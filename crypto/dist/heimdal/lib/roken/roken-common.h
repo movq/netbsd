@@ -31,7 +31,7 @@
  * SUCH DAMAGE.
  */
 
-/* $Id: roken-common.h,v 1.1 2000/06/16 18:32:35 thorpej Exp $ */
+/* $Id: roken-common.h,v 1.1.1.1 2000/06/16 18:32:35 thorpej Exp $ */
 
 #ifndef __ROKEN_COMMON_H__
 #define __ROKEN_COMMON_H__

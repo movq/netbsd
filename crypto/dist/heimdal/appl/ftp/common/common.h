@@ -31,7 +31,7 @@
  * SUCH DAMAGE.
  */
 
-/* $Id: common.h,v 1.1 2000/06/16 18:31:48 thorpej Exp $ */
+/* $Id: common.h,v 1.1.1.1 2000/06/16 18:31:48 thorpej Exp $ */
 
 #ifdef HAVE_CONFIG_H
 #include <config.h>

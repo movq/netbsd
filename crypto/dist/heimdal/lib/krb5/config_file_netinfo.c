@@ -32,7 +32,7 @@
  */
 
 #include "krb5_locl.h"
-RCSID("$Id: config_file_netinfo.c,v 1.1 2000/06/16 18:32:56 thorpej Exp $");
+RCSID("$Id: config_file_netinfo.c,v 1.1.1.1 2000/06/16 18:32:56 thorpej Exp $");
 
 /*
  * Netinfo implementation from Luke Howard <lukeh@xedoc.com.au>

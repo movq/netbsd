@@ -33,7 +33,7 @@
 
 #include "iprop.h"
 
-RCSID("$Id: replay_log.c,v 1.1 2000/06/16 18:32:53 thorpej Exp $");
+RCSID("$Id: replay_log.c,v 1.1.1.1 2000/06/16 18:32:53 thorpej Exp $");
 
 static void
 apply_entry(kadm5_server_context *server_context,

@@ -40,7 +40,7 @@
 #endif
 #include "resolve.h"
 
-RCSID("$Id: principal.c,v 1.1 2000/06/16 18:33:01 thorpej Exp $");
+RCSID("$Id: principal.c,v 1.1.1.1 2000/06/16 18:33:01 thorpej Exp $");
 
 #define princ_num_comp(P) ((P)->name.name_string.len)
 #define princ_type(P) ((P)->name.name_type)

@@ -34,7 +34,7 @@
 #include "iprop.h"
 #include "parse_time.h"
 
-RCSID("$Id: dump_log.c,v 1.1 2000/06/16 18:32:51 thorpej Exp $");
+RCSID("$Id: dump_log.c,v 1.1.1.1 2000/06/16 18:32:51 thorpej Exp $");
 
 static char *op_names[] = {
     "get",

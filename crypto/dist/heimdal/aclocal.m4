@@ -10,7 +10,7 @@ dnl but WITHOUT ANY WARRANTY, to the extent permitted by law; without
 dnl even the implied warranty of MERCHANTABILITY or FITNESS FOR A
 dnl PARTICULAR PURPOSE.
 
-dnl $Id: aclocal.m4,v 1.1 2000/06/16 18:31:36 thorpej Exp $
+dnl $Id: aclocal.m4,v 1.1.1.1 2000/06/16 18:31:36 thorpej Exp $
 dnl
 dnl Only put things that for some reason can't live in the `cf'
 dnl directory in this file.
@@ -144,7 +144,7 @@ AC_CHECK_PROGS(LEX, flex lex, "$missing_dir/missing flex")
 AC_PROG_LEX
 AC_DECL_YYTEXT])
 
-dnl $Id: aclocal.m4,v 1.1 2000/06/16 18:31:36 thorpej Exp $
+dnl $Id: aclocal.m4,v 1.1.1.1 2000/06/16 18:31:36 thorpej Exp $
 dnl
 dnl
 dnl Better test for ln -s, ln or cp
@@ -173,7 +173,7 @@ AC_SUBST(LN_S)dnl
 ])
 
 
-dnl $Id: aclocal.m4,v 1.1 2000/06/16 18:31:36 thorpej Exp $
+dnl $Id: aclocal.m4,v 1.1.1.1 2000/06/16 18:31:36 thorpej Exp $
 dnl
 dnl
 dnl Check for MIPS/IRIX ABI flags. Sets $abi and $abilibdirext to some
@@ -262,7 +262,7 @@ esac
 ])
 
 dnl
-dnl $Id: aclocal.m4,v 1.1 2000/06/16 18:31:36 thorpej Exp $
+dnl $Id: aclocal.m4,v 1.1.1.1 2000/06/16 18:31:36 thorpej Exp $
 dnl
 
 dnl
@@ -531,7 +531,7 @@ AC_MSG_RESULT([$NM])
 AC_SUBST(NM)
 ])
 
-dnl $Id: aclocal.m4,v 1.1 2000/06/16 18:31:36 thorpej Exp $
+dnl $Id: aclocal.m4,v 1.1.1.1 2000/06/16 18:31:36 thorpej Exp $
 dnl
 dnl set WFLAGS
 
@@ -553,7 +553,7 @@ AC_SUBST(WFLAGS_NOUNUSED)dnl
 AC_SUBST(WFLAGS_NOIMPLICITINT)dnl
 ])
 
-dnl $Id: aclocal.m4,v 1.1 2000/06/16 18:31:36 thorpej Exp $
+dnl $Id: aclocal.m4,v 1.1.1.1 2000/06/16 18:31:36 thorpej Exp $
 dnl
 dnl AC_TEST_PACKAGE_NEW(package,headers,libraries,extra libs,default locations)
 
@@ -642,7 +642,7 @@ AC_SUBST(INCLUDE_$1)
 AC_SUBST(LIB_$1)
 ])
 
-dnl $Id: aclocal.m4,v 1.1 2000/06/16 18:31:36 thorpej Exp $
+dnl $Id: aclocal.m4,v 1.1.1.1 2000/06/16 18:31:36 thorpej Exp $
 dnl
 dnl AC_FIND_FUNC(func, libraries, includes, arguments)
 AC_DEFUN(AC_FIND_FUNC, [
@@ -652,7 +652,7 @@ if test -n "$LIB_$1"; then
 fi
 ])
 
-dnl $Id: aclocal.m4,v 1.1 2000/06/16 18:31:36 thorpej Exp $
+dnl $Id: aclocal.m4,v 1.1.1.1 2000/06/16 18:31:36 thorpej Exp $
 dnl
 dnl
 dnl Look for function in any of the specified libraries
@@ -662,7 +662,7 @@ dnl AC_FIND_FUNC_NO_LIBS(func, libraries, includes, arguments, extra libs, extra
 AC_DEFUN(AC_FIND_FUNC_NO_LIBS, [
 AC_FIND_FUNC_NO_LIBS2([$1], ["" $2], [$3], [$4], [$5], [$6])])
 
-dnl $Id: aclocal.m4,v 1.1 2000/06/16 18:31:36 thorpej Exp $
+dnl $Id: aclocal.m4,v 1.1.1.1 2000/06/16 18:31:36 thorpej Exp $
 dnl
 dnl
 dnl Look for function in any of the specified libraries
@@ -739,7 +739,7 @@ else
   $1_FALSE=
 fi])
 
-dnl $Id: aclocal.m4,v 1.1 2000/06/16 18:31:36 thorpej Exp $
+dnl $Id: aclocal.m4,v 1.1.1.1 2000/06/16 18:31:36 thorpej Exp $
 dnl
 dnl enable OSF C2 stuff
 
@@ -754,7 +754,7 @@ fi
 AC_SUBST(LIB_security)
 ])
 
-dnl $Id: aclocal.m4,v 1.1 2000/06/16 18:31:36 thorpej Exp $
+dnl $Id: aclocal.m4,v 1.1.1.1 2000/06/16 18:31:36 thorpej Exp $
 dnl check how to format manual pages
 dnl
 
@@ -814,7 +814,7 @@ AC_SUBST(CATMANEXT)
 
 ])
 dnl
-dnl $Id: aclocal.m4,v 1.1 2000/06/16 18:31:36 thorpej Exp $
+dnl $Id: aclocal.m4,v 1.1.1.1 2000/06/16 18:31:36 thorpej Exp $
 dnl
 
 dnl check if this computer is little or big-endian
@@ -874,7 +874,7 @@ fi
 dnl 
 dnl See if there is any X11 present
 dnl
-dnl $Id: aclocal.m4,v 1.1 2000/06/16 18:31:36 thorpej Exp $
+dnl $Id: aclocal.m4,v 1.1.1.1 2000/06/16 18:31:36 thorpej Exp $
 
 AC_DEFUN(KRB_CHECK_X,[
 AC_PATH_XTRA
@@ -924,7 +924,7 @@ if test "$no_x" != yes; then
 fi
 ])
 
-dnl $Id: aclocal.m4,v 1.1 2000/06/16 18:31:36 thorpej Exp $
+dnl $Id: aclocal.m4,v 1.1.1.1 2000/06/16 18:31:36 thorpej Exp $
 dnl
 dnl check for Xau{Read,Write}Auth and XauFileName
 dnl
@@ -983,7 +983,7 @@ LIBS=$save_LIBS
 LDFLAGS=$save_LDFLAGS
 ])
 
-dnl $Id: aclocal.m4,v 1.1 2000/06/16 18:31:36 thorpej Exp $
+dnl $Id: aclocal.m4,v 1.1.1.1 2000/06/16 18:31:36 thorpej Exp $
 dnl
 dnl ac_check_type + extra headers
 
@@ -1007,7 +1007,7 @@ if test $ac_cv_type_$1 = no; then
 fi
 ])
 
-dnl $Id: aclocal.m4,v 1.1 2000/06/16 18:31:36 thorpej Exp $
+dnl $Id: aclocal.m4,v 1.1.1.1 2000/06/16 18:31:36 thorpej Exp $
 dnl
 dnl check for existance of a type
 
@@ -1041,7 +1041,7 @@ fi
 ])
 
 dnl
-dnl $Id: aclocal.m4,v 1.1 2000/06/16 18:31:36 thorpej Exp $
+dnl $Id: aclocal.m4,v 1.1.1.1 2000/06/16 18:31:36 thorpej Exp $
 dnl
 
 dnl extra magic check for netinet/{ip.h,tcp.h} because on irix 6.5.3
@@ -1079,7 +1079,7 @@ END
 
 ])
 
-dnl $Id: aclocal.m4,v 1.1 2000/06/16 18:31:36 thorpej Exp $
+dnl $Id: aclocal.m4,v 1.1.1.1 2000/06/16 18:31:36 thorpej Exp $
 dnl
 dnl test for IPv6
 dnl
@@ -1202,7 +1202,7 @@ if test "$ac_cv_lib_ipv6" = yes; then
 fi
 ])
 
-dnl $Id: aclocal.m4,v 1.1 2000/06/16 18:31:36 thorpej Exp $
+dnl $Id: aclocal.m4,v 1.1.1.1 2000/06/16 18:31:36 thorpej Exp $
 dnl
 AC_DEFUN(AC_BROKEN_SNPRINTF, [
 AC_CACHE_CHECK(for working snprintf,ac_cv_func_snprintf_working,
@@ -1261,7 +1261,7 @@ AC_NEED_PROTO([#include <stdio.h>],vsnprintf)
 fi
 ])
 
-dnl $Id: aclocal.m4,v 1.1 2000/06/16 18:31:36 thorpej Exp $
+dnl $Id: aclocal.m4,v 1.1.1.1 2000/06/16 18:31:36 thorpej Exp $
 dnl
 dnl
 dnl Check if we need the prototype for a function
@@ -1287,7 +1287,7 @@ undefine([foo])
 fi
 ])
 
-dnl $Id: aclocal.m4,v 1.1 2000/06/16 18:31:36 thorpej Exp $
+dnl $Id: aclocal.m4,v 1.1.1.1 2000/06/16 18:31:36 thorpej Exp $
 dnl
 dnl check for glob(3)
 dnl
@@ -1311,7 +1311,7 @@ fi
 ])
 
 dnl
-dnl $Id: aclocal.m4,v 1.1 2000/06/16 18:31:36 thorpej Exp $
+dnl $Id: aclocal.m4,v 1.1.1.1 2000/06/16 18:31:36 thorpej Exp $
 dnl
 dnl test for POSIX (broken) getlogin
 dnl
@@ -1334,7 +1334,7 @@ fi
 ])
 
 dnl
-dnl $Id: aclocal.m4,v 1.1 2000/06/16 18:31:36 thorpej Exp $
+dnl $Id: aclocal.m4,v 1.1.1.1 2000/06/16 18:31:36 thorpej Exp $
 dnl
 
 dnl
@@ -1348,7 +1348,7 @@ AC_CHECK_HEADERS(capability.h sys/capability.h)
 AC_CHECK_FUNCS(sgi_getcapabilitybyname cap_set_proc)
 ])
 
-dnl $Id: aclocal.m4,v 1.1 2000/06/16 18:31:36 thorpej Exp $
+dnl $Id: aclocal.m4,v 1.1.1.1 2000/06/16 18:31:36 thorpej Exp $
 dnl
 dnl check for getpwnam_r, and if it's posix or not
 
@@ -1372,7 +1372,7 @@ if test "$ac_cv_func_getpwnam_r_posix" = yes; then
 fi
 fi
 ])
-dnl $Id: aclocal.m4,v 1.1 2000/06/16 18:31:36 thorpej Exp $
+dnl $Id: aclocal.m4,v 1.1.1.1 2000/06/16 18:31:36 thorpej Exp $
 dnl
 dnl
 dnl Mix between AC_FIND_FUNC and AC_BROKEN
@@ -1386,7 +1386,7 @@ fi
 AC_SUBST(LIBOBJS)dnl
 ])
 
-dnl $Id: aclocal.m4,v 1.1 2000/06/16 18:31:36 thorpej Exp $
+dnl $Id: aclocal.m4,v 1.1.1.1 2000/06/16 18:31:36 thorpej Exp $
 dnl
 dnl
 dnl Same as AC _REPLACE_FUNCS, just define HAVE_func if found in normal
@@ -1406,7 +1406,7 @@ done
 AC_SUBST(LIBOBJS)dnl
 ])
 
-dnl $Id: aclocal.m4,v 1.1 2000/06/16 18:31:36 thorpej Exp $
+dnl $Id: aclocal.m4,v 1.1.1.1 2000/06/16 18:31:36 thorpej Exp $
 dnl
 dnl
 dnl Check if the prototype of a function is compatible with another one
@@ -1428,7 +1428,7 @@ if test "$ac_cv_func_$2_proto_compat" = yes; then
 fi
 undefine([foo])
 ])
-dnl $Id: aclocal.m4,v 1.1 2000/06/16 18:31:36 thorpej Exp $
+dnl $Id: aclocal.m4,v 1.1.1.1 2000/06/16 18:31:36 thorpej Exp $
 dnl
 dnl AC_CHECK_VAR(includes, variable)
 AC_DEFUN(AC_CHECK_VAR, [
@@ -1449,7 +1449,7 @@ fi
 undefine([foo])
 ])
 
-dnl $Id: aclocal.m4,v 1.1 2000/06/16 18:31:36 thorpej Exp $
+dnl $Id: aclocal.m4,v 1.1.1.1 2000/06/16 18:31:36 thorpej Exp $
 dnl
 dnl
 dnl Check if we need the declaration of a variable
@@ -1475,7 +1475,7 @@ fi
 undefine([foo])
 ])
 
-dnl $Id: aclocal.m4,v 1.1 2000/06/16 18:31:36 thorpej Exp $
+dnl $Id: aclocal.m4,v 1.1.1.1 2000/06/16 18:31:36 thorpej Exp $
 dnl
 dnl check for fields in a structure
 dnl
@@ -1495,7 +1495,7 @@ fi
 undefine([cache_val])
 ])
 
-dnl $Id: aclocal.m4,v 1.1 2000/06/16 18:31:36 thorpej Exp $
+dnl $Id: aclocal.m4,v 1.1.1.1 2000/06/16 18:31:36 thorpej Exp $
 dnl
 dnl
 dnl Search for struct winsize
@@ -1523,7 +1523,7 @@ AC_EGREP_HEADER(ws_ypixel, termios.h,
 	AC_DEFINE(HAVE_WS_YPIXEL, 1, [define if struct winsize has ws_ypixel]))
 ])
 
-dnl $Id: aclocal.m4,v 1.1 2000/06/16 18:31:36 thorpej Exp $
+dnl $Id: aclocal.m4,v 1.1.1.1 2000/06/16 18:31:36 thorpej Exp $
 dnl
 dnl Test for `struct spwd'
 
@@ -1546,7 +1546,7 @@ if test "$ac_cv_struct_spwd" = "yes"; then
 fi
 ])
 
-dnl $Id: aclocal.m4,v 1.1 2000/06/16 18:31:36 thorpej Exp $
+dnl $Id: aclocal.m4,v 1.1.1.1 2000/06/16 18:31:36 thorpej Exp $
 dnl
 AC_DEFUN(AC_GROK_TYPE, [
 AC_CACHE_VAL(ac_cv_type_$1, 
@@ -1585,7 +1585,7 @@ for i in $1; do
 done
 ])
 
-dnl $Id: aclocal.m4,v 1.1 2000/06/16 18:31:36 thorpej Exp $
+dnl $Id: aclocal.m4,v 1.1.1.1 2000/06/16 18:31:36 thorpej Exp $
 dnl
 dnl Figure what authentication modules should be built
 

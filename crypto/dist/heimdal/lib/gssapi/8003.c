@@ -33,7 +33,7 @@
 
 #include "gssapi_locl.h"
 
-RCSID("$Id: 8003.c,v 1.1 2000/06/16 18:32:44 thorpej Exp $");
+RCSID("$Id: 8003.c,v 1.1.1.1 2000/06/16 18:32:44 thorpej Exp $");
 
 static krb5_error_code
 encode_om_uint32(OM_uint32 n, u_char *p)

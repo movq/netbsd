@@ -32,7 +32,7 @@
  */
 
 #include "kpasswd_locl.h"
-RCSID("$Id: kpasswd.c,v 1.1 2000/06/16 18:31:41 thorpej Exp $");
+RCSID("$Id: kpasswd.c,v 1.1.1.1 2000/06/16 18:31:41 thorpej Exp $");
 
 static int version_flag;
 static int help_flag;

@@ -33,7 +33,7 @@
 
 #include "der_locl.h"
 
-RCSID("$Id: der_copy.c,v 1.1 2000/06/16 18:32:38 thorpej Exp $");
+RCSID("$Id: der_copy.c,v 1.1.1.1 2000/06/16 18:32:38 thorpej Exp $");
 
 int
 copy_general_string (const general_string *from, general_string *to)

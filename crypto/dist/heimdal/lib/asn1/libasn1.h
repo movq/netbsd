@@ -31,7 +31,7 @@
  * SUCH DAMAGE. 
  */
 
-/* $Id: libasn1.h,v 1.1 2000/06/16 18:32:39 thorpej Exp $ */
+/* $Id: libasn1.h,v 1.1.1.1 2000/06/16 18:32:39 thorpej Exp $ */
 
 #ifndef __LIBASN1_H__
 #define __LIBASN1_H__

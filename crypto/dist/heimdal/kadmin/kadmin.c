@@ -34,7 +34,7 @@
 #include "kadmin_locl.h"
 #include <sl.h>
 
-RCSID("$Id: kadmin.c,v 1.1 2000/06/16 18:32:07 thorpej Exp $");
+RCSID("$Id: kadmin.c,v 1.1.1.1 2000/06/16 18:32:07 thorpej Exp $");
 
 static char *config_file;
 static char *keyfile;

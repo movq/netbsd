@@ -33,7 +33,7 @@
 
 #include "ktutil_locl.h"
 
-RCSID("$Id: ktutil.c,v 1.1 2000/06/16 18:31:39 thorpej Exp $");
+RCSID("$Id: ktutil.c,v 1.1.1.1 2000/06/16 18:31:39 thorpej Exp $");
 
 static int help_flag;
 static int version_flag;

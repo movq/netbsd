@@ -33,7 +33,7 @@
 
 #include "gen_locl.h"
 
-RCSID("$Id: gen_length.c,v 1.1 2000/06/16 18:32:38 thorpej Exp $");
+RCSID("$Id: gen_length.c,v 1.1.1.1 2000/06/16 18:32:38 thorpej Exp $");
 
 static void
 length_primitive (const char *typename,

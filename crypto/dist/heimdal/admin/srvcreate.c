@@ -33,7 +33,7 @@
 
 #include "ktutil_locl.h"
 
-RCSID("$Id: srvcreate.c,v 1.1 2000/06/16 18:31:39 thorpej Exp $");
+RCSID("$Id: srvcreate.c,v 1.1.1.1 2000/06/16 18:31:39 thorpej Exp $");
 
 /* convert a version 5 keytab to a version 4 srvtab */
 

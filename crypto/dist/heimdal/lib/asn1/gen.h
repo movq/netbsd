@@ -31,7 +31,7 @@
  * SUCH DAMAGE. 
  */
 
-/* $Id: gen.h,v 1.1 2000/06/16 18:32:38 thorpej Exp $ */
+/* $Id: gen.h,v 1.1.1.1 2000/06/16 18:32:38 thorpej Exp $ */
 
 #include <stdio.h>
 #include "symbol.h"

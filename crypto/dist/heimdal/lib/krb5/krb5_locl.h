@@ -31,7 +31,7 @@
  * SUCH DAMAGE. 
  */
 
-/* $Id: krb5_locl.h,v 1.1 2000/06/16 18:32:58 thorpej Exp $ */
+/* $Id: krb5_locl.h,v 1.1.1.1 2000/06/16 18:32:58 thorpej Exp $ */
 
 #ifndef __KRB5_LOCL_H__
 #define __KRB5_LOCL_H__

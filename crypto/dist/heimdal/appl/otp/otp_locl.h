@@ -31,7 +31,7 @@
  * SUCH DAMAGE.
  */
 
-/* $Id: otp_locl.h,v 1.1 2000/06/16 18:31:58 thorpej Exp $ */
+/* $Id: otp_locl.h,v 1.1.1.1 2000/06/16 18:31:58 thorpej Exp $ */
 
 #ifdef HAVE_CONFIG_H
 #include <config.h>

@@ -33,7 +33,7 @@
 
 #include "kadmin_locl.h"
 
-RCSID("$Id: kadmind.c,v 1.1 2000/06/16 18:32:07 thorpej Exp $");
+RCSID("$Id: kadmind.c,v 1.1.1.1 2000/06/16 18:32:07 thorpej Exp $");
 
 static char *config_file;
 static char *keyfile;

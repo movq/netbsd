@@ -31,7 +31,7 @@
  * SUCH DAMAGE. 
  */
 
-/* $Id: der.h,v 1.1 2000/06/16 18:32:38 thorpej Exp $ */
+/* $Id: der.h,v 1.1.1.1 2000/06/16 18:32:38 thorpej Exp $ */
 
 #ifndef __DER_H__
 #define __DER_H__

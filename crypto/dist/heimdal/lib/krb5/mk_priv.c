@@ -33,7 +33,7 @@
 
 #include <krb5_locl.h>
 
-RCSID("$Id: mk_priv.c,v 1.1 2000/06/16 18:33:00 thorpej Exp $");
+RCSID("$Id: mk_priv.c,v 1.1.1.1 2000/06/16 18:33:00 thorpej Exp $");
 
 /*
  *

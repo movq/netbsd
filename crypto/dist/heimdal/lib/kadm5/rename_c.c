@@ -33,7 +33,7 @@
 
 #include "kadm5_locl.h"
 
-RCSID("$Id: rename_c.c,v 1.1 2000/06/16 18:32:53 thorpej Exp $");
+RCSID("$Id: rename_c.c,v 1.1.1.1 2000/06/16 18:32:53 thorpej Exp $");
 
 kadm5_ret_t
 kadm5_c_rename_principal(void *server_handle, 

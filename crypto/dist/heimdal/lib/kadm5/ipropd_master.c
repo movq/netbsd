@@ -33,7 +33,7 @@
 
 #include "iprop.h"
 
-RCSID("$Id: ipropd_master.c,v 1.1 2000/06/16 18:32:52 thorpej Exp $");
+RCSID("$Id: ipropd_master.c,v 1.1.1.1 2000/06/16 18:32:52 thorpej Exp $");
 
 static int
 make_signal_socket (krb5_context context)

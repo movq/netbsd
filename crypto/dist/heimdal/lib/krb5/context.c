@@ -33,7 +33,7 @@
 
 #include "krb5_locl.h"
 
-RCSID("$Id: context.c,v 1.1 2000/06/16 18:32:56 thorpej Exp $");
+RCSID("$Id: context.c,v 1.1.1.1 2000/06/16 18:32:56 thorpej Exp $");
 
 #define INIT_FIELD(C, T, E, D, F)					\
     (C)->E = krb5_config_get_ ## T ## _default ((C), NULL, (D), 	\

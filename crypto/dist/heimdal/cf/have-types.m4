@@ -1,5 +1,5 @@
 dnl
-dnl $Id: have-types.m4,v 1.1 2000/06/16 18:32:17 thorpej Exp $
+dnl $Id: have-types.m4,v 1.1.1.1 2000/06/16 18:32:17 thorpej Exp $
 dnl
 
 AC_DEFUN(AC_HAVE_TYPES, [

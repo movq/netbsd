@@ -33,7 +33,7 @@
 
 #include "krb5_locl.h"
 
-RCSID("$Id: time.c,v 1.1 2000/06/16 18:33:01 thorpej Exp $");
+RCSID("$Id: time.c,v 1.1.1.1 2000/06/16 18:33:01 thorpej Exp $");
 
 /*
  * return ``corrected'' time in `timeret'.

@@ -33,7 +33,7 @@
 
 #include "gssapi_locl.h"
 
-RCSID("$Id: encapsulate.c,v 1.1 2000/06/16 18:32:46 thorpej Exp $");
+RCSID("$Id: encapsulate.c,v 1.1.1.1 2000/06/16 18:32:46 thorpej Exp $");
 
 void
 gssapi_krb5_encap_length (size_t data_len,

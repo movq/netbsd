@@ -33,7 +33,7 @@
 
 #include "telnet_locl.h"
 
-RCSID("$Id: commands.c,v 1.1 2000/06/16 18:31:55 thorpej Exp $");
+RCSID("$Id: commands.c,v 1.1.1.1 2000/06/16 18:31:55 thorpej Exp $");
 
 #if	defined(IPPROTO_IP) && defined(IP_TOS)
 int tos = -1;

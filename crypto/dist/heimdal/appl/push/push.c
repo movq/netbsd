@@ -32,7 +32,7 @@
  */
 
 #include "push_locl.h"
-RCSID("$Id: push.c,v 1.1 2000/06/16 18:32:04 thorpej Exp $");
+RCSID("$Id: push.c,v 1.1.1.1 2000/06/16 18:32:04 thorpej Exp $");
 
 #ifdef KRB4
 static int use_v4 = -1;

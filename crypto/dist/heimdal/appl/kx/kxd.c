@@ -33,7 +33,7 @@
 
 #include "kx.h"
 
-RCSID("$Id: kxd.c,v 1.1 2000/06/16 18:31:43 thorpej Exp $");
+RCSID("$Id: kxd.c,v 1.1.1.1 2000/06/16 18:31:43 thorpej Exp $");
 
 static pid_t wait_on_pid = -1;
 static int   done        = 0;

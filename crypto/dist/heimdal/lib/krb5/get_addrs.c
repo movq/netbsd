@@ -33,7 +33,7 @@
 
 #include "krb5_locl.h"
 
-RCSID("$Id: get_addrs.c,v 1.1 2000/06/16 18:32:57 thorpej Exp $");
+RCSID("$Id: get_addrs.c,v 1.1.1.1 2000/06/16 18:32:57 thorpej Exp $");
 
 #ifdef __osf__
 /* hate */

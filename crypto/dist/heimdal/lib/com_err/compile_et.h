@@ -31,7 +31,7 @@
  * SUCH DAMAGE. 
  */
 
-/* $Id: compile_et.h,v 1.1 2000/06/16 18:32:20 thorpej Exp $ */
+/* $Id: compile_et.h,v 1.1.1.1 2000/06/16 18:32:20 thorpej Exp $ */
 
 #ifndef __COMPILE_ET_H__
 #define __COMPILE_ET_H__

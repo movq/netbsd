@@ -33,7 +33,7 @@
 
 #include "gssapi_locl.h"
 
-RCSID("$Id: add_oid_set_member.c,v 1.1 2000/06/16 18:32:45 thorpej Exp $");
+RCSID("$Id: add_oid_set_member.c,v 1.1.1.1 2000/06/16 18:32:45 thorpej Exp $");
 
 OM_uint32 gss_add_oid_set_member (
             OM_uint32 * minor_status,

@@ -33,7 +33,7 @@
 
 #include "kadm5_locl.h"
 
-RCSID("$Id: free.c,v 1.1 2000/06/16 18:32:51 thorpej Exp $");
+RCSID("$Id: free.c,v 1.1.1.1 2000/06/16 18:32:51 thorpej Exp $");
 
 void 
 kadm5_free_key_data(void *server_handle,

@@ -33,7 +33,7 @@
 
 #include "hdb_locl.h"
 
-RCSID("$Id: common.c,v 1.1 2000/06/16 18:32:48 thorpej Exp $");
+RCSID("$Id: common.c,v 1.1.1.1 2000/06/16 18:32:48 thorpej Exp $");
 
 int
 hdb_principal2key(krb5_context context, krb5_principal p, krb5_data *key)

@@ -33,7 +33,7 @@
 
 #include "kx.h"
 
-RCSID("$Id: krb4.c,v 1.1 2000/06/16 18:31:43 thorpej Exp $");
+RCSID("$Id: krb4.c,v 1.1.1.1 2000/06/16 18:31:43 thorpej Exp $");
 
 #ifdef KRB4
 

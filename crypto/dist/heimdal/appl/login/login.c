@@ -39,7 +39,7 @@
 #include <sys/capability.h>
 #endif
 
-RCSID("$Id: login.c,v 1.1 2000/06/16 18:32:06 thorpej Exp $");
+RCSID("$Id: login.c,v 1.1.1.1 2000/06/16 18:32:06 thorpej Exp $");
 
 /*
  * the environment we will send to execle and the shell.

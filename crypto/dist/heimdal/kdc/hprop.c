@@ -33,7 +33,7 @@
 
 #include "hprop.h"
 
-RCSID("$Id: hprop.c,v 1.1 2000/06/16 18:31:37 thorpej Exp $");
+RCSID("$Id: hprop.c,v 1.1.1.1 2000/06/16 18:31:37 thorpej Exp $");
 
 static int version_flag;
 static int help_flag;

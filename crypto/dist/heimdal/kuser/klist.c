@@ -33,7 +33,7 @@
 
 #include "kuser_locl.h"
 
-RCSID("$Id: klist.c,v 1.1 2000/06/16 18:31:40 thorpej Exp $");
+RCSID("$Id: klist.c,v 1.1.1.1 2000/06/16 18:31:40 thorpej Exp $");
 
 static char*
 printable_time(time_t t)

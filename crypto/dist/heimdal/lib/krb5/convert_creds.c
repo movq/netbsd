@@ -32,7 +32,7 @@
  */
 
 #include "krb5_locl.h"
-RCSID("$Id: convert_creds.c,v 1.1 2000/06/16 18:32:56 thorpej Exp $");
+RCSID("$Id: convert_creds.c,v 1.1.1.1 2000/06/16 18:32:56 thorpej Exp $");
 
 static krb5_error_code
 check_ticket_flags(TicketFlags f)

@@ -33,7 +33,7 @@
 
 #include "hprop.h"
 
-RCSID("$Id: hpropd.c,v 1.1 2000/06/16 18:31:37 thorpej Exp $");
+RCSID("$Id: hpropd.c,v 1.1.1.1 2000/06/16 18:31:37 thorpej Exp $");
 
 #ifdef KRB4
 static des_cblock mkey4;

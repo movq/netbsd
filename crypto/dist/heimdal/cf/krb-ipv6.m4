@@ -1,4 +1,4 @@
-dnl $Id: krb-ipv6.m4,v 1.1 2000/06/16 18:32:17 thorpej Exp $
+dnl $Id: krb-ipv6.m4,v 1.1.1.1 2000/06/16 18:32:17 thorpej Exp $
 dnl
 dnl test for IPv6
 dnl

@@ -36,7 +36,7 @@
 #include <krb5.h>
 #include "nt_gss_common.h"
 
-RCSID("$Id: nt_gss_server.c,v 1.1 2000/06/16 18:31:46 thorpej Exp $");
+RCSID("$Id: nt_gss_server.c,v 1.1.1.1 2000/06/16 18:31:46 thorpej Exp $");
 
 /*
  * This program tries to act as a server for the sample in `Sample

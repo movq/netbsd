@@ -33,7 +33,7 @@
 
 #include "kauth.h"
 
-RCSID("$Id: encdata.c,v 1.1 2000/06/16 18:31:51 thorpej Exp $");
+RCSID("$Id: encdata.c,v 1.1.1.1 2000/06/16 18:31:51 thorpej Exp $");
 
 int
 write_encrypted (int fd, void *buf, size_t len, des_key_schedule schedule,

@@ -37,7 +37,7 @@
 #include <netinet/in.h>
 #include <netdb.h>
 
-RCSID("$Id: init_c.c,v 1.1 2000/06/16 18:32:52 thorpej Exp $");
+RCSID("$Id: init_c.c,v 1.1.1.1 2000/06/16 18:32:52 thorpej Exp $");
 
 static void
 set_funcs(kadm5_client_context *c)

@@ -33,7 +33,7 @@
 
 #include "ktutil_locl.h"
 
-RCSID("$Id: change.c,v 1.1 2000/06/16 18:31:39 thorpej Exp $");
+RCSID("$Id: change.c,v 1.1.1.1 2000/06/16 18:31:39 thorpej Exp $");
 
 static void
 change_entry (krb5_context context, krb5_keytab_entry *entry,

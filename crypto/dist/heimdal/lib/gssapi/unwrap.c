@@ -33,7 +33,7 @@
 
 #include "gssapi_locl.h"
 
-RCSID("$Id: unwrap.c,v 1.1 2000/06/16 18:32:47 thorpej Exp $");
+RCSID("$Id: unwrap.c,v 1.1.1.1 2000/06/16 18:32:47 thorpej Exp $");
 
 OM_uint32
 gss_krb5_getsomekey(const gss_ctx_id_t context_handle,

@@ -32,7 +32,7 @@
  */
 
 #include "krb5_locl.h"
-RCSID("$Id: crypto.c,v 1.1 2000/06/16 18:32:56 thorpej Exp $");
+RCSID("$Id: crypto.c,v 1.1.1.1 2000/06/16 18:32:56 thorpej Exp $");
 
 #undef CRYPTO_DEBUG
 #ifdef CRYPTO_DEBUG

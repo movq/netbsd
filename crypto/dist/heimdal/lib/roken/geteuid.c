@@ -38,7 +38,7 @@
 
 #ifndef HAVE_GETEUID
 
-RCSID("$Id: geteuid.c,v 1.1 2000/06/16 18:32:34 thorpej Exp $");
+RCSID("$Id: geteuid.c,v 1.1.1.1 2000/06/16 18:32:34 thorpej Exp $");
 
 int geteuid(void)
 {

@@ -32,7 +32,7 @@
 
 #include "krb5_locl.h"
 
-RCSID("$Id: n-fold.c,v 1.1 2000/06/16 18:33:00 thorpej Exp $");
+RCSID("$Id: n-fold.c,v 1.1.1.1 2000/06/16 18:33:00 thorpej Exp $");
 
 static void
 rr13(unsigned char *buf, size_t len)

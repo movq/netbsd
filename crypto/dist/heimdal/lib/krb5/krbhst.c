@@ -34,7 +34,7 @@
 #include "krb5_locl.h"
 #include <resolve.h>
 
-RCSID("$Id: krbhst.c,v 1.1 2000/06/16 18:33:00 thorpej Exp $");
+RCSID("$Id: krbhst.c,v 1.1.1.1 2000/06/16 18:33:00 thorpej Exp $");
 
 /*
  * assuming that `*res' contains `*count' strings, add a copy of `string'.

@@ -33,7 +33,7 @@
 
 #include "kauth.h"
 
-RCSID("$Id: rkinit.c,v 1.1 2000/06/16 18:31:51 thorpej Exp $");
+RCSID("$Id: rkinit.c,v 1.1.1.1 2000/06/16 18:31:51 thorpej Exp $");
 
 static struct in_addr *
 getalladdrs (char *hostname, unsigned *count)

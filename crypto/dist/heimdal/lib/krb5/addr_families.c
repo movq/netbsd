@@ -33,7 +33,7 @@
 
 #include "krb5_locl.h"
 
-RCSID("$Id: addr_families.c,v 1.1 2000/06/16 18:32:55 thorpej Exp $");
+RCSID("$Id: addr_families.c,v 1.1.1.1 2000/06/16 18:32:55 thorpej Exp $");
 
 struct addr_operations {
     int af;

@@ -32,7 +32,7 @@
  */
 
 #include "rsh_locl.h"
-RCSID("$Id: rsh.c,v 1.1 2000/06/16 18:32:05 thorpej Exp $");
+RCSID("$Id: rsh.c,v 1.1.1.1 2000/06/16 18:32:05 thorpej Exp $");
 
 enum auth_method auth_method;
 int do_encrypt;

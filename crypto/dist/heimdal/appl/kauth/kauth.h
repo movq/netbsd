@@ -31,7 +31,7 @@
  * SUCH DAMAGE.
  */
 
-/* $Id: kauth.h,v 1.1 2000/06/16 18:31:51 thorpej Exp $ */
+/* $Id: kauth.h,v 1.1.1.1 2000/06/16 18:31:51 thorpej Exp $ */
 
 #ifdef HAVE_CONFIG_H
 #include <config.h>
