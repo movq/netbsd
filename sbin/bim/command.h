@@ -1,4 +1,4 @@
-/*	$NetBSD: command.h,v 1.2 1995/03/18 12:28:17 cgd Exp $	*/
+/*	$NetBSD: command.h,v 1.3 1997/09/15 01:29:30 lukem Exp $	*/
 
 /* 
  * Copyright (c) 1994 Philip A. Nelson.
@@ -44,12 +44,8 @@
 
 #ifdef __STDC__
 #define CMD_PROC(name) int name (int, char **, char *)
-#define PROTO(name,args) name args
-#define CONST const
 #else
 #define CMD_PROC(name) name ();
-#define PROTO(name,args) name ()
-#define CONST 
 #endif
 
 
@@ -57,10 +53,10 @@
     to the function that processes the command and a help message.  */
 
 struct command {	/* The commands, their names, help */
-  PROTO (int (*fn), (int, char **, char *));
-  char *name;
-  char *syntax;
-  char *help;
+	int	(*fn) __P((int, char **, char *));
+	char	*name;
+	char	*syntax;
+	char	*help;
 };
 
 /*  The command loop will do the following:
@@ -89,7 +85,7 @@ Each function to process a command must be defined as follows:
 #define MAXARGS 16
 #define BLANK_LINE 0
 
-/* Stuff for myStrCmp()
+/* Stuff for StrCmp()
  */
 #define CMP_NOMATCH	0
 #define CMP_MATCH	1
