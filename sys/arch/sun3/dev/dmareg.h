@@ -1,4 +1,4 @@
-/*	$NetBSD: dmareg.h,v 1.1 1997/02/24 01:45:13 jeremy Exp $ */
+/*	$NetBSD: dmareg.h,v 1.1.1.1 1997/02/24 01:45:13 jeremy Exp $ */
 
 /*
  * Copyright (c) 1994 Peter Galbavy.  All rights reserved.
