@@ -1,4 +1,4 @@
-/*	$NetBSD: pcap-missing.h,v 1.1 2004/09/27 17:06:52 dyoung Exp $	*/
+/*	$NetBSD: pcap-missing.h,v 1.1.1.1 2004/09/27 17:06:52 dyoung Exp $	*/
 
 /*
  * Copyright (c) 1988-2002

@@ -1,4 +1,4 @@
-/*	$NetBSD: print-ldp.c,v 1.1 2004/09/27 17:07:12 dyoung Exp $	*/
+/*	$NetBSD: print-ldp.c,v 1.1.1.1 2004/09/27 17:07:12 dyoung Exp $	*/
 
 /*
  * Redistribution and use in source and binary forms, with or without
