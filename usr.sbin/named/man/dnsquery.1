@@ -1,6 +1,4 @@
-.\"	$NetBSD: dnsquery.1,v 1.1 1996/02/02 15:27:20 mrg Exp $
-.\"
-.TH DNSQUERY 1 "10 March 1990"
+.TH DNSQUERY @CMD_EXT_U@ "10 March 1990"
 .UC 6
 .SH NAME
 dnsquery \- query domain name servers using resolver
@@ -142,8 +140,8 @@ The name of the host (or domain) of interest.
 .br
 <resolv.h>		list of resolver flags
 .SH "SEE ALSO"
-nslookup(8), nstest(1), nsquery(1), 
-named(8), resolver(5)
+nslookup(@SYS_OPS_EXT@), nstest(@CMD_EXT@), nsquery(@CMD_EXT@), 
+named(@SYS_OPS_EXT@), resolver(@FORMAT_EXT@)
 .SH DIAGNOSTICS
 If the resolver fails to answer the query and debugging has not been
 turned on,
