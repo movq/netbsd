@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 2000/06/17 01:08:24 thorpej Exp $
+#	$NetBSD: Makefile,v 1.1.1.1 2000/06/17 01:08:24 thorpej Exp $
 
 LIB=	des
 
