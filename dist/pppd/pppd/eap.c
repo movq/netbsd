@@ -1,4 +1,4 @@
-/*	$NetBSD: eap.c,v 1.1 2005/02/20 10:28:42 cube Exp $	*/
+/*	$NetBSD: eap.c,v 1.1.1.1 2005/02/20 10:28:42 cube Exp $	*/
 
 /*
  * eap.c - Extensible Authentication Protocol for PPP (RFC 2284)
@@ -50,7 +50,7 @@
 #if 0
 #define RCSID	"Id: eap.c,v 1.4 2004/11/09 22:39:25 paulus Exp"
 #else
-__RCSID("$NetBSD: eap.c,v 1.1 2005/02/20 10:28:42 cube Exp $");
+__RCSID("$NetBSD: eap.c,v 1.1.1.1 2005/02/20 10:28:42 cube Exp $");
 #endif
 #endif
 

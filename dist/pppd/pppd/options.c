@@ -1,4 +1,4 @@
-/*	$NetBSD: options.c,v 1.1 2005/02/20 10:28:50 cube Exp $	*/
+/*	$NetBSD: options.c,v 1.1.1.1 2005/02/20 10:28:50 cube Exp $	*/
 
 /*
  * options.c - handles option processing for PPP.
@@ -47,7 +47,7 @@
 #if 0
 #define RCSID	"Id: options.c,v 1.95 2004/11/09 22:33:35 paulus Exp"
 #else
-__RCSID("$NetBSD: options.c,v 1.1 2005/02/20 10:28:50 cube Exp $");
+__RCSID("$NetBSD: options.c,v 1.1.1.1 2005/02/20 10:28:50 cube Exp $");
 #endif
 #endif
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.1 2005/02/20 10:28:49 cube Exp $	*/
+/*	$NetBSD: main.c,v 1.1.1.1 2005/02/20 10:28:49 cube Exp $	*/
 
 /*
  * main.c - Point-to-Point Protocol main module
@@ -73,7 +73,7 @@
 #if 0
 #define RCSID	"Id: main.c,v 1.148 2004/11/13 12:05:48 paulus Exp"
 #else
-__RCSID("$NetBSD: main.c,v 1.1 2005/02/20 10:28:49 cube Exp $");
+__RCSID("$NetBSD: main.c,v 1.1.1.1 2005/02/20 10:28:49 cube Exp $");
 #endif
 #endif
 

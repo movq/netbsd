@@ -1,4 +1,4 @@
-/*	$NetBSD: passwordfd.c,v 1.1 2005/02/20 10:28:53 cube Exp $	*/
+/*	$NetBSD: passwordfd.c,v 1.1.1.1 2005/02/20 10:28:53 cube Exp $	*/
 
 
 /*

@@ -1,4 +1,4 @@
-/*	$NetBSD: lcp.h,v 1.1 2005/02/20 10:28:49 cube Exp $	*/
+/*	$NetBSD: lcp.h,v 1.1.1.1 2005/02/20 10:28:49 cube Exp $	*/
 
 /*
  * lcp.h - Link Control Protocol definitions.

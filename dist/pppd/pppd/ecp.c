@@ -1,4 +1,4 @@
-/*	$NetBSD: ecp.c,v 1.1 2005/02/20 10:28:43 cube Exp $	*/
+/*	$NetBSD: ecp.c,v 1.1.1.1 2005/02/20 10:28:43 cube Exp $	*/
 
 /*
  * ecp.c - PPP Encryption Control Protocol.
@@ -64,7 +64,7 @@
 #if 0
 #define RCSID	"Id: ecp.c,v 1.4 2004/11/04 10:02:26 paulus Exp"
 #else
-__RCSID("$NetBSD: ecp.c,v 1.1 2005/02/20 10:28:43 cube Exp $");
+__RCSID("$NetBSD: ecp.c,v 1.1.1.1 2005/02/20 10:28:43 cube Exp $");
 #endif
 #endif
 

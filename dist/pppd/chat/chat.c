@@ -1,4 +1,4 @@
-/*	$NetBSD: chat.c,v 1.1 2005/02/20 10:28:55 cube Exp $	*/
+/*	$NetBSD: chat.c,v 1.1.1.1 2005/02/20 10:28:55 cube Exp $	*/
 
 /*
  *	Chat -- a program for automatic session establishment (i.e. dial
@@ -93,7 +93,7 @@
 #if 0
 static const char rcsid[] = "Id: chat.c,v 1.30 2004/01/17 05:47:55 carlsonj Exp";
 #else
-__RCSID("$NetBSD: chat.c,v 1.1 2005/02/20 10:28:55 cube Exp $");
+__RCSID("$NetBSD: chat.c,v 1.1.1.1 2005/02/20 10:28:55 cube Exp $");
 #endif
 #endif
 

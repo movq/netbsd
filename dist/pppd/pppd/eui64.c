@@ -1,4 +1,4 @@
-/*	$NetBSD: eui64.c,v 1.1 2005/02/20 10:28:43 cube Exp $	*/
+/*	$NetBSD: eui64.c,v 1.1.1.1 2005/02/20 10:28:43 cube Exp $	*/
 
 /*
  * eui64.c - EUI64 routines for IPv6CP.
@@ -42,7 +42,7 @@
 #if 0
 #define RCSID	"Id: eui64.c,v 1.6 2002/12/04 23:03:32 paulus Exp"
 #else
-__RCSID("$NetBSD: eui64.c,v 1.1 2005/02/20 10:28:43 cube Exp $");
+__RCSID("$NetBSD: eui64.c,v 1.1.1.1 2005/02/20 10:28:43 cube Exp $");
 #endif
 #endif
 

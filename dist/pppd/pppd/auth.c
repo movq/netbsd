@@ -1,4 +1,4 @@
-/*	$NetBSD: auth.c,v 1.1 2005/02/20 10:28:36 cube Exp $	*/
+/*	$NetBSD: auth.c,v 1.1.1.1 2005/02/20 10:28:36 cube Exp $	*/
 
 /*
  * auth.c - PPP authentication and phase control.
@@ -75,7 +75,7 @@
 #if 0
 #define RCSID	"Id: auth.c,v 1.101 2004/11/12 10:30:51 paulus Exp"
 #else
-__RCSID("$NetBSD: auth.c,v 1.1 2005/02/20 10:28:36 cube Exp $");
+__RCSID("$NetBSD: auth.c,v 1.1.1.1 2005/02/20 10:28:36 cube Exp $");
 #endif
 #endif
 

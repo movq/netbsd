@@ -1,4 +1,4 @@
-/*	$NetBSD: lcp.c,v 1.1 2005/02/20 10:28:48 cube Exp $	*/
+/*	$NetBSD: lcp.c,v 1.1.1.1 2005/02/20 10:28:48 cube Exp $	*/
 
 /*
  * lcp.c - PPP Link Control Protocol.
@@ -47,7 +47,7 @@
 #if 0
 #define RCSID	"Id: lcp.c,v 1.74 2004/11/13 02:28:15 paulus Exp"
 #else
-__RCSID("$NetBSD: lcp.c,v 1.1 2005/02/20 10:28:48 cube Exp $");
+__RCSID("$NetBSD: lcp.c,v 1.1.1.1 2005/02/20 10:28:48 cube Exp $");
 #endif
 #endif
 

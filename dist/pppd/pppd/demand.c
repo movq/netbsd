@@ -1,4 +1,4 @@
-/*	$NetBSD: demand.c,v 1.1 2005/02/20 10:28:42 cube Exp $	*/
+/*	$NetBSD: demand.c,v 1.1.1.1 2005/02/20 10:28:42 cube Exp $	*/
 
 /*
  * demand.c - Support routines for demand-dialling.
@@ -35,7 +35,7 @@
 #if 0
 #define RCSID	"Id: demand.c,v 1.19 2004/11/04 10:02:26 paulus Exp"
 #else
-__RCSID("$NetBSD: demand.c,v 1.1 2005/02/20 10:28:42 cube Exp $");
+__RCSID("$NetBSD: demand.c,v 1.1.1.1 2005/02/20 10:28:42 cube Exp $");
 #endif
 #endif
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: eui64.h,v 1.1 2005/02/20 10:28:43 cube Exp $	*/
+/*	$NetBSD: eui64.h,v 1.1.1.1 2005/02/20 10:28:43 cube Exp $	*/
 
 /*
  * eui64.h - EUI64 routines for IPv6CP.

@@ -1,4 +1,4 @@
-/*	$NetBSD: ipv6cp.h,v 1.1 2005/02/20 10:28:48 cube Exp $	*/
+/*	$NetBSD: ipv6cp.h,v 1.1.1.1 2005/02/20 10:28:48 cube Exp $	*/
 
 /*
  * ipv6cp.h - PPP IPV6 Control Protocol.

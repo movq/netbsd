@@ -1,4 +1,4 @@
-/*	$NetBSD: cbcp.h,v 1.1 2005/02/20 10:28:37 cube Exp $	*/
+/*	$NetBSD: cbcp.h,v 1.1.1.1 2005/02/20 10:28:37 cube Exp $	*/
 
 #ifndef CBCP_H
 #define CBCP_H
