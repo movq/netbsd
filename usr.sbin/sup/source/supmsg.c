@@ -26,8 +26,8 @@
  **********************************************************************
  * HISTORY
  * $Log: supmsg.c,v $
- * Revision 1.1  1993/05/21 14:52:18  cgd
- * Initial revision
+ * Revision 1.1.1.1  1993/05/21 14:52:19  cgd
+ * initial import of CMU's SUP to NetBSD
  *
  * Revision 2.4  92/09/09  22:05:17  mrt
  * 	Moved PFI definition under __STDC__ conditional since it

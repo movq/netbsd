@@ -27,8 +27,8 @@
  **********************************************************************
  * HISTORY
  * $Log: supcmeat.c,v $
- * Revision 1.1  1993/05/21 14:52:17  cgd
- * Initial revision
+ * Revision 1.1.1.1  1993/05/21 14:52:18  cgd
+ * initial import of CMU's SUP to NetBSD
  *
  * Revision 1.16  92/09/09  22:04:51  mrt
  * 	Really added bww's recvone changes this time. 

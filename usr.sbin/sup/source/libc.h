@@ -26,8 +26,8 @@
  **********************************************************************
  * HISTORY
  * $Log: libc.h,v $
- * Revision 1.1  1993/05/21 14:52:16  cgd
- * Initial revision
+ * Revision 1.1.1.1  1993/05/21 14:52:17  cgd
+ * initial import of CMU's SUP to NetBSD
  *
  * Revision 1.7  89/04/03  11:10:45  vanryzin
  * 	Changed definition of qsort for c++ to indicate the procedure

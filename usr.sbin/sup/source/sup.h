@@ -35,8 +35,8 @@
  *	Changed name of DEFDIR from /usr/cs to /usr.
  *
  * $Log: sup.h,v $
- * Revision 1.1  1993/05/21 14:52:17  cgd
- * Initial revision
+ * Revision 1.1.1.1  1993/05/21 14:52:18  cgd
+ * initial import of CMU's SUP to NetBSD
  *
  * Revision 1.10  92/08/11  12:06:42  mrt
  * 	Added definition for DEBUGFPORTNUM, the debugging port number.

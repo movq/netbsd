@@ -29,8 +29,8 @@
  **********************************************************************
  * HISTORY
  * $Log: supcdefs.h,v $
- * Revision 1.1  1993/05/21 14:52:17  cgd
- * Initial revision
+ * Revision 1.1.1.1  1993/05/21 14:52:18  cgd
+ * initial import of CMU's SUP to NetBSD
  *
  * Revision 1.6  92/08/11  12:06:52  mrt
  * 	Added CFURELSUF  - use-release-suffix flag
