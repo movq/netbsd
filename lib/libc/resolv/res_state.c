@@ -1,4 +1,4 @@
-/*	$NetBSD: res_state.c,v 1.4 2004/05/23 16:55:09 christos Exp $	*/
+/*	$NetBSD: res_state.c,v 1.5 2004/06/09 18:07:03 christos Exp $	*/
 
 /*-
  * Copyright (c) 2004 The NetBSD Foundation, Inc.
@@ -38,7 +38,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: res_state.c,v 1.4 2004/05/23 16:55:09 christos Exp $");
+__RCSID("$NetBSD: res_state.c,v 1.5 2004/06/09 18:07:03 christos Exp $");
 #endif
 
 #include <sys/types.h>
@@ -47,10 +47,7 @@ __RCSID("$NetBSD: res_state.c,v 1.4 2004/05/23 16:55:09 christos Exp $");
 #include <netdb.h>
 #include <resolv.h>
 
-#undef _res
-
-/* Binary Compatibility; this symbol does not appear in a header file */
-struct __res_state _res;
+struct __res_state _nres;
 
 res_state __res_get_state_nothread(void);
 void __res_put_state_nothread(res_state);
@@ -65,11 +62,11 @@ __weak_alias(__res_state, __res_get_state_nothread)
 res_state
 __res_get_state_nothread(void)
 {
-	if ((_res.options & RES_INIT) == 0 && res_ninit(&_res) == -1) {
+	if ((_nres.options & RES_INIT) == 0 && res_ninit(&_nres) == -1) {
 		h_errno = NETDB_INTERNAL;
 		return NULL;
 	}
-	return &_res;
+	return &_nres;
 }
 
 void
