@@ -52,6 +52,7 @@ If your system is supported, it is one of
     BSD/OS 2.x
     BSD/OS 3.x
     BSD/OS 4.x
+    Darwin 1.x
     FreeBSD 2.x
     FreeBSD 3.x
     FreeBSD 4.x
@@ -73,8 +74,7 @@ If your system is supported, it is one of
     Linux SuSE 5.x
     Linux SuSE 6.x
     Linux SuSE 7.x
-    Mac OS X server
-    Mac OS X Public Beta
+    Mac OS X
     NEXTSTEP 3.x
     NetBSD 1.x
     OPENSTEP 4.x
@@ -84,7 +84,7 @@ If your system is supported, it is one of
     OpenBSD 2.x
     Reliant UNIX 5.x
     Rhapsody 5.x
-    SunOS 4.1.x
+    SunOS 4.1.x (with Postfix 1.1.0)
     SunOS 5.4..5.8 (Solaris 2.4..8)
     Ultrix 4.x (well, that was long ago)
 
@@ -152,15 +152,16 @@ In any case, if the command
     % make
 
 produces compiler error messages, it may be time to examine the
-FAQ document.
+FAQ document (see htlm/faq.html).
 
 5 - Porting to on an unsupported system
 =======================================
 
-- Choose a SYSTEMTYPE name for the new system. Please use a name
-that includes the major version of the operating system (such as
-SUNOS4 or LINUX2), so that different releases of the same system
-can be supported without confusion.
+- Each system type is identified by a unique name. Examples:
+SUNOS5, FREEBSD4, and so on.  Choose a SYSTEMTYPE name for the new
+system. You must use a name that includes at least the major version
+of the operating system (such as SUNOS4 or LINUX2), so that different
+releases of the same system can be supported without confusion.
 
 - Add a case statement to the "makedefs" shell script in the
 top-level directory that recognizes the new system reliably, and
@@ -182,6 +183,10 @@ again.
 6 - Installing the software after successful compilation
 ========================================================
 
+This text describes how to install Postfix from source code.  See
+the PACKAGE_README file if you are building a package for distribution
+to other systems.
+
 IMPORTANT: if you are REPLACING an existing sendmail installation
 with Postfix, you may need to keep the old sendmail program running
 for some time in order to flush the mail queue.  As superuser,
@@ -196,10 +201,11 @@ programs may be in a different place):
 
 In order to install or upgrade Postfix:
 
-- Create a user "postfix" with a unique user id and group id.
-  Preferably, this is an account that no-one can log into.  The
-  account does not need an executable login shell, and needs no
-  existing home directory.  My password file entry looks like this:
+- Create a user account "postfix" with a user id and group id that
+  are not used by any other user account.  Preferably, this is an
+  account that no-one can log into.  The account does not need an
+  executable login shell, and needs no existing home directory.
+  My password file entry looks like this:
 
     postfix:*:12345:12345:postfix:/no/where:/no/shell
 
@@ -207,22 +213,27 @@ In order to install or upgrade Postfix:
 
     postfix: root
 
-- Review section 12 of this file, and decide if a world-writable
-  maildrop is OK, or if Postfix needs a set-gid posting agent.
+- Create a group "postdrop" with a group id that is not used by
+  any other user account. Not even by the postfix user account.
+  My group file entry looks like:
 
-- Run the INSTALL.sh script as the super-user:
+    postdrop:*:54321:
 
-    # make install              (interactive version, first time install)
-    # make install </dev/null   (non-interactive version, for upgrades)
+  NB: this group was optional with older Postfix releases; it is
+  now required.
 
-  The non-interactive version needs the /etc/postfix/install.cf
-  file from a previous installation. If the file does not exist,
-  use interactive installation instead.
+- Run one of the following commands as the super-user:
 
-  The INSTALL.sh script offers suggestions for pathnames that you
-  can override, either by editing INSTALL.sh or by specifying your
-  preferences interactively. INSTALL.sh stores your preferences in
-  the Postfix configuration directory in order to ease future installs.
+    # make install       (interactive version, first time install)
+    # make upgrade       (non-interactive version, for upgrades)
+
+  The non-interactive version needs the /etc/postfix/main.cf file
+  from a previous installation. If the file does not exist, use
+  interactive installation instead.
+
+  The interactive version offers suggestions for pathnames that
+  you can override interactively, and stores your preferences in
+  /etc/postfix/main.cf for convenient future upgrades.
 
 - Proceed to the section on how you wish to run Postfix on your
   particular machine:
@@ -244,8 +255,8 @@ to change your existing sendmail setup. Instead, set up your mail
 user agent so that it calls the Postfix sendmail program directly.
 
 Follow the instructions in the "Mandatory configuration file edits"
-in section 10, review the "To chroot or not to chroot" text in
-section 11, and choose a security model according to section 12.
+in section 10, and review the "To chroot or not to chroot" text in
+section 11.
 
 You MUST comment out the `smtp inet' entry in /etc/postfix/master.cf,
 in order to avoid conflicts with the real sendmail.
@@ -264,10 +275,6 @@ and watch your syslog file for any error messages.
 
 Typical logfile names are: /var/log/maillog or /var/log/syslog.
 See /etc/syslog.conf for actual logfile names.
-
-When it is run for the first time, the Postfix startup shell script
-will create a bunch of subdirectories below the Postfix spool
-directory.
 
 In order to inspect the mail queue, use
 
@@ -293,8 +300,8 @@ In the /etc/postfix/main.cf file, I would specify
     mydestination = $myhostname
 
 Follow the instructions in the "Mandatory configuration file edits"
-in section 10, review the "To chroot or not to chroot" text in
-section 11, and choose a security model according to section 12.
+in section 10, and review the "To chroot or not to chroot" text in
+section 11.
 
 Start the mail system:
 
@@ -310,10 +317,6 @@ and watch your syslog file for any error messages.
 
 Typical logfile names are: /var/log/maillog or /var/log/syslog.
 See /etc/syslog.conf for actual logfile names.
-
-When it is run for the first time, the Postfix startup shell script
-will create a bunch of subdirectories below the Postfix spool
-directory.
 
 In order to inspect the mail queue, use
 
@@ -348,10 +351,6 @@ and watch the syslog file for any complaints from the mail system.
 
 Typical logfile names are: /var/log/maillog or /var/log/syslog.
 See /etc/syslog.conf for actual logfile names.
-
-When it is run for the first time, the Postfix startup shell script
-will create a bunch of subdirectories below the Postfix spool
-directory.
 
 See also the "Care and feeding" section 13 below.
 
@@ -472,52 +471,7 @@ files or device nodes.  The examples/chroot-setup directory has a
 collection of scripts that help you set up chroot environments for
 Postfix systems.
 
-12 - Security: writable versus protected maildrop directory
-===========================================================
-
-Postfix offers a choice of submission mechanisms.
-
-1 - Postfix can use a world-writable, sticky, mode 1733 maildrop
-    directory where local users can submit mail. This approach
-    avoids the need for set-uid or set-gid software. Mail can be
-    posted even while the mail system is down.  Queue files in the
-    maildrop directory have no read/write/execute permission for
-    other users.  The maildrop directory is not used for mail
-    received via the network.
-
-    With directory world write permission come opportunities for
-    annoyance: a local user can make hard links to someone else's
-    maildrop files so they don't go away and may be delivered
-    multiple times; a local user can fill the maildrop directory
-    with junk and try to crash the mail system; and a local user
-    can hard link someone else's files into the maildrop directory
-    and try to have them delivered as mail.  However, Postfix queue
-    files have a specific format; less than one in 10^12 non-Postfix
-    files would be recognized as a valid Postfix queue file.
-
-    In order to enable maildrop world-write permission: 
-
-    - Specify "no" when asked by the INSTALL.sh script whether
-      Postfix needs set-gid privileges.
-
-2 - On systems with many users it may be desirable to revoke maildrop
-    directory world write permission, and to enable set-gid privileges
-    on a small "maildrop" command that is provided for this purpose.
-
-    In order to revoke maildrop world-write permission:
-
-    - Create a group "maildrop" that is unique and that does not
-      share its group ID with any other user, certainly not with
-      the postfix account,
-
-    - Specify "maildrop" when asked by the INSTALL.sh script whether
-      Postfix needs set-gid privileges.
-
-    The sendmail posting program will automatically invoke the
-    postdrop command when maildrop directory write permission is
-    restricted.
-
-13 - Care and feeding of the Postfix system
+12 - Care and feeding of the Postfix system
 ===========================================
 
 The Postfix programs log all problems to the syslog daemon. The
