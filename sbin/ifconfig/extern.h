@@ -1,4 +1,4 @@
-/*	$NetBSD: extern.h,v 1.5 2005/03/19 23:16:55 thorpej Exp $	*/
+/*	$NetBSD: extern.h,v 1.6 2005/03/19 23:32:55 thorpej Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -29,6 +29,11 @@
  * SUCH DAMAGE.
  */
 
+#define	RIDADDR 0  
+#define	ADDR    1
+#define	MASK    2
+#define	DSTADDR 3
+
 struct afswtch {
 	const char *af_name;
 	short af_af;
@@ -47,9 +52,14 @@ extern struct ifreq ifr;
 extern int s;
 extern char name[30];
 
+extern u_short flags;
 extern int zflag;
+
+extern struct ifreq ifr, ridreq;
+extern struct ifaliasreq addreq;
 
 const struct afswtch *lookup_af_byname(const char *);
 const struct afswtch *lookup_af_bynum(int);
 const char *get_string(const char *, const char *, u_int8_t *, int *);
-void print_string(const u_int8_t *, int);
+void	print_string(const u_int8_t *, int);
+void    getsock(int);
