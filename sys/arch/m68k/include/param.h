@@ -1,4 +1,4 @@
-/*	$NetBSD: param.h,v 1.7 1999/12/12 07:45:46 scottr Exp $	*/
+/*	$NetBSD: param.h,v 1.5 1998/04/29 23:11:00 thorpej Exp $	*/
 
 /*
  * Copyright (c) 1988 University of Utah.
@@ -76,6 +76,10 @@
 #define BLKDEV_IOSIZE	2048
 #define	MAXPHYS		(64 * 1024)	/* max raw I/O transfer size */
 
+#define	CLSIZELOG2	0
+#define	CLSIZE		(1 << CLSIZELOG2)
+
+/* NOTE: SSIZE, SINCR and UPAGES must be multiples of CLSIZE */
 #define	SSIZE		1		/* initial stack size/NBPG */
 #define	SINCR		1		/* increment of stack/NBPG */
 
@@ -134,14 +138,12 @@
 #define	bdbtofsb(bn)	((bn) / (BLKDEV_IOSIZE/DEV_BSIZE))
 
 /*
- * Mach-derived conversion macros
+ * Mach derived conversion macros
  */
 #define	m68k_round_seg(x)	((((unsigned)(x)) + SEGOFSET) & ~SEGOFSET)
 #define	m68k_trunc_seg(x)	((unsigned)(x) & ~SEGOFSET)
-#define	m68k_seg_offset(x)	((unsigned)(x) & SEGOFSET)
 #define	m68k_round_page(x)	((((unsigned)(x)) + PGOFSET) & ~PGOFSET)
 #define	m68k_trunc_page(x)	((unsigned)(x) & ~PGOFSET)
-#define	m68k_page_offset(x)	((unsigned)(x) & PGOFSET)
 #define	m68k_btop(x)		((unsigned)(x) >> PGSHIFT)
 #define	m68k_ptob(x)		((unsigned)(x) << PGSHIFT)
 

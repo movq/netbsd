@@ -1,4 +1,4 @@
-/*	$NetBSD: advfsops.c,v 1.41 1999/11/15 20:55:48 tron Exp $	*/
+/*	$NetBSD: advfsops.c,v 1.36 1999/06/02 22:04:30 is Exp $	*/
 
 /*
  * Copyright (c) 1994 Christian E. Hopps
@@ -235,6 +235,7 @@ adosfs_mountfs(devvp, mp, p)
         mp->mnt_stat.f_fsid.val[0] = (long)devvp->v_rdev;
         mp->mnt_stat.f_fsid.val[1] = makefstype(MOUNT_ADOSFS);
 	mp->mnt_flag |= MNT_LOCAL;
+	devvp->v_specflags |= SI_MOUNTEDON;
 
 	/*
 	 * init anode table.
@@ -264,9 +265,7 @@ adosfs_mountfs(devvp, mp, p)
 	return(0);
 
 fail:
-	vn_lock(devvp, LK_EXCLUSIVE | LK_RETRY);
 	(void) VOP_CLOSE(devvp, FREAD, NOCRED, p);
-	VOP_UNLOCK(devvp, 0);
 	if (amp && amp->bitmap)
 		free(amp->bitmap, M_ADOSFSBITMAP);
 	if (amp)
@@ -299,11 +298,9 @@ adosfs_unmount(mp, mntflags, p)
 	if ((error = vflush(mp, NULLVP, flags)) != 0)
 		return (error);
 	amp = VFSTOADOSFS(mp);
-	if (amp->devvp->v_type != VBAD)
-		amp->devvp->v_specmountpoint = NULL;
-	vn_lock(amp->devvp, LK_EXCLUSIVE | LK_RETRY);
+	amp->devvp->v_specflags &= ~SI_MOUNTEDON;
 	error = VOP_CLOSE(amp->devvp, FREAD, NOCRED, p);
-	vput(amp->devvp);
+	vrele(amp->devvp);
 	if (amp->bitmap)
 		free(amp->bitmap, M_ADOSFSBITMAP);
 	free(amp, M_ADOSFSMNT);

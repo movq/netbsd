@@ -1,4 +1,4 @@
-/*	$NetBSD: param.h,v 1.15 1999/12/04 21:21:34 ragge Exp $ */
+/*	$NetBSD: param.h,v 1.11 1999/06/07 05:28:04 eeh Exp $ */
 
 /*
  * Copyright (c) 1992, 1993
@@ -116,19 +116,22 @@
  * of the `options SUN4?' combination a particular kernel was configured with.
  * See also the definitions of NBPG, PGOFSET and PGSHIFT below.
  */
-#if (defined(_KERNEL) || defined(_STANDALONE)) && !defined(_LOCORE)
+#if defined(_KERNEL) && !defined(_LOCORE)
 extern int nbpg, pgofset, pgshift;
 #endif
 
-#define	KERNBASE	0xf1000000	/* start of kernel virtual space */
-#define	KERNEND		0xfe000000	/* start of kernel virtual space */
-#define	VM_MAX_KERNEL_BUF	((KERNEND-KERNBASE)/4)
+#define	KERNBASE	0xf8000000	/* start of kernel virtual space */
+#define	KERNTEXTOFF	(KERNBASE+0x4000)	/* start of kernel text */
 
 #define	DEV_BSIZE	512
 #define	DEV_BSHIFT	9		/* log2(DEV_BSIZE) */
 #define	BLKDEV_IOSIZE	2048
 #define	MAXPHYS		(64 * 1024)
 
+#define	CLSIZE		1
+#define	CLSIZELOG2	0
+
+/* NOTE: SSIZE must be multiple of CLSIZE */
 #ifdef __arch64__
 /* We get stack overflows w/8K stacks in 64-bit mode */
 #define	SSIZE		2		/* initial stack size in pages */
@@ -139,7 +142,7 @@ extern int nbpg, pgofset, pgshift;
 
 /*
  * Constants related to network buffer management.
- * MCLBYTES must be no larger than NBPG (the software page size), and,
+ * MCLBYTES must be no larger than CLBYTES (the software page size), and,
  * on machines that exchange pages of input or output buffers with mbuf
  * clusters (MAPPED_MBUFS), MCLBYTES must also be an integral multiple
  * of the hardware page size.
@@ -164,10 +167,10 @@ extern int nbpg, pgofset, pgshift;
 #define MSGBUFSIZE	NBPG
 
 /*
- * Size of kernel malloc arena in NBPG-sized logical pages.
+ * Size of kernel malloc arena in CLBYTES-sized logical pages.
  */
 #ifndef	NKMEMCLUSTERS
-#define	NKMEMCLUSTERS	(6 * 1024 * 1024 / NBPG)
+#define	NKMEMCLUSTERS	(6 * 1024 * 1024 / CLBYTES)
 #endif
 
 /* pages ("clicks") to disk blocks */

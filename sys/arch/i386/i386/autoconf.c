@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.45 1999/11/17 01:22:09 thorpej Exp $	*/
+/*	$NetBSD: autoconf.c,v 1.41 1999/09/17 19:59:42 thorpej Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -46,18 +46,13 @@
  * devices are determined (from possibilities mentioned in ioconf.c),
  * and the drivers are initialized.
  */
-
-#include "opt_compat_oldboot.h"
-
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/buf.h>
 #include <sys/dkstat.h>
 #include <sys/disklabel.h>
 #include <sys/conf.h>
-#ifdef COMPAT_OLDBOOT
 #include <sys/reboot.h>
-#endif
 #include <sys/device.h>
 #include <sys/malloc.h>
 #include <sys/vnode.h>
@@ -75,18 +70,6 @@ void findroot __P((struct device **, int *));
 extern struct disklist *i386_alldisks;
 extern int i386_ndisks;
 
-#include "bios32.h"
-#if NBIOS32 > 0
-#include <machine/bios32.h>
-#endif
-
-#include "opt_pcibios.h"
-#ifdef PCIBIOS
-#include <dev/pci/pcireg.h>
-#include <dev/pci/pcivar.h>
-#include <i386/pci/pcibios.h>
-#endif
-
 /*
  * Determine i/o configuration for a machine.
  */
@@ -95,13 +78,6 @@ cpu_configure()
 {
 
 	startrtclock();
-
-#if NBIOS32 > 0
-	bios32_init();
-#endif
-#ifdef PCIBIOS
-	pcibios_init();
-#endif
 
 	if (config_rootfound("mainbus", NULL) == NULL)
 		panic("configure: mainbus not configured");
@@ -214,7 +190,7 @@ matchbiosdisks()
 
 			error = VOP_OPEN(tv, FREAD, NOCRED, 0);
 			if (error) {
-				vput(tv);
+				vrele(tv);
 				continue;
 			}
 			error = vn_rdwr(UIO_READ, tv, mbr, DEV_BSIZE, 0,
@@ -251,14 +227,13 @@ matchbiosdisks()
 				}
 			}
 			i386_alldisks->dl_nativedisks[n].ni_nmatches = m;
-			vput(tv);
+			vrele(tv);
 		}
 	}
 }
 
-#ifdef COMPAT_OLDBOOT
+
 u_long	bootdev = 0;		/* should be dev_t, but not until 32 bits */
-#endif
 struct device *booted_device;
 
 /*
@@ -312,7 +287,7 @@ match_harddisk(dv, bid)
 #endif
 			printf("findroot: can't open dev %s%c (%d)\n",
 			       dv->dv_xname, 'a' + bid->partition, error);
-		vput(tmpvn);
+		vrele(tmpvn);
 		return(0);
 	}
 	error = VOP_IOCTL(tmpvn, DIOCGDINFO, (caddr_t)&label, FREAD, NOCRED, 0);
@@ -334,7 +309,8 @@ match_harddisk(dv, bid)
 
 closeout:
 	VOP_CLOSE(tmpvn, FREAD, NOCRED, 0);
-	vput(tmpvn);
+	vrele(tmpvn);
+
 	return(found);
 }
 
@@ -350,10 +326,8 @@ findroot(devpp, partp)
 {
 	struct btinfo_bootdisk *bid;
 	struct device *dv;
-#ifdef COMPAT_OLDBOOT
 	int i, majdev, unit, part;
 	char buf[32];
-#endif
 
 	/*
 	 * Default to "not found."
@@ -436,7 +410,6 @@ found:
 			return;
 	}
 
-#ifdef COMPAT_OLDBOOT
 #if 0
 	printf("howto %x bootdev %x ", boothowto, bootdev);
 #endif
@@ -463,7 +436,6 @@ found:
 			return;
 		}
 	}
-#endif
 }
 
 #include "pci.h"
@@ -488,13 +460,9 @@ device_register(dev, aux)
 		if (bin == NULL)
 			return;
 
-		/*
-		 * We don't check the driver name against the device name
-		 * passed by the boot ROM. The ROM should stay usable
-		 * if the driver gets obsoleted.
-		 * The physical attachment information (checked below)
-		 * must be sufficient to identify the device.
-		 */
+		/* check driver name */
+		if (strcmp(bin->ifname, dev->dv_cfdata->cf_driver->cd_name))
+			return;
 
 		if (bin->bus == BI_BUS_ISA &&
 		    !strcmp(dev->dv_parent->dv_cfdata->cf_driver->cd_name,

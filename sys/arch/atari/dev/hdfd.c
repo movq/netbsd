@@ -1,4 +1,4 @@
-/*	$NetBSD: hdfd.c,v 1.17 1999/10/22 08:50:59 leo Exp $	*/
+/*	$NetBSD: hdfd.c,v 1.15 1999/08/06 08:27:31 leo Exp $	*/
 
 /*-
  * Copyright (c) 1996 Leo Weppelman
@@ -289,8 +289,7 @@ fdcprobe(parent, cfp, aux)
 	if ((mb_tag = mb_alloc_bus_space_tag()) == NULL)
 		return 0;
 
-	if (bus_space_map(mb_tag, FD_IOBASE, FD_IOSIZE, 0,
-						(caddr_t*)&fdio_addr)) {
+	if (bus_space_map(mb_tag, 0xfff00000, NBPG, 0, (caddr_t*)&fdio_addr)) {
 		printf("fdcprobe: cannot map io-area\n");
 		mb_free_bus_space_tag(mb_tag);
 		return (0);
@@ -315,7 +314,7 @@ fdcprobe(parent, cfp, aux)
 
  out:
 	if (rv == 0) {
-		bus_space_unmap(mb_tag, (caddr_t)fdio_addr, FD_IOSIZE);
+		bus_space_unmap(mb_tag, (caddr_t)fdio_addr, NBPG);
 		mb_free_bus_space_tag(mb_tag);
 	}
 
@@ -1331,17 +1330,15 @@ fdioctl(dev, cmd, addr, flag, p)
 		/* XXX do something */
 		return 0;
 
-	case DIOCSDINFO:
 	case DIOCWDINFO:
 		if ((flag & FWRITE) == 0)
-		    return EBADF;
+			return EBADF;
 
 		error = setdisklabel(&buffer, (struct disklabel *)addr, 0,NULL);
 		if (error)
-		    return error;
+			return error;
 
-		if (cmd == DIOCWDINFO)
-		    error = writedisklabel(dev, fdstrategy, &buffer, NULL);
+		error = writedisklabel(dev, fdstrategy, &buffer, NULL);
 		return error;
 
 	case FDIOCGETFORMAT:

@@ -1,4 +1,4 @@
-/*	$NetBSD: param.h,v 1.41 1999/12/04 21:21:28 ragge Exp $ */
+/*	$NetBSD: param.h,v 1.39 1999/05/03 16:14:02 christos Exp $ */
 
 /*
  * Copyright (c) 1992, 1993
@@ -97,12 +97,16 @@ extern int nbpg, pgofset, pgshift;
 #define	BLKDEV_IOSIZE	2048
 #define	MAXPHYS		(64 * 1024)
 
+#define	CLSIZE		1
+#define	CLSIZELOG2	0
+
+/* NOTE: SSIZE must be multiple of CLSIZE */
 #define	SSIZE		1		/* initial stack size in pages */
 #define	USPACE		8192
 
 /*
  * Constants related to network buffer management.
- * MCLBYTES must be no larger than NBPG (the software page size), and,
+ * MCLBYTES must be no larger than CLBYTES (the software page size), and,
  * on machines that exchange pages of input or output buffers with mbuf
  * clusters (MAPPED_MBUFS), MCLBYTES must also be an integral multiple
  * of the hardware page size.
@@ -112,11 +116,12 @@ extern int nbpg, pgofset, pgshift;
 #define	MCLSHIFT	11		/* log2(MCLBYTES) */
 #define	MCLOFSET	(MCLBYTES - 1)
 
+#ifndef NMBCLUSTERS
+
 #if defined(_KERNEL) && !defined(_LKM)
 #include "opt_gateway.h"
 #endif /* _KERNEL && ! _LKM */
 
-#ifndef NMBCLUSTERS
 #ifdef GATEWAY
 #define	NMBCLUSTERS	512		/* map size, max cluster allocation */
 #else
@@ -127,10 +132,10 @@ extern int nbpg, pgofset, pgshift;
 #define MSGBUFSIZE	4096
 
 /*
- * Size of kernel malloc arena in NBPG-sized logical pages.
+ * Size of kernel malloc arena in CLBYTES-sized logical pages.
  */
 #ifndef	NKMEMCLUSTERS
-#define	NKMEMCLUSTERS	(6 * 1024 * 1024 / NBPG)
+#define	NKMEMCLUSTERS	(6 * 1024 * 1024 / CLBYTES)
 #endif
 
 /* pages ("clicks") to disk blocks */

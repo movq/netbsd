@@ -1,4 +1,4 @@
-/*	$NetBSD: uvm_swap.c,v 1.30 1999/11/15 18:49:15 fvdl Exp $	*/
+/*	$NetBSD: uvm_swap.c,v 1.28 1999/07/22 22:58:39 thorpej Exp $	*/
 
 /*
  * Copyright (c) 1995, 1996, 1997 Matthew R. Green
@@ -1049,11 +1049,8 @@ bad:
 	/*
 	 * failure: close device if necessary and return error.
 	 */
-	if (vp != rootvp) {
-		vn_lock(vp, LK_EXCLUSIVE | LK_RETRY);
+	if (vp != rootvp)
 		(void)VOP_CLOSE(vp, FREAD|FWRITE, p->p_ucred, p);
-		VOP_UNLOCK(vp, 0);
-	}
 	return (error);
 }
 
@@ -1102,11 +1099,8 @@ swap_off(p, sdp)
 	extent_destroy(sdp->swd_ex);
 	free(name, M_VMSWAP);
 	free((caddr_t)sdp->swd_ex, M_VMSWAP);
-	if (sdp->swp_vp != rootvp) {
-		vn_lock(vp, LK_EXCLUSIVE | LK_RETRY);
+	if (sdp->swp_vp != rootvp)
 		(void) VOP_CLOSE(sdp->swd_vp, FREAD|FWRITE, p->p_ucred, p);
-		VOP_UNLOCK(vp, 0);
-	}
 	if (sdp->swd_vp)
 		vrele(sdp->swd_vp);
 	free((caddr_t)sdp, M_VMSWAP);
@@ -1364,7 +1358,6 @@ sw_reg_strategy(sdp, bp, bn)
 		nbp->vb_buf.b_vnbufs.le_next = NOLIST;
 		nbp->vb_buf.b_rcred    = sdp->swd_cred;
 		nbp->vb_buf.b_wcred    = sdp->swd_cred;
-		LIST_INIT(&nbp->vb_buf.b_dep);
 
 		/* 
 		 * set b_dirtyoff/end and b_validoff/end.   this is
@@ -1816,7 +1809,6 @@ uvm_swap_io(pps, startslot, npages, flags)
 	if (swapdev_vp->v_type == VBLK)
 		bp->b_dev = swapdev_vp->v_rdev;
 	bp->b_bcount = npages << PAGE_SHIFT;
-	LIST_INIT(&bp->b_dep);
 
 	/* 
 	 * for pageouts we must set "dirtyoff" [NFS client code needs it].

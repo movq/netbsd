@@ -1,4 +1,4 @@
-/*	$NetBSD: sd.c,v 1.153 1999/11/03 20:50:17 matt Exp $	*/
+/*	$NetBSD: sd.c,v 1.149 1999/09/30 22:57:54 thorpej Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -154,7 +154,7 @@ sdattach(parent, sd, sc_link, ops)
 	sd->sc_dk.dk_name = sd->sc_dev.dv_xname;
 	disk_attach(&sd->sc_dk);
 
-#if !defined(__i386__) && !defined(__vax__)
+#if !defined(i386)
 	dk_establish(&sd->sc_dk, &sd->sc_dev);		/* XXX */
 #endif
 
@@ -929,7 +929,7 @@ sdioctl(dev, cmd, addr, flag, p)
 			if ((sd->sc_dk.dk_openmask & ~(1 << part)) == 0 &&
 			    sd->sc_dk.dk_bopenmask + sd->sc_dk.dk_copenmask ==
 			    sd->sc_dk.dk_openmask) {
-				error = scsipi_prevent(sd->sc_link, PR_ALLOW,
+				error =  scsipi_prevent(sd->sc_link, PR_ALLOW,
 				    XS_CTL_IGNORE_NOT_READY);
 				if (error)
 					return (error);
@@ -1126,7 +1126,7 @@ sd_interpret_sense(xs)
 				printf("%s: respinning up disk\n",
 				    sd->sc_dev.dv_xname);
 				retval = scsipi_start(sd->sc_link, SSS_START,
-				    XS_CTL_URGENT | XS_CTL_NOSLEEP);
+				   XS_CTL_URGENT | XS_CTL_NOSLEEP);
 				if (retval != 0) {
 					printf(
 					    "%s: respin of disk failed - %d\n",
@@ -1205,6 +1205,9 @@ sddump(dev, blkno, va, size)
 	struct scsipi_xfer *xs;	/* ... convenience */
 	int	retval;
 
+	if ((sd->sc_dev.dv_flags & DVF_ACTIVE) == 0)
+		return (ENODEV);
+
 	/* Check if recursive dump; if so, punt. */
 	if (sddoingadump)
 		return (EFAULT);
@@ -1218,9 +1221,6 @@ sddump(dev, blkno, va, size)
 	/* Check for acceptable drive number. */
 	if (unit >= sd_cd.cd_ndevs || (sd = sd_cd.cd_devs[unit]) == NULL)
 		return (ENXIO);
-
-	if ((sd->sc_dev.dv_flags & DVF_ACTIVE) == 0)
-		return (ENODEV);
 
 	/* Make sure it was initialized. */
 	if ((sd->sc_link->flags & SDEV_MEDIA_LOADED) != SDEV_MEDIA_LOADED)
