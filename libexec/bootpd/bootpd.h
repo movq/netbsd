@@ -1,3 +1,5 @@
+#ifndef _BLURB_
+#define _BLURB_
 /************************************************************************
           Copyright 1988, 1991 by Carnegie Mellon University
 
@@ -19,15 +21,13 @@ PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS
 ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS
 SOFTWARE.
 ************************************************************************/
+#endif /* _BLURB_ */
 
 
 /*
  * bootpd.h -- common header file for all the modules of the bootpd program.
  */
 
-#include "bptypes.h"
-#include "hash.h"
-#include "hwaddr.h"
 
 #ifndef TRUE
 #define TRUE	1
@@ -44,7 +44,16 @@ SOFTWARE.
 #define SIGUSR1			 30	/* From 4.3 <signal.h> */
 #endif
 
+#define MAXHTYPES		  7	/* Number of htypes defined */
+#define MAXHADDRLEN		  6	/* Max hw address length in bytes */
 #define MAXSTRINGLEN		 80	/* Max string length */
+
+/*
+ * Return the length in bytes of a hardware address of the given type.
+ * Return the canonical name of the network of the given type.
+ */
+#define haddrlength(type)	((hwinfolist[(int) (type)]).hlen)
+#define netname(type)		((hwinfolist[(int) (type)]).name)
 
 
 /*
@@ -54,13 +63,59 @@ SOFTWARE.
 
 
 /*
+ * Variables shared among modules.
+ */
+
+extern int debug;
+extern char *bootptab;
+
+extern struct hwinfo hwinfolist[];
+
+extern hash_tbl *hwhashtable;
+extern hash_tbl *iphashtable;
+extern hash_tbl *nmhashtable;
+extern unsigned char vm_cmu[4];
+extern unsigned char vm_rfc1048[4];
+
+
+/*
+ * Functions shared among modules
+ */
+
+extern void report();
+extern char *get_errmsg();
+extern char *haddrtoa();
+extern int readtab();
+
+
+
+/*
+ * Nice typedefs. . .
+ */
+
+typedef int boolean;
+typedef unsigned char byte;
+
+
+/*
+ * This structure holds information about a specific network type.  The
+ * length of the network hardware address is stored in "hlen".
+ * The string pointed to by "name" is the cononical name of the network.
+ */
+struct hwinfo {
+    unsigned hlen;
+    char *name;
+};
+
+
+/*
  * Data structure used to hold an arbitrary-lengthed list of IP addresses.
  * The list may be shared among multiple hosts by setting the linkcount
  * appropriately.
  */
 
 struct in_addr_list {
-    unsigned int	linkcount, addrcount;
+    unsigned		linkcount, addrcount;
     struct in_addr	addr[1];		/* Dynamically extended */
 };
 
@@ -71,12 +126,12 @@ struct in_addr_list {
  */
 
 struct shared_string {
-    unsigned int	linkcount;
+    unsigned		linkcount;
     char		string[1];		/* Dynamically extended */
 };
 
 struct shared_bindata {
-    unsigned int	linkcount, length;
+    unsigned		linkcount, length;
     byte		data[1];		/* Dynamically extended */
 };
 
@@ -110,18 +165,14 @@ struct flag {
 		subnet_mask	:1,
 		tftpdir		:1,
 		time_offset	:1,
+		timeoff_auto	:1,
 		time_server	:1,
-		dump_file	:1,
-		domain_name	:1,
+		vendor_magic	:1,
+		dumpfile	:1,
+		domainname	:1,
 		swap_server	:1,
-		root_path	:1,
-		exten_file	:1,
-		reply_addr	:1,
-		nis_domain	:1,
-		nis_server	:1,
-		ntp_server	:1,
-		/* XXX - Add new tags here */
-		vm_cookie	:1;
+		rootpath	:1,
+		vm_auto		:1;
 };
 
 
@@ -146,7 +197,6 @@ struct flag {
  */
 
 struct host {
-    unsigned		    linkcount;		/* hash list inserts */
     struct flag		    flags;		/* ALL valid fields */
     struct in_addr_list	    *cookie_server,
 			    *domain_server,
@@ -156,47 +206,23 @@ struct host {
 			    *lpr_server,
 			    *name_server,
 			    *rlp_server,
-			    *time_server,
-			    *nis_server,
-			    *ntp_server;
+    			    *time_server;
     struct shared_string    *bootfile,
 			    *hostname,
-			    *domain_name,
+    			    *domainname,
 			    *homedir,
 			    *tftpdir,
-			    *dump_file,
-			    *exten_file,
-			    *root_path,
-			    *nis_domain;
+    			    *dumpfile,
+    			    *rootpath;
     struct shared_bindata   *generic;
     byte		    vm_cookie[4],
 			    htype,  /* RFC826 says this should be 16-bits but
 				       RFC951 only allocates 1 byte. . . */
 			    haddr[MAXHADDRLEN];
-    int32		    time_offset;
+    long		    time_offset;
     unsigned int	    bootsize;
     struct in_addr	    bootserver,
 			    iaddr,
-			    swap_server,
-			    reply_addr,
+			    swapserver,
 			    subnet_mask;
-    /* XXX - Add new tags here (or above as appropriate) */
 };
-
-
-
-/*
- * Variables shared among modules.
- */
-
-extern int debug;
-extern char *bootptab;
-extern char *progname;
-
-extern u_char vm_cmu[4];
-extern u_char vm_rfc1048[4];
-
-extern hash_tbl *hwhashtable;
-extern hash_tbl *iphashtable;
-extern hash_tbl *nmhashtable;
-
