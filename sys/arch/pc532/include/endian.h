@@ -32,7 +32,7 @@
  *
  *	@(#)endian.h	7.8 (Berkeley) 4/3/91
  *
- *	$Id: endian.h,v 1.1 1993/09/09 23:53:45 phil Exp $
+ *	endian.h,v 1.1.1.1 1993/09/09 23:53:46 phil Exp
  */
 
 /*
@@ -45,9 +45,7 @@
 
 #define	BYTE_ORDER	LITTLE_ENDIAN
 
-#ifndef KERNEL
 #include <sys/cdefs.h>
-#endif
 
 __BEGIN_DECLS
 unsigned long	htonl __P((unsigned long));
