@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.inc,v 1.1 1997/12/18 07:37:37 thorpej Exp $
+#	$NetBSD: Makefile.inc,v 1.1.1.1 1997/12/18 07:37:37 thorpej Exp $
 
 .if !defined(__MAKEFILE_INC_INCLUDED__)
 __MAKEFILE_INC_INCLUDED__=1

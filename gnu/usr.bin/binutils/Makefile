@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 1997/12/18 07:37:37 thorpej Exp $
+#	$NetBSD: Makefile,v 1.1.1.1 1997/12/18 07:37:37 thorpej Exp $
 
 SUBDIR=	common addr2line ar c++filt nlmconv nm objcopy objdump size strings \
 	strip
