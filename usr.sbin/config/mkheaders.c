@@ -1,6 +1,15 @@
-/*
- * Copyright (c) 1980 Regents of the University of California.
- * All rights reserved.
+/* 
+ * Copyright (c) 1992, 1993
+ *	The Regents of the University of California.  All rights reserved.
+ *
+ * This software was developed by the Computer Systems Engineering group
+ * at Lawrence Berkeley Laboratory under DARPA contract BG 91-66 and
+ * contributed to Berkeley.
+ *
+ * All advertising materials mentioning features or use of this software
+ * must display the following acknowledgement:
+ *	This product includes software developed by the University of
+ *	California, Lawrence Berkeley Laboratories.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -29,208 +38,112 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
+ *
+ *	from: @(#)mkheaders.c	8.1 (Berkeley) 6/6/93
+ *	$Id: mkheaders.c,v 1.7 1995/04/28 06:55:12 cgd Exp $
  */
 
-#ifndef lint
-/*static char sccsid[] = "from: @(#)mkheaders.c	5.7 (Berkeley) 7/1/91";*/
-static char rcsid[] = "$Id: mkheaders.c,v 1.6 1994/03/10 19:50:45 mycroft Exp $";
-#endif /* not lint */
-
-/*
- * Make all the .h files for the optional entries
- */
-
-#include <stdio.h>
+#include <sys/param.h>
 #include <ctype.h>
+#include <errno.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include "config.h"
-#include "y.tab.h"
-#include "specfile.h"
 
-headers()
-{
-	register struct file_list *fl;
-
-	for (fl = ftab; fl != 0; fl = fl->f_next)
-	    if (fl->f_was_driver)
-		    do_identifiers(fl->f_needs);
-	    else if (fl->f_needs_count)
-		    do_identifiers(fl->f_countname);
-}
-
-do_identifiers(expr)
-	register struct name_expr *expr;
-{
-
-	if (expr->left)
-		do_identifiers(expr->left);
-	if (expr->type == T_IDENTIFIER)
-		do_count(expr->name, expr->name, 1);
-	if (expr->right)
-		do_identifiers(expr->right);
-}
+static int emitcnt __P((struct nvlist *));
+static int err __P((const char *, char *, FILE *));
+static char *cntname __P((const char *));
 
 /*
- * count all the devices of a certain type and recurse to count
- * whatever the device is connected to
+ * Make headers containing counts, as needed.
  */
-do_count(dev, hname, search)
-	register char *dev, *hname;
-	int search;
+int
+mkheaders()
 {
-	register struct device *dp, *mp;
-	register int count;
+	register struct files *fi;
 
-	for (count = 0,dp = dtab; dp != 0; dp = dp->d_next)
-		if (dp->d_unit != -1 && eq(dp->d_name, dev)) {
-			if (dp->d_type == PSEUDO_DEVICE) {
-				count =
-				    dp->d_slave != UNKNOWN ? dp->d_slave : 1;
-				if (dp->d_flags)
-				    dev = NULL;
-				break;
-			}
-			count++;
-			/*
-			 * Allow holes in unit numbering,
-			 * assumption is unit numbering starts
-			 * at zero.
-			 */
-			if (dp->d_unit + 1 > count)
-				count = dp->d_unit + 1;
-			if (search) {
-				mp = dp->d_conn;
-				if (mp != 0 && mp != TO_NEXUS &&
-				    mp->d_conn != 0 && mp->d_conn != TO_NEXUS) {
-					do_count(mp->d_name, hname, 0);
-					search = 0;
-				}
-			}
-		}
-	do_header(dev, hname, count);
+	for (fi = allfiles; fi != NULL; fi = fi->fi_next) {
+		if (fi->fi_flags & FI_HIDDEN)
+			continue;
+		if (fi->fi_flags & (FI_NEEDSCOUNT | FI_NEEDSFLAG) &&
+		    emitcnt(fi->fi_opt))
+			return (1);
+	}
+	return (0);
 }
 
-do_header(dev, hname, count)
-	char *dev, *hname;
-	int count;
+static int
+emitcnt(head)
+	register struct nvlist *head;
 {
-	char *file, *name, *inw, *toheader(), *tomacro(), *get_rword();
-	struct file_list *fl, *fl_head;
-	FILE *inf, *outf;
-	int inc = 0, oldcount;
+	register struct nvlist *nv;
+	register FILE *fp;
+	register char *fname;
+	int cnt;
+	char nam[100];
+	char buf[BUFSIZ];
 
-	file = toheader(hname);
-	name = tomacro(dev?dev:hname) + (dev == NULL);
-	inf = fopen(file, "r");
-	oldcount = -1;
-	if (inf == 0) {
-		outf = fopen(file, "w");
-		if (outf == 0) {
-			perror(file);
-			exit(1);
-		}
-                if (dev || (!dev && count))
-		        fprintf(outf, "#define %s %d\n", name, count);
-		(void) fclose(outf);
-		return;
+	(void)sprintf(buf, "%s.h", head->nv_name);
+	fname = path(buf);
+	if ((fp = fopen(fname, "r")) == NULL)
+		goto writeit;
+	nv = head;
+	while (fgets(buf, sizeof(buf), fp) != NULL) {
+		if (nv == NULL)
+			goto writeit;
+		if (sscanf(buf, "#define %s %d", nam, &cnt) != 2 ||
+		    strcmp(nam, cntname(nv->nv_name)) != 0 ||
+		    cnt != nv->nv_int)
+			goto writeit;
+		nv = nv->nv_next;
 	}
-	fl_head = 0;
-	for (;;) {
-		char *cp;
-		if ((inw = get_rword(inf)) == 0 || inw == (char *)EOF)
-			break;
-		if ((inw = get_rword(inf)) == 0 || inw == (char *)EOF)
-			break;
-		inw = ns(inw);
-		cp = get_rword(inf);
-		if (cp == 0 || cp == (char *)EOF)
-			break;
-		inc = atoi(cp);
-		if (eq(inw, name)) {
-			oldcount = inc;
-			inc = count;
-		}
-		cp = get_rword(inf);
-		if (cp == (char *)EOF)
-			break;
-		fl = (struct file_list *) malloc(sizeof *fl);
-		bzero(fl, sizeof(*fl));
-		fl->f_fn = inw;
-		fl->f_type = inc;
-		fl->f_next = fl_head;
-		fl_head = fl;
+	if (ferror(fp))
+		return (err("read", fname, fp));
+	(void)fclose(fp);
+	if (nv == NULL)
+		return (0);
+writeit:
+	if ((fp = fopen(fname, "w")) == NULL) {
+		(void)fprintf(stderr, "config: cannot write %s: %s\n",
+		    fname, strerror(errno));
+		return (1);
 	}
-	(void) fclose(inf);
-/*DEBUG  printf("%s: dev=%x, inc=%d, oldcount=%d count=%d\n",
-		 file, dev, inc, oldcount, count); */
-	if (!dev && inc == 0 && oldcount == -1 && count == 0)
-		oldcount = 0;
-	else if (!dev && count == 0)
-		oldcount = -1;
-	if (count == oldcount) {
-		for (fl = fl_head; fl;) {
-			struct file_list *fln = fl->f_next;
-
-			free((char *)fl);
-			fl = fln;
-		}
-		return;
-	}
-	if (oldcount == -1) {
-		fl = (struct file_list *) malloc(sizeof *fl);
-		bzero(fl, sizeof(*fl));
-		fl->f_fn = name;
-		fl->f_type = count;
-		fl->f_next = fl_head;
-		fl_head = fl;
-	}
-	outf = fopen(file, "w");
-	if (outf == 0) {
-		perror(file);
-		exit(1);
-	}
-	for (fl = fl_head; fl;) {
-		struct file_list *fln = fl->f_next;
-
-                if (dev || (!dev && count))
-                    fprintf(outf, "#define %s %u\n",
-                            fl->f_fn, count ? fl->f_type : 0);
-		free((char *)fl);
-		fl = fln;
-	}
-	(void) fclose(outf);
+	for (nv = head; nv != NULL; nv = nv->nv_next)
+		if (fprintf(fp, "#define\t%s\t%d\n",
+		    cntname(nv->nv_name), nv->nv_int) < 0)
+			return (err("writ", fname, fp));
+	if (fclose(fp))
+		return (err("writ", fname, NULL));
+	return (0);
 }
 
-/*
- * convert a dev name to a .h file name
- */
-char *
-toheader(dev)
-	char *dev;
+static int
+err(what, fname, fp)
+	const char *what;
+	char *fname;
+	FILE *fp;
 {
-	static char hbuf[80];
 
-	(void) strcpy(hbuf, path(dev));
-	(void) strcat(hbuf, ".h");
-	return (hbuf);
+	(void)fprintf(stderr, "config: error %sing %s: %s\n",
+	    what, fname, strerror(errno));
+	if (fp)
+		(void)fclose(fp);
+	free(fname);
+	return (1);
 }
 
-/*
- * convert a dev name to a macro name
- */
-char *tomacro(dev)
-	register char *dev;
+static char *
+cntname(src)
+	register const char *src;
 {
-	static char mbuf[20];
-	register char *cp;
+	register char *dst, c;
+	static char buf[100];
 
-	cp = mbuf;
-	*cp++ = 'N';
-	while (*dev) {
-		if (islower(*dev))
-		    *cp++ = toupper(*dev++);
-		else
-		    *cp++ = *dev++;
-	}
-	*cp++ = 0;
-	return (mbuf);
+	dst = buf;
+	*dst++ = 'N';
+	while ((c = *src++) != 0)
+		*dst++ = islower(c) ? toupper(c) : c;
+	*dst = 0;
+	return (buf);
 }
