@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 1997/07/24 21:20:11 christos Exp $
+#	$NetBSD: Makefile,v 1.1.1.1 1997/07/24 21:20:11 christos Exp $
 
 LIB= amu
 SRCS=	mtabutil.c tranputil.c umount_fs.c xutil.c xdr_mountres3.c wire.c \
