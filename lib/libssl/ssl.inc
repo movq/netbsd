@@ -1,4 +1,4 @@
-#	$NetBSD: ssl.inc,v 1.1 2000/06/16 04:54:48 thorpej Exp $
+#	$NetBSD: ssl.inc,v 1.1.1.1 2000/06/16 04:54:48 thorpej Exp $
 #
 #	@(#) Copyright (c) 1995 Simon J. Gerraty
 #

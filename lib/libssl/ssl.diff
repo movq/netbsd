@@ -1,4 +1,4 @@
-$NetBSD: ssl.diff,v 1.1 2000/06/16 04:54:48 thorpej Exp $
+$NetBSD: ssl.diff,v 1.1.1.1 2000/06/16 04:54:48 thorpej Exp $
 
 --- ssl.inc.orig	Tue Jul 20 19:09:24 1999
 +++ ssl.inc	Tue Jul 20 19:09:41 1999
