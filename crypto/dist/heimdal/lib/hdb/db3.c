@@ -33,7 +33,7 @@
 
 #include "hdb_locl.h"
 
-RCSID("$Id: db3.c,v 1.1 2000/08/02 19:59:11 assar Exp $");
+RCSID("$Id: db3.c,v 1.1.1.1 2000/08/02 19:59:11 assar Exp $");
 
 #if defined(HAVE_DB_H) && DB_VERSION_MAJOR == 3
 static krb5_error_code

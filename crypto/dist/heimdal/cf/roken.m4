@@ -1,4 +1,4 @@
-dnl $Id: roken.m4,v 1.1 2000/08/02 20:00:31 assar Exp $
+dnl $Id: roken.m4,v 1.1.1.1 2000/08/02 20:00:31 assar Exp $
 dnl
 dnl try to look for an installed roken library with sufficient stuff
 dnl

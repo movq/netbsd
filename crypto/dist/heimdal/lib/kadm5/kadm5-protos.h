@@ -31,7 +31,7 @@
  * SUCH DAMAGE. 
  */
 
-/* $Id: kadm5-protos.h,v 1.1 2000/08/02 19:59:19 assar Exp $ */
+/* $Id: kadm5-protos.h,v 1.1.1.1 2000/08/02 19:59:19 assar Exp $ */
 
 #ifndef __kadm5_protos_h__
 #define __kadm5_protos_h__

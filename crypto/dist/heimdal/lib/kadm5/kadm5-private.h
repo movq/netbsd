@@ -31,7 +31,7 @@
  * SUCH DAMAGE. 
  */
 
-/* $Id: kadm5-private.h,v 1.1 2000/08/02 19:59:19 assar Exp $ */
+/* $Id: kadm5-private.h,v 1.1.1.1 2000/08/02 19:59:19 assar Exp $ */
 
 #ifndef __kadm5_privatex_h__
 #define __kadm5_privatex_h__

@@ -36,7 +36,7 @@
 #define O_BINARY 0
 #endif
 
-RCSID("$Id: mkey.c,v 1.1 2000/08/02 19:59:13 assar Exp $");
+RCSID("$Id: mkey.c,v 1.1.1.1 2000/08/02 19:59:13 assar Exp $");
 
 struct hdb_master_key_data {
     krb5_keytab_entry keytab;
