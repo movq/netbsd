@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 1997/12/18 19:27:58 thorpej Exp $
+#	$NetBSD: Makefile,v 1.1.1.1 1997/12/18 19:27:58 thorpej Exp $
 
 # Override this to built a cross profiler.
 TARGET_ARCH?=${MACHINE_ARCH}
