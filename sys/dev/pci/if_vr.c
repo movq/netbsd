@@ -29,7 +29,7 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
  * THE POSSIBILITY OF SUCH DAMAGE.
  *
- *	$Id: if_vr.c,v 1.1 1999/01/21 11:55:22 sakamoto Exp $
+ *	$Id: if_vr.c,v 1.1.1.1 1999/01/21 11:55:22 sakamoto Exp $
  */
 
 /*
@@ -97,7 +97,7 @@
 
 #ifndef lint
 static const char rcsid[] =
-	"$Id: if_vr.c,v 1.1 1999/01/21 11:55:22 sakamoto Exp $";
+	"$Id: if_vr.c,v 1.1.1.1 1999/01/21 11:55:22 sakamoto Exp $";
 #endif
 
 /*
