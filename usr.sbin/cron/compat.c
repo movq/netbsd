@@ -1,4 +1,4 @@
-/* Copyright 1988,1990,1993 by Paul Vixie
+/* Copyright 1988,1990,1993,1994 by Paul Vixie
  * All rights reserved
  *
  * Distribute freely, except: don't remove my name from the source or
@@ -16,7 +16,7 @@
  */
 
 #if !defined(lint) && !defined(LINT)
-static char rcsid[] = "$Id: compat.c,v 1.1 1994/01/05 20:40:12 jtc Exp $";
+static char rcsid[] = "$Id: compat.c,v 1.1.1.3 1994/01/20 02:47:03 jtc Exp $";
 #endif
 
 /* vix 30dec93 [broke this out of misc.c - see RCS log for history]
@@ -25,7 +25,6 @@ static char rcsid[] = "$Id: compat.c,v 1.1 1994/01/05 20:40:12 jtc Exp $";
 
 
 #include "cron.h"
-#include "externs.h"
 #ifdef NEED_GETDTABLESIZE
 # include <limits.h>
 #endif
