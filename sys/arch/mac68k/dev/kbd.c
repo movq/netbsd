@@ -1,4 +1,4 @@
-/*	$NetBSD: kbd.c,v 1.3 1999/02/16 01:08:16 ender Exp $	*/
+/*	$NetBSD: kbd.c,v 1.3.2.1 1999/03/05 08:24:25 scottr Exp $	*/
 
 /*
  * Copyright (C) 1998	Colin Wood
@@ -40,6 +40,8 @@
 #include <sys/systm.h>
 
 #include <machine/autoconf.h>
+#define KEYBOARD_ARRAY
+#include <machine/keyboard.h>
 
 #include <mac68k/mac68k/macrom.h>
 #include <mac68k/dev/adbvar.h>
