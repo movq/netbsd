@@ -1,4 +1,4 @@
-/*	$NetBSD: extern.h,v 1.7 1998/01/18 13:30:03 lukem Exp $	*/
+/*	$NetBSD: extern.h,v 1.8 1998/10/10 07:38:22 mrg Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -46,11 +46,11 @@ int	 revstatcmp __P((const FTSENT *, const FTSENT *));
 int	 sizecmp __P((const FTSENT *, const FTSENT *));
 int	 revsizecmp __P((const FTSENT *, const FTSENT *));
 
-char	*flags_to_string __P((u_long, char *));
-int	 string_to_flags __P((char **, u_long *, u_long *));
 void	 prcopy __P((char *, char *, int));
 void	 printacol __P((DISPLAY *));
 void	 printcol __P((DISPLAY *));
 void	 printlong __P((DISPLAY *));
 void	 printscol __P((DISPLAY *));
 void	 usage __P((void));
+
+#include "stat_flags.h"
