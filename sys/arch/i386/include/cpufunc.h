@@ -1,4 +1,4 @@
-/*	$NetBSD: cpufunc.h,v 1.16 1998/08/15 04:57:50 mycroft Exp $	*/
+/*	$NetBSD: cpufunc.h,v 1.20 2001/07/31 18:28:59 thorpej Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -164,12 +164,63 @@ write_eflags(u_long ef)
 	__asm __volatile("pushl %0; popfl" : : "r" (ef));
 }
 
+static __inline u_int64_t
+rdmsr(u_int msr)
+{
+	u_int64_t rv;
+
+	__asm __volatile("rdmsr" : "=A" (rv) : "c" (msr));
+	return (rv);
+}
+
+static __inline void
+wrmsr(u_int msr, u_int64_t newval)
+{
+	__asm __volatile("wrmsr" : : "A" (newval), "c" (msr));
+}
+
+static __inline void
+wbinvd(void)
+{
+	__asm __volatile("wbinvd");
+}
+
+static __inline u_int64_t
+rdtsc(void)
+{
+	u_int64_t rv;
+
+	__asm __volatile("rdtsc" : "=A" (rv));
+	return (rv);
+}
+
+static __inline u_int64_t
+rdpmc(u_int pmc)
+{
+	u_int64_t rv;
+
+	__asm __volatile("rdpmc" : "=A" (rv) : "c" (pmc));
+	return (rv);
+}
+
 /* Break into DDB/KGDB. */
 static __inline void
 breakpoint(void)
 {
 	__asm __volatile("int $3");
 }
+
+/*
+ * XXX Maybe these don't belong here...
+ */
+
+extern int (*copyout_func)(const void *, void *, size_t);
+extern int (*copyin_func)(const void *, void *, size_t);
+
+int	i386_copyout(const void *, void *, size_t);
+int	i486_copyout(const void *, void *, size_t);
+
+int	i386_copyin(const void *, void *, size_t);
 
 #endif /* _KERNEL */
 

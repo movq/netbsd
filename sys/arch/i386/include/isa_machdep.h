@@ -1,4 +1,4 @@
-/*	$NetBSD: isa_machdep.h,v 1.14 2000/02/07 22:07:29 thorpej Exp $	*/
+/*	$NetBSD: isa_machdep.h,v 1.19 2002/06/18 07:56:14 tshiozak Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997, 1998 The NetBSD Foundation, Inc.
@@ -109,15 +109,16 @@ struct isabus_attach_args;	/* XXX */
 /*
  * Functions provided to machine-independent ISA code.
  */
-void	isa_attach_hook __P((struct device *, struct device *,
-	    struct isabus_attach_args *));
-int	isa_intr_alloc __P((isa_chipset_tag_t, int, int, int *));
-void	*isa_intr_establish __P((isa_chipset_tag_t ic, int irq, int type,
-	    int level, int (*ih_fun)(void *), void *ih_arg));
-void	isa_intr_disestablish __P((isa_chipset_tag_t ic, void *handler));
-int	isa_mem_alloc __P((bus_space_tag_t, bus_size_t, bus_size_t,
-	    bus_addr_t, int, bus_addr_t *, bus_space_handle_t *));
-void	isa_mem_free __P((bus_space_tag_t, bus_space_handle_t, bus_size_t));
+void	isa_attach_hook(struct device *, struct device *,
+	    struct isabus_attach_args *);
+int	isa_intr_alloc(isa_chipset_tag_t, int, int, int *);
+const struct evcnt *isa_intr_evcnt(isa_chipset_tag_t ic, int irq);
+void	*isa_intr_establish(isa_chipset_tag_t ic, int irq, int type,
+	    int level, int (*ih_fun)(void *), void *ih_arg);
+void	isa_intr_disestablish(isa_chipset_tag_t ic, void *handler);
+int	isa_mem_alloc(bus_space_tag_t, bus_size_t, bus_size_t,
+	    bus_addr_t, int, bus_addr_t *, bus_space_handle_t *);
+void	isa_mem_free(bus_space_tag_t, bus_space_handle_t, bus_size_t);
 
 #define	isa_dmainit(ic, bst, dmat, d)					\
 	_isa_dmainit(&(ic)->ic_dmastate, (bst), (dmat), (d))
@@ -163,47 +164,17 @@ void	isa_mem_free __P((bus_space_tag_t, bus_space_handle_t, bus_size_t));
 	_isa_mappage((m), (o), (p))
 
 /*
+ * for ACPI code
+ */
+
+void	isa_reinit_irq(void);
+
+/*
  * ALL OF THE FOLLOWING ARE MACHINE-DEPENDENT, AND SHOULD NOT BE USED
  * BY PORTABLE CODE.
  */
 
 extern struct i386_bus_dma_tag isa_bus_dma_tag;
-
-/*
- * Cookie used by ISA dma.  A pointer to one of these it stashed in
- * the DMA map.
- */
-struct i386_isa_dma_cookie {
-	int	id_flags;		/* flags; see below */
-
-	/*
-	 * Information about the original buffer used during
-	 * DMA map syncs.  Note that origibuflen is only used
-	 * for ID_BUFTYPE_LINEAR.
-	 */
-	void	*id_origbuf;		/* pointer to orig buffer if
-					   bouncing */
-	bus_size_t id_origbuflen;	/* ...and size */
-	int	id_buftype;		/* type of buffer */
-
-	void	*id_bouncebuf;		/* pointer to the bounce buffer */
-	bus_size_t id_bouncebuflen;	/* ...and size */
-	int	id_nbouncesegs;		/* number of valid bounce segs */
-	bus_dma_segment_t id_bouncesegs[0]; /* array of bounce buffer
-					       physical memory segments */
-};
-
-/* id_flags */
-#define	ID_MIGHT_NEED_BOUNCE	0x01	/* map could need bounce buffers */
-#define	ID_HAS_BOUNCE		0x02	/* map currently has bounce buffers */
-#define	ID_IS_BOUNCING		0x04	/* map is bouncing current xfer */
-
-/* id_buftype */
-#define	ID_BUFTYPE_INVALID	0
-#define	ID_BUFTYPE_LINEAR	1
-#define	ID_BUFTYPE_MBUF		2
-#define	ID_BUFTYPE_UIO		3
-#define	ID_BUFTYPE_RAW		4
 
 /*
  * XXX Various seemingly PC-specific constants, some of which may be
@@ -232,8 +203,6 @@ struct i386_isa_dma_cookie {
 #define	MONO_BUF	0xB0000
 #define	CGA_BASE	0x3D4
 #define	CGA_BUF		0xB8000
-#define	IOPHYSMEM	0xA0000
-
 
 /*
  * Interrupt handler chains.  isa_intr_establish() inserts a handler into
@@ -241,32 +210,13 @@ struct i386_isa_dma_cookie {
  */
 
 struct intrhand {
-	int	(*ih_fun) __P((void *));
+	int	(*ih_fun)(void *);
 	void	*ih_arg;
 	u_long	ih_count;
 	struct	intrhand *ih_next;
 	int	ih_level;
 	int	ih_irq;
 };
-
- 
-/*
- * ISA DMA bounce buffers.
- * XXX should be made partially machine- and bus-mapping-independent.
- *
- * DMA_BOUNCE is the number of pages of low-addressed physical memory
- * to acquire for ISA bounce buffers.
- *
- * isaphysmem is the location of those bounce buffers.  (They are currently
- * assumed to be contiguous.
- */
-
-#ifndef DMA_BOUNCE
-#define	DMA_BOUNCE      8		/* one buffer per channel */
-#endif
-
-extern vaddr_t isaphysmem;
-
 
 /*
  * Variables and macros to deal with the ISA I/O hole.
@@ -292,6 +242,6 @@ extern u_long atdevbase;           /* kernel virtual address of "hole" */
 /*
  * Miscellanous functions.
  */
-void sysbeep __P((int, int));		/* beep with the system speaker */
+void sysbeep(int, int);		/* beep with the system speaker */
 
 #endif /* _I386_ISA_MACHDEP_H_ XXX */

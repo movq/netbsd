@@ -1,4 +1,4 @@
-/* $NetBSD: com_pnpbios.c,v 1.3 2000/02/01 18:33:22 soren Exp $ */
+/* $NetBSD: com_pnpbios.c,v 1.5 2001/11/15 07:03:35 lukem Exp $ */
 /*
  * Copyright (c) 1999
  * 	Matthias Drochner.  All rights reserved.
@@ -24,6 +24,9 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
+
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: com_pnpbios.c,v 1.5 2001/11/15 07:03:35 lukem Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -105,8 +108,10 @@ com_pnpbios_attach(parent, self, aux)
 	/*
 	 * if the chip isn't something we recognise skip it.
 	 */
-	if (comprobe1(sc->sc_iot, sc->sc_ioh) == 0)
+	if (comprobe1(sc->sc_iot, sc->sc_ioh) == 0) {
+		printf(": com probe failed\n");
 		return;
+	}
 
 	sc->sc_frequency = 115200 * 16;
 

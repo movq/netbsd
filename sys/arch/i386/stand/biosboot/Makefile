@@ -1,11 +1,13 @@
-#	$NetBSD: Makefile,v 1.25 2000/01/20 16:51:01 christos Exp $
+#	$NetBSD: Makefile,v 1.39 2002/02/17 20:03:08 thorpej Exp $
 
 S=	${.CURDIR}/../../../../
 
 BASE?= biosboot
 PROG= ${BASE}.sym
-MKMAN=	no
+NOMAN=	# defined
 NEWVERSWHAT=	"BIOS Boot"
+STARTFILE=	${BSSTART}
+RELOC=		0x0
 
 .if (${BASE} != "biosboot")
 .PATH.c: ${.CURDIR}/../biosboot/
@@ -13,23 +15,32 @@ NEWVERSWHAT=	"BIOS Boot"
 
 SRCS= main.c devopen.c conf.c exec.c
 
-CLEANFILES+= ${BSSTART}
+CPPFLAGS+= -DCOMPAT_386BSD_MBRPART -DSUPPORT_PS2
 
-CPPFLAGS+= -DCOMPAT_OLDBOOT -DCOMPAT_386BSD_MBRPART
-
-#Sample use of serial line debugger
+.if (${BASE} == "biosboot")
+# Various serial line configurations
+CPPFLAGS+= -DSUPPORT_SERIAL=CONSDEV_PC -DDIRECT_SERIAL
+#	or
 #CPPFLAGS+= -DSUPPORT_SERIAL=CONSDEV_COM0KBD
 #	or
 #CPPFLAGS+= -DSUPPORT_SERIAL=CONSDEV_AUTO
 #	and maybe
 #CPPFLAGS+= -DDIRECT_SERIAL -DCOMCONS_KEYPRESS -DCONSPEED=57600
+.endif
 
 .if (${BASE} == "biosboot_com0")
 CPPFLAGS+= -DSUPPORT_SERIAL=CONSDEV_COM0 -DDIRECT_SERIAL
 .endif
 
+.if (${BASE} == "biosboot_resetvideo")
+CPPFLAGS+= -DRESET_VIDEO
+CPPFLAGS+= -DSUPPORT_SERIAL=CONSDEV_PC -DDIRECT_SERIAL
+.endif
+
 CPPFLAGS+= -DSUPPORT_USTARFS
+#CPPFLAGS+= -DSUPPORT_DOSFS
 CPPFLAGS+= -DPASS_BIOSGEOM
+CPPFLAGS+= -DPASS_MEMMAP
 #CPPFLAGS+= -DBOOTPASSWD
 
 #uncomment if there are problems with memory detection
@@ -43,8 +54,9 @@ CPPFLAGS+= -DPASS_BIOSGEOM
 #CFLAGS= -O2 -fomit-frame-pointer -fno-defer-pop
 CFLAGS+= -Wall -Wmissing-prototypes -Wstrict-prototypes -Wno-main
 
-SAMISCCPPFLAGS+= -DHEAP_START=0x10000 -DHEAP_LIMIT=0x40000
-SAMISCMAKEFLAGS= SA_USE_CREAD=yes SA_INCLUDE_NET=no
+SAMISCCPPFLAGS+= -DHEAP_START=0x20000 -DHEAP_LIMIT=0x50000
+SAMISCMAKEFLAGS+= SA_USE_CREAD=yes	# Read compressed kernels
+SAMISCMAKEFLAGS+= SA_INCLUDE_NET=no	# Netboot via TFTP, NFS
 
 .if (${BASE} == "biosboot")
 VERSIONFILE= ${.CURDIR}/version

@@ -1,4 +1,4 @@
-/*	$NetBSD: pcibios.c,v 1.2 1999/11/17 07:33:41 thorpej Exp $	*/
+/*	$NetBSD: pcibios.c,v 1.9 2002/01/28 23:53:08 christos Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -66,6 +66,9 @@
  * Interface to the PCI BIOS and PCI Interrupt Routing table.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: pcibios.c,v 1.9 2002/01/28 23:53:08 christos Exp $");
+
 #include "opt_pcibios.h"
 
 #include <sys/param.h>
@@ -78,6 +81,7 @@
 
 #include <dev/pci/pcireg.h>
 #include <dev/pci/pcivar.h>
+#include <dev/pci/pcidevs.h>
 
 #include <i386/pci/pcibios.h>
 #ifdef PCIBIOS_INTR_FIXUP
@@ -86,8 +90,15 @@
 #ifdef PCIBIOS_BUS_FIXUP
 #include <i386/pci/pci_bus_fixup.h>
 #endif
+#ifdef PCIBIOS_ADDR_FIXUP
+#include <i386/pci/pci_addr_fixup.h>
+#endif
 
 #include <machine/bios32.h> 
+
+#ifdef PCIBIOSVERBOSE
+int	pcibiosverbose = 1;
+#endif
 
 int pcibios_present;
 
@@ -114,6 +125,12 @@ void	pcibios_print_pir_table __P((void));
 
 #define	PCI_IRQ_TABLE_START	0xf0000
 #define	PCI_IRQ_TABLE_END	0xfffff
+
+static void pci_bridge_hook(pci_chipset_tag_t, pcitag_t, void *);
+struct pci_bridge_hook_arg {
+	void (*func)(pci_chipset_tag_t, pcitag_t, void *);
+	void *arg;
+};
 
 void
 pcibios_init()
@@ -204,6 +221,10 @@ pcibios_init()
 	printf("PCI bus #%d is the last bus\n", pcibios_max_bus);
 #endif
 #endif
+
+#ifdef PCIBIOS_ADDR_FIXUP
+	pci_addr_fixup(NULL, pcibios_max_bus);
+#endif
 }
 
 void
@@ -219,8 +240,14 @@ pcibios_pir_init()
 
 	for (pa = PCI_IRQ_TABLE_START; pa < PCI_IRQ_TABLE_END; pa += 16) {
 		p = (caddr_t)ISA_HOLE_VADDR(pa);
-		if (*(int *)p != BIOS32_MAKESIG('$', 'P', 'I', 'R'))
-			continue;
+		if (*(int *)p != BIOS32_MAKESIG('$', 'P', 'I', 'R')) {
+			/*
+			 * XXX: Some laptops (Toshiba/Libretto L series
+			 * use _PIR instead of $PIR. So we try that too.
+			 */
+			if (*(int *)p != BIOS32_MAKESIG('_', 'P', 'I', 'R'))
+				continue;
+		}
 		
 		rev_min = *(p + 4);
 		rev_maj = *(p + 5);
@@ -265,8 +292,8 @@ pcibios_pir_init()
 
 		printf("PCI Interrupt Router at %03d:%02d:%01d",
 		    pcibios_pir_header.router_bus,
-		    (pcibios_pir_header.router_devfunc >> 3) & 0x1f,
-		    pcibios_pir_header.router_devfunc & 7);
+		    PIR_DEVFUNC_DEVICE(pcibios_pir_header.router_devfunc),
+		    PIR_DEVFUNC_FUNCTION(pcibios_pir_header.router_devfunc));
 		if (pcibios_pir_header.compat_router != 0) {
 			pci_devinfo(pcibios_pir_header.compat_router, 0, 0,
 			    devinfo);
@@ -461,7 +488,7 @@ pcibios_print_pir_table()
 		printf("PIR Entry %d:\n", i);
 		printf("\tBus: %d  Device: %d\n",
 		    pcibios_pir_table[i].bus,
-		    pcibios_pir_table[i].device >> 3);
+		    PIR_DEVFUNC_DEVICE(pcibios_pir_table[i].device));
 		for (j = 0; j < 4; j++) {
 			printf("\t\tINT%c: link 0x%02x bitmap 0x%04x\n",
 			    'A' + j,
@@ -471,3 +498,96 @@ pcibios_print_pir_table()
 	}
 }
 #endif
+
+void 
+pci_device_foreach(pc, maxbus, func, context)
+	pci_chipset_tag_t pc;
+	int maxbus;
+	void (*func) __P((pci_chipset_tag_t, pcitag_t, void *));
+	void *context;
+{
+  pci_device_foreach_min(pc, 0, maxbus, func, context);
+}
+
+void
+pci_device_foreach_min(pc, minbus, maxbus, func, context)
+	pci_chipset_tag_t pc;
+	int minbus;
+	int maxbus;
+	void (*func) __P((pci_chipset_tag_t, pcitag_t, void *));
+	void *context;
+{
+	const struct pci_quirkdata *qd;
+	int bus, device, function, maxdevs, nfuncs;
+	pcireg_t id, bhlcr;
+	pcitag_t tag;
+
+	for (bus = minbus; bus <= maxbus; bus++) {
+		maxdevs = pci_bus_maxdevs(pc, bus);
+		for (device = 0; device < maxdevs; device++) {
+			tag = pci_make_tag(pc, bus, device, 0);
+			id = pci_conf_read(pc, tag, PCI_ID_REG);
+
+			/* Invalid vendor ID value? */
+			if (PCI_VENDOR(id) == PCI_VENDOR_INVALID)
+				continue;
+			/* XXX Not invalid, but we've done this ~forever. */
+			if (PCI_VENDOR(id) == 0)
+				continue;
+
+			qd = pci_lookup_quirkdata(PCI_VENDOR(id),
+			    PCI_PRODUCT(id));
+
+			bhlcr = pci_conf_read(pc, tag, PCI_BHLC_REG);
+			if (PCI_HDRTYPE_MULTIFN(bhlcr) ||
+			    (qd != NULL &&
+			     (qd->quirks & PCI_QUIRK_MULTIFUNCTION) != 0))
+				nfuncs = 8;
+			else
+				nfuncs = 1;
+
+			for (function = 0; function < nfuncs; function++) {
+				tag = pci_make_tag(pc, bus, device, function);
+				id = pci_conf_read(pc, tag, PCI_ID_REG);
+
+				/* Invalid vendor ID value? */
+				if (PCI_VENDOR(id) == PCI_VENDOR_INVALID)
+					continue;
+				/*
+				 * XXX Not invalid, but we've done this
+				 * ~forever.
+				 */
+				if (PCI_VENDOR(id) == 0)
+					continue;
+				(*func)(pc, tag, context);
+			}
+		}
+	}
+}
+
+void
+pci_bridge_foreach(pci_chipset_tag_t pc, int minbus, int maxbus,
+    void (*func)(pci_chipset_tag_t, pcitag_t, void *), void *ctx)
+{
+	struct pci_bridge_hook_arg bridge_hook;
+
+	bridge_hook.func = func;
+	bridge_hook.arg = ctx;
+	
+	pci_device_foreach_min(pc, minbus, maxbus, pci_bridge_hook,
+	    &bridge_hook);
+}
+
+void
+pci_bridge_hook(pci_chipset_tag_t pc, pcitag_t tag, void *ctx)
+{
+	struct pci_bridge_hook_arg *bridge_hook = (void *)ctx;
+	pcireg_t reg;
+
+	reg = pci_conf_read(pc, tag, PCI_CLASS_REG);
+	if (PCI_CLASS(reg) == PCI_CLASS_BRIDGE &&
+	    (PCI_SUBCLASS(reg) == PCI_SUBCLASS_BRIDGE_PCI ||
+		PCI_SUBCLASS(reg) == PCI_SUBCLASS_BRIDGE_CARDBUS)) {
+		(*bridge_hook->func)(pc, tag, bridge_hook->arg);
+	}
+}

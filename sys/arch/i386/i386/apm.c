@@ -1,4 +1,4 @@
-/*	$NetBSD: apm.c,v 1.44 2000/02/07 17:36:59 thorpej Exp $ */
+/*	$NetBSD: apm.c,v 1.56 2000/11/26 11:08:57 takemura Exp $ */
 
 /*-
  * Copyright (c) 1996, 1997 The NetBSD Foundation, Inc.
@@ -68,6 +68,8 @@
 #include <sys/poll.h>
 #include <sys/conf.h>
 
+#include <uvm/uvm_extern.h>
+
 #include <machine/bus.h>
 #include <machine/stdarg.h>
 #include <machine/cpu.h>
@@ -111,6 +113,7 @@ struct apm_softc {
 	int	sc_flags;
 	int	event_count;
 	int	event_ptr;
+	int	sc_power_state;
 	struct proc *sc_thread;
 	struct lock sc_lock;
 	struct	apm_event_info event_list[APM_NEVENTS];
@@ -152,16 +155,18 @@ static void	apm_periodic_check __P((struct apm_softc *));
 static void	apm_create_thread __P((void *));
 static void	apm_thread __P((void *));
 static void	apm_perror __P((const char *, struct bioscallregs *, ...))
-		    __kprintf_attribute__((__format__(__printf__,1,3)));
+		    __attribute__((__format__(__printf__,1,3)));
+#ifdef APM_POWER_PRINT
 static void	apm_power_print __P((struct apm_softc *, struct bioscallregs *));
+#endif
 static void	apm_powmgt_enable __P((int));
 static void	apm_powmgt_engage __P((int, u_int));
 static int	apm_record_event __P((struct apm_softc *, u_int));
 static void	apm_get_capabilities __P((void));
 static void	apm_set_ver __P((struct apm_softc *));
-static void	apm_standby __P((void));
+static void	apm_standby __P((struct apm_softc *));
 static const char *apm_strerror __P((int));
-static void	apm_suspend __P((void));
+static void	apm_suspend __P((struct apm_softc *));
 static void	apm_resume __P((struct apm_softc *, struct bioscallregs *));
 
 cdev_decl(apm);
@@ -183,6 +188,11 @@ int	apm_enabled = 1;
 int	apm_force_64k_segments = 1;
 #else
 int	apm_force_64k_segments = 0;
+#endif
+#ifdef APM_ALLOW_BOGUS_SEGMENTS
+int	apm_allow_bogus_segments = 1;
+#else
+int	apm_allow_bogus_segments = 0;
 #endif
 #ifdef APM_NO_IDLE
 int	apm_do_idle = 0;
@@ -212,6 +222,8 @@ int	apm_inited;
 int	apm_standbys, apm_userstandbys, apm_suspends, apm_battlow;
 int	apm_damn_fool_bios, apm_op_inprog;
 int	apm_evindex;
+
+static int apm_spl;		/* saved spl while suspended */
 
 #ifdef APMDEBUG
 int	apmcall_debug(int, struct bioscallregs *, int);
@@ -276,12 +288,16 @@ apm_perror(const char *str, struct bioscallregs *regs, ...) /* XXX cgd */
 {
 	va_list ap;
 
+	printf("APM ");
+
 	va_start(ap, regs);
-	printf("APM %:: %s (0x%x)\n", str, ap, /* XXX cgd */
-	    apm_strerror(APM_ERR_CODE(regs)), regs->AX);
+	vprintf(str, ap);			/* XXX cgd */
 	va_end(ap);
+
+	printf(": %s (0x%x)\n", apm_strerror(APM_ERR_CODE(regs)), regs->AX);
 }
 
+#ifdef APM_POWER_PRINT
 static void
 apm_power_print(sc, regs)
 	struct apm_softc *sc;
@@ -353,6 +369,7 @@ apm_power_print(sc, regs)
 	}
 	return;
 }
+#endif
 
 #if 0 /* currently unused */
 static void
@@ -371,8 +388,23 @@ apm_get_powstate(dev)
 #endif
 
 static void
-apm_suspend()
+apm_suspend(sc)
+	struct apm_softc *sc;
 {
+
+	if (sc->sc_power_state == PWR_SUSPEND) {
+#ifdef APMDEBUG
+		printf("%s: apm_suspend: already suspended?\n",
+		    sc->sc_dev.dv_xname);
+#endif
+		return;
+	}
+	sc->sc_power_state = PWR_SUSPEND;
+
+	dopowerhooks(PWR_SOFTSUSPEND);
+
+	apm_spl = splhigh();
+
 	dopowerhooks(PWR_SUSPEND);
 
 	/* XXX cgd */
@@ -380,8 +412,23 @@ apm_suspend()
 }
 
 static void
-apm_standby()
+apm_standby(sc)
+	struct apm_softc *sc;
 {
+
+	if (sc->sc_power_state == PWR_STANDBY) {
+#ifdef APMDEBUG
+		printf("%s: apm_standby: already standing by?\n",
+		    sc->sc_dev.dv_xname);
+#endif
+		return;
+	}
+	sc->sc_power_state = PWR_STANDBY;
+
+	dopowerhooks(PWR_SOFTSTANDBY);
+
+	apm_spl = splhigh();
+
 	dopowerhooks(PWR_STANDBY);
 
 	/* XXX cgd */
@@ -394,6 +441,15 @@ apm_resume(sc, regs)
 	struct bioscallregs *regs;
 {
 
+	if (sc->sc_power_state == PWR_RESUME) {
+#ifdef APMDEBUG
+		printf("%s: apm_resume: already running?\n",
+		    sc->sc_dev.dv_xname);
+#endif
+		return;
+	}
+	sc->sc_power_state = PWR_RESUME;
+
 	/*
 	 * Some system requires its clock to be initialized after hybernation.
 	 */
@@ -401,6 +457,11 @@ apm_resume(sc, regs)
 
 	inittodr(time.tv_sec);
 	dopowerhooks(PWR_RESUME);
+
+	splx(apm_spl);
+
+	dopowerhooks(PWR_SOFTRESUME);
+
 	apm_record_event(sc, regs->BX);
 }
 
@@ -502,7 +563,7 @@ apm_event_handle(sc, regs)
 	case APM_POWER_CHANGE:
 		DPRINTF(APMDEBUG_EVENTS, ("apmev: power status change\n"));
 		error = apm_get_powstat(&nregs);
-#ifndef APM_NO_POWER_PRINT
+#ifdef APM_POWER_PRINT
 		/* only print if nobody is catching events. */
 		if (error == 0 &&
 		    (sc->sc_flags & (SCFLAG_OREAD|SCFLAG_OWRITE)) == 0)
@@ -534,7 +595,7 @@ apm_event_handle(sc, regs)
 	case APM_CRIT_SUSPEND_REQ:
 		DPRINTF(APMDEBUG_EVENTS, ("apmev: critical system suspend\n"));
 		apm_record_event(sc, regs->BX);
-		apm_suspend();
+		apm_suspend(sc);
 		break;
 
 	case APM_BATTERY_LOW:
@@ -600,10 +661,10 @@ apm_periodic_check(sc)
 		apm_perror("get event", &regs);
 	if (apm_suspends) {
 		apm_op_inprog = 0;
-		apm_suspend();
+		apm_suspend(sc);
 	} else if (apm_standbys || apm_userstandbys) {
 		apm_op_inprog = 0;
-		apm_standby();
+		apm_standby(sc);
 	}
 	apm_suspends = apm_standbys = apm_battlow = apm_userstandbys = 0;
 	apm_damn_fool_bios = 0;
@@ -634,7 +695,7 @@ apm_powmgt_engage(onoff, dev)
 	regs.BX = dev;
 	regs.CX = onoff ? APM_MGT_ENGAGE : APM_MGT_DISENGAGE;
 	if (apmcall(APM_PWR_MGT_ENGAGE, &regs) != 0)
-		apm_perror("power mgmt engage (device %x)\n", &regs, dev);
+		apm_perror("power mgmt engage (device %x)", &regs, dev);
 }
 
 #if 0
@@ -902,12 +963,11 @@ apmattach(parent, self, aux)
 	struct device *parent, *self;
 	void *aux;
 {
-	extern int biosbasemem;
 	struct apm_softc *apmsc = (void *)self;
 	struct bioscallregs regs;
 	int error, apm_data_seg_ok;
 	u_int okbases[] = { 0, biosbasemem*1024 };
-	u_int oklimits[] = { NBPG, IOM_END};
+	u_int oklimits[] = { PAGE_SIZE, IOM_END};
 	u_int i;
 #ifdef APMDEBUG
 	char bits[128];
@@ -1115,11 +1175,17 @@ apmattach(parent, self, aux)
 		}
 	}
 	if (!apm_data_seg_ok && apm_bogus_bios) {
-		DPRINTF(APMDEBUG_ATTACH,
-		    ("bogus bios data seg location, ignoring\n%s: ",
-		    apmsc->sc_dev.dv_xname));
-		apminfo.apm_data_seg_base = 0;
-		apminfo.apm_data_seg_len = 0;
+		if (apm_allow_bogus_segments) {
+			DPRINTF(APMDEBUG_ATTACH,
+			    ("bogus bios data seg location, continuing\n%s: ",
+			    apmsc->sc_dev.dv_xname));
+		} else {
+			DPRINTF(APMDEBUG_ATTACH,
+			    ("bogus bios data seg location, ignoring\n%s: ",
+			    apmsc->sc_dev.dv_xname));
+			apminfo.apm_data_seg_base = 0;
+			apminfo.apm_data_seg_len = 0;
+		}
 		apm_data_seg_ok = 1;		/* who are we kidding?! */
 	}
 	if (!apm_data_seg_ok) {
@@ -1248,12 +1314,17 @@ apmattach(parent, self, aux)
 	memset(&regs, 0, sizeof(regs));
 	error = apm_get_powstat(&regs);
 	if (error == 0) {
+#ifdef APM_POWER_PRINT
 		apm_power_print(apmsc, &regs);
+#endif
 	} else
 		apm_perror("get power status", &regs);
 	apm_cpu_busy();
 
 	lockinit(&apmsc->sc_lock, PWAIT, "apmlk", 0, 0);
+
+	/* Initial state is `resumed'. */
+	apmsc->sc_power_state = PWR_RESUME;
 
 	/* Do an initial check. */
 	apm_periodic_check(apmsc);
@@ -1322,7 +1393,7 @@ apm_thread(arg)
 		APM_LOCK(apmsc);
 		apm_periodic_check(apmsc);
 		APM_UNLOCK(apmsc);
-		(void) tsleep(apmsc, PWAIT, "apmev", hz);
+		(void) tsleep(apmsc, PWAIT, "apmev",  (8 * hz) / 7);
 	}
 }
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: rbus_machdep.c,v 1.2 1999/10/15 06:43:06 haya Exp $	*/
+/*	$NetBSD: rbus_machdep.c,v 1.14 2001/11/15 07:03:31 lukem Exp $	*/
 
 /*
  * Copyright (c) 1999
@@ -30,14 +30,14 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-/* $Id: rbus_machdep.c,v 1.2 1999/10/15 06:43:06 haya Exp $ */
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: rbus_machdep.c,v 1.14 2001/11/15 07:03:31 lukem Exp $");
+
+#include "opt_pcibios.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
-
-#include <vm/vm.h>
-#include <vm/vm_kern.h>
-#include <vm/vm_page.h>
+#include <sys/extent.h>
 
 #include <uvm/uvm_extern.h>
 
@@ -51,112 +51,88 @@
 #include <dev/isa/isavar.h>
 
 #include <dev/pci/pcivar.h>
-
-
-
-/**********************************************************************
- * void _i386_memio_unmap(bus_space_tag bst, bus_space_handle bsh,
- *                        bus_size_t size, bus_addr_t *adrp)
- *
- *   This function unmaps memory- or io-space mapped by the function
- *   _i386_memio_map().  This function works nearly as same as
- *   i386_memio_unmap(), but this function does not ask kernel
- *   built-in extents and returns physical address of the bus space,
- *   for the convenience of the extra extent manager.
- *
- *   I suppose this function should be in arch/i386/i386/machdep.c,
- *   but it is not.
- **********************************************************************/
-void
-_i386_memio_unmap(t, bsh, size, adrp)
-     bus_space_tag_t t;
-     bus_space_handle_t bsh;
-     bus_size_t size;
-     bus_addr_t *adrp;
-{
-  u_long va, endva;
-  bus_addr_t bpa;
-
-  /*
-   * Find the correct extent and bus physical address.
-   */
-  if (t == I386_BUS_SPACE_IO) {
-    bpa = bsh;
-  } else if (t == I386_BUS_SPACE_MEM) {
-    if (bsh >= atdevbase && (bsh + size) <= (atdevbase + IOM_SIZE)) {
-      bpa = (bus_addr_t)ISA_PHYSADDR(bsh);
-    } else {
-
-      va = i386_trunc_page(bsh);
-      endva = i386_round_page(bsh + size);
-
-#ifdef DIAGNOSTIC
-      if (endva <= va) {
-	panic("_i386_memio_unmap: overflow");
-      }
+#ifdef PCIBIOS_ADDR_FIXUP
+#include <arch/i386/pci/pci_addr_fixup.h>
 #endif
 
-#if __NetBSD_Version__ > 104050000
-      if (pmap_extract(pmap_kernel(), va, &bpa) == FALSE) {
-	panic("_i386_memio_unmap:i386/rbus_machdep.c wrong virtual address");
-      }
-      bpa += (bsh & PGOFSET);
-#else
-      bpa = pmap_extract(pmap_kernel(), va) + (bsh & PGOFSET);
+#ifndef RBUS_IO_BASE
+#define	RBUS_IO_BASE	0x4000
+#endif
+#ifndef RBUS_IO_SIZE
+#define	RBUS_IO_SIZE	0x2000
 #endif
 
-      /*
-       * Free the kernel virtual mapping.
-       */
-      uvm_km_free(kernel_map, va, endva - va);
-    }
-  } else {
-    panic("_i386_memio_unmap: bad bus space tag");
-  }
+#ifndef RBUS_MIN_START
+#define RBUS_MIN_START 0x40000000	/* 1GB */
+#endif
+bus_addr_t rbus_min_start = RBUS_MIN_START;
 
-  if (adrp != NULL) {
-    *adrp = bpa;
-  }
-}
-
-
-
-
-/**********************************************************************
+/*
  * rbus_tag_t rbus_fakeparent_mem(struct pci_attach_args *pa)
  *
- *   This function allocates a memory space from 1 GB to 1.25 GB.
- **********************************************************************/
+ *   This function makes an rbus tag for memory space.  This rbus tag
+ *   shares the all memory region of ex_iomem.
+ */
 rbus_tag_t
 rbus_pccbb_parent_mem(pa)
-     struct pci_attach_args *pa;
+	struct pci_attach_args *pa;
 {
-  bus_addr_t start =  0x40000000; /* 1 GB */
-  bus_size_t size =  0x08000000; /* 128 MB */
-  bus_space_handle_t memh;	/* fake */
+	bus_addr_t start, offset;
+	bus_size_t size;
+	struct extent *ex;
+#ifdef PCIBIOS_ADDR_FIXUP
+	ex = pciaddr.extent_mem;
+#else
+	extern struct extent *iomem_ex;
+	ex = iomem_ex;
+#endif
 
-  start += pa->pa_function * size;
+	start = ex->ex_start;
+
+	/*
+	 * XXX: unfortunately, iomem_ex cannot be used for the dynamic
+	 * bus_space allocatoin.  There are some hidden memory (or
+	 * some obstacles which do not recognised by the kernel) in
+	 * the region governed by iomem_ex.  So I decide to use only
+	 * very high address region.
+	 *
+	 * if defined PCIBIOS_ADDR_FIXUP, PCI device using area
+	 * which do not recognised by the kernel are already reserved.
+	 */
+
+	if (start < rbus_min_start) 
+		start = rbus_min_start;
+
+	size = ex->ex_end - start;
+	offset = 0;
   
-  bus_space_map(pa->pa_memt, start, size, 0, &memh);
-
-  return rbus_new_root_delegate(pa->pa_memt, start, size, 0);
+	return rbus_new_root_share(pa->pa_memt, ex, start, size, 0);
 }
 
 
-/**********************************************************************
+/*
  * rbus_tag_t rbus_pccbb_parent_io(struct pci_attach_args *pa)
- **********************************************************************/
+ */
 rbus_tag_t
 rbus_pccbb_parent_io(pa)
-     struct pci_attach_args *pa;
+	struct pci_attach_args *pa;
 {
-  bus_addr_t start =  0x2000;
-  bus_size_t size =  0x0800;
-  bus_space_handle_t ioh;
+	struct extent *ex;
+	bus_addr_t start;
+	bus_size_t size;
+	rbus_tag_t ret;
+#ifdef PCIBIOS_ADDR_FIXUP
+	ex = pciaddr.extent_port;
+#else
+	extern struct extent *ioport_ex;
+	ex = ioport_ex;
+#endif
+	start = RBUS_IO_BASE;
+	size  = RBUS_IO_SIZE;
 
-  start += pa->pa_function * size;
-
-  bus_space_map(pa->pa_iot, start, size, 0, &ioh);
-
-  return rbus_new_root_delegate(pa->pa_iot, start, size, 0);
+	ret = rbus_new_root_share(pa->pa_iot, ex, start, size, 0);
+	if(ret == NULL) {
+	  panic("failed to alloc I/O space");
+	}
+	return ret;
 }

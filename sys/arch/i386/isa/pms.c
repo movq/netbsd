@@ -1,4 +1,4 @@
-/*	$NetBSD: pms.c,v 1.46 1999/12/03 22:48:24 thorpej Exp $	*/
+/*	$NetBSD: pms.c,v 1.49 2001/11/15 07:03:33 lukem Exp $	*/
 
 /*-
  * Copyright (c) 1994, 1997 Charles M. Hannum.
@@ -30,6 +30,9 @@
  * same I/O ports.  Frobbing the mouse and keyboard at the same time
  * may result in dropped characters and/or corrupted mouse events.
  */
+
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: pms.c,v 1.49 2001/11/15 07:03:33 lukem Exp $");
 
 #include "opms.h"
 #if (NOPMS_HACK + NOPMS_PCKBC) > 1
@@ -364,7 +367,7 @@ opms_pckbc_attach(parent, self, aux)
 	sc->sc_state = 0;
 
 	pckbc_set_inputhandler(sc->sc_kbctag, sc->sc_kbcslot,
-			       opmsinput, sc);
+			       opmsinput, sc, sc->sc_dev.dv_xname);
 
 	/* no interrupts until enabled */
 	cmd[0] = PMS_DEV_DISABLE;
@@ -487,7 +490,7 @@ pmsread(dev, uio, flag)
 	size_t length;
 	u_char buffer[PMS_CHUNK];
 
-	/* Block until mouse activity occured. */
+	/* Block until mouse activity occurred. */
 
 	s = spltty();
 	while (sc->sc_q.c_cc == 0) {

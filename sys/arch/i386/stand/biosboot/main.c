@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.17 1999/09/10 16:38:47 drochner Exp $	*/
+/*	$NetBSD: main.c,v 1.29 2002/06/01 11:40:32 itojun Exp $	*/
 
 /*
  * Copyright (c) 1996, 1997, 1999
@@ -47,13 +47,17 @@
 #include <libi386.h>
 #include "devopen.h"
 
+#ifdef SUPPORT_PS2
+#include <biosmca.h>
+#endif
+
 int errno;
 extern int boot_biosdev;
 
-extern	char bootprog_name[], bootprog_rev[], bootprog_date[],
+extern	const char bootprog_name[], bootprog_rev[], bootprog_date[],
 	bootprog_maker[];
 
-char *names[] = {
+static const char * const names[] = {
     "netbsd", "netbsd.gz",
     "netbsd.old", "netbsd.old.gz",
     "onetbsd", "onetbsd.gz",
@@ -72,7 +76,7 @@ int boottimeout = TIMEOUT; /* patchable */
 
 static char *default_devname;
 static int default_unit, default_partition;
-static char *default_filename;
+static const char *default_filename;
 
 char *sprint_bootsel __P((const char *));
 void bootit __P((const char *, int, int));
@@ -84,14 +88,18 @@ void	command_ls __P((char *));
 void	command_quit __P((char *));
 void	command_boot __P((char *));
 void	command_dev __P((char *));
+void	command_consdev __P((char *));
 
-struct bootblk_command commands[] = {
+const struct bootblk_command commands[] = {
 	{ "help",	command_help },
 	{ "?",		command_help },
 	{ "ls",		command_ls },
 	{ "quit",	command_quit },
 	{ "boot",	command_boot },
 	{ "dev",	command_dev },
+#ifdef SUPPORT_SERIAL
+	{ "consdev",	command_consdev },
+#endif
 	{ NULL,		NULL },
 };
 
@@ -211,11 +219,6 @@ print_banner()
 	printf(">> %s, Revision %s\n", bootprog_name, bootprog_rev);
 	printf(">> (%s, %s)\n", bootprog_maker, bootprog_date);
 	printf(">> Memory: %d/%d k\n", getbasemem(), getextmem());
-	printf(
-#ifdef COMPAT_OLDBOOT
-	       "Use hd1a:netbsd to boot sd0 when wd0 is also installed\n"
-#endif
-	       "Press return to boot now, any other key for boot menu\n");
 }
 
 
@@ -234,7 +237,15 @@ main()
 #else
 	initio(CONSDEV_PC);
 #endif
+
+#ifdef SUPPORT_PS2
+	biosmca();
+#endif
 	gateA20();
+
+#ifdef RESET_VIDEO
+	biosvideomode();
+#endif
 
 	print_banner();
 
@@ -245,6 +256,7 @@ main()
 	/* if the user types "boot" without filename */
 	default_filename = DEFFILENAME;
 
+	printf("Press return to boot now, any other key for boot menu\n");
 	currname = 0;
 	for (;;) {
 		printf("booting %s - starting in ",
@@ -284,10 +296,13 @@ command_help(arg)
 {
 
 	printf("commands are:\n"
-	    "boot [xdNx:][filename] [-adrs]\n"
-	    "     (ex. \"sd0a:netbsd.old -s\"\n"
+	    "boot [xdNx:][filename] [-acdqsv]\n"
+	    "     (ex. \"hd0a:netbsd.old -s\"\n"
 	    "ls [path]\n"
 	    "dev xd[N[x]]:\n"
+#ifdef SUPPORT_SERIAL
+	    "consdev {pc|com[0123]|com[0123]kbd|auto}\n"
+#endif
 	    "help|?\n"
 	    "quit\n");
 }
@@ -296,7 +311,7 @@ void
 command_ls(arg)
 	char *arg;
 {
-	char *save = default_filename;
+	const char *save = default_filename;
 
 	default_filename = "/";
 	ufs_ls(arg);
@@ -309,12 +324,12 @@ command_quit(arg)
 	char *arg;
 {
 
-	printf("Rebooting... goodbye...\n");
+	printf("Exiting...\n");
 	delay(1000000);
 	reboot();
 	/* Note: we shouldn't get to this point! */
 	panic("Could not reboot!");
-	exit();
+	exit(0);
 }
 
 void
@@ -352,4 +367,36 @@ command_dev(arg)
 	/* put to own static storage */
 	strncpy(savedevname, devname, MAXDEVNAME + 1);
 	default_devname = savedevname;
+}
+
+void
+command_consdev(arg)
+	char *arg;
+{
+	if (!strcmp("pc", arg))
+		initio(CONSDEV_PC);
+	else if (!strcmp("com0", arg))
+		initio(CONSDEV_COM0);
+	else if (!strcmp("com1", arg))
+		initio(CONSDEV_COM1);
+	else if (!strcmp("com2", arg))
+		initio(CONSDEV_COM2);
+	else if (!strcmp("com3", arg))
+		initio(CONSDEV_COM3);
+	else if (!strcmp("com0kbd", arg))
+		initio(CONSDEV_COM0KBD);
+	else if (!strcmp("com1kbd", arg))
+		initio(CONSDEV_COM1KBD);
+	else if (!strcmp("com2kbd", arg))
+		initio(CONSDEV_COM2KBD);
+	else if (!strcmp("com3kbd", arg))
+		initio(CONSDEV_COM3KBD);
+	else if (!strcmp("auto", arg))
+		initio(CONSDEV_AUTO);
+	else {
+		printf("invalid console device.\n");
+		return;
+	}
+
+	print_banner();
 }

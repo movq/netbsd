@@ -1,7 +1,7 @@
-/*	$NetBSD: ibcs2_machdep.h,v 1.5 2000/01/10 03:03:54 matt Exp $	*/
+/*	$NetBSD: ibcs2_machdep.h,v 1.11 2002/07/04 23:32:05 thorpej Exp $	*/
 
 /*-
- * Copyright (c) 1997 The NetBSD Foundation, Inc.
+ * Copyright (c) 1997, 2000 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -41,15 +41,17 @@
 
 #define COFF_MAGIC_I386	0x14c
 #define	COFF_BADMAG(ex)	(ex->f_magic != COFF_MAGIC_I386)
+#define	COFF_LDPGSZ	4096
 
 #ifdef _KERNEL
 struct exec_package;
 struct exec_vmcmd;
 
 void	ibcs2_setregs __P((struct proc *, struct exec_package *, u_long));
-void	ibcs2_sendsig __P((sig_t, int, sigset_t *, u_long));
+void	ibcs2_sendsig __P((int, sigset_t *, u_long));
 int	ibcs2_sys_sysmachine __P((struct proc *, void *, register_t *retval));
 
+void	ibcs2_syscall_intern __P((struct proc *));
 #endif /* _KERNEL */
 
 #endif /* !_I386_IBCS2_MACHDEP_H_ */

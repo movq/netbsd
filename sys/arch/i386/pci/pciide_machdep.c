@@ -1,4 +1,4 @@
-/*	$NetBSD: pciide_machdep.c,v 1.2 1999/02/19 18:01:27 mycroft Exp $	*/
+/*	$NetBSD: pciide_machdep.c,v 1.4 2001/11/15 07:03:35 lukem Exp $	*/
 
 /*
  * Copyright (c) 1998 Christopher G. Demetriou.  All rights reserved.
@@ -40,6 +40,9 @@
  * PCI SIG.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: pciide_machdep.c,v 1.4 2001/11/15 07:03:35 lukem Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
@@ -50,8 +53,6 @@
 #include <dev/pci/pciidevar.h>
 
 #include <dev/isa/isavar.h>
-
-#define	PCIIDE_CHANNEL_NAME(chan)	((chan) == 0 ? "primary" : "secondary")
 
 void *
 pciide_machdep_compat_intr_establish(dev, pa, chan, func, arg)

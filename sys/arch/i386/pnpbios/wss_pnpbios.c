@@ -1,4 +1,4 @@
-/* $NetBSD: wss_pnpbios.c,v 1.2 1999/11/14 02:15:51 thorpej Exp $ */
+/* $NetBSD: wss_pnpbios.c,v 1.7 2002/05/15 18:14:41 mrg Exp $ */
 /*
  * Copyright (c) 1999
  * 	Matthias Drochner.  All rights reserved.
@@ -25,6 +25,9 @@
  * SUCH DAMAGE.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: wss_pnpbios.c,v 1.7 2002/05/15 18:14:41 mrg Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/errno.h>
@@ -49,10 +52,42 @@
 
 int wss_pnpbios_match __P((struct device *, struct cfdata *, void *));
 void wss_pnpbios_attach __P((struct device *, struct device *, void *));
+int wss_pnpbios_hints_index __P((const char *));
+
 
 struct cfattach wss_pnpbios_ca = {
 	sizeof(struct wss_softc), wss_pnpbios_match, wss_pnpbios_attach
 };
+
+struct wss_pnpbios_hint {
+	char idstr[8];
+	int io_region_idx_ad1848;	/* which region index is the DAC?  */
+	int io_region_idx_opl;		/* which region index is the OPL?  */
+	int offset_ad1848;		/* offset from start of DAC region */
+};
+
+struct wss_pnpbios_hint wss_pnpbios_hints[] = {
+	{ "NMX2210", 1, 2, WSS_CODEC },
+	{ "CSC0000", 0, 1, 0 },		/* Dell Latitude CPi */
+	{ "CSC0100", 0, 1, 0 },		/* CS4610 with CS4236 codec */
+	{ { 0 }, 0, 0, 0 }
+};
+
+
+int
+wss_pnpbios_hints_index(idstr)
+	const char *idstr;
+{
+	int idx = 0;
+
+	while (wss_pnpbios_hints[idx].idstr[0] != 0) {
+		if (!strcmp(wss_pnpbios_hints[idx].idstr, idstr))
+			return idx;
+		++idx;
+	}
+
+	return -1;
+}
 
 int
 wss_pnpbios_match(parent, match, aux)
@@ -62,7 +97,7 @@ wss_pnpbios_match(parent, match, aux)
 {
 	struct pnpbiosdev_attach_args *aa = aux;
 
-	if (strcmp(aa->idstr, "NMX2210"))
+	if (wss_pnpbios_hints_index(aa->idstr) == -1)
 		return (0);
 
 	return (2); /* beat sb */
@@ -76,6 +111,8 @@ wss_pnpbios_attach(parent, self, aux)
 	struct wss_softc *sc = (void *)self;
 	struct pnpbiosdev_attach_args *aa = aux;
 	struct audio_attach_args arg;
+	struct wss_pnpbios_hint *wph;
+
 #if 0
 	static u_char interrupt_bits[12] = {
 		-1, -1, -1, -1, -1, -1, -1, 0x08, -1, 0x10, 0x18, 0x20
@@ -83,18 +120,22 @@ wss_pnpbios_attach(parent, self, aux)
 	static u_char dma_bits[4] = {1, 2, 0, 3};
 #endif
 
-	if (pnpbios_io_map(aa->pbt, aa->resc, 1, &sc->sc_iot, &sc->sc_ioh)) {
+	wph = &wss_pnpbios_hints[wss_pnpbios_hints_index(aa->idstr)];
+
+	if (pnpbios_io_map(aa->pbt, aa->resc, wph->io_region_idx_ad1848,
+			   &sc->sc_iot, &sc->sc_ioh)) {
 		printf(": can't map i/o space\n");
 		return;
 	}
-	if (pnpbios_io_map(aa->pbt, aa->resc, 2, &sc->sc_iot, &sc->sc_opl_ioh)) {
+	if (pnpbios_io_map(aa->pbt, aa->resc, wph->io_region_idx_opl,
+			   &sc->sc_iot, &sc->sc_opl_ioh)) {
 		printf(": can't map i/o space\n");
 		return;
 	}
 
 	sc->wss_ic = aa->ic;
 
-	if (pnpbios_getirqnum(aa->pbt, aa->resc, 0, &sc->wss_irq)) {
+	if (pnpbios_getirqnum(aa->pbt, aa->resc, 0, &sc->wss_irq, NULL)) {
 		printf(": can't get IRQ\n");
 		return;
 	}
@@ -103,11 +144,13 @@ wss_pnpbios_attach(parent, self, aux)
 		printf(": can't get DMA channel\n");
 		return;
 	}
-	if (pnpbios_getdmachan(aa->pbt, aa->resc, 1, &sc->wss_recdrq))
+	if (pnpbios_getdmachan(aa->pbt, aa->resc, 1, &sc->wss_recdrq)) {
+		printf(": can't get recording DMA channel");
 		sc->wss_recdrq = -1;
+	}
 
 	sc->sc_ad1848.sc_ad1848.sc_iot = sc->sc_iot;
-	bus_space_subregion(sc->sc_iot, sc->sc_ioh, WSS_CODEC, 4,
+	bus_space_subregion(sc->sc_iot, sc->sc_ioh, wph->offset_ad1848, 4,
 			    &sc->sc_ad1848.sc_ad1848.sc_ioh);
 
 	printf("\n");
