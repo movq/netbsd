@@ -1,4 +1,4 @@
-.\" $NetBSD: mca.4,v 1.7 2001/03/31 00:48:03 jdolecek Exp $
+.\" $NetBSD: mca.4,v 1.8 2001/04/19 08:16:06 jdolecek Exp $
 .\"
 .\" Copyright (c) 2000 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -68,6 +68,12 @@ Adaptec AHA-1640
 interface.
 .El
 .\"
+.Ss Disk and tape controllers
+.Bl -tag -width speaker -offset indent
+.It dasd
+IBM ESDI Fixed Disk Controller
+.El
+.\"
 .Ss Network interfaces
 .Bl -tag -width speaker -offset indent
 .It tr
@@ -87,6 +93,7 @@ WD/SMC WD80x3x ethernet interface cards and clones
 .Sh SEE ALSO
 .Xr aha 4 ,
 .Xr ate 4 ,
+.Xr dasd 4 ,
 .Xr elmc 4 ,
 .Xr ep 4 ,
 .Xr tr 4 ,
