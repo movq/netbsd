@@ -1,4 +1,4 @@
-/*	$NetBSD: fsdbutil.c,v 1.1 1995/10/08 23:08:36 thorpej Exp $	*/
+/*	$NetBSD: fsdbutil.c,v 1.1.1.1 1995/10/08 23:08:36 thorpej Exp $	*/
 /*
  *  Copyright (c) 1995 John T. Kohl
  *  All rights reserved.
@@ -29,7 +29,7 @@
  */
 
 #ifndef lint
-static char rcsid[] = "$NetBSD: fsdbutil.c,v 1.1 1995/10/08 23:08:36 thorpej Exp $";
+static char rcsid[] = "$NetBSD: fsdbutil.c,v 1.1.1.1 1995/10/08 23:08:36 thorpej Exp $";
 #endif /* not lint */
 
 #include <stdlib.h>
