@@ -1,4 +1,4 @@
-#	$NetBSD: IXM1200,v 1.1 2002/07/15 17:13:30 ichiro Exp $
+#	$NetBSD: IXM1200,v 1.2 2002/07/15 17:18:03 ichiro Exp $
 #
 #	IXM1200 -- Intel IXM1200 Evaluation Board Kernel
 #
@@ -152,9 +152,8 @@ ixpcom*		at ixpsip? addr 0xf0000000 size 0x4000
 ixpio0		at mainbus?
 pci0		at ixpio? bus ?
 
-# PCI-PCI bridges
-#ppb*		at pci? dev ? function ?
-#pci*		at ppb? bus ?
+# Non-Transparent PCI-PCI bridge
+#nppb*		at pci? dev ? function ?
 
 #
 # Networking devices
