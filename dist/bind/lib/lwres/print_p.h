@@ -1,4 +1,4 @@
-/*	$NetBSD: print_p.h,v 1.1 2004/11/06 23:56:01 christos Exp $	*/
+/*	$NetBSD: print_p.h,v 1.1.1.1 2004/11/06 23:56:01 christos Exp $	*/
 
 /*
  * Copyright (C) 2004  Internet Systems Consortium, Inc. ("ISC")
