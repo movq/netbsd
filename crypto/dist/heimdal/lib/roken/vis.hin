@@ -1,5 +1,5 @@
-/*	$NetBSD: vis.hin,v 1.1 2001/02/11 13:51:47 assar Exp $	*/
-/*	$Id: vis.hin,v 1.1 2001/02/11 13:51:47 assar Exp $	*/
+/*	$NetBSD: vis.hin,v 1.1.1.1 2001/02/11 13:51:47 assar Exp $	*/
+/*	$Id: vis.hin,v 1.1.1.1 2001/02/11 13:51:47 assar Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993

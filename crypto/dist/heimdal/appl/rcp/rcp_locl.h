@@ -31,7 +31,7 @@
  * SUCH DAMAGE. 
  */
 
-/* $Id: rcp_locl.h,v 1.1 2001/02/11 13:51:12 assar Exp $ */
+/* $Id: rcp_locl.h,v 1.1.1.1 2001/02/11 13:51:12 assar Exp $ */
 
 #ifdef HAVE_CONFIG_H
 #include <config.h>

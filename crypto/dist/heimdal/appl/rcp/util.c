@@ -43,7 +43,7 @@ static const char rcsid[] =
 
 #include "rcp_locl.h"
 
-RCSID("$Id: util.c,v 1.1 2001/02/11 13:51:12 assar Exp $");
+RCSID("$Id: util.c,v 1.1.1.1 2001/02/11 13:51:12 assar Exp $");
 
 char *
 colon(cp)
