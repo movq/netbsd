@@ -1,4 +1,4 @@
-/*	$NetBSD: bninit32.c,v 1.1 2001/01/27 08:07:41 itojun Exp $	*/
+/*	$NetBSD: bninit32.c,v 1.1.1.1 2001/01/27 08:07:41 itojun Exp $	*/
 
 /*
  * Cylink Corporation © 1998

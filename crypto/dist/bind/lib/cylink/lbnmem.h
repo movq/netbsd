@@ -1,4 +1,4 @@
-/*	$NetBSD: lbnmem.h,v 1.1 2001/01/27 08:08:31 itojun Exp $	*/
+/*	$NetBSD: lbnmem.h,v 1.1.1.1 2001/01/27 08:08:31 itojun Exp $	*/
 
 /*
  * Cylink Corporation © 1998

@@ -1,4 +1,4 @@
-/*	$NetBSD: legal.h,v 1.1 2001/01/27 08:08:33 itojun Exp $	*/
+/*	$NetBSD: legal.h,v 1.1.1.1 2001/01/27 08:08:33 itojun Exp $	*/
 
 /*
  * Cylink Corporation © 1998

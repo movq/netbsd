@@ -1,4 +1,4 @@
-/*	$NetBSD: encrypt.c,v 1.1 2001/01/27 08:09:00 itojun Exp $	*/
+/*	$NetBSD: encrypt.c,v 1.1.1.1 2001/01/27 08:09:00 itojun Exp $	*/
 
 /* Copyright (C) RSA Data Security, Inc. created 1993, 1996.  This is an
    unpublished work protected as such under copyright law.  This work

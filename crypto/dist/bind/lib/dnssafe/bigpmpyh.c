@@ -1,4 +1,4 @@
-/*	$NetBSD: bigpmpyh.c,v 1.1 2001/01/27 08:08:57 itojun Exp $	*/
+/*	$NetBSD: bigpmpyh.c,v 1.1.1.1 2001/01/27 08:08:57 itojun Exp $	*/
 
 /* Copyright (C) RSA Data Security, Inc. created 1987, 1996.  This is an
    unpublished work protected as such under copyright law.  This work

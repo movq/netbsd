@@ -1,4 +1,4 @@
-/*	$NetBSD: bigacc.c,v 1.1 2001/01/27 08:08:54 itojun Exp $	*/
+/*	$NetBSD: bigacc.c,v 1.1.1.1 2001/01/27 08:08:54 itojun Exp $	*/
 
 /* Copyright (C) RSA Data Security, Inc. created 1987, 1996.  This is an
    unpublished work protected as such under copyright law.  This work

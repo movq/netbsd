@@ -1,4 +1,4 @@
-/*	$NetBSD: lbn68020.c,v 1.1 2001/01/27 08:08:29 itojun Exp $	*/
+/*	$NetBSD: lbn68020.c,v 1.1.1.1 2001/01/27 08:08:29 itojun Exp $	*/
 
 /*
  * Cylink Corporation © 1998

@@ -1,4 +1,4 @@
-/*	$NetBSD: algae.h,v 1.1 2001/01/27 08:08:50 itojun Exp $	*/
+/*	$NetBSD: algae.h,v 1.1.1.1 2001/01/27 08:08:50 itojun Exp $	*/
 
 /* Copyright (C) RSA Data Security, Inc. created 1992, 1996.  This is an
    unpublished work protected as such under copyright law.  This work

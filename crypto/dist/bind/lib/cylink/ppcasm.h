@@ -1,4 +1,4 @@
-/*	$NetBSD: ppcasm.h,v 1.1 2001/01/27 08:08:38 itojun Exp $	*/
+/*	$NetBSD: ppcasm.h,v 1.1.1.1 2001/01/27 08:08:38 itojun Exp $	*/
 
 #ifndef PPCASM_H
 #define PPCASM_H
