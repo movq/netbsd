@@ -1,4 +1,4 @@
-/*	$NetBSD: cpufunc.h,v 1.12 2002/02/19 17:21:20 uch Exp $	*/
+/*	$NetBSD: cpufunc.h,v 1.13 2002/02/22 19:44:02 uch Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -62,7 +62,10 @@ void _cpu_intr_resume(u_int32_t);
 u_int32_t _cpu_exception_suspend(void);
 void _cpu_exception_resume(u_int32_t);
 
-/* Hard reset */
+/* for delay loop. */
+void _cpu_spin(u_int32_t);
+
+/* Soft reset */
 void cpu_reset(void);
 
 #endif /* !_LOCORE */
