@@ -1,4 +1,4 @@
-/*	$NetBSD: autofs_solaris_v2_v3.h,v 1.1 2002/11/29 22:58:27 christos Exp $	*/
+/*	$NetBSD: autofs_solaris_v2_v3.h,v 1.1.1.1 2002/11/29 22:58:27 christos Exp $	*/
 
 #ifdef HAVE_FS_AUTOFS
 typedef struct autofs_args autofs_fh_t;

@@ -1,4 +1,4 @@
-/*	$NetBSD: autofs_default.h,v 1.1 2002/11/29 22:58:26 christos Exp $	*/
+/*	$NetBSD: autofs_default.h,v 1.1.1.1 2002/11/29 22:58:26 christos Exp $	*/
 
 /*
  * Autofs is not supported on this platform,
