@@ -6,7 +6,7 @@
  * to the original author and the contributors.
  */
 #if !defined(lint) && defined(LIBC_SCCS)
-static	char	rcsid[] = "$Id: ip_proxy.c,v 1.1 1997/05/26 15:18:15 darrenr Exp $";
+static	char	rcsid[] = "$Id: ip_proxy.c,v 1.1.1.1 1997/05/26 15:18:15 darrenr Exp $";
 #endif
 
 #if defined(__FreeBSD__) && defined(KERNEL) && !defined(_KERNEL)
