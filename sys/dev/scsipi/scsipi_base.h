@@ -1,4 +1,4 @@
-/*	$NetBSD: scsipi_base.h,v 1.10.6.2 2001/08/24 00:10:49 nathanw Exp $	*/
+/*	$NetBSD: scsipi_base.h,v 1.10.6.3 2003/01/07 21:34:50 thorpej Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -35,6 +35,9 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
+
+#ifndef _DEV_SCSIPI_SCSIPI_BASE_H_
+#define _DEV_SCSIPI_SCSIPI_BASE_H_
 
 struct scsipi_xfer *scsipi_get_xs __P((struct scsipi_periph *, int));
 void	scsipi_put_xs __P((struct scsipi_xfer *));
@@ -81,3 +84,5 @@ scsipi_make_xs(periph, scsipi_cmd, cmdlen, data_addr, datalen,
 
 	return (xs);
 }
+
+#endif /* _DEV_SCSIPI_SCSIPI_BASE_H_ */
