@@ -21,11 +21,11 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
- * $Id: dc21040reg.h,v 1.1 1995/06/05 00:38:18 cgd Exp $
+ * $Id: dc21040reg.h,v 1.1.1.1 1995/06/05 00:38:18 cgd Exp $
  *
  * $Log: dc21040reg.h,v $
- * Revision 1.1  1995/06/05 00:38:18  cgd
- * Initial revision
+ * Revision 1.1.1.1  1995/06/05 00:38:18  cgd
+ * dc21040 driver, from Matt Thomas
  *
  * Revision 1.3  1995/05/05  19:44:34  thomas
  * cogent em100 support
