@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 2002/04/12 21:11:46 leo Exp $
+#	$NetBSD: Makefile,v 1.1.1.1 2002/04/12 21:11:46 leo Exp $
 
 IMAGESIZE?=	1080k
 IMAGEENDIAN=	be
