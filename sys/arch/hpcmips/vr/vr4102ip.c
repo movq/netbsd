@@ -1,4 +1,4 @@
-/*	$NetBSD: vr4102ip.c,v 1.2 2002/02/11 08:15:41 takemura Exp $	*/
+/*	$NetBSD: vr4102ip.c,v 1.3 2002/02/11 09:21:47 takemura Exp $	*/
 
 /*-
  * Copyright (c) 2002 TAKEMURA Shin
@@ -29,31 +29,20 @@
  * SUCH DAMAGE.
  *
  */
-#include "opt_vr41xx.h"
-#include "opt_tx39xx.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
-#include <sys/device.h>
-#include <sys/reboot.h>
 
-#include <machine/cpu.h>
 #include <machine/bus.h>
-#include <machine/autoconf.h>
-#include <machine/platid.h>
-#include <machine/platid_mask.h>
 
-#include <hpcmips/vr/vr.h>
+#include "opt_vr41xx.h"
 #include <hpcmips/vr/vrcpudef.h>
 #include <hpcmips/vr/vripunit.h>
-#include <hpcmips/vr/vripif.h>
 #include <hpcmips/vr/vripreg.h>
 #include <hpcmips/vr/vripvar.h>
 #include <hpcmips/vr/icureg.h>
 #include <hpcmips/vr/cmureg.h>
-#include "locators.h"
 
-int	vr4102ipmatch(struct device *, struct cfdata *, void *);
 void	vr4102ipattach(struct device *, struct device *, void *);
 
 struct cfattach vr4102ip_ca = {
