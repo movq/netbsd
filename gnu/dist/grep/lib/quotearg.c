@@ -1,4 +1,4 @@
-/*	$NetBSD: quotearg.c,v 1.1 2003/01/26 23:15:12 wiz Exp $	*/
+/*	$NetBSD: quotearg.c,v 1.1.1.1 2003/01/26 23:15:12 wiz Exp $	*/
 
 /* quotearg.c - quote arguments for output
    Copyright (C) 1998, 1999, 2000, 2001 Free Software Foundation, Inc.

@@ -1,4 +1,4 @@
-/*	$NetBSD: malloc.c,v 1.1 2003/01/26 23:15:12 wiz Exp $	*/
+/*	$NetBSD: malloc.c,v 1.1.1.1 2003/01/26 23:15:12 wiz Exp $	*/
 
 /* rpl_malloc.c -- a replacement for malloc that don't accept 0 size
    Copyright (C) 2001 Free Software Foundation, Inc.

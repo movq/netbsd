@@ -1,4 +1,4 @@
-/*	$NetBSD: hard-locale.c,v 1.1 2003/01/26 23:15:12 wiz Exp $	*/
+/*	$NetBSD: hard-locale.c,v 1.1.1.1 2003/01/26 23:15:12 wiz Exp $	*/
 
 /* hard-locale.c -- Determine whether a locale is hard.
    Copyright 1997, 1998, 1999 Free Software Foundation, Inc.

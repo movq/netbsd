@@ -1,4 +1,4 @@
-/*	$NetBSD: stpcpy.c,v 1.1 2003/01/26 23:15:13 wiz Exp $	*/
+/*	$NetBSD: stpcpy.c,v 1.1.1.1 2003/01/26 23:15:13 wiz Exp $	*/
 
 /* stpcpy.c -- copy a string and return pointer to end of new string
    Copyright (C) 1992, 1995, 1997, 1998 Free Software Foundation, Inc.

@@ -1,4 +1,4 @@
-/*	$NetBSD: strtoumax.c,v 1.1 2003/01/26 23:15:13 wiz Exp $	*/
+/*	$NetBSD: strtoumax.c,v 1.1.1.1 2003/01/26 23:15:13 wiz Exp $	*/
 
 /* Convert string representation of a number into an uintmax_t value.
    Copyright 1999 Free Software Foundation, Inc.

@@ -1,4 +1,4 @@
-/*	$NetBSD: atexit.c,v 1.1 2003/01/26 23:15:11 wiz Exp $	*/
+/*	$NetBSD: atexit.c,v 1.1.1.1 2003/01/26 23:15:11 wiz Exp $	*/
 
 /* Wrapper to implement ANSI C's atexit using SunOS's on_exit. */
 /* This function is in the public domain.  --Mike Stump. */

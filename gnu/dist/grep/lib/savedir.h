@@ -1,4 +1,4 @@
-/*	$NetBSD: savedir.h,v 1.1 2003/01/26 23:15:13 wiz Exp $	*/
+/*	$NetBSD: savedir.h,v 1.1.1.1 2003/01/26 23:15:13 wiz Exp $	*/
 
 #if !defined SAVEDIR_H_
 # define SAVEDIR_H_

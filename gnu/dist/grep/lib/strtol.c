@@ -1,4 +1,4 @@
-/*	$NetBSD: strtol.c,v 1.1 2003/01/26 23:15:13 wiz Exp $	*/
+/*	$NetBSD: strtol.c,v 1.1.1.1 2003/01/26 23:15:13 wiz Exp $	*/
 
 /* Convert string representation of a number into an integer value.
    Copyright (C) 1991, 92, 94, 95, 96, 97, 98, 99, 01 Free Software Foundation, Inc.

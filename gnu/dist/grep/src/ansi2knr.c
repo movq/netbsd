@@ -1,4 +1,4 @@
-/*	$NetBSD: ansi2knr.c,v 1.1 2003/01/26 23:15:29 wiz Exp $	*/
+/*	$NetBSD: ansi2knr.c,v 1.1.1.1 2003/01/26 23:15:29 wiz Exp $	*/
 
 /* Copyright (C) 1989, 1997, 1998, 1999 Aladdin Enterprises.  All rights reserved. */
 
