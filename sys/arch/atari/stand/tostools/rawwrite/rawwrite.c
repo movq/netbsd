@@ -1,4 +1,4 @@
-/*	$NetBSD: rawwrite.c,v 1.1 1996/01/07 20:57:03 leo Exp $	*/
+/*	$NetBSD: rawwrite.c,v 1.1.1.1 1996/01/07 20:57:03 leo Exp $	*/
 
 /*
  * Copyright (c) 1995 Leo Weppelman.
