@@ -1,9 +1,9 @@
-#	$NetBSD: Makefile,v 1.1 2000/06/16 06:29:40 thorpej Exp $
+#	$NetBSD: Makefile,v 1.1.1.1 2000/06/16 06:29:40 thorpej Exp $
 
 .include <bsd.own.mk>
 
 # RCSid:
-#	$Id: Makefile,v 1.1 2000/06/16 06:29:40 thorpej Exp $
+#	$Id: Makefile,v 1.1.1.1 2000/06/16 06:29:40 thorpej Exp $
 #
 #	@(#) Copyright (c) 1995 Simon J. Gerraty
 #
