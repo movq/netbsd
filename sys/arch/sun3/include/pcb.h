@@ -45,7 +45,7 @@
 #include <machine/frame.h>
 
 /*
- * HP300 process control block
+ * Sun3 (close to but not exactly the same as the hp300) process control block
  */
 struct pcb
 {
@@ -53,7 +53,7 @@ struct pcb
 	short	pcb_ps; 	/* processor status word (+2) */
 	int	pcb_ustp;	/* user segment table pointer (+4) (not used)*/
 	int	pcb_usp;	/* user stack pointer (+8) */
-	int	pcb_regs[12];	/* D0-D7, A0-A7 (+C) */
+	int	pcb_regs[12];	/* D2-D7, A2-A7 (+C) */
 	vm_offset_t pcb_upte[3]; /* ptes for u-area */
 	caddr_t	pcb_onfault;	/* for copyin/out faults */
 	struct	fpframe pcb_fpregs; /* 68881/2 context save area */
