@@ -34,12 +34,13 @@
  * SUCH DAMAGE.
  *
  *	from: @(#)nfsdiskless.h	7.1 (Berkeley) 3/4/91
- *	$Id: nfsdiskless.h,v 1.3 1993/05/20 03:19:03 cgd Exp $
+ *	$Id: nfsdiskless.h,v 1.4 1993/07/07 12:06:39 cgd Exp $
  */
 
 #ifndef _NFS_NFSDISKLESS_H_
 #define _NFS_NFSDISKLESS_H_
 
+#define NFS_NAMELEN     256
 /*
  * Structure that must be initialized for a diskless nfs client.
  * This structure is used by nfs_mountroot() to set up the root and swap
@@ -54,11 +55,11 @@ struct nfs_diskless {
 	struct nfs_args	swap_args;	/* Mount args for swap file */
 	u_char		swap_fh[NFS_FHSIZE]; /* Swap file's file handle */
 	struct sockaddr	swap_saddr;	/* Address of swap server */
-	char		*swap_hostnam;	/* Host name for mount pt */
+	char		swap_hostnam[NFS_NAMELEN]; /* Host name for mount pt */
 	struct nfs_args	root_args;	/* Mount args for root fs */
 	u_char		root_fh[NFS_FHSIZE]; /* File handle of root dir */
 	struct sockaddr	root_saddr;	/* Address of root server */
-	char		*root_hostnam;	/* Host name for mount pt */
+	char		root_hostnam[NFS_NAMELEN]; /* Host name for mount pt */
 };
 
 #endif /* !_NFS_NFSDISKLESS_H_ */
