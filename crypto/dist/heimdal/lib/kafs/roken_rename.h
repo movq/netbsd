@@ -31,7 +31,7 @@
  * SUCH DAMAGE. 
  */
 
-/* $Id: roken_rename.h,v 1.1 2001/06/19 22:08:35 assar Exp $ */
+/* $Id: roken_rename.h,v 1.1.1.1 2001/06/19 22:08:35 assar Exp $ */
 
 #ifndef __roken_rename_h__
 #define __roken_rename_h__

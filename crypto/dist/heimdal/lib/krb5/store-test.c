@@ -32,7 +32,7 @@
 
 #include "krb5_locl.h"
 
-RCSID("$Id: store-test.c,v 1.1 2001/06/19 22:08:23 assar Exp $");
+RCSID("$Id: store-test.c,v 1.1.1.1 2001/06/19 22:08:23 assar Exp $");
 
 static void
 print_data(unsigned char *data, size_t len)

@@ -33,7 +33,7 @@
 
 #include "krb5_locl.h"
 
-RCSID("$Id: error_string.c,v 1.1 2001/06/19 22:08:20 assar Exp $");
+RCSID("$Id: error_string.c,v 1.1.1.1 2001/06/19 22:08:20 assar Exp $");
 
 #undef __attribute__
 #define __attribute__(X)
