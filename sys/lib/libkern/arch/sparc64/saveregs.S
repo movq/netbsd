@@ -1,4 +1,4 @@
-/*	$NetBSD: saveregs.S,v 1.1 1998/06/20 05:18:14 eeh Exp $	*/
+/*	$NetBSD: saveregs.S,v 1.1.1.1 1998/06/20 05:18:14 eeh Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993

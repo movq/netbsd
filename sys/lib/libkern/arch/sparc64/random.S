@@ -1,4 +1,4 @@
-/*	$NetBSD: random.S,v 1.1 1998/06/20 05:18:14 eeh Exp $	*/
+/*	$NetBSD: random.S,v 1.1.1.1 1998/06/20 05:18:14 eeh Exp $	*/
 
 /*
  * Copyright (c) 1990,1993 The Regents of the University of California.

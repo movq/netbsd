@@ -1,4 +1,4 @@
-/*	$NetBSD: divrem.m4,v 1.1 1998/06/20 05:18:14 eeh Exp $	*/
+/*	$NetBSD: divrem.m4,v 1.1.1.1 1998/06/20 05:18:14 eeh Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -48,7 +48,7 @@
 #ifdef notdef
 	.asciz "@(#)divrem.m4	8.1 (Berkeley) 6/4/93"
 #endif
-	.asciz "$NetBSD: divrem.m4,v 1.1 1998/06/20 05:18:14 eeh Exp $"
+	.asciz "$NetBSD: divrem.m4,v 1.1.1.1 1998/06/20 05:18:14 eeh Exp $"
 #endif /* LIBC_SCCS and not lint */
 
 /*
