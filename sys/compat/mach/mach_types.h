@@ -1,4 +1,4 @@
-/*	$NetBSD: mach_types.h,v 1.3 2002/11/03 23:17:19 manu Exp $	 */
+/*	$NetBSD: mach_types.h,v 1.4 2002/11/10 02:18:03 manu Exp $	 */
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -47,6 +47,10 @@ typedef int mach_boolean_t;
 typedef int mach_sleep_type_t;
 typedef int mach_timespec_t;
 typedef int mach_absolute_time_t;
+typedef int mach_integer_t;
+typedef int mach_cpu_type_t;
+typedef int mach_cpu_subtype_t;
+typedef unsigned int mach_msg_type_number_t;
 typedef unsigned int mach_vm_size_t;
 typedef unsigned long mach_vm_offset_t;
 typedef void *mach_cproc_t;	/* Unkown, see xnu/osfmk/ppc/hw_exception.s */
@@ -55,6 +59,17 @@ typedef struct {
 	u_int32_t	numer;
 	u_int32_t	denom;
 } mach_timebase_info_t;
+
+typedef struct {
+	u_int8_t       mig_vers;
+	u_int8_t       if_vers;
+	u_int8_t       reserved1;
+	u_int8_t       mig_encoding;
+	u_int8_t       int_rep;
+	u_int8_t       char_rep; 
+	u_int8_t       float_rep;
+	u_int8_t       reserved2;
+} mach_ndr_record_t;
 
 #ifdef DEBUG_MACH
 #define DPRINTF(a) uprintf a
