@@ -1,5 +1,5 @@
 #	from: @(#)Makefile	5.6 (Berkeley) 3/12/91
-#	$Id: Makefile,v 1.1 1996/01/22 03:14:17 mrg Exp $
+#	$Id: Makefile,v 1.1.1.1 1996/01/22 03:14:17 mrg Exp $
 
 .include "../../Makefile.inc"
 
