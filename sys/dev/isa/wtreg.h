@@ -64,8 +64,8 @@
 /* 
  * HISTORY
  * $Log: wtreg.h,v $
- * Revision 1.1  1993/03/21 09:45:37  cgd
- * Initial revision
+ * Revision 1.1.1.1  1993/03/21 09:45:37  cgd
+ * initial import of 386bsd-0.1 sources
  *
  * Revision 2.2.1.1  90/01/08  13:29:25  rvb
  * 	Add Intel copyright.

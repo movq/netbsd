@@ -32,7 +32,7 @@
  *
  *	@(#)com.c	7.5 (Berkeley) 5/16/91
  */
-static char rcsid[] = "$Header: /home/mike/src/cvs/netbsd/src/sys/dev/ic/com.c,v 1.1 1993/03/21 09:45:37 cgd Exp $";
+static char rcsid[] = "$Header: /home/mike/src/cvs/netbsd/src/sys/dev/ic/com.c,v 1.1.1.1 1993/03/21 09:45:37 cgd Exp $";
 
 #include "com.h"
 #if NCOM > 0
