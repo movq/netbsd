@@ -37,7 +37,7 @@
  *
  *	@(#)amq.h	8.1 (Berkeley) 6/6/93
  *
- * $Id: amq.h,v 1.1 1994/06/13 19:53:41 mycroft Exp $
+ * $Id: amq.h,v 1.1.1.1 1994/06/13 19:53:42 mycroft Exp $
  *
  */
 

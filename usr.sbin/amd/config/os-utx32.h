@@ -1,4 +1,4 @@
-/* $Id: os-utx32.h,v 1.1 1994/06/13 19:56:06 mycroft Exp $ */
+/* $Id: os-utx32.h,v 1.1.1.1 1994/06/13 19:56:07 mycroft Exp $ */
 
 /*
  * Gould UTX/32 definitions for Amd (automounter)
