@@ -1,6 +1,6 @@
 #
 # etc/services (ramdisk version)
-# $NetBSD: rd.services,v 1.1 1997/12/24 09:21:19 jeremy Exp $
+# $NetBSD: rd.services,v 1.1.1.1 1997/12/24 09:21:19 jeremy Exp $
 #
 tcpmux		1/tcp
 echo		7/tcp

@@ -1,4 +1,4 @@
-#	$NetBSD: install.md,v 1.1 1997/12/24 09:21:18 jeremy Exp $
+#	$NetBSD: install.md,v 1.1.1.1 1997/12/24 09:21:18 jeremy Exp $
 #
 #
 # Copyright (c) 1996 The NetBSD Foundation, Inc.

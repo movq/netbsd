@@ -1,4 +1,4 @@
-#	$NetBSD: ramdisk.list,v 1.1 1997/12/24 09:21:19 jeremy Exp $
+#	$NetBSD: ramdisk.list,v 1.1.1.1 1997/12/24 09:21:19 jeremy Exp $
 
 # copy the MAKEDEV script and make some devices
 COPY	${DESTDIR}/dev/MAKEDEV		dev

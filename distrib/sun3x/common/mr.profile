@@ -1,5 +1,5 @@
 #
-#	$NetBSD: mr.profile,v 1.1 1997/12/24 09:21:19 jeremy Exp $
+#	$NetBSD: mr.profile,v 1.1.1.1 1997/12/24 09:21:19 jeremy Exp $
 #
 # Copyright (c) 1995 Jason R. Thorpe
 # Copyright (c) 1994 Christopher G. Demetriou
