@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 2004/05/18 00:06:58 christos Exp $
+#	$NetBSD: Makefile,v 1.1.1.1 2004/05/18 00:06:58 christos Exp $
 
 LIB=dns
 
