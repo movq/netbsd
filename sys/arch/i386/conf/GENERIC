@@ -1,11 +1,11 @@
-#	$NetBSD: GENERIC,v 1.300.2.12 2001/01/07 22:12:38 sommerfeld Exp $
+#	$NetBSD: GENERIC,v 1.300.2.13 2001/01/23 06:34:53 thorpej Exp $
 #
 #	GENERIC -- everything that's currently supported
 #
 
 include "arch/i386/conf/std.i386"
 
-#ident 		"GENERIC-$Revision: 1.300.2.12 $"
+#ident 		"GENERIC-$Revision: 1.300.2.13 $"
 
 maxusers	32		# estimated number of users
 
@@ -699,8 +699,11 @@ upl*	at uhub? port ?
 
 # Serial adapters
 # FTDI FT8U100AX serial adapter
-#uftdi*	at uhub? port ?
-#ucom*	at uftdi? portno ?
+uftdi*	at uhub? port ?
+ucom*	at uftdi? portno ?
+
+uplcom*	at uhub? port ?		# I/O DATA USB-RSAQ2 serial adapter
+ucom*	at uplcom? portno ? 
 
 # Diamond Multimedia Rio 500
 urio*	at uhub? port ?
@@ -712,6 +715,13 @@ ucom*	at uvisor?
 # USB scanners
 uscanner* at uhub? port ?
 
+# USB scanners that use SCSI emulation, e.g., HP5300
+usscanner* at uhub? port ?
+scsibus* at usscanner? channel ?
+
+# Y@P firmware loader
+uyap* at uhub? port ?
+
 # USB Generic driver
 ugen*	at uhub? port ?
 
@@ -719,11 +729,13 @@ ugen*	at uhub? port ?
 # Audio Devices
 
 # PCI audio devices
-auvia*	at pci? dev ? function ?	# VIA VT82C686A integrated AC'97 Audio
 auich*	at pci? dev ? function ?	# Intel ICH integrated AC'97 Audio
+auvia*	at pci? dev ? function ?	# VIA VT82C686A integrated AC'97 Audio
 clcs*	at pci? dev ? function ?	# Cirrus Logic CS4280
+clct*	at pci? dev ? function ?	# Cirrus Logic CS4281
 cmpci*	at pci? dev ? function ?	# C-Media CMI8338/8738
 eap*	at pci? dev ? function ?	# Ensoniq AudioPCI
+esm*	at pci? dev ? function ?	# ESS Maestro-1/2/2e PCI Audio Accelerator
 eso*	at pci? dev ? function ?	# ESS Solo-1 PCI AudioDrive
 fms*	at pci? dev ? function ?	# Forte Media FM801
 neo*	at pci? dev ? function ?	# NeoMagic 256 AC'97 Audio
@@ -761,11 +773,13 @@ opl*	at ym?
 
 # Audio support
 #audio*	at aria?
-audio*	at auvia?
 audio*	at auich?
+audio*	at auvia?
 audio*	at clcs?
+audio*	at clct?
 audio*	at cmpci?
 audio*	at eap?
+audio*	at esm?
 audio*	at eso?
 audio*	at ess?
 audio*	at fms?
@@ -789,6 +803,7 @@ mpu*	at ym?
 
 # MIDI support
 midi*	at clcs?		# Cirrus Logic CS4280 MIDI port
+#midi*	at clct?		# Cirrus Logic CS4281 MIDI port
 #midi*	at cms?			# Creative Music System
 midi*	at eap?			# 137[01] MIDI port
 midi*	at mpu?			# MPU 401
