@@ -1,4 +1,4 @@
-/*	$NetBSD: pci_machdep.h,v 1.2 1994/10/27 04:21:40 cgd Exp $	*/
+/*	$NetBSD: pci_machdep.h,v 1.3 1995/04/17 12:08:00 cgd Exp $	*/
 
 /*
  * Copyright (c) 1994 Charles Hannum.  All rights reserved.
@@ -34,9 +34,6 @@
  *
  * See the comments in pci_machdep.c for more explanation.
  */
-
-/* Need this for struct intrhand. */
-#include <i386/isa/isavar.h>
 
 /*
  * Configuration tag; created from a {bus,device,function} triplet by
