@@ -34,7 +34,7 @@
  * SUCH DAMAGE.
  *
  * from: @(#)kadb.c	7.5 (Berkeley) 10/11/92
- * $Id: kadb.c,v 1.1 1993/10/12 03:22:29 deraadt Exp $
+ * $Id: kadb.c,v 1.1.1.1 1993/10/12 03:22:30 deraadt Exp $
  */
 
 /*

@@ -35,7 +35,7 @@
  * SUCH DAMAGE.
  *
  * from: @(#)regdef.h	7.1 (Berkeley) 1/7/92
- * $Id: regdef.h,v 1.1 1993/10/12 03:22:40 deraadt Exp $
+ * $Id: regdef.h,v 1.1.1.1 1993/10/12 03:22:41 deraadt Exp $
  */
 
 #define zero	$0	/* always zero */

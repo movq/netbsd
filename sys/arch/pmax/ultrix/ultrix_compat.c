@@ -37,7 +37,7 @@
  *
  * from: Utah Hdr: hpux_compat.c 1.41 91/04/06
  * from: @(#)ultrix_compat.c	7.4 (Berkeley) 10/11/92
- * $Id: ultrix_compat.c,v 1.1 1993/10/12 03:22:46 deraadt Exp $
+ * $Id: ultrix_compat.c,v 1.1.1.1 1993/10/12 03:22:47 deraadt Exp $
  */
 
 /*

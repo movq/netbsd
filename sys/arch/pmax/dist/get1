@@ -32,7 +32,7 @@
 # SUCH DAMAGE.
 #
 # from:	@(#)get1	7.1 (Berkeley) 4/20/92
-# $Id: get1,v 1.1 1993/10/12 03:22:47 deraadt Exp $
+# $Id: get1,v 1.1.1.1 1993/10/12 03:22:48 deraadt Exp $
 #
 
 # Shell script to build a mini-root file system in preparation for building

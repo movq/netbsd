@@ -37,7 +37,7 @@
  *
  * from: Utah Hdr: reg.h 1.1 90/07/09
  * from: @(#)reg.h	7.1 (Berkeley) 1/7/92
- * $Id: reg.h,v 1.1 1993/10/12 03:22:40 deraadt Exp $
+ * $Id: reg.h,v 1.1.1.1 1993/10/12 03:22:41 deraadt Exp $
  */
 
 /*

@@ -35,7 +35,7 @@
  * SUCH DAMAGE.
  *
  * from: @(#)kmin.h	7.1 (Berkeley) 11/15/92
- * $Id: kmin.h,v 1.1 1993/10/12 03:22:33 deraadt Exp $
+ * $Id: kmin.h,v 1.1.1.1 1993/10/12 03:22:34 deraadt Exp $
  */
 
 /* 

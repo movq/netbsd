@@ -37,7 +37,7 @@
  *
  * from: Utah Hdr: mem.c 1.14 90/10/12
  * from: @(#)mem.c	7.6 (Berkeley) 10/11/92
- * $Id: mem.c,v 1.1 1993/10/12 03:22:30 deraadt Exp $
+ * $Id: mem.c,v 1.1.1.1 1993/10/12 03:22:31 deraadt Exp $
  */
 
 /*

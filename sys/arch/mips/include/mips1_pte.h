@@ -37,7 +37,7 @@
  *
  * from: Utah Hdr: pte.h 1.11 89/09/03
  * from: @(#)pte.h	7.2 (Berkeley) 2/29/92
- * $Id: mips1_pte.h,v 1.1 1993/10/12 03:22:40 deraadt Exp $
+ * $Id: mips1_pte.h,v 1.1.1.1 1993/10/12 03:22:41 deraadt Exp $
  */
 
 /*

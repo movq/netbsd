@@ -35,7 +35,7 @@
  * SUCH DAMAGE.
  *
  * from: @(#)pmap.c	7.12 (Berkeley) 10/24/92
- * $Id: pmap.c,v 1.1 1993/10/12 03:22:31 deraadt Exp $
+ * $Id: pmap.c,v 1.1.1.1 1993/10/12 03:22:32 deraadt Exp $
  */
 
 /*

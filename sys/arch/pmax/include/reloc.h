@@ -32,7 +32,7 @@
  *
  * from: @(#)reloc.h	7.2 (Berkeley) 2/4/93
  * from: Header: reloc.h,v 1.6 92/06/20 09:59:37 torek Exp
- * $Id: reloc.h,v 1.1 1993/10/12 03:22:40 deraadt Exp $
+ * $Id: reloc.h,v 1.1.1.1 1993/10/12 03:22:41 deraadt Exp $
  */
 
 /*

@@ -34,7 +34,7 @@
  * SUCH DAMAGE.
  *
  * from: @(#)signal.h	7.1 (Berkeley) 1/7/92
- * $Id: signal.h,v 1.1 1993/10/12 03:22:41 deraadt Exp $
+ * $Id: signal.h,v 1.1.1.1 1993/10/12 03:22:42 deraadt Exp $
  */
 
 /*

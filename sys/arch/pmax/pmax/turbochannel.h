@@ -35,7 +35,7 @@
  * SUCH DAMAGE.
  *
  * from: @(#)turbochannel.h	7.2 (Berkeley) 11/15/92
- * $Id: turbochannel.h,v 1.1 1993/10/12 03:22:33 deraadt Exp $
+ * $Id: turbochannel.h,v 1.1.1.1 1993/10/12 03:22:34 deraadt Exp $
  */
 
 /* 

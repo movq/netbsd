@@ -65,8 +65,8 @@
 /*
  * HISTORY
  * $Log: asc.c,v $
- * Revision 1.1  1993/10/12 03:22:22  deraadt
- * Initial revision
+ * Revision 1.1.1.1  1993/10/12 03:22:23  deraadt
+ * pmax code from <ralphc@pyramid.com> & <rick@snowhite.cis.uoguelph.ca>
  *
  * Revision 2.5  91/02/05  17:45:07  mrt
  * 	Added author notices

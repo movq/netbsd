@@ -2,7 +2,7 @@
 # GENERIC DECstation 5000
 #
 # from:	@(#)GENERIC.5000	7.4 (Berkeley) 3/8/93
-# $Id: GENERIC.5000,v 1.1 1993/10/12 03:22:19 deraadt Exp $
+# $Id: GENERIC.5000,v 1.1.1.1 1993/10/12 03:22:20 deraadt Exp $
 machine		pmax
 
 cpu		"DS5000"

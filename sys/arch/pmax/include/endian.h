@@ -34,7 +34,7 @@
  * SUCH DAMAGE.
  *
  * from: @(#)endian.h	7.5 (Berkeley) 2/21/93
- * $Id: endian.h,v 1.1 1993/10/12 03:22:39 deraadt Exp $
+ * $Id: endian.h,v 1.1.1.1 1993/10/12 03:22:40 deraadt Exp $
  */
 
 /*

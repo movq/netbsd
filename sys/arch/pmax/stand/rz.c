@@ -34,7 +34,7 @@
  * SUCH DAMAGE.
  *
  * from: @(#)rz.c	7.2 (Berkeley) 2/15/93
- * $Id: rz.c,v 1.1 1993/10/12 03:22:44 deraadt Exp $
+ * $Id: rz.c,v 1.1.1.1 1993/10/12 03:22:45 deraadt Exp $
  */
 
 #include <stand/stand.h>

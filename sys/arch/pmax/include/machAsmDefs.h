@@ -51,7 +51,7 @@
  *
  * from: Header: /sprite/src/kernel/mach/ds3100.md/RCS/machAsmDefs.h,
  *	v 1.2 89/08/15 18:28:24 rab Exp SPRITE (DECWRL)
- * $Id: machAsmDefs.h,v 1.1 1993/10/12 03:22:42 deraadt Exp $
+ * $Id: machAsmDefs.h,v 1.1.1.1 1993/10/12 03:22:43 deraadt Exp $
  */
 
 #ifndef _MACHASMDEFS

@@ -64,8 +64,8 @@
 /*
  * HISTORY
  * $Log: dtopreg.h,v $
- * Revision 1.1  1993/10/12 03:22:26  deraadt
- * Initial revision
+ * Revision 1.1.1.1  1993/10/12 03:22:27  deraadt
+ * pmax code from <ralphc@pyramid.com> & <rick@snowhite.cis.uoguelph.ca>
  *
  * Revision 2.3  92/03/05  17:08:17  rpd
  * 	Define how many buttons and coordinates we can take.

@@ -35,7 +35,7 @@
  * SUCH DAMAGE.
  *
  * from: @(#)asic.h	7.2 (Berkeley) 12/20/92
- * $Id: asic.h,v 1.1 1993/10/12 03:22:31 deraadt Exp $
+ * $Id: asic.h,v 1.1.1.1 1993/10/12 03:22:32 deraadt Exp $
  */
 
 /* 

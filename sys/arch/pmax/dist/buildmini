@@ -32,7 +32,7 @@
 # SUCH DAMAGE.
 #
 # from:	@(#)buildmini	7.1 (Berkeley) 4/20/92
-# $Id: buildmini,v 1.1 1993/10/12 03:22:47 deraadt Exp $
+# $Id: buildmini,v 1.1.1.1 1993/10/12 03:22:48 deraadt Exp $
 #
 
 dist=/bsd3/src/sys.newvm/pmax/dist

@@ -48,7 +48,7 @@
  * from: Header: /sprite/src/kernel/vm/ds3100.md/vmPmaxAsm.s,
  *	v 1.1 89/07/10 14:27:41 nelson Exp SPRITE (DECWRL)
  * from: @(#)locore.s	7.13 (Berkeley) 2/26/93
- * $Id: locore_r4000.S,v 1.1 1993/10/12 03:22:31 deraadt Exp $
+ * $Id: locore_r4000.S,v 1.1.1.1 1993/10/12 03:22:32 deraadt Exp $
  */
 
 /*

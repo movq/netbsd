@@ -34,7 +34,7 @@
  * SUCH DAMAGE.
  *
  * from: @(#)callvec.c	7.1 (Berkeley) 11/15/92
- * $Id: callvec.c,v 1.1 1993/10/12 03:22:44 deraadt Exp $
+ * $Id: callvec.c,v 1.1.1.1 1993/10/12 03:22:45 deraadt Exp $
  */
 
 #include <pmax/stand/dec_prom.h>

@@ -1,4 +1,4 @@
-# $Id: files.pmax,v 1.1 1993/10/12 03:22:19 deraadt Exp $
+# $Id: files.pmax,v 1.1.1.1 1993/10/12 03:22:20 deraadt Exp $
 pmax/pmax/autoconf.c		standard
 pmax/pmax/clock.c		standard
 pmax/pmax/conf.c		standard

@@ -1,4 +1,4 @@
-# $Id: Makefile.pmax,v 1.1 1993/10/12 03:22:19 deraadt Exp $
+# $Id: Makefile.pmax,v 1.1.1.1 1993/10/12 03:22:20 deraadt Exp $
 # from:	@(#)Makefile.pmax	7.7 (Berkeley) 2/20/93
 #
 # Makefile for 4.4 BSD
