@@ -65,7 +65,7 @@
  * please contact nCipher.
  *
  *
- * $Id: hwcryptohook.h,v 1.1 2003/07/24 08:27:25 itojun Exp $
+ * $Id: hwcryptohook.h,v 1.1.1.1 2003/07/24 08:27:25 itojun Exp $
  */
 
 #ifndef HWCRYPTOHOOK_H
