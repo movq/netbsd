@@ -1,4 +1,4 @@
-/*	$NetBSD: auth2-gss.c,v 1.1 2005/02/13 00:52:52 christos Exp $	*/
+/*	$NetBSD: auth2-gss.c,v 1.1.1.1 2005/02/13 00:52:52 christos Exp $	*/
 /*	$OpenBSD: auth2-gss.c,v 1.8 2004/06/21 17:36:31 avsm Exp $	*/
 
 /*

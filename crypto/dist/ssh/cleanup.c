@@ -1,4 +1,4 @@
-/*	$NetBSD: cleanup.c,v 1.1 2005/02/13 00:52:57 christos Exp $	*/
+/*	$NetBSD: cleanup.c,v 1.1.1.1 2005/02/13 00:52:57 christos Exp $	*/
 /*
  * Copyright (c) 2003 Markus Friedl <markus@openbsd.org>
  *
