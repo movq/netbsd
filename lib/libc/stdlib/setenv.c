@@ -1,4 +1,4 @@
-/*	$NetBSD: setenv.c,v 1.21 2003/01/18 11:32:04 thorpej Exp $	*/
+/*	$NetBSD: setenv.c,v 1.22 2003/04/07 13:41:14 kleink Exp $	*/
 
 /*
  * Copyright (c) 1987, 1993
@@ -38,7 +38,7 @@
 #if 0
 static char sccsid[] = "@(#)setenv.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: setenv.c,v 1.21 2003/01/18 11:32:04 thorpej Exp $");
+__RCSID("$NetBSD: setenv.c,v 1.22 2003/04/07 13:41:14 kleink Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -53,7 +53,6 @@ __RCSID("$NetBSD: setenv.c,v 1.21 2003/01/18 11:32:04 thorpej Exp $");
 
 #ifdef __weak_alias
 __weak_alias(setenv,_setenv)
-__weak_alias(unsetenv,_unsetenv)
 #endif
 
 #ifdef _REENTRANT
@@ -134,25 +133,4 @@ setenv(name, value, rewrite)
 	for (*c++ = '='; (*c++ = *value++) != '\0'; );
 	rwlock_unlock(&__environ_lock);
 	return (0);
-}
-
-/*
- * unsetenv(name) --
- *	Delete environmental variable "name".
- */
-void
-unsetenv(name)
-	const char *name;
-{
-	char **p;
-	int offset;
-
-	_DIAGASSERT(name != NULL);
-
-	rwlock_wrlock(&__environ_lock);
-	while (__findenv(name, &offset))	/* if set multiple times */
-		for (p = &environ[offset];; ++p)
-			if (!(*p = *(p + 1)))
-				break;
-	rwlock_unlock(&__environ_lock);
 }
