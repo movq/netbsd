@@ -1,4 +1,4 @@
-/*	$NetBSD: print-fr.c,v 1.1 2004/09/27 17:07:03 dyoung Exp $	*/
+/*	$NetBSD: print-fr.c,v 1.1.1.1 2004/09/27 17:07:03 dyoung Exp $	*/
 
 /*
  * Copyright (c) 1990, 1991, 1993, 1994, 1995, 1996
