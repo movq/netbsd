@@ -33,23 +33,17 @@
 
 #if defined(LIBC_SCCS) && !defined(lint)
 /*static char *sccsid = "from: @(#)strerror.c	5.6 (Berkeley) 5/4/91";*/
-static char *rcsid = "$Id: strsignal.c,v 1.1 1994/08/02 05:01:23 jtc Exp $";
+static char *rcsid = "$Id: strsignal.c,v 1.2 1994/09/03 05:07:56 jtc Exp $";
 #endif /* LIBC_SCCS and not lint */
 
 #include <string.h>
-#include <signal.h>
+
+extern char *__strsignal __P((int, char *));
 
 char *
 strsignal(sig)
 	int sig;
 {
-	unsigned int signum = sig;
-	static char buf[40];
-
-	if (signum < NSIG) {
-		return(sys_siglist[signum]);
-	}
-
-	sprintf(buf, "Unknown signal: %d", signum);
-	return buf;
+	static char buf[128];
+	return __strsignal(sig, buf);
 }
