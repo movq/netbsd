@@ -1,4 +1,4 @@
-# $NetBSD: Makefile,v 1.1 1997/09/26 04:37:02 gwr Exp $
+# $NetBSD: Makefile,v 1.1.1.1 1997/09/26 04:37:02 gwr Exp $
 
 # PROG=	gdb # No, this needs custom rules.
 # Use <bsd.prog.mk> somehow?

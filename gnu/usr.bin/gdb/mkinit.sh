@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# $NetBSD: mkinit.sh,v 1.1 1997/09/26 04:37:02 gwr Exp $
+# $NetBSD: mkinit.sh,v 1.1.1.1 1997/09/26 04:37:02 gwr Exp $
 #
 # Generate the init.c file on stdout.
 # Arguments are names of *.o files.

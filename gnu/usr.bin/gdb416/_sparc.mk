@@ -1,4 +1,4 @@
-# $NetBSD: _sparc.mk,v 1.1 1997/09/26 04:37:02 gwr Exp $
+# $NetBSD: _sparc.mk,v 1.1.1.1 1997/09/26 04:37:02 gwr Exp $
 
 # From gdb/config/sparc/nbsd.mh
 NM_FILE= config/sparc/nm-nbsd.h

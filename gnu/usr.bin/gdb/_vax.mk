@@ -1,4 +1,4 @@
-# $NetBSD: _vax.mk,v 1.1 1997/09/26 04:37:02 gwr Exp $
+# $NetBSD: _vax.mk,v 1.1.1.1 1997/09/26 04:37:02 gwr Exp $
 
 # From gdb/config/vax/nbsd.mh
 NM_FILE= config/vax/nm-nbsd.h
