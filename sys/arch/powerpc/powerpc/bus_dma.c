@@ -1,4 +1,4 @@
-/*	$NetBSD: bus_dma.c,v 1.5 2003/02/06 23:03:54 matt Exp $	*/
+/*	$NetBSD: bus_dma.c,v 1.6 2003/03/05 22:08:29 matt Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997, 1998 The NetBSD Foundation, Inc.
@@ -207,7 +207,7 @@ _bus_dmamap_load_buffer(t, map, buf, buflen, p, flags, lastaddrp, segp, first)
 		 * the previous segment if possible.
 		 */
 		if (first) {
-			map->dm_segs[seg].ds_addr = PHYS_TO_PCI_MEM(curaddr);
+			map->dm_segs[seg].ds_addr = PHYS_TO_BUS_MEM(t, curaddr);
 			map->dm_segs[seg].ds_len = sgsize;
 			first = 0;
 		} else {
@@ -222,7 +222,7 @@ _bus_dmamap_load_buffer(t, map, buf, buflen, p, flags, lastaddrp, segp, first)
 				if (++seg >= map->_dm_segcnt)
 					break;
 				map->dm_segs[seg].ds_addr =
-					PHYS_TO_PCI_MEM(curaddr);
+					PHYS_TO_BUS_MEM(t, curaddr);
 				map->dm_segs[seg].ds_len = sgsize;
 			}
 		}
@@ -549,8 +549,8 @@ _bus_dmamem_free(t, segs, nsegs)
 	 */
 	TAILQ_INIT(&mlist);
 	for (curseg = 0; curseg < nsegs; curseg++) {
-		for (addr = PCI_MEM_TO_PHYS(segs[curseg].ds_addr);
-		    addr < (PCI_MEM_TO_PHYS(segs[curseg].ds_addr)
+		for (addr = BUS_MEM_TO_PHYS(t, segs[curseg].ds_addr);
+		    addr < (BUS_MEM_TO_PHYS(t, segs[curseg].ds_addr)
 			+ segs[curseg].ds_len);
 		    addr += PAGE_SIZE) {
 			m = PHYS_TO_VM_PAGE(addr);
@@ -588,8 +588,8 @@ _bus_dmamem_map(t, segs, nsegs, size, kvap, flags)
 	*kvap = (caddr_t)va;
 
 	for (curseg = 0; curseg < nsegs; curseg++) {
-		for (addr = PCI_MEM_TO_PHYS(segs[curseg].ds_addr);
-		    addr < (PCI_MEM_TO_PHYS(segs[curseg].ds_addr)
+		for (addr = BUS_MEM_TO_PHYS(t, segs[curseg].ds_addr);
+		    addr < (BUS_MEM_TO_PHYS(t, segs[curseg].ds_addr)
 			+ segs[curseg].ds_len);
 		    addr += NBPG, va += NBPG, size -= NBPG) {
 			if (size == 0)
@@ -643,7 +643,7 @@ _bus_dmamem_mmap(t, segs, nsegs, off, prot, flags)
 #ifdef DIAGNOSTIC
 		if (off & PGOFSET)
 			panic("_bus_dmamem_mmap: offset unaligned");
-		if (PCI_MEM_TO_PHYS(segs[i].ds_addr) & PGOFSET)
+		if (BUS_MEM_TO_PHYS(t, segs[i].ds_addr) & PGOFSET)
 			panic("_bus_dmamem_mmap: segment unaligned");
 		if (segs[i].ds_len & PGOFSET)
 			panic("_bus_dmamem_mmap: segment size not multiple"
@@ -654,7 +654,7 @@ _bus_dmamem_mmap(t, segs, nsegs, off, prot, flags)
 			continue;
 		}
 
-		return (PCI_MEM_TO_PHYS(segs[i].ds_addr) + off);
+		return (BUS_MEM_TO_PHYS(t, segs[i].ds_addr) + off);
 	}
 
 	/* Page not found. */
@@ -700,7 +700,7 @@ _bus_dmamem_alloc_range(t, size, alignment, boundary, segs, nsegs, rsegs,
 	m = mlist.tqh_first;
 	curseg = 0;
 	lastaddr = VM_PAGE_TO_PHYS(m);
-	segs[curseg].ds_addr = PHYS_TO_PCI_MEM(lastaddr);
+	segs[curseg].ds_addr = PHYS_TO_BUS_MEM(t, lastaddr);
 	segs[curseg].ds_len = PAGE_SIZE;
 	m = m->pageq.tqe_next;
 
@@ -717,7 +717,7 @@ _bus_dmamem_alloc_range(t, size, alignment, boundary, segs, nsegs, rsegs,
 			segs[curseg].ds_len += PAGE_SIZE;
 		else {
 			curseg++;
-			segs[curseg].ds_addr = PHYS_TO_PCI_MEM(curaddr);
+			segs[curseg].ds_addr = PHYS_TO_BUS_MEM(t, curaddr);
 			segs[curseg].ds_len = PAGE_SIZE;
 		}
 		lastaddr = curaddr;
