@@ -1,4 +1,4 @@
-/*	$NetBSD: route.c,v 1.1 1996/09/13 18:21:25 gwr Exp $	*/
+/*	$NetBSD: route.c,v 1.1.1.1 1996/09/13 18:21:25 gwr Exp $	*/
 
 /*
  * Copyright (c) 1983, 1989, 1991, 1993
@@ -43,7 +43,7 @@ static char copyright[] =
 #if 0
 static char sccsid[] = "@(#)route.c	8.3 (Berkeley) 3/19/94";
 #else
-static char rcsid[] = "$NetBSD: route.c,v 1.1 1996/09/13 18:21:25 gwr Exp $";
+static char rcsid[] = "$NetBSD: route.c,v 1.1.1.1 1996/09/13 18:21:25 gwr Exp $";
 #endif
 #endif /* not lint */
 
