@@ -1,5 +1,5 @@
 static char *RCSid =
-"$Header: /home/mike/src/cvs/netbsd/src/usr.bin/rcs/src/Attic/sccstorcs.c,v 1.1 1993/03/21 09:45:37 cgd Exp $";
+"$Header: /home/mike/src/cvs/netbsd/src/usr.bin/rcs/src/Attic/sccstorcs.c,v 1.1.1.1 1993/03/21 09:45:37 cgd Exp $";
 
 /*
  * SCCSTORCS - build RCS file from SCCS file preserving deltas.
@@ -12,8 +12,8 @@ static char *RCSid =
  * author.
  *
  * $Log: sccstorcs.c,v $
- * Revision 1.1  1993/03/21 09:45:37  cgd
- * Initial revision
+ * Revision 1.1.1.1  1993/03/21 09:45:37  cgd
+ * initial import of 386bsd-0.1 sources
  *
  * Revision 1.4  84/10/17  21:12:11  root
  * Added check for having multiple deltas in a row for the same revision.

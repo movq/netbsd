@@ -28,7 +28,7 @@
  */
 #ifndef lint
 static char rcsid[]=
-"$Header: /home/mike/src/cvs/netbsd/src/usr.bin/rcs/src/Attic/co.c,v 1.1 1993/03/21 09:45:37 cgd Exp $ Purdue CS";
+"$Header: /home/mike/src/cvs/netbsd/src/usr.bin/rcs/src/Attic/co.c,v 1.1.1.1 1993/03/21 09:45:37 cgd Exp $ Purdue CS";
 #endif
 /*****************************************************************************
  *                       check out revisions from RCS files
@@ -37,9 +37,9 @@ static char rcsid[]=
 
 
 /* $Log: co.c,v $
-/* Revision 1.1  1993/03/21 09:45:37  cgd
-/* Initial revision
-/*
+ * Revision 1.1.1.1  1993/03/21 09:45:37  cgd
+ * initial import of 386bsd-0.1 sources
+ *
  * Revision 4.7  89/05/01  15:11:41  narten
  * changed copyright header to reflect current distribution rules
  * 

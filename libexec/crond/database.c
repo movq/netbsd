@@ -1,5 +1,5 @@
 #if !defined(lint) && !defined(LINT)
-static char rcsid[] = "$Header: /home/mike/src/cvs/netbsd/src/libexec/crond/Attic/database.c,v 1.1 1993/03/21 09:45:37 cgd Exp $";
+static char rcsid[] = "$Header: /home/mike/src/cvs/netbsd/src/libexec/crond/Attic/database.c,v 1.1.1.1 1993/03/21 09:45:37 cgd Exp $";
 #endif
 
 /* vix 26jan87 [RCS has the log]

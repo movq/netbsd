@@ -47,7 +47,7 @@
  *
  * Routines to sift through a BSD fast filesystem. -wfj
  */
-static char rcsid[] = "$Header: /home/mike/src/cvs/netbsd/src/sys/arch/i386/stand/Attic/fs.c,v 1.1 1993/03/21 09:45:37 cgd Exp $";
+static char rcsid[] = "$Header: /home/mike/src/cvs/netbsd/src/sys/arch/i386/stand/Attic/fs.c,v 1.1.1.1 1993/03/21 09:45:37 cgd Exp $";
 
 #include "param.h"
 #include "fs.h"

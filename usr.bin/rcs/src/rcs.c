@@ -3,7 +3,7 @@
  */
 #ifndef lint
 static char rcsid[]=
-"$Header: /home/mike/src/cvs/netbsd/src/usr.bin/rcs/src/Attic/rcs.c,v 1.1 1993/03/21 09:45:37 cgd Exp $ Purdue CS";
+"$Header: /home/mike/src/cvs/netbsd/src/usr.bin/rcs/src/Attic/rcs.c,v 1.1.1.1 1993/03/21 09:45:37 cgd Exp $ Purdue CS";
 #endif
 /* Copyright (C) 1982, 1988, 1989 Walter Tichy
  * All rights reserved.
@@ -34,9 +34,9 @@ static char rcsid[]=
 
 
 /* $Log: rcs.c,v $
-/* Revision 1.1  1993/03/21 09:45:37  cgd
-/* Initial revision
-/*
+ * Revision 1.1.1.1  1993/03/21 09:45:37  cgd
+ * initial import of 386bsd-0.1 sources
+ *
  * Revision 4.11  89/05/01  15:12:06  narten
  * changed copyright header to reflect current distribution rules
  * 

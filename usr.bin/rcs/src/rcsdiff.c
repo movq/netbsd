@@ -3,7 +3,7 @@
  */
 #ifndef lint
 static char rcsid[]=
-"$Header: /home/mike/src/cvs/netbsd/src/usr.bin/rcs/src/Attic/rcsdiff.c,v 1.1 1993/03/21 09:45:37 cgd Exp $ Purdue CS";
+"$Header: /home/mike/src/cvs/netbsd/src/usr.bin/rcs/src/Attic/rcsdiff.c,v 1.1.1.1 1993/03/21 09:45:37 cgd Exp $ Purdue CS";
 #endif
 /*****************************************************************************
  *                       generate difference between RCS revisions
@@ -39,9 +39,9 @@ static char rcsid[]=
 
 
 /* $Log: rcsdiff.c,v $
-/* Revision 1.1  1993/03/21 09:45:37  cgd
-/* Initial revision
-/*
+ * Revision 1.1.1.1  1993/03/21 09:45:37  cgd
+ * initial import of 386bsd-0.1 sources
+ *
  * Revision 3.12  91/02/22  00:11:20  elan
  * *** empty log message ***
  * 

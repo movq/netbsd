@@ -26,8 +26,8 @@
 /*
  * HISTORY
  * $Log: eflags.h,v $
- * Revision 1.1  1993/03/21 09:45:37  cgd
- * Initial revision
+ * Revision 1.1.1.1  1993/03/21 09:45:37  cgd
+ * initial import of 386bsd-0.1 sources
  *
  * Revision 2.4  91/05/14  16:06:35  mrt
  * 	Correcting copyright

@@ -3,7 +3,7 @@
  */
 #ifndef lint
  static char
- rcsid[]= "$Id: rcsfnms.c,v 1.1 1993/03/21 09:45:37 cgd Exp $ Purdue CS";
+ rcsid[]= "$Id: rcsfnms.c,v 1.1.1.1 1993/03/21 09:45:37 cgd Exp $ Purdue CS";
 #endif
 /****************************************************************************
  *                     creation and deletion of semaphorefile,
@@ -42,9 +42,9 @@
 
 
 /* $Log: rcsfnms.c,v $
-/* Revision 1.1  1993/03/21 09:45:37  cgd
-/* Initial revision
-/*
+ * Revision 1.1.1.1  1993/03/21 09:45:37  cgd
+ * initial import of 386bsd-0.1 sources
+ *
  * Revision 3.12  89/08/15  21:38:10  bostic
  * Version 4 from Tom Narten at Purdue
  * 

@@ -3,7 +3,7 @@
  */
 #ifndef lint
  static char rcsid[]=
- "$Header: /home/mike/src/cvs/netbsd/src/usr.bin/rcs/src/Attic/snoop.c,v 1.1 1993/03/21 09:45:37 cgd Exp $ Purdue CS";
+ "$Header: /home/mike/src/cvs/netbsd/src/usr.bin/rcs/src/Attic/snoop.c,v 1.1.1.1 1993/03/21 09:45:37 cgd Exp $ Purdue CS";
 #endif
 /*******************************************************************
  * This program appends argv[1] to the file SNOOPFILE.
@@ -41,9 +41,9 @@
 
 
 /* $Log: snoop.c,v $
-/* Revision 1.1  1993/03/21 09:45:37  cgd
-/* Initial revision
-/*
+ * Revision 1.1.1.1  1993/03/21 09:45:37  cgd
+ * initial import of 386bsd-0.1 sources
+ *
  * Revision 4.4  89/05/01  15:14:00  narten
  * changed copyright header to reflect current distribution rules
  * 

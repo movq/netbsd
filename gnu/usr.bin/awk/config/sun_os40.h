@@ -12,9 +12,9 @@ the GNU General Public License, version 2, 1991.
 
 
 /* $Log: sun_os40.h,v $
-/* Revision 1.1  1993/03/21 09:45:37  cgd
-/* Initial revision
-/*
+ * Revision 1.1.1.1  1993/03/21 09:45:37  cgd
+ * initial import of 386bsd-0.1 sources
+ *
  * Revision 4.2  91/11/17  12:34:11  brennan
  * added a declaration for sprintf()
  * 

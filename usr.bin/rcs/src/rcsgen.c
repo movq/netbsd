@@ -2,7 +2,7 @@
  *                     RCS revision generation
  */
 #ifndef lint
-static char rcsid[]= "$Id: rcsgen.c,v 1.1 1993/03/21 09:45:37 cgd Exp $ Purdue CS";
+static char rcsid[]= "$Id: rcsgen.c,v 1.1.1.1 1993/03/21 09:45:37 cgd Exp $ Purdue CS";
 #endif
 
 /* Copyright (C) 1982, 1988, 1989 Walter Tichy
@@ -33,9 +33,9 @@ static char rcsid[]= "$Id: rcsgen.c,v 1.1 1993/03/21 09:45:37 cgd Exp $ Purdue C
 
 
 /* $Log: rcsgen.c,v $
-/* Revision 1.1  1993/03/21 09:45:37  cgd
-/* Initial revision
-/*
+ * Revision 1.1.1.1  1993/03/21 09:45:37  cgd
+ * initial import of 386bsd-0.1 sources
+ *
  * Revision 3.8  89/08/15  21:38:51  bostic
  * Version 4 from Tom Narten at Purdue
  * 

@@ -23,8 +23,8 @@
    c/o AIRS, P.O. Box 520, Waltham, MA 02254.
 
    $Log: alloca.c,v $
-   Revision 1.1  1993/03/21 09:45:37  cgd
-   Initial revision
+   Revision 1.1.1.1  1993/03/21 09:45:37  cgd
+   initial import of 386bsd-0.1 sources
 
    Revision 1.1  1992/02/23  03:26:51  ian
    Initial revision
@@ -34,7 +34,7 @@
 #include "uucp.h"
 
 #if USE_RCS_ID
-char alloca_rcsid[] = "$Id: alloca.c,v 1.1 1993/03/21 09:45:37 cgd Exp $";
+char alloca_rcsid[] = "$Id: alloca.c,v 1.1.1.1 1993/03/21 09:45:37 cgd Exp $";
 #endif
 
 /* A simplistic implementation of alloca.  I could just include Doug

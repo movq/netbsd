@@ -26,8 +26,8 @@
 /*
  * HISTORY
  * $Log: db_machdep.h,v $
- * Revision 1.1  1993/03/21 09:45:37  cgd
- * Initial revision
+ * Revision 1.1.1.1  1993/03/21 09:45:37  cgd
+ * initial import of 386bsd-0.1 sources
  *
  * Revision 2.8  92/02/19  15:07:56  elf
  * 	Added db_thread_fp_used.

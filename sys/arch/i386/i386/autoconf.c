@@ -35,7 +35,7 @@
  *
  *	@(#)autoconf.c	7.1 (Berkeley) 5/9/91
  */
-static char rcsid[] = "$Header: /home/mike/src/cvs/netbsd/src/sys/arch/i386/i386/autoconf.c,v 1.1 1993/03/21 09:45:37 cgd Exp $";
+static char rcsid[] = "$Header: /home/mike/src/cvs/netbsd/src/sys/arch/i386/i386/autoconf.c,v 1.1.1.1 1993/03/21 09:45:37 cgd Exp $";
 
 /*
  * Setup the system to run on the current machine.

@@ -23,8 +23,8 @@
    c/o AIRS, P.O. Box 520, Waltham, MA 02254.
 
    $Log: sys2.unx,v $
-   Revision 1.1  1993/03/21 09:45:37  cgd
-   Initial revision
+   Revision 1.1.1.1  1993/03/21 09:45:37  cgd
+   initial import of 386bsd-0.1 sources
 
    Revision 1.72  1992/04/03  17:43:39  ian
    Petri Helenius: don't clobber undefined bits in termio or termios
@@ -247,7 +247,7 @@
 #include "uucp.h"
 
 #if USE_RCS_ID
-char sys2_unx_rcsid[] = "$Id: sys2.unx,v 1.1 1993/03/21 09:45:37 cgd Exp $";
+char sys2_unx_rcsid[] = "$Id: sys2.unx,v 1.1.1.1 1993/03/21 09:45:37 cgd Exp $";
 #endif
 
 #include <errno.h>

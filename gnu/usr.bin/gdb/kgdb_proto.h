@@ -36,7 +36,7 @@
  *	@(#)kgdb_proto.h	6.3 (Berkeley) 5/8/91
  *
  *
- * $Header: /home/mike/src/cvs/netbsd/src/gnu/usr.bin/gdb/Attic/kgdb_proto.h,v 1.1 1993/03/21 09:45:37 cgd Exp $ (LBL)
+ * $Header: /home/mike/src/cvs/netbsd/src/gnu/usr.bin/gdb/Attic/kgdb_proto.h,v 1.1.1.1 1993/03/21 09:45:37 cgd Exp $ (LBL)
  */
 
 /*

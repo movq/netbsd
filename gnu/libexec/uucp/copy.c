@@ -23,8 +23,8 @@
    c/o AIRS, P.O. Box 520, Waltham, MA 02254.
 
    $Log: copy.c,v $
-   Revision 1.1  1993/03/21 09:45:37  cgd
-   Initial revision
+   Revision 1.1.1.1  1993/03/21 09:45:37  cgd
+   initial import of 386bsd-0.1 sources
 
    Revision 1.7  1992/02/24  20:07:43  ian
    John Theus: some systems don't have <fcntl.h>
@@ -52,7 +52,7 @@
 #include "uucp.h"
 
 #if USE_RCS_ID
-char copy_rcsid[] = "$Id: copy.c,v 1.1 1993/03/21 09:45:37 cgd Exp $";
+char copy_rcsid[] = "$Id: copy.c,v 1.1.1.1 1993/03/21 09:45:37 cgd Exp $";
 #endif
 
 #include <stdio.h>

@@ -24,9 +24,9 @@ the GNU General Public License, version 2, 1991.
 */
 
 /*$Log: xenix_r2.h,v $
-/*Revision 1.1  1993/03/21 09:45:37  cgd
-/*Initial revision
-/*
+ *Revision 1.1.1.1  1993/03/21 09:45:37  cgd
+ *initial import of 386bsd-0.1 sources
+ *
  * Revision 4.1  91/09/25  11:42:13  brennan
  * VERSION 1.0
  * 

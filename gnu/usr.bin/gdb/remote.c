@@ -33,7 +33,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * $Header: /home/mike/src/cvs/netbsd/src/gnu/usr.bin/gdb/Attic/remote.c,v 1.1 1993/03/21 09:45:37 cgd Exp $;
+ * $Header: /home/mike/src/cvs/netbsd/src/gnu/usr.bin/gdb/Attic/remote.c,v 1.1.1.1 1993/03/21 09:45:37 cgd Exp $;
  */
 
 #ifndef lint

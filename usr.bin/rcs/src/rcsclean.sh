@@ -1,7 +1,7 @@
 #! /bin/sh
 #
 # RCS cleanup operation.
-# $Header: /home/mike/src/cvs/netbsd/src/usr.bin/rcs/src/Attic/rcsclean.sh,v 1.1 1993/03/21 09:45:37 cgd Exp $
+# $Header: /home/mike/src/cvs/netbsd/src/usr.bin/rcs/src/Attic/rcsclean.sh,v 1.1.1.1 1993/03/21 09:45:37 cgd Exp $
 #
 # This program removes working files which are copies of the latest
 # revision on the default branch of the corresponding RCS files.

@@ -2,7 +2,7 @@
 
 /* scanner skeleton version:
  *
- * $Header: /home/mike/src/cvs/netbsd/src/gnu/usr.bin/lex/Attic/lex.skel,v 1.1 1993/03/21 09:45:37 cgd Exp $
+ * $Header: /home/mike/src/cvs/netbsd/src/gnu/usr.bin/lex/Attic/lex.skel,v 1.1.1.1 1993/03/21 09:45:37 cgd Exp $
  *
  *	@(#)lex.skel	5.5 (Berkeley) 5/6/91
  */

@@ -13,9 +13,9 @@ the GNU General Public License, version 2, 1991.
 /* Turbo C under MSDOS */
 
 /* $Log: tcc_dos.h,v $
-/* Revision 1.1  1993/03/21 09:45:37  cgd
-/* Initial revision
-/*
+ * Revision 1.1.1.1  1993/03/21 09:45:37  cgd
+ * initial import of 386bsd-0.1 sources
+ *
  * Revision 4.2  91/10/29  09:37:54  brennan
  * changes for 1.09
  * 

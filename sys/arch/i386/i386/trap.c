@@ -35,7 +35,7 @@
  *
  *	@(#)trap.c	7.4 (Berkeley) 5/13/91
  */
-static char rcsid[] = "$Header: /home/mike/src/cvs/netbsd/src/sys/arch/i386/i386/trap.c,v 1.1 1993/03/21 09:45:37 cgd Exp $";
+static char rcsid[] = "$Header: /home/mike/src/cvs/netbsd/src/sys/arch/i386/i386/trap.c,v 1.1.1.1 1993/03/21 09:45:37 cgd Exp $";
 
 /*
  * 386 Trap and System call handleing

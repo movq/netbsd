@@ -16,9 +16,9 @@ Carl Mascott (cmascott@world.std.com)
 */
 
 /*$Log: V7.h,v $
-/*Revision 1.1  1993/03/21 09:45:37  cgd
-/*Initial revision
-/*
+ *Revision 1.1.1.1  1993/03/21 09:45:37  cgd
+ *initial import of 386bsd-0.1 sources
+ *
  * Revision 4.2  91/11/21  13:30:34  brennan
  *    
  * 

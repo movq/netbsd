@@ -1,4 +1,4 @@
-# RCS Info: $Revision: 1.1 $ on $Date: 1993/03/21 09:45:37 $
+# RCS Info: $Revision: 1.1.1.1 $ on $Date: 1993/03/21 09:45:37 $
 #           $Source: /home/mike/src/cvs/netbsd/src/gnu/games/chess/Xchess/Attic/Makefile,v $
 # Copyright (c) 1985 Wayne A. Christopher, U. C. Berkeley CAD Group
 #

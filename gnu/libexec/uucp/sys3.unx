@@ -23,8 +23,8 @@
    c/o AIRS, P.O. Box 520, Waltham, MA 02254.
 
    $Log: sys3.unx,v $
-   Revision 1.1  1993/03/21 09:45:37  cgd
-   Initial revision
+   Revision 1.1.1.1  1993/03/21 09:45:37  cgd
+   initial import of 386bsd-0.1 sources
 
 # Revision 1.2  92/05/13  05:42:07  rich
 # ported to 386bsd
@@ -181,7 +181,7 @@
 #include "uucp.h"
 
 #if USE_RCS_ID
-char sys3_unx_rcsid[] = "$Id: sys3.unx,v 1.1 1993/03/21 09:45:37 cgd Exp $";
+char sys3_unx_rcsid[] = "$Id: sys3.unx,v 1.1.1.1 1993/03/21 09:45:37 cgd Exp $";
 #endif
 
 #include <ctype.h>

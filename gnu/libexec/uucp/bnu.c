@@ -23,8 +23,8 @@
    c/o AIRS, P.O. Box 520, Waltham, MA 02254.
 
    $Log: bnu.c,v $
-   Revision 1.1  1993/03/21 09:45:37  cgd
-   Initial revision
+   Revision 1.1.1.1  1993/03/21 09:45:37  cgd
+   initial import of 386bsd-0.1 sources
 
    Revision 1.35  1992/04/06  19:49:49  ian
    Erik Forsberg: support multiple character modem classes
@@ -138,7 +138,7 @@
 #if HAVE_BNU_CONFIG
 
 #if USE_RCS_ID
-char bnu_rcsid[] = "$Id: bnu.c,v 1.1 1993/03/21 09:45:37 cgd Exp $";
+char bnu_rcsid[] = "$Id: bnu.c,v 1.1.1.1 1993/03/21 09:45:37 cgd Exp $";
 #endif
 
 #include <ctype.h>

@@ -46,7 +46,7 @@
  * SUCH DAMAGE.
  *
  */
-static char rcsid[] = "$Header: /home/mike/src/cvs/netbsd/src/sys/kern/Attic/kern__physio.c,v 1.1 1993/03/21 09:45:37 cgd Exp $";
+static char rcsid[] = "$Header: /home/mike/src/cvs/netbsd/src/sys/kern/Attic/kern__physio.c,v 1.1.1.1 1993/03/21 09:45:37 cgd Exp $";
 
 #include "param.h"
 #include "systm.h"

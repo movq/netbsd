@@ -2,7 +2,7 @@
  *                     RCS stream editor
  */
 #ifndef lint
-static char rcsid[]= "$Id: rcsedit.c,v 1.1 1993/03/21 09:45:37 cgd Exp $ Purdue CS";
+static char rcsid[]= "$Id: rcsedit.c,v 1.1.1.1 1993/03/21 09:45:37 cgd Exp $ Purdue CS";
 #endif
 /**********************************************************************************
  *                       edits the input file according to a
@@ -38,9 +38,9 @@ static char rcsid[]= "$Id: rcsedit.c,v 1.1 1993/03/21 09:45:37 cgd Exp $ Purdue 
 
 
 /* $Log: rcsedit.c,v $
-/* Revision 1.1  1993/03/21 09:45:37  cgd
-/* Initial revision
-/*
+ * Revision 1.1.1.1  1993/03/21 09:45:37  cgd
+ * initial import of 386bsd-0.1 sources
+ *
  * Revision 3.11  89/08/15  21:37:31  bostic
  * Version 4 from Tom Narten at Purdue
  * 

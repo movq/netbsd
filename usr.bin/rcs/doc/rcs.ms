@@ -250,19 +250,19 @@ RCS can stamp source and object code with special identification strings,
 similar to product and serial numbers.
 To obtain such identification, place the marker
 .D(
-$Header: /home/mike/src/cvs/netbsd/src/usr.bin/rcs/doc/Attic/rcs.ms,v 1.1 1993/03/21 09:45:37 cgd Exp $
+$Header: /home/mike/src/cvs/netbsd/src/usr.bin/rcs/doc/Attic/rcs.ms,v 1.1.1.1 1993/03/21 09:45:37 cgd Exp $
 .D)
 into the text of a revision, for instance inside a comment.
 The check-out operation will replace this marker with a string of the form
 .D(
-$Header: /home/mike/src/cvs/netbsd/src/usr.bin/rcs/doc/Attic/rcs.ms,v 1.1 1993/03/21 09:45:37 cgd Exp $
+$Header: /home/mike/src/cvs/netbsd/src/usr.bin/rcs/doc/Attic/rcs.ms,v 1.1.1.1 1993/03/21 09:45:37 cgd Exp $
 .D)
 This string need never be touched, because \fIco\fR keeps it
 up to date automatically.
 To propagate the marker into object code, simply put
 it into a literal character string. In C, this is done as follows:
 .D(
-static char rcsid[] = "$Header: /home/mike/src/cvs/netbsd/src/usr.bin/rcs/doc/Attic/rcs.ms,v 1.1 1993/03/21 09:45:37 cgd Exp $";
+static char rcsid[] = "$Header: /home/mike/src/cvs/netbsd/src/usr.bin/rcs/doc/Attic/rcs.ms,v 1.1.1.1 1993/03/21 09:45:37 cgd Exp $";
 .D)
 The command \fIident\fR extracts such markers from any file, in particular from
 object code.
@@ -273,12 +273,12 @@ from which a copy of the program can be reconstructed.
 This facility is invaluable for program maintenance.
 .PP
 There are several additional identification markers, one for each component
-of $Header: /home/mike/src/cvs/netbsd/src/usr.bin/rcs/doc/Attic/rcs.ms,v 1.1 1993/03/21 09:45:37 cgd Exp $.
+of $Header: /home/mike/src/cvs/netbsd/src/usr.bin/rcs/doc/Attic/rcs.ms,v 1.1.1.1 1993/03/21 09:45:37 cgd Exp $.
 The marker
 .D(
 $Log: rcs.ms,v $
-Revision 1.1  1993/03/21 09:45:37  cgd
-Initial revision
+Revision 1.1.1.1  1993/03/21 09:45:37  cgd
+initial import of 386bsd-0.1 sources
 
 .D)
 has a similar function. It accumulates
@@ -295,9 +295,9 @@ and makes it easy to determine what the recent modifications were.
 .nf
 .in +0.5i
 /* $Log: rcs.ms,v $
-/* Revision 1.1  1993/03/21 09:45:37  cgd
-/* Initial revision
-/*
+ * Revision 1.1.1.1  1993/03/21 09:45:37  cgd
+ * initial import of 386bsd-0.1 sources
+ *
  * Revision 4.1  83/05/10  17:03:06  wft
  * Added option -d and -w, and updated assignment of date, etc. to new delta.
  * Added handling of default branches.
@@ -316,7 +316,10 @@ and makes it easy to determine what the recent modifications were.
  */
 .in 0
 .ce 1
-Figure 1. Log entries produced by the marker $Log$.
+Figure 1. Log entries produced by the marker $Log: rcs.ms,v $
+Figure 1. Log entries produced by the marker Revision 1.1.1.1  1993/03/21 09:45:37  cgd
+Figure 1. Log entries produced by the marker initial import of 386bsd-0.1 sources
+Figure 1. Log entries produced by the marker.
 .fi
 .nr VS 18pts
 .vs 18pts
@@ -327,8 +330,8 @@ each log message is
 physically stored once,
 independent of the number of revisions present.
 Thus, the $Log: rcs.ms,v $
-Thus, the Revision 1.1  1993/03/21 09:45:37  cgd
-Thus, the Initial revision
+Thus, the Revision 1.1.1.1  1993/03/21 09:45:37  cgd
+Thus, the initial import of 386bsd-0.1 sources
 Thus, the marker incurs negligible space overhead.
 .NH
 The RCS Revision Tree

@@ -1,5 +1,5 @@
 NOMAN=noman
-#$Header: /home/mike/src/cvs/netbsd/src/usr.bin/rcs/src/Attic/Makefile,v 1.1 1993/03/21 09:45:37 cgd Exp $
+#$Header: /home/mike/src/cvs/netbsd/src/usr.bin/rcs/src/Attic/Makefile,v 1.1.1.1 1993/03/21 09:45:37 cgd Exp $
 # Copyright (C) 1982, 1988, 1989 Walter Tichy
 # All rights reserved.
 #

@@ -23,8 +23,8 @@
    c/o AIRS, P.O. Box 520, Waltham, MA 02254.
 
    $Log: uucp.c,v $
-   Revision 1.1  1993/03/21 09:45:37  cgd
-   Initial revision
+   Revision 1.1.1.1  1993/03/21 09:45:37  cgd
+   initial import of 386bsd-0.1 sources
 
    Revision 1.25  1992/03/15  04:51:17  ian
    Keep an array of signals we've received rather than a single variable
@@ -106,7 +106,7 @@
 #include "uucp.h"
 
 #if USE_RCS_ID
-char uucp_rcsid[] = "$Id: uucp.c,v 1.1 1993/03/21 09:45:37 cgd Exp $";
+char uucp_rcsid[] = "$Id: uucp.c,v 1.1.1.1 1993/03/21 09:45:37 cgd Exp $";
 #endif
 
 #include <ctype.h>

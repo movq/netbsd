@@ -1,6 +1,6 @@
 # Make up some fake test files that are easily produced.
 # By no means an exhaustive test!
-# @(#) $Header: /home/mike/src/cvs/netbsd/src/usr.bin/file/tst/Attic/Makefile,v 1.1 1993/03/21 09:45:37 cgd Exp $
+# @(#) $Header: /home/mike/src/cvs/netbsd/src/usr.bin/file/tst/Attic/Makefile,v 1.1.1.1 1993/03/21 09:45:37 cgd Exp $
 all:	ar cmd emp i t x
 ar:
 	echo '<ar> fake fake fake' >$@

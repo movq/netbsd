@@ -1,6 +1,6 @@
 # Makefile for vixie's cron
 #
-# $Header: /home/mike/src/cvs/netbsd/src/libexec/crond/Attic/Makefile.vixie,v 1.1 1993/03/21 09:45:37 cgd Exp $
+# $Header: /home/mike/src/cvs/netbsd/src/libexec/crond/Attic/Makefile.vixie,v 1.1.1.1 1993/03/21 09:45:37 cgd Exp $
 #
 # vix 03mar88 [moved to RCS, rest of log is in there]
 # vix 30mar87 [goodbye, time.c; hello, getopt]

@@ -20,12 +20,12 @@
  *	(ARPANET: KLH @ SRI)
  */
 #ifndef lint
-static char rcsid[]= "$Id: maketime.c,v 1.1 1993/03/21 09:45:37 cgd Exp $";
+static char rcsid[]= "$Id: maketime.c,v 1.1.1.1 1993/03/21 09:45:37 cgd Exp $";
 #endif
 /* $Log: maketime.c,v $
-/* Revision 1.1  1993/03/21 09:45:37  cgd
-/* Initial revision
-/*
+ * Revision 1.1.1.1  1993/03/21 09:45:37  cgd
+ * initial import of 386bsd-0.1 sources
+ *
  * Revision 1.8  88/11/08  13:54:53  narten
  * allow negative timezones (-24h <= x <= 24h)
  * 

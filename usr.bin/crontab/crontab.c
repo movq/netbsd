@@ -1,5 +1,5 @@
 #if !defined(lint) && !defined(LINT)
-static char rcsid[] = "$Header: /home/mike/src/cvs/netbsd/src/usr.bin/crontab/Attic/crontab.c,v 1.1 1993/03/21 09:45:37 cgd Exp $";
+static char rcsid[] = "$Header: /home/mike/src/cvs/netbsd/src/usr.bin/crontab/Attic/crontab.c,v 1.1.1.1 1993/03/21 09:45:37 cgd Exp $";
 #endif
 
 /* Revision 1.5  87/05/02  17:33:22  paul

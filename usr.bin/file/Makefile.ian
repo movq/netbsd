@@ -1,6 +1,6 @@
 # Makefile for file(1) cmd. 
 # Copyright (c) Ian F. Darwin 86/09/01 - see LEGAL.NOTICE.
-# @(#)$Header: /home/mike/src/cvs/netbsd/src/usr.bin/file/Attic/Makefile.ian,v 1.1 1993/03/21 09:45:37 cgd Exp $
+# @(#)$Header: /home/mike/src/cvs/netbsd/src/usr.bin/file/Attic/Makefile.ian,v 1.1.1.1 1993/03/21 09:45:37 cgd Exp $
 #
 CC      = cc
 SHELL	= /bin/sh

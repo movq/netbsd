@@ -13,11 +13,11 @@
  * 90/02/06 15:03 - Fixed a bug in where TIOCGPGRP and TIOCSPGRP were
  * mixed up. Anders Klemets - klemets@sics.se
  *
- * $Header: /home/mike/src/cvs/netbsd/src/sys/net/if_tun.c,v 1.1 1993/03/21 09:45:37 cgd Exp $
+ * $Header: /home/mike/src/cvs/netbsd/src/sys/net/if_tun.c,v 1.1.1.1 1993/03/21 09:45:37 cgd Exp $
  * 
  * $Log: if_tun.c,v $
- * Revision 1.1  1993/03/21 09:45:37  cgd
- * Initial revision
+ * Revision 1.1.1.1  1993/03/21 09:45:37  cgd
+ * initial import of 386bsd-0.1 sources
  *
  * Revision 1.13  88/07/11  08:28:51  jpo
  * Some tidying up

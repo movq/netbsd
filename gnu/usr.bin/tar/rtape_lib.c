@@ -20,13 +20,13 @@ the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.  */
 /* JF: modified to make all rmtXXX calls into macros for speed */
 
 #ifndef lint
-static char *RCSid = "$Header: /home/mike/src/cvs/netbsd/src/gnu/usr.bin/tar/Attic/rtape_lib.c,v 1.1 1993/03/21 09:45:37 cgd Exp $";
+static char *RCSid = "$Header: /home/mike/src/cvs/netbsd/src/gnu/usr.bin/tar/Attic/rtape_lib.c,v 1.1.1.1 1993/03/21 09:45:37 cgd Exp $";
 #endif
 
 /*
  * $Log: rtape_lib.c,v $
- * Revision 1.1  1993/03/21 09:45:37  cgd
- * Initial revision
+ * Revision 1.1.1.1  1993/03/21 09:45:37  cgd
+ * initial import of 386bsd-0.1 sources
  *
  * Revision 1.7  89/03/23  14:09:51  root
  * Fix from haynes@ucscc.ucsc.edu for use w/compat. ADR.

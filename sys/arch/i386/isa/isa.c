@@ -35,7 +35,7 @@
  *
  *	@(#)isa.c	7.2 (Berkeley) 5/13/91
  */
-static char rcsid[] = "$Header: /home/mike/src/cvs/netbsd/src/sys/arch/i386/isa/Attic/isa.c,v 1.1 1993/03/21 09:45:37 cgd Exp $";
+static char rcsid[] = "$Header: /home/mike/src/cvs/netbsd/src/sys/arch/i386/isa/Attic/isa.c,v 1.1.1.1 1993/03/21 09:45:37 cgd Exp $";
 
 /*
  * code to manage AT bus

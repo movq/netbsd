@@ -5,7 +5,7 @@
  * Modified 1991 by Donn Seeley at UUNET Technologies, Inc.
  * Modified 1990 by Van Jacobson at Lawrence Berkeley Laboratory.
  *
- * $Header: /home/mike/src/cvs/netbsd/src/gnu/usr.bin/gdb/Attic/symtab.c,v 1.1 1993/03/21 09:45:37 cgd Exp $;
+ * $Header: /home/mike/src/cvs/netbsd/src/gnu/usr.bin/gdb/Attic/symtab.c,v 1.1.1.1 1993/03/21 09:45:37 cgd Exp $;
  */
 
 #ifndef lint

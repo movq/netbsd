@@ -36,7 +36,7 @@
  *
  *	@(#)pmap.c	7.7 (Berkeley)	5/12/91
  */
-static char rcsid[] = "$Header: /home/mike/src/cvs/netbsd/src/sys/arch/i386/i386/Attic/pmap.c,v 1.1 1993/03/21 09:45:37 cgd Exp $";
+static char rcsid[] = "$Header: /home/mike/src/cvs/netbsd/src/sys/arch/i386/i386/Attic/pmap.c,v 1.1.1.1 1993/03/21 09:45:37 cgd Exp $";
 
 /*
  * Derived from hp300 version by Mike Hibler, this version by William

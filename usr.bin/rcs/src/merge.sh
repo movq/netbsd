@@ -1,5 +1,5 @@
 
-#	$Id: merge.sh,v 1.1 1993/03/21 09:45:37 cgd Exp $
+#	$Id: merge.sh,v 1.1.1.1 1993/03/21 09:45:37 cgd Exp $
 
 PATH=/bin:/usr/bin
 DIFF=/bin/diff

@@ -41,7 +41,7 @@
 /*
  *	Utah $Hdr: vm_machdep.c 1.16.1.1 89/06/23$
  */
-static char rcsid[] = "$Header: /home/mike/src/cvs/netbsd/src/sys/arch/i386/i386/Attic/vm_machdep.c,v 1.1 1993/03/21 09:45:37 cgd Exp $";
+static char rcsid[] = "$Header: /home/mike/src/cvs/netbsd/src/sys/arch/i386/i386/Attic/vm_machdep.c,v 1.1.1.1 1993/03/21 09:45:37 cgd Exp $";
 
 #include "param.h"
 #include "systm.h"
