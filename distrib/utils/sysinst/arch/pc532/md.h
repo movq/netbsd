@@ -1,4 +1,4 @@
-/*	$NetBSD: md.h,v 1.1.1.1.2.1 1997/10/30 06:18:34 mellon Exp $	*/
+/*	$NetBSD: md.h,v 1.1.1.1.2.2 1997/11/10 19:24:00 thorpej Exp $	*/
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -58,9 +58,9 @@ EXTERN char ftp_prefix[STRSIZE] INIT("/binary/Tarfiles");
 EXTERN char dist_postfix[STRSIZE] INIT(".tar.gz");
 EXTERN distinfo dist_list[]
 #ifdef MAIN
-= { {"kern%s%s", 1, NULL, "Kernel       : "},
+= {
+    {"base%s%s", 1, NULL, "Base         : "},
     {"etc%s%s",  1, NULL, "System (/etc): "},
-    {"base%s%s", 1, NULL, "Base         : "}, 
     {"comp%s%s", 1, NULL, "Compiler     : "},
     {"games%s%s", 1, NULL,"Games        : "},
     {"man%s%s",  1, NULL, "Manuals      : "},
