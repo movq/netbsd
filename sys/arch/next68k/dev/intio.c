@@ -1,4 +1,4 @@
-/*	$NetBSD: intio.c,v 1.1.1.1 1998/06/09 07:53:05 dbj Exp $	*/
+/*	$NetBSD: intio.c,v 1.2 1999/01/28 11:46:23 dbj Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -111,8 +111,7 @@ intiosearch(parent, cf, aux)
 
 	bzero(&ia, sizeof(ia));
 	if ((*cf->cf_attach->ca_match)(parent, cf, &ia) > 0) {
-          config_attach(parent, cf, &ia, intioprint);
-          printf("\n");
-        }
+		config_attach(parent, cf, &ia, intioprint);
+	}
 	return (0);
 }
