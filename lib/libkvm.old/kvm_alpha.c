@@ -1,4 +1,4 @@
-/*	$NetBSD: kvm_alpha.c,v 1.1 1996/03/16 10:05:25 leo Exp $	*/
+/*	$NetBSD: kvm_alpha.c,v 1.1.1.1 1996/03/16 10:05:25 leo Exp $	*/
 
 /*
  * Copyright (c) 1994, 1995 Carnegie-Mellon University.

@@ -1,5 +1,5 @@
 #	from: @(#)Makefile	8.1 (Berkeley) 6/4/93
-#	$Id: Makefile,v 1.1 1996/03/16 10:05:25 leo Exp $
+#	$Id: Makefile,v 1.1.1.1 1996/03/16 10:05:25 leo Exp $
 
 LIB=	kvm
 CFLAGS+=-DLIBC_SCCS

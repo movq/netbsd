@@ -1,4 +1,4 @@
-/*	$NetBSD: kvm_ns32k.c,v 1.1 1996/03/16 10:05:24 leo Exp $	*/
+/*	$NetBSD: kvm_ns32k.c,v 1.1.1.1 1996/03/16 10:05:24 leo Exp $	*/
 
 /*-
  * Copyright (c) 1989, 1992, 1993
