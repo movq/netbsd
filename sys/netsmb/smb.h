@@ -1,7 +1,5 @@
-/*	$NetBSD: smb.h,v 1.1 2000/12/07 03:48:10 deberg Exp $	*/
-
 /*
- * Copyright (c) 2000, Boris Popov
+ * Copyright (c) 2000-2001 Boris Popov
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -30,6 +28,8 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
+ *
+ * $FreeBSD: src/sys/netsmb/smb.h,v 1.2 2001/08/21 08:21:03 bp Exp $
  */
 
 /*
@@ -39,6 +39,7 @@
 #ifndef _NETSMB_SMB_H_
 #define _NETSMB_SMB_H_
 
+#define	SMB_TCP_PORT	139
 /*
  * SMB dialects that we have to deal with.
  */
@@ -67,7 +68,7 @@ enum smb_dialects {
  */
 #define	SMB_SIGNATURE		"\xFFSMB"
 #define	SMB_SIGLEN		4
-#define	SMB_HDRMID(p)		(*(u_short*)((u_char*)(p) + 30))
+#define	SMB_HDRMID(p)		(letohs(*(u_short*)((u_char*)(p) + 30)))
 #define	SMB_HDRLEN		32
 /*
  * bits in the smb_flags field
