@@ -1,4 +1,4 @@
-/*	$NetBSD: ip_h323_pxy.c,v 1.1 2002/05/02 16:48:42 martti Exp $	*/
+/*	$NetBSD: ip_h323_pxy.c,v 1.1.1.1 2002/05/02 16:48:42 martti Exp $	*/
 
 /*
  * Copyright 2001, QNX Software Systems Ltd. All Rights Reserved
