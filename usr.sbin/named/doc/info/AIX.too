@@ -262,7 +262,7 @@ diff -cr bind-4.9.3-BETA21/res/gethnamaddr.c bind-4.9.3-BETA21.mod/res/gethnamad
 ***************
 *** 58,63 ****
 --- 58,64 ----
-  static char rcsid[] = "$Id: AIX.too,v 1.1 1997/04/13 09:08:04 mrg Exp $";
+  static char rcsid[] = "$Id: AIX.too,v 1.1.1.1 1997/04/13 09:08:04 mrg Exp $";
   #endif /* LIBC_SCCS and not lint */
   
 + #include <sys/types.h>
@@ -275,7 +275,7 @@ diff -cr bind-4.9.3-BETA21/res/getnetent.c bind-4.9.3-BETA21.mod/res/getnetent.c
 ***************
 *** 46,51 ****
 --- 46,52 ----
-  static char rcsid[] = "$Id: AIX.too,v 1.1 1997/04/13 09:08:04 mrg Exp $";
+  static char rcsid[] = "$Id: AIX.too,v 1.1.1.1 1997/04/13 09:08:04 mrg Exp $";
   #endif /* LIBC_SCCS and not lint */
   
 + #include <sys/types.h>
@@ -288,7 +288,7 @@ diff -cr bind-4.9.3-BETA21/res/getnetnamadr.c bind-4.9.3-BETA21.mod/res/getnetna
 ***************
 *** 44,49 ****
 --- 44,50 ----
-  static char rcsid[] = "$Id: AIX.too,v 1.1 1997/04/13 09:08:04 mrg Exp $";
+  static char rcsid[] = "$Id: AIX.too,v 1.1.1.1 1997/04/13 09:08:04 mrg Exp $";
   #endif /* LIBC_SCCS and not lint */
   
 + #include <sys/types.h>
@@ -301,7 +301,7 @@ diff -cr bind-4.9.3-BETA21/res/herror.c bind-4.9.3-BETA21.mod/res/herror.c
 ***************
 *** 58,63 ****
 --- 58,64 ----
-  static char rcsid[] = "$Id: AIX.too,v 1.1 1997/04/13 09:08:04 mrg Exp $";
+  static char rcsid[] = "$Id: AIX.too,v 1.1.1.1 1997/04/13 09:08:04 mrg Exp $";
   #endif /* LIBC_SCCS and not lint */
   
 + #include <sys/types.h>
@@ -314,7 +314,7 @@ diff -cr bind-4.9.3-BETA21/res/inet_addr.c bind-4.9.3-BETA21.mod/res/inet_addr.c
 ***************
 *** 58,63 ****
 --- 58,64 ----
-  static char rcsid[] = "$Id: AIX.too,v 1.1 1997/04/13 09:08:04 mrg Exp $";
+  static char rcsid[] = "$Id: AIX.too,v 1.1.1.1 1997/04/13 09:08:04 mrg Exp $";
   #endif /* LIBC_SCCS and not lint */
   
 + #include <sys/types.h>
@@ -327,7 +327,7 @@ diff -cr bind-4.9.3-BETA21/res/nsap_addr.c bind-4.9.3-BETA21.mod/res/nsap_addr.c
 ***************
 *** 2,7 ****
 --- 2,8 ----
-  static char rcsid[] = "$Id: AIX.too,v 1.1 1997/04/13 09:08:04 mrg Exp $";
+  static char rcsid[] = "$Id: AIX.too,v 1.1.1.1 1997/04/13 09:08:04 mrg Exp $";
   #endif /* LIBC_SCCS and not lint */
   
 + #include <sys/types.h>
@@ -340,7 +340,7 @@ diff -cr bind-4.9.3-BETA21/res/res_comp.c bind-4.9.3-BETA21.mod/res/res_comp.c
 ***************
 *** 58,63 ****
 --- 58,64 ----
-  static char rcsid[] = "$Id: AIX.too,v 1.1 1997/04/13 09:08:04 mrg Exp $";
+  static char rcsid[] = "$Id: AIX.too,v 1.1.1.1 1997/04/13 09:08:04 mrg Exp $";
   #endif /* LIBC_SCCS and not lint */
   
 + #include <sys/types.h>
@@ -353,7 +353,7 @@ diff -cr bind-4.9.3-BETA21/res/res_debug.c bind-4.9.3-BETA21.mod/res/res_debug.c
 ***************
 *** 58,63 ****
 --- 58,64 ----
-  static char rcsid[] = "$Id: AIX.too,v 1.1 1997/04/13 09:08:04 mrg Exp $";
+  static char rcsid[] = "$Id: AIX.too,v 1.1.1.1 1997/04/13 09:08:04 mrg Exp $";
   #endif /* LIBC_SCCS and not lint */
   
 + #include <sys/types.h>
@@ -366,7 +366,7 @@ diff -cr bind-4.9.3-BETA21/res/res_init.c bind-4.9.3-BETA21.mod/res/res_init.c
 ***************
 *** 58,63 ****
 --- 58,64 ----
-  static char rcsid[] = "$Id: AIX.too,v 1.1 1997/04/13 09:08:04 mrg Exp $";
+  static char rcsid[] = "$Id: AIX.too,v 1.1.1.1 1997/04/13 09:08:04 mrg Exp $";
   #endif /* LIBC_SCCS and not lint */
   
 + #include <sys/types.h>
@@ -379,7 +379,7 @@ diff -cr bind-4.9.3-BETA21/res/res_mkquery.c bind-4.9.3-BETA21.mod/res/res_mkque
 ***************
 *** 58,63 ****
 --- 58,64 ----
-  static char rcsid[] = "$Id: AIX.too,v 1.1 1997/04/13 09:08:04 mrg Exp $";
+  static char rcsid[] = "$Id: AIX.too,v 1.1.1.1 1997/04/13 09:08:04 mrg Exp $";
   #endif /* LIBC_SCCS and not lint */
   
 + #include <sys/types.h>
@@ -392,7 +392,7 @@ diff -cr bind-4.9.3-BETA21/res/res_query.c bind-4.9.3-BETA21.mod/res/res_query.c
 ***************
 *** 58,63 ****
 --- 58,64 ----
-  static char rcsid[] = "$Id: AIX.too,v 1.1 1997/04/13 09:08:04 mrg Exp $";
+  static char rcsid[] = "$Id: AIX.too,v 1.1.1.1 1997/04/13 09:08:04 mrg Exp $";
   #endif /* LIBC_SCCS and not lint */
   
 + #include <sys/types.h>
@@ -418,7 +418,7 @@ diff -cr bind-4.9.3-BETA21/res/sethostent.c bind-4.9.3-BETA21.mod/res/sethostent
 ***************
 *** 36,41 ****
 --- 36,42 ----
-  static char rcsid[] = "$Id: AIX.too,v 1.1 1997/04/13 09:08:04 mrg Exp $";
+  static char rcsid[] = "$Id: AIX.too,v 1.1.1.1 1997/04/13 09:08:04 mrg Exp $";
   #endif /* LIBC_SCCS and not lint */
   
 + #include <sys/types.h>
