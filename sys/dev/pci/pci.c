@@ -1,4 +1,4 @@
-/*	$NetBSD: pci.c,v 1.61 2002/05/15 19:23:51 thorpej Exp $	*/
+/*	$NetBSD: pci.c,v 1.63 2002/05/16 01:03:05 thorpej Exp $	*/
 
 /*
  * Copyright (c) 1995, 1996, 1997, 1998
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pci.c,v 1.61 2002/05/15 19:23:51 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pci.c,v 1.63 2002/05/16 01:03:05 thorpej Exp $");
 
 #include "opt_pci.h"
 
@@ -170,6 +170,7 @@ pciattach(parent, self, aux)
 	sc->sc_dmat = pba->pba_dmat;
 	sc->sc_pc = pba->pba_pc;
 	sc->sc_bus = pba->pba_bus;
+	sc->sc_bridgetag = pba->pba_bridgetag;
 	sc->sc_maxndevs = pci_bus_maxdevs(pba->pba_pc, pba->pba_bus);
 	sc->sc_intrswiz = pba->pba_intrswiz;
 	sc->sc_intrtag = pba->pba_intrtag;
@@ -268,6 +269,7 @@ pci_probe_device(struct pci_softc *sc, pcitag_t tag,
 	pa.pa_memt = sc->sc_memt;
 	pa.pa_dmat = sc->sc_dmat;
 	pa.pa_pc = pc;
+	pa.pa_bus = bus;
 	pa.pa_device = device;
 	pa.pa_function = function;
 	pa.pa_tag = tag;
