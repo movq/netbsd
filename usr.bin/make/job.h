@@ -1,5 +1,3 @@
-/*	$NetBSD: job.h,v 1.5 1996/11/06 17:59:10 christos Exp $	*/
-
 /*
  * Copyright (c) 1988, 1989, 1990 The Regents of the University of California.
  * Copyright (c) 1988, 1989 by Adam de Boor
@@ -37,7 +35,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	from: @(#)job.h	8.1 (Berkeley) 6/6/93
+ *	@(#)job.h	5.3 (Berkeley) 6/1/90
  */
 
 /*-
@@ -53,14 +51,14 @@
 /*
  * The SEL_ constants determine the maximum amount of time spent in select
  * before coming out to see if a child has finished. SEL_SEC is the number of
- * seconds and SEL_USEC is the number of micro-seconds
+ * seconds and SEL_USEC is the number of micro-seconds 
  */
 #define SEL_SEC		0
 #define SEL_USEC	500000
 
 
 /*-
- * Job Table definitions.
+ * Job Table definitions. 
  *
  * Each job has several things associated with it:
  *	1) The process id of the child shell
@@ -81,11 +79,11 @@
  *	6) An identifier provided by and for the exclusive use of the
  *	   Rmt module.
  *	7) A word of flags which determine how the module handles errors,
- *	   echoing, etc. for the job
+ *	   echoing, etc. for the job 
  *
  * The job "table" is kept as a linked Lst in 'jobs', with the number of
  * active jobs maintained in the 'nJobs' variable. At no time will this
- * exceed the value of 'maxJobs', initialized by the Job_Init function.
+ * exceed the value of 'maxJobs', initialized by the Job_Init function. 
  *
  * When a job is finished, the Make_Update function is called on each of the
  * parents of the node which was just remade. This takes care of the upward
@@ -99,7 +97,7 @@ typedef struct Job {
 			     * saved when the job has been run */
     FILE 	*cmdFILE;   /* When creating the shell script, this is
 			     * where the commands go */
-    int    	rmtID;     /* ID returned from Rmt module */
+    char    	*rmtID;     /* ID returned from Rmt module */
     short      	flags;	    /* Flags to control treatment of job */
 #define	JOB_IGNERR	0x001	/* Ignore non-zero exits */
 #define	JOB_SILENT	0x002	/* no output */
@@ -107,7 +105,7 @@ typedef struct Job {
 				 * if we can't export it and maxLocal is 0 */
 #define JOB_IGNDOTS	0x008  	/* Ignore "..." lines when processing
 				 * commands */
-#define JOB_REMOTE	0x010	/* Job is running remotely */
+#define JOB_REMOTE	0x010	/* Job is running remotely */  
 #define JOB_FIRST	0x020	/* Job is first job for the node */
 #define JOB_REMIGRATE	0x040	/* Job needs to be remigrated */
 #define JOB_RESTART	0x080	/* Job needs to be completely restarted */
@@ -195,7 +193,7 @@ typedef struct Shell {
     char	  *errCheck;	/* string to turn error checking on */
     char	  *ignErr;	/* string to turn off error checking */
     /*
-     * command-line flags
+     * command-line flags 
      */
     char          *echo;	/* echo commands */
     char          *exit;	/* exit on error */
@@ -217,19 +215,18 @@ extern Lst  	stoppedJobs;	/* List of jobs that are stopped or didn't
 				 * quite get started */
 extern Boolean	jobFull;    	/* Non-zero if no more jobs should/will start*/
 
-
-void Job_Touch __P((GNode *, Boolean));
-Boolean Job_CheckCommands __P((GNode *, void (*abortProc )(char *, ...)));
-void Job_CatchChildren __P((Boolean));
-void Job_CatchOutput __P((void));
-void Job_Make __P((GNode *));
-void Job_Init __P((int, int));
-Boolean Job_Full __P((void));
-Boolean Job_Empty __P((void));
-ReturnStatus Job_ParseShell __P((char *));
-int Job_End __P((void));
-void Job_Wait __P((void));
-void Job_AbortAll __P((void));
-void JobFlagForMigration __P((int));
-
+/*
+ * These functions should be used only by an intelligent Rmt module, hence
+ * their names do *not* include an underscore as they are not fully exported,
+ * if you see what I mean.
+ */
+extern void 	JobDoOutput(/* job, final? */);	/* Funnel output from
+			     	    	    	 * job->outPipe to the screen,
+						 * filtering out echo-off
+						 * strings etc. */
+extern void 	JobFinish(/* job, status */);	/* Finish out a job. If
+			    	    	    	 * status indicates job has
+						 * just stopped, not finished,
+						 * the descriptor is placed on
+						 * the stoppedJobs list. */
 #endif /* _JOB_H_ */

@@ -1,8 +1,6 @@
-/*	$NetBSD: logout.c,v 1.7 1997/08/25 19:31:46 kleink Exp $	*/
-
 /*
- * Copyright (c) 1988, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1988 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,45 +31,37 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char sccsid[] = "@(#)logout.c	8.1 (Berkeley) 6/4/93";
-#else
-__RCSID("$NetBSD: logout.c,v 1.7 1997/08/25 19:31:46 kleink Exp $");
-#endif
+static char sccsid[] = "@(#)logout.c	5.5 (Berkeley) 6/1/90";
 #endif /* LIBC_SCCS and not lint */
 
 #include <sys/types.h>
+#include <sys/file.h>
 #include <sys/time.h>
-
-#include <fcntl.h>
 #include <utmp.h>
-#include <unistd.h>
-#include <stdlib.h>
-#include <string.h>
-#include <util.h>
 
 typedef struct utmp UTMP;
 
-int
 logout(line)
-	const char *line;
+	register char *line;
 {
-	int fd, rval;
+	register int fd;
 	UTMP ut;
+	int rval;
+	off_t lseek();
+	time_t time();
 
-	if ((fd = open(_PATH_UTMP, O_RDWR, 0)) < 0)
+	if ((fd = open(_PATH_UTMP, O_RDWR)) < 0)
 		return(0);
 	rval = 0;
-	while (read(fd, &ut, sizeof(UTMP)) == sizeof(UTMP)) {
+	while (read(fd, (char *)&ut, sizeof(UTMP)) == sizeof(UTMP)) {
 		if (!ut.ut_name[0] || strncmp(ut.ut_line, line, UT_LINESIZE))
 			continue;
 		bzero(ut.ut_name, UT_NAMESIZE);
 		bzero(ut.ut_host, UT_HOSTSIZE);
 		(void)time(&ut.ut_time);
-		(void)lseek(fd, -(off_t)sizeof(UTMP), SEEK_CUR);
-		(void)write(fd, &ut, sizeof(UTMP));
+		(void)lseek(fd, -(long)sizeof(UTMP), L_INCR);
+		(void)write(fd, (char *)&ut, sizeof(UTMP));
 		rval = 1;
 	}
 	(void)close(fd);

@@ -1,8 +1,6 @@
-/*	$NetBSD: input.h,v 1.9 1996/10/16 15:45:09 christos Exp $	*/
-
 /*-
- * Copyright (c) 1991, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1991 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Kenneth Almquist.
@@ -35,7 +33,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)input.h	8.2 (Berkeley) 5/4/95
+ *	@(#)input.h	5.1 (Berkeley) 3/7/91
  */
 
 /* PEOF (the end of file marker) is defined in syntax.h */
@@ -48,19 +46,32 @@
 extern int plinno;
 extern int parsenleft;		/* number of characters left in input buffer */
 extern char *parsenextc;	/* next character in input buffer */
-extern int init_editline;	/* 0 == not setup, 1 == OK, -1 == failed */
 
-char *pfgets __P((char *, int));
-int pgetc __P((void));
-int preadbuffer __P((void));
-void pungetc __P((void));
-void pushstring __P((char *, int, void *));
-void popstring __P((void));
-void setinputfile __P((char *, int));
-void setinputfd __P((int, int));
-void setinputstring __P((char *, int));
-void popfile __P((void));
-void popallfiles __P((void));
-void closescript __P((void));
+
+#ifdef __STDC__
+char *pfgets(char *, int);
+int pgetc(void);
+int preadbuffer(void);
+void pungetc(void);
+void ppushback(char *, int);
+void setinputfile(char *, int);
+void setinputfd(int, int);
+void setinputstring(char *, int);
+void popfile(void);
+void popallfiles(void);
+void closescript(void);
+#else
+char *pfgets();
+int pgetc();
+int preadbuffer();
+void pungetc();
+void ppushback();
+void setinputfile();
+void setinputfd();
+void setinputstring();
+void popfile();
+void popallfiles();
+void closescript();
+#endif
 
 #define pgetc_macro()	(--parsenleft >= 0? *parsenextc++ : preadbuffer())

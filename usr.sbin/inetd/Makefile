@@ -1,14 +1,8 @@
-#	from: @(#)Makefile	8.1 (Berkeley) 6/6/93
-#	$NetBSD: Makefile,v 1.13 1997/10/18 06:42:49 lukem Exp $
+#	@(#)Makefile	5.5 (Berkeley) 6/29/90
 
 PROG=	inetd
-MAN=	inetd.8
-MLINKS=	inetd.8 inetd.conf.5
-
-CFLAGS+=-DLIBWRAP
-# Use LIBWRAP_INTERNAL for libwrap checking of inetd's `internal' services.
-#CFLAGS+=-DLIBWRAP_INTERNAL
-LDADD+= -lwrap
-DPADD+= ${LIBWRAP}
+LDADD=	-lutil
+MAN8=	inetd.0
+MLINKS=	inetd.8 inetd.5
 
 .include <bsd.prog.mk>

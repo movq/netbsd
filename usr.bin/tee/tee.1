@@ -1,7 +1,5 @@
-.\"	$NetBSD: tee.1,v 1.5 1997/10/20 00:37:11 lukem Exp $
-.\"
-.\" Copyright (c) 1991, 1993
-.\"	The Regents of the University of California.  All rights reserved.
+.\" Copyright (c) 1991 Regents of the University of California.
+.\" All rights reserved.
 .\"
 .\" This code is derived from software contributed to Berkeley by
 .\" the Institute of Electrical and Electronics Engineers, Inc.
@@ -34,21 +32,21 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\"     @(#)tee.1	8.1 (Berkeley) 6/6/93
+.\"     @(#)tee.1	6.5 (Berkeley) 7/29/91
 .\"
-.Dd June 6, 1993
+.Dd July 29, 1991
 .Dt TEE 1
 .Os
 .Sh NAME
 .Nm tee
-.Nd pipe fitting
+.Nd Pipe fitting.
 .Sh SYNOPSIS
-.Nm
+.Nm tee
 .Op Fl ai
 .Op Ar file ...
 .Sh DESCRIPTION
 The
-.Nm
+.Nm tee
 utility copies standard input to standard output,
 making a copy in zero or more files.
 The output is unbuffered.
@@ -72,18 +70,18 @@ A pathname of an output
 .El
 .Pp
 The
-.Nm
+.Nm tee
 utility takes the default action for all signals,
 except in the event of the
 .Fl i
 option.
 .Pp
 The
-.Nm
+.Nm tee
 utility exits 0 on success, and >0 if an error occurs.
 .Sh STANDARDS
 The
-.Nm
+.Nm tee
 function is expected to be
 .Tn POSIX
 .St -p1003.2

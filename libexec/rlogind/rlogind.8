@@ -1,7 +1,5 @@
-.\"	$NetBSD: rlogind.8,v 1.6 1997/10/20 02:44:18 enami Exp $
-.\"
-.\" Copyright (c) 1983, 1989, 1991, 1993
-.\"	The Regents of the University of California.  All rights reserved.
+.\" Copyright (c) 1983, 1989, 1991 The Regents of the University of California.
+.\" All rights reserved.
 .\"
 .\" Redistribution and use in source and binary forms, with or without
 .\" modification, are permitted provided that the following conditions
@@ -31,26 +29,26 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\"     from: @(#)rlogind.8	8.1 (Berkeley) 6/4/93
+.\"     @(#)rlogind.8	6.12 (Berkeley) 3/16/91
 .\"
-.Dd November 8, 1996
+.Dd March 16, 1991
 .Dt RLOGIND 8
 .Os BSD 4.2
 .Sh NAME
 .Nm rlogind
 .Nd remote login server
 .Sh SYNOPSIS
-.Nm
-.Op Fl alnL
+.Nm rlogind
+.Op Fl aln
 .Sh DESCRIPTION
-.Nm
+.Nm Rlogind
 is the server for the 
 .Xr rlogin 1
 program.  The server provides a remote login facility
 with authentication based on privileged port numbers from trusted hosts.
 .Pp
 Options supported by
-.Nm "" :
+.Nm rlogind :
 .Bl -tag -width Ds
 .It Fl a
 Ask hostname for verification.
@@ -60,15 +58,9 @@ Prevent any authentication based on the user's
 file, unless the user is logging in as the superuser.
 .It Fl n
 Disable keep-alive messages.
-.It Fl L
-Log all successful accesses to
-.Xr syslogd 8
-as
-.Li auth.info
-messages.
 .El
 .Pp
-.Nm 
+.Nm Rlogind
 listens for service requests at the port indicated in
 the ``login'' service specification; see
 .Xr services 5 .
@@ -99,7 +91,7 @@ Normal authentication is bypassed if the address verification fails.
 .El
 .Pp
 Once the source port and address have been checked, 
-.Nm
+.Nm rlogind
 proceeds with the authentication process described in
 .Xr rshd 8 .
 It then allocates a pseudo terminal (see 

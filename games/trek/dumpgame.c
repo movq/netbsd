@@ -1,8 +1,6 @@
-/*	$NetBSD: dumpgame.c,v 1.5 1997/10/12 21:24:42 christos Exp $	*/
-
 /*
- * Copyright (c) 1980, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1980 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,20 +31,11 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)dumpgame.c	8.1 (Berkeley) 5/31/93";
-#else
-__RCSID("$NetBSD: dumpgame.c,v 1.5 1997/10/12 21:24:42 christos Exp $");
-#endif
+static char sccsid[] = "@(#)dumpgame.c	4.6 (Berkeley) 6/1/90";
 #endif /* not lint */
 
-#include <stdio.h>
-#include <err.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include "trek.h"
+# include	"trek.h"
 
 /***  THIS CONSTANT MUST CHANGE AS THE DATA SPACES CHANGE ***/
 # define	VERSION		2
@@ -57,21 +46,19 @@ struct dump
 	int	count;
 };
 
-static int readdump __P((int));
-
 
 struct dump	Dump_template[] =
 {
-	{ (char *)&Ship,	sizeof (Ship) },
-	{ (char *)&Now,		sizeof (Now) },
-	{ (char *)&Param,	sizeof (Param) },
-	{ (char *)&Etc,		sizeof (Etc) },
-	{ (char *)&Game,	sizeof (Game) },
-	{ (char *)Sect,		sizeof (Sect) },
-	{ (char *)Quad,		sizeof (Quad) },
-	{ (char *)&Move,	sizeof (Move) },
-	{ (char *)Event,	sizeof (Event) },
-	{ NULL,			0 }
+	(char *)&Ship,		sizeof (Ship),
+	(char *)&Now,		sizeof (Now),
+	(char *)&Param,		sizeof (Param),
+	(char *)&Etc,		sizeof (Etc),
+	(char *)&Game,		sizeof (Game),
+	(char *)Sect,		sizeof (Sect),
+	(char *)Quad,		sizeof (Quad),
+	(char *)&Move,		sizeof (Move),
+	(char *)Event,		sizeof (Event),
+	0
 };
 
 /*
@@ -84,20 +71,15 @@ struct dump	Dump_template[] =
 **	output change.
 */
 
-/*ARGSUSED*/
-void
-dumpgame(v)
-	int v;
+dumpgame()
 {
-	int		version;
-	int		fd;
-	struct dump	*d;
-	int		i;
+	int			version;
+	register int		fd;
+	register struct dump	*d;
+	register int		i;
 
-	if ((fd = creat("trek.dump", 0644)) < 0) {
-		warn("cannot open `trek.dump'");
-		return;
-	}
+	if ((fd = creat("trek.dump", 0644)) < 0)
+		return (printf("cannot dump\n"));
 	version = VERSION;
 	write(fd, &version, sizeof version);
 
@@ -124,10 +106,9 @@ dumpgame(v)
 **	Return value is zero for success, one for failure.
 */
 
-int
 restartgame()
 {
-	int	fd;
+	register int	fd;
 	int		version;
 
 	if ((fd = open("trek.dump", 0)) < 0 ||
@@ -154,14 +135,13 @@ restartgame()
 **	Returns zero for success, one for failure.
 */
 
-static int
 readdump(fd1)
 int	fd1;
 {
-	int		fd;
-	struct dump	*d;
-	int		i;
-	long			junk;
+	register int		fd;
+	register struct dump	*d;
+	register int		i;
+	int			junk;
 
 	fd = fd1;
 

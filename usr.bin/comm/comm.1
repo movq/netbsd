@@ -1,7 +1,5 @@
-.\"	$NetBSD: comm.1,v 1.5 1997/10/18 13:04:19 lukem Exp $
-.\"
-.\" Copyright (c) 1989, 1990, 1993
-.\"	The Regents of the University of California.  All rights reserved.
+.\" Copyright (c) 1989, 1990 The Regents of the University of California.
+.\" All rights reserved.
 .\"
 .\" This code is derived from software contributed to Berkeley by
 .\" the Institute of Electrical and Electronics Engineers, Inc.
@@ -34,21 +32,21 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\"     @(#)comm.1	8.1 (Berkeley) 6/6/93
+.\"     @(#)comm.1	6.7 (Berkeley) 6/27/91
 .\"
-.Dd June 6, 1993
+.Dd June 27, 1991
 .Os
 .Dt COMM 1
 .Sh NAME
 .Nm comm
-.Nd select or reject lines common to two files
+.Nd Select or reject lines common to two files
 .Sh SYNOPSIS
-.Nm
+.Nm comm
 .Op Fl 123
 .Ar file1 file2
 .Sh DESCRIPTION
 The
-.Nm
+.Nm comm
 utility reads
 .Ar file1
 and
@@ -79,19 +77,11 @@ For example, if column number two is being suppressed, lines printed
 in column number one will not have any tabs preceding them, and lines
 printed in column number three will have one.
 .Pp
-.Nm
+.Nm Comm
 assumes that the files are lexically sorted; all characters
 participate in line comparisons.
-.\" .Sh ENVIRONMENT
-.\" .Bl -tag -width indent
-.\" .It Ev LANG
-.\" .It Ev LC_ALL
-.\" .It Ev LC_CTYPE
-.\" .It Ev LC_COLLATE
-.\" .It Ev LC_MESSAGES
-.\" .El
-.Sh DIAGNOSTICS
-.Nm
+.Pp
+.Nm Comm
 exits 0 on success, >0 if an error occurred.
 .Sh SEE ALSO
 .Xr cmp 1 ,
@@ -100,6 +90,5 @@ exits 0 on success, >0 if an error occurred.
 .Xr uniq 1
 .Sh STANDARDS
 The
-.Nm
-utility conforms to 
-.St -p1003.2-92 .
+.Nm comm
+command is expected to be POSIX 1003.2 compatible.

@@ -1,6 +1,6 @@
 /*
- * Copyright (c) 1988, 1993, 1994
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1988 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -31,74 +31,50 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1988, 1993, 1994\n\
-	The Regents of the University of California.  All rights reserved.\n");
+char copyright[] =
+"@(#) Copyright (c) 1988 The Regents of the University of California.\n\
+ All rights reserved.\n";
 #endif /* not lint */
 
 #ifndef lint
-/*static char sccsid[] = "@(#)env.c	8.3 (Berkeley) 4/2/94";*/
-__RCSID("$NetBSD: env.c,v 1.10 1997/10/18 13:55:28 lukem Exp $");
+static char sccsid[] = "@(#)env.c	5.3 (Berkeley) 6/1/90";
 #endif /* not lint */
 
-#include <err.h>
 #include <stdio.h>
 #include <string.h>
-#include <stdlib.h>
-#include <unistd.h>
-#include <locale.h>
-#include <errno.h>
 
-int	main __P((int, char **));
-static void usage __P((void));
-
-int
 main(argc, argv)
 	int argc;
 	char **argv;
 {
 	extern char **environ;
-	extern int optind;
-	char **ep, *p;
+	extern int errno, optind;
+	register char **ep, *p;
 	char *cleanenv[1];
 	int ch;
 
-	setlocale(LC_ALL, "");
-
-	while ((ch = getopt(argc, argv, "-i")) != -1)
+	while ((ch = getopt(argc, argv, "-")) != EOF)
 		switch((char)ch) {
-		case '-':			/* obsolete */
-		case 'i':
+		case '-':
 			environ = cleanenv;
 			cleanenv[0] = NULL;
 			break;
 		case '?':
 		default:
-			usage();
+			(void)fprintf(stderr,
+			    "usage: env [-] [name=value ...] [command]\n");
+			exit(1);
 		}
-
-	for (argv += optind; *argv && (p = strchr(*argv, '=')); ++argv)
+	for (argv += optind; *argv && (p = index(*argv, '=')); ++argv)
 		(void)setenv(*argv, ++p, 1);
-
 	if (*argv) {
-		/* return 127 if the command to be run could not be found; 126
-		   if the command was was found but could not be invoked */
-
 		execvp(*argv, argv);
-		err((errno == ENOENT) ? 127 : 126, "%s", *argv);
-		/* NOTREACHED */
+		(void)fprintf(stderr, "env: %s: %s\n", *argv,
+		    strerror(errno));
+		exit(1);
 	}
-
 	for (ep = environ; *ep; ep++)
 		(void)printf("%s\n", *ep);
-
 	exit(0);
-}
-
-static void
-usage ()
-{
-	(void) fprintf(stderr, "usage: env [-i] [name=value ...] [command]\n");
-	exit (1);
 }

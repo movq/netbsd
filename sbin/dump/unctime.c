@@ -1,8 +1,6 @@
-/*	$NetBSD: unctime.c,v 1.11 1997/09/15 07:58:11 lukem Exp $	*/
-
 /*-
- * Copyright (c) 1980, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1980 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,19 +31,13 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)unctime.c	8.2 (Berkeley) 6/14/94";
-#else
-__RCSID("$NetBSD: unctime.c,v 1.11 1997/09/15 07:58:11 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)unctime.c	5.4 (Berkeley) 3/7/91";
 #endif /* not lint */
 
 #include <sys/types.h>
-
-#include <stdio.h>
 #include <time.h>
+#include <stdio.h>
 #ifdef __STDC__
 #include <stdlib.h>
 #include <string.h>
@@ -69,20 +61,20 @@ __RCSID("$NetBSD: unctime.c,v 1.11 1997/09/15 07:58:11 lukem Exp $");
 #define	E_SECOND	17
 #define	E_YEAR		20
 
-static	int lookup __P((char *));
-time_t unctime __P((char *));
-
+static int lookup();
 
 time_t
 unctime(str)
 	char *str;
 {
 	struct tm then;
-	char dbuf[26];
+	char dbuf[30];
+	time_t emitl();
 
-	(void) strncpy(dbuf, str, sizeof(dbuf) - 1);
-	dbuf[sizeof(dbuf) - 1] = '\0';
-	dbuf[E_MONTH+3] = '\0';
+	if (strlen(str) != 25)
+		str[25] = 0;
+	strcpy(dbuf, str);
+	dbuf[E_MONTH+3] = 0;
 	if ((then.tm_mon = lookup(&dbuf[E_MONTH])) < 0)
 		return (-1);
 	then.tm_mday = atoi(&dbuf[E_DAY]);
@@ -90,8 +82,7 @@ unctime(str)
 	then.tm_min = atoi(&dbuf[E_MINUTE]);
 	then.tm_sec = atoi(&dbuf[E_SECOND]);
 	then.tm_year = atoi(&dbuf[E_YEAR]) - 1900;
-	then.tm_isdst = -1;
-	return(mktime(&then));
+	return(emitl(&then));
 }
 
 static char months[] =
@@ -101,10 +92,63 @@ static int
 lookup(str)
 	char *str;
 {
-	char *cp, *cp2;
+	register char *cp, *cp2;
 
-	for (cp = months, cp2 = str; *cp != '\0'; cp += 3)
+	for (cp = months, cp2 = str; *cp != 0; cp += 3)
 		if (strncmp(cp, cp2, 3) == 0)
 			return((cp-months) / 3);
 	return(-1);
+}
+/*
+ * Routine to convert a localtime(3) format date back into
+ * a system format date.
+ *
+ *	Use a binary search.
+ */
+
+struct tm *localtime();
+static int dcmp();
+
+time_t
+emitl(dp)
+	struct tm *dp;
+{
+	time_t conv;
+	register int i, bit;
+	struct tm dcopy;
+
+	dcopy = *dp;
+	dp = &dcopy;
+	conv = 0;
+	for (i = 30; i >= 0; i--) {
+		bit = 1 << i;
+		conv |= bit;
+		if (dcmp(localtime(&conv), dp) > 0)
+			conv &= ~bit;
+	}
+	return(conv);
+}
+
+/*
+ * Compare two localtime dates, return result.
+ */
+
+#define DECIDE(a) \
+	if (dp->a > dp2->a) \
+		return(1); \
+	if (dp->a < dp2->a) \
+		return(-1)
+
+static int
+dcmp(dp, dp2)
+	register struct tm *dp, *dp2;
+{
+
+	DECIDE(tm_year);
+	DECIDE(tm_mon);
+	DECIDE(tm_mday);
+	DECIDE(tm_hour);
+	DECIDE(tm_min);
+	DECIDE(tm_sec);
+	return(0);
 }

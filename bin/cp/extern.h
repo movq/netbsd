@@ -1,8 +1,6 @@
-/*	$NetBSD: extern.h,v 1.3 1995/03/21 09:02:16 cgd Exp $	*/
-
 /*-
- * Copyright (c) 1991, 1993, 1994
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1991 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,26 +30,23 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)extern.h	8.2 (Berkeley) 4/1/94
+ *	from: @(#)extern.h	5.3 (Berkeley) 10/27/91
+ *	$Id: extern.h,v 1.1 1993/08/07 03:14:57 mycroft Exp $
  */
 
 typedef struct {
 	char *p_end;			/* pointer to NULL at end of path */
-	char *target_end;               /* pointer to end of target base */
 	char p_path[MAXPATHLEN + 1];	/* pointer to the start of a path */
 } PATH_T;
 
-extern PATH_T to;
-extern uid_t myuid;
-extern int iflag, pflag, myumask;
+extern char *progname;			/* program name */
 
 #include <sys/cdefs.h>
 
 __BEGIN_DECLS
-int	copy_fifo __P((struct stat *, int));
-int	copy_file __P((FTSENT *, int));
-int	copy_link __P((FTSENT *, int));
-int	copy_special __P((struct stat *, int));
-int	setfile __P((struct stat *, int));
-void	usage __P((void));
+void	 err __P((const char *fmt, ...));
+int	 path_set __P((PATH_T *, char *));
+char	*path_append __P((PATH_T *, char *, int));
+char	*path_basename __P((PATH_T *));
+void	 path_restore __P((PATH_T *, char *));
 __END_DECLS

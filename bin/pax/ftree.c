@@ -1,5 +1,3 @@
-/*	$NetBSD: ftree.c,v 1.6 1997/07/20 20:32:30 christos Exp $	*/
-
 /*-
  * Copyright (c) 1992 Keith Muller.
  * Copyright (c) 1992, 1993
@@ -37,13 +35,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
 static char sccsid[] = "@(#)ftree.c	8.2 (Berkeley) 4/18/94";
-#else
-__RCSID("$NetBSD: ftree.c,v 1.6 1997/07/20 20:32:30 christos Exp $");
-#endif
 #endif /* not lint */
 
 #include <sys/types.h>
@@ -128,7 +121,7 @@ ftree_start()
 		ftsopts |= FTS_PHYSICAL;
 	if (Hflag)
 #	ifdef NET2_FTS
-		tty_warn(0, "The -H flag is not supported on this version");
+		warn(0, "The -H flag is not supported on this version");
 #	else
 		ftsopts |= FTS_COMFOLLOW;
 #	endif
@@ -136,7 +129,7 @@ ftree_start()
 		ftsopts |= FTS_XDEV;
 
 	if ((fthead == NULL) && ((farray[0] = malloc(PAXPATHLEN+2)) == NULL)) {
-		tty_warn(1, "Unable to allocate memory for file name buffer");
+		warn(1, "Unable to allocate memory for file name buffer");
 		return(-1);
 	}
 
@@ -157,21 +150,21 @@ ftree_start()
 
 #if __STDC__
 int
-ftree_add(char *str)
+ftree_add(register char *str)
 #else
 int
 ftree_add(str)
-	char *str;
+	register char *str;
 #endif
 {
-	FTREE *ft;
-	int len;
+	register FTREE *ft;
+	register int len;
 
 	/*
 	 * simple check for bad args
 	 */
 	if ((str == NULL) || (*str == '\0')) {
-		tty_warn(0, "Invalid file name arguement");
+		warn(0, "Invalid file name arguement");
 		return(-1);
 	}
 
@@ -181,7 +174,7 @@ ftree_add(str)
 	 * trailing / the user may pass us. (watch out for / by itself).
 	 */
 	if ((ft = (FTREE *)malloc(sizeof(FTREE))) == NULL) {
-		tty_warn(0, "Unable to allocate memory for filename");
+		warn(0, "Unable to allocate memory for filename");
 		return(-1);
 	}
 
@@ -207,11 +200,11 @@ ftree_add(str)
 
 #if __STDC__
 void
-ftree_sel(ARCHD *arcn)
+ftree_sel(register ARCHD *arcn)
 #else
 void
 ftree_sel(arcn)
-	ARCHD *arcn;
+	register ARCHD *arcn;
 #endif
 {
 	/*
@@ -252,8 +245,8 @@ void
 ftree_chk()
 #endif
 {
-	FTREE *ft;
-	int wban = 0;
+	register FTREE *ft;
+	register int wban = 0;
 
 	/*
 	 * make sure all dir access times were reset.
@@ -269,8 +262,7 @@ ftree_chk()
 		if (ft->refcnt > 0)
 			continue;
 		if (wban == 0) {
-			tty_warn(1,
-			    "WARNING! These file names were not selected:");
+			warn(1,"WARNING! These file names were not selected:");
 			++wban;
 		}
 		(void)fprintf(stderr, "%s\n", ft->fname);
@@ -295,7 +287,7 @@ static int
 ftree_arg()
 #endif
 {
-	char *pt;
+	register char *pt;
 
 	/*
 	 * close off the current file tree
@@ -354,14 +346,14 @@ ftree_arg()
 
 #if __STDC__
 int
-next_file(ARCHD *arcn)
+next_file(register ARCHD *arcn)
 #else
 int
 next_file(arcn)
-	ARCHD *arcn;
+	register ARCHD *arcn;
 #endif
 {
-	int cnt;
+	register int cnt;
 	time_t atime;
 	time_t mtime;
 
@@ -430,8 +422,7 @@ next_file(arcn)
 			/*
 			 * fts claims a file system cycle
 			 */
-			tty_warn(1,"File system cycle found at %s",
-			    ftent->fts_path);
+			warn(1,"File system cycle found at %s",ftent->fts_path);
 			continue;
 		case FTS_DNR:
 #			ifdef NET2_FTS

@@ -1,7 +1,5 @@
-.\"	$NetBSD: fstat.1,v 1.10 1997/10/18 15:28:04 lukem Exp $
-.\"
-.\" Copyright (c) 1987, 1991, 1993
-.\"	The Regents of the University of California.  All rights reserved.
+.\" Copyright (c) 1987, 1991 Regents of the University of California.
+.\" All rights reserved.
 .\"
 .\" Redistribution and use in source and binary forms, with or without
 .\" modification, are permitted provided that the following conditions
@@ -31,39 +29,36 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\"     from: @(#)fstat.1	8.3 (Berkeley) 2/25/94
-.\"	$NetBSD: fstat.1,v 1.10 1997/10/18 15:28:04 lukem Exp $
+.\"     @(#)fstat.1	5.12 (Berkeley) 7/22/91
 .\"
-.Dd February 25, 1994
+.Dd July 22, 1991
 .Dt FSTAT 1
 .Os BSD 4
 .Sh NAME
 .Nm fstat
 .Nd file status
 .Sh SYNOPSIS
-.Nm
+.Nm fstat
 .Op Fl fnv
 .Op Fl M Ar core
 .Op Fl N Ar system
-.Op Fl p Ar pid
 .Op Fl u Ar user
 .Op Ar filename...
 .Sh DESCRIPTION
-.Nm
+.Nm Fstat
 identifies open files.
 A file is considered open by a process if it was explicitly opened,
 is the working directory, root directory, active pure text, or kernel
 trace file for that process.
 If no options are specified,
-.Nm
+.Nm fstat
 reports on all open files in the system.
 .Pp
 Options:
 .Bl -tag -width Ds
 .It Fl f
-Restrict examination to files open in the same filesystems as
-the named file arguments, or to the filesystem containing the
-current directory if there are no additional filename arguments.
+If additional filename arguments are present, restrict examination to files
+open in the same filesystem as the named file arguments.
 For example, to find all files open in the filesystem where the
 directory
 .Pa /usr/src
@@ -75,7 +70,7 @@ instead of the default
 .Pa /dev/kmem .
 .It Fl N
 Extract the name list from the specified system instead of the default
-.Pa /netbsd .
+.Pa /vmunix .
 .It Fl n
 Numerical format.  Print the device number (maj,min) of the filesystem
 the file resides in rather than the mount point name; for special
@@ -93,10 +88,10 @@ Verbose mode.  Print error messages upon failures to locate particular
 system data structures rather than silently ignoring them.  Most of
 these data structures are dynamically created or deleted and it is
 possible for them to disappear while
-.Nm
+.Nm fstat
 is running.  This
 is normal and  unavoidable since the rest of the system is running while
-.Nm
+.Nm fstat
 itself is running.
 .It Ar filename ...
 Restrict reports to the specified files.
@@ -161,12 +156,6 @@ located, or the
 .Fl n
 flag is specified, prints the major/minor device
 number that the special device refers to.
-.It Li R/W
-This column describes the access mode that the file allows.
-The letter ``r'' indicates open for reading;
-the letter ``w'' indicates open for writing.
-This field is useful when trying to find the processes that are
-preventing a filesystem from being down graded to read-only.
 .It Li NAME
 If filename arguments are specified and the
 .Fl f
@@ -204,7 +193,7 @@ an arrow (``<-'' or ``->''), and a full duplex socket shows a double arrow
 (``<->'').
 .Sh BUGS
 Since
-.Nm
+.Nm fstat
 takes a snapshot of the system, it is only correct for a very short period
 of time.
 .Sh SEE ALSO
@@ -212,9 +201,9 @@ of time.
 .Xr nfsstat 1 ,
 .Xr ps 1 ,
 .Xr systat 1 ,
+.Xr vmstat 1 ,
 .Xr iostat 8 ,
-.Xr pstat 8 ,
-.Xr vmstat 8
+.Xr pstat 8
 .Sh HISTORY
 The
 .Nm

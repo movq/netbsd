@@ -1,8 +1,7 @@
-/*	$NetBSD: pt_tcp.c,v 1.12 1997/09/21 02:35:44 enami Exp $	*/
-
 /*
- * Copyright (c) 1992, 1993, 1994
+ * Copyright (c) 1992, 1993
  *	The Regents of the University of California.  All rights reserved.
+ * All rights reserved.
  *
  * This code is derived from software donated to Berkeley by
  * Jan-Simon Pendry.
@@ -35,14 +34,10 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	from: Id: pt_tcp.c,v 1.1 1992/05/25 21:43:09 jsp Exp
- *	@(#)pt_tcp.c	8.5 (Berkeley) 4/28/95
+ *	from: Id: pt_tcp.c,v 1.1 1992/05/25 21:43:09 jsp Exp jsp
+ *	from: @(#)pt_tcp.c	8.1 (Berkeley) 6/5/93
+ *	$Id: pt_tcp.c,v 1.1 1994/01/12 20:02:27 cgd Exp $
  */
-
-#include <sys/cdefs.h>
-#ifndef lint
-__RCSID("$NetBSD: pt_tcp.c,v 1.12 1997/09/21 02:35:44 enami Exp $");
-#endif /* not lint */
 
 #include <stdio.h>
 #include <unistd.h>
@@ -54,7 +49,6 @@ __RCSID("$NetBSD: pt_tcp.c,v 1.12 1997/09/21 02:35:44 enami Exp $");
 #include <sys/syslog.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
-#include <arpa/inet.h>
 #include <netdb.h>
 
 #include "portald.h"
@@ -66,13 +60,12 @@ __RCSID("$NetBSD: pt_tcp.c,v 1.12 1997/09/21 02:35:44 enami Exp $");
  * Some trailing suffix values have special meanings.
  * An unrecognised suffix is an error.
  */
-int
-portal_tcp(pcr, key, v, kso, fdp)
-	struct portal_cred *pcr;
-	char *key;
-	char **v;
-	int kso;
-	int *fdp;
+int portal_tcp(pcr, key, v, kso, fdp)
+struct portal_cred *pcr;
+char *key;
+char **v;
+int kso;
+int *fdp;
 {
 	char host[MAXHOSTNAMELEN];
 	char port[MAXHOSTNAMELEN];
@@ -84,7 +77,6 @@ portal_tcp(pcr, key, v, kso, fdp)
 	struct in_addr *ip[2];
 	struct in_addr ina;
 	int s_port;
-	int priv = 0;
 	struct sockaddr_in sain;
 
 	q = strchr(p, '/');
@@ -92,32 +84,22 @@ portal_tcp(pcr, key, v, kso, fdp)
 		return (EINVAL);
 	*q = '\0';
 	strcpy(host, p);
-	p = q + 1;
+	p = q++;
 
 	q = strchr(p, '/');
-	if (q)
-		*q = '\0';
-	if (strlen(p) >= sizeof(port))
+	if (q == 0 || q - p >= sizeof(port))
 		return (EINVAL);
+	*q = '\0';
 	strcpy(port, p);
-	if (q) {
-		p = q + 1;
-		if (strcmp(p, "priv") == 0) {
-			if (pcr->pcr_uid == 0)
-				priv = 1;
-			else
-				return (EPERM);
-		} else {
-			return (EINVAL);
-		}
-	}
+	p = q++;
 
-	if (inet_aton(host, &ina) == 0) {
-		hp = gethostbyname(host);
-		if (hp == 0)
-			return (EINVAL);
+	hp = gethostbyname(host);
+	if (hp != 0) {
 		ipp = (struct in_addr **) hp->h_addr_list;
 	} else {
+		ina.s_addr = inet_addr(host);
+		if (ina.s_addr == INADDR_NONE)
+			return (EINVAL);
 		ip[0] = &ina;
 		ip[1] = 0;
 		ipp = ip;
@@ -127,13 +109,12 @@ portal_tcp(pcr, key, v, kso, fdp)
 	if (sp != 0)
 		s_port = sp->s_port;
 	else {
-		s_port = strtoul(port, &p, 0);
-		if (s_port == 0 || *p != '\0')
+		s_port = atoi(port);
+		if (s_port == 0)
 			return (EINVAL);
-		s_port = htons(s_port);
 	}
 
-	memset(&sain, 0, sizeof(sain));
+	bzero(&sain, sizeof(sain));
 	sain.sin_len = sizeof(sain);
 	sain.sin_family = AF_INET;
 	sain.sin_port = s_port;
@@ -141,18 +122,14 @@ portal_tcp(pcr, key, v, kso, fdp)
 	while (ipp[0]) {
 		int so;
 
-		if (priv)
-			so = rresvport((int *) 0);
-		else
-			so = socket(AF_INET, SOCK_STREAM, 0);
+		so = socket(AF_INET, SOCK_STREAM, 0);
 		if (so < 0) {
 			syslog(LOG_ERR, "socket: %m");
 			return (errno);
 		}
 
 		sain.sin_addr = *ipp[0];
-		if (connect(so, (struct sockaddr *) &sain,
-		    sizeof(sain)) == 0) {
+		if (connect(so, (struct sockaddr *) &sain, sizeof(sain)) == 0) {
 			*fdp = so;
 			return (0);
 		}

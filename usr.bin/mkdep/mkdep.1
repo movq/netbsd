@@ -1,7 +1,5 @@
-.\"	$NetBSD: mkdep.1,v 1.4 1997/10/19 05:10:15 lukem Exp $
-.\"
-.\" Copyright (c) 1987, 1990, 1993
-.\"	The Regents of the University of California.  All rights reserved.
+.\" Copyright (c) 1987, 1990 The Regents of the University of California.
+.\" All rights reserved.
 .\"
 .\" Redistribution and use in source and binary forms, with or without
 .\" modification, are permitted provided that the following conditions
@@ -31,22 +29,22 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\"     @(#)mkdep.1	8.1 (Berkeley) 6/6/93
+.\"     @(#)mkdep.1	5.13 (Berkeley) 6/2/91
 .\"
-.Dd June 6, 1993
+.Dd June 2, 1991
 .Dt MKDEP 1
 .Os BSD 4.2
 .Sh NAME
 .Nm mkdep
 .Nd construct Makefile dependency list
 .Sh SYNOPSIS
-.Nm
+.Nm mkdep
 .Op Fl ap
 .Op Fl f Ar file
 .Op Ar flags
 .Ar file ...
 .Sh DESCRIPTION
-.Nm
+.Nm Mkdep
 takes a set of flags for the C compiler and a list
 of C source files as arguments and constructs a set of include
 file dependencies which are written into the file ``.depend''.
@@ -67,7 +65,7 @@ The options are as follows:
 .It Fl a
 Append to the output file,
 so that multiple
-.Nm "" Ns 's
+.Nm mkdep Ns 's
 may be run from a single Makefile.
 .It Fl f
 Write the include file dependencies to 
@@ -75,7 +73,7 @@ Write the include file dependencies to
 instead of the default ``.depend''.
 .It Fl p
 Cause
-.Nm
+.Nm mkdep
 to produce dependencies of the form:
 .Bd -literal -offset indent
 program: program.c
@@ -100,6 +98,6 @@ File containing list of dependencies.
 .El
 .Sh HISTORY
 The
-.Nm
+.Nm mkdep
 command appeared in
 .Bx 4.3 Tahoe .

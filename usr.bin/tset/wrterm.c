@@ -1,8 +1,6 @@
-/*	$NetBSD: wrterm.c,v 1.6 1997/10/20 01:07:55 lukem Exp $	*/
-
 /*-
- * Copyright (c) 1991, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1991 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,18 +31,13 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)wrterm.c	8.1 (Berkeley) 6/9/93";
-#endif
-__RCSID("$NetBSD: wrterm.c,v 1.6 1997/10/20 01:07:55 lukem Exp $");
+static char sccsid[] = "@(#)wrterm.c	5.2 (Berkeley) 12/24/91";
 #endif /* not lint */
 
 #include <sys/types.h>
-#include <ctype.h>
-#include <err.h>
 #include <stdio.h>
+#include <ctype.h>
 #include <string.h>
 #include "extern.h"
 
@@ -56,19 +49,19 @@ void
 wrtermcap(bp)
 	char *bp;
 {
-	int ch;
-	char *p;
+	register int ch;
+	register char *p;
 	char *t, *sep;
 
 	/* Find the end of the terminal names. */
-	if ((t = strchr(bp, ':')) == NULL)
-		errx(1, "termcap names not colon terminated");
+	if ((t = index(bp, ':')) == NULL)
+		err("termcap names not colon terminated");
 	*t++ = '\0';
 
-	/* Output terminal names that don't have whitespace or quotes. */
+	/* Output terminal names that don't have whitespace. */
 	sep = "";
 	while ((p = strsep(&bp, "|")) != NULL)
-		if (*p != '\0' && strpbrk(p, " \t'\"") == NULL) {
+		if (*p != '\0' && strpbrk(p, " \t") == NULL) {
 			(void)printf("%s%s", sep, p);
 			sep = "|";
 		}

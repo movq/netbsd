@@ -1,8 +1,6 @@
-/*	$NetBSD: phaser.c,v 1.5 1997/10/12 21:25:06 christos Exp $	*/
-
 /*
- * Copyright (c) 1980, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1980 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,19 +31,12 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)phaser.c	8.1 (Berkeley) 5/31/93";
-#else
-__RCSID("$NetBSD: phaser.c,v 1.5 1997/10/12 21:25:06 christos Exp $");
-#endif
+static char sccsid[] = "@(#)phaser.c	5.4 (Berkeley) 6/1/90";
 #endif /* not lint */
 
-#include <stdio.h>
-#include <math.h>
-#include "trek.h"
-#include "getpar.h"
+# include	"trek.h"
+# include	"getpar.h"
 
 /* factors for phaser hits; see description below */
 
@@ -82,9 +73,9 @@ __RCSID("$NetBSD: phaser.c,v 1.5 1997/10/12 21:25:06 christos Exp $");
 
 struct cvntab	Matab[] =
 {
-	{ "m",		"anual",	(cmdfun) 1,	0 },
-	{ "a",		"utomatic",	(cmdfun) 0,	0 },
-	{ NULL,		NULL,		NULL,		0 }
+	"m",		"anual",		(int (*)())1,		0,
+	"a",		"utomatic",		0,		0,
+	0
 };
 
 struct banks
@@ -96,37 +87,28 @@ struct banks
 
 
 
-/*ARGSUSED*/
-void
-phaser(v)
-	int v;
+phaser()
 {
-	int		i;
-	int		j;
-	struct kling	*k;
-	double		dx, dy;
-	double		anglefactor, distfactor;
-	struct banks	*b;
-	int		manual, flag, extra = 0;
-	int		hit;
-	double		tot;
-	int		n;
-	int		hitreqd[NBANKS];
-	struct banks	bank[NBANKS];
-	struct cvntab	*ptr;
+	register int		i;
+	int			j;
+	register struct kling	*k;
+	double			dx, dy;
+	double			anglefactor, distfactor;
+	register struct banks	*b;
+	int			manual, flag, extra;
+	int			hit;
+	double			tot;
+	int			n;
+	int			hitreqd[NBANKS];
+	struct banks		bank[NBANKS];
+	struct cvntab		*ptr;
 
-	if (Ship.cond == DOCKED) {
-		printf("Phasers cannot fire through starbase shields\n");
-		return;
-	}
-	if (damaged(PHASER)) {
-		out(PHASER);
-		return;
-	}
-	if (Ship.shldup) {
-		printf("Sulu: Captain, we cannot fire through shields.\n");
-		return;
-	}
+	if (Ship.cond == DOCKED)
+		return(printf("Phasers cannot fire through starbase shields\n"));
+	if (damaged(PHASER))
+		return (out(PHASER));
+	if (Ship.shldup)
+		return (printf("Sulu: Captain, we cannot fire through shields.\n"));
 	if (Ship.cloaked)
 	{
 		printf("Sulu: Captain, surely you must realize that we cannot fire\n");
@@ -156,7 +138,7 @@ phaser(v)
 	if (!manual)
 	{
 		ptr = getcodpar("Manual or automatic", Matab);
-		manual = (long) ptr->value;
+		manual = (int) ptr->value;
 	}
 	if (!manual && damaged(COMPUTER))
 	{
@@ -210,10 +192,8 @@ phaser(v)
 	else
 	{
 		/* automatic distribution of power */
-		if (Etc.nkling <= 0) {
-			printf("Sulu: But there are no Klingons in this quadrant\n");
-			return;
-		}
+		if (Etc.nkling <= 0)
+			return (printf("Sulu: But there are no Klingons in this quadrant\n"));
 		printf("Phasers locked on target.  ");
 		while (flag)
 		{

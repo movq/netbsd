@@ -1,8 +1,6 @@
-/*	$NetBSD: hunt.c,v 1.7 1997/05/14 00:20:01 mellon Exp $	*/
-
 /*
- * Copyright (c) 1983, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1983 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -34,10 +32,7 @@
  */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)hunt.c	8.1 (Berkeley) 6/6/93";
-#endif
-static char rcsid[] = "$NetBSD: hunt.c,v 1.7 1997/05/14 00:20:01 mellon Exp $";
+static char sccsid[] = "@(#)hunt.c	5.6 (Berkeley) 6/1/90";
 #endif /* not lint */
 
 #include "tip.h"
@@ -55,7 +50,6 @@ dead()
 	longjmp(deadline, 1);
 }
 
-long
 hunt(name)
 	char *name;
 {
@@ -79,7 +73,7 @@ hunt(name)
 			break;
 		if (setjmp(deadline) == 0) {
 			alarm(10);
-			FD = open(cp, (O_RDWR | (DC ? O_NONBLOCK : 0)));
+			FD = open(cp, O_RDWR);
 		}
 		alarm(0);
 		if (FD < 0) {
@@ -87,18 +81,13 @@ hunt(name)
 			deadfl = 1;
 		}
 		if (!deadfl) {
-			struct termios cntrl;
-
-			tcgetattr(FD, &cntrl);
-			if (!DC)
-				cntrl.c_cflag |= HUPCL;
-			tcsetattr(FD, TCSAFLUSH, &cntrl);
 			ioctl(FD, TIOCEXCL, 0);
+			ioctl(FD, TIOCHPCL, 0);
 			signal(SIGALRM, SIG_DFL);
-			return ((long)cp);
+			return ((int)cp);
 		}
 		(void)uu_unlock(uucplock);
 	}
 	signal(SIGALRM, f);
-	return (deadfl ? -1 : (long)cp);
+	return (deadfl ? -1 : (int)cp);
 }

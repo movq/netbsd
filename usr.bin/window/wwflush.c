@@ -1,8 +1,6 @@
-/*	$NetBSD: wwflush.c,v 1.5 1995/12/21 10:46:08 mycroft Exp $	*/
-
 /*
- * Copyright (c) 1983, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1983 Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Edward Wang at The University of California, Berkeley.
@@ -37,16 +35,11 @@
  */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)wwflush.c	8.1 (Berkeley) 6/6/93";
-#else
-static char rcsid[] = "$NetBSD: wwflush.c,v 1.5 1995/12/21 10:46:08 mycroft Exp $";
-#endif
+static char sccsid[] = "@(#)wwflush.c	3.12 (Berkeley) 6/6/90";
 #endif /* not lint */
 
 #include "ww.h"
 #include "tt.h"
-#include <sys/signal.h>
 
 wwflush()
 {
@@ -61,59 +54,5 @@ wwflush()
 	else if (col >= wwncol)
 		col = wwncol - 1;
 	xxmove(row, col);
-	if (wwdocheckpoint) {
-		xxflush(0);
-		wwcheckpoint();
-	} else
-		xxflush(1);
-}
-
-wwcheckpoint()
-{
-	sigset_t sigset, osigset;
-
-	sigemptyset(&sigset);
-	sigaddset(&sigset, SIGALRM);
-	sigprocmask(SIG_BLOCK, &sigset, &osigset);
-
-	tt.tt_ack = 0;
-	do {
-		(*tt.tt_checkpoint)();
-#ifndef OLD_TTY
-		(void) tcdrain(1);
-#endif
-		(void) alarm(3);
-		for (wwdocheckpoint = 0; !wwdocheckpoint && tt.tt_ack == 0;)
-			sigsuspend(&osigset);
-	} while (tt.tt_ack == 0);
-	(void) alarm(0);
-	wwdocheckpoint = 0;
-	if (tt.tt_ack < 0) {
-		wwcopyscreen(wwcs, wwos);
-		(void) alarm(1);
-		wwreset();
-		wwupdate();
-		wwflush();
-	} else {
-		wwcopyscreen(wwos, wwcs);
-		(void) alarm(3);
-	}
-
-	sigprocmask(SIG_SETMASK, &osigset, (sigset_t *)0);
-}
-
-wwcopyscreen(s1, s2)
-	register union ww_char **s1, **s2;
-{
-	register i;
-	register s = wwncol * sizeof **s1;
-
-	for (i = wwnrow; --i >= 0;)
-		bcopy((char *) *s1++, (char *) *s2++, s);
-}
-
-void
-wwalarm()
-{
-	wwdocheckpoint = 1;
+	xxflush(1);
 }

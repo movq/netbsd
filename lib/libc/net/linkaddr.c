@@ -1,8 +1,6 @@
-/*	$NetBSD: linkaddr.c,v 1.6 1997/07/13 19:57:52 christos Exp $	*/
-
 /*-
- * Copyright (c) 1990, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1990 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,13 +31,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char sccsid[] = "@(#)linkaddr.c	8.1 (Berkeley) 6/4/93";
-#else
-__RCSID("$NetBSD: linkaddr.c,v 1.6 1997/07/13 19:57:52 christos Exp $");
-#endif
+static char sccsid[] = "@(#)linkaddr.c	5.2 (Berkeley) 2/24/91";
 #endif /* LIBC_SCCS and not lint */
 
 #include <sys/types.h>
@@ -65,19 +58,18 @@ link_addr(addr, sdl)
 {
 	register char *cp = sdl->sdl_data;
 	char *cplim = sdl->sdl_len + (char *)sdl;
-	register int byte = 0, state = NAMING;
-	register int newaddr = 0;	/* pacify gcc */
+	register int byte = 0, state = NAMING, new;
 
 	bzero((char *)&sdl->sdl_family, sdl->sdl_len - 1);
 	sdl->sdl_family = AF_LINK;
 	do {
 		state &= ~LETTER;
 		if ((*addr >= '0') && (*addr <= '9')) {
-			newaddr = *addr - '0';
+			new = *addr - '0';
 		} else if ((*addr >= 'a') && (*addr <= 'f')) {
-			newaddr = *addr - 'a' + 10;
+			new = *addr - 'a' + 10;
 		} else if ((*addr >= 'A') && (*addr <= 'F')) {
-			newaddr = *addr - 'A' + 10;
+			new = *addr - 'A' + 10;
 		} else if (*addr == 0) {
 			state |= END;
 		} else if (state == NAMING &&
@@ -90,41 +82,29 @@ link_addr(addr, sdl)
 		switch (state /* | INPUT */) {
 		case NAMING | DIGIT:
 		case NAMING | LETTER:
-			*cp++ = addr[-1];
-			continue;
+			*cp++ = addr[-1]; continue;
 		case NAMING | DELIM:
-			state = RESET;
-			sdl->sdl_nlen = cp - sdl->sdl_data;
-			continue;
+			state = RESET; sdl->sdl_nlen = cp - sdl->sdl_data; continue;
 		case GOTTWO | DIGIT:
-			*cp++ = byte;
-			/* FALLTHROUGH */
+			*cp++ = byte; /*FALLTHROUGH*/
 		case RESET | DIGIT:
-			state = GOTONE;
-			byte = newaddr;
-			continue;
+			state = GOTONE; byte = new; continue;
 		case GOTONE | DIGIT:
-			state = GOTTWO;
-			byte = newaddr + (byte << 4);
-			continue;
+			state = GOTTWO; byte = new + (byte << 4); continue;
 		default: /* | DELIM */
-			state = RESET;
-			*cp++ = byte;
-			byte = 0;
-			continue;
+			state = RESET; *cp++ = byte; byte = 0; continue;
 		case GOTONE | END:
 		case GOTTWO | END:
-			*cp++ = byte;
-			/* FALLTHROUGH */
+			*cp++ = byte; /* FALLTHROUGH */
 		case RESET | END:
 			break;
 		}
 		break;
 	} while (cp < cplim); 
 	sdl->sdl_alen = cp - LLADDR(sdl);
-	newaddr = cp - (char *)sdl;
-	if (newaddr > sizeof(*sdl))
-		sdl->sdl_len = newaddr;
+	new = cp - (char *)sdl;
+	if (new > sizeof(*sdl))
+		sdl->sdl_len = new;
 	return;
 }
 
@@ -138,20 +118,16 @@ link_ntoa(sdl)
 	register char *out = obuf; 
 	register int i;
 	register u_char *in = (u_char *)LLADDR(sdl);
-	u_char *inlim = in + sdl->sdl_alen;
+	u_char *inlim = in + sdl->sdl_nlen;
 	int firsttime = 1;
 
 	if (sdl->sdl_nlen) {
 		bcopy(sdl->sdl_data, obuf, sdl->sdl_nlen);
 		out += sdl->sdl_nlen;
-		if (sdl->sdl_alen)
-			*out++ = ':';
+		*out++ = ':';
 	}
 	while (in < inlim) {
-		if (firsttime)
-			firsttime = 0;
-		else
-			*out++ = '.';
+		if (firsttime) firsttime = 0; else *out++ = '.';
 		i = *in++;
 		if (i > 0xf) {
 			out[1] = hexlist[i & 0xf];
@@ -162,5 +138,5 @@ link_ntoa(sdl)
 			*out++ = hexlist[i];
 	}
 	*out = 0;
-	return (obuf);
+	return(obuf);
 }

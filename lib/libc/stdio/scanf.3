@@ -1,7 +1,5 @@
-.\"	$NetBSD: scanf.3,v 1.7 1995/02/02 01:15:52 jtc Exp $
-.\"
-.\" Copyright (c) 1990, 1991, 1993
-.\"	The Regents of the University of California.  All rights reserved.
+.\" Copyright (c) 1990, 1991 The Regents of the University of California.
+.\" All rights reserved.
 .\"
 .\" This code is derived from software contributed to Berkeley by
 .\" Chris Torek and the American National Standards Committee X3,
@@ -35,9 +33,9 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\"     @(#)scanf.3	8.2 (Berkeley) 12/11/93
+.\"     @(#)scanf.3	6.11 (Berkeley) 6/29/91
 .\"
-.Dd January 31, 1995
+.Dd June 29, 1991
 .Dt SCANF 3
 .Os
 .Sh NAME
@@ -165,20 +163,14 @@ and the next pointer is a pointer to
 .Em double
 (rather than
 .Em float ) .
-.It Cm q
-Indicates that the conversion will be one of
-.Cm dioux
-or
-.Cm n
-and the next pointer is a pointer to a
-.Em quad_t
-(rather than
-.Em int ) .
 .It Cm L
 Indicates that the conversion will be
 .Cm efg
 and the next pointer is a pointer to
 .Em long double .
+(This type is not implemented; the
+.Cm L
+flag is currently ignored.)
 .El
 .Pp
 In addition to these flags,
@@ -208,7 +200,7 @@ the next pointer must be a pointer to
 .Em int .
 .It Cm D
 Equivalent to
-.Cm ld ;
+.Xr ld ;
 this exists only for backwards compatibility.
 .It Cm i
 Matches an optionally signed integer;
@@ -229,19 +221,24 @@ the next pointer must be a pointer to
 .Em unsigned int .
 .It Cm O
 Equivalent to
-.Cm lo ;
+.Xr lo ;
 this exists for backwards compatibility.
 .It Cm u
 Matches an optionally signed decimal integer;
 the next pointer must be a pointer to
 .Em unsigned int .
 .It Cm x
-Matches an optionally signed hexadecimal integer;
+Matches an optionally a signed hexadecimal integer;
 the next pointer must be a pointer to
 .Em unsigned int .
 .It Cm X
 Equivalent to
-.Cm x .
+.Cm lx ;
+this violates the
+.St -ansiC ,
+but is backwards compatible with previous
+.Ux
+systems.
 .It Cm f
 Matches an optionally signed floating-point number;
 the next pointer must be a pointer to
@@ -254,10 +251,16 @@ Equivalent to
 .Cm f .
 .It Cm E
 Equivalent to
-.Cm f .
-.It Cm G
+.Cm lf ;
+this violates the
+.St -ansiC ,
+but is backwards compatible with previous
+.Ux
+systems.
+.It Cm F
 Equivalent to
-.Cm f .
+.Cm lf ;
+this exists only for backwards compatibility.
 .It Cm s
 Matches a sequence of non-white-space characters;
 the next pointer must be a pointer to
@@ -354,6 +357,19 @@ and a `conversion' of
 .Ql %\e0
 causes an immediate return of
 .Dv EOF .
+The
+.Cm F
+and
+.Cm X
+conversions will be changed in the future
+to conform to the
+.Tn ANSI
+C standard,
+after which they will act like
+.Cm f
+and
+.Cm x
+respectively.
 .Pp
 .Sh RETURN VALUES
 These
@@ -377,7 +393,6 @@ the number of conversions which were successfully completed is returned.
 .Sh SEE ALSO
 .Xr strtol 3 ,
 .Xr strtoul 3 ,
-.Xr strtod 3 ,
 .Xr getc 3 ,
 .Xr printf 3
 .Sh STANDARDS
@@ -396,13 +411,10 @@ and
 .Fn vfscanf
 are new to this release.
 .Sh BUGS
-All of the backwards compatibility formats will be removed in the future.
+The current situation with
+.Cm %F
+and
+.Cm %X
+conversions is unfortunate.
 .Pp
-Numerical strings are truncated to 512 characters; for example,
-.Cm %f
-and
-.Cm %d
-are implicitly
-.Cm %512f
-and
-.Cm %512d .
+All of the backwards compatibility formats will be removed in the future.

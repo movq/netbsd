@@ -1,5 +1,3 @@
-/*	$NetBSD: el.c,v 1.7 1997/07/06 18:25:24 christos Exp $	*/
-
 /*-
  * Copyright (c) 1992, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -36,13 +34,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #if !defined(lint) && !defined(SCCSID)
-#if 0
 static char sccsid[] = "@(#)el.c	8.2 (Berkeley) 1/3/94";
-#else
-__RCSID("$NetBSD: el.c,v 1.7 1997/07/06 18:25:24 christos Exp $");
-#endif
 #endif /* not lint && not SCCSID */
 
 /*
@@ -54,7 +47,7 @@ __RCSID("$NetBSD: el.c,v 1.7 1997/07/06 18:25:24 christos Exp $");
 #include <sys/param.h>
 #include <string.h>
 #include <stdlib.h>
-#ifdef __STDC__
+#if __STDC__
 # include <stdarg.h>
 #else
 # include <varargs.h>
@@ -158,7 +151,7 @@ el_reset(el)
  *	set the editline parameters
  */
 public int
-#ifdef __STDC__
+#if __STDC__
 el_set(EditLine *el, int op, ...)
 #else
 el_set(va_alist)
@@ -167,7 +160,7 @@ el_set(va_alist)
 {
     va_list va;
     int rv;
-#ifdef __STDC__
+#if __STDC__
     va_start(va, op);
 #else
     EditLine *el;
@@ -300,23 +293,21 @@ el_source(el, fname)
 	if ((fp = fopen(fname, "r")) == NULL) {
 	    if ((ptr = getenv("HOME")) == NULL) 
 		return -1;
-	    (void)snprintf(path, sizeof(path), "%s%s", ptr, elpath);
-	    fname = path;
+	    fname = strncpy(path, ptr, MAXPATHLEN);
+	    (void) strncat(path, elpath, MAXPATHLEN);
+	    path[MAXPATHLEN-1] = '\0';
 	}
     }
 
     if ((fp = fopen(fname, "r")) == NULL) 
 	return -1;
 
-    while ((ptr = fgetln(fp, &len)) != NULL) {
-	if (ptr[len - 1] == '\n')
-	    --len;
-	ptr[len] = '\0';
+    while ((ptr = fgetln(fp, &len)) != NULL)
+	ptr[len - 1] = '\0';
 	if (parse_line(el, ptr) == -1) {
 	    (void) fclose(fp);
 	    return -1;
 	}
-    }
 
     (void) fclose(fp);
     return 0;

@@ -1,8 +1,6 @@
-/*	$NetBSD: ccitt_addr.c,v 1.12 1997/09/16 07:04:17 lukem Exp $	*/
-
 /*
- * Copyright (c) 1990, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1990 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,9 +30,8 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)ccitt_addr.c	8.2 (Berkeley) 4/28/95
+ *	@(#)ccitt_addr.c	5.1 (Berkeley) 6/27/91
  */
-
 /*
  * parse CCITT addresses
  *
@@ -52,25 +49,20 @@
  * Copyright (c) 1984
  */
 
-#include <string.h>
-#include <stdlib.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netccitt/x25.h>
 
-#include "extern.h"
+static char *copychar ();
 
-static char *copychar __P((char *, char *));
-
-int
 ccitt_addr (addr, xp)
-	char *addr;
-	struct sockaddr_x25 *xp;
+char *addr;
+register struct sockaddr_x25 *xp;
 {
-	char *p, *ap, *limit;
+	register char *p, *ap, *limit;
 	int havenet = 0;
 
-	memset(xp, 0, sizeof (*xp));
+	bzero ((char *)xp, sizeof (*xp));
 	xp->x25_family = AF_CCITT;
 	xp->x25_len = sizeof(*xp);
 	p = addr;
@@ -159,9 +151,9 @@ ccitt_addr (addr, xp)
 
 static char *
 copychar (from, to)
-	char *from, *to;
+register char *from, *to;
 {
-	int n;
+	register int n;
 
 	if (*from != '\\' || from[1] < '0' || from[1] > '7') {
 		*to = *from++;
@@ -170,11 +162,10 @@ copychar (from, to)
 	n = *++from - '0';
 	from++;
 	if (*from >= '0' && *from <= '7') {
-		int n1;
+		register int n1;
 
 		n = n*8 + *from++ - '0';
-		if (*from >= '0' && *from <= '7' &&
-		    (n1 = n*8 + *from-'0') < 256) {
+		if (*from >= '0' && *from <= '7' && (n1 = n*8 + *from-'0') < 256) {
 			n = n1;
 			from++;
 		}

@@ -1,8 +1,6 @@
-/*	$NetBSD: edit.c,v 1.10 1997/10/19 14:05:56 mrg Exp $	*/
-
 /*-
- * Copyright (c) 1990, 1993, 1994
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1990 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,57 +31,41 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)edit.c	8.3 (Berkeley) 4/2/94";
-#else
-__RCSID("$NetBSD: edit.c,v 1.10 1997/10/19 14:05:56 mrg Exp $");
-#endif
+static char sccsid[] = "@(#)edit.c	5.2 (Berkeley) 3/3/91";
 #endif /* not lint */
 
 #include <sys/param.h>
 #include <sys/stat.h>
-
-#include <ctype.h>
-#include <err.h>
-#include <errno.h>
-#include <paths.h>
 #include <pwd.h>
+#include <errno.h>
 #include <stdio.h>
+#include <paths.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
-#include <util.h>
-
 #include "chpass.h"
 
+extern char *tempname;
+
 void
-edit(tempname, pw)
-	char *tempname;
+edit(pw)
 	struct passwd *pw;
 {
 	struct stat begin, end;
 
 	for (;;) {
 		if (stat(tempname, &begin))
-			(*Pw_error)(tempname, 1, 1);
-		pw_edit(1, tempname);
+			pw_error(tempname, 1, 1);
+		pw_edit(1);
 		if (stat(tempname, &end))
-			(*Pw_error)(tempname, 1, 1);
+			pw_error(tempname, 1, 1);
 		if (begin.st_mtime == end.st_mtime) {
-			warnx("no changes made");
-			unlink(tempname);
-			(*Pw_error)(NULL, 0, 0);
+			(void)fprintf(stderr, "chpass: no changes made\n");
+			pw_error((char *)NULL, 0, 0);
 		}
-		if (verify(tempname, pw))
+		if (verify(pw))
 			break;
-#ifdef YP
-		if (use_yp)
-			yppw_prompt();
-		else
-#endif
-			pw_prompt();
+		pw_prompt();
 	}
 }
 
@@ -92,21 +74,19 @@ edit(tempname, pw)
  *	print out the file for the user to edit; strange side-effect:
  *	set conditional flag if the user gets to edit the shell.
  */
-void
-display(tempname, fd, pw)
-	char *tempname;
+display(fd, pw)
 	int fd;
 	struct passwd *pw;
 {
+	register char *p;
 	FILE *fp;
-	char *bp, *p;
+	char *bp, *ok_shell(), *ttoa();
 
 	if (!(fp = fdopen(fd, "w")))
-		(*Pw_error)(tempname, 1, 1);
+		pw_error(tempname, 1, 1);
 
 	(void)fprintf(fp,
-	    "#Changing user %sdatabase information for %s.\n",
-	    use_yp ? "YP " : "", pw->pw_name);
+	    "#Changing user database information for %s.\n", pw->pw_name);
 	if (!uid) {
 		(void)fprintf(fp, "Login: %s\n", pw->pw_name);
 		(void)fprintf(fp, "Password: %s\n", pw->pw_passwd);
@@ -145,60 +125,53 @@ display(tempname, fd, pw)
 	(void)fclose(fp);
 }
 
-int
-verify(tempname, pw)
-	char *tempname;
+verify(pw)
 	struct passwd *pw;
 {
-	ENTRY *ep;
-	char *p;
-	struct stat sb;
+	register ENTRY *ep;
+	register char *p;
 	FILE *fp;
 	int len;
-	static char buf[LINE_MAX];
+	char buf[LINE_MAX];
 
 	if (!(fp = fopen(tempname, "r")))
-		(*Pw_error)(tempname, 1, 1);
-	if (fstat(fileno(fp), &sb))
-		(*Pw_error)(tempname, 1, 1);
-	if (sb.st_size == 0) {
-		warnx("corrupted temporary file");
-		goto bad;
-	}
+		pw_error(tempname, 1, 1);
 	while (fgets(buf, sizeof(buf), fp)) {
 		if (!buf[0] || buf[0] == '#')
 			continue;
-		if (!(p = strchr(buf, '\n'))) {
-			warnx("line too long");
+		if (!(p = index(buf, '\n'))) {
+			(void)fprintf(stderr, "chpass: line too long.\n");
 			goto bad;
 		}
 		*p = '\0';
 		for (ep = list;; ++ep) {
 			if (!ep->prompt) {
-				warnx("unrecognized field");
+				(void)fprintf(stderr,
+				    "chpass: unrecognized field.\n");
 				goto bad;
 			}
 			if (!strncasecmp(buf, ep->prompt, ep->len)) {
 				if (ep->restricted && uid) {
-					warnx(
-					    "you may not change the %s field",
-						ep->prompt);
+					(void)fprintf(stderr,
+			    "chpass: you may not change the %s field.\n",
+					    ep->prompt);
 					goto bad;
 				}
-				if (!(p = strchr(buf, ':'))) {
-					warnx("line corrupted");
+				if (!(p = index(buf, ':'))) {
+					(void)fprintf(stderr,
+					    "chpass: line corrupted.\n");
 					goto bad;
 				}
 				while (isspace(*++p));
 				if (ep->except && strpbrk(p, ep->except)) {
-					warnx(
-				   "illegal character in the \"%s\" field",
+					(void)fprintf(stderr,
+			    "chpass: illegal character in the \"%s\" field.\n",
 					    ep->prompt);
 					goto bad;
 				}
 				if ((ep->func)(p, pw, ep)) {
 bad:					(void)fclose(fp);
-					return (0);
+					return(0);
 				}
 				break;
 			}
@@ -209,18 +182,20 @@ bad:					(void)fclose(fp);
 	/* Build the gecos field. */
 	len = strlen(list[E_NAME].save) + strlen(list[E_BPHONE].save) +
 	    strlen(list[E_HPHONE].save) + strlen(list[E_LOCATE].save) + 4;
-	if (!(p = malloc(len)))
-		err(1, "malloc");
-	(void)snprintf(pw->pw_gecos = p, len, "%s,%s,%s,%s", list[E_NAME].save,
+	if (!(p = malloc(len))) {
+		(void)fprintf(stderr, "chpass: %s\n", strerror(errno));
+		exit(1);
+	}
+	(void)sprintf(pw->pw_gecos = p, "%s,%s,%s,%s", list[E_NAME].save,
 	    list[E_LOCATE].save, list[E_BPHONE].save, list[E_HPHONE].save);
 
 	if (snprintf(buf, sizeof(buf),
-	    "%s:%s:%d:%d:%s:%lu:%lu:%s:%s:%s",
+	    "%s:%s:%d:%d:%s:%ld:%ld:%s:%s:%s",
 	    pw->pw_name, pw->pw_passwd, pw->pw_uid, pw->pw_gid, pw->pw_class,
-	    (u_long)pw->pw_change, (u_long)pw->pw_expire, pw->pw_gecos,
-	    pw->pw_dir, pw->pw_shell) >= sizeof(buf)) {
-		warnx("entries too long");
-		return (0);
+	    pw->pw_change, pw->pw_expire, pw->pw_gecos, pw->pw_dir,
+	    pw->pw_shell) >= sizeof(buf)) {
+		(void)fprintf(stderr, "chpass: entries too long\n");
+		return(0);
 	}
-	return (pw_scan(buf, pw, (int *)NULL));
+	return(pw_scan(buf, pw));
 }

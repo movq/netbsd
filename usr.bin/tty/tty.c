@@ -1,8 +1,6 @@
-/*	$NetBSD: tty.c,v 1.5 1997/10/20 01:10:39 lukem Exp $	*/
-
 /*
- * Copyright (c) 1988, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1988 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,57 +31,39 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1988, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+char copyright[] =
+"@(#) Copyright (c) 1988 Regents of the University of California.\n\
+ All rights reserved.\n";
 #endif /* not lint */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)tty.c	8.1 (Berkeley) 6/6/93";
-#endif
-__RCSID("$NetBSD: tty.c,v 1.5 1997/10/20 01:10:39 lukem Exp $");
+static char sccsid[] = "@(#)tty.c	4.4 (Berkeley) 6/1/90";
 #endif /* not lint */
 
 #include <stdio.h>
-#include <stdlib.h>
-#include <unistd.h>
 
-int	main __P((int, char **));
-static void usage	__P((void));
-
-int
 main(argc, argv)
 	int argc;
 	char **argv;
 {
 	int ch, sflag;
-	char *t;
+	char *t, *ttyname();
 
 	sflag = 0;
-	while ((ch = getopt(argc, argv, "s")) != -1) {
+	while ((ch = getopt(argc, argv, "s")) != EOF)
 		switch((char)ch) {
 		case 's':
 			sflag = 1;
 			break;
 		case '?':
 		default:
-			usage();
-			/* NOTREACHED */
+			fputs("usage: tty [-s]\n", stderr);
+			exit(2);
 		}
-	}
 
-	t = ttyname(STDIN_FILENO);
+	t = ttyname(0);
 	if (!sflag)
 		puts(t ? t : "not a tty");
 	exit(t ? 0 : 1);
-}
-
-
-static void
-usage ()
-{
-	fprintf(stderr, "usage: tty [-s]\n");
-	exit(2);
 }

@@ -1,5 +1,3 @@
-/*	$NetBSD: alias.c,v 1.9 1997/07/04 21:01:48 christos Exp $	*/
-
 /*-
  * Copyright (c) 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -36,16 +34,10 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)alias.c	8.3 (Berkeley) 5/4/95";
-#else
-__RCSID("$NetBSD: alias.c,v 1.9 1997/07/04 21:01:48 christos Exp $");
-#endif
+static char sccsid[] = "@(#)alias.c	8.1 (Berkeley) 5/31/93";
 #endif /* not lint */
 
-#include <stdlib.h>
 #include "shell.h"
 #include "input.h"
 #include "output.h"
@@ -59,15 +51,12 @@ __RCSID("$NetBSD: alias.c,v 1.9 1997/07/04 21:01:48 christos Exp $");
 
 struct alias *atab[ATABSIZE];
 
-STATIC void setalias __P((char *, char *));
-STATIC int unalias __P((char *));
 STATIC struct alias **hashalias __P((char *));
 
 STATIC
-void
 setalias(name, val)
 	char *name, *val;
-{
+	{
 	struct alias *ap, **app;
 
 	app = hashalias(name);
@@ -107,7 +96,7 @@ setalias(name, val)
 	{
 	int len = strlen(val);
 	ap->val = ckmalloc(len + 2);
-	memcpy(ap->val, val, len);
+	bcopy(val, ap->val, len);
 	ap->val[len] = ' ';	/* fluff */
 	ap->val[len+1] = '\0';
 	}
@@ -152,7 +141,7 @@ unalias(name)
 }
 
 #ifdef mkinit
-MKINIT void rmaliases __P((void));
+MKINIT void rmaliases();
 
 SHELLPROC {
 	rmaliases();
@@ -182,8 +171,7 @@ rmaliases() {
 struct alias *
 lookupalias(name, check)
 	char *name;
-	int check;
-{
+	{
 	struct alias *ap = *hashalias(name);
 
 	for (; ap; ap = ap->next) {
@@ -200,11 +188,9 @@ lookupalias(name, check)
 /*
  * TODO - sort output
  */
-int
 aliascmd(argc, argv)
-	int argc;
 	char **argv;
-{
+	{
 	char *n, *v;
 	int ret = 0;
 	struct alias *ap;
@@ -219,7 +205,7 @@ aliascmd(argc, argv)
 			}
 		return (0);
 	}
-	while ((n = *++argv) != NULL) {
+	while (n = *++argv) {
 		if ((v = strchr(n+1, '=')) == NULL) /* n+1: funny ksh stuff */
 			if ((ap = lookupalias(n, 0)) == NULL) {
 				outfmt(out2, "alias: %s not found\n", n);
@@ -235,13 +221,11 @@ aliascmd(argc, argv)
 	return (ret);
 }
 
-int
 unaliascmd(argc, argv)
-	int argc;
 	char **argv;
-{
+	{
 	int i;
-
+	
 	while ((i = nextopt("a")) != '\0') {
 		if (i == 'a') {
 			rmaliases();
@@ -256,7 +240,7 @@ unaliascmd(argc, argv)
 
 STATIC struct alias **
 hashalias(p)
-	char *p;
+	register char *p;
 	{
 	unsigned int hashval;
 

@@ -1,8 +1,6 @@
-/*	$NetBSD: ranlib.c,v 1.6 1997/10/19 13:40:27 lukem Exp $	*/
-
 /*-
- * Copyright (c) 1990, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1990 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Hugh Smith at The University of Guelph.
@@ -36,44 +34,35 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1990, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+char copyright[] =
+"@(#) Copyright (c) 1990 The Regents of the University of California.\n\
+ All rights reserved.\n";
 #endif /* not lint */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)ranlib.c	8.1 (Berkeley) 6/6/93";
-#else
-__RCSID("$NetBSD: ranlib.c,v 1.6 1997/10/19 13:40:27 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)ranlib.c	5.6 (Berkeley) 2/26/91";
 #endif /* not lint */
 
 #include <sys/types.h>
 #include <dirent.h>
-#include <archive.h>
 #include <stdio.h>
 #include <stdlib.h>
-
-#include "extern.h"
+#include <archive.h>
 
 CHDR chdr;
 u_int options;				/* UNUSED -- keep open_archive happy */
 char *archive;
 
-int	main __P((int, char **));
-void	usage __P((void));
-
-int
 main(argc, argv)
 	int argc;
 	char **argv;
 {
+	extern int optind;
 	int ch, eval, tflag;
 
 	tflag = 0;
-	while ((ch = getopt(argc, argv, "t")) != -1)
+	while ((ch = getopt(argc, argv, "t")) != EOF)
 		switch(ch) {
 		case 't':
 			tflag = 1;
@@ -88,12 +77,11 @@ main(argc, argv)
 	if (!*argv)
 		usage();
 
-	for (eval = 0; (archive = *argv++) != NULL;)
+	for (eval = 0; archive = *argv++;)
 		eval |= tflag ? touch() : build();
 	exit(eval);
 }
 
-void
 usage()
 {
 	(void)fprintf(stderr, "usage: ranlib [-t] archive ...\n");

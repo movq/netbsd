@@ -1,8 +1,6 @@
-/*	$NetBSD: dol.c,v 1.10 1997/07/04 21:23:56 christos Exp $	*/
-
 /*-
- * Copyright (c) 1980, 1991, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1980, 1991 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,13 +31,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)dol.c	8.1 (Berkeley) 5/31/93";
-#else
-__RCSID("$NetBSD: dol.c,v 1.10 1997/07/04 21:23:56 christos Exp $");
-#endif
+static char sccsid[] = "@(#)dol.c	5.13 (Berkeley) 6/8/91";
 #endif /* not lint */
 
 #include <sys/types.h>
@@ -73,7 +66,7 @@ static Char *Dcp, **Dvp;	/* Input vector for Dreadc */
 
 #define	unDgetC(c)	Dpeekc = c
 
-#define QUOTES		(_QF|_QB|_ESC)	/* \ ' " ` */
+#define QUOTES		(_Q|_Q1|_ESC)	/* \ ' " ` */
 
 /*
  * The following variables give the information about the current
@@ -81,18 +74,14 @@ static Char *Dcp, **Dvp;	/* Input vector for Dreadc */
  * words within this expansion, the count of remaining words, and the
  * information about any : modifier which is being applied.
  */
-#define MAXWLEN (BUFSIZ - 4)
-#define MAXMOD MAXWLEN		/* This cannot overflow	*/
 static Char *dolp;		/* Remaining chars from this word */
 static Char **dolnxt;		/* Further words */
 static int dolcnt;		/* Count of further words */
-static Char dolmod[MAXMOD];	/* : modifier character */
-static int dolnmod;		/* Number of modifiers */
+static Char dolmod;		/* : modifier character */
 static int dolmcnt;		/* :gx -> 10000, else 1 */
-static int dolwcnt;		/* :wx -> 10000, else 1 */
 
 static void	 Dfix2 __P((Char **));
-static Char	*Dpack __P((Char *, Char *));
+static Char 	*Dpack __P((Char *, Char *));
 static int	 Dword __P((void));
 static void	 dolerror __P((Char *));
 static int	 DgetC __P((int));
@@ -110,15 +99,15 @@ static void	 Dtestq __P((int));
  */
 void
 Dfix(t)
-    struct command *t;
+    register struct command *t;
 {
-    Char **pp;
-    Char *p;
+    register Char **pp;
+    register Char *p;
 
     if (noexec)
 	return;
     /* Note that t_dcom isn't trimmed thus !...:q's aren't lost */
-    for (pp = t->t_dcom; (p = *pp++) != NULL;)
+    for (pp = t->t_dcom; p = *pp++;)
 	for (; *p; p++) {
 	    if (cmap(*p, _DOL | QUOTES)) {	/* $, \, ', ", ` */
 		Dfix2(t->t_dcom);	/* found one */
@@ -135,7 +124,7 @@ Dfix(t)
  */
 Char   *
 Dfix1(cp)
-    Char *cp;
+    register Char *cp;
 {
     Char   *Dv[2];
 
@@ -145,7 +134,7 @@ Dfix1(cp)
     Dv[1] = NULL;
     Dfix2(Dv);
     if (gargc != 1) {
-	setname(vis_str(cp));
+	setname(short2str(cp));
 	stderror(ERR_NAME | ERR_AMBIG);
     }
     cp = Strsave(gargv[0]);
@@ -171,6 +160,7 @@ Dfix2(v)
 	continue;
 }
 
+#define MAXWLEN (BUFSIZ - 4)
 /*
  * Pack up more characters in this word
  */
@@ -178,8 +168,8 @@ static Char *
 Dpack(wbuf, wp)
     Char   *wbuf, *wp;
 {
-    int c;
-    int i = MAXWLEN - (wp - wbuf);
+    register int c;
+    register int i = MAXWLEN - (wp - wbuf);
 
     for (;;) {
 	c = DgetC(DODOL);
@@ -202,7 +192,7 @@ Dpack(wbuf, wp)
 	    Gcat(STRNULL, wbuf);
 	    return (NULL);
 	}
-	if (cmap(c, _SP | _NL | _QF | _QB)) {	/* sp \t\n'"` */
+	if (cmap(c, _SP | _NL | _Q | _Q1)) {	/* sp \t\n'"` */
 	    unDgetC(c);
 	    if (cmap(c, QUOTES))
 		return (wp);
@@ -225,11 +215,11 @@ Dpack(wbuf, wp)
 static int
 Dword()
 {
-    int c, c1;
+    register int c, c1;
     Char    wbuf[BUFSIZ];
-    Char *wp = wbuf;
-    int i = MAXWLEN;
-    bool dolflg;
+    register Char *wp = wbuf;
+    register int i = MAXWLEN;
+    register bool dolflg;
     bool    sofar = 0, done = 0;
 
     while (!done) {
@@ -294,13 +284,10 @@ Dword()
 		    /* Leave all text alone for later */
 		    *wp++ = c;
 		    break;
-
-		default:
-		    break;
 		}
 	    }
 	    if (c1 == '`')
-		*wp++ = '`' /* i--; eliminated */;
+		*wp++ = '`', --i;
 	    sofar = 1;
 	    if ((wp = Dpack(wbuf, wp)) == NULL)
 		return (1);
@@ -317,9 +304,6 @@ Dword()
 		break;
 	    }
 	    c |= QUOTE;
-	    break;
-
-	default:
 	    break;
 	}
 	if (done) {
@@ -345,12 +329,12 @@ Dword()
  */
 static int
 DgetC(flag)
-    int flag;
+    register int flag;
 {
-    int c;
+    register int c;
 
 top:
-    if ((c = Dpeekc) != '\0') {
+    if (c = Dpeekc) {
 	Dpeekc = 0;
 	return (c);
     }
@@ -366,7 +350,7 @@ quotspec:
 	return (c);
     }
     if (dolp) {
-	if ((c = *dolp++ & (QUOTE | TRIM)) != '\0')
+	if (c = *dolp++ & (QUOTE | TRIM))
 	    goto quotspec;
 	if (dolcnt > 0) {
 	    setDolp(*dolnxt++);
@@ -389,13 +373,13 @@ quotspec:
 }
 
 static Char *nulvec[] = {0};
-static struct varent nulargv = {nulvec, STRargv, { NULL, NULL, NULL }, 0};
+static struct varent nulargv = {nulvec, STRargv, 0};
 
 static void
 dolerror(s)
     Char   *s;
 {
-    setname(vis_str(s));
+    setname(short2str(s));
     stderror(ERR_NAME | ERR_RANGE);
 }
 
@@ -406,17 +390,16 @@ dolerror(s)
 static void
 Dgetdol()
 {
-    Char *np;
-    struct varent *vp = NULL;
+    register Char *np;
+    register struct varent *vp = NULL;
     Char    name[4 * MAXVARLEN + 1];
     int     c, sc;
     int     subscr = 0, lwb = 1, upb = 0;
     bool    dimen = 0, bitset = 0;
     char    tnp;
     Char    wbuf[BUFSIZ];
-    static Char *dolbang = NULL;
 
-    dolnmod = dolmcnt = dolwcnt = 0;
+    dolmod = dolmcnt = 0;
     c = sc = DgetC(0);
     if (c == '{')
 	c = DgetC(0);		/* sc is { to take } later */
@@ -425,16 +408,6 @@ Dgetdol()
     else if (c == '?')
 	bitset++, c = DgetC(0);	/* $? tests existence */
     switch (c) {
-
-    case '!':
-	if (dimen || bitset)
-	    stderror(ERR_SYNTAX);
-	if (backpid != 0) {
-	    if (dolbang) 
-		xfree((ptr_t) dolbang);
-	    setDolp(dolbang = putn(backpid));
-	}
-	goto eatbrac;
 
     case '$':
 	if (dimen || bitset)
@@ -448,10 +421,10 @@ Dgetdol()
 	if (dimen)
 	    stderror(ERR_NOTALLOWED, "$?#");
 	for (np = wbuf; read(OLDSTD, &tnp, 1) == 1; np++) {
-	    *np = (unsigned char) tnp;
+	    *np = tnp;
 	    if (np >= &wbuf[BUFSIZ - 1])
 		stderror(ERR_LTOOLONG);
-	    if (tnp == '\n')
+	    if (SIGN_EXTEND_CHAR(tnp) <= 0 || tnp == '\n')
 		break;
 	}
 	*np = 0;
@@ -462,7 +435,7 @@ Dgetdol()
 	 * it. The actual function of the 'q' causes filename expansion not to
 	 * be done on the interpolated value.
 	 */
-	dolmod[dolnmod++] = 'q';
+	dolmod = 'q';
 	dolmcnt = 10000;
 	setDolp(wbuf);
 	goto eatbrac;
@@ -564,8 +537,7 @@ Dgetdol()
 	if (Isdigit(*np)) {
 	    int     i;
 
-	    for (i = 0; Isdigit(*np); i = i * 10 + *np++ - '0')
-		continue;
+	    for (i = 0; Isdigit(*np); i = i * 10 + *np++ - '0');
 	    if ((i < 0 || i > upb) && !any("-*", *np)) {
 		dolerror(vp->v_name);
 		return;
@@ -579,7 +551,7 @@ Dgetdol()
 	else if (*np != '-')
 	    stderror(ERR_MISSING, '-');
 	else {
-	    int i = upb;
+	    register int i = upb;
 
 	    np++;
 	    if (Isdigit(*np)) {
@@ -637,58 +609,18 @@ eatbrac:
 static void
 fixDolMod()
 {
-    int c;
+    register int c;
 
     c = DgetC(0);
     if (c == ':') {
-	do {
-	    c = DgetC(0), dolmcnt = 1, dolwcnt = 1;
-	    if (c == 'g' || c == 'a') {
-		if (c == 'g')
-		    dolmcnt = 10000;
-		else
-		    dolwcnt = 10000;
-		c = DgetC(0);
-	    }
-	    if ((c == 'g' && dolmcnt != 10000) || 
-		(c == 'a' && dolwcnt != 10000)) {
-		if (c == 'g')
-		    dolmcnt = 10000;
-		else
-		    dolwcnt = 10000;
-		c = DgetC(0); 
-	    }
-
-	    if (c == 's') {	/* [eichin:19910926.0755EST] */
-		int delimcnt = 2;
-		int delim = DgetC(0);
-		dolmod[dolnmod++] = c;
-		dolmod[dolnmod++] = delim;
-		
-		if (!delim || letter(delim)
-		    || Isdigit(delim) || any(" \t\n", delim)) {
-		    seterror(ERR_BADSUBST);
-		    break;
-		}	
-		while ((c = DgetC(0)) != (-1)) {
-		    dolmod[dolnmod++] = c;
-		    if(c == delim) delimcnt--;
-		    if(!delimcnt) break;
-		}
-		if(delimcnt) {
-		    seterror(ERR_BADSUBST);
-		    break;
-		}
-		continue;
-	    }
-	    if (!any("htrqxes", c))
-		stderror(ERR_BADMOD, c);
-	    dolmod[dolnmod++] = c;
-	    if (c == 'q')
-		dolmcnt = 10000;
-	}
-	while ((c = DgetC(0)) == ':');
-	unDredc(c);
+	c = DgetC(0), dolmcnt = 1;
+	if (c == 'g')
+	    c = DgetC(0), dolmcnt = 10000;
+	if (!any("htrqxe", c))
+	    stderror(ERR_BADMOD, c);
+	dolmod = c;
+	if (c == 'q')
+	    dolmcnt = 10000;
     }
     else
 	unDredc(c);
@@ -696,103 +628,22 @@ fixDolMod()
 
 static void
 setDolp(cp)
-    Char *cp;
+    register Char *cp;
 {
-    Char *dp;
-    int i;
+    register Char *dp;
 
-    if (dolnmod == 0 || dolmcnt == 0) {
+    if (dolmod == 0 || dolmcnt == 0) {
 	dolp = cp;
 	return;
     }
-    dp = cp = Strsave(cp);
-    for (i = 0; i < dolnmod; i++) {
-	/* handle s// [eichin:19910926.0510EST] */
-	if(dolmod[i] == 's') {
-	    int delim;
-	    Char *lhsub, *rhsub, *np;
-	    size_t lhlen = 0, rhlen = 0;
-	    int didmod = 0;
-		
-	    delim = dolmod[++i];
-	    if (!delim || letter(delim)
-		|| Isdigit(delim) || any(" \t\n", delim)) {
-		seterror(ERR_BADSUBST);
-		break;
-	    }
-	    lhsub = &dolmod[++i];
-	    while(dolmod[i] != delim && dolmod[++i]) {
-		lhlen++;
-	    }
-	    dolmod[i] = 0;
-	    rhsub = &dolmod[++i];
-	    while(dolmod[i] != delim && dolmod[++i]) {
-		rhlen++;
-	    }
-	    dolmod[i] = 0;
-
-	    do {
-		dp = Strstr(cp, lhsub);
-		if (dp) {
-		    np = (Char *) xmalloc((size_t)
-					  ((Strlen(cp) + 1 - lhlen + rhlen) *
-					  sizeof(Char)));
-		    (void) Strncpy(np, cp, dp - cp);
-		    (void) Strcpy(np + (dp - cp), rhsub);
-		    (void) Strcpy(np + (dp - cp) + rhlen, dp + lhlen);
-
-		    xfree((ptr_t) cp);
-		    dp = cp = np;
-		    didmod = 1;
-		} else {
-		    /* should this do a seterror? */
-		    break;
-		}
-	    }
-	    while (dolwcnt == 10000);
-	    /*
-	     * restore dolmod for additional words
-	     */
-	    dolmod[i] = rhsub[-1] = delim;
-	    if (didmod)
-		dolmcnt--;
-	    else
-		break;
-        } else {
-	    int didmod = 0;
-
-	    do {
-		if ((dp = domod(cp, dolmod[i]))) {
-		    didmod = 1;
-		    if (Strcmp(cp, dp) == 0) {
-			xfree((ptr_t) cp);
-			cp = dp;
-			break;
-		    }
-		    else {
-			xfree((ptr_t) cp);
-			cp = dp;
-		    }
-		}
-		else
-		    break;
-	    }
-	    while (dolwcnt == 10000);
-	    dp = cp;
-	    if (didmod)
-		dolmcnt--;
-	    else
-		break;
-	}
-    }
-
+    dp = domod(cp, dolmod);
     if (dp) {
+	dolmcnt--;
 	addla(dp);
 	xfree((ptr_t) dp);
     }
     else
 	addla(cp);
-
     dolp = STRNULL;
     if (seterr)
 	stderror(ERR_OLD);
@@ -809,9 +660,9 @@ unDredc(c)
 static int
 Dredc()
 {
-    int c;
+    register int c;
 
-    if ((c = Dpeekrd) != '\0') {
+    if (c = Dpeekrd) {
 	Dpeekrd = 0;
 	return (c);
     }
@@ -827,7 +678,7 @@ Dredc()
 
 static void
 Dtestq(c)
-    int c;
+    register int c;
 {
 
     if (cmap(c, QUOTES))
@@ -840,22 +691,28 @@ Dtestq(c)
  * Unit 0 should have been closed before this call.
  */
 void
-/*ARGSUSED*/
 heredoc(term)
-    Char *term;
+    Char   *term;
 {
-    int c;
+    register int c;
     Char   *Dv[2];
     Char    obuf[BUFSIZ], lbuf[BUFSIZ], mbuf[BUFSIZ];
     int     ocnt, lcnt, mcnt;
-    Char   *lbp, *obp, *mbp;
+    register Char *lbp, *obp, *mbp;
     Char  **vp;
     bool    quoted;
     char   *tmp;
 
-    tmp = short2str(shtemp);
-    if (open(tmp, O_RDWR | O_CREAT | O_TRUNC, 0600) < 0)
+    if (creat(tmp = short2str(shtemp), 0600) < 0)
 	stderror(ERR_SYSTEM, tmp, strerror(errno));
+    (void) close(0);
+    if (open(tmp, O_RDWR) < 0) {
+	int     oerrno = errno;
+
+	(void) unlink(tmp);
+	errno = oerrno;
+	stderror(ERR_SYSTEM, tmp, strerror(errno));
+    }
     (void) unlink(tmp);		/* 0 0 inode! */
     Dv[0] = term;
     Dv[1] = NULL;
@@ -875,7 +732,7 @@ heredoc(term)
 	    c = readc(1);	/* 1 -> Want EOF returns */
 	    if (c < 0 || c == '\n')
 		break;
-	    if ((c &= TRIM) != '\0') {
+	    if (c &= TRIM) {
 		*lbp++ = c;
 		if (--lcnt < 0) {
 		    setname("<<");
@@ -890,7 +747,7 @@ heredoc(term)
 	 */
 	if (c < 0 || eq(lbuf, term)) {
 	    (void) write(0, short2str(obuf), (size_t) (BUFSIZ - ocnt));
-	    (void) lseek(0, (off_t) 0, SEEK_SET);
+	    (void) lseek(0, 0l, L_SET);
 	    return;
 	}
 
@@ -900,7 +757,7 @@ heredoc(term)
 	if (quoted || noexec) {
 	    *lbp++ = '\n';
 	    *lbp = 0;
-	    for (lbp = lbuf; (c = *lbp++) != '\0';) {
+	    for (lbp = lbuf; c = *lbp++;) {
 		*obp++ = c;
 		if (--ocnt == 0) {
 		    (void) write(0, short2str(obuf), BUFSIZ);

@@ -1,7 +1,5 @@
-.\"	$NetBSD: getsockname.2,v 1.6 1995/10/12 15:41:00 jtc Exp $
-.\"
-.\" Copyright (c) 1983, 1991, 1993
-.\"	The Regents of the University of California.  All rights reserved.
+.\" Copyright (c) 1983, 1991 The Regents of the University of California.
+.\" All rights reserved.
 .\"
 .\" Redistribution and use in source and binary forms, with or without
 .\" modification, are permitted provided that the following conditions
@@ -31,16 +29,15 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\"     @(#)getsockname.2	8.1 (Berkeley) 6/4/93
+.\"     @(#)getsockname.2	6.4 (Berkeley) 3/10/91
 .\"
-.Dd June 4, 1993
+.Dd March 10, 1991
 .Dt GETSOCKNAME 2
 .Os BSD 4.2
 .Sh NAME
 .Nm getsockname
 .Nd get socket name
 .Sh SYNOPSIS
-.Fd #include <sys/socket.h>
 .Ft int
 .Fn getsockname "int s" "struct sockaddr *name" "int *namelen"
 .Sh DESCRIPTION
@@ -58,7 +55,7 @@ returned (in bytes).
 A 0 is returned if the call succeeds, -1 if it fails.
 .Sh ERRORS
 The call succeeds unless:
-.Bl -tag -width Er
+.Bl -tag -width ENOTSOCKAA
 .It Bq Er EBADF
 The argument
 .Fa s
@@ -85,6 +82,6 @@ Names bound to sockets in the UNIX domain are inaccessible;
 returns a zero length name.
 .Sh HISTORY
 The
-.Fn getsockname
+.Nm
 function call appeared in
 .Bx 4.2 .

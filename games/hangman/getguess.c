@@ -1,8 +1,6 @@
-/*	$NetBSD: getguess.c,v 1.7 1997/10/11 01:16:29 lukem Exp $	*/
-
 /*
- * Copyright (c) 1983, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1983 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,28 +31,21 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)getguess.c	8.1 (Berkeley) 5/31/93";
-#else
-__RCSID("$NetBSD: getguess.c,v 1.7 1997/10/11 01:16:29 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)getguess.c	5.4 (Berkeley) 6/1/90";
 #endif /* not lint */
 
-#include <sys/ttydefaults.h>
-#include "hangman.h"
+# include	"hangman.h"
 
 /*
  * getguess:
  *	Get another guess
  */
-void
 getguess()
 {
-	int i;
-	int ch;
-	bool correct;
+	register int	i;
+	register int	ch;
+	register bool	correct;
 
 	leaveok(stdscr, FALSE);
 	for (;;) {
@@ -65,16 +56,15 @@ getguess()
 			if (isupper(ch))
 				ch = tolower(ch);
 			if (Guessed[ch - 'a'])
-				mvprintw(MESGY, MESGX, "Already guessed '%c'",
-				    ch);
+				mvprintw(MESGY, MESGX, "Already guessed '%c'", ch);
 			else
 				break;
-		} else
-			if (ch == CTRL('D'))
-				die(0);
-			else
-				mvprintw(MESGY, MESGX,
-				    "Not a valid guess: '%s'", unctrl(ch));
+		}
+		else if (ch == CTRL('D'))
+			die();
+		else
+			mvprintw(MESGY, MESGX, "Not a valid guess: '%s'",
+				unctrl(ch));
 	}
 	leaveok(stdscr, TRUE);
 	move(MESGY, MESGX);
@@ -90,25 +80,28 @@ getguess()
 	if (!correct)
 		Errors++;
 }
+
 /*
  * readch;
  *	Read a character from the input
  */
-int
 readch()
 {
-	int cnt;
-	char ch;
+	register int	cnt, r;
+	auto char	ch;
 
 	cnt = 0;
 	for (;;) {
-		if (read(0, &ch, sizeof ch) <= 0) {
+		if (read(0, &ch, sizeof ch) <= 0)
+		{
 			if (++cnt > 100)
-				die(0);
-		} else
-			if (ch == CTRL('L')) {
-				wrefresh(curscr);
-			} else
-				return ch;
+				die();
+		}
+		else if (ch == CTRL('L')) {
+			wrefresh(curscr);
+			mvcur(0, 0, curscr->_cury, curscr->_curx);
+		}
+		else
+			return ch;
 	}
 }

@@ -1,7 +1,5 @@
-.\"	$NetBSD: unifdef.1,v 1.5 1997/10/20 02:23:13 lukem Exp $
-.\"
-.\" Copyright (c) 1985, 1991, 1993
-.\"	The Regents of the University of California.  All rights reserved.
+.\" Copyright (c) 1985, 1991 The Regents of the University of California.
+.\" All rights reserved.
 .\"
 .\" This code is derived from software contributed to Berkeley by
 .\" Dave Yost.
@@ -34,18 +32,18 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\"     @(#)unifdef.1	8.2 (Berkeley) 4/1/94
+.\"     @(#)unifdef.1	6.5 (Berkeley) 4/23/91
 .\"
-.Dd April 1, 1994
+.Dd April 23, 1991
 .Dt UNIFDEF 1
 .Os BSD 4.3
 .Sh NAME
 .Nm unifdef
 .Nd remove ifdef'ed lines
 .Sh SYNOPSIS
-.Nm
-.Op Fl clt
+.Nm unifdef
 .Oo
+.Fl t l c
 .Fl D Ns Ar sym
 .Fl U Ns Ar sym
 .Fl iD Ns Ar sym
@@ -54,10 +52,10 @@
 .Ar ...
 .Op Ar file
 .Sh DESCRIPTION
-.Nm
+.Nm Unifdef
 is useful for removing ifdef'ed lines
 from a file while otherwise leaving the file alone.
-.Nm
+.Nm Unifdef
 acts on
 #ifdef, #ifndef, #else, and #endif lines,
 and it knows only enough about C
@@ -97,7 +95,7 @@ If the
 .Fl c
 flag is specified,
 then the operation of
-.Nm
+.Nm unifdef
 is complemented,
 i.e. the lines that would have been removed or blanked
 are retained and vice versa.
@@ -106,8 +104,9 @@ are retained and vice versa.
 Replace removed lines with blank lines
 instead of deleting them.
 .It Fl t
-Disables parsing for C comments and quotes, which is useful
-for plain text.
+Disables parsing for
+C comments and quotes useful for plain text
+(not C code).
 .Pp
 .It Fl iD Ns Ar sym
 .It Fl iU Ns Ar sym
@@ -116,7 +115,7 @@ If your C code uses ifdefs to delimit non-C lines,
 such as comments
 or code which is under construction,
 then you must tell
-.Nm
+.Nm unifdef
 which symbols are used for that purpose so that it won't try to parse
 for quotes and comments
 inside those ifdefs.
@@ -131,7 +130,7 @@ and
 above.
 .El
 .Pp
-.Nm
+.Nm Unifdef
 copies its output to
 .Em stdout
 and will take its input from
@@ -140,7 +139,7 @@ if no
 .Ar file
 argument is given.
 .Pp
-.Nm
+.Nm Unifdef
 works nicely with the
 .Fl D Ns Ar sym
 option added to

@@ -1,8 +1,6 @@
-/*	$NetBSD: map.c,v 1.8 1997/10/20 01:07:51 lukem Exp $	*/
-
 /*-
- * Copyright (c) 1991, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1991 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,20 +31,15 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)map.c	8.1 (Berkeley) 6/9/93";
-#endif
-__RCSID("$NetBSD: map.c,v 1.8 1997/10/20 01:07:51 lukem Exp $");
+static char sccsid[] = "@(#)map.c	5.2 (Berkeley) 12/24/91";
 #endif /* not lint */
 
 #include <sys/types.h>
-#include <err.h>
+#include <termios.h>
 #include <errno.h>
 #include <stdlib.h>
 #include <string.h>
-#include <termios.h>
 #include "extern.h"
 
 int	baudrate __P((char *));
@@ -84,7 +77,7 @@ add_mapping(port, arg)
 	copy = strdup(arg);
 	mapp = malloc((u_int)sizeof(MAP));
 	if (copy == NULL || mapp == NULL)
-		err(1, "malloc");
+		err("%s", strerror(errno));
 	mapp->next = NULL;
 	if (maplist == NULL)
 		cur = maplist = mapp;
@@ -137,14 +130,14 @@ next:	if (*arg == ':') {
 			goto badmopt;
 		++arg;
 	} else {				/* Optional baudrate. */
-		arg = strchr(p = arg, ':');
+		arg = index(p = arg, ':');
 		if (arg == NULL)
 			goto badmopt;
 		*arg++ = '\0';
 		mapp->speed = baudrate(p);
 	}
 
-	if (*arg == '\0')			/* Non-optional type. */
+	if (*arg == NULL)			/* Non-optional type. */
 		goto badmopt;
 
 	mapp->type = arg;
@@ -160,7 +153,7 @@ next:	if (*arg == ':') {
 	/* If user specified a port with an option flag, set it. */
 done:	if (port) {
 		if (mapp->porttype)
-badmopt:		errx(1, "illegal -m option format: %s", copy);
+badmopt:		err("illegal -m option format: %s", copy);
 		mapp->porttype = port;
 	}
 
@@ -195,7 +188,6 @@ mapped(type)
 	MAP *mapp;
 	int match;
 
-	match = 0;
 	for (mapp = maplist; mapp; mapp = mapp->next)
 		if (mapp->porttype == NULL || !strcmp(mapp->porttype, type)) {
 			switch (mapp->conditional) {
@@ -225,14 +217,47 @@ mapped(type)
 	return (type);
 }
 
+typedef struct speeds {
+	char	*string;
+	int	speed;
+} SPEEDS;
+
+SPEEDS speeds[] = {
+	"0",		B0,
+	"50",		B50,
+	"75",		B75,
+	"110",		B110,
+	"134",		B134,
+	"134.5",	B134,
+	"150",		B150,
+	"200",		B200,
+	"300",		B300,
+	"600",		B600,
+	"1200",		B1200,
+	"1800",		B1800,
+	"2400",		B2400,
+	"4800",		B4800,
+	"9600",		B9600,
+	"19200",	B19200,
+	"38400",	B38400,
+	"exta",		B19200,
+	"extb",		B38400,
+	NULL
+};
+
 int
 baudrate(rate)
 	char *rate;
 {
+	SPEEDS *sp;
 
 	/* The baudrate number can be preceded by a 'B', which is ignored. */
 	if (*rate == 'B')
 		++rate;
 
-	return (atoi(rate));
+	for (sp = speeds; sp->string; ++sp)
+		if (!strcasecmp(rate, sp->string))
+			return (sp->speed);
+	err("unknown baud rate %s", rate);
+	/* NOTREACHED */
 }

@@ -1,7 +1,5 @@
-.\"	$NetBSD: send.2,v 1.7 1997/03/25 15:43:06 is Exp $
-.\"
-.\" Copyright (c) 1983, 1991, 1993
-.\"	The Regents of the University of California.  All rights reserved.
+.\" Copyright (c) 1983, 1991 The Regents of the University of California.
+.\" All rights reserved.
 .\"
 .\" Redistribution and use in source and binary forms, with or without
 .\" modification, are permitted provided that the following conditions
@@ -31,9 +29,9 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\"     @(#)send.2	8.2 (Berkeley) 2/21/94
+.\"     @(#)send.2	6.9 (Berkeley) 5/1/91
 .\"
-.Dd February 21, 1994
+.Dd May 1, 1991
 .Dt SEND 2
 .Os BSD 4.2
 .Sh NAME
@@ -44,11 +42,11 @@
 .Sh SYNOPSIS
 .Fd #include <sys/types.h>
 .Fd #include <sys/socket.h>
-.Ft ssize_t
-.Fn send "int s" "const void *msg" "size_t len" "int flags"
-.Ft ssize_t
-.Fn sendto "int s" "const void *msg" "size_t len" "int flags" "const struct sockaddr *to" "int tolen"
-.Ft ssize_t
+.Ft int
+.Fn send "int s" "const void *msg" "int len" "int flags"
+.Ft int
+.Fn sendto "int s" "const void *msg" "int len" "int flags" "const struct sockaddr *to" "int tolen"
+.Ft int
 .Fn sendmsg "int s" "const struct msghdr *msg" "int flags"
 .Sh DESCRIPTION
 .Fn Send ,
@@ -126,7 +124,7 @@ if an error occurred.
 and
 .Fn sendmsg
 fail if:
-.Bl -tag -width Er
+.Bl -tag -width [EWOULDBLOCK]
 .It Bq Er EBADF
 An invalid descriptor was specified.
 .It Bq Er ENOTSOCK
@@ -138,7 +136,7 @@ An invalid user space address was specified for a parameter.
 .It Bq Er EMSGSIZE
 The socket requires that message be sent atomically,
 and the size of the message to be sent made this impossible.
-.It Bq Er EAGAIN
+.It Bq Er EWOULDBLOCK
 The socket is marked non-blocking and the requested operation
 would block.
 .It Bq Er ENOBUFS
@@ -148,11 +146,6 @@ The operation may succeed when buffers become available.
 The output queue for a network interface was full.
 This generally indicates that the interface has stopped sending,
 but may be caused by transient congestion.
-.It Bq Er EACCES
-The SO_BROADCAST option is not set on the socket, and a broadcast address
-was given as the destination.
-.It Bq Er EHOSTUNREACH
-The destination for the message is unreachable.
 .El
 .Sh SEE ALSO
 .Xr fcntl 2 ,
@@ -163,6 +156,6 @@ The destination for the message is unreachable.
 .Xr write 2
 .Sh HISTORY
 The
-.Fn send
+.Nm
 function call appeared in
 .Bx 4.2 .

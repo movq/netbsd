@@ -1,8 +1,6 @@
-/*	$NetBSD: vars.c,v 1.5 1997/10/19 05:04:04 lukem Exp $	*/
-
 /*
- * Copyright (c) 1980, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1980 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,17 +31,11 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)vars.c	8.1 (Berkeley) 6/6/93";
-#else
-__RCSID("$NetBSD: vars.c,v 1.5 1997/10/19 05:04:04 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)vars.c	5.6 (Berkeley) 6/1/90";
 #endif /* not lint */
 
 #include "rcv.h"
-#include "extern.h"
 
 /*
  * Mail -- a mail program
@@ -54,12 +46,12 @@ __RCSID("$NetBSD: vars.c,v 1.5 1997/10/19 05:04:04 lukem Exp $");
 /*
  * Assign a value to a variable.
  */
-void
+
 assign(name, value)
 	char name[], value[];
 {
-	struct var *vp;
-	int h;
+	register struct var *vp;
+	register int h;
 
 	h = hash(name);
 	vp = lookup(name);
@@ -79,7 +71,7 @@ assign(name, value)
  * strings whose value is "" since they are expected to be frequent.
  * Thus, we cannot free same!
  */
-void
+
 vfree(cp)
 	char *cp;
 {
@@ -103,8 +95,8 @@ vcopy(str)
 		return "";
 	len = strlen(str) + 1;
 	if ((new = malloc(len)) == NULL)
-		errx(1, "Out of memory");
-	memmove(new, str, (int) len);
+		panic("Out of memory");
+	bcopy(str, new, (int) len);
 	return new;
 }
 
@@ -117,7 +109,7 @@ char *
 value(name)
 	char name[];
 {
-	struct var *vp;
+	register struct var *vp;
 
 	if ((vp = lookup(name)) == NOVAR)
 		return(getenv(name));
@@ -131,9 +123,9 @@ value(name)
 
 struct var *
 lookup(name)
-	char name[];
+	register char name[];
 {
-	struct var *vp;
+	register struct var *vp;
 
 	for (vp = variables[hash(name)]; vp != NOVAR; vp = vp->v_link)
 		if (*vp->v_name == *name && equal(vp->v_name, name))
@@ -147,9 +139,9 @@ lookup(name)
 
 struct grouphead *
 findgroup(name)
-	char name[];
+	register char name[];
 {
-	struct grouphead *gh;
+	register struct grouphead *gh;
 
 	for (gh = groups[hash(name)]; gh != NOGRP; gh = gh->g_link)
 		if (*gh->g_name == *name && equal(gh->g_name, name))
@@ -160,12 +152,12 @@ findgroup(name)
 /*
  * Print a group out on stdout
  */
-void
+
 printgroup(name)
 	char name[];
 {
-	struct grouphead *gh;
-	struct group *gp;
+	register struct grouphead *gh;
+	register struct group *gp;
 
 	if ((gh = findgroup(name)) == NOGRP) {
 		printf("\"%s\": not a group\n", name);
@@ -181,11 +173,11 @@ printgroup(name)
  * Hash the passed string and return an index into
  * the variable or group hash table.
  */
-int
+
 hash(name)
-	char *name;
+	register char *name;
 {
-	int h = 0;
+	register h = 0;
 
 	while (*name) {
 		h <<= 2;

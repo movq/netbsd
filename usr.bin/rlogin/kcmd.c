@@ -1,5 +1,3 @@
-/*	$NetBSD: kcmd.c,v 1.5 1997/10/19 14:10:27 lukem Exp $	*/
-
 /*
  * Copyright (c) 1983, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -34,12 +32,8 @@
  */
 
 #ifndef lint
-#if 0
 static char Xsccsid[] = "derived from @(#)rcmd.c 5.17 (Berkeley) 6/27/88";
 static char sccsid[] = "@(#)kcmd.c	8.2 (Berkeley) 8/19/93";
-#else
-__RCSID("$NetBSD: kcmd.c,v 1.5 1997/10/19 14:10:27 lukem Exp $");
-#endif
 #endif /* not lint */
 
 #include <sys/param.h>
@@ -112,7 +106,8 @@ kcmd(sock, ahost, rport, locuser, remuser, cmd, fd2p, ticket, service, realm,
 		return (-1);
 	}
 
-	host_save = strdup(hp->h_name);
+	host_save = malloc(strlen(hp->h_name) + 1);
+	strcpy(host_save, hp->h_name);
 	*ahost = host_save;
 
 #ifdef KERBEROS
@@ -192,7 +187,7 @@ kcmd(sock, ahost, rport, locuser, remuser, cmd, fd2p, ticket, service, realm,
 			goto bad;
 		}
 		listen(s2, 1);
-		(void)snprintf(num, sizeof num, "%d", lport);
+		(void) sprintf(num, "%d", lport);
 		if (write(s, num, strlen(num) + 1) != strlen(num) + 1) {
 			perror("kcmd(write): setting up stderr");
 			(void) close(s2);
@@ -238,7 +233,7 @@ kcmd(sock, ahost, rport, locuser, remuser, cmd, fd2p, ticket, service, realm,
 	}
 #ifdef KERBEROS
 	if ((status = krb_sendauth(authopts, s, ticket, service, *ahost,
-			       realm, (u_int32_t) getpid(), msg_data,
+			       realm, (unsigned long) getpid(), msg_data,
 			       cred, schedule,
 			       laddr,
 			       faddr,

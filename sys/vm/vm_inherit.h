@@ -1,8 +1,6 @@
-/*	$NetBSD: vm_inherit.h,v 1.7 1994/06/29 06:47:58 cgd Exp $	*/
-
 /* 
- * Copyright (c) 1991, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1991 Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * The Mach Operating System project at Carnegie-Mellon University.
@@ -35,7 +33,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)vm_inherit.h	8.1 (Berkeley) 6/11/93
+ *	@(#)vm_inherit.h	7.2 (Berkeley) 4/21/91
  *
  *
  * Copyright (c) 1987, 1990 Carnegie-Mellon University.
@@ -72,6 +70,14 @@
 #define	_VM_INHERIT_
 
 /*
+ *	Types defined:
+ *
+ *	vm_inherit_t	inheritance codes.
+ */
+
+typedef int		vm_inherit_t;	/* might want to change this */
+
+/*
  *	Enumeration of valid values for vm_inherit_t.
  */
 
@@ -82,4 +88,4 @@
 
 #define VM_INHERIT_DEFAULT	VM_INHERIT_COPY
 
-#endif /* _VM_INHERIT_ */
+#endif	_VM_INHERIT_

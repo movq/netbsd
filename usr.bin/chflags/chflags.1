@@ -1,5 +1,3 @@
-.\"	$NetBSD: chflags.1,v 1.6 1997/10/18 12:39:50 lukem Exp $
-.\"
 .\" Copyright (c) 1989, 1990, 1993, 1994
 .\"	The Regents of the University of California.  All rights reserved.
 .\"
@@ -34,16 +32,16 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\"	@(#)chflags.1	8.4 (Berkeley) 5/2/95
+.\"	@(#)chflags.1	8.2 (Berkeley) 3/31/94
 .\"
-.Dd May 2, 1995
+.Dd March 31, 1994
 .Dt CHFLAGS 1
 .Os
 .Sh NAME
 .Nm chflags
 .Nd change file flags
 .Sh SYNOPSIS
-.Nm
+.Nm chflags
 .Oo
 .Fl R
 .Op Fl H | Fl L | Fl P
@@ -52,7 +50,7 @@
 .Ar file ...
 .Sh DESCRIPTION
 The
-.Nm
+.Nm chflags
 utility modifies the file flags of the listed files
 as specified by the
 .Ar flags
@@ -81,9 +79,8 @@ in the files instead of just the files themselves.
 Flags are a comma separated list of keywords.
 The following keywords are currently defined:
 .Bd -literal -offset indent compact
-arch	set the archived flag (super-user only)
-opaque	set the opaque flag (owner or super-user only)
-nodump	set the nodump flag (owner or super-user only)
+.\"arch	nothing yet.
+dump	set the dump flag
 sappnd	set the system append-only flag (super-user only)
 schg	set the system immutable flag (super-user only)
 uappnd	set the user append-only flag (owner or super-user only)
@@ -95,7 +92,7 @@ Putting the letters
 before an option causes the flag to be turned off.
 For example:
 .Bd -literal -offset indent compact
-nouchg	the immutable bit should be cleared
+nodump	the file should never be dumped
 .Ed
 .Pp
 Symbolic links do not have flags, so unless the
@@ -103,7 +100,7 @@ Symbolic links do not have flags, so unless the
 or
 .Fl L
 option is set,
-.Nm
+.Nm chflags
 on a symbolic link always succeeds and has no effect.
 The
 .Fl H ,
@@ -117,7 +114,7 @@ In addition, these options override each other and the
 command's actions are determined by the last one specified.
 .Pp
 The
-.Nm
+.Nm chflags
 utility exits 0 on success, and >0 if an error occurs.
 .Sh SEE ALSO
 .Xr chflags 2 ,

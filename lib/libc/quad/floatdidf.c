@@ -1,5 +1,3 @@
-/*	$NetBSD: floatdidf.c,v 1.4 1997/07/13 20:01:46 christos Exp $	*/
-
 /*-
  * Copyright (c) 1992, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -37,13 +35,9 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char sccsid[] = "@(#)floatdidf.c	8.1 (Berkeley) 6/4/93";
-#else
-__RCSID("$NetBSD: floatdidf.c,v 1.4 1997/07/13 20:01:46 christos Exp $");
-#endif
+/*static char *sccsid = "from: @(#)floatdidf.c	8.1 (Berkeley) 6/4/93";*/
+static char *rcsid = "$Id: floatdidf.c,v 1.1 1993/09/16 06:05:58 mycroft Exp $";
 #endif /* LIBC_SCCS and not lint */
 
 #include "quad.h"
@@ -74,7 +68,7 @@ __floatdidf(x)
 	 * code and does not know how to get at an exponent.  Machine-
 	 * specific code may be able to do this more efficiently.
 	 */
-	d = (double)u.ul[H] * (((long)1 << (LONG_BITS - 2)) * 4.0);
+	d = (double)u.ul[H] * ((1 << (LONG_BITS - 2)) * 4.0);
 	d += u.ul[L];
 
 	return (neg ? -d : d);

@@ -1,8 +1,6 @@
-/*	$NetBSD: wwframe.c,v 1.4 1996/02/08 21:49:05 mycroft Exp $	*/
-
 /*
- * Copyright (c) 1983, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1983 Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Edward Wang at The University of California, Berkeley.
@@ -37,11 +35,7 @@
  */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)wwframe.c	8.1 (Berkeley) 6/6/93";
-#else
-static char rcsid[] = "$NetBSD: wwframe.c,v 1.4 1996/02/08 21:49:05 mycroft Exp $";
-#endif
+static char sccsid[] = "@(#)wwframe.c	3.20 (Berkeley) 6/6/90";
 #endif /* not lint */
 
 #include "ww.h"
@@ -57,12 +51,14 @@ struct ww *wframe;
 	register r, c;
 	char a1, a2, a3;
 	char b1, b2, b3;
+	register char *smap;
 	register code;
 	register struct ww *w1;
 
 	if (w->ww_w.t > 0) {
 		r = w->ww_w.t - 1;
 		c = w->ww_i.l - 1;
+		smap = &wwsmap[r + 1][c + 1];
 		a1 = 0;
 		a2 = 0;
 		b1 = 0;
@@ -73,7 +69,7 @@ struct ww *wframe;
 				a3 = 1;
 				b3 = 1;
 			} else {
-				a3 = w->ww_index == wwsmap[r + 1][c + 1];
+				a3 = w->ww_index == *smap++;
 				b3 = frameok(w, r, c + 1);
 			}
 			if (b2) {
@@ -97,6 +93,7 @@ struct ww *wframe;
 	if (w->ww_w.b < wwnrow) {
 		r = w->ww_w.b;
 		c = w->ww_i.l - 1;
+		smap = &wwsmap[r - 1][c + 1];
 		a1 = 0;
 		a2 = 0;
 		b1 = 0;
@@ -107,7 +104,7 @@ struct ww *wframe;
 				a3 = 1;
 				b3 = 1;
 			} else {
-				a3 = w->ww_index == wwsmap[r - 1][c + 1];
+				a3 = w->ww_index == *smap++;
 				b3 = frameok(w, r, c + 1);
 			}
 			if (b2) {
@@ -203,7 +200,7 @@ register r, c;
 char code;
 {
 	char oldcode;
-	register unsigned char *smap;
+	register char *smap;
 
 	if (r < f->ww_i.t || r >= f->ww_i.b || c < f->ww_i.l || c >= f->ww_i.r)
 		return;

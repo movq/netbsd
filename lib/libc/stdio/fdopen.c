@@ -1,8 +1,6 @@
-/*	$NetBSD: fdopen.c,v 1.6 1997/07/13 20:14:50 christos Exp $	*/
-
 /*-
- * Copyright (c) 1990, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1990 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Chris Torek.
@@ -36,13 +34,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char sccsid[] = "@(#)fdopen.c	8.1 (Berkeley) 6/4/93";
-#else
-__RCSID("$NetBSD: fdopen.c,v 1.6 1997/07/13 20:14:50 christos Exp $");
-#endif
+static char sccsid[] = "@(#)fdopen.c	5.6 (Berkeley) 2/24/91";
 #endif /* LIBC_SCCS and not lint */
 
 #include <sys/types.h>
@@ -58,7 +51,11 @@ fdopen(fd, mode)
 	const char *mode;
 {
 	register FILE *fp;
+	static int nofile;
 	int flags, oflags, fdflags, tmp;
+
+	if (nofile == 0)
+		nofile = getdtablesize();
 
 	if ((flags = __sflags(mode, &oflags)) == 0)
 		return (NULL);

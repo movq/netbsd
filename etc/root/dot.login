@@ -1,2 +1,4 @@
 tset -Q \?$TERM
-echo "Don't login as root, use the su command."
+stty crt erase ^H
+umask 2
+echo "Don't login as root, use su"

@@ -1,8 +1,6 @@
-/*	$NetBSD: domacro.c,v 1.10 1997/07/20 09:45:45 lukem Exp $	*/
-
 /*
- * Copyright (c) 1985, 1993, 1994
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1985 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,33 +31,32 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)domacro.c	8.3 (Berkeley) 4/2/94";
-#else
-__RCSID("$NetBSD: domacro.c,v 1.10 1997/07/20 09:45:45 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)domacro.c	1.8 (Berkeley) 9/28/90";
 #endif /* not lint */
-
-#include <ctype.h>
-#include <signal.h>
-#include <stdio.h>
-#include <string.h>
 
 #include "ftp_var.h"
 
-void
+#include <signal.h>
+#include <stdio.h>
+#include <errno.h>
+#include <ctype.h>
+#include <sys/ttychars.h>
+
 domacro(argc, argv)
 	int argc;
 	char *argv[];
 {
-	int i, j, count = 2, loopflg = 0;
-	char *cp1, *cp2, line2[200];
-	struct cmd *c;
+	register int i, j;
+	register char *cp1, *cp2;
+	int count = 2, loopflg = 0;
+	char line2[200];
+	extern char **glob(), *globerr;
+	struct cmd *getcmd(), *c;
+	extern struct cmd cmdtab[];
 
 	if (argc < 2 && !another(&argc, &argv, "macro name")) {
-		printf("usage: %s macro_name\n", argv[0]);
+		printf("Usage: %s macro_name.\n", argv[0]);
 		code = -1;
 		return;
 	}
@@ -73,7 +70,7 @@ domacro(argc, argv)
 		code = -1;
 		return;
 	}
-	(void)strcpy(line2, line);
+	(void) strcpy(line2, line);
 TOP:
 	cp1 = macros[i].mac_start;
 	while (cp1 != macros[i].mac_end) {
@@ -94,7 +91,7 @@ TOP:
 				    }
 				    cp1--;
 				    if (argc - 2 >= j) {
-					(void)strcpy(cp2, argv[j+1]);
+					(void) strcpy(cp2, argv[j+1]);
 					cp2 += strlen(argv[j+1]);
 				    }
 				    break;
@@ -103,7 +100,7 @@ TOP:
 					loopflg = 1;
 					cp1++;
 					if (count < argc) {
-					   (void)strcpy(cp2, argv[count]);
+					   (void) strcpy(cp2, argv[count]);
 					   cp2 += strlen(argv[count]);
 					}
 					break;
@@ -121,25 +118,26 @@ TOP:
 		makeargv();
 		c = getcmd(margv[0]);
 		if (c == (struct cmd *)-1) {
-			puts("?Ambiguous command.");
+			printf("?Ambiguous command\n");
 			code = -1;
 		}
 		else if (c == 0) {
-			puts("?Invalid command.");
+			printf("?Invalid command\n");
 			code = -1;
 		}
 		else if (c->c_conn && !connected) {
-			puts("Not connected.");
+			printf("Not connected.\n");
 			code = -1;
 		}
 		else {
-			if (verbose)
-				puts(line);
+			if (verbose) {
+				printf("%s\n",line);
+			}
 			(*c->c_handler)(margc, margv);
 			if (bell && c->c_bell) {
-				(void)putchar('\007');
+				(void) putchar('\007');
 			}
-			(void)strcpy(line, line2);
+			(void) strcpy(line, line2);
 			makeargv();
 			argc = margc;
 			argv = margv;

@@ -1,5 +1,3 @@
-/*	$NetBSD: main.c,v 1.8 1997/07/25 16:46:34 perry Exp $	*/
-
 /*
  * Copyright (c) 1989 The Regents of the University of California.
  * All rights reserved.
@@ -36,23 +34,17 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1989 The Regents of the University of California.\n"
-"All rights reserved.\n");
+char copyright[] =
+"@(#) Copyright (c) 1989 The Regents of the University of California.\n\
+ All rights reserved.\n";
 #endif /* not lint */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)main.c	5.5 (Berkeley) 5/24/93";
-#else
-__RCSID("$NetBSD: main.c,v 1.8 1997/07/25 16:46:34 perry Exp $");
-#endif
+static char sccsid[] = "@(#)main.c	5.4 (Berkeley) 2/26/91";
 #endif /* not lint */
 
 #include <signal.h>
-#include <stdlib.h>
-#include <unistd.h>
 #include "defs.h"
 
 char dflag;
@@ -61,15 +53,12 @@ char rflag;
 char tflag;
 char vflag;
 
-char *symbol_prefix;
 char *file_prefix = "y";
 char *myname = "yacc";
 char *temp_form = "yacc.XXXXXXX";
 
 int lineno;
 int outline;
-
-int explicit_file_name;
 
 char *action_file_name;
 char *code_file_name;
@@ -113,18 +102,10 @@ char  *rassoc;
 short **derives;
 char *nullable;
 
-int main __P((int, char *[]));
+extern char *mktemp();
+extern char *getenv();
 
-void onintr __P((int));
-__dead void done __P((int));
-void set_signals __P((void));
-void usage __P((void));
-void getargs __P((int, char *[]));
-char * allocate __P((unsigned));
-void create_file_names __P((void));
-void open_files __P((void));
 
-__dead void
 done(k)
 int k;
 {
@@ -136,14 +117,12 @@ int k;
 
 
 void
-onintr(signo)
-	int signo;
+onintr()
 {
     done(1);
 }
 
 
-void
 set_signals()
 {
 #ifdef SIGINT
@@ -161,22 +140,19 @@ set_signals()
 }
 
 
-void
 usage()
 {
-    fprintf(stderr, "usage: %s [-dlrtv] [-b file_prefix] [-o outputfile] "
-	"[-p symbol_prefix] filename\n", myname);
+    fprintf(stderr, "usage: %s [-dlrtv] [-b file_prefix] filename\n", myname);
     exit(1);
 }
 
 
-void
 getargs(argc, argv)
 int argc;
 char *argv[];
 {
-    int i;
-    char *s;
+    register int i;
+    register char *s;
 
     if (argc > 0) myname = argv[0];
     for (i = 1; i < argc; ++i)
@@ -210,25 +186,6 @@ char *argv[];
 	case 'l':
 	    lflag = 1;
 	    break;
-
-	case 'o':
-	    if (*++s)
-		output_file_name = s;
-	    else if (++i < argc)
-		output_file_name = argv[i];
-	    else
-		usage();
-	    explicit_file_name = 1;
-		continue;
-
-	case 'p':
-	    if (*++s)
-		symbol_prefix = s;
-	    else if (++i < argc)
-		symbol_prefix = argv[i];
-	    else
-		usage();
-	    continue;
 
 	case 'r':
 	    rflag = 1;
@@ -290,7 +247,7 @@ char *
 allocate(n)
 unsigned n;
 {
-    char *p;
+    register char *p;
 
     p = NULL;
     if (n)
@@ -302,7 +259,6 @@ unsigned n;
 }
 
 
-void
 create_file_names()
 {
     int i, len;
@@ -343,16 +299,17 @@ create_file_names()
     text_file_name[len + 5] = 't';
     union_file_name[len + 5] = 'u';
 
+    mktemp(action_file_name);
+    mktemp(text_file_name);
+    mktemp(union_file_name);
+
     len = strlen(file_prefix);
 
-    if (!output_file_name)
-    {
-	output_file_name = MALLOC(len + 7);
-	if (output_file_name == 0)
-	    no_space();
-	strcpy(output_file_name, file_prefix);
-	strcpy(output_file_name + len, OUTPUT_SUFFIX);
-    }
+    output_file_name = MALLOC(len + 7);
+    if (output_file_name == 0)
+	no_space();
+    strcpy(output_file_name, file_prefix);
+    strcpy(output_file_name + len, OUTPUT_SUFFIX);
 
     if (rflag)
     {
@@ -367,23 +324,11 @@ create_file_names()
 
     if (dflag)
     {
-	if (explicit_file_name)
-	{
-	    defines_file_name = MALLOC(strlen(output_file_name));
-	    if (defines_file_name == 0)
-		no_space();
-	    strcpy(defines_file_name, output_file_name);
-	    if (!strcmp(output_file_name + (strlen(output_file_name)-2), ".c"))
-		defines_file_name [strlen(output_file_name)-1] = 'h';
-	}
-	else
-	{
-	    defines_file_name = MALLOC(len + 7);
-	    if (defines_file_name == 0)
-		no_space();
-	    strcpy(defines_file_name, file_prefix);
-	    strcpy(defines_file_name + len, DEFINES_SUFFIX);
-	}
+	defines_file_name = MALLOC(len + 7);
+	if (defines_file_name == 0)
+	    no_space();
+	strcpy(defines_file_name, file_prefix);
+	strcpy(defines_file_name + len, DEFINES_SUFFIX);
     }
 
     if (vflag)
@@ -397,11 +342,8 @@ create_file_names()
 }
 
 
-void
 open_files()
 {
-    int fd;
-
     create_file_names();
 
     if (input_file == 0)
@@ -411,12 +353,12 @@ open_files()
 	    open_error(input_file_name);
     }
 
-    if (((fd = mkstemp(action_file_name)) == -1) ||
-	(action_file = fdopen(fd, "w")) == NULL)
+    action_file = fopen(action_file_name, "w");
+    if (action_file == 0)
 	open_error(action_file_name);
 
-    if (((fd = mkstemp(text_file_name)) == -1) ||
-	(text_file = fdopen(fd, "w")) == NULL)
+    text_file = fopen(text_file_name, "w");
+    if (text_file == 0)
 	open_error(text_file_name);
 
     if (vflag)
@@ -431,8 +373,8 @@ open_files()
 	defines_file = fopen(defines_file_name, "w");
 	if (defines_file == 0)
 	    open_error(defines_file_name);
-	if (((fd = mkstemp(union_file_name)) == -1) ||
-	    (union_file = fdopen(fd, "w")) == NULL)
+	union_file = fopen(union_file_name, "w");
+	if (union_file ==  0)
 	    open_error(union_file_name);
     }
 
@@ -467,5 +409,4 @@ char *argv[];
     output();
     done(0);
     /*NOTREACHED*/
-    exit(0);
 }

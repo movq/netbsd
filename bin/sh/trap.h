@@ -1,8 +1,6 @@
-/*	$NetBSD: trap.h,v 1.11 1996/10/16 15:45:20 christos Exp $	*/
-
 /*-
- * Copyright (c) 1991, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1991 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Kenneth Almquist.
@@ -35,16 +33,23 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)trap.h	8.3 (Berkeley) 6/5/95
+ *	@(#)trap.h	5.1 (Berkeley) 3/7/91
  */
 
 extern int pendingsigs;
 
-int trapcmd __P((int, char **));
-void clear_traps __P((void));
-long setsignal __P((int));
-void ignoresig __P((int));
-void onsig __P((int));
-void dotrap __P((void));
-void setinteractive __P((int));
-void exitshell __P((int));
+#ifdef __STDC__
+void clear_traps(void);
+int setsignal(int);
+void ignoresig(int);
+void dotrap(void);
+void setinteractive(int);
+void exitshell(int);
+#else
+void clear_traps();
+int setsignal();
+void ignoresig();
+void dotrap();
+void setinteractive();
+void exitshell();
+#endif

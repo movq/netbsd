@@ -1,8 +1,6 @@
-/*	$NetBSD: prword.c,v 1.4 1997/10/11 01:16:40 lukem Exp $	*/
-
 /*-
- * Copyright (c) 1983, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1983 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,22 +31,16 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)prword.c	8.1 (Berkeley) 5/31/93";
-#else
-__RCSID("$NetBSD: prword.c,v 1.4 1997/10/11 01:16:40 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)prword.c	5.3 (Berkeley) 4/8/91";
 #endif /* not lint */
 
-#include	"hangman.h"
+# include	"hangman.h"
 
 /*
  * prword:
  *	Print out the current state of the word
  */
-void
 prword()
 {
 	move(KNOWNY, KNOWNX + sizeof "Word: ");

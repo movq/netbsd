@@ -1,7 +1,5 @@
-/*	$NetBSD: tty_subr.c,v 1.16 1996/10/25 21:20:29 cgd Exp $	*/
-
 /*
- * Copyright (c) 1993, 1994 Theo de Raadt
+ * Copyright (c) 1993 Theo de Raadt
  * All rights reserved.
  *
  * Per Lindqvist <pgd@compuram.bbt.se> supplied an almost fully working
@@ -18,30 +16,19 @@
  * 3. All advertising materials mentioning features or use of this software
  *    must display the following acknowledgement:
  *	This product includes software developed by Theo de Raadt.
- * 4. The name of the author may not be used to endorse or promote products
+ * 4. The name of Theo de Raadt may not be used to endorse or promote products
  *    derived from this software without specific prior written permission.
  *
- * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
- * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
- * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
- * IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
- * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
- * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
- * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
- * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
- * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *	$Id: tty_subr.c,v 1.1 1993/07/12 11:35:18 mycroft Exp $
  */
 
-#include <sys/param.h>
-#include <sys/systm.h>
-#include <sys/buf.h>
-#include <sys/ioctl.h>
-#include <sys/tty.h>
-#ifdef REAL_CLISTS
-#include <sys/clist.h>
-#endif
-#include <sys/malloc.h>
+#include "param.h"
+#include "systm.h"
+#include "buf.h"
+#include "ioctl.h"
+#include "tty.h"
+#include "clist.h"
+#include "malloc.h"
 
 /*
  * At compile time, choose:
@@ -64,10 +51,6 @@
 #define QMEM(n)		(n)
 #endif
 
-void	cinit __P((void));
-#ifdef QBITS
-void	clrbits __P((u_char *, int, int));
-#endif
 
 /*
  * Initialize clists.
@@ -195,7 +178,6 @@ q_to_b(clp, cp, count)
  * Return count of contiguous characters in clist.
  * Stop counting if flag&character is non-null.
  */
-int
 ndqb(clp, flag)
 	struct clist *clp;
 	int flag;
@@ -206,30 +188,14 @@ ndqb(clp, flag)
 	int s;
 
 	s = spltty();
-	if ((cc = clp->c_cc) == 0)
+	if ((cc = clp->c_cc) == 0 || flag == 0)
 		goto out;
-
-	if (flag == 0) {
-		count = clp->c_cl - clp->c_cf;
-		if (count <= 0)
-			count = clp->c_ce - clp->c_cf;
-		goto out;
-	}
 
 	i = clp->c_cf - clp->c_cs;
-	if (flag & TTY_QUOTE) {
-		while (cc-- > 0 && !(clp->c_cs[i++] & (flag & ~TTY_QUOTE) ||
-		    isset(clp->c_cq, i))) {
-			count++;
-			if (i == clp->c_cn)
-				break;
-		}
-	} else {
-		while (cc-- > 0 && !(clp->c_cs[i++] & flag)) {
-			count++;
-			if (i == clp->c_cn)
-				break;
-		}
+	while (cc-- > 0 && (clp->c_cs[i++] & flag) == 0) {
+		count++;
+		if (i == clp->c_cn)
+			break;
 	}
 out:
 	splx(s);
@@ -280,7 +246,9 @@ putc(c, clp)
 	int c;
 	struct clist *clp;
 {
+	register u_char *q;
 	register int i;
+	int r = -1;
 	int s;
 
 	s = spltty();
@@ -290,7 +258,7 @@ putc(c, clp)
 	if (clp->c_cc == 0) {
 		if (!clp->c_cs) {
 #if defined(DIAGNOSTIC) || 1
-			printf("putc: required clalloc\n");
+			printf("b_to_q: required clalloc\n");
 #endif
 			if(clalloc(clp, 1024, 1)) {
 out:
@@ -370,13 +338,13 @@ clrbits(cp, off, len)
  */
 int
 b_to_q(cp, count, clp)
-	const u_char *cp;
+	u_char *cp;
 	int count;
 	struct clist *clp;
 {
-	register int cc;
-	register const u_char *p = cp;
-	int s;
+	register int i, cc;
+	register u_char *p = cp;
+	int off, s;
 
 	if (count <= 0)
 		return 0;
@@ -480,7 +448,9 @@ firstc(clp, c)
 	struct clist *clp;
 	int *c;
 {
+	int empty = 0;
 	register u_char *cp;
+	register int i;
 
 	cc = clp->c_cc;
 	if (cc == 0)
@@ -526,7 +496,7 @@ unputc(clp)
 			c |= TTY_QUOTE;
 #else
 		if (*(clp->c_cf - clp->c_cs + clp->c_cq))
-			c |= TTY_QUOTE;
+			c | TTY_QUOTE;
 #endif
 	}
 	if (clp->c_cc == 0)

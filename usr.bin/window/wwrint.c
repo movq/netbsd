@@ -1,8 +1,6 @@
-/*	$NetBSD: wwrint.c,v 1.4 1995/12/21 10:46:24 mycroft Exp $	*/
-
 /*
- * Copyright (c) 1983, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1983 Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Edward Wang at The University of California, Berkeley.
@@ -37,15 +35,11 @@
  */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)wwrint.c	8.1 (Berkeley) 6/6/93";
-#else
-static char rcsid[] = "$NetBSD: wwrint.c,v 1.4 1995/12/21 10:46:24 mycroft Exp $";
-#endif
+static char sccsid[] = "@(#)wwrint.c	3.12 (Berkeley) 7/1/91";
 #endif /* not lint */
 
 #include "ww.h"
-#include "tt.h"
+#include <fcntl.h>
 
 /*
  * Tty input interrupt handler.
@@ -62,22 +56,16 @@ wwrint()
 {
 	register n;
 
+	if (wwibp == wwibq)
+		wwibp = wwibq = wwib;
 	wwnread++;
+	(void) fcntl(0, F_SETFL, O_NONBLOCK|wwnewtty.ww_fflags);
 	n = read(0, wwibq, wwibe - wwibq);
+	(void) fcntl(0, F_SETFL, wwnewtty.ww_fflags);
 	if (n > 0) {
-		if (tt.tt_rint)
-			n = (*tt.tt_rint)(wwibq, n);
-		if (n > 0) {
-			wwibq += n;
-			wwnreadc += n;
-			/*
-			 * Hasten or delay the next checkpoint,
-			 * as the case may be.
-			 */
-			if (tt.tt_checkpoint && !wwdocheckpoint)
-				(void) alarm(1);
-			wwsetintr();
-		}
+		wwibq += n;
+		wwnreadc += n;
+		wwsetintr();
 	} else if (n == 0)
 		wwnreadz++;
 	else

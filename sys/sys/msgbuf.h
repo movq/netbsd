@@ -1,8 +1,6 @@
-/*	$NetBSD: msgbuf.h,v 1.10 1997/09/19 13:57:30 leo Exp $	*/
-
 /*
- * Copyright (c) 1981, 1984, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1981, 1984 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,27 +30,17 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)msgbuf.h	8.1 (Berkeley) 6/2/93
+ *	@(#)msgbuf.h	7.5 (Berkeley) 5/2/91
  */
 
-#ifndef _SYS_MSGBUF_H_
-#define _SYS_MSGBUF_H_
-
-struct	kern_msgbuf {
+#define	MSG_BSIZE	(4096 - 3 * sizeof(long))
+struct	msgbuf {
 #define	MSG_MAGIC	0x063061
 	long	msg_magic;
 	long	msg_bufx;		/* write pointer */
 	long	msg_bufr;		/* read pointer */
-	long	msg_bufs;		/* real msg_bufc size (bytes) */
-	char	msg_bufc[1];		/* buffer */
+	char	msg_bufc[MSG_BSIZE];	/* buffer */
 };
-
-#ifdef _KERNEL
-extern int	msgbufmapped;		/* is the message buffer mapped */
-extern int	msgbufenabled;		/* is logging to the buffer enabled */
-extern struct	kern_msgbuf *msgbufp;	/* the mapped buffer, itself. */
-
-void	initmsgbuf __P((caddr_t buf, size_t bufsize));
+#ifdef KERNEL
+struct	msgbuf *msgbufp;
 #endif
-
-#endif /* !_SYS_MSGBUF_H_ */

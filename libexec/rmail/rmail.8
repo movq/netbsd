@@ -1,5 +1,3 @@
-.\"	$NetBSD: rmail.8,v 1.10 1997/10/20 02:10:22 enami Exp $
-.\"
 .\" Copyright (c) 1983, 1990 The Regents of the University of California.
 .\" All rights reserved.
 .\"
@@ -31,39 +29,42 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\"	@(#)rmail.8	6.10 (Berkeley) 4/29/93
+.\"     @(#)rmail.8	6.8 (Berkeley) 4/20/91
 .\"
-.Dd April 29, 1993
+.Vx
+.Vx
+.Dd April 20, 1991
 .Dt RMAIL 8
 .Os BSD 4.2
 .Sh NAME
 .Nm rmail
 .Nd handle remote mail received via uucp
 .Sh SYNOPSIS
-.Nm
+.Nm rmail
 .Ar user ...
 .Sh DESCRIPTION
-.Nm
+.Nm Rmail
 interprets incoming mail received via
 .Xr uucp 1 ,
 collapsing ``From'' lines in the form generated
 by
-.Xr mail.local 8
+.Xr binmail  1
 into a single line of the form ``return-path!sender'',
 and passing the processed mail on to
 .Xr sendmail  8  .
 .Pp
-.Nm
+.Nm Rmail
 is explicitly designed for use with
 .Xr uucp
 and
 .Xr sendmail  .
 .Sh SEE ALSO
+.Xr binmail 1 ,
 .Xr uucp 1 ,
-.Xr mail.local 8 ,
 .Xr sendmail 8
 .Sh HISTORY
-The
-.Nm
-program appeared in
-.Bx 4.2 .
+.Nm Rmail
+apeared in 4.2 BSD.
+.Sh BUGS
+.Nm Rmail
+should not reside in /bin.

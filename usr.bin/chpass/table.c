@@ -1,8 +1,6 @@
-/*	$NetBSD: table.c,v 1.4 1997/10/18 12:49:10 lukem Exp $	*/
-
 /*-
- * Copyright (c) 1990, 1993, 1994
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1990 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,13 +31,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)table.c	8.3 (Berkeley) 4/2/94";
-#else
-__RCSID("$NetBSD: table.c,v 1.4 1997/10/18 12:49:10 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)table.c	5.1 (Berkeley) 2/12/91";
 #endif /* not lint */
 
 #include <sys/types.h>
@@ -48,6 +41,9 @@ __RCSID("$NetBSD: table.c,v 1.4 1997/10/18 12:49:10 lukem Exp $");
 
 char e1[] = ": ";
 char e2[] = ":,";
+
+int p_change(), p_class(), p_expire(), p_gecos(), p_gid(), p_hdir();
+int p_login(), p_passwd(), p_shell(), p_uid();
 
 ENTRY list[] = {
 	{ "login",		p_login,  1,   5, e1,   },

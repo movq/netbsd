@@ -1,5 +1,3 @@
-/*	$NetBSD: mkdict.c,v 1.3 1997/10/11 02:12:21 lukem Exp $	*/
-
 /*-
  * Copyright (c) 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -43,11 +41,7 @@ static char copyright[] =
 #endif /* not lint */
 
 #ifndef lint
-#if 0
 static char sccsid[] = "@(#)mkdict.c	8.1 (Berkeley) 6/11/93";
-#else
-static char rcsid[] = "$NetBSD: mkdict.c,v 1.3 1997/10/11 02:12:21 lukem Exp $";
-#endif
 #endif /* not lint */
 
 /*
@@ -70,8 +64,8 @@ main(argc, argv)
 	int argc;
 	char *argv[];
 {
-	char *p, *q;
-	int ch, common, n, nwords;
+	register char *p, *q;
+	register int ch, common, n, nwords;
 	int current, len, prev, qcount;
 	char buf[2][MAXWORDLEN + 1];
 
@@ -83,8 +77,9 @@ main(argc, argv)
 
 	for (nwords = 1;
 	    fgets(buf[current], MAXWORDLEN + 1, stdin) != NULL; ++nwords) {
-		if ((p = strchr(buf[current], '\n')) == NULL) {
-			warnx("word too long: %s", buf[current]);
+		if ((p = index(buf[current], '\n')) == NULL) {
+			fprintf(stderr,
+			    "mkdict: word too long: %s\n", buf[current]);
 			while ((ch = getc(stdin)) != EOF && ch != '\n')
 				;
 			if (ch == EOF)
@@ -124,6 +119,6 @@ main(argc, argv)
 		prev = !prev;
 		current = !current;
 	}
-	warnx("%d words", nwords);
+	fprintf(stderr, "%d words\n", nwords);
 	exit(0);
 }

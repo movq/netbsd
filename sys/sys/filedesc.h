@@ -1,8 +1,6 @@
-/*	$NetBSD: filedesc.h,v 1.15 1997/01/22 07:09:15 mikel Exp $	*/
-
 /*
- * Copyright (c) 1990, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1990 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,11 +30,8 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)filedesc.h	8.1 (Berkeley) 6/2/93
+ *	@(#)filedesc.h	7.4 (Berkeley) 5/4/91
  */
-
-#ifndef _SYS_FILEDESC_H_
-#define _SYS_FILEDESC_H_
 
 /*
  * This structure is used for the management of descriptors.  It may be
@@ -53,7 +48,7 @@
  * that will fit in a power-of-two sized piece of memory.
  */
 #define NDFILE		20
-#define NDEXTENT	50		/* 250 bytes in 256-byte alloc. */
+#define NDEXTENT	50		/* 250 bytes in 256-byte alloc. */ 
 
 struct filedesc {
 	struct	file **fd_ofiles;	/* file structures for open files */
@@ -61,8 +56,8 @@ struct filedesc {
 	struct	vnode *fd_cdir;		/* current directory */
 	struct	vnode *fd_rdir;		/* root directory */
 	int	fd_nfiles;		/* number of open files allocated */
-	int	fd_lastfile;		/* high-water mark of fd_ofiles */
-	int	fd_freefile;		/* approx. next free file */
+	u_short	fd_lastfile;		/* high-water mark of fd_ofiles */
+	u_short	fd_freefile;		/* approx. next free file */
 	u_short	fd_cmask;		/* mask for file creation */
 	u_short	fd_refcnt;		/* reference count */
 };
@@ -92,23 +87,13 @@ struct filedesc0 {
  */
 #define OFILESIZE (sizeof(struct file *) + sizeof(char))
 
-#ifdef _KERNEL
+#ifdef KERNEL
 /*
  * Kernel global variables and routines.
  */
-int	dupfdopen __P((struct filedesc *fdp, int indx, int dfd, int mode,
-	    int error));
 int	fdalloc __P((struct proc *p, int want, int *result));
 int	fdavail __P((struct proc *p, int n));
 int	falloc __P((struct proc *p, struct file **resultfp, int *resultfd));
-void	ffree __P((struct file *));
 struct	filedesc *fdcopy __P((struct proc *p));
 void	fdfree __P((struct proc *p));
-int	fdrelease __P((struct proc *p, int));
-void	fdcloseexec __P((struct proc *));
-
-int	closef __P((struct file *, struct proc *));
-int	getsock __P((struct filedesc *, int, struct file **));
-#endif /* _KERNEL */
-
-#endif /* !_SYS_FILEDESC_H_ */
+#endif

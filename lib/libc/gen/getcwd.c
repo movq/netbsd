@@ -1,8 +1,6 @@
-/*	$NetBSD: getcwd.c,v 1.7 1997/07/21 14:07:04 jtc Exp $	*/
-
 /*
- * Copyright (c) 1989, 1991, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1989, 1991 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,16 +31,10 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char sccsid[] = "@(#)getcwd.c	8.1 (Berkeley) 6/4/93";
-#else
-__RCSID("$NetBSD: getcwd.c,v 1.7 1997/07/21 14:07:04 jtc Exp $");
-#endif
+static char sccsid[] = "@(#)getcwd.c	5.11 (Berkeley) 2/24/91";
 #endif /* LIBC_SCCS and not lint */
 
-#include "namespace.h"
 #include <sys/param.h>
 #include <sys/stat.h>
 #include <errno.h>
@@ -52,13 +44,9 @@ __RCSID("$NetBSD: getcwd.c,v 1.7 1997/07/21 14:07:04 jtc Exp $");
 #include <string.h>
 #include <unistd.h>
 
-#ifdef __weak_alias
-__weak_alias(getcwd,_getcwd);
-#endif
-
 #define	ISDOT(dp) \
 	(dp->d_name[0] == '.' && (dp->d_name[1] == '\0' || \
-	    (dp->d_name[1] == '.' && dp->d_name[2] == '\0')))
+	    dp->d_name[1] == '.' && dp->d_name[2] == '\0'))
 
 char *
 getcwd(pt, size)
@@ -87,12 +75,12 @@ getcwd(pt, size)
 		ptsize = 0;
 		if (!size) {
 			errno = EINVAL;
-			return (NULL);
+			return((char *)NULL);
 		}
 		ept = pt + size;
 	} else {
-		if ((pt = malloc(ptsize = 1024 - 4)) == NULL)
-			return (NULL);
+		if (!(pt = (char *)malloc(ptsize = 1024 - 4)))
+			return((char *)NULL);
 		ept = pt + ptsize;
 	}
 	bpt = ept - 1;
@@ -103,7 +91,7 @@ getcwd(pt, size)
 	 * Should always be enough (it's 340 levels).  If it's not, allocate
 	 * as necessary.  Special * case the first stat, it's ".", not "..".
 	 */
-	if ((up = malloc(upsize = 1024 - 4)) == NULL)
+	if (!(up = (char *)malloc(upsize = 1024 - 4)))
 		goto err;
 	eup = up + MAXPATHLEN;
 	bup = up;
@@ -135,9 +123,9 @@ getcwd(pt, size)
 			 * path to the beginning of the buffer, but it's always
 			 * been that way and stuff would probably break.
 			 */
-			bcopy(bpt, pt, ept - bpt);
+			(void)bcopy(bpt, pt, ept - bpt);
 			free(up);
-			return (pt);
+			return(pt);
 		}
 
 		/*
@@ -146,9 +134,8 @@ getcwd(pt, size)
 		 * possible component name, plus a trailing NULL.
 		 */
 		if (bup + 3  + MAXNAMLEN + 1 >= eup) {
-			if ((up = realloc(up, upsize *= 2)) == NULL)
+			if (!(up = (char *)realloc(up, upsize *= 2)))
 				goto err;
-			bup = up;
 			eup = up + upsize;
 		}
 		*bup++ = '.';
@@ -207,11 +194,11 @@ getcwd(pt, size)
 			}
 			off = bpt - pt;
 			len = ept - bpt;
-			if ((pt = realloc(pt, ptsize *= 2)) == NULL)
+			if (!(pt = (char *)realloc(pt, ptsize *= 2)))
 				goto err;
 			bpt = pt + off;
 			ept = pt + ptsize;
-			bcopy(bpt, ept - len, len);
+			(void)bcopy(bpt, ept - len, len);
 			bpt = ept - len;
 		}
 		if (!first)
@@ -237,5 +224,5 @@ err:
 	if (ptsize)
 		free(pt);
 	free(up);
-	return (NULL);
+	return((char *)NULL);
 }

@@ -1,8 +1,6 @@
-/*	$NetBSD: acu.c,v 1.4 1996/12/29 10:34:03 cgd Exp $	*/
-
 /*
- * Copyright (c) 1983, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1983 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -34,10 +32,7 @@
  */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)acu.c	8.1 (Berkeley) 6/6/93";
-#endif
-static char rcsid[] = "$NetBSD: acu.c,v 1.4 1996/12/29 10:34:03 cgd Exp $";
+static char sccsid[] = "@(#)acu.c	5.8 (Berkeley) 3/2/91";
 #endif /* not lint */
 
 #include "tip.h"
@@ -89,7 +84,7 @@ connect()
 		printf("\ncall aborted\n");
 		logent(value(HOST), "", "", "call aborted");
 		if (acu != NOACU) {
-			setboolean(value(VERBOSE), FALSE);
+			boolean(value(VERBOSE)) = FALSE;
 			if (conflag)
 				disconnect(NOSTR);
 			else
@@ -107,8 +102,6 @@ connect()
 				*cp++ = '\0';
 			
 			if (conflag = (*acu->acu_dialer)(phnum, CU)) {
-				if (CM != NOSTR)
-					pwrite(FD, CM, size(CM));
 				logent(value(HOST), phnum, acu->acu_name,
 					"call completed");
 				return (NOSTR);
@@ -145,8 +138,6 @@ connect()
 			
 			if (conflag = (*acu->acu_dialer)(phnum, CU)) {
 				fclose(fd);
-				if (CM != NOSTR)
-					pwrite(FD, CM, size(CM));
 				logent(value(HOST), phnum, acu->acu_name,
 					"call completed");
 				return (NOSTR);

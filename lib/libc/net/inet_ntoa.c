@@ -1,8 +1,6 @@
-/*	$NetBSD: inet_ntoa.c,v 1.6 1997/07/21 14:08:07 jtc Exp $	*/
-
 /*
- * Copyright (c) 1983, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1983 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,28 +31,18 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char sccsid[] = "@(#)inet_ntoa.c	8.1 (Berkeley) 6/4/93";
-#else
-__RCSID("$NetBSD: inet_ntoa.c,v 1.6 1997/07/21 14:08:07 jtc Exp $");
-#endif
+static char sccsid[] = "@(#)inet_ntoa.c	5.6 (Berkeley) 2/24/91";
 #endif /* LIBC_SCCS and not lint */
 
 /*
  * Convert network-format internet address
  * to base 256 d.d.d.d representation.
  */
-#include "namespace.h"
 #include <sys/types.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <stdio.h>
-
-#ifdef __weak_alias
-__weak_alias(inet_ntoa,_inet_ntoa);
-#endif
 
 char *
 inet_ntoa(in)

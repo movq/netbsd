@@ -1,8 +1,6 @@
-/*	$NetBSD: misc.c,v 1.6 1997/10/12 00:54:16 lukem Exp $	*/
-
 /*
- * Copyright (c) 1983, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1983 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,32 +31,20 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)misc.c	8.1 (Berkeley) 5/31/93";
-#else
-__RCSID("$NetBSD: misc.c,v 1.6 1997/10/12 00:54:16 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)misc.c	5.6 (Berkeley) 6/1/90";
 #endif /* not lint */
-
-#include <sys/file.h>
-#include <termios.h>
-
-#if __STDC__
-#include	<stdarg.h>
-#else
-#include	<varargs.h>
-#endif
 
 #include	"mille.h"
 #ifndef	unctrl
 #include	"unctrl.h"
 #endif
 
+# include	<sys/file.h>
 
 # ifdef	attron
 #	include	<term.h>
+#	define	_tty	cur_term->Nttyb
 # endif	attron
 
 /*
@@ -67,35 +53,23 @@ __RCSID("$NetBSD: misc.c,v 1.6 1997/10/12 00:54:16 lukem Exp $");
 
 #define	NUMSAFE	4
 
-bool
-#if __STDC__
-error(char *str, ...)
-#else
-error(str, va_alist)
-	char	*str;
-	va_dcl
-#endif
+/* VARARGS1 */
+error(str, arg)
+char	*str;
 {
-	va_list ap;
-
-#if __STDC__
-	va_start(ap, str);
-#else
-	va_start(ap);
-#endif
-	wmove(Score, ERR_Y, ERR_X);
-	vwprintw(Score, str, ap);
+	stdscr = Score;
+	mvprintw(ERR_Y, ERR_X, str, arg);
 	clrtoeol();
 	putchar('\07');
 	refresh();
-	va_end(ap);
+	stdscr = Board;
 	return FALSE;
 }
 
 CARD
 getcard()
 {
-	int	c, c1;
+	reg int		c, c1;
 
 	for (;;) {
 		while ((c = readch()) == '\n' || c == '\r' || c == ' ')
@@ -141,10 +115,8 @@ cont:		;
 	}
 }
 
-int
 check_ext(forcomp)
-	bool	forcomp;
-{
+reg bool	forcomp; {
 
 
 	if (End == 700)
@@ -163,8 +135,8 @@ done:
 			}
 		}
 		else {
-			PLAY	*pp, *op;
-			int	i, safe, miles;
+			reg PLAY	*pp, *op;
+			reg int		i, safe, miles;
 
 			pp = &Player[COMP];
 			op = &Player[PLAYER];
@@ -197,11 +169,10 @@ done:
  *	Get a yes or no answer to the given question.  Saves are
  * also allowed.  Return TRUE if the answer was yes, FALSE if no.
  */
-int
 getyn(promptno)
-	int	promptno;
-{
-	char	c;
+register int	promptno; {
+
+	reg char	c;
 
 	Saved = FALSE;
 	for (;;) {
@@ -225,9 +196,6 @@ getyn(promptno)
 			refresh();
 			Saved = save();
 			continue;
-		  case CTRL('L'):
-			wrefresh(curscr);
-			break;
 		  default:
 			addstr(unctrl(c));
 			refresh();
@@ -242,9 +210,10 @@ getyn(promptno)
  * came from a saved file, make sure that they don't want to restore
  * it.  Exit appropriately.
  */
-void
-check_more()
-{
+check_more() {
+
+	flush_input();
+
 	On_exit = TRUE;
 	if (Player[PLAYER].total >= 5000 || Player[COMP].total >= 5000)
 		if (getyn(ANOTHERGAMEPROMPT))
@@ -266,17 +235,27 @@ check_more()
 	if (!Saved && getyn(SAVEGAMEPROMPT))
 		if (!save())
 			return;
-	die(0);
+	die();
 }
 
-int
 readch()
 {
-	int	cnt;
+	reg int		cnt;
 	static char	c;
 
 	for (cnt = 0; read(0, &c, 1) <= 0; cnt++)
 		if (cnt > 100)
 			exit(1);
 	return c;
+}
+
+flush_input()
+{
+# ifdef	TIOCFLUSH
+	static int	ioctl_args = O_RDONLY;
+
+	(void) ioctl(fileno(stdin), TIOCFLUSH, &ioctl_args);
+# else
+	fflush(stdin);
+# endif
 }

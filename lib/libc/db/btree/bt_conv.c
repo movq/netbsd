@@ -1,7 +1,5 @@
-/*	$NetBSD: bt_conv.c,v 1.7 1997/07/13 18:51:49 christos Exp $	*/
-
 /*-
- * Copyright (c) 1990, 1993, 1994
+ * Copyright (c) 1990, 1993
  *	The Regents of the University of California.  All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
@@ -36,13 +34,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char sccsid[] = "@(#)bt_conv.c	8.5 (Berkeley) 8/17/94";
-#else
-__RCSID("$NetBSD: bt_conv.c,v 1.7 1997/07/13 18:51:49 christos Exp $");
-#endif
+static char sccsid[] = "@(#)bt_conv.c	8.1 (Berkeley) 6/4/93";
 #endif /* LIBC_SCCS and not lint */
 
 #include <sys/param.h>
@@ -71,11 +64,11 @@ __bt_pgin(t, pg, pp)
 	void *pp;
 {
 	PAGE *h;
-	indx_t i, top;
+	int i, top;
 	u_char flags;
 	char *p;
 
-	if (!F_ISSET(((BTREE *)t), B_NEEDSWAP))
+	if (!ISSET(((BTREE *)t), B_NEEDSWAP))
 		return;
 	if (pg == P_META) {
 		mswap(pp);
@@ -83,50 +76,50 @@ __bt_pgin(t, pg, pp)
 	}
 
 	h = pp;
-	M_32_SWAP(h->pgno);
-	M_32_SWAP(h->prevpg);
-	M_32_SWAP(h->nextpg);
-	M_32_SWAP(h->flags);
-	M_16_SWAP(h->lower);
-	M_16_SWAP(h->upper);
+	BLSWAP(h->pgno);
+	BLSWAP(h->prevpg);
+	BLSWAP(h->nextpg);
+	BLSWAP(h->flags);
+	BSSWAP(h->lower);
+	BSSWAP(h->upper);
 
 	top = NEXTINDEX(h);
 	if ((h->flags & P_TYPE) == P_BINTERNAL)
 		for (i = 0; i < top; i++) {
-			M_16_SWAP(h->linp[i]);
+			BSSWAP(h->linp[i]);
 			p = (char *)GETBINTERNAL(h, i);
-			P_32_SWAP(p);
-			p += sizeof(u_int32_t);
-			P_32_SWAP(p);
+			BLPSWAP(p);
+			p += sizeof(size_t);
+			BLPSWAP(p);
 			p += sizeof(pgno_t);
 			if (*(u_char *)p & P_BIGKEY) {
 				p += sizeof(u_char);
-				P_32_SWAP(p);
+				BLPSWAP(p);
 				p += sizeof(pgno_t);
-				P_32_SWAP(p);
+				BLPSWAP(p);
 			}
 		}
 	else if ((h->flags & P_TYPE) == P_BLEAF)
 		for (i = 0; i < top; i++) {
-			M_16_SWAP(h->linp[i]);
+			BSSWAP(h->linp[i]);
 			p = (char *)GETBLEAF(h, i);
-			P_32_SWAP(p);
-			p += sizeof(u_int32_t);
-			P_32_SWAP(p);
-			p += sizeof(u_int32_t);
+			BLPSWAP(p);
+			p += sizeof(size_t);
+			BLPSWAP(p);
+			p += sizeof(size_t);
 			flags = *(u_char *)p;
 			if (flags & (P_BIGKEY | P_BIGDATA)) {
 				p += sizeof(u_char);
 				if (flags & P_BIGKEY) {
-					P_32_SWAP(p);
+					BLPSWAP(p);
 					p += sizeof(pgno_t);
-					P_32_SWAP(p);
+					BLPSWAP(p);
 				}
 				if (flags & P_BIGDATA) {
-					p += sizeof(u_int32_t);
-					P_32_SWAP(p);
+					p += sizeof(size_t);
+					BLPSWAP(p);
 					p += sizeof(pgno_t);
-					P_32_SWAP(p);
+					BLPSWAP(p);
 				}
 			}
 		}
@@ -139,11 +132,11 @@ __bt_pgout(t, pg, pp)
 	void *pp;
 {
 	PAGE *h;
-	indx_t i, top;
+	int i, top;
 	u_char flags;
 	char *p;
 
-	if (!F_ISSET(((BTREE *)t), B_NEEDSWAP))
+	if (!ISSET(((BTREE *)t), B_NEEDSWAP))
 		return;
 	if (pg == P_META) {
 		mswap(pp);
@@ -155,49 +148,49 @@ __bt_pgout(t, pg, pp)
 	if ((h->flags & P_TYPE) == P_BINTERNAL)
 		for (i = 0; i < top; i++) {
 			p = (char *)GETBINTERNAL(h, i);
-			P_32_SWAP(p);
-			p += sizeof(u_int32_t);
-			P_32_SWAP(p);
+			BLPSWAP(p);
+			p += sizeof(size_t);
+			BLPSWAP(p);
 			p += sizeof(pgno_t);
 			if (*(u_char *)p & P_BIGKEY) {
 				p += sizeof(u_char);
-				P_32_SWAP(p);
+				BLPSWAP(p);
 				p += sizeof(pgno_t);
-				P_32_SWAP(p);
+				BLPSWAP(p);
 			}
-			M_16_SWAP(h->linp[i]);
+			BSSWAP(h->linp[i]);
 		}
 	else if ((h->flags & P_TYPE) == P_BLEAF)
 		for (i = 0; i < top; i++) {
 			p = (char *)GETBLEAF(h, i);
-			P_32_SWAP(p);
-			p += sizeof(u_int32_t);
-			P_32_SWAP(p);
-			p += sizeof(u_int32_t);
+			BLPSWAP(p);
+			p += sizeof(size_t);
+			BLPSWAP(p);
+			p += sizeof(size_t);
 			flags = *(u_char *)p;
 			if (flags & (P_BIGKEY | P_BIGDATA)) {
 				p += sizeof(u_char);
 				if (flags & P_BIGKEY) {
-					P_32_SWAP(p);
+					BLPSWAP(p);
 					p += sizeof(pgno_t);
-					P_32_SWAP(p);
+					BLPSWAP(p);
 				}
 				if (flags & P_BIGDATA) {
-					p += sizeof(u_int32_t);
-					P_32_SWAP(p);
+					p += sizeof(size_t);
+					BLPSWAP(p);
 					p += sizeof(pgno_t);
-					P_32_SWAP(p);
+					BLPSWAP(p);
 				}
 			}
-			M_16_SWAP(h->linp[i]);
+			BSSWAP(h->linp[i]);
 		}
 
-	M_32_SWAP(h->pgno);
-	M_32_SWAP(h->prevpg);
-	M_32_SWAP(h->nextpg);
-	M_32_SWAP(h->flags);
-	M_16_SWAP(h->lower);
-	M_16_SWAP(h->upper);
+	BLSWAP(h->pgno);
+	BLSWAP(h->prevpg);
+	BLSWAP(h->nextpg);
+	BLSWAP(h->flags);
+	BSSWAP(h->lower);
+	BSSWAP(h->upper);
 }
 
 /*
@@ -213,16 +206,16 @@ mswap(pg)
 	char *p;
 
 	p = (char *)pg;
-	P_32_SWAP(p);		/* magic */
-	p += sizeof(u_int32_t);
-	P_32_SWAP(p);		/* version */
-	p += sizeof(u_int32_t);
-	P_32_SWAP(p);		/* psize */
-	p += sizeof(u_int32_t);
-	P_32_SWAP(p);		/* free */
-	p += sizeof(u_int32_t);
-	P_32_SWAP(p);		/* nrecs */
-	p += sizeof(u_int32_t);
-	P_32_SWAP(p);		/* flags */
-	p += sizeof(u_int32_t);
+	BLPSWAP(p);		/* m_magic */
+	p += sizeof(u_long);
+	BLPSWAP(p);		/* m_version */
+	p += sizeof(u_long);
+	BLPSWAP(p);		/* m_psize */
+	p += sizeof(u_long);
+	BLPSWAP(p);		/* m_free */
+	p += sizeof(u_long);
+	BLPSWAP(p);		/* m_nrecs */
+	p += sizeof(u_long);
+	BLPSWAP(p);		/* m_flags */
+	p += sizeof(u_long);
 }

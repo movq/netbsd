@@ -1,13 +1,8 @@
-#	@(#)Makefile	8.1 (Berkeley) 6/6/93
-#	$NetBSD: Makefile,v 1.6 1997/10/18 06:43:06 lukem Exp $
+#	@(#)Makefile	5.3 (Berkeley) 5/11/90
 
 PROG=	trpt
-MAN=	trpt.8
-
+MAN8=	trpt.0
 BINGRP=	kmem
 BINMODE=2555
-
-DPADD=	${LIBKVM}
-LDADD=	-lkvm
 
 .include <bsd.prog.mk>

@@ -1,5 +1,3 @@
-/*	$NetBSD: ar_io.c,v 1.7 1997/07/20 20:32:15 christos Exp $	*/
-
 /*-
  * Copyright (c) 1992 Keith Muller.
  * Copyright (c) 1992, 1993
@@ -37,13 +35,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
 static char sccsid[] = "@(#)ar_io.c	8.2 (Berkeley) 4/18/94";
-#else
-__RCSID("$NetBSD: ar_io.c,v 1.7 1997/07/20 20:32:15 christos Exp $");
-#endif
 #endif /* not lint */
 
 #include <sys/types.h>
@@ -60,7 +53,6 @@ __RCSID("$NetBSD: ar_io.c,v 1.7 1997/07/20 20:32:15 christos Exp $");
 #include <ctype.h>
 #include <errno.h>
 #include <stdlib.h>
-#include <err.h>
 #include "pax.h"
 #include "extern.h"
 
@@ -86,11 +78,9 @@ static int invld_rec;			/* tape has out of spec record size */
 static int wr_trail = 1;		/* trailer was rewritten in append */
 static int can_unlnk = 0;		/* do we unlink null archives?  */
 char *arcname;                  	/* printable name of archive */
-char *gzip_program;			/* name of gzip program */
 
 static int get_phys __P((void));
 extern sigset_t s_mask;
-static void ar_start_gzip __P((int));
 
 /*
  * ar_open()
@@ -130,8 +120,6 @@ ar_open(name)
 			arcname = STDN;
 		} else if ((arfd = open(name, EXT_MODE, DMOD)) < 0)
 			syswarn(0, errno, "Failed open to read on %s", name);
-		if (zflag)
-			ar_start_gzip(arfd);
 		break;
 	case ARCHIVE:
 		if (name == NULL) {
@@ -141,12 +129,8 @@ ar_open(name)
 			syswarn(0, errno, "Failed open to write on %s", name);
 		else
 			can_unlnk = 1;
-		if (zflag)
-			ar_start_gzip(arfd);
 		break;
 	case APPND:
-		if (zflag)
-			err(1, "can not gzip while appending");
 		if (name == NULL) {
 			arfd = STDOUT_FILENO;
 			arcname = STDO;
@@ -176,7 +160,7 @@ ar_open(name)
 		return(-1);
 	}
 	if (S_ISDIR(arsb.st_mode)) {
-		tty_warn(0, "Cannot write an archive on top of a directory %s",
+		warn(0, "Cannot write an archive on top of a directory %s",
 		    arcname);
 		(void)close(arfd);
 		arfd = -1;
@@ -396,7 +380,7 @@ ar_close()
 #	else
 		(void)fprintf(outf, "%s: unknown format, %qu bytes skipped.\n",
 #	endif
-		    argv0, (unsigned long long) rdcnt);
+		    argv0, rdcnt);
 		(void)fflush(outf);
 		flcnt = 0;
 		return;
@@ -408,9 +392,7 @@ ar_close()
 #	else
 	    "%s: %s vol %d, %lu files, %qu bytes read, %qu bytes written.\n",
 #	endif
-	    argv0, frmt->name, arvol-1, flcnt,
-	    (unsigned long long) rdcnt, 
-	    (unsigned long long) wrcnt);
+	    argv0, frmt->name, arvol-1, flcnt, rdcnt, wrcnt);
 	(void)fflush(outf);
 	flcnt = 0;
 }
@@ -430,7 +412,7 @@ void
 ar_drain()
 #endif
 {
-	int res;
+	register int res;
 	char drbuf[MAXBLK];
 
 	/*
@@ -511,16 +493,14 @@ ar_app_ok()
 #endif
 {
 	if (artyp == ISPIPE) {
-		tty_warn(1,
-		    "Cannot append to an archive obtained from a pipe.");
+		warn(1, "Cannot append to an archive obtained from a pipe.");
 		return(-1);
 	}
 
 	if (!invld_rec)
 		return(0);
-	tty_warn(1,
-	    "Cannot append, device record size %d does not support %s spec",
-	    rdblksz, argv0);
+	warn(1,"Cannot append, device record size %d does not support %s spec",
+		rdblksz, argv0);
 	return(-1);
 }
 
@@ -535,15 +515,15 @@ ar_app_ok()
 
 #if __STDC__
 int
-ar_read(char *buf, int cnt)
+ar_read(register char *buf, register int cnt)
 #else
 int
 ar_read(buf, cnt)
-	char *buf;
-	int cnt;
+	register char *buf;
+	register int cnt;
 #endif
 {
-	int res = 0;
+	register int res = 0;
 
 	/*
 	 * if last i/o was in error, no more reads until reset or new volume
@@ -608,7 +588,7 @@ ar_read(buf, cnt)
 	if (res < 0)
 		syswarn(1, errno, "Failed read on archive volume %d", arvol);
 	else
-		tty_warn(0, "End of archive volume %d reached", arvol);
+		warn(0, "End of archive volume %d reached", arvol);
 	return(res);
 } 
 
@@ -625,15 +605,15 @@ ar_read(buf, cnt)
 
 #if __STDC__
 int
-ar_write(char *buf, int bsz)
+ar_write(register char *buf, register int bsz)
 #else
 int
 ar_write(buf, bsz)
-	char *buf;
-	int bsz;
+	register char *buf;
+	register int bsz;
 #endif
 {
-	int res;
+	register int res;
 	off_t cpos;
 
 	/*
@@ -687,8 +667,7 @@ ar_write(buf, bsz)
 		if (res >= 0)
 			break;
 		if (errno == EACCES) {
-			tty_warn(0,
-			    "Write failed, archive is write protected.");
+			warn(0, "Write failed, archive is write protected.");
 			res = lstrval = 0;
 			return(0);
 		}
@@ -726,20 +705,18 @@ ar_write(buf, bsz)
 	 * must quit right away.
 	 */
 	if (!wr_trail && (res <= 0)) {
-		tty_warn(1,
-		    "Unable to append, trailer re-write failed. Quitting.");
+		warn(1,"Unable to append, trailer re-write failed. Quitting.");
 		return(res);
 	}
 		
 	if (res == 0) 
-		tty_warn(0, "End of archive volume %d reached", arvol);
+		warn(0, "End of archive volume %d reached", arvol);
 	else if (res < 0)
 		syswarn(1, errno, "Failed write to archive volume: %d", arvol);
 	else if (!frmt->blkalgn || ((res % frmt->blkalgn) == 0))
-		tty_warn(0,
-		    "WARNING: partial archive write. Archive MAY BE FLAWED");
+		warn(0,"WARNING: partial archive write. Archive MAY BE FLAWED");
 	else
-		tty_warn(1,"WARNING: partial archive write. Archive IS FLAWED");
+		warn(1,"WARNING: partial archive write. Archive IS FLAWED");
 	return(res);
 }
 
@@ -773,7 +750,7 @@ ar_rdsync()
 		return(-1);
 
 	if ((act == APPND) || (act == ARCHIVE)) {
-		tty_warn(1, "Cannot allow updates to an archive with flaws.");
+		warn(1, "Cannot allow updates to an archive with flaws.");
 		return(-1);
 	}
 	if (io_ok)
@@ -825,10 +802,10 @@ ar_rdsync()
 		break;
 	}
 	if (lstrval <= 0) {
-		tty_warn(1, "Unable to recover from an archive read failure.");
+		warn(1, "Unable to recover from an archive read failure.");
 		return(-1);
 	}
-	tty_warn(0, "Attempting to recover from an archive read failure.");
+	warn(0, "Attempting to recover from an archive read failure.");
 	return(0);
 }
 
@@ -919,7 +896,7 @@ ar_rev(sksz)
 {
 	off_t cpos;
         struct mtop mb;
-	int phyblk; 
+	register int phyblk; 
 
 	/*
 	 * make sure we do not have try to reverse on a flawed archive
@@ -934,7 +911,7 @@ ar_rev(sksz)
 		/*
 		 * cannot go backwards on these critters
 		 */
-		tty_warn(1, "Reverse positioning on pipes is not supported.");
+		warn(1, "Reverse positioning on pipes is not supported.");
 		lstrval = -1;
 		return(-1);
 	case ISREG:
@@ -970,8 +947,7 @@ ar_rev(sksz)
 				/*
 				 * this should never happen
 				 */
-				tty_warn(1,
-				    "Reverse position on previous volume.");
+				warn(1,"Reverse position on previous volume.");
 				lstrval = -1;
 				return(-1);
 			}
@@ -1013,7 +989,7 @@ ar_rev(sksz)
 		 * ok we have to move. Make sure the tape drive can do it.
 		 */
 		if (sksz % phyblk) {
-			tty_warn(1,
+			warn(1,
 			    "Tape drive unable to backspace requested amount");
 			lstrval = -1;
 			return(-1);
@@ -1055,9 +1031,9 @@ static int
 get_phys()
 #endif
 {
-	int padsz = 0;
-	int res;
-	int phyblk;
+	register int padsz = 0;
+	register int res;
+	register int phyblk;
 	struct mtop mb;
 	char scbuf[MAXBLK];
 
@@ -1137,7 +1113,7 @@ get_phys()
 	 * never fail).
 	 */
 	if (padsz % phyblk) {
-		tty_warn(1, "Tape drive unable to backspace requested amount");
+		warn(1, "Tape drive unable to backspace requested amount");
 		return(-1);
 	}
 
@@ -1299,7 +1275,7 @@ ar_next()
 			if ((arcname = strdup(buf)) == NULL) {
 				done = 1;
 				lstrval = -1;
-				tty_warn(0, "Cannot save archive name.");
+				warn(0, "Cannot save archive name.");
 				return(-1);
 			}
 			freeit = 1;
@@ -1309,66 +1285,4 @@ ar_next()
 		continue;
 	}
 	return(0);
-}
-
-/*
- * ar_start_gzip()
- * starts the gzip compression/decompression process as a child, using magic
- * to keep the fd the same in the calling function (parent).
- */
-void
-#ifdef __STDC__
-ar_start_gzip(int fd)
-#else
-ar_start_gzip(fd)
-	int fd;
-#endif
-{
-	pid_t pid;
-	int fds[2];
-	char *gzip_flags;
-
-	if (pipe(fds) < 0)
-		err(1, "could not pipe");
-	pid = fork();
-	if (pid < 0)
-		err(1, "could not fork");
-
-	/* parent */
-	if (pid) {
-		switch (act) {
-		case ARCHIVE:
-			dup2(fds[1], fd);
-			break;
-		case LIST:
-		case EXTRACT:
-			dup2(fds[0], fd);
-			break;
-		default:
-			errx(1, "ar_start_gzip:  impossible");
-		}
-		close(fds[0]);
-		close(fds[1]);
-	} else {
-		switch (act) {
-		case ARCHIVE:
-			dup2(fds[0], STDIN_FILENO);
-			dup2(fd, STDOUT_FILENO);
-			gzip_flags = "-c";
-			break;
-		case LIST:
-		case EXTRACT:
-			dup2(fds[1], STDOUT_FILENO);
-			dup2(fd, STDIN_FILENO);
-			gzip_flags = "-dc";
-			break;
-		default:
-			errx(1, "ar_start_gzip:  impossible");
-		}
-		close(fds[0]);
-		close(fds[1]);
-		if (execlp(gzip_program, gzip_program, gzip_flags, NULL) < 0)
-			err(1, "could not exec");
-		/* NOTREACHED */
-	}
 }

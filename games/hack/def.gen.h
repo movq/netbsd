@@ -1,10 +1,6 @@
-/*	$NetBSD: def.gen.h,v 1.4 1997/10/19 16:57:01 christos Exp $	*/
+/* Copyright (c) Stichting Mathematisch Centrum, Amsterdam, 1985. */
+/* def.gen.h version 1.0.1: added ONCE flag */
 
-/*
- * Copyright (c) Stichting Mathematisch Centrum, Amsterdam, 1985.
- */
-#ifndef _DEF_GEN_H_
-#define _DEF_GEN_H_
 struct gen {
 	struct gen *ngen;
 	xchar gx,gy;
@@ -15,5 +11,5 @@ struct gen {
 #define	ONCE	0100
 };
 extern struct gen *fgold, *ftrap;
+struct gen *g_at();
 #define newgen()	(struct gen *) alloc(sizeof(struct gen))
-#endif /* _DEF_GEN_H_ */

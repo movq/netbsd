@@ -1,8 +1,6 @@
-/*	$NetBSD: compkl.c,v 1.4 1997/10/12 21:24:33 christos Exp $	*/
-
 /*
- * Copyright (c) 1980, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1980 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,17 +31,11 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)compkl.c	8.1 (Berkeley) 5/31/93";
-#else
-__RCSID("$NetBSD: compkl.c,v 1.4 1997/10/12 21:24:33 christos Exp $");
-#endif
+static char sccsid[] = "@(#)compkl.c	5.4 (Berkeley) 6/1/90";
 #endif /* not lint */
 
-#include <math.h>
-#include "trek.h"
+# include	"trek.h"
 
 /*
 **  compute klingon distances
@@ -56,15 +48,12 @@ __RCSID("$NetBSD: compkl.c,v 1.4 1997/10/12 21:24:33 christos Exp $");
 **	move.
 */
 
-static void sortkl __P((void));
-
-void
 compkldist(f)
 int	f;		/* set if new quadrant */
 {
-	int		i, dx, dy;
-	double		d;
-	double		temp;
+	register int		i, dx, dy;
+	double			d;
+	double			temp;
 
 	if (Etc.nkling == 0)
 		return;
@@ -101,11 +90,10 @@ int	f;		/* set if new quadrant */
 **	bubble sort on ascending distance
 */
 
-static void
 sortkl()
 {
 	struct kling		t;
-	int		f, i, m;
+	register int		f, i, m;
 
 	m = Etc.nkling - 1;
 	f = 1;
@@ -115,9 +103,9 @@ sortkl()
 		for (i = 0; i < m; i++)
 			if (Etc.klingon[i].dist > Etc.klingon[i+1].dist)
 			{
-				t =  Etc.klingon[i];
-				Etc.klingon[i] = Etc.klingon[i+1];
-				Etc.klingon[i+1] = t;
+				bmove(&Etc.klingon[i], &t, sizeof t);
+				bmove(&Etc.klingon[i+1], &Etc.klingon[i], sizeof t);
+				bmove(&t, &Etc.klingon[i+1], sizeof t);
 				f = 1;
 			}
 	}

@@ -1,8 +1,6 @@
-/*	$NetBSD: main.c,v 1.16 1997/09/16 13:44:14 lukem Exp $	*/
-
 /*
- * Copyright (c) 1983, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1983 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,156 +31,172 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1983, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+char copyright[] =
+"@(#) Copyright (c) 1983 The Regents of the University of California.\n\
+ All rights reserved.\n";
 #endif /* not lint */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)main.c	8.6 (Berkeley) 5/4/95";
-#else
-__RCSID("$NetBSD: main.c,v 1.16 1997/09/16 13:44:14 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)main.c	5.8 (Berkeley) 6/1/90";
 #endif /* not lint */
 
-#include <sys/param.h>
-#include <sys/time.h>
-
-#include <ufs/ufs/dinode.h>
-#include <ufs/ffs/fs.h>
-#include <protocols/dumprestore.h>
-
-#include <err.h>
-#include <errno.h>
-#include <paths.h>
-#include <signal.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
+/*
+ *	Modified to recursively extract all files within a subtree
+ *	(supressed by the h option) and recreate the heirarchical
+ *	structure of that subtree and move extracted files to their
+ *	proper homes (supressed by the m option).
+ *	Includes the s (skip files) option for use with multiple
+ *	dumps on a single tape.
+ *	8/29/80		by Mike Litzkow
+ *
+ *	Modified to work on the new file system and to recover from
+ *	tape read errors.
+ *	1/19/82		by Kirk McKusick
+ *
+ *	Full incremental restore running entirely in user code and
+ *	interactive tape browser.
+ *	1/19/83		by Kirk McKusick
+ */
 
 #include "restore.h"
-#include "extern.h"
-
-extern char *__progname;	/* from crt0.o */
+#include <protocols/dumprestore.h>
+#include <sys/signal.h>
+#include "pathnames.h"
 
 int	bflag = 0, cvtflag = 0, dflag = 0, vflag = 0, yflag = 0;
 int	hflag = 1, mflag = 1, Nflag = 0;
 char	command = '\0';
-int32_t	dumpnum = 1;
-int32_t	volno = 0;
-int32_t	ntrec;
+long	dumpnum = 1;
+long	volno = 0;
+long	ntrec;
 char	*dumpmap;
-char	*usedinomap;
+char	*clrimap;
 ino_t	maxino;
 time_t	dumptime;
 time_t	dumpdate;
 FILE 	*terminal;
-char	*tmpdir;
 
-int	main __P((int, char *[]));
-static	void obsolete __P((int *, char **[]));
-static	void usage __P((void));
-
-int
 main(argc, argv)
 	int argc;
 	char *argv[];
 {
-	int ch;
+	register char *cp;
 	ino_t ino;
-	char *inputdev;
+	char *inputdev = _PATH_DEFTAPE;
 	char *symtbl = "./restoresymtable";
-	char *p, name[MAXPATHLEN];
-
-	if (argc < 2)
-		usage();
-
-	if ((inputdev = getenv("TAPE")) == NULL)
-		inputdev = _PATH_DEFTAPE;
-	if ((tmpdir = getenv("TMPDIR")) == NULL)
-		tmpdir = _PATH_TMP;
-	obsolete(&argc, &argv);
-	while ((ch = getopt(argc, argv, "b:cdf:himNRrs:tvxy")) != -1)
-		switch(ch) {
-		case 'b':
-			/* Change default tape blocksize. */
-			bflag = 1;
-			ntrec = strtol(optarg, &p, 10);
-			if (*p)
-				errx(1, "illegal blocksize -- %s", optarg);
-			if (ntrec <= 0)
-				errx(1, "block size must be greater than 0");
-			break;
-		case 'c':
-			cvtflag = 1;
-			break;
-		case 'd':
-			dflag = 1;
-			break;
-		case 'f':
-			inputdev = optarg;
-			break;
-		case 'h':
-			hflag = 0;
-			break;
-		case 'i':
-		case 'R':
-		case 'r':
-		case 't':
-		case 'x':
-			if (command != '\0')
-				errx(1,
-				    "%c and %c options are mutually exclusive",
-				    ch, command);
-			command = ch;
-			break;
-		case 'm':
-			mflag = 0;
-			break;
-		case 'N':
-			Nflag = 1;
-			break;
-		case 's':
-			/* Dumpnum (skip to) for multifile dump tapes. */
-			dumpnum = strtol(optarg, &p, 10);
-			if (*p)
-				errx(1, "illegal dump number -- %s", optarg);
-			if (dumpnum <= 0)
-				errx(1, "dump number must be greater than 0");
-			break;
-		case 'v':
-			vflag = 1;
-			break;
-		case 'y':
-			yflag = 1;
-			break;
-		default:
-			usage();
-		}
-	argc -= optind;
-	argv += optind;
-
-	if (command == '\0')
-		errx(1, "none of i, R, r, t or x options specified");
+	char name[MAXPATHLEN];
+	void onintr();
 
 	if (signal(SIGINT, onintr) == SIG_IGN)
 		(void) signal(SIGINT, SIG_IGN);
 	if (signal(SIGTERM, onintr) == SIG_IGN)
 		(void) signal(SIGTERM, SIG_IGN);
 	setlinebuf(stderr);
-
-	atexit(cleanup);
-
+	if (argc < 2) {
+usage:
+		fprintf(stderr, "Usage:\n%s%s%s%s%s",
+			"\trestore tfhsvy [file file ...]\n",
+			"\trestore xfhmsvy [file file ...]\n",
+			"\trestore ifhmsvy\n",
+			"\trestore rfsvy\n",
+			"\trestore Rfsvy\n");
+		done(1);
+	}
+	argv++;
+	argc -= 2;
+	command = '\0';
+	for (cp = *argv++; *cp; cp++) {
+		switch (*cp) {
+		case '-':
+			break;
+		case 'c':
+			cvtflag++;
+			break;
+		case 'd':
+			dflag++;
+			break;
+		case 'h':
+			hflag = 0;
+			break;
+		case 'm':
+			mflag = 0;
+			break;
+		case 'N':
+			Nflag++;
+			break;
+		case 'v':
+			vflag++;
+			break;
+		case 'y':
+			yflag++;
+			break;
+		case 'f':
+			if (argc < 1) {
+				fprintf(stderr, "missing device specifier\n");
+				done(1);
+			}
+			inputdev = *argv++;
+			argc--;
+			break;
+		case 'b':
+			/*
+			 * change default tape blocksize
+			 */
+			bflag++;
+			if (argc < 1) {
+				fprintf(stderr, "missing block size\n");
+				done(1);
+			}
+			ntrec = atoi(*argv++);
+			if (ntrec <= 0) {
+				fprintf(stderr, "Block size must be a positive integer\n");
+				done(1);
+			}
+			argc--;
+			break;
+		case 's':
+			/*
+			 * dumpnum (skip to) for multifile dump tapes
+			 */
+			if (argc < 1) {
+				fprintf(stderr, "missing dump number\n");
+				done(1);
+			}
+			dumpnum = atoi(*argv++);
+			if (dumpnum <= 0) {
+				fprintf(stderr, "Dump number must be a positive integer\n");
+				done(1);
+			}
+			argc--;
+			break;
+		case 't':
+		case 'R':
+		case 'r':
+		case 'x':
+		case 'i':
+			if (command != '\0') {
+				fprintf(stderr,
+					"%c and %c are mutually exclusive\n",
+					*cp, command);
+				goto usage;
+			}
+			command = *cp;
+			break;
+		default:
+			fprintf(stderr, "Bad key character %c\n", *cp);
+			goto usage;
+		}
+	}
+	if (command == '\0') {
+		fprintf(stderr, "must specify i, t, r, R, or x\n");
+		goto usage;
+	}
 	setinput(inputdev);
-
 	if (argc == 0) {
 		argc = 1;
 		*--argv = ".";
 	}
-
 	switch (command) {
 	/*
 	 * Interactive mode.
@@ -190,9 +204,9 @@ main(argc, argv)
 	case 'i':
 		setup();
 		extractdirs(1);
-		initsymtable(NULL);
+		initsymtable((char *)0);
 		runcmdshell();
-		break;
+		done(0);
 	/*
 	 * Incremental restoration of a file system.
 	 */
@@ -222,14 +236,14 @@ main(argc, argv)
 		}
 		createleaves(symtbl);
 		createlinks();
-		setdirmodes(FORCE);
+		setdirmodes();
 		checkrestore();
 		if (dflag) {
 			vprintf(stdout, "Verify the directory structure\n");
 			treescan(".", ROOTINO, verifyfile);
 		}
 		dumpsymtable(symtbl, (long)1);
-		break;
+		done(0);
 	/*
 	 * Resume an incremental file system restoration.
 	 */
@@ -239,10 +253,10 @@ main(argc, argv)
 		skipdirs();
 		createleaves(symtbl);
 		createlinks();
-		setdirmodes(FORCE);
+		setdirmodes();
 		checkrestore();
 		dumpsymtable(symtbl, (long)1);
-		break;
+		done(0);
 	/*
 	 * List contents of tape.
 	 */
@@ -257,7 +271,7 @@ main(argc, argv)
 				continue;
 			treescan(name, ino, listfile);
 		}
-		break;
+		done(0);
 	/*
 	 * Batch extraction of tape contents.
 	 */
@@ -276,104 +290,9 @@ main(argc, argv)
 		}
 		createfiles();
 		createlinks();
-		setdirmodes(0);
+		setdirmodes();
 		if (dflag)
 			checkrestore();
-		break;
+		done(0);
 	}
-	exit(0);
-	/* NOTREACHED */
-}
-
-static void
-usage()
-{
-
-	(void)fprintf(stderr,
-	    "usage: %s -i [-chmvy] [-b blocksize] [-f file] [-s fileno]\n",
-	    __progname);
-	(void)fprintf(stderr,
-	    "\t%s -R [-cvy] [-b blocksize] [-f file] [-s fileno]\n",
-	    __progname);
-	(void)fprintf(stderr,
-	    "\t%s -r [-cvy] [-b blocksize] [-f file] [-s fileno]\n",
-	    __progname);
-	(void)fprintf(stderr,
-	    "\t%s -t [-chvy] [-b blocksize] [-f file] [-s fileno] [file ...]\n",
-	    __progname);
-	(void)fprintf(stderr,
-	    "\t%s -x [-chmvy] [-b blocksize] [-f file] [-s fileno] [file ...]\n",
-	    __progname);
-	exit(1);
-}
-
-/*
- * obsolete --
- *	Change set of key letters and ordered arguments into something
- *	getopt(3) will like.
- */
-static void
-obsolete(argcp, argvp)
-	int *argcp;
-	char **argvp[];
-{
-	int argc, flags;
-	char *ap, **argv, *flagsp, **nargv, *p;
-
-	/* Setup. */
-	argv = *argvp;
-	argc = *argcp;
-
-	/* Return if no arguments or first argument has leading dash. */
-	ap = argv[1];
-	if (argc == 1 || *ap == '-')
-		return;
-
-	/* Allocate space for new arguments. */
-	if ((*argvp = nargv = malloc((argc + 1) * sizeof(char *))) == NULL ||
-	    (p = flagsp = malloc(strlen(ap) + 2)) == NULL)
-		err(1, "%s", "");
-
-	*nargv++ = *argv;
-	argv += 2;
-
-	for (flags = 0; *ap; ++ap) {
-		switch (*ap) {
-		case 'b':
-		case 'f':
-		case 's':
-			if (*argv == NULL) {
-				warnx("option requires an argument -- %c", *ap);
-				usage();
-			}
-			if ((nargv[0] = malloc(strlen(*argv) + 2 + 1)) == NULL)
-				err(1, "%s", "");
-			nargv[0][0] = '-';
-			nargv[0][1] = *ap;
-			(void)strcpy(&nargv[0][2], *argv);
-			++argv;
-			++nargv;
-			break;
-		default:
-			if (!flags) {
-				*p++ = '-';
-				flags = 1;
-			}
-			*p++ = *ap;
-			break;
-		}
-	}
-
-	/* Terminate flags. */
-	if (flags) {
-		*p = '\0';
-		*nargv++ = flagsp;
-	}
-
-	/* Copy remaining arguments. */
-	while ((*nargv++ = *argv++) != NULL)
-		;
-
-	/* Update argument count. */
-	*argcp = nargv - *argvp - 1;
 }

@@ -1,8 +1,6 @@
-/*	$NetBSD: set.c,v 1.7 1997/10/14 02:07:59 lukem Exp $	*/
-
 /*-
- * Copyright (c) 1991, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1991 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,18 +31,13 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)set.c	8.2 (Berkeley) 2/28/94";
-#endif
-__RCSID("$NetBSD: set.c,v 1.7 1997/10/14 02:07:59 lukem Exp $");
+static char sccsid[] = "@(#)set.c	5.2 (Berkeley) 12/24/91";
 #endif /* not lint */
 
-#include <stdio.h>
-#include <termcap.h>
 #include <termios.h>
 #include <unistd.h>
+#include <stdio.h>
 #include "extern.h"
 
 #define	CHK(val, dft)	(val <= 0 ? dft : val)
@@ -129,7 +122,7 @@ reset_mode()
 #endif
 			 );
 
-	mode.c_cflag &= ~(CSIZE | CSTOPB | PARENB | PARODD);
+	mode.c_cflag &= ~(CSIZE | CSTOPB | PARENB | PARODD | CLOCAL);
 	mode.c_cflag |= (CS8 | CREAD);
 	mode.c_lflag &= ~(ECHONL | NOFLSH | TOSTOP
 #ifdef ECHOPTR
@@ -260,12 +253,10 @@ set_init()
 	settle = set_tabs();
 
 	if (isreset) {
-		bp = buf;
 		if (tgetstr("rs", &bp) != 0 || tgetstr("is", &bp) != 0) {
 			tputs(buf, 0, outc);
 			settle = 1;
 		}
-		bp = buf;
 		if (tgetstr("rf", &bp) != 0 || tgetstr("if", &bp) != 0) {
 			cat(buf);
 			settle = 1;

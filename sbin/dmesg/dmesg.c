@@ -1,7 +1,6 @@
-/*	$NetBSD: dmesg.c,v 1.15 1997/09/20 09:48:35 enami Exp $	*/
 /*-
- * Copyright (c) 1991, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1991 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,65 +31,52 @@
  * SUCH DAMAGE.
  */
 
+#ifndef lint
+char copyright[] =
+"@(#) Copyright (c) 1991 The Regents of the University of California.\n\
+ All rights reserved.\n";
+#endif /* not lint */
+
+#ifndef lint
+static char sccsid[] = "@(#)dmesg.c	5.9 (Berkeley) 5/2/91";
+#endif /* not lint */
+
 #include <sys/cdefs.h>
-#ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1991, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
-#endif /* not lint */
-
-#ifndef lint
-#if 0
-static char sccsid[] = "@(#)dmesg.c	8.1 (Berkeley) 6/5/93";
-#else
-__RCSID("$NetBSD: dmesg.c,v 1.15 1997/09/20 09:48:35 enami Exp $");
-#endif
-#endif /* not lint */
-
 #include <sys/msgbuf.h>
-
-#include <err.h>
-#include <fcntl.h>
-#include <kvm.h>
-#include <limits.h>
-#include <nlist.h>
-#include <stdio.h>
-#include <stdlib.h>
 #include <time.h>
-#include <unistd.h>
-#include <vis.h>
+#include <nlist.h>
+#include <kvm.h>
+#include <stdlib.h>
+#include <stdio.h>
+#include <ctype.h>
 
 struct nlist nl[] = {
-#define	X_MSGBUF	0
+#define	X_MSGBUFP	0
 	{ "_msgbufp" },
 	{ NULL },
 };
 
-int	main __P((int, char *[]));
-void	usage __P((void));
+void usage(), vputc();
+void err __P((const char *, ...));
 
-#define	KREAD(addr, var) \
-	kvm_read(kd, addr, &var, sizeof(var)) != sizeof(var)
-
-int
 main(argc, argv)
 	int argc;
-	char *argv[];
+	char **argv;
 {
-	int ch, newl, skip, i;
-	char *p;
-	struct kern_msgbuf *bufp, cur;
-	char *memf, *nlistf, *bufdata;
-	kvm_t *kd;
-	char buf[5];
+	register int ch, newl, skip;
+	register char *p, *ep;
+	struct msgbuf cur;
+	int msgbufat;
+	char *core, *namelist;
 
-	memf = nlistf = NULL;
-	while ((ch = getopt(argc, argv, "M:N:")) != -1)
+	core = namelist = NULL;
+	while ((ch = getopt(argc, argv, "M:N:")) != EOF)
 		switch(ch) {
 		case 'M':
-			memf = optarg;
+			core = optarg;
 			break;
 		case 'N':
-			nlistf = optarg;
+			namelist = optarg;
 			break;
 		case '?':
 		default:
@@ -99,49 +85,30 @@ main(argc, argv)
 	argc -= optind;
 	argv += optind;
 
-	/*
-	 * Discard setgid privileges if not the running kernel so that bad
-	 * guys can't print interesting stuff from kernel memory.
-	 */
-	if (memf != NULL || nlistf != NULL)
-		setgid(getgid());
+	/* Read in kernel message buffer, do sanity checks. */
+	if (kvm_openfiles(namelist, core, NULL) == -1)
+		err("kvm_openfiles: %s", kvm_geterr());
+	if (kvm_nlist(nl) == -1)
+		err("kvm_nlist: %s", kvm_geterr());
+	if (nl[X_MSGBUFP].n_type == 0)
+		err("msgbufp not found namelist");
 
-	/* Read in message buffer header and data, and do sanity checks. */
-	if ((kd = kvm_open(nlistf, memf, NULL, O_RDONLY, "dmesg")) == NULL)
-		exit (1);
-	if (kvm_nlist(kd, nl) == -1)
-		errx(1, "kvm_nlist: %s", kvm_geterr(kd));
-	if (nl[X_MSGBUF].n_type == 0)
-		errx(1, "%s: msgbufp not found", nlistf ? nlistf : "namelist");
-	if (KREAD(nl[X_MSGBUF].n_value, bufp))
-		errx(1, "kvm_read: %s (0x%lx)", kvm_geterr(kd),
-		    nl[X_MSGBUF].n_value);
-	if (KREAD((long)bufp, cur))
-		errx(1, "kvm_read: %s (0x%lx)", kvm_geterr(kd),
-		    (unsigned long)bufp);
+        kvm_read((void *)nl[X_MSGBUFP].n_value, (void *)&msgbufat, sizeof(msgbufat));
+        kvm_read((void *)msgbufat, (void *)&cur, sizeof(cur));
 	if (cur.msg_magic != MSG_MAGIC)
-		errx(1, "magic number incorrect");
-	bufdata = malloc(cur.msg_bufs);
-	if (bufdata == NULL)
-		errx(1, "couldn't allocate space for buffer data");
-	if (kvm_read(kd, (long)&bufp->msg_bufc, bufdata,
-	    cur.msg_bufs) != cur.msg_bufs)
-		errx(1, "kvm_read: %s", kvm_geterr(kd));
-	kvm_close(kd);
-	if (cur.msg_bufx >= cur.msg_bufs)
+		err("magic number incorrect");
+	if (cur.msg_bufx >= MSG_BSIZE)
 		cur.msg_bufx = 0;
 
 	/*
-	 * The message buffer is circular; start at the write pointer
-	 * (which points the oldest character), and go to the write
-	 * pointer - 1 (which points the newest character).  I.e, loop
-	 * over cur.msg_bufs times.  Unused area is skipped since it
-	 * contains nul.
+	 * The message buffer is circular; start at the read pointer, and
+	 * go to the write pointer - 1.
 	 */
-	for (newl = skip = i = 0, p = bufdata + cur.msg_bufx;
-	    i < cur.msg_bufs; i++, p++) {
-		if (p == bufdata + cur.msg_bufs)
-			p = bufdata;
+	p = cur.msg_bufc + cur.msg_bufx;
+	ep = cur.msg_bufc + cur.msg_bufx - 1;
+	for (newl = skip = 0; p != ep; ++p) {
+		if (p == cur.msg_bufc + MSG_BSIZE)
+			p = cur.msg_bufc;
 		ch = *p;
 		/* Skip "\n<.*>" syslog sequences. */
 		if (skip) {
@@ -155,12 +122,8 @@ main(argc, argv)
 		}
 		if (ch == '\0')
 			continue;
-		newl = ch == '\n';
-		(void)vis(buf, ch, 0, 0);
-		if (buf[1] == 0)
-			(void)putchar(buf[0]);
-		else
-			(void)printf("%s", buf);
+		newl = (ch = *p) == '\n';
+		vputc(ch);
 	}
 	if (!newl)
 		(void)putchar('\n');
@@ -168,9 +131,58 @@ main(argc, argv)
 }
 
 void
+vputc(ch)
+	register int ch;
+{
+	int meta;
+
+	if (!isascii(ch)) {
+		(void)putchar('M');
+		(void)putchar('-');
+		ch = toascii(ch);
+		meta = 1;
+	} else
+		meta = 0;
+	if (isprint(ch) || !meta && (ch == ' ' || ch == '\t' || ch == '\n'))
+		(void)putchar(ch);
+	else {
+		(void)putchar('^');
+		(void)putchar(ch == '\177' ? '?' : ch | 0100);
+	}
+}
+
+#if __STDC__
+#include <stdarg.h>
+#else
+#include <varargs.h>
+#endif
+
+void
+#if __STDC__
+err(const char *fmt, ...)
+#else
+err(fmt, va_alist)
+	char *fmt;
+        va_dcl
+#endif
+{
+	va_list ap;
+#if __STDC__
+	va_start(ap, fmt);
+#else
+	va_start(ap);
+#endif
+	(void)fprintf(stderr, "dmesg: ");
+	(void)vfprintf(stderr, fmt, ap);
+	va_end(ap);
+	(void)fprintf(stderr, "\n");
+	exit(1);
+	/* NOTREACHED */
+}
+
+void
 usage()
 {
-
 	(void)fprintf(stderr, "usage: dmesg [-M core] [-N system]\n");
 	exit(1);
 }

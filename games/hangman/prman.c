@@ -1,8 +1,6 @@
-/*	$NetBSD: prman.c,v 1.4 1997/10/11 01:16:39 lukem Exp $	*/
-
 /*-
- * Copyright (c) 1983, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1983 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,26 +31,20 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)prman.c	8.1 (Berkeley) 5/31/93";
-#else
-__RCSID("$NetBSD: prman.c,v 1.4 1997/10/11 01:16:39 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)prman.c	5.3 (Berkeley) 4/8/91";
 #endif /* not lint */
 
-#include	"hangman.h"
+# include	"hangman.h"
 
 /*
  * prman:
  *	Print out the man appropriately for the give number
  *	of incorrect guesses.
  */
-void
 prman()
 {
-	int i;
+	register int	i;
 
 	for (i = 0; i < Errors; i++)
 		mvaddch(Err_pos[i].y, Err_pos[i].x, Err_pos[i].ch);

@@ -1,8 +1,6 @@
-/*	$NetBSD: mktemp.c,v 1.9 1997/07/13 20:15:16 christos Exp $	*/
-
 /*
- * Copyright (c) 1987, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1987 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,13 +31,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char sccsid[] = "@(#)mktemp.c	8.1 (Berkeley) 6/4/93";
-#else
-__RCSID("$NetBSD: mktemp.c,v 1.9 1997/07/13 20:15:16 christos Exp $");
-#endif
+static char sccsid[] = "@(#)mktemp.c	5.10 (Berkeley) 2/24/91";
 #endif /* LIBC_SCCS and not lint */
 
 #include <sys/types.h>
@@ -47,14 +40,9 @@ __RCSID("$NetBSD: mktemp.c,v 1.9 1997/07/13 20:15:16 christos Exp $");
 #include <fcntl.h>
 #include <errno.h>
 #include <stdio.h>
-#include <ctype.h>
-#include <unistd.h>
-#include <errno.h>
-#include "local.h"
 
-static int _gettemp __P((char *, int *));
+static int _gettemp();
 
-int
 mkstemp(path)
 	char *path;
 {
@@ -64,67 +52,27 @@ mkstemp(path)
 }
 
 char *
-_mktemp(path)
-	char *path;
-{
-	return (_gettemp(path, (int *)NULL) ? path : (char *)NULL);
-}
-
-__warn_references(mktemp,
-    "warning: mktemp() possibly used unsafely, consider using mkstemp()");
-
-char *
 mktemp(path)
 	char *path;
 {
-	return (_gettemp(path, (int *)NULL) ? path : (char *)NULL);
+	return(_gettemp(path, (int *)NULL) ? path : (char *)NULL);
 }
 
-static int
+static
 _gettemp(path, doopen)
 	char *path;
 	register int *doopen;
 {
+	extern int errno;
 	register char *start, *trv;
 	struct stat sbuf;
 	u_int pid;
 
-	/* To guarantee multiple calls generate unique names even if
-	   the file is not created. 676 different possibilities with 7
-	   or more X's, 26 with 6 or less. */
-	static char xtra[2] = "aa";
-	int xcnt = 0;
-
 	pid = getpid();
-
-	/* Move to end of path and count trailing X's. */
-	for (trv = path; *trv; ++trv)
-		if (*trv == 'X')
-			xcnt++;
-		else
-			xcnt = 0;	
-
-	/* Use at least one from xtra.  Use 2 if more than 6 X's. */
-	if (*(trv-1) == 'X')
-		*--trv = xtra[0];
-	if (xcnt > 6 && *(trv-1) == 'X')
-		*--trv = xtra[1];
-
-	/* Set remaining X's to pid digits with 0's to the left. */
+	for (trv = path; *trv; ++trv);		/* extra X's get set to 0's */
 	while (*--trv == 'X') {
 		*trv = (pid % 10) + '0';
 		pid /= 10;
-	}
-
-	/* update xtra for next call. */
-	if (xtra[0] != 'z')
-		xtra[0]++;
-	else {
-		xtra[0] = 'a';
-		if (xtra[1] != 'z')
-			xtra[1]++;
-		else
-			xtra[1] = 'a';
 	}
 
 	/*
@@ -137,10 +85,10 @@ _gettemp(path, doopen)
 		if (*trv == '/') {
 			*trv = '\0';
 			if (stat(path, &sbuf))
-				return (0);
+				return(0);
 			if (!S_ISDIR(sbuf.st_mode)) {
 				errno = ENOTDIR;
-				return (0);
+				return(0);
 			}
 			*trv = '/';
 			break;
@@ -151,17 +99,17 @@ _gettemp(path, doopen)
 		if (doopen) {
 			if ((*doopen =
 			    open(path, O_CREAT|O_EXCL|O_RDWR, 0600)) >= 0)
-				return (1);
+				return(1);
 			if (errno != EEXIST)
-				return (0);
+				return(0);
 		}
-		else if (lstat(path, &sbuf))
-			return (errno == ENOENT ? 1 : 0);
+		else if (stat(path, &sbuf))
+			return(errno == ENOENT ? 1 : 0);
 
 		/* tricky little algorithm for backward compatibility */
 		for (trv = start;;) {
 			if (!*trv)
-				return (0);
+				return(0);
 			if (*trv == 'z')
 				*trv++ = 'a';
 			else {

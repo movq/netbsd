@@ -1,5 +1,3 @@
-/*	$NetBSD: stdio.h,v 1.18 1996/04/25 18:29:21 jtc Exp $	*/
-
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
  * All rights reserved.
@@ -41,34 +39,19 @@
 #ifndef	_STDIO_H_
 #define	_STDIO_H_
 
-#if !defined(_ANSI_SOURCE) && !defined(__STRICT_ANSI__)
-#include <sys/types.h>
-#endif
-
 #include <sys/cdefs.h>
 
 #include <machine/ansi.h>
-#ifdef	_BSD_SIZE_T_
-typedef	_BSD_SIZE_T_	size_t;
-#undef	_BSD_SIZE_T_
+#ifdef	_SIZE_T_
+typedef	_SIZE_T_	size_t;
+#undef	_SIZE_T_
 #endif
 
 #ifndef NULL
 #define	NULL	0
 #endif
 
-/*      
- * This is fairly grotesque, but pure ANSI code must not inspect the
- * innards of an fpos_t anyway.  The library internally uses off_t,
- * which we assume is exactly as big as eight chars.
- */
-#if !defined(_ANSI_SOURCE) && !defined(__STRICT_ANSI__)
-typedef off_t fpos_t;
-#else
-typedef struct __sfpos {
-	long long _pos;			/* XXX must be the same as off_t */
-} fpos_t;
-#endif
+typedef long fpos_t;		/* Must match off_t <sys/types.h> */
 
 #define	_FSTDIO			/* Define for new stdio with functions. */
 
@@ -133,12 +116,12 @@ typedef	struct __sFILE {
 	unsigned char _ubuf[3];	/* guarantee an ungetc() buffer */
 	unsigned char _nbuf[1];	/* guarantee a getc() buffer */
 
-	/* separate buffer for fgetln() when line crosses buffer boundary */
-	struct	__sbuf _lb;	/* buffer for fgetln() */
+	/* separate buffer for fgetline() when line crosses buffer boundary */
+	struct	__sbuf _lb;	/* buffer for fgetline() */
 
 	/* Unix stdio files get aligned to block boundaries on fseek() */
 	int	_blksize;	/* stat.st_blksize (may be != _bf._size) */
-	fpos_t	_offset;	/* current lseek offset */
+	int	_offset;	/* current lseek offset */
 } FILE;
 
 __BEGIN_DECLS
@@ -159,7 +142,7 @@ __END_DECLS
 #define	__SOPT	0x0400		/* do fseek() optimisation */
 #define	__SNPT	0x0800		/* do not do fseek() optimisation */
 #define	__SOFF	0x1000		/* set iff _offset is in fact correct */
-#define	__SMOD	0x2000		/* true => fgetln modified _p text */
+#define	__SMOD	0x2000		/* true => fgetline modified _p text */
 
 /*
  * The following three definitions are for ANSI C, which took them
@@ -217,21 +200,25 @@ int	 ferror __P((FILE *));
 int	 fflush __P((FILE *));
 int	 fgetc __P((FILE *));
 int	 fgetpos __P((FILE *, fpos_t *));
-char	*fgets __P((char *, int, FILE *));
+char	*fgets __P((char *, size_t, FILE *));
 FILE	*fopen __P((const char *, const char *));
 int	 fprintf __P((FILE *, const char *, ...));
 int	 fputc __P((int, FILE *));
 int	 fputs __P((const char *, FILE *));
-size_t	 fread __P((void *, size_t, size_t, FILE *));
+int	 fread __P((void *, size_t, size_t, FILE *));
 FILE	*freopen __P((const char *, const char *, FILE *));
 int	 fscanf __P((FILE *, const char *, ...));
 int	 fseek __P((FILE *, long, int));
 int	 fsetpos __P((FILE *, const fpos_t *));
-long	 ftell __P((FILE *));
-size_t	 fwrite __P((const void *, size_t, size_t, FILE *));
+long	 ftell __P((const FILE *));
+int	 fwrite __P((const void *, size_t, size_t, FILE *));
 int	 getc __P((FILE *));
 int	 getchar __P((void));
 char	*gets __P((char *));
+#if !defined(_ANSI_SOURCE) && !defined(_POSIX_SOURCE)
+extern int sys_nerr;			/* perror(3) external variables */
+extern char *sys_errlist[];
+#endif
 void	 perror __P((const char *));
 int	 printf __P((const char *, ...));
 int	 putc __P((int, FILE *));
@@ -244,25 +231,24 @@ int	 scanf __P((const char *, ...));
 void	 setbuf __P((FILE *, char *));
 int	 setvbuf __P((FILE *, char *, int, size_t));
 int	 sprintf __P((char *, const char *, ...));
-int	 sscanf __P((const char *, const char *, ...));
+int	 sscanf __P((char *, const char *, ...));
 FILE	*tmpfile __P((void));
 char	*tmpnam __P((char *));
 int	 ungetc __P((int, FILE *));
-int	 vfprintf __P((FILE *, const char *, _BSD_VA_LIST_));
-int	 vprintf __P((const char *, _BSD_VA_LIST_));
-int	 vsprintf __P((char *, const char *, _BSD_VA_LIST_));
+int	 vfprintf __P((FILE *, const char *, _VA_LIST_));
+int	 vprintf __P((const char *, _VA_LIST_));
+int	 vsprintf __P((char *, const char *, _VA_LIST_));
 __END_DECLS
 
 /*
  * Functions defined in POSIX 1003.1.
  */
 #ifndef _ANSI_SOURCE
+#define	L_cuserid	9	/* size for cuserid(); UT_NAMESIZE + 1 */
 #define	L_ctermid	1024	/* size for ctermid(); PATH_MAX */
-#define L_cuserid	9	/* size for cuserid(); UT_NAMESIZE + 1 */
 
 __BEGIN_DECLS
 char	*ctermid __P((char *));
-char	*cuserid __P((char *));
 FILE	*fdopen __P((int, const char *));
 int	 fileno __P((FILE *));
 __END_DECLS
@@ -273,7 +259,7 @@ __END_DECLS
  */
 #if !defined (_ANSI_SOURCE) && !defined(_POSIX_SOURCE)
 __BEGIN_DECLS
-char	*fgetln __P((FILE *, size_t *));
+char	*fgetline __P((FILE *, size_t *));
 int	 fpurge __P((FILE *));
 int	 getw __P((FILE *));
 int	 pclose __P((FILE *));
@@ -282,14 +268,10 @@ int	 putw __P((int, FILE *));
 void	 setbuffer __P((FILE *, char *, int));
 int	 setlinebuf __P((FILE *));
 char	*tempnam __P((const char *, const char *));
-int	 snprintf __P((char *, size_t, const char *, ...))
-		__attribute__((format (printf, 3, 4)));
-int	 vsnprintf __P((char *, size_t, const char *, _BSD_VA_LIST_))
-		__attribute__((format (printf, 3, 0)));
-int	 vscanf __P((const char *, _BSD_VA_LIST_))
-		__attribute__((format (scanf, 1, 0)));
-int	 vsscanf __P((const char *, const char *, _BSD_VA_LIST_))
-		__attribute__((format (scanf, 2, 0)));
+int	 snprintf __P((char *, size_t, const char *, ...));
+int	 vsnprintf __P((char *, size_t, const char *, _VA_LIST_));
+int	 vscanf __P((const char *, _VA_LIST_));
+int	 vsscanf __P((const char *, const char *, _VA_LIST_));
 __END_DECLS
 
 /*
@@ -318,7 +300,7 @@ __END_DECLS
  */
 __BEGIN_DECLS
 int	__srget __P((FILE *));
-int	__svfscanf __P((FILE *, const char *, _BSD_VA_LIST_));
+int	__svfscanf __P((FILE *, const char *, _VA_LIST_));
 int	__swbuf __P((int, FILE *));
 __END_DECLS
 
@@ -328,7 +310,7 @@ __END_DECLS
  */
 #define	__sgetc(p) (--(p)->_r < 0 ? __srget(p) : (int)(*(p)->_p++))
 #if defined(__GNUC__) && defined(__STDC__)
-static __inline int __sputc(int _c, FILE *_p) {
+static inline int __sputc(int _c, FILE *_p) {
 	if (--_p->_w >= 0 || (_p->_w >= _p->_lbfsize && (char)_c != '\n'))
 		return (*_p->_p++ = _c);
 	else

@@ -1,8 +1,6 @@
-/*	$NetBSD: mkstr.c,v 1.8 1997/10/19 14:12:34 mrg Exp $	*/
-
 /*
- * Copyright (c) 1980, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1980 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,26 +31,22 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1980, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+char copyright[] =
+"@(#) Copyright (c) 1980 Regents of the University of California.\n\
+ All rights reserved.\n";
 #endif /* not lint */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)mkstr.c	8.1 (Berkeley) 6/6/93";
-#else
-__RCSID("$NetBSD: mkstr.c,v 1.8 1997/10/19 14:12:34 mrg Exp $");
-#endif
+static char sccsid[] = "@(#)mkstr.c	5.4 (Berkeley) 6/1/90";
 #endif /* not lint */
 
 #include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
 
 #define	ungetchar(c)	ungetc(c, stdin)
 
+long	ftell();
+char	*calloc();
 /*
  * mkstr - create a string error message file by massaging C source
  *
@@ -85,16 +79,6 @@ char	*progname;
 char	usagestr[] =	"usage: %s [ - ] mesgfile prefix file ...\n";
 char	name[100], *np;
 
-void process __P((void));
-int main __P((int, char **));
-int match __P((char *));
-int octdigit __P((char));
-void inithash __P((void));
-int hashit __P((char *, char, unsigned));
-void copystr __P((void));
-int fgetNUL __P((char *, int, FILE *));
-
-int
 main(argc, argv)
 	int argc;
 	char *argv[];
@@ -129,10 +113,10 @@ main(argc, argv)
 	exit(0);
 }
 
-void
 process()
 {
-	int c;
+	register char *cp;
+	register c;
 
 	for (;;) {
 		c = getchar();
@@ -153,12 +137,11 @@ process()
 	}
 }
 
-int
 match(ocp)
 	char *ocp;
 {
-	char *cp;
-	int c;
+	register char *cp;
+	register c;
 
 	for (cp = ocp + 1; *cp; cp++) {
 		c = getchar();
@@ -172,12 +155,11 @@ match(ocp)
 	return (1);
 }
 
-void
 copystr()
 {
-	int c, ch;
+	register c, ch;
 	char buf[512];
-	char *cp = buf;
+	register char *cp = buf;
 
 	for (;;) {
 		c = getchar();
@@ -233,10 +215,9 @@ copystr()
 	}
 out:
 	*cp = 0;
-	printf("%d", hashit(buf, 1, 0));
+	printf("%d", hashit(buf, 1, NULL));
 }
 
-int
 octdigit(c)
 	char c;
 {
@@ -244,14 +225,13 @@ octdigit(c)
 	return (c >= '0' && c <= '7');
 }
 
-void
 inithash()
 {
 	char buf[512];
 	int mesgpt = 0;
 
 	rewind(mesgread);
-	while (fgetNUL(buf, sizeof buf, mesgread) != 0) {
+	while (fgetNUL(buf, sizeof buf, mesgread) != NULL) {
 		hashit(buf, 0, mesgpt);
 		mesgpt += strlen(buf) + 2;
 	}
@@ -265,21 +245,17 @@ struct	hash {
 	struct	hash *hnext;
 } *bucket[NBUCKETS];
 
-int
 hashit(str, really, fakept)
 	char *str;
 	char really;
 	unsigned fakept;
 {
 	int i;
-	struct hash *hp;
+	register struct hash *hp;
 	char buf[512];
 	long hashval = 0;
-	char *cp;
+	register char *cp;
 
-#ifdef __GNUC__
-	hp = NULL;	/* XXX gcc */
-#endif
 	if (really)
 		fflush(mesgwrite);
 	for (cp = str; *cp;)
@@ -318,18 +294,17 @@ hashit(str, really, fakept)
 #include <sys/types.h>
 #include <sys/stat.h>
 
-int
 fgetNUL(obuf, rmdr, file)
 	char *obuf;
-	int rmdr;
+	register int rmdr;
 	FILE *file;
 {
-	int c;
-	char *buf = obuf;
+	register c;
+	register char *buf = obuf;
 
 	while (--rmdr > 0 && (c = getc(file)) != 0 && c != EOF)
 		*buf++ = c;
 	*buf++ = 0;
 	getc(file);
-	return ((feof(file) || ferror(file)) ? 0 : 1);
+	return ((feof(file) || ferror(file)) ? NULL : 1);
 }

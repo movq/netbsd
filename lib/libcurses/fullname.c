@@ -1,8 +1,6 @@
-/*	$NetBSD: fullname.c,v 1.7 1997/07/22 07:36:41 mikel Exp $	*/
-
 /*
- * Copyright (c) 1981, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1981 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,37 +31,35 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)fullname.c	8.1 (Berkeley) 6/4/93";
-#else
-__RCSID("$NetBSD: fullname.c,v 1.7 1997/07/22 07:36:41 mikel Exp $");
-#endif
-#endif	/* not lint */
+static char sccsid[] = "@(#)fullname.c	5.4 (Berkeley) 6/1/90";
+#endif /* not lint */
 
-#include "curses.h"
+# define	reg	register
 
 /*
- * fullname --
  *	This routine fills in "def" with the full name of the terminal.
- *	This is assumed to be the last name in the list of aliases.
+ * This is assumed to be the last name in the list of aliases.
+ *
  */
 char *
 fullname(bp, def)
-	register char *bp, *def;
+reg char	*bp, *def;
 {
-	register char *cp;
 
-	*def = '\0';		/* In case no name. */
+	reg char	*cp;
+
+	*def = 0;			/* in case no name */
 
 	while (*bp && *bp != ':') {
-		cp = def;	/* Start of answer. */
-		while (*bp && *bp != ':' && *bp != '|')
-			*cp++ = *bp++;	/* Copy name over. */
-		*cp = '\0';		/* Zero end of name. */
-		if (*bp == '|')
-			bp++;		/* Skip over '|' if that is case. */
+		cp = def;		/* start of answer */
+		while (*bp && *bp != ':' && *bp != '|') {
+			*cp++ = *bp++;	/* copy name over */
+		}
+		*cp = 0;		/* zero end of name */
+		if (*bp == '|') {
+			bp++;		/* skip over '|' if that is case */
+		}
 	}
-	return (def);
+	return(def);
 }

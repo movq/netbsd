@@ -1,6 +1,6 @@
-/*-
- * Copyright (c) 1985, 1993
- *	The Regents of the University of California.  All rights reserved.
+/*
+ * Copyright (c) 1983 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -31,28 +31,20 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)byteorder.c	8.1 (Berkeley) 6/6/93";
-#else
-__RCSID("$NetBSD: byteorder.c,v 1.5 1997/10/17 14:19:12 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)byteorder.c	2.7 (Berkeley) 6/1/90";
 #endif /* not lint */
 
-#ifdef sgi
-#ident "$Revision: 1.5 $"
-#endif
-
 #include "globals.h"
+#include <protocols/timed.h>
 
 /*
  * Two routines to do the necessary byte swapping for timed protocol
  * messages. Protocol is defined in /usr/include/protocols/timed.h
  */
-void
+
 bytenetorder(ptr)
-	struct tsp *ptr;
+struct tsp *ptr;
 {
 	ptr->tsp_seq = htons((u_short)ptr->tsp_seq);
 	switch (ptr->tsp_type) {
@@ -70,9 +62,8 @@ bytenetorder(ptr)
 	}
 }
 
-void
 bytehostorder(ptr)
-	struct tsp *ptr;
+struct tsp *ptr;
 {
 	ptr->tsp_seq = ntohs((u_short)ptr->tsp_seq);
 	switch (ptr->tsp_type) {

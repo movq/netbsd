@@ -1,8 +1,6 @@
-/*	$NetBSD: pi.c,v 1.4 1997/10/18 14:44:37 lukem Exp $	*/
-
 /*
- * Copyright (c) 1980, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1980 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,12 +31,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)pi.c	8.1 (Berkeley) 6/6/93";
-#endif
-__RCSID("$NetBSD: pi.c,v 1.4 1997/10/18 14:44:37 lukem Exp $");
+static char sccsid[] = "@(#)pi.c	5.5 (Berkeley) 2/26/91";
 #endif /* not lint */
 
 #include <stdio.h>
@@ -50,13 +44,6 @@ extern	char	*currentfilename;
 static	char	*c_linenumber;
 static	char	*unk_hdr[] = {"In", "program", "???"};
 static	char	**c_header = &unk_hdr[0];
-
-boolean	alldigits __P((char *));
-boolean	isdateformat __P((int, char **));
-boolean	instringset __P((char *, char **));
-Errorclass pi __P((void));
-boolean	piptr __P((char *));
-
 
 /*
  *	Attempt to handle error messages produced by pi (and by pc)
@@ -167,19 +154,16 @@ char *pi_und2[] = {"undefined", "on", "lines"};
 char *pi_imp1[] = {"improperly", "used", "on", "line"};
 char *pi_imp2[] = {"improperly", "used", "on", "lines"};
 
-boolean
-alldigits(string)
-	char	*string;
+boolean alldigits(string)
+	reg	char	*string;
 {
 	for (; *string && isdigit(*string); string++)
 		continue;
 	return(*string == '\0');
 }
-
-boolean
-instringset(member, set)
-	char	*member;
-	char	**set;
+boolean instringset(member, set)
+		char	*member;
+	reg	char	**set;
 {
 	for(; *set; set++){
 		if (strcmp(*set, member) == 0)
@@ -188,8 +172,7 @@ instringset(member, set)
 	return(FALSE);
 }
 
-boolean
-isdateformat(wordc, wordv)
+boolean isdateformat(wordc, wordv)
 	int	wordc;
 	char	**wordv;
 {
@@ -201,9 +184,8 @@ isdateformat(wordc, wordv)
 	     && (alldigits(wordv[4])) );
 }
 
-boolean
-piptr(string)
-	char	*string;
+boolean piptr(string)
+	reg	char	*string;
 {
 	if (*string != '-')
 		return(FALSE);
@@ -220,12 +202,10 @@ piptr(string)
 extern	int	wordc;
 extern	char	**wordv;
 
-Errorclass
-pi()
+Errorclass pi()
 {
 	char	**nwordv;
 
-	nwordv = NULL;
 	if (wordc < 2)
 		return (C_UNKNOWN);
 	if (   ( strlen(wordv[1]) == 1)

@@ -1,5 +1,3 @@
-/*	$NetBSD: lfs_vfsops.c,v 1.14 1997/10/16 18:29:20 mjacob Exp $	*/
-
 /*
  * Copyright (c) 1989, 1991, 1993, 1994
  *	The Regents of the University of California.  All rights reserved.
@@ -32,7 +30,8 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)lfs_vfsops.c	8.10 (Berkeley) 11/21/94
+ *	from: @(#)lfs_vfsops.c	8.7 (Berkeley) 4/16/94
+ *	$Id: lfs_vfsops.c,v 1.1 1994/06/08 11:42:48 mycroft Exp $
  */
 
 #include <sys/param.h>
@@ -82,7 +81,6 @@ int
 lfs_mountroot()
 {
 	panic("lfs_mountroot");		/* XXX -- implement */
-	return 0;
 }
 
 /*
@@ -90,24 +88,21 @@ lfs_mountroot()
  *
  * mount system call
  */
-int
 lfs_mount(mp, path, data, ndp, p)
 	register struct mount *mp;
-	const char *path;
-	void *data;
+	char *path;
+	caddr_t data;
 	struct nameidata *ndp;
 	struct proc *p;
 {
 	struct vnode *devvp;
 	struct ufs_args args;
-	struct ufsmount *ump = NULL;
-	register struct lfs *fs = NULL;				/* LFS */
-	size_t size;
+	struct ufsmount *ump;
+	register struct lfs *fs;				/* LFS */
+	u_int size;
 	int error;
-	mode_t accessmode;
 
-	error = copyin(data, (caddr_t)&args, sizeof (struct ufs_args));
-	if (error)
+	if (error = copyin(data, (caddr_t)&args, sizeof (struct ufs_args)))
 		return (error);
 
 	/* Until LFS can do NFS right.		XXX */
@@ -120,23 +115,15 @@ lfs_mount(mp, path, data, ndp, p)
 	 */
 	if (mp->mnt_flag & MNT_UPDATE) {
 		ump = VFSTOUFS(mp);
-		if (fs->lfs_ronly && (mp->mnt_flag & MNT_WANTRDWR)) {
-			/*
-			 * If upgrade to read-write by non-root, then verify
-			 * that user has necessary permissions on the device.
-			 */
-			if (p->p_ucred->cr_uid != 0) {
-				VOP_LOCK(ump->um_devvp);
-				error = VOP_ACCESS(ump->um_devvp, VREAD|VWRITE,
-						   p->p_ucred, p);
-				if (error) {
-					VOP_UNLOCK(ump->um_devvp);
-					return (error);
-				}
-				VOP_UNLOCK(ump->um_devvp);
-			}
+#ifdef NOTLFS							/* LFS */
+		fs = ump->um_fs;
+		if (fs->fs_ronly && (mp->mnt_flag & MNT_RDONLY) == 0)
+			fs->fs_ronly = 0;
+#else
+		fs = ump->um_lfs;
+		if (fs->lfs_ronly && (mp->mnt_flag & MNT_RDONLY) == 0)
 			fs->lfs_ronly = 0;
-		}
+#endif
 		if (args.fspec == 0) {
 			/*
 			 * Process export requests.
@@ -149,7 +136,7 @@ lfs_mount(mp, path, data, ndp, p)
 	 * and verify that it refers to a sensible block device.
 	 */
 	NDINIT(ndp, LOOKUP, FOLLOW, UIO_USERSPACE, args.fspec, p);
-	if ((error = namei(ndp)) != 0)
+	if (error = namei(ndp))
 		return (error);
 	devvp = ndp->ni_vp;
 	if (devvp->v_type != VBLK) {
@@ -159,22 +146,6 @@ lfs_mount(mp, path, data, ndp, p)
 	if (major(devvp->v_rdev) >= nblkdev) {
 		vrele(devvp);
 		return (ENXIO);
-	}
-	/*
-	 * If mount by non-root, then verify that user has necessary
-	 * permissions on the device.
-	 */
-	if (p->p_ucred->cr_uid != 0) {
-		accessmode = VREAD;
-		if ((mp->mnt_flag & MNT_RDONLY) == 0)
-			accessmode |= VWRITE;
-		VOP_LOCK(devvp);
-		error = VOP_ACCESS(devvp, accessmode, p->p_ucred, p);
-		if (error) {
-			vput(devvp);
-			return (error);
-		}
-		VOP_UNLOCK(devvp);
 	}
 	if ((mp->mnt_flag & MNT_UPDATE) == 0)
 		error = lfs_mountfs(devvp, mp, p);		/* LFS */
@@ -193,15 +164,22 @@ lfs_mount(mp, path, data, ndp, p)
 #ifdef NOTLFS							/* LFS */
 	(void) copyinstr(path, fs->fs_fsmnt, sizeof(fs->fs_fsmnt) - 1, &size);
 	bzero(fs->fs_fsmnt + size, sizeof(fs->fs_fsmnt) - size);
-	bcopy(fs->fs_fsmnt, mp->mnt_stat.f_mntonname, MNAMELEN);
-#else
-	(void)copyinstr(path, fs->lfs_fsmnt, sizeof(fs->lfs_fsmnt) - 1, &size);
-	bzero(fs->lfs_fsmnt + size, sizeof(fs->lfs_fsmnt) - size);
-	bcopy(fs->lfs_fsmnt, mp->mnt_stat.f_mntonname, MNAMELEN);
-#endif
+	bcopy((caddr_t)fs->fs_fsmnt, (caddr_t)mp->mnt_stat.f_mntonname,
+	    MNAMELEN);
 	(void) copyinstr(args.fspec, mp->mnt_stat.f_mntfromname, MNAMELEN - 1,
 	    &size);
 	bzero(mp->mnt_stat.f_mntfromname + size, MNAMELEN - size);
+	(void) ufs_statfs(mp, &mp->mnt_stat, p);
+#else
+	(void)copyinstr(path, fs->lfs_fsmnt, sizeof(fs->lfs_fsmnt) - 1, &size);
+	bzero(fs->lfs_fsmnt + size, sizeof(fs->lfs_fsmnt) - size);
+	bcopy((caddr_t)fs->lfs_fsmnt, (caddr_t)mp->mnt_stat.f_mntonname,
+	    MNAMELEN);
+	(void) copyinstr(args.fspec, mp->mnt_stat.f_mntfromname, MNAMELEN - 1,
+	    &size);
+	bzero(mp->mnt_stat.f_mntfromname + size, MNAMELEN - size);
+	(void) lfs_statfs(mp, &mp->mnt_stat, p);
+#endif
 	return (0);
 }
 
@@ -223,28 +201,25 @@ lfs_mountfs(devvp, mp, p)
 	struct partinfo dpart;
 	dev_t dev;
 	int error, i, ronly, size;
-	struct ucred *cred;
 
-	cred = p ? p->p_ucred : NOCRED;
 	/*
 	 * Disallow multiple mounts of the same device.
 	 * Disallow mounting of a device that is currently in use
 	 * (except for root, which might share swap device for miniroot).
 	 * Flush out any old buffers remaining from a previous use.
 	 */
-	if ((error = vfs_mountedon(devvp)) != 0)
+	if (error = vfs_mountedon(devvp))
 		return (error);
 	if (vcount(devvp) > 1 && devvp != rootvp)
 		return (EBUSY);
-	if ((error = vinvalbuf(devvp, V_SAVE, cred, p, 0, 0)) != 0)
+	if (error = vinvalbuf(devvp, V_SAVE, p->p_ucred, p, 0, 0))
 		return (error);
 
 	ronly = (mp->mnt_flag & MNT_RDONLY) != 0;
-	error = VOP_OPEN(devvp, ronly ? FREAD : FREAD|FWRITE, FSCRED, p);
-	if (error)
+	if (error = VOP_OPEN(devvp, ronly ? FREAD : FREAD|FWRITE, FSCRED, p))
 		return (error);
 
-	if (VOP_IOCTL(devvp, DIOCGPART, (caddr_t)&dpart, FREAD, cred, p) != 0)
+	if (VOP_IOCTL(devvp, DIOCGPART, (caddr_t)&dpart, FREAD, NOCRED, p) != 0)
 		size = DEV_BSIZE;
 	else {
 		size = dpart.disklab->d_secsize;
@@ -261,8 +236,7 @@ lfs_mountfs(devvp, mp, p)
 	ump = NULL;
 
 	/* Read in the superblock. */
-	error = bread(devvp, LFS_LABELPAD / size, LFS_SBPAD, cred, &bp);
-	if (error)
+	if (error = bread(devvp, LFS_LABELPAD / size, LFS_SBPAD, NOCRED, &bp))
 		goto out;
 	fs = (struct lfs *)bp->b_data;
 
@@ -319,7 +293,7 @@ lfs_mountfs(devvp, mp, p)
 	 * artificially increment the reference count and keep a pointer
 	 * to it in the incore copy of the superblock.
 	 */
-	if ((error = VFS_VGET(mp, LFS_IFILE_INUM, &vp)) != 0)
+	if (error = VFS_VGET(mp, LFS_IFILE_INUM, &vp))
 		goto out;
 	fs->lfs_ivnode = vp;
 	VREF(vp);
@@ -329,7 +303,7 @@ lfs_mountfs(devvp, mp, p)
 out:
 	if (bp)
 		brelse(bp);
-	(void)VOP_CLOSE(devvp, ronly ? FREAD : FREAD|FWRITE, cred, p);
+	(void)VOP_CLOSE(devvp, ronly ? FREAD : FREAD|FWRITE, NOCRED, p);
 	if (ump) {
 		free(ump->um_lfs, M_UFSMNT);
 		free(ump, M_UFSMNT);
@@ -341,27 +315,28 @@ out:
 /*
  * unmount system call
  */
-int
 lfs_unmount(mp, mntflags, p)
 	struct mount *mp;
 	int mntflags;
 	struct proc *p;
 {
+	extern int doforce;
 	register struct ufsmount *ump;
 	register struct lfs *fs;
-	int error, flags, ronly;
+	int i, error, flags, ronly;
 
 	flags = 0;
-	if (mntflags & MNT_FORCE)
+	if (mntflags & MNT_FORCE) {
+		if (!doforce || (mp->mnt_flag & MNT_ROOTFS))
+			return (EINVAL);
 		flags |= FORCECLOSE;
+	}
 
 	ump = VFSTOUFS(mp);
 	fs = ump->um_lfs;
 #ifdef QUOTA
 	if (mp->mnt_flag & MNT_QUOTA) {
-		int i;
-		error = vflush(mp, fs->lfs_ivnode, SKIPSYSTEM|flags);
-		if (error)
+		if (error = vflush(mp, fs->lfs_ivnode, SKIPSYSTEM|flags))
 			return (error);
 		for (i = 0; i < MAXQUOTAS; i++) {
 			if (ump->um_quotas[i] == NULLVP)
@@ -374,10 +349,10 @@ lfs_unmount(mp, mntflags, p)
 		 */
 	}
 #endif
-	if ((error = vflush(mp, fs->lfs_ivnode, flags)) != 0)
+	if (error = vflush(mp, fs->lfs_ivnode, flags))
 		return (error);
 	fs->lfs_clean = 1;
-	if ((error = VFS_SYNC(mp, 1, p->p_ucred, p)) != 0)
+	if (error = VFS_SYNC(mp, 1, p->p_ucred, p))
 		return (error);
 	if (fs->lfs_ivnode->v_dirtyblkhd.lh_first)
 		panic("lfs_unmount: still dirty blocks on ifile vnode\n");
@@ -399,7 +374,6 @@ lfs_unmount(mp, mntflags, p)
 /*
  * Get file system statistics.
  */
-int
 lfs_statfs(mp, sbp, p)
 	struct mount *mp;
 	register struct statfs *sbp;
@@ -417,17 +391,19 @@ lfs_statfs(mp, sbp, p)
 	sbp->f_iosize = fs->lfs_bsize;
 	sbp->f_blocks = dbtofsb(fs,fs->lfs_dsize);
 	sbp->f_bfree = dbtofsb(fs, fs->lfs_bfree);
-        sbp->f_bavail = (long) (((u_int64_t) fs->lfs_dsize * (u_int64_t)
-		(100 - fs->lfs_minfree) / (u_int64_t) 100) -
-		(u_int64_t) (fs->lfs_dsize - sbp->f_bfree));
+	sbp->f_bavail = (fs->lfs_dsize * (100 - fs->lfs_minfree) / 100) -
+		(fs->lfs_dsize - fs->lfs_bfree);
 	sbp->f_bavail = dbtofsb(fs, sbp->f_bavail);
 	sbp->f_files = fs->lfs_nfiles;
 	sbp->f_ffree = sbp->f_bfree * INOPB(fs);
 	if (sbp != &mp->mnt_stat) {
-		bcopy(mp->mnt_stat.f_mntonname, sbp->f_mntonname, MNAMELEN);
-		bcopy(mp->mnt_stat.f_mntfromname, sbp->f_mntfromname, MNAMELEN);
+		bcopy((caddr_t)mp->mnt_stat.f_mntonname,
+			(caddr_t)&sbp->f_mntonname[0], MNAMELEN);
+		bcopy((caddr_t)mp->mnt_stat.f_mntfromname,
+			(caddr_t)&sbp->f_mntfromname[0], MNAMELEN);
 	}
-	strncpy(sbp->f_fstypename, mp->mnt_op->vfs_name, MFSNAMELEN);
+	strncpy(&sbp->f_fstypename[0], mp->mnt_op->vfs_name, MFSNAMELEN);
+	sbp->f_fstypename[MFSNAMELEN] = '\0';
 	return (0);
 }
 
@@ -438,7 +414,6 @@ lfs_statfs(mp, sbp, p)
  *
  * Note: we are always called with the filesystem marked `MPBUSY'.
  */
-int
 lfs_sync(mp, waitfor, cred, p)
 	struct mount *mp;
 	int waitfor;
@@ -494,7 +469,7 @@ lfs_vget(mp, ino, vpp)
 	}
 
 	/* Allocate new vnode/inode. */
-	if ((error = lfs_vcreate(mp, ino, &vp)) != 0) {
+	if (error = lfs_vcreate(mp, ino, &vp)) {
 		*vpp = NULL;
 		return (error);
 	}
@@ -517,8 +492,8 @@ lfs_vget(mp, ino, vpp)
 	ip->i_lfs = ump->um_lfs;
 
 	/* Read in the disk contents for the inode, copy into the inode. */
-	error = bread(ump->um_devvp, daddr, (int)fs->lfs_bsize, NOCRED, &bp);
-	if (error) {
+	if (error =
+	    bread(ump->um_devvp, daddr, (int)fs->lfs_bsize, NOCRED, &bp)) {
 		/*
 		 * The inode does not contain anything useful, so it would
 		 * be misleading to leave it on its hash chain. With mode
@@ -530,15 +505,14 @@ lfs_vget(mp, ino, vpp)
 		*vpp = NULL;
 		return (error);
 	}
-	ip->i_din.ffs_din = *lfs_ifind(fs, ino, (struct dinode *)bp->b_data);
+	ip->i_din = *lfs_ifind(fs, ino, (struct dinode *)bp->b_data);
 	brelse(bp);
 
 	/*
 	 * Initialize the vnode from the inode, check for aliases.  In all
 	 * cases re-init ip, the underlying vnode/inode may have changed.
 	 */
-	error = ufs_vinit(mp, lfs_specop_p, LFS_FIFOOPS, &vp);
-	if (error) {
+	if (error = ufs_vinit(mp, lfs_specop_p, LFS_FIFOOPS, &vp)) {
 		vput(vp);
 		*vpp = NULL;
 		return (error);
@@ -588,7 +562,6 @@ lfs_fhtovp(mp, fhp, nam, vpp, exflagsp, credanonp)
  * Vnode pointer to File handle
  */
 /* ARGSUSED */
-int
 lfs_vptofh(vp, fhp)
 	struct vnode *vp;
 	struct fid *fhp;
@@ -600,6 +573,6 @@ lfs_vptofh(vp, fhp)
 	ufhp = (struct ufid *)fhp;
 	ufhp->ufid_len = sizeof(struct ufid);
 	ufhp->ufid_ino = ip->i_number;
-	ufhp->ufid_gen = ip->i_ffs_gen;
+	ufhp->ufid_gen = ip->i_gen;
 	return (0);
 }

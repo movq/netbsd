@@ -1,8 +1,6 @@
-/*	$NetBSD: pty.c,v 1.8 1997/06/29 18:44:09 christos Exp $	*/
-
 /*-
- * Copyright (c) 1990, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1990 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,15 +31,11 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char sccsid[] = "@(#)pty.c	8.1 (Berkeley) 6/4/93";
-#else
-__RCSID("$NetBSD: pty.c,v 1.8 1997/06/29 18:44:09 christos Exp $");
-#endif
+static char sccsid[] = "@(#)pty.c	5.6 (Berkeley) 5/10/91";
 #endif /* LIBC_SCCS and not lint */
 
+#include <sys/cdefs.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/ioctl.h>
@@ -52,23 +46,14 @@ __RCSID("$NetBSD: pty.c,v 1.8 1997/06/29 18:44:09 christos Exp $");
 #include <stdio.h>
 #include <string.h>
 #include <grp.h>
-#include <util.h>
 
-#ifdef i386
-/* PCVT conflicts with ttyv*. */
-#define TTY_LETTERS "pqrstuwxyzPQRST"
-#else
-#define TTY_LETTERS "pqrstuvwxyzPQRST"
-#endif
-
-int
 openpty(amaster, aslave, name, termp, winp)
 	int *amaster, *aslave;
 	char *name;
 	struct termios *termp;
 	struct winsize *winp;
 {
-	static char line[] = "/dev/XtyXX";
+	static char line[] = "/dev/ptyXX";
 	register const char *cp1, *cp2;
 	register int master, slave, ttygid;
 	struct group *gr;
@@ -78,8 +63,7 @@ openpty(amaster, aslave, name, termp, winp)
 	else
 		ttygid = -1;
 
-	line[5] = 'p';
-	for (cp1 = TTY_LETTERS; *cp1; cp1++) {
+	for (cp1 = "pqrs"; *cp1; cp1++) {
 		line[8] = *cp1;
 		for (cp2 = "0123456789abcdef"; *cp2; cp2++) {
 			line[9] = *cp2;
@@ -113,15 +97,13 @@ openpty(amaster, aslave, name, termp, winp)
 	return (-1);
 }
 
-pid_t
 forkpty(amaster, name, termp, winp)
 	int *amaster;
 	char *name;
 	struct termios *termp;
 	struct winsize *winp;
 {
-	int master, slave;
-	pid_t pid;
+	int master, slave, pid;
 
 	if (openpty(&master, &slave, name, termp, winp) == -1)
 		return (-1);

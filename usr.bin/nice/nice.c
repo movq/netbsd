@@ -1,5 +1,3 @@
-/*	$NetBSD: nice.c,v 1.10 1997/10/19 06:28:04 lukem Exp $	*/
-
 /*
  * Copyright (c) 1989 The Regents of the University of California.
  * All rights reserved.
@@ -33,90 +31,68 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT(
-    "@(#) Copyright (c) 1989 The Regents of the University of California.\n\
- All rights reserved.\n");
+char copyright[] =
+"@(#) Copyright (c) 1989 The Regents of the University of California.\n\
+ All rights reserved.\n";
 #endif /* not lint */
 
 #ifndef lint
-#if 0
 static char sccsid[] = "@(#)nice.c	5.4 (Berkeley) 6/1/90";
-#endif
-__RCSID("$NetBSD: nice.c,v 1.10 1997/10/19 06:28:04 lukem Exp $");
 #endif /* not lint */
 
-#include <sys/types.h>
 #include <sys/time.h>
 #include <sys/resource.h>
 #include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <locale.h>
 #include <ctype.h>
-#include <errno.h>
-#include <err.h>
-#include <unistd.h>
 
 #define	DEFNICE	10
 
-int	main __P((int, char **));
-static void usage __P((void));
-
-int
+/* ARGSUSED */
 main(argc, argv)
 	int argc;
 	char **argv;
 {
-	int niceness = DEFNICE;
-	int c;
+	extern int errno;
+	int niceness;
+	char *strerror();
 
-	setlocale(LC_ALL, "");
-
-        /* handle obsolete -number syntax */
-        if (argc > 1 && argv[1][0] == '-' && isdigit(argv[1][1])) {
-		niceness = atoi (argv[1] + 1);
-                argc--; argv++;
-        }
-
-	while ((c = getopt (argc, argv, "n:")) != -1) {
-		switch (c) {
-		case 'n':
-			niceness = atoi (optarg);
-			break;
-
-		case '?':
-		default:
-			usage();
-			break;
+	niceness = DEFNICE;
+	if (argv[1][0] == '-')
+		if (isdigit(argv[1][1])) {
+			niceness = atoi(argv[1] + 1);
+			++argv;
 		}
-	}
-	argc -= optind; argv += optind;
+		else {
+			(void)fprintf(stderr, "nice: illegal option -- %c\n",
+			    argv[1][1]);
+			usage();
+		}
 
-	if (argc == 0)
+	if (!argv[1])
 		usage();
 
 	errno = 0;
 	niceness += getpriority(PRIO_PROCESS, 0);
 	if (errno) {
-		err (1, "getpriority");
-		/* NOTREACHED */
+		(void)fprintf(stderr, "nice: getpriority: %s\n",
+		    strerror(errno));
+		exit(1);
 	}
 	if (setpriority(PRIO_PROCESS, 0, niceness)) {
-		warn ("setpriority");
+		(void)fprintf(stderr,
+		    "nice: setpriority: %s\n", strerror(errno));
+		exit(1);
 	}
-
-	execvp(argv[0], &argv[0]);
-	err ((errno == ENOENT) ? 127 : 126, "%s", argv[0]);
-	/* NOTREACHED */
+	execvp(argv[1], &argv[1]);
+	(void)fprintf(stderr,
+	    "nice: %s: %s\n", argv[1], strerror(errno));
+	exit(1);
 }
 
-static void
 usage()
 {
 	(void)fprintf(stderr,
-	    "usage: nice [ -n increment ] utility [ argument ...]\n");
-	
+	    "nice [ -# ] command [ options ] [ operands ]\n");
 	exit(1);
 }

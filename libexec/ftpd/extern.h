@@ -1,5 +1,3 @@
-/*	$NetBSD: extern.h,v 1.5 1997/09/23 13:56:40 lukem Exp $	*/
-
 /*-
  * Copyright (c) 1992, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -32,25 +30,23 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)extern.h	8.2 (Berkeley) 4/4/94
+ *	from: @(#)extern.h	8.2 (Berkeley) 4/4/94
+ * 	$Id: extern.h,v 1.1 1994/06/29 01:49:39 deraadt Exp $
  */
 
 void	blkfree __P((char **));
-char   *conffilename __P((const char *));
 char  **copyblk __P((char **));
 void	cwd __P((char *));
 void	delete __P((char *));
-char   *do_conversion __P((const char *));
 void	dologout __P((int));
 void	fatal __P((char *));
 int	ftpd_pclose __P((FILE *));
-FILE   *ftpd_popen __P((char *, char *, int));
+FILE   *ftpd_popen __P((char *, char *));
 char   *getline __P((char *, int, FILE *));
 void	logwtmp __P((char *, char *, char *));
 void	lreply __P((int, const char *, ...));
 void	makedir __P((char *));
 void	nack __P((char *));
-void	parse_conf __P((char *));
 void	pass __P((char *));
 void	passive __P((void));
 void	perror_reply __P((int, char *));
@@ -61,33 +57,10 @@ char   *renamefrom __P((char *));
 void	reply __P((int, const char *, ...));
 void	retrieve __P((char *, char *));
 void	send_file_list __P((char *));
-void	show_chdir_messages __P((int));
+void	setproctitle __P((const char *, ...));
 void	statcmd __P((void));
 void	statfilecmd __P((char *));
 void	store __P((char *, char *, int));
 void	upper __P((char *));
 void	user __P((char *));
 void	yyerror __P((char *));
-
-#define CLASS_CHROOT	"chroot"
-#define CLASS_GUEST	"guest"
-#define CLASS_REAL	"real"
-
-struct ftpconv {
-	struct ftpconv	*next;
-	char		*suffix;	/* Suffix of requested name */
-	char		*types;		/* Valid file types */
-	char		*disable;	/* File to disable conversions */
-	char		*command;	/* Command to do the conversion */
-};
-
-struct ftpclass {
-	char		*classname;	/* Current class */
-	struct ftpconv 	*conversions;	/* List of conversions */
-	char		*display;	/* Files to display upon chdir */
-	unsigned int	 maxtimeout;	/* Maximum permitted timeout */
-	int		 modify;	/* Allow dele, mkd, rmd, umask, chmod */
-	char		*notify;	/* Files to notify about upon chdir */
-	unsigned int	 timeout;	/* Default timeout */
-	mode_t		 umask;		/* Umask to use */
-};

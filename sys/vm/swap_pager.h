@@ -1,9 +1,7 @@
-/*	$NetBSD: swap_pager.h,v 1.7 1997/01/03 18:03:19 mrg Exp $	*/
-
 /*
  * Copyright (c) 1990 University of Utah.
- * Copyright (c) 1991, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1991 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * the Systems Programming Group of the University of Utah Computer
@@ -37,7 +35,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)swap_pager.h	8.1 (Berkeley) 6/11/93
+ *	@(#)swap_pager.h	7.1 (Berkeley) 12/5/90
  */
 
 #ifndef	_SWAP_PAGER_
@@ -83,11 +81,32 @@ struct swpager {
 	sw_blk_t     sw_blocks;	/* pointer to list of swap blocks */
 	short	     sw_flags;	/* flags */
 	short	     sw_poip;	/* pageouts in progress */
-	int	     sw_cnt;	/* count of pages in pager */
 };
 typedef struct swpager	*sw_pager_t;
 
 #define	SW_WANTED	0x01
 #define SW_NAMED	0x02
+
+#ifdef KERNEL
+
+void		swap_pager_init();
+vm_pager_t	swap_pager_alloc();
+void		swap_pager_dealloc();
+boolean_t	swap_pager_getpage(), swap_pager_putpage();
+boolean_t	swap_pager_haspage();
+
+struct pagerops swappagerops = {
+	swap_pager_init,
+	swap_pager_alloc,
+	swap_pager_dealloc,
+	swap_pager_getpage,
+	swap_pager_putpage,
+	swap_pager_haspage
+};
+
+int		swap_pager_iodone();
+boolean_t	swap_pager_clean();
+
+#endif
 
 #endif	/* _SWAP_PAGER_ */

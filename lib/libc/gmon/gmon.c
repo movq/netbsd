@@ -1,5 +1,3 @@
-/*	$NetBSD: gmon.c,v 1.10 1997/07/13 19:53:06 christos Exp $	*/
-
 /*-
  * Copyright (c) 1983, 1992, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -33,29 +31,20 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #if !defined(lint) && defined(LIBC_SCCS)
-#if 0
 static char sccsid[] = "@(#)gmon.c	8.1 (Berkeley) 6/4/93";
-#else
-__RCSID("$NetBSD: gmon.c,v 1.10 1997/07/13 19:53:06 christos Exp $");
-#endif
 #endif
 
-#include "namespace.h"
 #include <sys/param.h>
 #include <sys/time.h>
 #include <sys/gmon.h>
 #include <sys/sysctl.h>
 
 #include <stdio.h>
-#include <stdlib.h>
 #include <fcntl.h>
-#include <limits.h>
 #include <unistd.h>
-#include <err.h>
 
-extern char *minbrk __asm ("minbrk");
+extern char *minbrk asm ("minbrk");
 
 struct gmonparam _gmonparam = { GMON_PROF_OFF };
 
@@ -66,8 +55,6 @@ static int	s_scale;
 #define ERR(s) write(2, s, sizeof(s))
 
 void	moncontrol __P((int));
-void	monstartup __P((u_long, u_long));
-void	_mcleanup __P((void));
 static int hertz __P((void));
 
 void
@@ -88,7 +75,7 @@ monstartup(lowpc, highpc)
 	p->textsize = p->highpc - p->lowpc;
 	p->kcountsize = p->textsize / HISTFRACTION;
 	p->hashfraction = HASHFRACTION;
-	p->fromssize = p->textsize / p->hashfraction;
+	p->fromssize = p->textsize / HASHFRACTION;
 	p->tolimit = p->textsize * ARCDENSITY / 100;
 	if (p->tolimit < MINARCS)
 		p->tolimit = MINARCS;
@@ -115,7 +102,7 @@ monstartup(lowpc, highpc)
 
 	o = p->highpc - p->lowpc;
 	if (p->kcountsize < o) {
-#ifndef notdef
+#ifndef hp300
 		s_scale = ((float)p->kcountsize / o ) * SCALE_1_TO_1;
 #else /* avoid floating point */
 		int quot = o / p->kcountsize;
@@ -149,13 +136,9 @@ _mcleanup()
 	struct clockinfo clockinfo;
 	int mib[2];
 	size_t size;
-	char *profdir;
-	char *proffile;
-	char  buf[PATH_MAX];
-	int len = sizeof(buf) - 1;
 #ifdef DEBUG
 	int log, len;
-	char buf2[200];
+	char buf[200];
 #endif
 
 	if (p->state == GMON_PROF_ERROR)
@@ -177,68 +160,20 @@ _mcleanup()
 	}
 
 	moncontrol(0);
-
-	if ((profdir = getenv("PROFDIR")) != NULL) {
-		extern char *__progname;
-		char *s, *t;
-		pid_t pid;
-		long divisor;
-
-		/* If PROFDIR contains a null value, no profiling 
-		   output is produced */
-		if (*profdir == '\0') {
-			return;
-		}
-		
-		t = buf;
-		s = profdir;
-		while ((*t = *s) != '\0') {
-			if (len-- == 0) {
-				warnx("_mcleanup: internal buffer overflow, PROFDIR too long");
-				return;
-			}
-			t++;
-			s++;
-		}
-		*t++ = '/';
-
-		/* 
-		 * Copy and convert pid from a pid_t to a string.  For 
-		 * best performance, divisor should be initialized to
-		 * the largest power of 10 less than PID_MAX.
-		 */
-		pid = getpid();
-		divisor=10000;
-		while (divisor > pid) divisor /= 10;	/* skip leading zeros */
-		do {
-			*t++ = (pid/divisor) + '0';
-			pid %= divisor;
-		} while (divisor /= 10);
-		*t++ = '.';
-
-		s = __progname;
-		while ((*t++ = *s++) != '\0')
-			;
-
-		proffile = buf;
-	} else {
-		proffile = "gmon.out";
-	}
-
-	fd = open(proffile , O_CREAT|O_TRUNC|O_WRONLY, 0666);
+	fd = open("gmon.out", O_CREAT|O_TRUNC|O_WRONLY, 0666);
 	if (fd < 0) {
-		warn("mcount: Cannot open `%s'", proffile);
+		perror("mcount: gmon.out");
 		return;
 	}
 #ifdef DEBUG
 	log = open("gmon.log", O_CREAT|O_TRUNC|O_WRONLY, 0664);
 	if (log < 0) {
-		warn("mcount: Cannot open `gmon.log'");
+		perror("mcount: gmon.log");
 		return;
 	}
-	len = snprintf(buf2, sizeof buf2, "[mcleanup1] kcount 0x%x ssiz %d\n",
+	len = sprintf(buf, "[mcleanup1] kcount 0x%x ssiz %d\n",
 	    p->kcount, p->kcountsize);
-	write(log, buf2, len);
+	write(log, buf, len);
 #endif
 	hdr = (struct gmonhdr *)&gmonhdr;
 	hdr->lpc = p->lowpc;
@@ -258,11 +193,11 @@ _mcleanup()
 		for (toindex = p->froms[fromindex]; toindex != 0;
 		     toindex = p->tos[toindex].link) {
 #ifdef DEBUG
-			len = snprintf(buf2, sizeof buf2,
+			len = sprintf(buf,
 			"[mcleanup2] frompc 0x%x selfpc 0x%x count %d\n" ,
 				frompc, p->tos[toindex].selfpc,
 				p->tos[toindex].count);
-			write(log, buf2, len);
+			write(log, buf, len);
 #endif
 			rawarc.raw_frompc = frompc;
 			rawarc.raw_selfpc = p->tos[toindex].selfpc;
@@ -286,7 +221,7 @@ moncontrol(mode)
 
 	if (mode) {
 		/* start */
-		profil((char *)p->kcount, p->kcountsize, p->lowpc,
+		profil((char *)p->kcount, p->kcountsize, (int)p->lowpc,
 		    s_scale);
 		p->state = GMON_PROF_ON;
 	} else {
@@ -315,3 +250,5 @@ hertz()
 		return(0);
 	return (1000000 / tim.it_interval.tv_usec);
 }
+
+

@@ -1,8 +1,6 @@
-/*	$NetBSD: rget.c,v 1.6 1997/07/13 20:15:24 christos Exp $	*/
-
 /*-
- * Copyright (c) 1990, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1990 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Chris Torek.
@@ -36,24 +34,17 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char sccsid[] = "@(#)rget.c	8.1 (Berkeley) 6/4/93";
-#else
-__RCSID("$NetBSD: rget.c,v 1.6 1997/07/13 20:15:24 christos Exp $");
-#endif
+static char sccsid[] = "@(#)rget.c	5.1 (Berkeley) 1/20/91";
 #endif /* LIBC_SCCS and not lint */
 
 #include <stdio.h>
-#include "local.h"
 
 /*
  * Handle getc() when the buffer ran out:
  * Refill, then return the first character
  * in the newly-filled buffer.
  */
-int
 __srget(fp)
 	register FILE *fp;
 {

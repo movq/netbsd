@@ -1,8 +1,6 @@
-/*	$NetBSD: input.c,v 1.6 1997/10/10 02:07:18 lukem Exp $	*/
-
 /*-
- * Copyright (c) 1990, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1990 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Ed James.
@@ -45,13 +43,8 @@
  * For more info on this and all of my stuff, mail edjames@berkeley.edu.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)input.c	8.1 (Berkeley) 5/31/93";
-#else
-__RCSID("$NetBSD: input.c,v 1.6 1997/10/10 02:07:18 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)input.c	5.4 (Berkeley) 4/30/90";
 #endif not lint
 
 #include "include.h"
@@ -74,7 +67,7 @@ typedef struct {
 	int	token;
 	int	to_state;
 	char	*str;
-	char	*(*func) __P((char));
+	char	*(*func)();
 } RULE;
 
 typedef struct {
@@ -100,6 +93,10 @@ typedef struct {
 
 #define NUMSTATES	NUMELS(st)
 
+char	*setplane(), *circle(), *left(), *right(), *Left(), *Right(), 
+	*beacon(), *ex_it(), *climb(), *descend(), *setalt(), *setrelalt(), 
+	*benum(), *to_dir(), *rel_dir(), *delayb(), *mark(), *unmark(),
+	*airport(), *turn(), *ignore();
 
 RULE	state0[] = {	{ ALPHATOKEN,	1,	"%c:",		setplane},
 			{ RETTOKEN,	-1,	"",		NULL	},
@@ -193,7 +190,6 @@ int	level;
 int	tval;
 int	dest_type, dest_no, dir;
 
-int
 pop()
 {
 	if (level == 0)
@@ -208,7 +204,6 @@ pop()
 	return (0);
 }
 
-void
 rezero()
 {
 	iomove(0);
@@ -221,9 +216,7 @@ rezero()
 	strcpy(T_STR, "");
 }
 
-void
 push(ruleno, ch)
-	int ruleno, ch;
 {
 	int	newstate, newpos;
 
@@ -244,21 +237,20 @@ push(ruleno, ch)
 	strcpy(T_STR, "");
 }
 
-int
 getcommand()
 {
 	int	c, i, done;
-	char	*s, *(*func) __P((char));
+	char	*s, *(*func)();
 	PLANE	*pp;
 
 	rezero();
 
 	do {
 		c = gettoken();
-		if (c == tty_new.c_cc[VERASE]) {
+		if (c == tty_new.sg_erase) {
 			if (pop() < 0)
 				noise();
-		} else if (c == tty_new.c_cc[VKILL]) {
+		} else if (c == tty_new.sg_kill) {
 			while (pop() >= 0)
 				;
 		} else {
@@ -303,14 +295,12 @@ getcommand()
 	return (0);
 }
 
-void
 noise()
 {
 	putchar('\07');
 	fflush(stdout);
 }
 
-int
 gettoken()
 {
 	while ((tval = getAChar()) == REDRAWTOKEN || tval == SHELLTOKEN)
@@ -329,7 +319,7 @@ gettoken()
 #endif
 			if (fork() == 0)	/* child */
 			{
-				char *shell, *base;
+				char *shell, *base, *getenv(), *strrchr();
 
 				setuid(getuid()); /* turn off setuid bit */
 				done_screen();
@@ -351,8 +341,8 @@ gettoken()
 			}
 
 			wait(0);
-			tcsetattr(fileno(stdin), TCSADRAIN, &tty_new);
 #ifdef BSD
+			ioctl(fileno(stdin), TIOCSETP, &tty_new);
 			itv.it_value.tv_sec = 0;
 			itv.it_value.tv_usec = 1;
 			itv.it_interval.tv_sec = sp->update_secs;
@@ -360,6 +350,7 @@ gettoken()
 			setitimer(ITIMER_REAL, &itv, NULL);
 #endif
 #ifdef SYSV
+			ioctl(fileno(stdin), TCSETAW, &tty_new);
 			alarm(aval);
 #endif
 		}
@@ -376,21 +367,19 @@ gettoken()
 
 char	*
 setplane(c)
-	char c;
 {
 	PLANE	*pp;
 
 	pp = findplane(number(c));
 	if (pp == NULL)
 		return ("Unknown Plane");
-	memcpy(&p, pp, sizeof (p));
+	bcopy(pp, &p, sizeof (p));
 	p.delayd = 0;
 	return (NULL);
 }
 
 char	*
 turn(c)
-	char c;
 {
 	if (p.altitude == 0)
 		return ("Planes at airports may not change direction");
@@ -399,7 +388,6 @@ turn(c)
 
 char	*
 circle(c)
-	char c;
 {
 	if (p.altitude == 0)
 		return ("Planes cannot circle on the ground");
@@ -409,7 +397,6 @@ circle(c)
 
 char	*
 left(c)
-	char c;
 {
 	dir = D_LEFT;
 	p.new_dir = p.dir - 1;
@@ -420,7 +407,6 @@ left(c)
 
 char	*
 right(c)
-	char c;
 {
 	dir = D_RIGHT;
 	p.new_dir = p.dir + 1;
@@ -431,7 +417,6 @@ right(c)
 
 char	*
 Left(c)
-	char c;
 {
 	p.new_dir = p.dir - 2;
 	if (p.new_dir < 0)
@@ -441,7 +426,6 @@ Left(c)
 
 char	*
 Right(c)
-	char c;
 {
 	p.new_dir = p.dir + 2;
 	if (p.new_dir > MAXDIR)
@@ -451,7 +435,6 @@ Right(c)
 
 char	*
 delayb(c)
-	char c;
 {
 	int	xdiff, ydiff;
 
@@ -497,7 +480,6 @@ delayb(c)
 
 char	*
 beacon(c)
-	char c;
 {
 	dest_type = T_BEACON;
 	return (NULL);
@@ -505,7 +487,6 @@ beacon(c)
 
 char	*
 ex_it(c)
-	char c;
 {
 	dest_type = T_EXIT;
 	return (NULL);
@@ -513,7 +494,6 @@ ex_it(c)
 
 char	*
 airport(c)
-	char c;
 {
 	dest_type = T_AIRPORT;
 	return (NULL);
@@ -521,7 +501,6 @@ airport(c)
 
 char	*
 climb(c)
-	char c;
 {
 	dir = D_UP;
 	return (NULL);
@@ -529,7 +508,6 @@ climb(c)
 
 char	*
 descend(c)
-	char c;
 {
 	dir = D_DOWN;
 	return (NULL);
@@ -537,7 +515,6 @@ descend(c)
 
 char	*
 setalt(c)
-	char c;
 {
 	if ((p.altitude == c - '0') && (p.new_altitude == p.altitude))
 		return ("Already at that altitude");
@@ -547,7 +524,6 @@ setalt(c)
 
 char	*
 setrelalt(c)
-	char c;
 {
 	if (c == 0)
 		return ("altitude not changed");
@@ -572,7 +548,6 @@ setrelalt(c)
 
 char	*
 benum(c)
-	char c;
 {
 	dest_no = c -= '0';
 
@@ -604,7 +579,6 @@ benum(c)
 
 char	*
 to_dir(c)
-	char c;
 {
 	p.new_dir = dir_no(c);
 	return (NULL);
@@ -612,7 +586,6 @@ to_dir(c)
 
 char	*
 rel_dir(c)
-	char c;
 {
 	int	angle;
 
@@ -637,7 +610,6 @@ rel_dir(c)
 
 char	*
 mark(c)
-	char c;
 {
 	if (p.altitude == 0)
 		return ("Cannot mark planes on the ground");
@@ -649,7 +621,6 @@ mark(c)
 
 char	*
 unmark(c)
-	char c;
 {
 	if (p.altitude == 0)
 		return ("Cannot unmark planes on the ground");
@@ -661,7 +632,6 @@ unmark(c)
 
 char	*
 ignore(c)
-	char c;
 {
 	if (p.altitude == 0)
 		return ("Cannot ignore planes on the ground");
@@ -671,13 +641,11 @@ ignore(c)
 	return (NULL);
 }
 
-int
 dir_no(ch)
 	char	ch;
 {
 	int	dir;
 
-	dir = -1;
 	switch (ch) {
 	case 'w':	dir = 0;	break;
 	case 'e':	dir = 1;	break;

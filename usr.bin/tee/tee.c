@@ -1,8 +1,6 @@
-/*	$NetBSD: tee.c,v 1.6 1997/10/20 00:37:11 lukem Exp $	*/
-
 /*
- * Copyright (c) 1988, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1988 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,30 +31,24 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1988, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+char copyright[] =
+"@(#) Copyright (c) 1988 Regents of the University of California.\n\
+ All rights reserved.\n";
 #endif /* not lint */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)tee.c	8.1 (Berkeley) 6/6/93";
-#endif
-__RCSID("$NetBSD: tee.c,v 1.6 1997/10/20 00:37:11 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)tee.c	5.11 (Berkeley) 5/6/91";
+#endif /* not lint */
 
 #include <sys/types.h>
 #include <sys/stat.h>
-#include <signal.h>
-#include <errno.h>
 #include <fcntl.h>
+#include <signal.h>
 #include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <locale.h>
-#include <err.h>
 
 typedef struct _list {
 	struct _list *next;
@@ -65,25 +57,20 @@ typedef struct _list {
 } LIST;
 LIST *head;
 
-void	add __P((int, char *));
-int	main __P((int, char **));
-
-int
 main(argc, argv)
 	int argc;
-	char *argv[];
+	char **argv;
 {
-	LIST *p;
-	int n, fd, rval, wval;
-	char *bp;
+	extern int errno, optind;
+	register LIST *p;
+	register int n, fd, rval, wval;
+	register char *bp;
 	int append, ch, exitval;
 	char *buf;
-#define	BSIZE (8 * 1024)
-
-	setlocale(LC_ALL, "");
+	off_t lseek();
 
 	append = 0;
-	while ((ch = getopt(argc, argv, "ai")) != -1)
+	while ((ch = getopt(argc, argv, "ai")) != EOF)
 		switch((char)ch) {
 		case 'a':
 			append = 1;
@@ -99,26 +86,27 @@ main(argc, argv)
 	argv += optind;
 	argc -= optind;
 
-	if ((buf = malloc((size_t)BSIZE)) == NULL)
-		err(1, "malloc");
-
+	if (!(buf = malloc((u_int)8 * 1024))) {
+		(void)fprintf(stderr, "tee: out of space.\n");
+		exit(1);
+	}
 	add(STDOUT_FILENO, "stdout");
-
-	for (exitval = 0; *argv; ++argv)
+	for (; *argv; ++argv)
 		if ((fd = open(*argv, append ? O_WRONLY|O_CREAT|O_APPEND :
-		    O_WRONLY|O_CREAT|O_TRUNC, DEFFILEMODE)) < 0) {
-			warn("%s", *argv);
-			exitval = 1;
-		} else
+		    O_WRONLY|O_CREAT|O_TRUNC, DEFFILEMODE)) < 0)
+			(void)fprintf(stderr, "tee: %s: %s.\n",
+			    *argv, strerror(errno));
+		else
 			add(fd, *argv);
-
-	while ((rval = read(STDIN_FILENO, buf, BSIZE)) > 0)
+	exitval = 0;
+	while ((rval = read(STDIN_FILENO, buf, sizeof(buf))) > 0)
 		for (p = head; p; p = p->next) {
 			n = rval;
 			bp = buf;
 			do {
 				if ((wval = write(p->fd, bp, n)) == -1) {
-					warn("%s", p->name);
+					(void)fprintf(stderr, "tee: %s: %s.\n",
+					    p->name, strerror(errno));
 					exitval = 1;
 					break;
 				}
@@ -126,29 +114,22 @@ main(argc, argv)
 			} while (n -= wval);
 		}
 	if (rval < 0) {
-		warn("read");
-		exitval = 1;
+		(void)fprintf(stderr, "tee: read: %s\n", strerror(errno));
+		exit(1);
 	}
-
-	for (p = head; p; p = p->next) {
-		if (close(p->fd) == -1) {
-			warn("%s", p->name);
-			exitval = 1;
-		}
-	}
-
 	exit(exitval);
 }
 
-void
 add(fd, name)
 	int fd;
 	char *name;
 {
 	LIST *p;
 
-	if ((p = malloc((size_t)sizeof(LIST))) == NULL)
-		err(1, "malloc");
+	if (!(p = malloc((u_int)sizeof(LIST)))) {
+		(void)fprintf(stderr, "tee: out of space.\n");
+		exit(1);
+	}
 	p->fd = fd;
 	p->name = name;
 	p->next = head;

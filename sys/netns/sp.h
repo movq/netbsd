@@ -1,8 +1,6 @@
-/*	$NetBSD: sp.h,v 1.6 1997/07/18 19:30:44 thorpej Exp $	*/
-
 /*
- * Copyright (c) 1984, 1985, 1986, 1987, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1984, 1985, 1986, 1987 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,7 +30,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)sp.h	8.1 (Berkeley) 6/10/93
+ *	@(#)sp.h	7.4 (Berkeley) 6/28/90
  */
 
 /*
@@ -40,15 +38,15 @@
  */
 
 struct sphdr {
-	u_int8_t sp_cc;		/* connection control */
-	u_int8_t sp_dt;		/* datastream type */
+	u_char	sp_cc;		/* connection control */
+	u_char	sp_dt;		/* datastream type */
 #define	SP_SP	0x80		/* system packet */
 #define	SP_SA	0x40		/* send acknowledgement */
 #define	SP_OB	0x20		/* attention (out of band data) */
 #define	SP_EM	0x10		/* end of message */
-	u_int16_t sp_sid;	/* source connection identifier */
-	u_int16_t sp_did;	/* destination connection identifier */
-	u_int16_t sp_seq;	/* sequence number */
-	u_int16_t sp_ack;	/* acknowledge number */
-	u_int16_t sp_alo;	/* allocation number */
+	u_short	sp_sid;		/* source connection identifier */
+	u_short	sp_did;		/* destination connection identifier */
+	u_short	sp_seq;		/* sequence number */
+	u_short	sp_ack;		/* acknowledge number */
+	u_short	sp_alo;		/* allocation number */
 };

@@ -1,5 +1,3 @@
-/*	$NetBSD: ufs_inode.c,v 1.9 1997/06/11 10:10:11 bouyer Exp $	*/
-
 /*
  * Copyright (c) 1991, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -37,7 +35,8 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)ufs_inode.c	8.7 (Berkeley) 7/22/94
+ *	from: @(#)ufs_inode.c	8.4 (Berkeley) 1/21/94
+ *	$Id: ufs_inode.c,v 1.1 1994/06/08 11:43:17 mycroft Exp $
  */
 
 #include <sys/param.h>
@@ -47,41 +46,47 @@
 #include <sys/mount.h>
 #include <sys/kernel.h>
 #include <sys/malloc.h>
-#include <sys/namei.h>
 
 #include <ufs/ufs/quota.h>
 #include <ufs/ufs/inode.h>
 #include <ufs/ufs/ufsmount.h>
 #include <ufs/ufs/ufs_extern.h>
 
-void
+u_long	nextgennumber;		/* Next generation number to assign. */
+int	prtactive = 0;		/* 1 => print out reclaim of active vnodes */
+
+int
 ufs_init()
 {
-	static int done = 0;
+	static int first = 1;
 
-	if (done)
-		return;
-	done = 1;
+	if (!first)
+		return (0);
+	first = 0;
+
+#ifdef DIAGNOSTIC
+	if ((sizeof(struct inode) - 1) & sizeof(struct inode))
+		printf("ufs_init: bad size %d\n", sizeof(struct inode));
+#endif
 	ufs_ihashinit();
 #ifdef QUOTA
 	dqinit();
 #endif
-	return;
+	return (0);
 }
 
 /*
  * Last reference to an inode.  If necessary, write or delete it.
  */
 int
-ufs_inactive(v)
-	void *v;
-{
+ufs_inactive(ap)
 	struct vop_inactive_args /* {
 		struct vnode *a_vp;
-	} */ *ap = v;
+	} */ *ap;
+{
 	register struct vnode *vp = ap->a_vp;
 	register struct inode *ip = VTOI(vp);
-	struct timespec ts;
+	struct timeval tv;
 	int mode, error;
 	extern int prtactive;
 
@@ -89,7 +94,7 @@ ufs_inactive(v)
 		vprint("ffs_inactive: pushing active", vp);
 
 	/* Get rid of inodes related to stale file handles. */
-	if (ip->i_ffs_mode == 0) {
+	if (ip->i_mode == 0) {
 		if ((vp->v_flag & VXLOCK) == 0)
 			vgone(vp);
 		return (0);
@@ -105,28 +110,28 @@ ufs_inactive(v)
 		ip->i_lockholder = -1;
 #endif
 	ip->i_flag |= IN_LOCKED;
-	if (ip->i_ffs_nlink <= 0 && (vp->v_mount->mnt_flag & MNT_RDONLY) == 0) {
+	if (ip->i_nlink <= 0 && (vp->v_mount->mnt_flag & MNT_RDONLY) == 0) {
 #ifdef QUOTA
 		if (!getinoquota(ip))
 			(void)chkiq(ip, -1, NOCRED, 0);
 #endif
 		error = VOP_TRUNCATE(vp, (off_t)0, 0, NOCRED, NULL);
-		ip->i_ffs_rdev = 0;
-		mode = ip->i_ffs_mode;
-		ip->i_ffs_mode = 0;
+		ip->i_rdev = 0;
+		mode = ip->i_mode;
+		ip->i_mode = 0;
 		ip->i_flag |= IN_CHANGE | IN_UPDATE;
 		VOP_VFREE(vp, ip->i_number, mode);
 	}
 	if (ip->i_flag & (IN_ACCESS | IN_CHANGE | IN_MODIFIED | IN_UPDATE)) {
-		TIMEVAL_TO_TIMESPEC(&time, &ts);
-		VOP_UPDATE(vp, &ts, &ts, 0);
+		tv = time;
+		VOP_UPDATE(vp, &tv, &tv, 0);
 	}
 	VOP_UNLOCK(vp);
 	/*
 	 * If we are done with the inode, reclaim it
 	 * so that it can be reused immediately.
 	 */
-	if (vp->v_usecount == 0 && ip->i_ffs_mode == 0)
+	if (vp->v_usecount == 0 && ip->i_mode == 0)
 		vgone(vp);
 	return (error);
 }
@@ -139,7 +144,7 @@ ufs_reclaim(vp)
 	register struct vnode *vp;
 {
 	register struct inode *ip;
-	extern int prtactive;
+	int i;
 
 	if (prtactive && vp->v_usecount != 0)
 		vprint("ufs_reclaim: pushing active", vp);
@@ -157,13 +162,10 @@ ufs_reclaim(vp)
 		ip->i_devvp = 0;
 	}
 #ifdef QUOTA
-	{
-		int i;
-		for (i = 0; i < MAXQUOTAS; i++) {
-			if (ip->i_dquot[i] != NODQUOT) {
-				dqrele(vp, ip->i_dquot[i]);
-				ip->i_dquot[i] = NODQUOT;
-			}
+	for (i = 0; i < MAXQUOTAS; i++) {
+		if (ip->i_dquot[i] != NODQUOT) {
+			dqrele(vp, ip->i_dquot[i]);
+			ip->i_dquot[i] = NODQUOT;
 		}
 	}
 #endif

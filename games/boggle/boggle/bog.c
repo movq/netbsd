@@ -1,5 +1,3 @@
-/*	$NetBSD: bog.c,v 1.8 1997/10/11 02:12:11 lukem Exp $	*/
-
 /*-
  * Copyright (c) 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -36,33 +34,26 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+static char copyright[] =
+"@(#) Copyright (c) 1993\n\
+	The Regents of the University of California.  All rights reserved.\n";
 #endif /* not lint */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)bog.c	8.2 (Berkeley) 5/4/95";
-#else
-__RCSID("$NetBSD: bog.c,v 1.8 1997/10/11 02:12:11 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)bog.c	8.1 (Berkeley) 6/11/93";
 #endif /* not lint */
 
 #include <ctype.h>
 #include <err.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 #include <time.h>
-#include <unistd.h>
 
 #include "bog.h"
 #include "extern.h"
 
-static	int	compar __P((const void *, const void *));
-	int	main __P((int, char *[]));
+static int	compar __P((const void *, const void *));
 
 struct dictindex dictindex[26];
 
@@ -113,7 +104,7 @@ int tnmwords = 0, tnpwords = 0;
 #include <setjmp.h>
 jmp_buf env;
 
-time_t start_t;
+long start_t;
 
 static FILE *dictfp;
 
@@ -132,13 +123,12 @@ main(argc, argv)
 	int ch, done, i, selfuse, sflag;
 	char *bspec, *p;
 
-	seed = 0;
 	batch = debug = reuse = selfuse = sflag = 0;
 	bspec = NULL;
 	minlength = 3;
 	tlimit = 180;		/* 3 minutes is standard */
 
-	while ((ch = getopt(argc, argv, "bds:t:w:")) != -1)
+	while ((ch = getopt(argc, argv, "bds:t:w:")) != EOF)
 		switch(ch) {
 		case 'b':
 			batch = 1;
@@ -165,29 +155,19 @@ main(argc, argv)
 	argc -= optind;
 	argv += optind;
 
-	/* process final arguments */
-	if (argc > 0)
-		if (strcmp(argv[0], "+") == 0)
-			reuse = 1;
-		else if (strcmp(argv[0], "++") == 0)
-			selfuse = 1;
+	if (strcmp(argv[0], "+") == 0)
+		reuse = 1;
+	else if (strcmp(argv[0], "++") == 0)
+		selfuse = 1;
+	else if (islower(argv[0][0])) {
+		if (strlen(argv[0]) != 16) {
+			usage();
 
-	if (reuse || selfuse) {
-		argc -= 1;
-		argv += 1;
+			/* This board is assumed to be valid... */
+			bspec = argv[0];
+		} else
+			usage();
 	}
-
-	if (argc > 0)
-		if (islower(argv[0][0])) {
-			if (strlen(argv[0]) != 16) {
-				usage();
-			} else {
-				/* This board is assumed to be valid... */
-				bspec = argv[0];
-			}
-		} else {
-		  	usage();
-		}
 
 	if (batch && bspec == NULL)
 		errx(1, "must give both -b and a board setup");
@@ -262,8 +242,8 @@ char *
 batchword(fp)
 	FILE *fp;
 {
-	int *p, *q;
-	char *w;
+	register int *p, *q;
+	register char *w;
 
 	q = &wordpath[MAXWORDLEN + 1];
 	p = wordpath;
@@ -290,8 +270,9 @@ batchword(fp)
 void
 playgame()
 {
+	/* Can't use register variables if setjmp() is used! */
 	int i, *p, *q;
-	time_t t;
+	long t;
 	char buf[MAXWORDLEN + 1];
 
 	ngames++;
@@ -413,8 +394,8 @@ checkword(word, prev, path)
 	char *word;
 	int prev, *path;
 {
-	char *p, *q;
-	int i, *lm;
+	register char *p, *q;
+	register int i, *lm;
 
 	if (debug) {
 		(void) printf("checkword(%s, %d, [", word, prev);
@@ -495,8 +476,8 @@ int
 validword(word)
 	char *word;
 {
-	int j;
-	char *q, *w;
+	register int j;
+	register char *q, *w;
 
 	j = word[0] - 'a';
 	if (dictseek(dictfp, dictindex[j].start, 0) < 0) {
@@ -529,8 +510,8 @@ validword(word)
 void
 checkdict()
 {
-	char *p, **pw, *w;
-	int i;
+	register char *p, **pw, *w;
+	register int i;
 	int prevch, previndex, *pi, *qi, st;
 
 	mwordsp = mwords;
@@ -595,8 +576,7 @@ checkdict()
 		}
 		mword[nmwords++] = mwordsp;
 		p = w;
-		while ((*mwordsp++ = *p++) != NULL)
-		    	;
+		while (*mwordsp++ = *p++);
 	}
 }
 
@@ -609,7 +589,7 @@ void
 newgame(b)
 	char *b;
 {
-	int i, p, q;
+	register int i, p, q;
 	char *tmp;
 	int *lm[26];
 	static char *cubes[16] = {
@@ -655,7 +635,7 @@ newgame(b)
 	}
 
 	for (i = 0; i < 16; i++) {
-		int j;
+		register int j;
 
 		j = (int) (board[i] - 'a');
 		*lm[j] = i;

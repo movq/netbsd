@@ -1,8 +1,6 @@
-/*	$NetBSD: tcp_fsm.h,v 1.7 1997/06/18 10:05:44 kleink Exp $	*/
-
 /*
- * Copyright (c) 1982, 1986, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1982, 1986 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,7 +30,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)tcp_fsm.h	8.1 (Berkeley) 6/10/93
+ *	@(#)tcp_fsm.h	7.4 (Berkeley) 6/28/90
  */
 
 /*
@@ -51,14 +49,13 @@
 #define	TCPS_CLOSE_WAIT		5	/* rcvd fin, waiting for close */
 /* states > TCPS_CLOSE_WAIT are those where user has closed */
 #define	TCPS_FIN_WAIT_1		6	/* have closed, sent fin */
-#define	TCPS_CLOSING		7	/* closed xchd FIN; await ACK */
+#define	TCPS_CLOSING		7	/* closed xchd FIN; await FIN ACK */
 #define	TCPS_LAST_ACK		8	/* had fin and close; await FIN ACK */
 /* states > TCPS_CLOSE_WAIT && < TCPS_FIN_WAIT_2 await ACK of FIN */
 #define	TCPS_FIN_WAIT_2		9	/* have closed, fin is acked */
 #define	TCPS_TIME_WAIT		10	/* in 2*msl quiet wait after close */
 
 #define	TCPS_HAVERCVDSYN(s)	((s) >= TCPS_SYN_RECEIVED)
-#define	TCPS_HAVEESTABLISHED(s)	((s) >= TCPS_ESTABLISHED)
 #define	TCPS_HAVERCVDFIN(s)	((s) >= TCPS_TIME_WAIT)
 
 #ifdef	TCPOUTFLAGS
@@ -71,7 +68,7 @@
 u_char	tcp_outflags[TCP_NSTATES] = {
     TH_RST|TH_ACK, 0, TH_SYN, TH_SYN|TH_ACK,
     TH_ACK, TH_ACK,
-    TH_FIN|TH_ACK, TH_ACK, TH_FIN|TH_ACK, TH_ACK, TH_ACK,
+    TH_FIN|TH_ACK, TH_FIN|TH_ACK, TH_FIN|TH_ACK, TH_ACK, TH_ACK,
 };
 #endif
 

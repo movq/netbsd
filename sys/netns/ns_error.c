@@ -1,8 +1,6 @@
-/*	$NetBSD: ns_error.c,v 1.9 1997/07/18 19:30:37 thorpej Exp $	*/
-
 /*
- * Copyright (c) 1984, 1988, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1984, 1988 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,32 +30,24 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)ns_error.c	8.1 (Berkeley) 6/10/93
+ *	@(#)ns_error.c	7.8 (Berkeley) 6/28/90
  */
 
-#include <sys/param.h>
-#include <sys/systm.h>
-#include <sys/malloc.h>
-#include <sys/mbuf.h>
-#include <sys/protosw.h>
-#include <sys/socket.h>
-#include <sys/time.h>
-#include <sys/kernel.h>
+#include "param.h"
+#include "systm.h"
+#include "malloc.h"
+#include "mbuf.h"
+#include "protosw.h"
+#include "socket.h"
+#include "time.h"
+#include "kernel.h"
 
-#include <net/if.h>
-#include <net/route.h>
+#include "../net/route.h"
 
-#include <netns/ns.h>
-#include <netns/ns_pcb.h>
-#include <netns/ns_if.h>
-#include <netns/ns_var.h>
-#include <netns/idp.h>
-#include <netns/idp_var.h>
-#include <netns/ns_error.h>
-#include <netns/sp.h>
-#include <netns/spidp.h>
-#include <netns/spp_timer.h>
-#include <netns/spp_var.h>
+#include "ns.h"
+#include "ns_pcb.h"
+#include "idp.h"
+#include "ns_error.h"
 
 #ifdef lint
 #define NS_ERRPRINTFS 1
@@ -71,12 +61,10 @@
 int	ns_errprintfs = 0;
 #endif
 
-int
 ns_err_x(c)
-	int c;
 {
-	register u_int16_t *w, *lim, *base = ns_errstat.ns_es_codes;
-	u_int16_t x = c;
+	register u_short *w, *lim, *base = ns_errstat.ns_es_codes;
+	u_short x = c;
 
 	/*
 	 * zero is a legit error code, handle specially
@@ -97,11 +85,10 @@ ns_err_x(c)
  * Generate an error packet of type error
  * in response to bad packet.
  */
-void
+
 ns_error(om, type, param)
 	struct mbuf *om;
 	int type;
-	int param;
 {
 	register struct ns_epidp *ep;
 	struct mbuf *m;
@@ -156,12 +143,12 @@ ns_error(om, type, param)
 	if ((u_int)type > NS_ERR_TOO_BIG)
 		panic("ns_err_error");
 	ns_errstat.ns_es_outhist[ns_err_x(type)]++;
-	ep->ns_ep_errp.ns_err_num = htons((u_int16_t)type);
-	ep->ns_ep_errp.ns_err_param = htons((u_int16_t)param);
+	ep->ns_ep_errp.ns_err_num = htons((u_short)type);
+	ep->ns_ep_errp.ns_err_param = htons((u_short)param);
 	bcopy((caddr_t)oip, (caddr_t)&ep->ns_ep_errp.ns_err_idp, 42);
 	nip = &ep->ns_ep_idp;
 	nip->idp_len = sizeof(*ep);
-	nip->idp_len = htons((u_int16_t)nip->idp_len);
+	nip->idp_len = htons((u_short)nip->idp_len);
 	nip->idp_pt = NSPROTO_ERROR;
 	nip->idp_tc = 0;
 	nip->idp_dna = oip->idp_sna;
@@ -177,7 +164,6 @@ freeit:
 	m_freem(om);
 }
 
-void
 ns_printhost(p)
 register struct ns_addr *p;
 {
@@ -195,14 +181,11 @@ register struct ns_addr *p;
 /*
  * Process a received NS_ERR message.
  */
-void
 ns_err_input(m)
 	struct mbuf *m;
 {
 	register struct ns_errp *ep;
-#ifdef NS_ERRPRINTFS
 	register struct ns_epidp *epidp = mtod(m, struct ns_epidp *);
-#endif
 	register int i;
 	int type, code, param;
 
@@ -275,15 +258,15 @@ ns_err_input(m)
 #ifdef NS_ERRPRINTFS
 		if (ns_errprintfs)
 			printf("deliver to protocol %d\n",
-			    ep->ns_err_idp.idp_pt);
+				       ep->ns_err_idp.idp_pt);
 #endif
 		switch(ep->ns_err_idp.idp_pt) {
 		case NSPROTO_SPP:
-			spp_ctlinput(code, NULL, ep);
+			spp_ctlinput(code, (caddr_t)ep);
 			break;
 
 		default:
-			idp_ctlinput(code, NULL, ep);
+			idp_ctlinput(code, (caddr_t)ep);
 		}
 		
 		goto freeit;
@@ -299,11 +282,11 @@ freeit:
 }
 
 #ifdef notdef
-u_int32_t
+u_long
 nstime()
 {
 	int s = splclock();
-	u_int32_t t;
+	u_long t;
 
 	t = (time.tv_sec % (24*60*60)) * 1000 + time.tv_usec / 1000;
 	splx(s);
@@ -311,14 +294,13 @@ nstime()
 }
 #endif
 
-int
 ns_echo(m)
 struct mbuf *m;
 {
 	register struct idp *idp = mtod(m, struct idp *);
 	register struct echo {
 	    struct idp	ec_idp;
-	    u_int16_t		ec_op; /* Operation, 1 = request, 2 = reply */
+	    u_short		ec_op; /* Operation, 1 = request, 2 = reply */
 	} *ec = (struct echo *)idp;
 	struct ns_addr temp;
 

@@ -1,5 +1,3 @@
-/*	$NetBSD: pr.c,v 1.5 1997/10/19 12:42:10 lukem Exp $	*/
-
 /*-
  * Copyright (c) 1991 Keith Muller.
  * Copyright (c) 1993
@@ -37,18 +35,15 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+static char copyright[] =
+"@(#) Copyright (c) 1993\n\
+	The Regents of the University of California.  All rights reserved.\n";
 #endif /* not lint */
 
 #ifndef lint
-#if 0
-from: static char sccsid[] = "@(#)pr.c	8.1 (Berkeley) 6/6/93";
-#else
-__RCSID("$NetBSD: pr.c,v 1.5 1997/10/19 12:42:10 lukem Exp $");
-#endif
+/* from: static char sccsid[] = "@(#)pr.c	8.1 (Berkeley) 6/6/93"; */
+static char *rcsid = "$Id: pr.c,v 1.1 1994/01/06 15:57:25 cgd Exp $";
 #endif /* not lint */
 
 #include <sys/types.h>
@@ -110,8 +105,6 @@ int	addone;			/* page length is odd with double space */
 int	errcnt;			/* error count on file processing */
 char	digs[] = "0123456789";	/* page number translation map */
 
-int	main __P((int, char **));
-
 int
 main(argc, argv)
         int argc;
@@ -151,11 +144,11 @@ onecol(argc, argv)
         int argc;
         char *argv[];
 {
-	int cnt = -1;
-	int off;
-	int lrgln;
-	int linecnt;
-	int num;
+	register int cnt = -1;
+	register int off;
+	register int lrgln;
+	register int linecnt;
+	register int num;
 	int lncnt;
 	int pagecnt;
 	int ips;
@@ -296,13 +289,13 @@ vertcol(argc, argv)
         int argc;
         char *argv[];
 {
-	char *ptbf;
-	char **lstdat;
-	int i;
-	int j;
-	int cnt = -1;
-	int pln;
-	int *indy;
+	register char *ptbf;
+	register char **lstdat;
+	register int i;
+	register int j;
+	register int cnt = -1;
+	register int pln;
+	register int *indy;
 	int cvc;
 	int *lindy;
 	int lncnt;
@@ -617,13 +610,13 @@ horzcol(argc, argv)
         int argc;
         char *argv[];
 {
-	char *ptbf;
-	int pln;
-	int cnt = -1;
-	char *lstdat;
-	int col = colwd + 1;
-	int j;
-	int i;
+	register char *ptbf;
+	register int pln;
+	register int cnt = -1;
+	register char *lstdat;
+	register int col = colwd + 1;
+	register int j;
+	register int i;
 	int lncnt;
 	int pagecnt;
 	char *buf;
@@ -760,12 +753,12 @@ mulfile(argc, argv)
         int argc;
         char *argv[];
 {
-	char *ptbf;
-	int j;
-	int pln;
-	int cnt;
-	char *lstdat;
-	int i;
+	register char *ptbf;
+	register int j;
+	register int pln;
+	register int cnt;
+	register char *lstdat;
+	register int i;
 	FILE **fbuf;
 	int actf;
 	int lncnt;
@@ -973,16 +966,16 @@ int
 inln(inf, buf, lim, cps, trnc, mor)
 	FILE *inf;
 	char *buf;
-	int lim;
+	register int lim;
 	int *cps;
 	int trnc;
 	int *mor;
 {
-	int col;
-	int gap = ingap;
-	int ch = EOF;
-	char *ptbuf;
-	int chk = (int)inchar;
+	register int col;
+	register int gap = ingap;
+	register int ch = EOF;
+	register char *ptbuf;
+	register int chk = (int)inchar;
 
 	ptbuf = buf;
 
@@ -1082,17 +1075,17 @@ inln(inf, buf, lim, cps, trnc, mor)
  */
 int
 otln(buf, cnt, svips, svops, mor)
-	char *buf;
+	register char *buf;
 	int cnt;
 	int *svops;
 	int *svips;
 	int mor;
 {
-	int ops;		/* last col output */
-	int ips;		/* last col in buf examined */
-	int gap = ogap;
-	int tbps;
-	char *endbuf;
+	register int ops;		/* last col output */
+	register int ips;		/* last col in buf examined */
+	register int gap = ogap;
+	register int tbps;
+	register char *endbuf;
 
 	if (ogap) {
 		/*
@@ -1225,11 +1218,11 @@ otln(buf, cnt, svips, svops, mor)
 int
 inskip(inf, pgcnt, lncnt)
 	FILE *inf;
-	int pgcnt;
-	int lncnt;
+	register int pgcnt;
+	register int lncnt;
 {
-	int c;
-	int cnt;
+	register int c;
+	register int cnt;
 
 	while(--pgcnt > 0) {
 		cnt = lncnt;
@@ -1266,7 +1259,6 @@ nxtfile(argc, argv, fname, buf, dt)
 	struct timezone tz;
 	struct tm *timeptr = NULL;
 	struct stat statbuf;
-	time_t curtime;
 	static int twice = -1;
 
 	++twice;
@@ -1291,8 +1283,7 @@ nxtfile(argc, argv, fname, buf, dt)
 			eoptind = argc - 1;
 			return(NULL);
 		}
-		curtime = tv.tv_sec;
-		timeptr = localtime(&curtime);
+		timeptr = localtime(&(tv.tv_sec));
 	}
 	for (; eoptind < argc; ++eoptind) {
 		if (strcmp(argv[eoptind], "-") == 0) {
@@ -1315,8 +1306,7 @@ nxtfile(argc, argv, fname, buf, dt)
 					strerror(errno));
 				return(NULL);
 			}
-			curtime = tv.tv_sec;
-			timeptr = localtime(&curtime);
+			timeptr = localtime(&(tv.tv_sec));
 		} else {
 			/*
 			 * normal file processing
@@ -1347,8 +1337,7 @@ nxtfile(argc, argv, fname, buf, dt)
 					     strerror(errno));
 					return(NULL);
 				}
-				curtime = tv.tv_sec;
-				timeptr = localtime(&curtime);
+				timeptr = localtime(&(tv.tv_sec));
 			} else {
 				if (fstat(fileno(inf), &statbuf) < 0) {
 					++errcnt;
@@ -1396,11 +1385,11 @@ nxtfile(argc, argv, fname, buf, dt)
  */
 void
 addnum(buf, wdth, line)
-	char *buf;
-	int wdth;
-	int line;
+	register char *buf;
+	register int wdth;
+	register int line;
 {
-	char *pt = buf + wdth;
+	register char *pt = buf + wdth;
 
 	do {
 		*--pt = digs[line % 10];
@@ -1462,7 +1451,7 @@ prhead(buf, fname, pagcnt)
  */
 int
 prtail(cnt, incomp)
-	int cnt;
+	register int cnt;
 	int incomp;
 {
 	if (nohead) {
@@ -1571,10 +1560,10 @@ usage()
  */
 int
 setup(argc, argv)
-	int argc;
-	char **argv;
+	register int argc;
+	register char **argv;
 {
-	int c;
+	register int c;
 	int eflag = 0;
 	int iflag = 0;
 	int wflag = 0;
@@ -1590,7 +1579,7 @@ setup(argc, argv)
 		}
 	} else
 		err = stderr;
-	while ((c = egetopt(argc, argv, "#adFmrte?h:i?l:n?o:s?w:")) != -1) {
+	while ((c = egetopt(argc, argv, "#adFmrte?h:i?l:n?o:s?w:")) != EOF) {
 		switch (c) {
 		case '+':
 			if ((pgnm = atoi(eoptarg)) < 1) {
@@ -1756,6 +1745,9 @@ setup(argc, argv)
 			pgwd = SPGWD;
 		else
 			pgwd = PGWD;
+	} else if (clcnt == 1) {
+		(void)fputs("pr: -w requires multiple columns\n", err);
+		return(1);
 	}
 	if (cflag || merge) {
 		if (!eflag) {

@@ -1,8 +1,6 @@
-/*	$NetBSD: addch.c,v 1.8 1997/07/22 07:36:22 mikel Exp $	*/
-
 /*
- * Copyright (c) 1981, 1993, 1994
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1981 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,41 +31,19 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)addch.c	8.2 (Berkeley) 5/4/94";
-#else
-__RCSID("$NetBSD: addch.c,v 1.8 1997/07/22 07:36:22 mikel Exp $");
-#endif
-#endif	/* not lint */
+static char sccsid[] = "@(#)addch.c	5.5 (Berkeley) 6/1/90";
+#endif /* not lint */
 
-#include "curses.h"
+# include	"curses.ext"
 
 /*
- * waddch --
- *	Add the character to the current position in the given window.
+ *	This routine adds the character to the current position
  *
  */
-int
-waddch(win, ch)
-	WINDOW *win;
-	int ch;
+waddch(win, c)
+WINDOW	*win;
+char		c;
 {
-	__LDATA buf;
-
-	buf.ch = ch;
-	buf.attr = 0;
-	return (__waddch(win, &buf));
-}
-
-int
-__waddch(win, dp)
-	WINDOW *win;
-	__LDATA *dp;
-{
-	char buf[2];
-
-	buf[0] = dp->ch;
-	return (__waddbytes(win, buf, 1, dp->attr & __STANDOUT));
+    return waddbytes(win, &c, 1);
 }

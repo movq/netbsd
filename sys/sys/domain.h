@@ -1,8 +1,6 @@
-/*	$NetBSD: domain.h,v 1.11 1997/01/22 07:09:11 mikel Exp $	*/
-
 /*
- * Copyright (c) 1982, 1986, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1982, 1986 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,41 +30,22 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)domain.h	8.1 (Berkeley) 6/2/93
+ *	@(#)domain.h	7.4 (Berkeley) 6/28/90
  */
-
-#ifndef _SYS_DOMAIN_H_
-#define _SYS_DOMAIN_H_
 
 /*
  * Structure per communications domain.
  */
-
-/*
- * Forward structure declarations for function prototypes [sic].
- */
-struct	mbuf;
-
 struct	domain {
 	int	dom_family;		/* AF_xxx */
 	char	*dom_name;
-	void	(*dom_init)		/* initialize domain data structures */
-			__P((void));
-	int	(*dom_externalize)	/* externalize access rights */
-			__P((struct mbuf *));
-	void	(*dom_dispose)		/* dispose of internalized rights */
-			__P((struct mbuf *));
+	int	(*dom_init)();		/* initialize domain data structures */
+	int	(*dom_externalize)();	/* externalize access rights */
+	int	(*dom_dispose)();	/* dispose of internalized rights */
 	struct	protosw *dom_protosw, *dom_protoswNPROTOSW;
 	struct	domain *dom_next;
-	int	(*dom_rtattach)		/* initialize routing table */
-			__P((void **, int));
-	int	dom_rtoffset;		/* an arg to rtattach, in bits */
-	int	dom_maxrtkey;		/* for routing layer */
 };
 
-#ifdef _KERNEL
+#ifdef KERNEL
 struct	domain *domains;
-void domaininit __P((void));
 #endif
-
-#endif /* !_SYS_DOMAIN_H_ */

@@ -1,5 +1,3 @@
-/*	$NetBSD: warshall.c,v 1.5 1997/07/25 16:46:40 perry Exp $	*/
-
 /*
  * Copyright (c) 1989 The Regents of the University of California.
  * All rights reserved.
@@ -36,39 +34,31 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)warshall.c	5.4 (Berkeley) 5/24/93";
-#else
-__RCSID("$NetBSD: warshall.c,v 1.5 1997/07/25 16:46:40 perry Exp $");
-#endif
+static char sccsid[] = "@(#)warshall.c	5.3 (Berkeley) 6/1/90";
 #endif /* not lint */
 
 #include "defs.h"
 
-void transitive_closure __P((unsigned *, int));
-
-void
 transitive_closure(R, n)
 unsigned *R;
 int n;
 {
-    int rowsize;
-    unsigned i;
-    unsigned *rowj;
-    unsigned *rp;
-    unsigned *rend;
-    unsigned *ccol;
-    unsigned *relend;
-    unsigned *cword;
-    unsigned *rowi;
+    register int rowsize;
+    register unsigned mask;
+    register unsigned *rowj;
+    register unsigned *rp;
+    register unsigned *rend;
+    register unsigned *ccol;
+    register unsigned *relend;
+    register unsigned *cword;
+    register unsigned *rowi;
 
     rowsize = WORDSIZE(n);
     relend = R + n*rowsize;
 
     cword = R;
-    i = 0;
+    mask = 1;
     rowi = R;
     while (rowi < relend)
     {
@@ -77,7 +67,7 @@ int n;
 
 	while (rowj < relend)
 	{
-	    if (*ccol & (1 << i))
+	    if (*ccol & mask)
 	    {
 		rp = rowi;
 		rend = rowj + rowsize;
@@ -92,9 +82,10 @@ int n;
 	    ccol += rowsize;
 	}
 
-	if (++i >= BITS_PER_WORD)
+	mask <<= 1;
+	if (mask == 0)
 	{
-	    i = 0;
+	    mask = 1;
 	    cword++;
 	}
 
@@ -102,29 +93,29 @@ int n;
     }
 }
 
-void
 reflexive_transitive_closure(R, n)
 unsigned *R;
 int n;
 {
-    int rowsize;
-    unsigned i;
-    unsigned *rp;
-    unsigned *relend;
+    register int rowsize;
+    register unsigned mask;
+    register unsigned *rp;
+    register unsigned *relend;
 
     transitive_closure(R, n);
 
     rowsize = WORDSIZE(n);
     relend = R + n*rowsize;
 
-    i = 0;
+    mask = 1;
     rp = R;
     while (rp < relend)
     {
-	*rp |= (1 << i);
-	if (++i >= BITS_PER_WORD)
+	*rp |= mask;
+	mask <<= 1;
+	if (mask == 0)
 	{
-	    i = 0;
+	    mask = 1;
 	    rp++;
 	}
 

@@ -1,8 +1,6 @@
-/*	$NetBSD: head.c,v 1.7 1997/10/19 05:03:26 lukem Exp $	*/
-
 /*
- * Copyright (c) 1980, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1980 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,17 +31,11 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)head.c	8.2 (Berkeley) 4/20/95";
-#else
-__RCSID("$NetBSD: head.c,v 1.7 1997/10/19 05:03:26 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)head.c	5.7 (Berkeley) 6/1/90";
 #endif /* not lint */
 
 #include "rcv.h"
-#include "extern.h"
 
 /*
  * Mail -- a mail program
@@ -56,11 +48,10 @@ __RCSID("$NetBSD: head.c,v 1.7 1997/10/19 05:03:26 lukem Exp $");
  * Return true if yes.  Note the extreme pains to
  * accomodate all funny formats.
  */
-int
 ishead(linebuf)
 	char linebuf[];
 {
-	char *cp;
+	register char *cp;
 	struct headline hl;
 	char parbuf[BUFSIZ];
 
@@ -84,7 +75,6 @@ ishead(linebuf)
 }
 
 /*ARGSUSED*/
-void
 fail(linebuf, reason)
 	char linebuf[], reason[];
 {
@@ -102,12 +92,11 @@ fail(linebuf, reason)
  * pointers into the copied line in the passed headline
  * structure.  Actually, it scans.
  */
-void
 parse(line, hl, pbuf)
 	char line[], pbuf[];
-	struct headline *hl;
+	register struct headline *hl;
 {
-	char *cp;
+	register char *cp;
 	char *sp;
 	char word[LINESIZE];
 
@@ -139,14 +128,14 @@ parse(line, hl, pbuf)
  */
 char *
 copyin(src, space)
-	char *src;
+	register char *src;
 	char **space;
 {
-	char *cp;
+	register char *cp;
 	char *top;
 
 	top = cp = *space;
-	while ((*cp++ = *src++) != '\0')
+	while (*cp++ = *src++)
 		;
 	*space = cp;
 	return (top);
@@ -170,27 +159,21 @@ copyin(src, space)
  * 'N'	A new line
  */
 char ctype[] = "Aaa Aaa O0 00:00:00 0000";
-char SysV_ctype[] = "Aaa Aaa O0 00:00 0000";
 char tmztype[] = "Aaa Aaa O0 00:00:00 AAA 0000";
-char SysV_tmztype[] = "Aaa Aaa O0 00:00 AAA 0000";
 
-int
 isdate(date)
 	char date[];
 {
 
-	return cmatch(date, ctype) || 
-	       cmatch(date, tmztype) || 
-	       cmatch(date, SysV_tmztype) || cmatch(date, SysV_ctype);
+	return cmatch(date, ctype) || cmatch(date, tmztype);
 }
 
 /*
  * Match the given string (cp) against the given template (tp).
  * Return 1 if they match, 0 if they don't
  */
-int
 cmatch(cp, tp)
-	char *cp, *tp;
+	register char *cp, *tp;
 {
 
 	while (*cp && *tp)
@@ -237,9 +220,9 @@ cmatch(cp, tp)
  */
 char *
 nextword(wp, wbuf)
-	char *wp, *wbuf;
+	register char *wp, *wbuf;
 {
-	int c;
+	register c;
 
 	if (wp == NOSTR) {
 		*wbuf = 0;

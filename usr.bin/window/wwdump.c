@@ -1,8 +1,6 @@
-/*	$NetBSD: wwdump.c,v 1.5 1995/09/29 00:44:09 cgd Exp $	*/
-
 /*
- * Copyright (c) 1983, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1983 Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Edward Wang at The University of California, Berkeley.
@@ -37,16 +35,11 @@
  */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)wwdump.c	8.1 (Berkeley) 6/6/93";
-#else
-static char rcsid[] = "$NetBSD: wwdump.c,v 1.5 1995/09/29 00:44:09 cgd Exp $";
-#endif
+static char sccsid[] = "@(#)wwdump.c	3.15 (Berkeley) 6/6/90";
 #endif /* not lint */
 
 #include "ww.h"
 #include "tt.h"
-#include <string.h>
 
 static char cmap[] = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 

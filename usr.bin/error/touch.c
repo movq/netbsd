@@ -1,8 +1,6 @@
-/*	$NetBSD: touch.c,v 1.7 1997/10/19 14:06:23 mrg Exp $	*/
-
 /*
- * Copyright (c) 1980, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1980 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,27 +31,18 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)touch.c	8.1 (Berkeley) 6/6/93";
-#endif
-__RCSID("$NetBSD: touch.c,v 1.7 1997/10/19 14:06:23 mrg Exp $");
+static char sccsid[] = "@(#)touch.c	5.7 (Berkeley) 2/26/91";
 #endif /* not lint */
 
 #include <sys/types.h>
 #include <sys/stat.h>
-#include <ctype.h>
 #include <signal.h>
+#include <unistd.h>
 #include <stdio.h>
+#include <ctype.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
-#if __STDC__
-#include <stdarg.h>
-#else
-#include <varargs.h>
-#endif
 #include "error.h"
 #include "pathnames.h"
 
@@ -66,20 +55,19 @@ __RCSID("$NetBSD: touch.c,v 1.7 1997/10/19 14:06:23 mrg Exp $");
 #define	FILEITERATE(fi, lb)	for (fi = lb; fi <= nfiles; fi++)
 int	touchstatus = Q_YES;
 
-void
 findfiles(nerrors, errors, r_nfiles, r_files)
-	int	nerrors;
+		int	nerrors;
 	Eptr	*errors;
-	int	*r_nfiles;
+		int	*r_nfiles;
 	Eptr	***r_files;
 {
-	int	nfiles;
+		int	nfiles;
 	Eptr	**files;
 
-	char	*name;
-	int	ei;
-	int	fi;
-	Eptr	errorp;
+		char	*name;
+	reg	int	ei;
+		int	fi;
+	reg	Eptr	errorp;
 
 	nfiles = countfiles(errors);
 
@@ -120,13 +108,12 @@ findfiles(nerrors, errors, r_nfiles, r_files)
 	*r_files = files;
 }
 
-int
-countfiles(errors)
+int countfiles(errors)
 	Eptr	*errors;
 {
 	char	*name;
 	int	ei;
-	Eptr	errorp;
+	reg	Eptr	errorp;
 
 	int	nfiles;
 	nfiles = 0;
@@ -141,7 +128,6 @@ countfiles(errors)
 	}
 	return(nfiles);
 }
-
 char	*class_table[] = {
 	/*C_UNKNOWN	0	*/	"Unknown",
 	/*C_IGNORE	1	*/	"ignore",
@@ -156,15 +142,14 @@ char	*class_table[] = {
 
 int	class_count[C_LAST - C_FIRST] = {0};
 
-void
 filenames(nfiles, files)
 	int	nfiles;
 	Eptr	**files;
 {
-	int	fi;
-	char	*sep = " ";
+	reg	int	fi;
+		char	*sep = " ";
 	extern	char	*class_table[];
-	int	someerrors;
+		int	someerrors;
 
 	/*
 	 *	first, simply dump out errors that
@@ -182,7 +167,7 @@ filenames(nfiles, files)
 			FILEITERATE(fi, 1){
 				fprintf(stdout, "%s\"%s\" (%d)",
 					sep, (*files[fi])->error_text[0],
-					(int)(files[fi+1] - files[fi]));
+					files[fi+1] - files[fi]);
 				sep = ", ";
 			}
 		}
@@ -195,14 +180,13 @@ filenames(nfiles, files)
 /*
  *	Dump out errors that don't pertain to any file
  */
-int
-nopertain(files)
+int nopertain(files)
 	Eptr	**files;
 {
 	int	type;
 	int	someerrors = 0;
-	Eptr	*erpp;
-	Eptr	errorp;
+	reg	Eptr	*erpp;
+	reg	Eptr	errorp;
 
 	if (files[1] - files[0] <= 0)
 		return(0);
@@ -230,21 +214,20 @@ nopertain(files)
 
 extern	boolean	notouch;
 
-boolean
-touchfiles(nfiles, files, r_edargc, r_edargv)
+boolean touchfiles(nfiles, files, r_edargc, r_edargv)
 	int	nfiles;
 	Eptr	**files;
 	int	*r_edargc;
 	char	***r_edargv;
 {
-	char	*name;
-	Eptr	errorp;
-	int	fi;
-	Eptr	*erpp;
-	int	ntrueerrors;
-	boolean	scribbled;
-	int	n_pissed_on;	/* # of file touched*/
-	int	spread;
+		char	*name;
+	reg	Eptr	errorp;
+	reg	int	fi;
+	reg	Eptr	*erpp;
+		int		ntrueerrors;
+		boolean		scribbled;
+		int		n_pissed_on;	/* # of file touched*/
+		int	spread;
 
 	FILEITERATE(fi, 1){
 		name = (*files[fi])->error_text[0];
@@ -290,12 +273,10 @@ touchfiles(nfiles, files, r_edargc, r_edargv)
 	}
 }
 
-void
 hackfile(name, files, ix, nerrors)
 	char	*name;
 	Eptr	**files;
 	int	ix;
-	int	nerrors;
 {
 	boolean	previewed;
 	int	errordest;	/* where errors go*/
@@ -324,15 +305,14 @@ hackfile(name, files, ix, nerrors)
 	}
 }
 
-boolean
-preview(name, nerrors, files, ix)
+boolean preview(name, nerrors, files, ix)
 	char	*name;
 	int	nerrors;
 	Eptr	**files;
 	int	ix;
 {
 	int	back;
-	Eptr	*erpp;
+	reg	Eptr	*erpp;
 
 	if (nerrors <= 0)
 		return(FALSE);
@@ -356,8 +336,7 @@ preview(name, nerrors, files, ix)
 	return(back);
 }
 
-int
-settotouch(name)
+int settotouch(name)
 	char	*name;
 {
 	int	dest = TOSTDOUT;
@@ -404,7 +383,6 @@ settotouch(name)
 	return(dest);
 }
 
-void
 diverterrors(name, dest, files, ix, previewed, nterrors)
 	char	*name;
 	int	dest;
@@ -414,8 +392,8 @@ diverterrors(name, dest, files, ix, previewed, nterrors)
 	int	nterrors;
 {
 	int	nerrors;
-	Eptr	*erpp;
-	Eptr	errorp;
+	reg	Eptr	*erpp;
+	reg	Eptr	errorp;
 
 	nerrors = files[ix+1] - files[ix];
 
@@ -449,14 +427,13 @@ diverterrors(name, dest, files, ix, previewed, nterrors)
 	}
 }
 
-int
-oktotouch(filename)
+int oktotouch(filename)
 	char	*filename;
 {
-	extern	char	*suffixlist;
-	char	*src;
-	char	*pat;
-	char	*osrc;
+	extern		char	*suffixlist;
+	reg	char	*src;
+	reg	char	*pat;
+			char	*osrc;
 
 	pat = suffixlist;
 	if (pat == 0)
@@ -492,7 +469,6 @@ oktotouch(filename)
 	}
 	return(0);
 }
-
 /*
  *	Construct an execv argument
  *	We need 1 argument for the editor's name
@@ -503,7 +479,6 @@ oktotouch(filename)
  *	We fill in the initial search string.
  *	We fill in the arguments, and the null.
  */
-void
 execvarg(n_pissed_on, r_argc, r_argv)
 	int	n_pissed_on;
 	int	*r_argc;
@@ -513,7 +488,6 @@ execvarg(n_pissed_on, r_argc, r_argv)
 	char	*sep;
 	int	fi;
 
-	sep = NULL;
 	(*r_argv) = (char **)Calloc(n_pissed_on + 3, sizeof(char *));
 	(*r_argc) =  n_pissed_on + 2;
 	(*r_argv)[1] = "+1;/###/";
@@ -549,12 +523,9 @@ boolean	tempfileopen = FALSE;
  *	open the file; guaranteed to be both readable and writable
  *	Well, if it isn't, then return TRUE if something failed
  */
-boolean
-edit(name)
+boolean edit(name)
 	char	*name;
 {
-	int fd;
-
 	o_name = name;
 	if ( (o_touchedfile = fopen(name, "r")) == NULL){
 		fprintf(stderr, "%s: Can't open file \"%s\" to touch (read).\n",
@@ -562,11 +533,8 @@ edit(name)
 		return(TRUE);
 	}
 	(void)strcpy(n_name, canon_name);
-	fd = -1;
-	if ((fd = mkstemp(n_name)) == -1 ||
-	    (n_touchedfile = fdopen(fd, "w")) == NULL) {
-		if (fd != -1)
-			close(fd);
+	(void)mktemp(n_name);
+	if ( (n_touchedfile = fopen(n_name, "w")) == NULL){
 		fprintf(stderr,"%s: Can't open file \"%s\" to touch (write).\n",
 			processname, name);
 		return(TRUE);
@@ -576,13 +544,10 @@ edit(name)
 	o_lineno = 0;
 	return(FALSE);
 }
-
 /*
  *	Position to the line (before, after) the line given by place
  */
 char	edbuf[BUFSIZ];
-
-void
 insert(place)
 	int	place;
 {
@@ -594,10 +559,9 @@ insert(place)
 	}
 }
 
-void
 text(p, use_all)
-	Eptr	p;
-	boolean	use_all;
+	reg	Eptr	p;
+		boolean	use_all;
 {
 	int	offset = use_all ? 0 : 2;
 
@@ -614,19 +578,18 @@ text(p, use_all)
  *	write the touched file to its temporary copy,
  *	then bring the temporary in over the local file
  */
-boolean
 writetouched(overwrite)
 	int	overwrite;
 {
-	int	nread;
-	FILE	*localfile;
-	FILE	*tmpfile;
-	int	botch;
-	int	oktorm;
+	reg	int	nread;
+	reg	FILE	*localfile;
+	reg	FILE	*tmpfile;
+		int	botch;
+		int	oktorm;
 
 	botch = 0;
 	oktorm = 1;
-	while ((nread = fread(edbuf, 1, sizeof(edbuf), o_touchedfile)) != 0) {
+	while((nread = fread(edbuf, 1, sizeof(edbuf), o_touchedfile)) != NULL){
 		if (nread != fwrite(edbuf, 1, nread, n_touchedfile)){
 			/*
 			 *	Catastrophe in temporary area: file system full?
@@ -677,18 +640,16 @@ writetouched(overwrite)
 	tempfileopen = FALSE;
 	return(TRUE);
 }
-
 /*
  *	return 1 if the tmpfile can be removed after writing it out
  */
-int
-mustoverwrite(preciousfile, tmpfile)
+int mustoverwrite(preciousfile, tmpfile)
 	FILE	*preciousfile;
 	FILE	*tmpfile;
 {
 	int	nread;
 
-	while ((nread = fread(edbuf, 1, sizeof(edbuf), tmpfile)) != 0) {
+	while((nread = fread(edbuf, 1, sizeof(edbuf), tmpfile)) != NULL){
 		if (mustwrite(edbuf, nread, preciousfile) == 0)
 			return(0);
 	}
@@ -697,7 +658,6 @@ mustoverwrite(preciousfile, tmpfile)
 /*
  *	return 0 on catastrophe
  */
-int
 mustwrite(base, n, preciousfile)
 	char	*base;
 	int	n;
@@ -735,8 +695,7 @@ mustwrite(base, n, preciousfile)
 }
 
 void
-onintr(dummy)
-	int dummy;
+onintr()
 {
 	switch(inquire(terse
 	    ? "\nContinue? "
@@ -757,7 +716,6 @@ onintr(dummy)
 	/*NOTREACHED*/
 }
 
-void
 errorprint(place, errorp, print_all)
 	FILE	*place;
 	Eptr	errorp;
@@ -772,30 +730,18 @@ errorprint(place, errorp, print_all)
 	putc('\n', place);
 }
 
-int
-#if __STDC__
-inquire(char *fmt, ...)
-#else
-inquire(fmt, va_alist)
+int inquire(fmt, a1, a2)
 	char	*fmt;
-	va_dcl
-#endif
+	/*VARARGS1*/
 {
-	va_list ap;
 	char	buffer[128];
-
-#if __STDC__
-	va_start(ap, fmt);
-#else
-	va_start(ap);
-#endif
 
 	if (queryfile == NULL)
 		return(0);
 	for(;;){
 		do{
 			fflush(stdout);
-			vfprintf(stderr, fmt, ap);
+			fprintf(stderr, fmt, a1, a2);
 			fflush(stderr);
 		} while (fgets(buffer, 127, queryfile) == NULL);
 		switch(buffer[0]){
@@ -808,8 +754,7 @@ inquire(fmt, va_alist)
 	}
 }
 
-int
-probethisfile(name)
+int probethisfile(name)
 	char	*name;
 {
 	struct stat statbuf;

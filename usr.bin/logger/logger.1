@@ -1,7 +1,5 @@
-.\"	$NetBSD: logger.1,v 1.5 1997/10/19 04:16:47 lukem Exp $
-.\"
-.\" Copyright (c) 1983, 1990, 1993
-.\"	The Regents of the University of California.  All rights reserved.
+.\" Copyright (c) 1983, 1990 The Regents of the University of California.
+.\" All rights reserved.
 .\"
 .\" Redistribution and use in source and binary forms, with or without
 .\" modification, are permitted provided that the following conditions
@@ -31,23 +29,23 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\"	@(#)logger.1	8.1 (Berkeley) 6/6/93
+.\"	@(#)logger.1	6.8 (Berkeley) 7/27/91
 .\"
-.Dd June 6, 1993
+.Dd July 27, 1991
 .Dt LOGGER 1
 .Os BSD 4.3
 .Sh NAME
 .Nm logger
 .Nd make entries in the system log
 .Sh SYNOPSIS
-.Nm
+.Nm logger
 .Op Fl is
 .Op Fl f Ar file
 .Op Fl p Ar pri
 .Op Fl t Ar tag
 .Op Ar message ...
 .Sh DESCRIPTION
-.Nm
+.Nm Logger
 provides a shell command interface to the
 .Xr syslog  3
 system log module.
@@ -83,7 +81,7 @@ provided, standard input is logged.
 .El
 .Pp
 The
-.Nm
+.Nm logger
 utility exits 0 on success, and >0 if an error occurs.
 .Sh EXAMPLES
 .Bd -literal -offset indent -compact
@@ -96,6 +94,7 @@ logger \-p local0.notice \-t HOSTIDM \-f /dev/idmc
 .Xr syslogd 8
 .Sh STANDARDS
 The
-.Nm
-utility conforms to
-.St -p1003.2-92 .
+.Nm logger
+command is expected to be
+.St -p1003.2
+compatible.

@@ -1,8 +1,6 @@
-/*	$NetBSD: scandir.c,v 1.9 1997/08/03 06:19:40 mikel Exp $	*/
-
 /*
- * Copyright (c) 1983, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1983 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,13 +31,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char sccsid[] = "@(#)scandir.c	8.3 (Berkeley) 1/2/94";
-#else
-__RCSID("$NetBSD: scandir.c,v 1.9 1997/08/03 06:19:40 mikel Exp $");
-#endif
+static char sccsid[] = "@(#)scandir.c	5.10 (Berkeley) 2/23/91";
 #endif /* LIBC_SCCS and not lint */
 
 /*
@@ -49,28 +42,21 @@ __RCSID("$NetBSD: scandir.c,v 1.9 1997/08/03 06:19:40 mikel Exp $");
  * struct dirent (through namelist). Returns -1 if there were any errors.
  */
 
-#include "namespace.h"
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <dirent.h>
 #include <stdlib.h>
 #include <string.h>
 
-#ifdef __weak_alias
-__weak_alias(scandir,_scandir);
-__weak_alias(alphasort,_alphasort);
-#endif
-
 /*
- * The DIRSIZ macro is the minimum record length which will hold the directory
- * entry.  This requires the amount of space in struct dirent without the
- * d_name field, plus enough space for the name and a terminating nul byte
- * (dp->d_namlen + 1), rounded up to a 4 byte boundary.
+ * The DIRSIZ macro gives the minimum record length which will hold
+ * the directory entry.  This requires the amount of space in struct dirent
+ * without the d_name field, plus enough space for the name with a terminating
+ * null byte (dp->d_namlen+1), rounded up to a 4 byte boundary.
  */
 #undef DIRSIZ
-#define DIRSIZ(dp)							\
-	((sizeof(struct dirent) - sizeof(dp)->d_name) +			\
-	    (((dp)->d_namlen + 1 + 3) &~ 3))
+#define DIRSIZ(dp) \
+    ((sizeof (struct dirent) - (MAXNAMLEN+1)) + (((dp)->d_namlen+1 + 3) &~ 3))
 
 int
 scandir(dirname, namelist, select, dcomp)
@@ -109,9 +95,8 @@ scandir(dirname, namelist, select, dcomp)
 		p = (struct dirent *)malloc(DIRSIZ(d));
 		if (p == NULL)
 			return(-1);
-		p->d_fileno = d->d_fileno;
+		p->d_ino = d->d_ino;
 		p->d_reclen = d->d_reclen;
-		p->d_type = d->d_type;
 		p->d_namlen = d->d_namlen;
 		bcopy(d->d_name, p->d_name, p->d_namlen + 1);
 		/*

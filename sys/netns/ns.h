@@ -1,8 +1,6 @@
-/*	$NetBSD: ns.h,v 1.10 1997/07/18 19:30:35 thorpej Exp $	*/
-
 /*
- * Copyright (c) 1984, 1985, 1986, 1987, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1984, 1985, 1986, 1987 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,7 +30,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)ns.h	8.1 (Berkeley) 6/10/93
+ *	@(#)ns.h	7.8 (Berkeley) 2/22/91
  */
 
 /*
@@ -68,8 +66,8 @@
 
 /* flags passed to ns_output as last parameter */
 
-#define	NS_FORWARDING		0x1		/* most of idp header exists */
-#define	NS_ROUTETOIF		SO_DONTROUTE	/* bypass routing tables */
+#define	NS_FORWARDING		0x1	/* most of idp header exists */
+#define	NS_ROUTETOIF		0x10	/* same as SO_DONTROUTE */
 #define	NS_ALLOWBROADCAST	SO_BROADCAST	/* can send broadcast packets */
 
 #define NS_MAXHOPS		15
@@ -89,24 +87,24 @@
  * NS addressing
  */
 union ns_host {
-	u_int8_t	c_host[6];
-	u_int16_t	s_host[3];
+	u_char	c_host[6];
+	u_short	s_host[3];
 };
 
 union ns_net {
-	u_int8_t	c_net[4];
-	u_int16_t	s_net[2];
+	u_char	c_net[4];
+	u_short	s_net[2];
 };
 
 union ns_net_u {
 	union ns_net	net_e;
-	u_int32_t	long_e;
+	u_long		long_e;
 };
 
 struct ns_addr {
 	union ns_net	x_net;
 	union ns_host	x_host;
-	u_int16_t	x_port;
+	u_short	x_port;
 };
 
 /*
@@ -121,7 +119,7 @@ struct sockaddr_ns {
 #define sns_port sns_addr.x_port
 
 #ifdef vax
-#define ns_netof(a) (*(int32_t *) & ((a).x_net)) /* XXX - not needed */
+#define ns_netof(a) (*(long *) & ((a).x_net)) /* XXX - not needed */
 #endif
 #define ns_neteqnn(a,b) (((a).s_net[0]==(b).s_net[0]) && \
 					((a).s_net[1]==(b).s_net[1]))
@@ -133,16 +131,14 @@ struct sockaddr_ns {
 #define ns_nullhost(x) (((x).x_host.s_host[0]==0) && \
 	((x).x_host.s_host[1]==0) && ((x).x_host.s_host[2]==0))
 
-#ifdef _KERNEL
+#ifdef KERNEL
 extern struct domain nsdomain;
 union ns_host ns_thishost;
 union ns_host ns_zerohost;
 union ns_host ns_broadhost;
 union ns_net ns_zeronet;
 union ns_net ns_broadnet;
-
-#define	satosns(sa)	((struct sockaddr_ns *)(sa))
-#define	snstosa(sns)	((struct sockaddr *)(sns))
+u_short ns_cksum();
 #else
 
 #include <sys/cdefs.h>

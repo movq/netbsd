@@ -1,7 +1,4 @@
-/*	$NetBSD: extern.h,v 1.7 1997/10/17 10:14:59 lukem Exp $	*/
-
 /*-
- * Copyright (c) 1996 Christopher G. Demetriou.  All rights reserved.
  * Copyright (c) 1992, 1993
  *	The Regents of the University of California.  All rights reserved.
  *
@@ -33,39 +30,9 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	from: @(#)extern.h	8.1 (Berkeley) 6/6/93
+ *	@(#)extern.h	8.1 (Berkeley) 6/6/93
  */
 
-#if defined(__alpha__)
-#  define	NLIST_ECOFF
-#  define	NLIST_ELF64
-#elif defined(__mips__)
-#  define	NLIST_AOUT
-#  define	NLIST_ECOFF
-#  define	NLIST_ELF32
-#elif defined(__powerpc__)
-#  define	NLIST_AOUT 
-#  define	NLIST_ELF32
-#else 
-#  define	NLIST_AOUT
-/* #define	NLIST_ECOFF */
-/* #define	NLIST_ELF32 */ 
-/* #define	NLIST_ELF64 */
-#endif
-
-void	create_knlist __P((const char *, DB *));
-void	punt __P((void));
-int	testdb __P((void));
-
-#ifdef NLIST_AOUT
-int	create_knlist_aout __P((const char *, DB *));
-#endif
-#ifdef NLIST_ECOFF
-int	create_knlist_ecoff __P((const char *, DB *));
-#endif
-#ifdef NLIST_ELF32
-int	create_knlist_elf32 __P((const char *, DB *));
-#endif
-#ifdef NLIST_ELF64
-int	create_knlist_elf64 __P((const char *, DB *));
-#endif
+void	create_knlist __P((char *, DB *));
+void	error __P((char *));
+int	testdb __P(());

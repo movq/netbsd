@@ -1,8 +1,6 @@
-/*	$NetBSD: ungetc.c,v 1.6 1997/07/13 20:15:33 christos Exp $	*/
-
 /*-
- * Copyright (c) 1990, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1990 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Chris Torek.
@@ -36,13 +34,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char sccsid[] = "@(#)ungetc.c	8.2 (Berkeley) 11/3/93";
-#else
-__RCSID("$NetBSD: ungetc.c,v 1.6 1997/07/13 20:15:33 christos Exp $");
-#endif
+static char sccsid[] = "@(#)ungetc.c	5.6 (Berkeley) 5/4/91";
 #endif /* LIBC_SCCS and not lint */
 
 #include <stdio.h>
@@ -50,14 +43,13 @@ __RCSID("$NetBSD: ungetc.c,v 1.6 1997/07/13 20:15:33 christos Exp $");
 #include <string.h>
 #include "local.h"
 
-static int __submore __P((FILE *));
 /*
  * Expand the ungetc buffer `in place'.  That is, adjust fp->_p when
  * the buffer moves, so that it points the same distance from the end,
  * and move the bytes in the buffer around as necessary so that they
  * are all at the end (stack-style).
  */
-static int
+static
 __submore(fp)
 	register FILE *fp;
 {
@@ -82,15 +74,13 @@ __submore(fp)
 	p = realloc(fp->_ub._base, i << 1);
 	if (p == NULL)
 		return (EOF);
-	/* no overlap (hence can use memcpy) because we doubled the size */
-	(void)memcpy((void *)(p + i), (void *)p, (size_t)i);
+	(void) bcopy((void *)p, (void *)(p + i), (size_t)i);
 	fp->_p = p + i;
 	fp->_ub._base = p;
 	fp->_ub._size = i << 1;
 	return (0);
 }
 
-int
 ungetc(c, fp)
 	int c;
 	register FILE *fp;
@@ -128,7 +118,6 @@ ungetc(c, fp)
 		fp->_r++;
 		return (c);
 	}
-	fp->_flags &= ~__SEOF;
 
 	/*
 	 * If we can handle this by simply backing up, do so,

@@ -1,8 +1,6 @@
-/*	$NetBSD: xdr_subs.h,v 1.12 1997/10/10 01:53:34 fvdl Exp $	*/
-
 /*
- * Copyright (c) 1989, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1989 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Rick Macklem at The University of Guelph.
@@ -35,75 +33,25 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)xdr_subs.h	8.3 (Berkeley) 3/30/95
+ *	@(#)xdr_subs.h	7.3 (Berkeley) 6/28/90
  */
-
-
-#ifndef _NFS_XDR_SUBS_H_
-#define _NFS_XDR_SUBS_H_
 
 /*
  * Macros used for conversion to/from xdr representation by nfs...
  * These use the MACHINE DEPENDENT routines ntohl, htonl
  * As defined by "XDR: External Data Representation Standard" RFC1014
- *
- * To simplify the implementation, we use ntohl/htonl even on big-endian
- * machines, and count on them being `#define'd away.  Some of these
- * might be slightly more efficient as quad_t copies on a big-endian,
- * but we cannot count on their alignment anyway.
  */
+/* From xdr to machine */
+#define fxdr_unsigned(t, v)	((t)ntohl((long)(v)))
+#define	fxdr_time(f, t)		{((struct timeval *)(t))->tv_sec=ntohl( \
+				((struct timeval *)(f))->tv_sec); \
+				((struct timeval *)(t))->tv_usec=ntohl( \
+				((struct timeval *)(f))->tv_usec);}
 
-#define	fxdr_unsigned(t, v)	((t)ntohl((int32_t)(v)))
-#define	txdr_unsigned(v)	(htonl((int32_t)(v)))
+/* from machine to xdr */
+#define	txdr_unsigned(v)	(htonl((long)(v)))
+#define	txdr_time(f, t)		{((struct timeval *)(t))->tv_sec=htonl( \
+				((struct timeval *)(f))->tv_sec); \
+				((struct timeval *)(t))->tv_usec=htonl( \
+				((struct timeval *)(f))->tv_usec);}
 
-/*
- * Directory cookies shouldn't really be XDR-ed, these functions
- * are just here to attempt to keep information within 32 bits. And
- * make things look better. See nfs_cookieheuristic.
- */
-#define fxdr_cookie3(v) (((off_t)((v)[0]) << 32) | ((off_t) (v)[1]))
-#define fxdr_swapcookie3(v) (((off_t)((v)[1]) << 32) | ((off_t) (v)[0]))
-
-#define txdr_cookie3(f, v) { \
-	(v)[1] = (u_int32_t)((f) & 0xffffffffLL); \
-	(v)[0] = (u_int32_t)((f) >> 32); \
-}
-#define txdr_swapcookie3(f, v) { \
-	(v)[0] = (u_int32_t)((f) & 0xffffffffLL); \
-	(v)[1] = (u_int32_t)((f) >> 32); \
-}
-
-#define	fxdr_nfsv2time(f, t) { \
-	(t)->tv_sec = ntohl(((struct nfsv2_time *)(f))->nfsv2_sec); \
-	if (((struct nfsv2_time *)(f))->nfsv2_usec != 0xffffffff) \
-		(t)->tv_nsec = 1000 * ntohl(((struct nfsv2_time *)(f))->nfsv2_usec); \
-	else \
-		(t)->tv_nsec = 0; \
-}
-#define	txdr_nfsv2time(f, t) { \
-	((struct nfsv2_time *)(t))->nfsv2_sec = htonl((f)->tv_sec); \
-	if ((f)->tv_nsec != -1) \
-		((struct nfsv2_time *)(t))->nfsv2_usec = htonl((f)->tv_nsec / 1000); \
-	else \
-		((struct nfsv2_time *)(t))->nfsv2_usec = 0xffffffff; \
-}
-
-#define	fxdr_nfsv3time(f, t) { \
-	(t)->tv_sec = ntohl(((struct nfsv3_time *)(f))->nfsv3_sec); \
-	(t)->tv_nsec = ntohl(((struct nfsv3_time *)(f))->nfsv3_nsec); \
-}
-#define	txdr_nfsv3time(f, t) { \
-	((struct nfsv3_time *)(t))->nfsv3_sec = htonl((f)->tv_sec); \
-	((struct nfsv3_time *)(t))->nfsv3_nsec = htonl((f)->tv_nsec); \
-}
-
-#define	fxdr_hyper(f, t) { \
-	((int32_t *)(t))[_QUAD_HIGHWORD] = ntohl(((int32_t *)(f))[0]); \
-	((int32_t *)(t))[_QUAD_LOWWORD] = ntohl(((int32_t *)(f))[1]); \
-}
-#define	txdr_hyper(f, t) { \
-	((int32_t *)(t))[0] = htonl(((int32_t *)(f))[_QUAD_HIGHWORD]); \
-	((int32_t *)(t))[1] = htonl(((int32_t *)(f))[_QUAD_LOWWORD]); \
-}
-
-#endif

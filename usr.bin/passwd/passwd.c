@@ -1,8 +1,6 @@
-/*	$NetBSD: passwd.c,v 1.12 1997/10/19 12:30:00 lukem Exp $	*/
-
 /*
- * Copyright (c) 1988, 1993, 1994
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1988 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,176 +31,84 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1988, 1993, 1994\n\
-	The Regents of the University of California.  All rights reserved.\n");
+char copyright[] =
+"@(#) Copyright (c) 1988 The Regents of the University of California.\n\
+ All rights reserved.\n";
 #endif /* not lint */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "from: @(#)passwd.c    8.3 (Berkeley) 4/2/94";
-#else
-__RCSID("$NetBSD: passwd.c,v 1.12 1997/10/19 12:30:00 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)passwd.c	5.5 (Berkeley) 7/6/91";
 #endif /* not lint */
 
-#include <err.h>
 #include <stdio.h>
-#include <string.h>
 #include <unistd.h>
 
-#include "extern.h"
- 
-void	usage __P((void)); 
-
-/*
- * Note on configuration:
- *      Generally one would not use both Kerberos and YP
- *      to maintain passwords.
- *
- */
-
-int use_kerberos;
-int use_yp;
-int yppwd;
-int yflag;
-
-extern	char *__progname;		/* from crt0.o */
-
-int	main __P((int, char **));
-
-#ifdef YP
-extern int _yp_check __P((char **));	/* buried deep inside libc */
+#ifdef KERBEROS
+int use_kerberos = 1;
 #endif
 
-int
 main(argc, argv)
 	int argc;
 	char **argv;
 {
 	extern int optind;
-	int ch;
-	char *username;
-#if defined(KERBEROS) || defined(KERBEROS5)
-	char *iflag = 0, *rflag = 0, *uflag = 0;
+	register int ch;
+	char *uname;
 
-	if (strcmp(__progname, "kpasswd") == 0)
-		use_kerberos = 1;
-	else
-		use_kerberos = krb_check();
-#endif
-#ifdef	YP
-	use_yp = _yp_check(NULL);
-#endif
-
-	if (strcmp(__progname, "yppasswd") == 0) {
-#ifdef YP
-		if (!use_yp)
-			errx(1, "YP not in use.");
-		use_kerberos = 0;
-		yppwd = 1;
-#else
-		errx(1, "YP support not compiled in.");
-#endif
-	}
-
-	
-	while ((ch = getopt(argc, argv, "lkyi:r:u:")) != -1)
+#ifdef KERBEROS
+	while ((ch = getopt(argc, argv, "l")) != EOF)
 		switch (ch) {
 		case 'l':		/* change local password file */
-			if (yppwd)
-				usage();
 			use_kerberos = 0;
-			use_yp = 0;
-			break;
-#ifdef KERBEROS
-		case 'i':
-			iflag = optarg;
-			break;
-		case 'r':
-			rflag = optarg;
-			break;
-		case 'u':
-			uflag = optarg;
-			break;	
-#endif
-		case 'k':		/* change Kerberos password */
-#if defined(KERBEROS) || defined(KERBEROS5)
-			if (yppwd)
-				usage();
-			use_kerberos = 1;
-			use_yp = 0;
 			break;
 #else
-			errx(1, "Kerberos support not compiled in.");
-#endif
-		case 'y':		/* change YP password */
-#ifdef	YP
-			if (yppwd)
-				usage();
-			if (!use_yp)
-				errx(1, "YP not in use.");
-			use_kerberos = 0;
-			yflag = 1;
-			break;
-#else
-			errx(1, "YP support not compiled in.");
+	while ((ch = getopt(argc, argv, "")) != EOF)
+		switch (ch) {
 #endif
 		default:
+		case '?':
 			usage();
+			exit(1);
 		}
 
 	argc -= optind;
 	argv += optind;
 
-	username = getlogin();
-	if (username == NULL)
-		errx(1, "who are you ??");
-	
+	uname = getlogin();
+
 	switch(argc) {
 	case 0:
 		break;
 	case 1:
-#ifdef KERBEROS5
-		if (use_kerberos && strcmp(argv[0], username)) {
-			errx(1, "%s\n\t%s\n%s\n",
-			     "to change another user's Kerberos password, do",
-			     "\"kinit <user>; passwd; kdestroy\";",
-			     "to change a user's local passwd, use\
-			     \"passwd -l <user>\"");
+#ifdef	KERBEROS
+		if (use_kerberos && strcmp(argv[1], uname)) {
+			(void)fprintf(stderr, "passwd: %s\n\t%s\n%s\n",
+"to change another user's Kerberos password, do",
+"\"kinit user; passwd; kdestroy\";",
+"to change a user's local passwd, use \"passwd -l user\"");
+			exit(1);
 		}
 #endif
-		username = argv[0];
+		uname = argv[0];
 		break;
 	default:
 		usage();
 		exit(1);
 	}
 
-#if defined(KERBEROS) || defined(KERBEROS5)
-	if (use_kerberos)
-		exit(kadm_passwd(username, iflag, rflag, uflag));
-#else
-#ifdef KERBEROS5
+#ifdef	KERBEROS
 	if (use_kerberos)
 		exit(krb_passwd());
 #endif
-#endif
-#ifdef	YP
-	if (use_yp)
-		exit(yp_passwd(username));
-#endif
-	exit(local_passwd(username));
+	exit(local_passwd(uname));
 }
 
-void
 usage()
 {
-
-	if (yppwd)
-		fprintf(stderr, "usage: %s user\n", __progname);
-	else
-		fprintf(stderr, "usage: %s [-l] [-k] [-y] [-i instance] [-r realm] [-u fullname] user\n", __progname);
-	exit(1);
+#ifdef	KERBEROS
+	(void)fprintf(stderr, "usage: passwd [-l] user\n");
+#else
+	(void)fprintf(stderr, "usage: passwd user\n");
+#endif
 }

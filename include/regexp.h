@@ -1,5 +1,3 @@
-/*	$NetBSD: regexp.h,v 1.3 1994/10/26 00:56:15 cgd Exp $	*/
-
 /*
  * Copyright (c) 1986 by University of Toronto.
  * Copyright (c) 1989 The Regents of the University of California.

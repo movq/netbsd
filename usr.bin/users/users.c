@@ -1,8 +1,6 @@
-/*	$NetBSD: users.c,v 1.6 1997/10/20 02:41:22 lukem Exp $	*/
-
 /*
- * Copyright (c) 1980, 1987, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1980, 1987 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,44 +31,33 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1980, 1987, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+char copyright[] =
+"@(#) Copyright (c) 1980, 1987 Regents of the University of California.\n\
+ All rights reserved.\n";
 #endif /* not lint */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)users.c	8.1 (Berkeley) 6/6/93";
-#endif
-__RCSID("$NetBSD: users.c,v 1.6 1997/10/20 02:41:22 lukem Exp $");
+static char sccsid[] = "@(#)users.c	5.12 (Berkeley) 11/1/90";
 #endif /* not lint */
 
 #include <sys/types.h>
 #include <utmp.h>
 #include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <err.h>
 
-typedef char	namebuf[UT_NAMESIZE];
+#define	MAXUSERS	200
 
-int	main __P((int, char **));
-int scmp __P((const void *, const void *));
-
-int
 main(argc, argv)
 	int argc;
 	char **argv;
 {
-	namebuf *names = NULL;
-	int ncnt = 0;
-	int nmax = 0;
-	int cnt;
+	extern int optind;
+	register int cnt, ncnt;
 	struct utmp utmp;
-	int ch;
+	char names[MAXUSERS][UT_NAMESIZE];
+	int ch, scmp();
 
-	while ((ch = getopt(argc, argv, "")) != -1)
+	while ((ch = getopt(argc, argv, "")) != EOF)
 		switch(ch) {
 		case '?':
 		default:
@@ -81,27 +68,20 @@ main(argc, argv)
 	argv += optind;
 
 	if (!freopen(_PATH_UTMP, "r", stdin)) {
-		err(1, "can't open %s", _PATH_UTMP);
-		/* NOTREACHED */
+		(void)fprintf(stderr, "users: can't open %s.\n", _PATH_UTMP);
+		exit(1);
 	}
-
-	while (fread((char *)&utmp, sizeof(utmp), 1, stdin) == 1) {
+	for (ncnt = 0;
+	    fread((char *)&utmp, sizeof(utmp), 1, stdin) == 1;)
 		if (*utmp.ut_name) {
-			if (ncnt >= nmax) {
-				nmax += 32;
-				names = realloc(names, 
-					sizeof (*names) * nmax);
-
-				if (!names) {
-					err(1, "realloc");
-					/* NOTREACHED */
-				}
+			if (ncnt == MAXUSERS) {
+				(void)fprintf(stderr,
+				    "users: too many users.\n");
+				break;
 			}
-
 			(void)strncpy(names[ncnt], utmp.ut_name, UT_NAMESIZE);
 			++ncnt;
 		}
-	}
 
 	if (ncnt) {
 		qsort(names, ncnt, UT_NAMESIZE, scmp);
@@ -114,9 +94,8 @@ main(argc, argv)
 	exit(0);
 }
 
-int
 scmp(p, q)
-	const void *p, *q;
+	char *p, *q;
 {
-	return(strncmp((char *) p, (char *) q, UT_NAMESIZE));
+	return(strncmp(p, q, UT_NAMESIZE));
 }

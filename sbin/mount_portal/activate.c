@@ -1,8 +1,7 @@
-/*	$NetBSD: activate.c,v 1.8 1997/09/21 02:35:40 enami Exp $	*/
-
 /*
  * Copyright (c) 1992, 1993
  *	The Regents of the University of California.  All rights reserved.
+ * All rights reserved.
  *
  * This code is derived from software donated to Berkeley by
  * Jan-Simon Pendry.
@@ -35,14 +34,10 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	from: Id: activate.c,v 1.2 1992/05/27 07:09:27 jsp Exp
- *	@(#)activate.c	8.3 (Berkeley) 4/28/95
+ *	from: Id: activate.c,v 1.2 1992/05/27 07:09:27 jsp Exp jsp
+ *	from: @(#)activate.c	8.1 (Berkeley) 6/5/93
+ *	$Id: activate.c,v 1.1 1994/01/12 20:01:32 cgd Exp $
  */
-
-#include <sys/cdefs.h>
-#ifndef lint
-__RCSID("$NetBSD: activate.c,v 1.8 1997/09/21 02:35:40 enami Exp $");
-#endif /* not lint */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -59,22 +54,16 @@ __RCSID("$NetBSD: activate.c,v 1.8 1997/09/21 02:35:40 enami Exp $");
 
 #include "portald.h"
 
-static	int	activate_argv __P((struct portal_cred *, char *, char **,
-				    int, int *));
-static	int	get_request __P((int, struct portal_cred *, char *, int));
-static	void	send_reply __P((int, int, int));
-
 /*
  * Scan the providers list and call the
  * appropriate function.
  */
-static int
-activate_argv(pcr, key, v, so, fdp)
-	struct portal_cred *pcr;
-	char *key;
-	char **v;
-	int so;
-	int *fdp;
+static int activate_argv(pcr, key, v, so, fdp)
+struct portal_cred *pcr;
+char *key;
+char **v;
+int so;
+int *fdp;
 {
 	provider *pr;
 
@@ -85,12 +74,11 @@ activate_argv(pcr, key, v, so, fdp)
 	return (ENOENT);
 }
 
-static int
-get_request(so, pcr, key, klen)
-	int so;
-	struct portal_cred *pcr;
-	char *key;
-	int klen;
+static int get_request(so, pcr, key, klen)
+int so;
+struct portal_cred *pcr;
+char *key;
+int klen;
 {
 	struct iovec iov[2];
 	struct msghdr msg;
@@ -101,7 +89,7 @@ get_request(so, pcr, key, klen)
 	iov[1].iov_base = key;
 	iov[1].iov_len = klen;
 
-	memset(&msg, 0, sizeof(msg));
+	bzero((char *) &msg, sizeof(msg));
 	msg.msg_iov = iov;
 	msg.msg_iovlen = 2;
 
@@ -118,11 +106,10 @@ get_request(so, pcr, key, klen)
 	return (0);
 }
 
-static void
-send_reply(so, fd, error)
-	int so;
-	int fd;
-	int error;
+static void send_reply(so, fd, error)
+int so;
+int fd;
+int error;
 {
 	int n;
 	struct iovec iov;
@@ -142,7 +129,7 @@ send_reply(so, fd, error)
 	/*
 	 * Build a msghdr
 	 */
-	memset(&msg, 0, sizeof(msg));
+	bzero((char *) &msg, sizeof(msg));
 	msg.msg_iov = &iov;
 	msg.msg_iovlen = 1;
 
@@ -163,14 +150,14 @@ send_reply(so, fd, error)
 	 * Send to kernel...
 	 */
 	if ((n = sendmsg(so, &msg, MSG_EOR)) < 0)
-		syslog(LOG_ERR, "send: %m");
+		syslog(LOG_ERR, "send: %s", strerror(errno));
 #ifdef DEBUG
 	fprintf(stderr, "sent %d bytes\n", n);
 #endif
 	sleep(1);	/*XXX*/
 #ifdef notdef
 	if (shutdown(so, 2) < 0)
-		syslog(LOG_ERR, "shutdown: %m");
+		syslog(LOG_ERR, "shutdown: %s", strerror(errno));
 #endif
 	/*
 	 * Throw away the open file descriptor
@@ -178,13 +165,13 @@ send_reply(so, fd, error)
 	(void) close(fd);
 }
 
-void
-activate(q, so)
-	qelem *q;
-	int so;
+void activate(q, so)
+qelem *q;
+int so;
 {
 	struct portal_cred pcred;
 	char key[MAXPATHLEN+1];
+	int n;
 	int error;
 	char **v;
 	int fd = -1;
@@ -194,7 +181,7 @@ activate(q, so)
 	 */
 	error = get_request(so, &pcred, key, sizeof(key));
 	if (error) {
-		syslog(LOG_ERR, "activate: recvmsg: %m");
+		syslog(LOG_ERR, "activate: recvmsg: %s", strerror(error));
 		goto drop;
 	}
 
@@ -217,8 +204,9 @@ activate(q, so)
 			fd = -1;
 		else if (fd < 0)
 			error = -1;
-	} else
+	} else {
 		error = ENOENT;
+	}
 
 	if (error >= 0)
 		send_reply(so, fd, error);

@@ -1,8 +1,6 @@
-/*	$NetBSD: wait.h,v 1.12 1996/10/12 22:20:50 christos Exp $	*/
-
 /*
- * Copyright (c) 1982, 1986, 1989, 1993, 1994
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1982, 1986, 1989 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,11 +30,8 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)wait.h	8.2 (Berkeley) 7/10/94
+ *	@(#)wait.h	7.17 (Berkeley) 6/19/91
  */
-
-#ifndef _SYS_WAIT_H_
-#define _SYS_WAIT_H_
 
 /*
  * This file holds definitions relevent to the wait4 system call
@@ -70,7 +65,7 @@
 #endif
 
 /*
- * Option bits for the third argument of wait4.  WNOHANG causes the
+ * Option bits for the second argument of wait4.  WNOHANG causes the
  * wait to not hang if there are no stopped or terminated processes, rather
  * returning an error indication in this case (pid==0).  WUNTRACED
  * indicates that the caller should receive status about untraced children
@@ -78,7 +73,7 @@
  * this option is done, it is as though they were still running... nothing
  * about them is returned.
  */
-#define WNOHANG		1	/* don't hang in wait */
+#define WNOHANG		1	/* dont hang in wait */
 #define WUNTRACED	2	/* tell about stopped, untraced children */
 
 #ifndef _POSIX_SOURCE
@@ -90,7 +85,9 @@
 #define	WAIT_ANY	(-1)	/* any process */
 #define	WAIT_MYPGRP	0	/* any process in my process group */
 
-#include <sys/types.h>
+#ifndef BYTE_ORDER
+#include <machine/endian.h>
+#endif
 
 /*
  * Deprecated:
@@ -104,13 +101,13 @@ union wait {
 	 * Terminated process status.
 	 */
 	struct {
-#if BYTE_ORDER == LITTLE_ENDIAN
+#if BYTE_ORDER == LITTLE_ENDIAN 
 		unsigned int	w_Termsig:7,	/* termination signal */
 				w_Coredump:1,	/* core dump indicator */
 				w_Retcode:8,	/* exit code if w_termsig==0 */
 				w_Filler:16;	/* upper bits filler */
 #endif
-#if BYTE_ORDER == BIG_ENDIAN
+#if BYTE_ORDER == BIG_ENDIAN 
 		unsigned int	w_Filler:16,	/* upper bits filler */
 				w_Retcode:8,	/* exit code if w_termsig==0 */
 				w_Coredump:1,	/* core dump indicator */
@@ -123,12 +120,12 @@ union wait {
 	 * with the WUNTRACED option bit.
 	 */
 	struct {
-#if BYTE_ORDER == LITTLE_ENDIAN
+#if BYTE_ORDER == LITTLE_ENDIAN 
 		unsigned int	w_Stopval:8,	/* == W_STOPPED if stopped */
 				w_Stopsig:8,	/* signal that stopped us */
 				w_Filler:16;	/* upper bits filler */
 #endif
-#if BYTE_ORDER == BIG_ENDIAN
+#if BYTE_ORDER == BIG_ENDIAN 
 		unsigned int	w_Filler:16,	/* upper bits filler */
 				w_Stopsig:8,	/* signal that stopped us */
 				w_Stopval:8;	/* == W_STOPPED if stopped */
@@ -144,7 +141,8 @@ union wait {
 #define	WSTOPPED	_WSTOPPED
 #endif /* _POSIX_SOURCE */
 
-#ifndef _KERNEL
+#ifndef KERNEL
+#include <sys/types.h>
 #include <sys/cdefs.h>
 
 __BEGIN_DECLS
@@ -158,5 +156,3 @@ pid_t	wait4 __P((pid_t, int *, int, struct rusage *));
 #endif
 __END_DECLS
 #endif
-
-#endif /* !_SYS_WAIT_H_ */

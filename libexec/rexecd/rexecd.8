@@ -1,7 +1,5 @@
-.\"	$NetBSD: rexecd.8,v 1.4 1997/10/20 02:42:46 enami Exp $
-.\"
-.\" Copyright (c) 1983, 1991, 1993
-.\"	The Regents of the University of California.  All rights reserved.
+.\" Copyright (c) 1983, 1991 The Regents of the University of California.
+.\" All rights reserved.
 .\"
 .\" Redistribution and use in source and binary forms, with or without
 .\" modification, are permitted provided that the following conditions
@@ -31,25 +29,25 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\"     from: @(#)rexecd.8	8.3 (Berkeley) 6/1/94
+.\"     @(#)rexecd.8	6.5 (Berkeley) 3/16/91
 .\"
-.Dd June 1, 1994
+.Dd March 16, 1991
 .Dt REXECD 8
 .Os BSD 4.2
 .Sh NAME
 .Nm rexecd
 .Nd remote execution server
 .Sh SYNOPSIS
-.Nm
+.Nm rexecd
 .Sh DESCRIPTION
-.Nm
+.Nm Rexecd
 is the server for the 
 .Xr rexec 3
 routine.  The server provides remote execution facilities
 with authentication based on user names and
 passwords.
 .Pp
-.Nm
+.Nm Rexecd
 listens for service requests at the port indicated in
 the ``exec'' service specification; see
 .Xr services 5 .
@@ -83,7 +81,7 @@ shell is retrieved on the initial socket.  The length of
 the command is limited by the upper bound on the size of
 the system's argument list.  
 .It
-.Nm
+.Nm Rexecd
 then validates the user as is done at login time
 and, if the authentication was successful, changes
 to the user's home directory, and establishes the user
@@ -96,7 +94,7 @@ and the command line is passed to the normal login
 shell of the user.  The
 shell inherits the network connections established
 by
-.Nm "" .
+.Nm rexecd .
 .El
 .Sh DIAGNOSTICS
 Except for the last one listed below,
@@ -118,8 +116,7 @@ list (as configured into the system).
 .It Sy Login incorrect.
 No password file entry for the user name existed.
 .It Sy Password incorrect.
-The wrong password was supplied.
-.ne 1i
+The wrong was password supplied.
 .It Sy \&No remote directory.
 The 
 .Xr chdir

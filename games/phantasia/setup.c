@@ -1,11 +1,10 @@
-/*	$NetBSD: setup.c,v 1.7 1997/10/13 02:18:37 lukem Exp $	*/
-
 /*
  * setup.c - set up all files for Phantasia
  */
-#include <sys/param.h>
-#include <sys/stat.h>
 #include "include.h"
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <stdlib.h>
 /**/
 /************************************************************************
 /
@@ -62,9 +61,8 @@ main(argc, argv)
 	FILE	*fp;			/* for opening files */
 	struct stat	fbuf;		/* for getting files statistics */
 	int ch;
-	char path[MAXPATHLEN], *prefix;
 
-	while ((ch = getopt(argc, argv, "m:")) != -1)
+	while ((ch = getopt(argc, argv, "m:")) != EOF)
 		switch(ch) {
 		case 'm':
 			monsterfile = optarg;
@@ -76,19 +74,16 @@ main(argc, argv)
 	argc -= optind;
 	argv += optind;
 
-    srandom((unsigned) time(NULL));	/* prime random numbers */
+    srandom((unsigned) time((long *) NULL));	/* prime random numbers */
 
     umask(0117);		/* only owner can read/write created files */
-
-    prefix = getenv("DESTDIR");
 
     /* try to create data files */
     filename = &files[0];
     while (*filename != NULL)
 	/* create each file */
 	{
-	snprintf(path, sizeof(path), "%s%s", prefix?prefix:"", *filename);
-	if (stat(path, &fbuf) == 0)
+	if (stat(*filename, &fbuf) == 0)
 	    /* file exists; remove it */
 	    {
 	    if (!strcmp(*filename, _PATH_PEOPLE))
@@ -98,13 +93,13 @@ main(argc, argv)
 		continue;
 		}
 
-	    if (unlink(path) < 0)
-		Error("Cannot unlink %s.\n", path);
+	    if (unlink(*filename) < 0)
+		Error("Cannot unlink %s.\n", *filename);
 		/*NOTREACHED*/
 	    }
 
-	if ((fd = creat(path, 0660)) < 0)
-	    Error("Cannot create %s.\n", path);
+	if ((fd = creat(*filename, 0660)) < 0)
+	    Error("Cannot create %s.\n", *filename);
 	    /*NOTREACHED*/
 
 	close(fd);			/* close newly created file */
@@ -116,9 +111,8 @@ main(argc, argv)
     Enrgyvoid.ev_active = TRUE;
     Enrgyvoid.ev_x = ROLL(-1.0e6, 2.0e6);
     Enrgyvoid.ev_y = ROLL(-1.0e6, 2.0e6);
-    snprintf(path, sizeof(path), "%s%s", prefix?prefix:"", _PATH_VOID);
-    if ((fp = fopen(path, "w")) == NULL)
-	Error("Cannot update %s.\n", path);
+    if ((fp = fopen(_PATH_VOID, "w")) == NULL)
+	Error("Cannot update %s.\n", _PATH_VOID);
     else
 	{
 	fwrite(&Enrgyvoid, SZ_VOIDSTRUCT, 1, fp);
@@ -126,9 +120,8 @@ main(argc, argv)
 	}
 
     /* create binary monster data base */
-    snprintf(path, sizeof(path), "%s%s", prefix?prefix:"", _PATH_MONST);
-    if ((Monstfp = fopen(path, "w")) == NULL)
-	Error("Cannot update %s.\n", path);
+    if ((Monstfp = fopen(_PATH_MONST, "w")) == NULL)
+	Error("Cannot update %s.\n", _PATH_MONST);
     else
 	{
 	if ((fp = fopen(monsterfile, "r")) == NULL)
@@ -167,9 +160,8 @@ main(argc, argv)
     printf("One line 'motd' ? ");
     if (fgets(Databuf, SZ_DATABUF, stdin) == NULL)
 	Databuf[0] = '\0';
-    snprintf(path, sizeof(path), "%s%s", prefix?prefix:"", _PATH_MOTD);
-    if ((fp = fopen(path, "w")) == NULL)
-	Error("Cannot update %s.\n", path);
+    if ((fp = fopen(_PATH_MOTD, "w")) == NULL)
+	Error("Cannot update %s.\n", _PATH_MOTD);
     else
 	{
 	fwrite(Databuf, sizeof(char), strlen(Databuf), fp);

@@ -1,8 +1,6 @@
-/*	$NetBSD: getword.c,v 1.5 1997/10/11 01:16:30 lukem Exp $	*/
-
 /*
- * Copyright (c) 1983, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1983 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,32 +31,30 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)getword.c	8.1 (Berkeley) 5/31/93";
-#else
-__RCSID("$NetBSD: getword.c,v 1.5 1997/10/11 01:16:30 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)getword.c	5.3 (Berkeley) 6/1/90";
 #endif /* not lint */
 
-#include "hangman.h"
+# include	"hangman.h"
+
+# if pdp11
+#	define	RN	(((off_t) rand() << 16) | (off_t) rand())
+# else
+#	define	RN	rand()
+# endif
 
 /*
  * getword:
  *	Get a valid word out of the dictionary file
  */
-void
 getword()
 {
-	FILE *inf;
-	char *wp, *gp;
-	long pos;
+	register FILE		*inf;
+	register char		*wp, *gp;
 
 	inf = Dict;
 	for (;;) {
-		pos = (double) rand() / (RAND_MAX + 1.0) * (double) Dict_size;
-		fseek(inf, pos, 0);
+		fseek(inf, abs(RN % Dict_size), 0);
 		if (fgets(Word, BUFSIZ, inf) == NULL)
 			continue;
 		if (fgets(Word, BUFSIZ, inf) == NULL)
@@ -79,4 +75,18 @@ cont:		;
 		wp++;
 	}
 	*gp = '\0';
+}
+
+/*
+ * abs:
+ *	Return the absolute value of an integer
+ */
+off_t
+abs(i)
+off_t	i;
+{
+	if (i < 0)
+		return -(off_t) i;
+	else
+		return (off_t) i;
 }

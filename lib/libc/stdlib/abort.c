@@ -1,5 +1,3 @@
-/*	$NetBSD: abort.c,v 1.9 1997/07/13 20:16:33 christos Exp $	*/
-
 /*
  * Copyright (c) 1985 Regents of the University of California.
  * All rights reserved.
@@ -33,21 +31,14 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char *sccsid = "from: @(#)abort.c	5.11 (Berkeley) 2/23/91";
-#else
-__RCSID("$NetBSD: abort.c,v 1.9 1997/07/13 20:16:33 christos Exp $");
-#endif
+static char sccsid[] = "@(#)abort.c	5.11 (Berkeley) 2/23/91";
 #endif /* LIBC_SCCS and not lint */
 
-#include <signal.h>
+#include <sys/signal.h>
 #include <stdlib.h>
+#include <stddef.h>
 #include <unistd.h>
-
-extern void (*__cleanup) __P((void));
-static int aborting = 0;
 
 void
 abort()
@@ -61,19 +52,6 @@ abort()
 	 */
 	sigdelset(&mask, SIGABRT);
 	(void)sigprocmask(SIG_SETMASK, &mask, (sigset_t *)NULL);
-
-	/* 
-	 * POSIX.1 requires that stdio buffers be flushed on abort.
-	 * We ensure the cleanup routines are only called once in
-	 * case the user calls abort() in a SIGABRT handler.
-	 */
-	if (!aborting) {
-		aborting = 1;
-
-		if (__cleanup)
-			(*__cleanup)();
-	}
-
 	(void)kill(getpid(), SIGABRT);
 
 	/*

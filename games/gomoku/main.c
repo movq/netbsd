@@ -1,5 +1,3 @@
-/*	$NetBSD: main.c,v 1.4 1997/10/10 13:36:04 lukem Exp $	*/
-
 /*
  * Copyright (c) 1994
  *	The Regents of the University of California.  All rights reserved.
@@ -36,23 +34,20 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1994\n\
-	The Regents of the University of California.  All rights reserved.\n");
+static char copyright[] =
+"@(#) Copyright (c) 1994\n\
+	The Regents of the University of California.  All rights reserved.\n";
 #endif /* not lint */
 
 #ifndef lint
-#if 0
 static char sccsid[] = "@(#)main.c	8.4 (Berkeley) 5/4/95";
-#else
-__RCSID("$NetBSD: main.c,v 1.4 1997/10/10 13:36:04 lukem Exp $");
-#endif
 #endif /* not lint */
 
 #include <curses.h>
 #include <err.h>
 #include <signal.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
@@ -82,9 +77,11 @@ int	movelog[BSZ * BSZ];		/* log of all the moves */
 int	movenum;			/* current move number */
 char	*plyr[2];			/* who's who */
 
-int	main __P((int, char *[]));
+extern void quit();
+#ifdef DEBUG
+extern void whatsup();
+#endif
 
-int
 main(argc, argv)
 	int argc;
 	char **argv;
@@ -97,15 +94,13 @@ main(argc, argv)
 		"%3d        %-6s"
 	};
 
-	color = curmove = 0;
-
 	prog = strrchr(argv[0], '/');
 	if (prog)
 		prog++;
 	else
 		prog = argv[0];
 
-	while ((ch = getopt(argc, argv, "bcdD:u")) != -1) {
+	while ((ch = getopt(argc, argv, "bcdD:u")) != EOF) {
 		switch (ch) {
 		case 'b':	/* background */
 			interactive = 0;
@@ -149,7 +144,7 @@ again:
 #ifdef DEBUG
 		signal(SIGINT, whatsup);
 #else
-		signal(SIGINT, quitsig);
+		signal(SIGINT, quit);
 #endif
 
 		if (inputfp == NULL && test == 0) {
@@ -310,7 +305,7 @@ again:
 		replay:
 			ask("replay? ");
 			if (getline(buf, sizeof(buf)) &&
-			    (buf[0] == 'y' || buf[0] == 'Y'))
+			    buf[0] == 'y' || buf[0] == 'Y')
 				goto again;
 			if (strcmp(buf, "save") == 0) {
 				FILE *fp;
@@ -330,11 +325,8 @@ again:
 		}
 	}
 	quit();
-	/* NOTREACHED */
-	return(0);
 }
 
-int
 readinput(fp)
 	FILE *fp;
 {
@@ -494,7 +486,6 @@ syntax:
 /*
  * Display debug info.
  */
-void
 dlog(str)
 	char *str;
 {
@@ -507,7 +498,6 @@ dlog(str)
 		fprintf(stderr, "%s\n", str);
 }
 
-void
 log(str)
 	char *str;
 {
@@ -530,17 +520,9 @@ quit()
 	exit(0);
 }
 
-void
-quitsig(dummy)
-	int dummy;
-{
-	quit();
-}
-
 /*
  * Die gracefully.
  */
-void
 panic(str)
 	char *str;
 {

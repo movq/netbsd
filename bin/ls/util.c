@@ -1,8 +1,6 @@
-/*	$NetBSD: util.c,v 1.13 1997/07/20 18:53:15 christos Exp $	*/
-
 /*
- * Copyright (c) 1989, 1993, 1994
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1989 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Michael Fischbein.
@@ -36,44 +34,45 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)util.c	8.5 (Berkeley) 4/28/95";
-#else
-__RCSID("$NetBSD: util.c,v 1.13 1997/07/20 18:53:15 christos Exp $");
-#endif
+static char sccsid[] = "@(#)util.c	5.8 (Berkeley) 7/22/90";
 #endif /* not lint */
 
 #include <sys/types.h>
-#include <sys/stat.h>
-
-#include <ctype.h>
-#include <fts.h>
 #include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+#include <ctype.h>
 
-#include "ls.h"
-#include "extern.h"
-
-void
 prcopy(src, dest, len)
-	char *src, *dest;
-	int len;
+	register char *src, *dest;
+	register int len;
 {
-	int ch;
+	register int ch;
 
-	while (len--) {
+	while(len--) {
 		ch = *src++;
 		*dest++ = isprint(ch) ? ch : '?';
 	}
 }
 
-void
+char
+*emalloc(size)
+	u_int size;
+{
+	char *retval, *malloc();
+
+	if (!(retval = malloc(size)))
+		nomem();
+	return(retval);
+}
+
+nomem()
+{
+	(void)fprintf(stderr, "ls: out of memory.\n");
+	exit(1);
+}
+
 usage()
 {
-	(void)fprintf(stderr, 
-	    "usage: ls [-1ACFLRSTWacdfikloqrstu] [file ...]\n");
+	(void)fprintf(stderr, "usage: ls [-1ACFLRTacdfgiklqrstu] [file ...]\n");
 	exit(1);
 }

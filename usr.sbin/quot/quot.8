@@ -27,20 +27,20 @@
 .\" OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 .\" ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 .\"
-.\"	$NetBSD: quot.8,v 1.6 1997/10/18 04:37:52 lukem Exp $
+.\"	$Id $"
 .\"
 .Dd February 8, 1994
-.Dt QUOT 8
+.Dt QUOT 1
 .Os BSD 4
 .Sh NAME
 .Nm quot
 .Nd display disk space occupied by each user
 .Sh SYNOPSIS
-.Nm
+.Nm quot
 .Op Fl acfhknv
 .Op Ar filesystem ...
 .Sh DESCRIPTION
-.Nm
+.Nm Quot
 is used to gather statistics about the disk usage for each local user.
 .Pp
 The following options are available:
@@ -77,17 +77,17 @@ to get a report of files and their owners.
 In addition to the default output, display the number of files
 not accessed within 30, 60 and 90 days.
 .El
-.Sh ENVIRONMENT VARIABLES
+.Sh ENVIRONMENTAL VARIABLES
 .Bl -tag -width BLOCKSIZE
 .It Ev BLOCKSIZE
-If the environment variable
+If the environmental variable
 .Ev BLOCKSIZE
 is set, and the
 .Gl k
 option is not specified, the block counts will be displayed in units of that
 size block.
 .El
-.\".Sh BUGS
+.Sh BUGS
 .Sh SEE ALSO
 .Xr df 1 ,
 .Xr quota 1 ,

@@ -1,5 +1,3 @@
-/*	$NetBSD: lam.c,v 1.3 1997/10/19 03:42:18 lukem Exp $	*/
-
 /*-
  * Copyright (c) 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -33,17 +31,14 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+static char copyright[] =
+"@(#) Copyright (c) 1993\n\
+	The Regents of the University of California.  All rights reserved.\n";
 #endif /* not lint */
 
 #ifndef lint
-#if 0
 static char sccsid[] = "@(#)lam.c	8.1 (Berkeley) 6/6/93";
-#endif
-__RCSID("$NetBSD: lam.c,v 1.3 1997/10/19 03:42:18 lukem Exp $");
 #endif /* not lint */
 
 /*
@@ -51,7 +46,6 @@ __RCSID("$NetBSD: lam.c,v 1.3 1997/10/19 03:42:18 lukem Exp $");
  *	Author:  John Kunze, UCB
  */
 
-#include <err.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -76,7 +70,6 @@ char	*linep;
 void	 error __P((char *, char *));
 char	*gatherline __P((struct openfile *));
 void	 getargs __P((char *[]));
-int	 main __P((int, char **));
 char	*pad __P((struct openfile *));
 
 int
@@ -84,7 +77,7 @@ main(argc, argv)
 	int argc;
 	char *argv[];
 {
-	struct	openfile *ip;
+	register struct	openfile *ip;
 
 	getargs(argv);
 	if (!morefiles)
@@ -106,9 +99,9 @@ void
 getargs(av)
 	char *av[];
 {
-	struct	openfile *ip = input;
-	char *p;
-	char *c;
+	register struct	openfile *ip = input;
+	register char *p;
+	register char *c;
 	static char fmtbuf[BUFSIZ];
 	char *fmtp = fmtbuf;
 	int P, S, F, T;
@@ -119,8 +112,10 @@ getargs(av)
 			morefiles++;
 			if (*p == '-')
 				ip->fp = stdin;
-			else if ((ip->fp = fopen(p, "r")) == NULL)
-				errx(1, "open %s", p);
+			else if ((ip->fp = fopen(p, "r")) == NULL) {
+				perror(p);
+				exit(1);
+			}
 			ip->pad = P;
 			if (!ip->sepstring)
 				ip->sepstring = (S ? (ip-1)->sepstring : "");
@@ -176,8 +171,8 @@ char *
 pad(ip)
 	struct openfile *ip;
 {
-	char *p = ip->sepstring;
-	char *lp = linep;
+	register char *p = ip->sepstring;
+	register char *lp = linep;
 
 	while (*p)
 		*lp++ = *p++;
@@ -193,9 +188,9 @@ gatherline(ip)
 	struct openfile *ip;
 {
 	char s[BUFSIZ];
-	int c;
-	char *p;
-	char *lp = linep;
+	register int c;
+	register char *p;
+	register char *lp = linep;
 	char *end = s + BUFSIZ;
 
 	if (ip->eof)
@@ -223,7 +218,8 @@ void
 error(msg, s)
 	char *msg, *s;
 {
-	warnx(msg, s);
+	fprintf(stderr, "lam: ");
+	fprintf(stderr, msg, s);
 	fprintf(stderr,
 "\nUsage:  lam [ -[fp] min.max ] [ -s sepstring ] [ -t c ] file ...\n");
 	if (strncmp("lam - ", msg, 6) == 0)

@@ -1,5 +1,3 @@
-/*	$NetBSD: config.h,v 1.3 1996/09/19 06:27:09 thorpej Exp $	*/
-
 /* config.h
  * This file was produced by running the config.h.SH script, which
  * gets its values from config.sh, which is generally produced by

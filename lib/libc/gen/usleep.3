@@ -1,7 +1,5 @@
-.\"	$NetBSD: usleep.3,v 1.6 1997/09/20 04:52:36 mikel Exp $
-.\"
-.\" Copyright (c) 1986, 1991, 1993
-.\"	The Regents of the University of California.  All rights reserved.
+.\" Copyright (c) 1986, 1991 Regents of the University of California.
+.\" All rights reserved.
 .\"
 .\" Redistribution and use in source and binary forms, with or without
 .\" modification, are permitted provided that the following conditions
@@ -31,9 +29,9 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\"     @(#)usleep.3	8.1 (Berkeley) 6/4/93
+.\"     @(#)usleep.3	6.4 (Berkeley) 4/19/91
 .\"
-.Dd June 4, 1993
+.Dd April 19, 1991
 .Dt USLEEP 3
 .Os BSD 4.3
 .Sh NAME
@@ -45,22 +43,41 @@
 .Fn usleep "u_int microseconds"
 .Sh DESCRIPTION
 The
-.Fn usleep
+.Fn sleep
 function
 suspends execution of the calling process
-until either the number of microseconds specified by
+for
 .Fa microseconds
-have elapsed or a signal is delivered to the calling process and its
-action is to invoke a signal catching function or to terminate the
-process.  The suspension time may be longer than requested due to the
-scheduling of other activity by the system.
-.Sh RETURN VALUE
-The
-.Fn usleep
-function returns no value.
+of time.
+System activity or time spent in processing the
+call may lengthen the sleep slightly.
+.Pp
+If a timer is already running on the process its state is saved.
+If the value
+.Fa microseconds
+is more than or equal to the remaining clock time for the saved timer,
+the sleep time is set to
+the remaining clock time.
+The state of the previous timer
+is restored after
+.Fa microseconds
+has passed.
+.Pp
+This routine is implemented using 
+.Xr setitimer 2 ;
+it requires eight system calls each time it is invoked.
+A similar but less compatible function can be obtained with a single
+.Xr select 2 ;
+such a function would not restart after signals, but would not interfere
+with other uses of
+.Xr setitimer .
 .Sh SEE ALSO
-.Xr nanosleep 2 ,
-.Xr sleep 3
+.Xr setitimer 2 ,
+.Xr getitimer 2 ,
+.Xr sigpause 2 ,
+.Xr ualarm 3 ,
+.Xr sleep 3 ,
+.Xr alarm 3
 .Sh HISTORY
 The
 .Fn usleep

@@ -1,8 +1,6 @@
-/*	$NetBSD: makekey.c,v 1.4 1997/10/07 11:31:26 mrg Exp $	*/
-
 /*-
- * Copyright (c) 1990, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1990 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,30 +31,24 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1990, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
-#if 0
-static char sccsid[] = "from: @(#)makekey.c	8.1 (Berkeley) 6/4/93";
-#else
-__RCSID("$NetBSD: makekey.c,v 1.4 1997/10/07 11:31:26 mrg Exp $");
-#endif
+char copyright[] =
+"@(#) Copyright (c) 1990 The Regents of the University of California.\n\
+ All rights reserved.\n";
 #endif /* not lint */
 
-#include <sys/types.h>
+#ifndef lint
+static char sccsid[] = "@(#)makekey.c	5.3 (Berkeley) 2/25/91";
+#endif /* not lint */
 
-#include <err.h>
 #include <errno.h>
+#include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
 
-static void get __P((char *, int));
-int main __P((void));
+static void error(), get();
 
-int
 main()
 {
 	int len;
@@ -66,7 +58,7 @@ main()
 	get(salt, sizeof(salt) - 1);
 	len = strlen(r = crypt(key, salt));
 	if (write(STDOUT_FILENO, r, len) != len)
-		err(1, "stdout");
+		error();
 	exit(0);
 }
 
@@ -82,5 +74,12 @@ get(bp, len)
 		return;
 	if (nr >= 0)
 		errno = EFTYPE;
-	err(1, "stdin");
+	error();
+}
+
+static void
+error()
+{
+	(void)fprintf(stderr, "makekey: %s\n", strerror(errno));
+	exit(1);
 }

@@ -1,8 +1,6 @@
-/*	$NetBSD: table.c,v 1.4 1997/06/29 19:13:04 christos Exp $	*/
-
 /*
- * Copyright (c) 1983, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1983 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,13 +31,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)table.c	8.1 (Berkeley) 6/4/93";
-#else
-__RCSID("$NetBSD: table.c,v 1.4 1997/06/29 19:13:04 christos Exp $");
-#endif
+static char sccsid[] = "@(#)table.c	5.7 (Berkeley) 2/26/91";
 #endif /* not lint */
 
 /*
@@ -59,7 +52,6 @@ __RCSID("$NetBSD: table.c,v 1.4 1997/06/29 19:13:04 christos Exp $");
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "extern.h"
 
 #define MAX_ID 16000	/* << 2^15 so I don't have sign troubles */
 
@@ -79,8 +71,8 @@ struct table_entry {
 };
 
 TABLE_ENTRY *table = NIL;
-
-static void delete __P((TABLE_ENTRY *));
+CTL_MSG *find_request();
+CTL_MSG *find_match();
 
 /*
  * Look in the table for an invitation that matches the current
@@ -88,9 +80,9 @@ static void delete __P((TABLE_ENTRY *));
  */
 CTL_MSG *
 find_match(request)
-	CTL_MSG *request;
+	register CTL_MSG *request;
 {
-	TABLE_ENTRY *ptr;
+	register TABLE_ENTRY *ptr;
 	time_t current_time;
 
 	gettimeofday(&tp, &txp);
@@ -122,9 +114,9 @@ find_match(request)
  */
 CTL_MSG *
 find_request(request)
-	CTL_MSG *request;
+	register CTL_MSG *request;
 {
-	TABLE_ENTRY *ptr;
+	register TABLE_ENTRY *ptr;
 	time_t current_time;
 
 	gettimeofday(&tp, &txp);
@@ -158,12 +150,11 @@ find_request(request)
 	return ((CTL_MSG *)0);
 }
 
-void
 insert_table(request, response)
 	CTL_MSG *request;
 	CTL_RESPONSE *response;
 {
-	TABLE_ENTRY *ptr;
+	register TABLE_ENTRY *ptr;
 	time_t current_time;
 
 	gettimeofday(&tp, &txp);
@@ -188,7 +179,6 @@ insert_table(request, response)
 /*
  * Generate a unique non-zero sequence number
  */
-int
 new_id()
 {
 	static int current_id = 0;
@@ -203,11 +193,10 @@ new_id()
 /*
  * Delete the invitation with id 'id_num'
  */
-int
 delete_invite(id_num)
 	int id_num;
 {
-	TABLE_ENTRY *ptr;
+	register TABLE_ENTRY *ptr;
 
 	ptr = table;
 	if (debug)
@@ -228,9 +217,8 @@ delete_invite(id_num)
 /*
  * Classic delete from a double-linked list
  */
-static void
 delete(ptr)
-	TABLE_ENTRY *ptr;
+	register TABLE_ENTRY *ptr;
 {
 
 	if (debug)

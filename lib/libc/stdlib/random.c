@@ -1,5 +1,3 @@
-/*	$NetBSD: random.c,v 1.6 1997/07/21 14:09:02 jtc Exp $	*/
-
 /*
  * Copyright (c) 1983 Regents of the University of California.
  * All rights reserved.
@@ -33,25 +31,12 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char *sccsid = "from: @(#)random.c	5.9 (Berkeley) 2/23/91";
-#else
-__RCSID("$NetBSD: random.c,v 1.6 1997/07/21 14:09:02 jtc Exp $");
-#endif
+static char sccsid[] = "@(#)random.c	5.9 (Berkeley) 2/23/91";
 #endif /* LIBC_SCCS and not lint */
 
-#include "namespace.h"
 #include <stdio.h>
 #include <stdlib.h>
-
-#ifdef __weak_alias
-__weak_alias(initstate,_initstate);
-__weak_alias(random,_random);
-__weak_alias(setstate,_setstate);
-__weak_alias(srandom,_srandom);
-#endif
 
 /*
  * random.c:

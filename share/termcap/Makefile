@@ -1,15 +1,26 @@
-#	$NetBSD: Makefile,v 1.21 1997/10/17 10:47:42 mrg Exp $
-#	from: @(#)Makefile	8.1 (Berkeley) 6/8/93
+#	@(#)Makefile	5.12 (Berkeley) 7/1/90
 
-MAN=	termcap.5
+# reorder gives an editor command for most common terminals
+# (in reverse order from n'th to 1'st most commonly used)
+# to move them to the front of termcap
+#
+MAN5=	termcap.0
 
-CLEANFILES= termcap.db
-all: termcap.db
-FILES=termcap.db termcap.src map3270
-FILESNAME_termcap.src=termcap
-FILESDIR=${BINDIR}/misc
+all: termcap ${MAN5}
 
-termcap.db: termcap.src
-	cap_mkdb -f termcap ${.ALLSRC}
+termcap: reorder termcap.src
+	ex - ${.CURDIR}/termcap.src < ${.CURDIR}/reorder > /dev/null
+
+clean:
+	rm -f termcap
+
+cleandir: clean
+	rm -f ${MAN5}
+
+beforeinstall:
+	install -o ${BINOWN} -g ${BINGRP} -m 444 termcap \
+	     ${DESTDIR}${BINDIR}/misc
+	install -c -o ${BINOWN} -g ${BINGRP} -m 444 ${.CURDIR}/map3270 \
+	     ${DESTDIR}${BINDIR}/misc
 
 .include <bsd.prog.mk>

@@ -1,8 +1,6 @@
-/*	$NetBSD: arithmetic.c,v 1.9 1997/10/15 08:53:24 is Exp $	*/
-
 /*
- * Copyright (c) 1989, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1989 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Eamonn McManus of Trinity College Dublin.
@@ -36,18 +34,14 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1989, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+char copyright[] =
+"@(#) Copyright (c) 1989 The Regents of the University of California.\n\
+ All rights reserved.\n";
 #endif /* not lint */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)arithmetic.c	8.1 (Berkeley) 5/31/93";
-#else
-__RCSID("$NetBSD: arithmetic.c,v 1.9 1997/10/15 08:53:24 is Exp $");
-#endif
+static char sccsid[] = "@(#)arithmetic.c	5.5 (Berkeley) 2/27/91";
 #endif /* not lint */
 
 /*
@@ -79,22 +73,10 @@ __RCSID("$NetBSD: arithmetic.c,v 1.9 1997/10/15 08:53:24 is Exp $");
  */
 
 #include <sys/types.h>
-#include <err.h>
+#include <sys/signal.h>
 #include <ctype.h>
-#include <signal.h>
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
-#include <time.h>
-
-int	getrandom __P((int, int, int));
-void	intr __P((int));
-int	main __P((int, char *[]));
-int	opnum __P((int));
-void	penalise __P((int, int, int));
-int	problem __P((void));
-void	showstats __P((void));
-void	usage __P((void));
 
 char keylist[] = "+-x/";
 char defaultkeys[] = "+-";
@@ -112,7 +94,7 @@ time_t qtime;
  * bound is 10.  After every NQUESTS questions, statistics on the performance
  * so far are printed.
  */
-int
+void
 main(argc, argv)
 	int argc;
 	char **argv;
@@ -120,21 +102,29 @@ main(argc, argv)
 	extern char *optarg;
 	extern int optind;
 	int ch, cnt;
+	time_t time();
+	void intr();
 
-	while ((ch = getopt(argc, argv, "r:o:")) != -1)
+	while ((ch = getopt(argc, argv, "r:o:")) != EOF)
 		switch(ch) {
 		case 'o': {
-			char *p;
+			register char *p;
 
 			for (p = keys = optarg; *p; ++p)
-				if (!strchr(keylist, *p))
-					errx(1, "arithmetic: unknown key.");
+				if (!index(keylist, *p)) {
+					(void)fprintf(stderr,
+					    "arithmetic: unknown key.\n");
+					exit(1);
+				}
 			nkeys = p - optarg;
 			break;
 		}
 		case 'r':
-			if ((rangemax = atoi(optarg)) <= 0)
-				errx(1, "arithmetic: invalid range.");
+			if ((rangemax = atoi(optarg)) <= 0) {
+				(void)fprintf(stderr,
+				    "arithmetic: invalid range.\n");
+				exit(1);
+			}
 			break;
 		case '?':
 		default:
@@ -160,15 +150,13 @@ main(argc, argv)
 
 /* Handle interrupt character.  Print score and exit. */
 void
-intr(dummy)
-	int dummy;
+intr()
 {
 	showstats();
 	exit(0);
 }
 
 /* Print score.  Original `arithmetic' had a delay after printing it. */
-void
 showstats()
 {
 	if (nright + nwrong > 0) {
@@ -189,15 +177,13 @@ showstats()
  * answer causes the numbers in the problem to be penalised, so that they are
  * more likely to appear in subsequent problems.
  */
-int
 problem()
 {
-	char *p;
+	register char *p;
 	time_t start, finish;
 	int left, op, right, result;
 	char line[80];
 
-	right = left = result = 0;
 	op = keys[random() % nkeys];
 	if (op != '/')
 		right = getrandom(rangemax + 1, op, 1);
@@ -302,11 +288,11 @@ struct penalty {
  * operand number `operand' (0 or 1).  If we run out of memory, we just
  * forget about the penalty (how likely is this, anyway?).
  */
-void
 penalise(value, op, operand)
 	int value, op, operand;
 {
 	struct penalty *p;
+	char *malloc();
 
 	op = opnum(op);
 	if ((p = (struct penalty *)malloc((u_int)sizeof(*p))) == NULL)
@@ -323,12 +309,11 @@ penalise(value, op, operand)
  * as a value, or represents a position in the penalty list.  If the latter,
  * we find the corresponding value and return that, decreasing its penalty.
  */
-int
 getrandom(maxval, op, operand)
 	int maxval, op, operand;
 {
 	int value;
-	struct penalty **pp, *p;
+	register struct penalty **pp, *p;
 
 	op = opnum(op);
 	value = random() % (maxval + penalty[op][operand]);
@@ -363,30 +348,28 @@ getrandom(maxval, op, operand)
 	 * correspond to the actual sum of penalties in the list.  Provide an
 	 * obscure message.
 	 */
-	errx(1, "arithmetic: bug: inconsistent penalties.");
+	(void)fprintf(stderr, "arithmetic: bug: inconsistent penalties\n");
+	exit(1);
 	/* NOTREACHED */
 }
 
 /* Return an index for the character op, which is one of [+-x/]. */
-int
 opnum(op)
 	int op;
 {
 	char *p;
 
-	if (op == 0 || (p = strchr(keylist, op)) == NULL)
-		errx(1, "arithmetic: bug: op %c not in keylist %s",
-		    op, keylist);
+	if (op == 0 || (p = index(keylist, op)) == NULL) {
+		(void)fprintf(stderr,
+		    "arithmetic: bug: op %c not in keylist %s\n", op, keylist);
+		exit(1);
+	}
 	return(p - keylist);
 }
 
 /* Print usage message and quit. */
-void
 usage()
 {
-	extern char *__progname;	/* from crt0.o */
-
-	(void)fprintf(stderr, "usage: %s [-o +-x/] [-r range]\n",
-		__progname);
+	(void)fprintf(stderr, "usage: arithmetic [-o +-x/] [-r range]\n");
 	exit(1);
 }

@@ -1,5 +1,3 @@
-/*	$NetBSD: mfsnode.h,v 1.5 1996/09/07 12:41:42 mycroft Exp $	*/
-
 /*
  * Copyright (c) 1989, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -32,7 +30,8 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)mfsnode.h	8.2 (Berkeley) 8/11/93
+ *	from: @(#)mfsnode.h	8.2 (Berkeley) 8/11/93
+ *	$Id: mfsnode.h,v 1.1 1994/06/08 11:42:59 mycroft Exp $
  */
 
 /*
@@ -55,34 +54,34 @@ struct mfsnode {
 #define MFSTOV(mfsp)	((mfsp)->mfs_vnode)
 
 /* Prototypes for MFS operations on vnodes. */
-#define	mfs_lookup	genfs_badop
-#define	mfs_create	genfs_badop
-#define	mfs_mknod	genfs_badop
-#define	mfs_access	genfs_badop
-#define	mfs_getattr	genfs_badop
-#define	mfs_setattr	genfs_badop
-#define	mfs_read	genfs_badop
-#define	mfs_write	genfs_badop
-#define	mfs_poll	genfs_badop
-#define	mfs_mmap	genfs_badop
-#define	mfs_seek	genfs_badop
-#define	mfs_remove	genfs_badop
-#define	mfs_link	genfs_badop
-#define	mfs_rename	genfs_badop
-#define	mfs_mkdir	genfs_badop
-#define	mfs_rmdir	genfs_badop
-#define	mfs_symlink	genfs_badop
-#define	mfs_readdir	genfs_badop
-#define	mfs_readlink	genfs_badop
-#define	mfs_abortop	genfs_badop
-#define	mfs_lock	genfs_nullop
-#define	mfs_unlock	genfs_nullop
-#define	mfs_islocked	genfs_nullop
-#define	mfs_pathconf	genfs_badop
-#define	mfs_advlock	genfs_badop
-#define	mfs_blkatoff	genfs_badop
-#define	mfs_valloc	genfs_badop
-#define	mfs_vfree	genfs_badop
-#define	mfs_truncate	genfs_badop
-#define	mfs_update	genfs_badop
-#define	mfs_bwrite	vn_bwrite
+#define mfs_lookup ((int (*) __P((struct  vop_lookup_args *)))mfs_badop)
+#define mfs_create ((int (*) __P((struct  vop_create_args *)))mfs_badop)
+#define mfs_mknod ((int (*) __P((struct  vop_mknod_args *)))mfs_badop)
+#define mfs_access ((int (*) __P((struct  vop_access_args *)))mfs_badop)
+#define mfs_getattr ((int (*) __P((struct  vop_getattr_args *)))mfs_badop)
+#define mfs_setattr ((int (*) __P((struct  vop_setattr_args *)))mfs_badop)
+#define mfs_read ((int (*) __P((struct  vop_read_args *)))mfs_badop)
+#define mfs_write ((int (*) __P((struct  vop_write_args *)))mfs_badop)
+#define mfs_select ((int (*) __P((struct  vop_select_args *)))mfs_badop)
+#define mfs_mmap ((int (*) __P((struct  vop_mmap_args *)))mfs_badop)
+#define mfs_seek ((int (*) __P((struct  vop_seek_args *)))mfs_badop)
+#define mfs_remove ((int (*) __P((struct  vop_remove_args *)))mfs_badop)
+#define mfs_link ((int (*) __P((struct  vop_link_args *)))mfs_badop)
+#define mfs_rename ((int (*) __P((struct  vop_rename_args *)))mfs_badop)
+#define mfs_mkdir ((int (*) __P((struct  vop_mkdir_args *)))mfs_badop)
+#define mfs_rmdir ((int (*) __P((struct  vop_rmdir_args *)))mfs_badop)
+#define mfs_symlink ((int (*) __P((struct  vop_symlink_args *)))mfs_badop)
+#define mfs_readdir ((int (*) __P((struct  vop_readdir_args *)))mfs_badop)
+#define mfs_readlink ((int (*) __P((struct  vop_readlink_args *)))mfs_badop)
+#define mfs_abortop ((int (*) __P((struct  vop_abortop_args *)))mfs_badop)
+#define mfs_lock ((int (*) __P((struct  vop_lock_args *)))nullop)
+#define mfs_unlock ((int (*) __P((struct  vop_unlock_args *)))nullop)
+#define mfs_islocked ((int (*) __P((struct  vop_islocked_args *)))nullop)
+#define mfs_pathconf ((int (*) __P((struct  vop_pathconf_args *)))mfs_badop)
+#define mfs_advlock ((int (*) __P((struct  vop_advlock_args *)))mfs_badop)
+#define mfs_blkatoff ((int (*) __P((struct  vop_blkatoff_args *)))mfs_badop)
+#define mfs_valloc ((int (*) __P((struct  vop_valloc_args *)))mfs_badop)
+#define mfs_vfree ((int (*) __P((struct  vop_vfree_args *)))mfs_badop)
+#define mfs_truncate ((int (*) __P((struct  vop_truncate_args *)))mfs_badop)
+#define mfs_update ((int (*) __P((struct  vop_update_args *)))mfs_badop)
+#define mfs_bwrite ((int (*) __P((struct  vop_bwrite_args *)))vn_bwrite)

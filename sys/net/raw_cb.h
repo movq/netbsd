@@ -1,8 +1,6 @@
-/*	$NetBSD: raw_cb.h,v 1.11 1996/05/28 23:24:50 pk Exp $	*/
-
 /*
- * Copyright (c) 1980, 1986, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1980, 1986 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,7 +30,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)raw_cb.h	8.1 (Berkeley) 6/10/93
+ *	@(#)raw_cb.h	7.6 (Berkeley) 6/28/90
  */
 
 /*
@@ -40,7 +38,8 @@
  * to tie a socket to the generic raw interface.
  */
 struct rawcb {
-	LIST_ENTRY(rawcb) rcb_list;	/* doubly linked list */
+	struct	rawcb *rcb_next;	/* doubly linked list */
+	struct	rawcb *rcb_prev;
 	struct	socket *rcb_socket;	/* back pointer to socket */
 	struct	sockaddr *rcb_faddr;	/* destination address */
 	struct	sockaddr *rcb_laddr;	/* socket's address */
@@ -55,18 +54,6 @@ struct rawcb {
 #define	RAWSNDQ		8192
 #define	RAWRCVQ		8192
 
-#ifdef _KERNEL
-LIST_HEAD(, rawcb) rawcb;		/* head of list */
-
-int	raw_attach __P((struct socket *, int));
-void	*raw_ctlinput __P((int, struct sockaddr *, void *));
-void	raw_detach __P((struct rawcb *));
-void	raw_disconnect __P((struct rawcb *));
-void	raw_init __P((void));
-void	raw_input __P((struct mbuf *, ...));
-int	raw_usrreq __P((struct socket *,
-	    int, struct mbuf *, struct mbuf *, struct mbuf *, struct proc *));
-void	raw_setsockaddr __P((struct rawcb *, struct mbuf *));
-void	raw_setpeeraddr __P((struct rawcb *, struct mbuf *));
-
-#endif /* _KERNEL */
+#ifdef KERNEL
+struct rawcb rawcb;			/* head of list */
+#endif

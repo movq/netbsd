@@ -1,7 +1,5 @@
-.\"	$NetBSD: munmap.2,v 1.7 1997/10/16 23:21:59 christos Exp $
-.\"
-.\" Copyright (c) 1991, 1993
-.\"	The Regents of the University of California.  All rights reserved.
+.\" Copyright (c) 1991 Regents of the University of California.
+.\" All rights reserved.
 .\"
 .\" Redistribution and use in source and binary forms, with or without
 .\" modification, are permitted provided that the following conditions
@@ -31,54 +29,23 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\"	@(#)munmap.2	8.2 (Berkeley) 4/15/94
+.\"	@(#)munmap.2	6.1 (Berkeley) 5/27/91
 .\"
-.Dd April 15, 1994
-.Dt MUNMAP 2
-.Os
-.Sh NAME
-.Nm munmap
-.Nd remove a mapping
-.Sh SYNOPSIS
-.Fd #include <sys/types.h>
-.Fd #include <sys/mman.h>
-.Ft int
-.Fn munmap "void *addr" "size_t len"
-.Sh DESCRIPTION
-The
-.Fn munmap
-system call
+.TH MUNMAP 2 "May 27, 1991"
+.UC 7
+.SH NAME
+munmap \- remove a mapping
+.SH SYNOPSIS
+.nf
+munmap(addr, len)
+.B caddr_t addr;
+.B int len;
+.fi
+.SH DESCRIPTION
+.PP
+The \fImunmap\fP system call
 deletes the mappings for the specified address range,
 and causes further references to addresses within the range
 to generate invalid memory references.
-.Sh RETURN VALUES
-Upon successful completion,
-.Nm munmap
-returns zero.
-Otherwise, a value of -1 is returned and
-.Va errno
-is set to indicate the error.
-.Sh ERRORS
-.Fn Munmap
-will fail if:
-.Bl -tag -width Er
-.It Bq Er EINVAL
-The
-.Fa addr
-parameter was not page aligned, the
-.Fa len
-parameter was negative, or
-some part of the region being unmapped is not part of the currently
-valid address space.
-.Sh "SEE ALSO"
-.Xr madvise 2 ,
-.Xr mincore 2 ,
-.Xr mlock 2 ,
-.Xr mmap 2 ,
-.Xr mprotect 2 ,
-.Xr msync 2 ,
-.Xr getpagesize 3
-.Sh HISTORY
-The
-.Fn munmap
-function first appeared in 4.4BSD.
+.SH "SEE ALSO"
+msync.2, munmap.2, mprotect.2, madvise.2, mincore.2

@@ -1,8 +1,6 @@
-/*	$NetBSD: vfs_conf.c,v 1.26 1997/10/20 17:40:07 is Exp $	*/
-
 /*
- * Copyright (c) 1989, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1989 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,266 +30,60 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)vfs_conf.c	8.8 (Berkeley) 3/31/94
+ *	@(#)vfs_conf.c	7.3 (Berkeley) 6/28/90
  */
+
+#include "param.h"
+#include "mount.h"
 
 /*
- * XXX This file needs to die.
+ * This specifies the filesystem used to mount the root.
+ * This specification should be done by /etc/config.
  */
-
-#include <sys/param.h>
-#include <sys/mount.h>
-#include <sys/vnode.h>
+extern int ufs_mountroot();
+int (*mountroot)() = ufs_mountroot;
 
 /*
  * These define the root filesystem and device.
  */
 struct mount *rootfs;
-struct vnode *rootvnode;
+struct vnode *rootdir;
 
 /*
  * Set up the filesystem operations for vnodes.
  * The types are defined in mount.h.
  */
-#ifdef FFS
-extern	struct vfsops ffs_vfsops;
-#endif
+extern	struct vfsops ufs_vfsops;
 
-#ifdef LFS
-extern	struct vfsops lfs_vfsops;
+#ifdef NFS
+extern	struct vfsops nfs_vfsops;
 #endif
 
 #ifdef MFS
 extern	struct vfsops mfs_vfsops;
 #endif
 
-#ifdef MSDOSFS
-extern	struct vfsops msdosfs_vfsops;
-#endif
-
-#ifdef NFS
-extern	struct vfsops nfs_vfsops;
-#endif
-
-#ifdef FDESC
-extern	struct vfsops fdesc_vfsops;
-#endif
-
-#ifdef PORTAL
-extern	struct vfsops portal_vfsops;
-#endif
-
-#ifdef NULLFS
-extern	struct vfsops nullfs_vfsops;
-#endif
-
-#ifdef UMAPFS
-extern	struct vfsops umapfs_vfsops;
-#endif
-
-#ifdef KERNFS
-extern	struct vfsops kernfs_vfsops;
-#endif
-
-#ifdef PROCFS
-extern	struct vfsops procfs_vfsops;
-#endif
-
-#ifdef AFS
-extern	struct vfsops afs_vfsops;
-#endif
-
-#ifdef CD9660
-extern	struct vfsops cd9660_vfsops;
-#endif
-
-#ifdef UNION
-extern	struct vfsops union_vfsops;
-#endif
-
-#ifdef ADOSFS
-extern 	struct vfsops adosfs_vfsops;
-#endif
-
-#ifdef EXT2FS
-extern struct vfsops ext2fs_vfsops;
+#ifdef ISOFS
+extern	struct vfsops isofs_vfsops;
 #endif
 
 struct vfsops *vfssw[] = {
-#ifdef FFS
-	&ffs_vfsops,
-#endif
+	(struct vfsops *)0,	/* 0 = MOUNT_NONE */
+	&ufs_vfsops,		/* 1 = MOUNT_UFS */
 #ifdef NFS
-	&nfs_vfsops,
+	&nfs_vfsops,		/* 2 = MOUNT_NFS */
+#else
+	(struct vfsops *)0,
 #endif
 #ifdef MFS
-	&mfs_vfsops,
+	&mfs_vfsops,		/* 3 = MOUNT_MFS */
+#else
+	(struct vfsops *)0,
 #endif
-#ifdef MSDOSFS
-	&msdosfs_vfsops,
+	(struct vfsops *)0,	/* 4 = MOUNT_MSDOS */
+#ifdef ISOFS
+	&isofs_vfsops,		/* 5 = MOUNT_ISOFS */
+#else
+	(struct vfsops *)0,
 #endif
-#ifdef LFS
-	&lfs_vfsops,
-#endif
-#ifdef FDESC
-	&fdesc_vfsops,
-#endif
-#ifdef PORTAL
-	&portal_vfsops,
-#endif
-#ifdef NULLFS
-	&nullfs_vfsops,
-#endif
-#ifdef UMAPFS
-	&umapfs_vfsops,
-#endif
-#ifdef KERNFS
-	&kernfs_vfsops,
-#endif
-#ifdef PROCFS
-	&procfs_vfsops,
-#endif
-#ifdef AFS
-	&afs_vfsops,
-#endif
-#ifdef CD9660
-	&cd9660_vfsops,
-#endif
-#ifdef UNION
-	&union_vfsops,
-#endif
-#ifdef ADOSFS
-	&adosfs_vfsops,
-#endif
-#ifdef EXT2FS
-	&ext2fs_vfsops,
-#endif
-#ifdef LKM			/* for LKM's.  add new FS's before these */
-	NULL,
-	NULL,
-	NULL,
-	NULL,
-	NULL,
-	NULL,
-	NULL,
-	NULL,
-	NULL,
-	NULL,
-	NULL,
-	NULL,
-	NULL,
-	NULL,
-	NULL,
-	NULL,
-#endif
-	0
-};
-int	nvfssw = sizeof(vfssw) / sizeof(vfssw[0]);
-
-/*
- * vfs_opv_descs enumerates the list of vnode classes, each with it's own
- * vnode operation vector.  It is consulted at system boot to build operation
- * vectors.  It is NULL terminated.
- */
-extern struct vnodeopv_desc ffs_vnodeop_opv_desc;
-extern struct vnodeopv_desc ffs_specop_opv_desc;
-extern struct vnodeopv_desc ffs_fifoop_opv_desc;
-extern struct vnodeopv_desc lfs_vnodeop_opv_desc;
-extern struct vnodeopv_desc lfs_specop_opv_desc;
-extern struct vnodeopv_desc lfs_fifoop_opv_desc;
-extern struct vnodeopv_desc mfs_vnodeop_opv_desc;
-extern struct vnodeopv_desc dead_vnodeop_opv_desc;
-extern struct vnodeopv_desc fifo_vnodeop_opv_desc;
-extern struct vnodeopv_desc spec_vnodeop_opv_desc;
-extern struct vnodeopv_desc nfsv2_vnodeop_opv_desc;
-extern struct vnodeopv_desc spec_nfsv2nodeop_opv_desc;
-extern struct vnodeopv_desc fifo_nfsv2nodeop_opv_desc;
-extern struct vnodeopv_desc fdesc_vnodeop_opv_desc;
-extern struct vnodeopv_desc portal_vnodeop_opv_desc;
-extern struct vnodeopv_desc nullfs_vnodeop_opv_desc;
-extern struct vnodeopv_desc umapfs_vnodeop_opv_desc;
-extern struct vnodeopv_desc kernfs_vnodeop_opv_desc;
-extern struct vnodeopv_desc procfs_vnodeop_opv_desc;
-extern struct vnodeopv_desc cd9660_vnodeop_opv_desc;
-extern struct vnodeopv_desc cd9660_specop_opv_desc;
-extern struct vnodeopv_desc cd9660_fifoop_opv_desc;
-extern struct vnodeopv_desc union_vnodeop_opv_desc;
-extern struct vnodeopv_desc msdosfs_vnodeop_opv_desc;
-extern struct vnodeopv_desc adosfs_vnodeop_opv_desc;
-extern struct vnodeopv_desc ext2fs_vnodeop_opv_desc;
-extern struct vnodeopv_desc ext2fs_specop_opv_desc;
-extern struct vnodeopv_desc ext2fs_fifoop_opv_desc;
-
-struct vnodeopv_desc *vfs_opv_descs[] = {
-#ifdef FFS
-	&ffs_vnodeop_opv_desc,
-	&ffs_specop_opv_desc,
-#ifdef FIFO
-	&ffs_fifoop_opv_desc,
-#endif
-#endif
-	&dead_vnodeop_opv_desc,
-#ifdef FIFO
-	&fifo_vnodeop_opv_desc,
-#endif
-	&spec_vnodeop_opv_desc,
-#ifdef LFS
-	&lfs_vnodeop_opv_desc,
-	&lfs_specop_opv_desc,
-#ifdef FIFO
-	&lfs_fifoop_opv_desc,
-#endif
-#endif
-#ifdef MFS
-	&mfs_vnodeop_opv_desc,
-#endif
-#ifdef NFS
-	&nfsv2_vnodeop_opv_desc,
-	&spec_nfsv2nodeop_opv_desc,
-#ifdef FIFO
-	&fifo_nfsv2nodeop_opv_desc,
-#endif
-#endif
-#ifdef FDESC
-	&fdesc_vnodeop_opv_desc,
-#endif
-#ifdef PORTAL
-	&portal_vnodeop_opv_desc,
-#endif
-#ifdef NULLFS
-	&nullfs_vnodeop_opv_desc,
-#endif
-#ifdef UMAPFS
-	&umapfs_vnodeop_opv_desc,
-#endif
-#ifdef KERNFS
-	&kernfs_vnodeop_opv_desc,
-#endif
-#ifdef PROCFS
-	&procfs_vnodeop_opv_desc,
-#endif
-#ifdef CD9660
-	&cd9660_vnodeop_opv_desc,
-	&cd9660_specop_opv_desc,
-#ifdef FIFO
-	&cd9660_fifoop_opv_desc,
-#endif
-#endif
-#ifdef UNION
-	&union_vnodeop_opv_desc,
-#endif
-#ifdef MSDOSFS
-	&msdosfs_vnodeop_opv_desc,
-#endif
-#ifdef ADOSFS
-	&adosfs_vnodeop_opv_desc,
-#endif
-#ifdef EXT2FS
-	&ext2fs_vnodeop_opv_desc,
-	&ext2fs_specop_opv_desc,
-#ifdef FIFO
-	&ext2fs_fifoop_opv_desc,
-#endif
-#endif
-	NULL
 };

@@ -1,7 +1,5 @@
-.\"	$NetBSD: ns.3,v 1.5 1997/10/06 23:38:59 hubertf Exp $
-.\"
-.\" Copyright (c) 1986, 1991, 1993
-.\"	The Regents of the University of California.  All rights reserved.
+.\" Copyright (c) 1986, 1991 The Regents of the University of California.
+.\" All rights reserved.
 .\"
 .\" Redistribution and use in source and binary forms, with or without
 .\" modification, are permitted provided that the following conditions
@@ -31,9 +29,9 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\"     @(#)ns.3	8.1 (Berkeley) 6/4/93
+.\"     @(#)ns.3	6.5 (Berkeley) 4/19/91
 .\"
-.Dd June 4, 1993
+.Dd April 19, 1991
 .Dt NS 3
 .Os BSD 4.3
 .Sh NAME
@@ -46,7 +44,7 @@ address conversion routines
 .Fd #include <sys/types.h>
 .Fd #include <netns/ns.h>
 .Ft struct ns_addr 
-.Fn ns_addr "const char *cp"
+.Fn ns_addr "char *cp"
 .Ft char *
 .Fn ns_ntoa "struct ns_addr ns"
 .Sh DESCRIPTION
@@ -115,7 +113,6 @@ None. (See
 .Sh SEE ALSO
 .Xr hosts 5 ,
 .Xr networks 5 ,
-.Xr ns 4
 .Sh HISTORY
 The
 .Fn ns_addr

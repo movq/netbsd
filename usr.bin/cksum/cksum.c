@@ -1,12 +1,9 @@
-/*	$NetBSD: cksum.c,v 1.10 1997/10/17 11:36:59 lukem Exp $	*/
-
 /*-
- * Copyright (c) 1997 Jason R. Thorpe.  All rights reserved.
- * Copyright (c) 1991, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1991 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
- * James W. Williams of NASA Goddard Space Flight Center.
+ * James W. Williams of the University of Maryland.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -37,115 +34,53 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1991, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+char copyright[] =
+"@(#) Copyright (c) 1991 The Regents of the University of California.\n\
+ All rights reserved.\n";
 #endif /* not lint */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)cksum.c	8.2 (Berkeley) 4/28/95";
-#endif
-__RCSID("$NetBSD: cksum.c,v 1.10 1997/10/17 11:36:59 lukem Exp $");
+static char sccsid[] = "@(#)cksum.c	5.3 (Berkeley) 4/4/91";
 #endif /* not lint */
 
 #include <sys/cdefs.h>
 #include <sys/types.h>
-
-#include <err.h>
-#include <errno.h>
 #include <fcntl.h>
-#include <locale.h>
-#include <md5.h>
+#include <unistd.h>
 #include <stdio.h>
+#include <errno.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
-
 #include "extern.h"
 
-int	main __P((int, char **));
-int	md5_digest_file __P((char *));
-void	requiremd5 __P((const char *));
-void	usage __P((void));
-
-int
 main(argc, argv)
 	int argc;
 	char **argv;
 {
-	register int ch, fd, rval, domd5, dosum, pflag, nomd5stdin;
-	u_int32_t len, val;
+	extern int optind;
+	u_long len, val;
+	register int ch, fd, rval;
 	char *fn;
-	int (*cfncn) __P((int, u_int32_t *, u_int32_t *));
-	void (*pfncn) __P((char *, u_int32_t, u_int32_t));
-	extern char *__progname;
+	int (*cfncn) __P((int, unsigned long *, unsigned long *));
+	void (*pfncn) __P((char *, unsigned long, unsigned long));
 
-	cfncn = NULL;
-	pfncn = NULL;
-	dosum = domd5 = pflag = nomd5stdin = 0;
-
-	setlocale(LC_ALL, "");
-
-	if (!strcmp(__progname, "md5"))
-		domd5 = 1;
-	else if (!strcmp(__progname, "sum")) {
-		dosum = 1;
-		cfncn = csum1;
-		pfncn = psum1;
-	} else {
-		cfncn = crc;
-		pfncn = pcrc;
-	}
-
-	while ((ch = getopt(argc, argv, "mo:ps:tx")) != -1)
+	cfncn = crc;
+	pfncn = pcrc;
+	while ((ch = getopt(argc, argv, "o:")) != EOF)
 		switch(ch) {
-		case 'm':
-			if (dosum) {
-				warnx("sum mutually exclusive with md5");
-				usage();
-			}
-			domd5 = 1;
-			break;
 		case 'o':
-			if (domd5) {
-				warnx("md5 mutually exclusive with sum");
-				usage();
-			}
-			if (!strcmp(optarg, "1")) {
+			if (*optarg == '1') {
 				cfncn = csum1;
 				pfncn = psum1;
-			} else if (!strcmp(optarg, "2")) {
+			} else if (*optarg == '2') {
 				cfncn = csum2;
 				pfncn = psum2;
 			} else {
-				warnx("illegal argument to -o option");
+				(void)fprintf(stderr,
+				    "cksum: illegal argument to -o option\n");
 				usage();
 			}
-			break;
-		case 'p':
-			if (!domd5)
-				requiremd5("-p");
-			pflag = 1;
-			break;
-		case 's':
-			if (!domd5)
-				requiremd5("-s");
-			nomd5stdin = 1;
-			MDString(optarg);
-			break;
-		case 't':
-			if (!domd5)
-				requiremd5("-t");
-			MDTimeTrial();
-			nomd5stdin = 1;
-			break;
-		case 'x':
-			if (!domd5)
-				requiremd5("-x");
-			MDTestSuite();
-			nomd5stdin = 1;
 			break;
 		case '?':
 		default:
@@ -155,67 +90,31 @@ main(argc, argv)
 	argv += optind;
 
 	fd = STDIN_FILENO;
-	fn = NULL;
+	fn = "stdin";
 	rval = 0;
 	do {
 		if (*argv) {
 			fn = *argv++;
-			if (domd5) {
-				if (md5_digest_file(fn)) {
-					warn("%s", fn);
-					rval = 1;
-				}
-				continue;
-			}
 			if ((fd = open(fn, O_RDONLY, 0)) < 0) {
-				warn("%s", fn);
+				(void)fprintf(stderr,
+				    "cksum: %s: %s\n", fn, strerror(errno));
 				rval = 1;
 				continue;
 			}
-		} else if (domd5 && !nomd5stdin)
-			MDFilter(pflag);
-
-		if (!domd5) {
-			if (cfncn(fd, &val, &len)) {
-				warn("%s", fn ? fn : "stdin");
-				rval = 1;
-			} else
-				pfncn(fn, val, len);
-			(void)close(fd);
 		}
+		if (cfncn(fd, &val, &len)) {
+			(void)fprintf(stderr,
+			    "cksum: %s: %s\n", fn, strerror(errno));
+			rval = 1;
+		} else
+			pfncn(fn, val, len);
+		(void)close(fd);
 	} while (*argv);
 	exit(rval);
 }
 
-int
-md5_digest_file(fn)
-	char *fn;
-{
-	char buf[33], *cp;
-
-	cp = MD5File(fn, buf);
-	if (cp == NULL)
-		return (1);
-
-	printf("MD5 (%s) = %s\n", fn, cp);
-	return (0);
-}
-
-void
-requiremd5(flg)
-	const char *flg;
-{
-	warnx("%s flag requires `md5' or -m", flg);
-	usage();
-}
-
-void
 usage()
 {
-
-	(void)fprintf(stderr, "usage: cksum [-m | [-o 1 | 2]] [file ...]\n");
-	(void)fprintf(stderr, "       sum [file ...]\n");
-	(void)fprintf(stderr,
-	    "       md5 [-p | -t | -x | -s string] [file ...]\n");
+	(void)fprintf(stderr, "usage: cksum [-o 1 | 2] [file ...]\n");
 	exit(1);
 }

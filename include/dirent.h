@@ -1,8 +1,6 @@
-/*	$NetBSD: dirent.h,v 1.13 1997/10/10 13:18:37 fvdl Exp $	*/
-
 /*-
- * Copyright (c) 1989, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1989 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,19 +30,31 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)dirent.h	8.2 (Berkeley) 7/28/94
+ *	@(#)dirent.h	5.18 (Berkeley) 2/23/91
  */
 
 #ifndef _DIRENT_H_
 #define _DIRENT_H_
 
-#include <sys/types.h>
-
 /*
- * The kernel defines the format of directory entries returned by 
- * the getdirentries(2) system call.
+ * A directory entry has a struct dirent at the front of it, containing its
+ * inode number, the length of the entry, and the length of the name
+ * contained in the entry.  These are followed by the name padded to a 4
+ * byte boundary with null bytes.  All names are guaranteed null terminated.
+ * The maximum length of a name in a directory is MAXNAMLEN.
  */
-#include <sys/dirent.h>
+
+struct dirent {
+	u_long	d_fileno;		/* file number of entry */
+	u_short	d_reclen;		/* length of this record */
+	u_short	d_namlen;		/* length of string in d_name */
+#ifdef _POSIX_SOURCE
+	char	d_name[255 + 1];	/* name must be no longer than this */
+#else
+#define	MAXNAMLEN	255
+	char	d_name[MAXNAMLEN + 1];	/* name must be no longer than this */
+#endif
+};
 
 #ifdef _POSIX_SOURCE
 typedef void *	DIR;
@@ -59,21 +69,13 @@ typedef void *	DIR;
 typedef struct _dirdesc {
 	int	dd_fd;		/* file descriptor associated with directory */
 	long	dd_loc;		/* offset in current buffer */
-	long	dd_size;	/* amount of data returned by getdents */
+	long	dd_size;	/* amount of data returned by getdirentries */
 	char	*dd_buf;	/* data buffer */
 	int	dd_len;		/* size of data buffer */
-	off_t	dd_seek;	/* magic cookie returned by getdents */
-	long	dd_rewind;	/* magic cookie for rewinding */
-	int	dd_flags;	/* flags for readdir */
+	long	dd_seek;	/* magic cookie returned by getdirentries */
 } DIR;
 
 #define	dirfd(dirp)	((dirp)->dd_fd)
-
-/* flags for opendir2 */
-#define DTF_HIDEW	0x0001	/* hide whiteout entries */
-#define DTF_NODUP	0x0002	/* don't return duplicate names */
-#define DTF_REWIND	0x0004	/* rewind after reading union stack */
-#define __DTF_READALL	0x0008	/* everything has been read */
 
 #ifndef NULL
 #define	NULL	0
@@ -81,7 +83,7 @@ typedef struct _dirdesc {
 
 #endif /* _POSIX_SOURCE */
 
-#ifndef _KERNEL
+#ifndef KERNEL
 
 #include <sys/cdefs.h>
 
@@ -91,18 +93,15 @@ struct dirent *readdir __P((DIR *));
 void rewinddir __P((DIR *));
 int closedir __P((DIR *));
 #ifndef _POSIX_SOURCE
-DIR *__opendir2 __P((const char *, int));
 long telldir __P((const DIR *));
-void __seekdir __P((DIR *, long));
 void seekdir __P((DIR *, long));
 int scandir __P((const char *, struct dirent ***,
     int (*)(struct dirent *), int (*)(const void *, const void *)));
 int alphasort __P((const void *, const void *));
 int getdirentries __P((int, char *, int, long *));
-int getdents __P((int, char *, size_t));
 #endif /* not POSIX */
 __END_DECLS
 
-#endif /* !_KERNEL */
+#endif /* !KERNEL */
 
 #endif /* !_DIRENT_H_ */

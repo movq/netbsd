@@ -1,8 +1,6 @@
-/*	$NetBSD: strings.c,v 1.10 1997/10/19 23:29:25 lukem Exp $	*/
-
 /*
- * Copyright (c) 1980, 1987, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1980, 1987 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,35 +31,25 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1980, 1987, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+char copyright[] =
+"@(#) Copyright (c) 1980, 1987 The Regents of the University of California.\n\
+ All rights reserved.\n";
 #endif /* not lint */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)strings.c	8.2 (Berkeley) 1/28/94";
-#endif
-__RCSID("$NetBSD: strings.c,v 1.10 1997/10/19 23:29:25 lukem Exp $");
+static char sccsid[] = "@(#)strings.c	5.10 (Berkeley) 5/23/91";
 #endif /* not lint */
 
 #include <sys/types.h>
-
-#include <a.out.h>
-#include <ctype.h>
-#include <err.h>
-#include <errno.h>
 #include <fcntl.h>
+#include <errno.h>
+#include <a.out.h>
+#include <unistd.h>
 #include <stdio.h>
+#include <ctype.h>
 #include <stdlib.h>
 #include <string.h>
-#include <locale.h>
-#include <unistd.h>
-
-#define FORMAT_DEC "%07ld "
-#define FORMAT_OCT "%07lo "
-#define FORMAT_HEX "%07lx "
 
 #define DEF_LEN		4		/* default minimum string length */
 #define ISSTR(ch)	(isascii(ch) && (isprint(ch) || ch == '\t'))
@@ -72,37 +60,31 @@ static long	foff;			/* offset in the file */
 static int	hcnt,			/* head count */
 		head_len,		/* length of header */
 		read_len;		/* length to read */
-static EXEC	hbfr;			/* buffer for struct exec */
+static u_char	hbfr[sizeof(EXEC)];	/* buffer for struct exec */
 
-int	getch __P((void));
-int	main __P((int, char **));
-void	usage __P((void));
+static void usage();
 
-int
 main(argc, argv)
 	int argc;
 	char **argv;
 {
-	int ch, cnt;
-	u_char *C;
+	extern char *optarg;
+	extern int optind;
+	register int ch, cnt;
+	register u_char *C;
 	EXEC *head;
 	int exitcode, minlen;
-	short asdata, fflg;
+	short asdata, oflg, fflg;
 	u_char *bfr;
 	char *file, *p;
-	char *offset_format;
-
-	C = NULL;
-	setlocale(LC_ALL, "");
 
 	/*
 	 * for backward compatibility, allow '-' to specify 'a' flag; no
 	 * longer documented in the man page or usage string.
 	 */
-	asdata = exitcode = fflg = 0;
-	offset_format = NULL;
+	asdata = exitcode = fflg = oflg = 0;
 	minlen = -1;
-	while ((ch = getopt(argc, argv, "-0123456789an:oft:")) != -1)
+	while ((ch = getopt(argc, argv, "-0123456789anof")) != EOF)
 		switch((char)ch) {
 		case '0': case '1': case '2': case '3': case '4':
 		case '5': case '6': case '7': case '8': case '9':
@@ -129,23 +111,7 @@ main(argc, argv)
 			minlen = atoi(optarg);
 			break;
 		case 'o':
-			offset_format = FORMAT_OCT;
-			break;
-		case 't':
-			switch (*optarg) {
-			case 'o':
-			        offset_format = FORMAT_OCT;
-				break;
-			case 'd':
-				offset_format = FORMAT_DEC;
-				break;
-			case 'x':
-				offset_format = FORMAT_HEX;
-				break;
-			default:
-				usage();
-				/* NOTREACHED */
-			}
+			oflg = 1;
 			break;
 		case '?':
 		default:
@@ -156,18 +122,19 @@ main(argc, argv)
 
 	if (minlen == -1)
 		minlen = DEF_LEN;
-	else if (minlen < 1)
-		errx(1, "length less than 1");
 
-	if (!(bfr = malloc(minlen + 1)))
-		err(1, "malloc");
+	if (!(bfr = malloc((u_int)minlen))) {
+		(void)fprintf(stderr, "strings: %s\n", strerror(errno));
+		exit(1);
+	}
 	bfr[minlen] = '\0';
 	file = "stdin";
 	do {
 		if (*argv) {
 			file = *argv++;
 			if (!freopen(file, "r", stdin)) {
-				warn("%s", file);
+				(void)fprintf(stderr,
+				    "strings: %s: %s\n", file, strerror(errno));
 				exitcode = 1;
 				goto nextfile;
 			}
@@ -178,7 +145,7 @@ main(argc, argv)
 		if (asdata)
 			DO_EVERYTHING()
 		else {
-			head = &hbfr;
+			head = (EXEC *)hbfr;
 			if ((head_len =
 			    read(fileno(stdin), head, sizeof(EXEC))) == -1)
 				DO_EVERYTHING()
@@ -200,15 +167,13 @@ start:
 				*C++ = ch;
 				if (++cnt < minlen)
 					continue;
-
 				if (fflg)
 					printf("%s:", file);
-
-				if (offset_format) 
-					printf(offset_format, foff - minlen);
-
-				printf("%s", bfr);
-
+				if (oflg)
+					printf("%07ld %s",
+					    foff - minlen, (char *)bfr);
+				else
+					printf("%s", bfr);
 				while ((ch = getch()) != EOF && ISSTR(ch))
 					putchar((char)ch);
 				putchar('\n');
@@ -224,13 +189,12 @@ nextfile: ;
  * getch --
  *	get next character from wherever
  */
-int
 getch()
 {
 	++foff;
 	if (head_len) {
 		if (hcnt < head_len)
-			return((int)((u_char *)&hbfr)[hcnt++]);
+			return((int)hbfr[hcnt++]);
 		head_len = 0;
 	}
 	if (read_len == -1 || read_len-- > 0)
@@ -238,10 +202,10 @@ getch()
 	return(EOF);
 }
 
-void
+static void
 usage()
 {
 	(void)fprintf(stderr,
-	    "usage: strings [-afo] [-n length] [-t {o,d,x}] [file ... ]\n");
+	    "usage: strings [-afo] [-n length] [file ... ]\n");
 	exit(1);
 }

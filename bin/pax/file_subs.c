@@ -1,5 +1,3 @@
-/*	$NetBSD: file_subs.c,v 1.8 1997/10/19 13:02:43 mycroft Exp $	*/
-
 /*-
  * Copyright (c) 1992 Keith Muller.
  * Copyright (c) 1992, 1993
@@ -37,13 +35,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
 static char sccsid[] = "@(#)file_subs.c	8.1 (Berkeley) 5/31/93";
-#else
-__RCSID("$NetBSD: file_subs.c,v 1.8 1997/10/19 13:02:43 mycroft Exp $");
-#endif
 #endif /* not lint */
 
 #include <sys/types.h>
@@ -62,7 +55,7 @@ __RCSID("$NetBSD: file_subs.c,v 1.8 1997/10/19 13:02:43 mycroft Exp $");
 #include "extern.h"
 
 static int
-mk_link __P((char *,struct stat *,char *, int));
+mk_link __P((register char *,register struct stat *,register char *, int));
 
 /*
  * routines that deal with file operations such as: creating, removing;
@@ -82,11 +75,11 @@ mk_link __P((char *,struct stat *,char *, int));
 
 #if __STDC__
 int
-file_creat(ARCHD *arcn)
+file_creat(register ARCHD *arcn)
 #else
 int
 file_creat(arcn)
-	ARCHD *arcn;
+	register ARCHD *arcn;
 #endif
 {
 	int fd = -1;
@@ -145,11 +138,11 @@ file_creat(arcn)
 
 #if __STDC__
 void
-file_close(ARCHD *arcn, int fd)
+file_close(register ARCHD *arcn, int fd)
 #else
 void
 file_close(arcn, fd)
-	ARCHD *arcn;
+	register ARCHD *arcn;
 	int fd;
 #endif
 {
@@ -192,11 +185,11 @@ file_close(arcn, fd)
 
 #if __STDC__
 int
-lnk_creat(ARCHD *arcn)
+lnk_creat(register ARCHD *arcn)
 #else
 int
 lnk_creat(arcn)
-	ARCHD *arcn;
+	register ARCHD *arcn;
 #endif
 {
 	struct stat sb;
@@ -212,7 +205,7 @@ lnk_creat(arcn)
 	}
 
 	if (S_ISDIR(sb.st_mode)) {
-		tty_warn(1, "A hard link to the directory %s is not allowed",
+		warn(1, "A hard link to the directory %s is not allowed",
 		    arcn->ln_name);
 		return(-1);
 	}
@@ -232,11 +225,11 @@ lnk_creat(arcn)
 
 #if __STDC__
 int
-cross_lnk(ARCHD *arcn)
+cross_lnk(register ARCHD *arcn)
 #else
 int
 cross_lnk(arcn)
-	ARCHD *arcn;
+	register ARCHD *arcn;
 #endif
 {
 	/*
@@ -262,11 +255,11 @@ cross_lnk(arcn)
 
 #if __STDC__
 int
-chk_same(ARCHD *arcn)
+chk_same(register ARCHD *arcn)
 #else
 int
 chk_same(arcn)
-	ARCHD *arcn;
+	register ARCHD *arcn;
 #endif
 {
 	struct stat sb;
@@ -284,7 +277,7 @@ chk_same(arcn)
 	 * better make sure the user does not have src == dest by mistake
 	 */
 	if ((arcn->sb.st_dev == sb.st_dev) && (arcn->sb.st_ino == sb.st_ino)) {
-		tty_warn(1, "Unable to copy %s, file would overwrite itself",
+		warn(1, "Unable to copy %s, file would overwrite itself",
 		    arcn->name);
 		return(0);
 	}
@@ -305,14 +298,14 @@ chk_same(arcn)
 
 #if __STDC__
 static int
-mk_link(char *to, struct stat *to_sb, char *from,
+mk_link(register char *to, register struct stat *to_sb, register char *from,
 	int ign)
 #else
 static int
 mk_link(to, to_sb, from, ign)
-	char *to;
-	struct stat *to_sb;
-	char *from;
+	register char *to;
+	register struct stat *to_sb;
+	register char *from;
 	int ign;
 #endif
 {
@@ -331,7 +324,7 @@ mk_link(to, to_sb, from, ign)
 		 * make sure it is not the same file, protect the user
 		 */
 		if ((to_sb->st_dev==sb.st_dev)&&(to_sb->st_ino == sb.st_ino)) {
-			tty_warn(1, "Unable to link file %s to itself", to);
+			warn(1, "Unable to link file %s to itself", to);
 			return(-1);;
 		}
 
@@ -387,17 +380,17 @@ mk_link(to, to_sb, from, ign)
 
 #if __STDC__
 int
-node_creat(ARCHD *arcn)
+node_creat(register ARCHD *arcn)
 #else
 int
 node_creat(arcn)
-	ARCHD *arcn;
+	register ARCHD *arcn;
 #endif
 {
-	int res;
-	int ign = 0;
-	int oerrno;
-	int pass = 0;
+	register int res;
+	register int ign = 0;
+	register int oerrno;
+	register int pass = 0;
 	mode_t file_mode;
 	struct stat sb;
 
@@ -431,12 +424,13 @@ node_creat(arcn)
 			/*
 			 * Skip sockets, operation has no meaning under BSD
 			 */
-			tty_warn(0,
+			warn(0,
 			    "%s skipped. Sockets cannot be copied or extracted",
 			    arcn->name);
 			return(-1);
 		case PAX_SLK:
-			res = symlink(arcn->ln_name, arcn->name);
+			if ((res = symlink(arcn->ln_name, arcn->name)) == 0)
+				return(0);
 			break;
 		case PAX_CTG:
 		case PAX_HLK:
@@ -446,7 +440,7 @@ node_creat(arcn)
 			/*
 			 * we should never get here
 			 */
-			tty_warn(0, "%s has an unknown file type, skipping",
+			warn(0, "%s has an unknown file type, skipping",
 				arcn->name);
 			return(-1);
 		}
@@ -549,12 +543,12 @@ node_creat(arcn)
 
 #if __STDC__
 int
-unlnk_exist(char *name, int type)
+unlnk_exist(register char *name, register int type)
 #else
 int
 unlnk_exist(name, type)
-	char *name;
-	int type;
+	register char *name;
+	register int type;
 #endif
 {
 	struct stat sb;
@@ -607,16 +601,16 @@ unlnk_exist(name, type)
 
 #if __STDC__
 int
-chk_path( char *name, uid_t st_uid, gid_t st_gid)
+chk_path( register char *name, uid_t st_uid, gid_t st_gid)
 #else
 int
 chk_path(name, st_uid, st_gid)
-	char *name;
+	register char *name;
 	uid_t st_uid;
 	gid_t st_gid;
 #endif
 {
-	char *spt = name;
+	register char *spt = name;
 	struct stat sb;
 	int retval = -1;
 
@@ -709,13 +703,11 @@ set_ftime(fnm, mtime, atime, frc)
 	int frc;
 #endif
 {
-	struct timeval tv[2];
+	static struct timeval tv[2] = {{0L, 0L}, {0L, 0L}};
 	struct stat sb;
 
 	tv[0].tv_sec = (long)atime;
-	tv[0].tv_usec = 0;
 	tv[1].tv_sec = (long)mtime;
-	tv[1].tv_usec = 0;
 	if (!frc && (!patime || !pmtime)) {
 		/*
 		 * if we are not forcing, only set those times the user wants
@@ -723,9 +715,9 @@ set_ftime(fnm, mtime, atime, frc)
 		 */
 		if (lstat(fnm, &sb) == 0) {
 			if (!patime)
-				TIMESPEC_TO_TIMEVAL(&tv[0], &sb.st_atimespec);
+				tv[0].tv_sec = (long)sb.st_atime;
 			if (!pmtime)
-				TIMESPEC_TO_TIMEVAL(&tv[1], &sb.st_mtimespec);
+				tv[1].tv_sec = (long)sb.st_mtime;
 		} else
 			syswarn(0,errno,"Unable to obtain file stats %s", fnm);
 	}
@@ -733,7 +725,7 @@ set_ftime(fnm, mtime, atime, frc)
 	/*
 	 * set the times
 	 */
-	if (lutimes(fnm, tv) < 0)
+	if (utimes(fnm, tv) < 0)
 		syswarn(1, errno, "Access/modification time set failed on: %s",
 		    fnm);
 	return;
@@ -757,7 +749,7 @@ set_ids(fnm, uid, gid)
 	gid_t gid;
 #endif
 {
-	if (lchown(fnm, uid, gid) < 0) {
+	if (chown(fnm, uid, gid) < 0) {
 		syswarn(1, errno, "Unable to set file uid/gid of %s", fnm);
 		return(-1);
 	}
@@ -780,7 +772,7 @@ set_pmode(fnm, mode)
 #endif
 {
 	mode &= ABITS;
-	if (lchmod(fnm, mode) < 0)
+	if (chmod(fnm, mode) < 0)
 		syswarn(1, errno, "Could not set permissions on %s", fnm);
 	return;
 }
@@ -835,24 +827,24 @@ set_pmode(fnm, mode)
 
 #if __STDC__
 int
-file_write(int fd, char *str, int cnt, int *rem, int *isempt, int sz,
+file_write(int fd, char *str, register int cnt, int *rem, int *isempt, int sz,
 	char *name)
 #else
 int
 file_write(fd, str, cnt, rem, isempt, sz, name)
 	int fd;
 	char *str;
-	int cnt;
+	register int cnt;
 	int *rem;
 	int *isempt;
 	int sz;
 	char *name;
 #endif
 {
-	char *pt;
-	char *end;
-	int wcnt;
-	char *st = str;
+	register char *pt;
+	register char *end;
+	register int wcnt;
+	register char *st = str;
 	
 	/*
 	 * while we have data to process
@@ -967,12 +959,12 @@ file_flush(fd, fname, isempt)
 
 #if __STDC__
 void
-rdfile_close(ARCHD *arcn, int *fd)
+rdfile_close(register ARCHD *arcn, register int *fd)
 #else
 void
 rdfile_close(arcn, fd)
-	ARCHD *arcn;
-	int *fd;
+	register ARCHD *arcn;
+	register int *fd;
 #endif
 {
 	/*
@@ -1004,16 +996,16 @@ rdfile_close(arcn, fd)
 
 #if __STDC__
 int
-set_crc(ARCHD *arcn, int fd)
+set_crc(register ARCHD *arcn, register int fd)
 #else
 int
 set_crc(arcn, fd)
-	ARCHD *arcn;
-	int fd;
+	register ARCHD *arcn;
+	register int fd;
 #endif
 {
-	int i;
-	int res;
+	register int i;
+	register int res;
 	off_t cpcnt = 0L;
 	u_long size;
 	unsigned long crc = 0L;
@@ -1048,11 +1040,11 @@ set_crc(arcn, fd)
 	 * they can create inconsistant archive copies.
 	 */
 	if (cpcnt != arcn->sb.st_size)
-		tty_warn(1, "File changed size %s", arcn->org_name);
+		warn(1, "File changed size %s", arcn->org_name);
 	else if (fstat(fd, &sb) < 0)
 		syswarn(1, errno, "Failed stat on %s", arcn->org_name);
 	else if (arcn->sb.st_mtime != sb.st_mtime)
-		tty_warn(1, "File %s was modified during read", arcn->org_name);
+		warn(1, "File %s was modified during read", arcn->org_name);
 	else if (lseek(fd, (off_t)0L, SEEK_SET) < 0)
 		syswarn(1, errno, "File rewind failed on: %s", arcn->org_name);
 	else {

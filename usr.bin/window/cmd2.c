@@ -1,8 +1,6 @@
-/*	$NetBSD: cmd2.c,v 1.3 1995/09/28 10:34:05 tls Exp $	*/
-
 /*
- * Copyright (c) 1983, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1983 Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Edward Wang at The University of California, Berkeley.
@@ -37,11 +35,7 @@
  */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)cmd2.c	8.1 (Berkeley) 6/6/93";
-#else
-static char rcsid[] = "$NetBSD: cmd2.c,v 1.3 1995/09/28 10:34:05 tls Exp $";
-#endif
+static char sccsid[] = "@(#)cmd2.c	3.40 (Berkeley) 6/6/90";
 #endif /* not lint */
 
 #include "defs.h"
@@ -67,8 +61,6 @@ char *help_shortcmd[] = {
 	"j       Move cursor down",
 	"k       Move cursor up",
 	"l       Move cursor right",
-	"y       Yank",
-	"p       Put",
 	"^S      Stop output in current window",
 	"^Q      Restart output in current window",
 	"^L      Redraw screen",

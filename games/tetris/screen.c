@@ -1,5 +1,3 @@
-/*	$NetBSD: screen.c,v 1.6 1997/10/14 01:14:28 lukem Exp $	*/
-
 /*-
  * Copyright (c) 1992, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -42,6 +40,7 @@
  * Tetris screen control.
  */
 
+#include <sgtty.h>
 #include <sys/ioctl.h>
 
 #include <setjmp.h>
@@ -49,8 +48,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <termcap.h>
-#include <termios.h>
 #include <unistd.h>
 
 #ifndef sigmask
@@ -60,21 +57,28 @@
 #include "screen.h"
 #include "tetris.h"
 
+/*
+ * XXX - need a <termcap.h>
+ */
+int	tgetent __P((char *, const char *));
+int	tgetflag __P((const char *));
+int	tgetnum __P((const char *));
+int	tputs __P((const char *, int, int (*)(int)));
+
 static cell curscreen[B_SIZE];	/* 1 => standout (or otherwise marked) */
 static int curscore;
 static int isset;		/* true => terminal is in game mode */
-static struct termios oldtt;
-static void (*tstp) __P((int));
+static struct sgttyb oldtt;
+static void (*tstp)();
 
-static	void	scr_stop __P((int));
-static	void	stopset __P((int));
+char	*tgetstr(), *tgoto();
 
 
 /*
  * Capabilities from TERMCAP.
  */
 char	PC, *BC, *UP;		/* tgoto requires globals: ugh! */
-speed_t	ospeed;
+short	ospeed;
 
 static char
 	*bcstr,			/* backspace char */
@@ -102,21 +106,21 @@ struct tcsinfo {	/* termcap string info; some abbrevs above */
 	char tcname[3];
 	char **tcaddr;
 } tcstrings[] = {
-	{"bc", &bcstr},
-	{"ce", &CEstr},
-	{"cl", &CLstr},
-	{"cm", &CMstr},
+	"bc", &bcstr,
+	"ce", &CEstr,
+	"cl", &CLstr,
+	"cm", &CMstr,
 #ifdef unneeded
-	{"cr", &CRstr},
+	"cr", &CRstr,
 #endif
-	{"le", &BC},		/* move cursor left one space */
-	{"pc", &pcstr},
-	{"se", &SEstr},
-	{"so", &SOstr},
-	{"te", &TEstr},
-	{"ti", &TIstr},
-	{"up", &UP},		/* cursor up */
-	{ {0}, NULL}
+	"le", &BC,		/* move cursor left one space */
+	"pc", &pcstr,
+	"se", &SEstr,
+	"so", &SOstr,
+	"te", &TEstr,
+	"ti", &TIstr,
+	"up", &UP,		/* cursor up */
+	0
 };
 
 /* This is where we will actually stuff the information */
@@ -127,12 +131,12 @@ static char combuf[1024], tbuf[1024];
 /*
  * Routine used by tputs().
  */
-void
+int
 put(c)
 	int c;
 {
 
-	(void) putchar(c);
+	return (putchar(c));
 }
 
 /*
@@ -158,18 +162,18 @@ scr_init()
 		char tcname[3];
 		int *tcaddr;
 	} tcflags[] = {
-		{"bs", &bsflag},
-		{"ms", &MSflag},
+		"bs", &bsflag,
+		"ms", &MSflag,
 #ifdef unneeded
-		{"nc", &ncflag},
+		"nc", &ncflag,
 #endif
-		{"xs", &xsflag},
-		{ {0}, NULL}
+		"xs", &xsflag,
+		0
 	}, tcnums[] = {
-		{"co", &COnum},
-		{"li", &LInum},
-		{"sg", &sgnum},
-		{ {0}, NULL}
+		"co", &COnum,
+		"li", &LInum,
+		"sg", &sgnum,
+		0
 	};
 	
 	if ((term = getenv("TERM")) == NULL)
@@ -213,31 +217,24 @@ scr_init()
 /* this foolery is needed to modify tty state `atomically' */
 static jmp_buf scr_onstop;
 
+#define	sigunblock(mask) sigsetmask(sigblock(0) & ~(mask))
+
 static void
 stopset(sig)
 	int sig;
 {
-	sigset_t sigset;
-
 	(void) signal(sig, SIG_DFL);
 	(void) kill(getpid(), sig);
-	sigemptyset(&sigset);
-	sigaddset(&sigset, sig);
-	(void) sigprocmask(SIG_UNBLOCK, &sigset, (sigset_t *)0);
+	(void) sigunblock(sigmask(sig));
 	longjmp(scr_onstop, 1);
 }
 
 static void
-scr_stop(sig)
-	int sig;
+scr_stop()
 {
-	sigset_t sigset;
-
 	scr_end();
-	(void) kill(getpid(), sig);
-	sigemptyset(&sigset);
-	sigaddset(&sigset, sig);
-	(void) sigprocmask(SIG_UNBLOCK, &sigset, (sigset_t *)0);
+	(void) kill(getpid(), SIGTSTP);
+	(void) sigunblock(sigmask(SIGTSTP));
 	scr_set();
 	scr_msg(key_msg, 1);
 }
@@ -249,25 +246,22 @@ void
 scr_set()
 {
 	struct winsize ws;
-	struct termios newtt;
-	sigset_t sigset, osigset;
-	void (*ttou) __P((int));
+	struct sgttyb newtt;
+	volatile int omask;
+	void (*ttou)();
 
-	sigemptyset(&sigset);
-	sigaddset(&sigset, SIGTSTP);
-	sigaddset(&sigset, SIGTTOU);
-	(void) sigprocmask(SIG_BLOCK, &sigset, &osigset);
+	omask = sigblock(sigmask(SIGTSTP) | sigmask(SIGTTOU));
 	if ((tstp = signal(SIGTSTP, stopset)) == SIG_IGN)
 		(void) signal(SIGTSTP, SIG_IGN);
-	if ((ttou = signal(SIGTTOU, stopset)) == SIG_IGN)
-		(void) signal(SIGTTOU, SIG_IGN);
+	if ((ttou = signal(SIGTSTP, stopset)) == SIG_IGN)
+		(void) signal(SIGTSTP, SIG_IGN);
 	/*
 	 * At last, we are ready to modify the tty state.  If
 	 * we stop while at it, stopset() above will longjmp back
 	 * to the setjmp here and we will start over.
 	 */
 	(void) setjmp(scr_onstop);
-	(void) sigprocmask(SIG_SETMASK, &osigset, (sigset_t *)0);
+	(void) sigsetmask(omask);
 	Rows = 0, Cols = 0;
 	if (ioctl(0, TIOCGWINSZ, &ws) == 0) {
 		Rows = ws.ws_row;
@@ -283,15 +277,16 @@ scr_set()
 		    MINROWS, MINCOLS);
 		stop("");	/* stop() supplies \n */
 	}
-	if (tcgetattr(0, &oldtt) < 0)
-		stop("tcgetattr() fails");
+	if (ioctl(0, TIOCGETP, &oldtt))
+		stop("ioctl(TIOCGETP) fails");
 	newtt = oldtt;
-	newtt.c_lflag &= ~(ICANON|ECHO);
-	newtt.c_oflag &= ~OXTABS;
-	if (tcsetattr(0, TCSADRAIN, &newtt) < 0)
-		stop("tcsetattr() fails");
-	ospeed = cfgetospeed(&newtt);
-	(void) sigprocmask(SIG_BLOCK, &sigset, &osigset);
+	newtt.sg_flags = (newtt.sg_flags | CBREAK) & ~(CRMOD | ECHO);
+	if ((newtt.sg_flags & TBDELAY) == XTABS)
+		newtt.sg_flags &= ~TBDELAY;
+	if (ioctl(0, TIOCSETN, &newtt))
+		stop("ioctl(TIOCSETN) fails");
+	ospeed = newtt.sg_ospeed;
+	omask = sigblock(sigmask(SIGTSTP) | sigmask(SIGTTOU));
 
 	/*
 	 * We made it.  We are now in screen mode, modulo TIstr
@@ -301,11 +296,10 @@ scr_set()
 		putstr(TIstr);	/* termcap(5) says this is not padded */
 	if (tstp != SIG_IGN)
 		(void) signal(SIGTSTP, scr_stop);
-	if (ttou != SIG_IGN)
-		(void) signal(SIGTTOU, ttou);
+	(void) signal(SIGTTOU, ttou);
 
 	isset = 1;
-	(void) sigprocmask(SIG_SETMASK, &osigset, (sigset_t *)0);
+	(void) sigsetmask(omask);
 	scr_clear();
 }
 
@@ -315,12 +309,8 @@ scr_set()
 void
 scr_end()
 {
-	sigset_t sigset, osigset;
+	int omask = sigblock(sigmask(SIGTSTP) | sigmask(SIGTTOU));
 
-	sigemptyset(&sigset);
-	sigaddset(&sigset, SIGTSTP);
-	sigaddset(&sigset, SIGTTOU);
-	(void) sigprocmask(SIG_BLOCK, &sigset, &osigset);
 	/* move cursor to last line */
 	if (LLstr)
 		putstr(LLstr);	/* termcap(5) says this is not padded */
@@ -330,11 +320,11 @@ scr_end()
 	if (TEstr)
 		putstr(TEstr);	/* termcap(5) says this is not padded */
 	(void) fflush(stdout);
-	(void) tcsetattr(0, TCSADRAIN, &oldtt);
+	(void) ioctl(0, TIOCSETN, &oldtt);
 	isset = 0;
 	/* restore signals */
 	(void) signal(SIGTSTP, tstp);
-	(void) sigprocmask(SIG_SETMASK, &osigset, (sigset_t *)0);
+	(void) sigsetmask(omask);
 }
 
 void
@@ -375,11 +365,7 @@ scr_update()
 	register cell *bp, *sp;
 	register regcell so, cur_so = 0;
 	register int i, ccol, j;
-	sigset_t sigset, osigset;
-
-	sigemptyset(&sigset);
-	sigaddset(&sigset, SIGTSTP);
-	(void) sigprocmask(SIG_BLOCK, &sigset, &osigset);
+	int omask = sigblock(sigmask(SIGTSTP));
 
 	/* always leave cursor after last displayed point */
 	curscreen[D_LAST * B_COLS - 1] = -1;
@@ -439,7 +425,7 @@ scr_update()
 	if (cur_so)
 		putpad(SEstr);
 	(void) fflush(stdout);
-	(void) sigprocmask(SIG_SETMASK, &osigset, (sigset_t *)0);
+	(void) sigsetmask(omask);
 }
 
 /*

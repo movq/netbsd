@@ -1,8 +1,6 @@
-/*	$NetBSD: snake.h,v 1.9 1997/10/14 01:02:53 lukem Exp $	*/
-
 /*
- * Copyright (c) 1980, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1980 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,20 +30,15 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)snake.h	8.1 (Berkeley) 5/31/93
+ *	@(#)snake.h	5.5 (Berkeley) 6/1/90
  */
 
-# include <sys/types.h>
-# include <sys/ioctl.h>
-# include <assert.h>
-# include <err.h>
-# include <math.h>
-# include <signal.h>
 # include <stdio.h>
-# include <stdlib.h>
-# include <string.h>
-# include <termcap.h>
-# include <termios.h>
+# include <assert.h>
+# include <sys/types.h>
+# include <sgtty.h>
+# include <signal.h>
+# include <math.h>
 
 #define ESC	'\033'
 
@@ -60,12 +53,12 @@ char	*CL, *UP, *DO, *ND, *BS,
 	*TI, *TE, *KS, *KE;
 int	LINES, COLUMNS;	/* physical screen size. */
 int	lcnt, ccnt;	/* user's idea of screen size */
-char	PC;
+char	xBC, PC;
 int	AM, BW;
 char	tbuf[1024], tcapbuf[128];
+char	*tgetstr(), *tgoto();
 int	Klength;	/* length of KX strings */
 int	chunk;		/* amount of money given at a time */
-speed_t	ospeed;
 #ifdef	debug
 #define	cashvalue	(loot-penalty)/25
 #else
@@ -76,53 +69,11 @@ struct point {
 	int col, line;
 };
 struct point cursor;
-struct termios orig, new;
+struct sgttyb orig, new;
+#ifdef TIOCLGET
+struct ltchars olttyc, nlttyc;
+#endif
+struct point *point();
 
 #define	same(s1, s2)	((s1)->line == (s2)->line && (s1)->col == (s2)->col)
 
-
-void		apr __P((struct point *, const char *, ...));
-void		bs __P((void));
-void		chase __P((struct point *, struct point *));
-int		chk __P((struct point *));
-void		clear __P((void));
-void		cook __P((void));
-void		cr __P((void));
-void		delay __P((int));
-void		done __P((void));
-void		down __P((void));
-void		drawbox __P((void));
-void		flushi __P((void));
-void		getcap __P((void));
-void		gto __P((struct point *));
-void		home __P((void));
-void		length __P((int));
-void		ll __P((void));
-void		logit __P((const char *));
-void		mainloop __P((void));
-void		move __P((struct point *));
-void		nd __P((void));
-void		outch __P((int));
-void		pch __P((int));
-void		pchar __P((struct point *, char));
-struct point   *point __P((struct point *, int, int));
-int		post __P((int, int));
-void		pr __P((const char *, ...));
-void		pstring __P((const char *));
-int		pushsnake __P((void));
-void		putpad __P((char *));
-void		raw __P((void));
-void		right __P((struct point *));
-void		setup __P((void));
-void		snap __P((void));
-void		snap __P((void));
-void		snrand __P((struct point *));
-void		spacewarp __P((int));
-void		stop __P((int));
-int		stretch __P((struct point *));
-int		stretch __P((struct point *));
-void		surround __P((struct point *));
-void		suspend __P((void));
-void		up __P((void));
-void		win __P((struct point *));
-void		winnings __P((int));

@@ -1,7 +1,5 @@
-.\"	$NetBSD: rdist.1,v 1.9 1997/10/19 13:59:15 lukem Exp $
-.\"
-.\" Copyright (c) 1985, 1990, 1993
-.\"	The Regents of the University of California.  All rights reserved.
+.\" Copyright (c) 1985, 1990 The Regents of the University of California.
+.\" All rights reserved.
 .\"
 .\" Redistribution and use in source and binary forms, with or without
 .\" modification, are permitted provided that the following conditions
@@ -31,32 +29,32 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\"	from: @(#)rdist.1	8.3 (Berkeley) 3/17/94
+.\"	@(#)rdist.1	6.11 (Berkeley) 7/27/91
 .\"
-.Dd March 17, 1994
+.Dd July 27, 1991
 .Dt RDIST 1
 .Os BSD 4.3
 .Sh NAME
 .Nm rdist
 .Nd remote file distribution program
 .Sh SYNOPSIS
-.Nm
+.Nm rdist
 .Op Fl nqbRhivwy
 .Op Fl f Ar distfile
 .Op Fl d Ar var=value
-.Op Fl m Ar host
+.Op Fl m host
 .Op Ar name ...
-.Nm ""
+.Nm rdist
 .Op Fl nqbRhivwy
 .Fl c
 .Ar name ...
 .Oo login@ Oc Ns Ar host Ns Op :dest
 .Sh DESCRIPTION
-.Nm
+.Nm Rdist
 is a program to maintain identical copies of files over multiple hosts.
 It preserves the owner, group, mode, and mtime of files if possible and
 can update programs that are executing.
-.Nm
+.Nm Rdist
 reads commands from
 .Ar distfile
 to direct the updating of files and/or directories.
@@ -85,7 +83,7 @@ then
 .Dq Pa Distfile
 to use as the input.
 If no names are specified on the command line,
-.Nm
+.Nm rdist
 will update all of the files and directories listed in
 .Ar distfile  .
 Otherwise, the argument is taken to be the name of a file to be updated
@@ -99,7 +97,7 @@ Options specific to the second SYNOPSIS form:
 .Bl -tag -width Fl c
 .It Fl c
 Forces
-.Nm
+.Nm rdist
 to interpret the remaining arguments as a small
 .Ar distfile  .
 .Pp
@@ -140,13 +138,13 @@ Follow symbolic links. Copy the file that the link points to rather than the
 link itself.
 .It Fl i
 Ignore unresolved links.
-.Nm
-will normally try to maintain the link structure of files being transferred
+.Nm Rdist
+will normally try to maintain the link structure of files being transfered
 and warn the user if all the links cannot be found.
 .It Fl m Ar host
 Limit which machines are to be updated. Multiple
 .Fl m
-arguments can be given to limit updates to a subset of the hosts listed in the
+arguments can be given to limit updates to a subset of the hosts listed the
 .Ar distfile  .
 .It Fl n
 Print the commands without executing them. This option is
@@ -160,7 +158,7 @@ option suppresses this.
 .It Fl R
 Remove extraneous files. If a directory is being updated, any files that exist
 on the remote host that do not exist in the master directory are removed.
-This is useful for maintaining truly identical copies of directories.
+This is useful for maintaining truely identical copies of directories.
 .It Fl v
 Verify that the files are up to date on all the hosts. Any files
 that are out of date will be displayed but no files will be changed
@@ -182,7 +180,7 @@ and
 disagree. The
 .Fl y
 option causes
-.Nm
+.Nm rdist
 not to update files that are younger than the master copy.
 This can be used
 to prevent newer copies on other hosts from being replaced.
@@ -289,7 +287,7 @@ unless the destination name is of the format ``login@host".
 The
 .Ic notify
 command is used to mail the list of files updated (and any errors
-that may have occurred) to the listed names.
+that may have occured) to the listed names.
 If no `@' appears in the name, the destination host is appended to
 the name
 (e.g., name1@host, name2@host, ...).
@@ -389,7 +387,7 @@ temporary file for update lists
 .Xr stat 2
 .Sh HISTORY
 The
-.Nm
+.Nm rdist
 command appeared in
 .Bx 4.3 .
 .Sh DIAGNOSTICS
@@ -397,7 +395,7 @@ A complaint about mismatch of rdist version numbers may really stem
 from some problem with starting your shell, e.g., you are in too many groups.
 .Sh BUGS
 Source files must reside on the local host where
-.Nm
+.Nm rdist
 is executed.
 .Pp
 There is no easy way to have a special command executed after all files
@@ -406,7 +404,7 @@ in a directory have been updated.
 Variable expansion only works for name lists; there should be a general macro
 facility.
 .Pp
-.Nm
+.Nm Rdist
 aborts on files which have a negative mtime (before Jan 1, 1970).
 .Pp
 There should be a `force' option to allow replacement of non-empty directories

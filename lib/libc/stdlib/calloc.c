@@ -1,5 +1,3 @@
-/*	$NetBSD: calloc.c,v 1.7 1997/07/13 20:16:39 christos Exp $	*/
-
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
  * All rights reserved.
@@ -33,13 +31,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char *sccsid = "from: @(#)calloc.c	5.6 (Berkeley) 2/23/91";
-#else
-__RCSID("$NetBSD: calloc.c,v 1.7 1997/07/13 20:16:39 christos Exp $");
-#endif
+static char sccsid[] = "@(#)calloc.c	5.6 (Berkeley) 2/23/91";
 #endif /* LIBC_SCCS and not lint */
 
 #include <stdlib.h>
@@ -53,7 +46,14 @@ calloc(num, size)
 	register void *p;
 
 	size *= num;
-	if ((p = malloc(size)) != NULL)
-		memset(p, '\0', size);
+	if (p = malloc(size))
+		bzero(p, size);
 	return(p);
+}
+
+void
+cfree(p)
+	void *p;
+{
+	(void)free(p);
 }

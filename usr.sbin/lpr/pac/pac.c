@@ -1,9 +1,6 @@
-/*	$NetBSD: pac.c,v 1.10 1997/10/05 15:12:25 mrg Exp $	*/
-
 /*
- * Copyright (c) 1983, 1993
- *	The Regents of the University of California.  All rights reserved.
- *
+ * Copyright (c) 1983 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -34,15 +31,14 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1983, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
-#if 0
-static char sccsid[] = "@(#)pac.c	8.1 (Berkeley) 6/6/93";
-#else
-__RCSID("$NetBSD: pac.c,v 1.10 1997/10/05 15:12:25 mrg Exp $");
-#endif
+char copyright[] =
+"@(#) Copyright (c) 1983 Regents of the University of California.\n\
+ All rights reserved.\n";
+#endif /* not lint */
+
+#ifndef lint
+static char sccsid[] = "@(#)pac.c	5.5 (Berkeley) 6/1/90";
 #endif /* not lint */
 
 /*
@@ -52,32 +48,24 @@ __RCSID("$NetBSD: pac.c,v 1.10 1997/10/05 15:12:25 mrg Exp $");
  * to print the usage information for the named people.
  */
 
-#include <sys/param.h>
-
-#include <dirent.h>
 #include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
-#include <err.h>
-
-#include "lp.h"
 #include "lp.local.h"
 
-static char	*acctfile;	/* accounting file (input data) */
-static int	 allflag = 1;	/* Get stats on everybody */
-static int	 errs;
-static int	 hcount;	/* Count of hash entries */
-static int	 mflag = 0;	/* disregard machine names */
-static int	 pflag = 0;	/* 1 if -p on cmd line */
-static float	 price = 0.02;	/* cost per page (or what ever) */
-static long	 price100;	/* per-page cost in 100th of a cent */
-static int	 reverse;	/* Reverse sort order */
-static int	 sort;		/* Sort by cost */
-static char	*sumfile;	/* summary file */
-static int	 summarize;	/* Compress accounting file */
-
-uid_t	uid, euid;
+char	*printer;			/* printer name */
+char	*acctfile;			/* accounting file (input data) */
+char	*sumfile;			/* summary file */
+float	price = 0.02;			/* cost per page (or what ever) */
+int	allflag = 1;			/* Get stats on everybody */
+int	sort;				/* Sort by cost */
+int	summarize;			/* Compress accounting file */
+int	reverse;			/* Reverse sort order */
+int	hcount;				/* Count of hash entries */
+int	errs;
+int	mflag = 0;			/* disregard machine names */
+int	pflag = 0;			/* 1 if -p on cmd line */
+int	price100;			/* per-page cost in 100th of a cent */
+char	*index();
+int	pgetnum();
 
 /*
  * Grossness follows:
@@ -94,30 +82,22 @@ struct hent {
 	int	h_count;		/* Number of runs */
 };
 
-static struct	hent	*hashtab[HSHSIZE];	/* Hash table proper */
+struct	hent	*hashtab[HSHSIZE];	/* Hash table proper */
+struct	hent	*enter();
+struct	hent	*lookup();
 
-static void	account __P((FILE *));
-static int	any __P((int, char []));
-static int	chkprinter __P((char *));
-static void	dumpit __P((void));
-static int	hash __P((char []));
-static struct	hent *enter __P((char []));
-static struct	hent *lookup __P((char []));
-static int	qucmp __P((const void *, const void *));
-static void	rewrite __P((void));
-static void	usage __P((void));
-int		main __P((int, char *[]));
+#define	NIL	((struct hent *) 0)	/* The big zero */
 
-int
+double	atof();
+char	*getenv();
+char	*pgetstr();
+
 main(argc, argv)
-	int argc;
 	char **argv;
 {
-	FILE *acct;
-	char *cp;
+	register FILE *acct;
+	register char *cp;
 
-	euid = geteuid();	/* these aren't used in pac(1) */
-	uid = getuid();
 	while (--argc) {
 		cp = *++argv;
 		if (*cp++ == '-') {
@@ -166,11 +146,12 @@ main(argc, argv)
 				continue;
 
 			default:
-				usage();
+fprintf(stderr,
+    "usage: pac [-Pprinter] [-pprice] [-s] [-c] [-r] [-m] [user ...]\n");
 				exit(1);
 			}
 		}
-		(void)enter(--cp);
+		(void) enter(--cp);
 		allflag = 0;
 	}
 	if (printer == NULL && (printer = getenv("PRINTER")) == NULL)
@@ -180,8 +161,10 @@ main(argc, argv)
 		exit(2);
 	}
 
-	if ((acct = fopen(acctfile, "r")) == NULL)
-		err(1, "%s", acctfile);
+	if ((acct = fopen(acctfile, "r")) == NULL) {
+		perror(acctfile);
+		exit(1);
+	}
 	account(acct);
 	fclose(acct);
 	if ((acct = fopen(sumfile, "r")) != NULL) {
@@ -203,19 +186,19 @@ main(argc, argv)
  * formats here.
  * Host names are ignored if the -m flag is present.
  */
-static void
+
 account(acct)
-	FILE *acct;
+	register FILE *acct;
 {
 	char linebuf[BUFSIZ];
 	double t;
-	char *cp, *cp2;
-	struct hent *hp;
-	int ic;
+	register char *cp, *cp2;
+	register struct hent *hp;
+	register int ic;
 
 	while (fgets(linebuf, BUFSIZ, acct) != NULL) {
 		cp = linebuf;
-		while (any(*cp, " \t"))
+		while (any(*cp, " t\t"))
 			cp++;
 		t = atof(cp);
 		while (any(*cp, ".0123456789"))
@@ -226,10 +209,10 @@ account(acct)
 			;
 		ic = atoi(cp2);
 		*cp2 = '\0';
-		if (mflag && strchr(cp, ':'))
-		    cp = strchr(cp, ':') + 1;
+		if (mflag && index(cp, ':'))
+		    cp = index(cp, ':') + 1;
 		hp = lookup(cp);
-		if (hp == NULL) {
+		if (hp == NIL) {
 			if (!allflag)
 				continue;
 			hp = enter(cp);
@@ -246,21 +229,20 @@ account(acct)
  * Sort the hashed entries by name or footage
  * and print it all out.
  */
-static void
+
 dumpit()
 {
 	struct hent **base;
-	struct hent *hp, **ap;
-	int hno, c, runs;
+	register struct hent *hp, **ap;
+	register int hno, c, runs;
 	float feet;
+	int qucmp();
 
 	hp = hashtab[0];
 	hno = 1;
 	base = (struct hent **) calloc(sizeof hp, hcount);
-	if (base == NULL)
-		err(1, "calloc");
 	for (ap = base, c = hcount; c--; ap++) {
-		while (hp == NULL)
+		while (hp == NIL)
 			hp = hashtab[hno++];
 		*ap = hp;
 		hp = hp->h_link;
@@ -286,15 +268,15 @@ dumpit()
 /*
  * Rewrite the summary file with the summary information we have accumulated.
  */
-static void
+
 rewrite()
 {
-	struct hent *hp;
-	int i;
-	FILE *acctf;
+	register struct hent *hp;
+	register int i;
+	register FILE *acctf;
 
 	if ((acctf = fopen(sumfile, "w")) == NULL) {
-		warn("%s", sumfile);
+		perror(sumfile);
 		errs++;
 		return;
 	}
@@ -308,12 +290,12 @@ rewrite()
 	}
 	fflush(acctf);
 	if (ferror(acctf)) {
-		warn("%s", sumfile);
+		perror(sumfile);
 		errs++;
 	}
 	fclose(acctf);
 	if ((acctf = fopen(acctfile, "w")) == NULL)
-		warn("%s", acctfile);
+		perror(acctfile);
 	else
 		fclose(acctf);
 }
@@ -326,23 +308,20 @@ rewrite()
  * Enter the name into the hash table and return the pointer allocated.
  */
 
-static struct hent *
+struct hent *
 enter(name)
 	char name[];
 {
-	struct hent *hp;
-	int h;
+	register struct hent *hp;
+	register int h;
 
-	if ((hp = lookup(name)) != NULL)
+	if ((hp = lookup(name)) != NIL)
 		return(hp);
 	h = hash(name);
 	hcount++;
 	hp = (struct hent *) calloc(sizeof *hp, 1);
-	if (hp == NULL)
-		err(1, "calloc");
-	hp->h_name = strdup(name);
-	if (hp->h_name == NULL)
-		err(1, "malloc");
+	hp->h_name = (char *) calloc(sizeof(char), strlen(name)+1);
+	strcpy(hp->h_name, name);
 	hp->h_feetpages = 0.0;
 	hp->h_count = 0;
 	hp->h_link = hashtab[h];
@@ -355,30 +334,30 @@ enter(name)
  * to it.
  */
 
-static struct hent *
+struct hent *
 lookup(name)
 	char name[];
 {
-	int h;
-	struct hent *hp;
+	register int h;
+	register struct hent *hp;
 
 	h = hash(name);
-	for (hp = hashtab[h]; hp != NULL; hp = hp->h_link)
+	for (hp = hashtab[h]; hp != NIL; hp = hp->h_link)
 		if (strcmp(hp->h_name, name) == 0)
 			return(hp);
-	return(NULL);
+	return(NIL);
 }
 
 /*
  * Hash the passed name and return the index in
  * the hash table to begin the search.
  */
-static int
+
 hash(name)
 	char name[];
 {
-	int h;
-	char *cp;
+	register int h;
+	register char *cp;
 
 	for (cp = name, h = 0; *cp; h = (h << 2) + *cp++)
 		;
@@ -388,13 +367,12 @@ hash(name)
 /*
  * Other stuff
  */
-static int
+
 any(ch, str)
-	int ch;
 	char str[];
 {
-	int c = ch;
-	char *cp = str;
+	register int c = ch;
+	register char *cp = str;
 
 	while (*cp)
 		if (*cp++ == c)
@@ -407,18 +385,18 @@ any(ch, str)
  * The comparison is ascii collating order
  * or by feet of typesetter film, according to sort.
  */
-static int
-qucmp(a, b)
-	const void *a, *b;
-{
-	struct hent *h1, *h2;
-	int r;
 
-	h1 = *(struct hent **)a;
-	h2 = *(struct hent **)b;
+qucmp(left, right)
+	struct hent **left, **right;
+{
+	register struct hent *h1, *h2;
+	register int r;
+
+	h1 = *left;
+	h2 = *right;
 	if (sort)
-		r = h1->h_feetpages < h2->h_feetpages ?
-		    -1 : h1->h_feetpages > h2->h_feetpages;
+		r = h1->h_feetpages < h2->h_feetpages ? -1 : h1->h_feetpages > 
+h2->h_feetpages;
 	else
 		r = strcmp(h1->h_name, h2->h_name);
 	return(reverse ? -r : r);
@@ -427,38 +405,31 @@ qucmp(a, b)
 /*
  * Perform lookup for printer name or abbreviation --
  */
-static int
 chkprinter(s)
-	char *s;
+	register char *s;
 {
+	static char buf[BUFSIZ/2];
+	char b[BUFSIZ];
 	int stat;
+	char *bp = buf;
 
-	if ((stat = cgetent(&bp, printcapdb, s)) == -2) {
+	if ((stat = pgetent(b, s)) < 0) {
 		printf("pac: can't open printer description file\n");
 		exit(3);
-	} else if (stat == -1)
+	} else if (stat == 0)
 		return(0);
-	else if (stat == -3)
-		fatal("potential reference loop detected in printcap file");
-
-	if (cgetstr(bp, "af", &acctfile) == -1) {
+	if ((acctfile = pgetstr("af", &bp)) == NULL) {
 		printf("accounting not enabled for printer %s\n", printer);
 		exit(2);
 	}
-	if (!pflag && (cgetnum(bp, "pc", &price100) == 0))
+	if (!pflag && (price100 = pgetnum("pc")) > 0)
 		price = price100/10000.0;
 	sumfile = (char *) calloc(sizeof(char), strlen(acctfile)+5);
-	if (sumfile == NULL)
-		err(1, "pac");
-	strcpy(sumfile, acctfile);	/* XXX: strcpy is safe */
-	strcat(sumfile, "_sum");	/* XXX: strcat is safe */
+	if (sumfile == NULL) {
+		perror("pac");
+		exit(1);
+	}
+	strcpy(sumfile, acctfile);
+	strcat(sumfile, "_sum");
 	return(1);
-}
-
-static void
-usage()
-{
-
-	fprintf(stderr,
-	    "usage: pac [-Pprinter] [-pprice] [-s] [-c] [-r] [-m] [user ...]\n");
 }

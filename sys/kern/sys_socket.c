@@ -1,8 +1,6 @@
-/*	$NetBSD: sys_socket.c,v 1.15 1996/09/07 12:41:00 mycroft Exp $	*/
-
 /*
- * Copyright (c) 1982, 1986, 1990, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1982, 1986, 1990 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,28 +30,26 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)sys_socket.c	8.1 (Berkeley) 6/10/93
+ *	@(#)sys_socket.c	7.11 (Berkeley) 4/16/91
  */
 
-#include <sys/param.h>
-#include <sys/systm.h>
-#include <sys/file.h>
-#include <sys/mbuf.h>
-#include <sys/protosw.h>
-#include <sys/socket.h>
-#include <sys/socketvar.h>
-#include <sys/ioctl.h>
-#include <sys/stat.h>
-#include <sys/poll.h>
+#include "param.h"
+#include "systm.h"
+#include "file.h"
+#include "mbuf.h"
+#include "protosw.h"
+#include "socket.h"
+#include "socketvar.h"
+#include "ioctl.h"
+#include "stat.h"
 
-#include <net/if.h>
-#include <net/route.h>
+#include "net/if.h"
+#include "net/route.h"
 
 struct	fileops socketops =
-    { soo_read, soo_write, soo_ioctl, soo_poll, soo_close };
+    { soo_read, soo_write, soo_ioctl, soo_select, soo_close };
 
 /* ARGSUSED */
-int
 soo_read(fp, uio, cred)
 	struct file *fp;
 	struct uio *uio;
@@ -65,7 +61,6 @@ soo_read(fp, uio, cred)
 }
 
 /* ARGSUSED */
-int
 soo_write(fp, uio, cred)
 	struct file *fp;
 	struct uio *uio;
@@ -76,10 +71,9 @@ soo_write(fp, uio, cred)
 		uio, (struct mbuf *)0, (struct mbuf *)0, 0));
 }
 
-int
 soo_ioctl(fp, cmd, data, p)
 	struct file *fp;
-	u_long cmd;
+	int cmd;
 	register caddr_t data;
 	struct proc *p;
 {
@@ -132,62 +126,60 @@ soo_ioctl(fp, cmd, data, p)
 	if (IOCGROUP(cmd) == 'r')
 		return (rtioctl(cmd, data, p));
 	return ((*so->so_proto->pr_usrreq)(so, PRU_CONTROL, 
-	    (struct mbuf *)cmd, (struct mbuf *)data, (struct mbuf *)0, p));
+	    (struct mbuf *)cmd, (struct mbuf *)data, (struct mbuf *)0));
 }
 
-int
-soo_poll(fp, events, p)
+soo_select(fp, which, p)
 	struct file *fp;
-	int events;
+	int which;
 	struct proc *p;
 {
 	register struct socket *so = (struct socket *)fp->f_data;
-	int revents = 0;
-	register int s = splsoftnet();
+	register int s = splnet();
 
-	if (events & (POLLIN | POLLRDNORM))
-		if (soreadable(so))
-			revents |= events & (POLLIN | POLLRDNORM);
+	switch (which) {
 
-	if (events & (POLLOUT | POLLWRNORM))
-		if (sowriteable(so))
-			revents |= events & (POLLOUT | POLLWRNORM);
-
-	if (events & (POLLPRI | POLLRDBAND))
-		if (so->so_oobmark || (so->so_state & SS_RCVATMARK))
-			revents |= events & (POLLPRI | POLLRDBAND);
-
-	if (revents == 0) {
-		if (events & (POLLIN | POLLPRI | POLLRDNORM | POLLRDBAND)) {
-			selrecord(p, &so->so_rcv.sb_sel);
-			so->so_rcv.sb_flags |= SB_SEL;
+	case FREAD:
+		if (soreadable(so)) {
+			splx(s);
+			return (1);
 		}
+		sbselqueue(&so->so_rcv, p);
+		break;
 
-		if (events & (POLLOUT | POLLWRNORM)) {
-			selrecord(p, &so->so_snd.sb_sel);
-			so->so_snd.sb_flags |= SB_SEL;
+	case FWRITE:
+		if (sowriteable(so)) {
+			splx(s);
+			return (1);
 		}
+		sbselqueue(&so->so_snd, p);
+		break;
+
+	case 0:
+		if (so->so_oobmark ||
+		    (so->so_state & SS_RCVATMARK)) {
+			splx(s);
+			return (1);
+		}
+		sbselqueue(&so->so_rcv, p);
+		break;
 	}
-
 	splx(s);
-	return (revents);
+	return (0);
 }
 
-int
 soo_stat(so, ub)
 	register struct socket *so;
 	register struct stat *ub;
 {
 
 	bzero((caddr_t)ub, sizeof (*ub));
-	ub->st_mode = S_IFSOCK;
 	return ((*so->so_proto->pr_usrreq)(so, PRU_SENSE,
-	    (struct mbuf *)ub, (struct mbuf *)0, (struct mbuf *)0,
-	    (struct proc *)0));
+	    (struct mbuf *)ub, (struct mbuf *)0, 
+	    (struct mbuf *)0));
 }
 
 /* ARGSUSED */
-int
 soo_close(fp, p)
 	struct file *fp;
 	struct proc *p;

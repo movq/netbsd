@@ -1,7 +1,5 @@
-#	@(#)Makefile	8.2 (Berkeley) 4/3/94
-#	$NetBSD: Makefile,v 1.8 1997/03/24 21:59:47 christos Exp $
+#	@(#)Makefile	5.3 (Berkeley) 5/11/90
 
-MAN=	pagesize.1
-SCRIPTS=pagesize.sh
+PROG=	pagesize
 
 .include <bsd.prog.mk>

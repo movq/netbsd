@@ -1,47 +1,46 @@
-#	$NetBSD: Makefile,v 1.35 1997/10/10 19:57:03 christos Exp $
-#	@(#)Makefile	8.4 (Berkeley) 5/5/95
+#	%W% (Berkeley) %G%
 
 PROG=	sh
-SHSRCS=	alias.c cd.c echo.c error.c eval.c exec.c expand.c \
-	histedit.c input.c jobs.c mail.c main.c memalloc.c miscbltin.c \
-	mystring.c options.c parser.c redir.c show.c trap.c output.c var.c
-GENSRCS=arith.c arith_lex.c builtins.c builtins.h init.c nodes.c nodes.h \
-	syntax.c syntax.h token.h
-SRCS=	${SHSRCS} ${GENSRCS}
+SRCS=	builtins.c cd.c dirent.c echo.c error.c eval.c exec.c expand.c \
+	input.c jobs.c mail.c main.c memalloc.c miscbltin.c \
+	mystring.c nodes.c options.c parser.c redir.c show.c signames.c \
+	syntax.c trap.c output.c var.c
+OBJS+=	init.o
+CFLAGS+=-DSHELL -I. -I${.CURDIR}
+.PATH:	${.CURDIR}/bltin
+CLEANFILES+=\
+	builtins.c builtins.h init.c mkinit mknodes mksignames mksyntax \
+	nodes.c nodes.h signames.c signames.h syntax.c syntax.h token.def
 
-LDADD+=	-ll -ledit -ltermcap
-DPADD+=	${LIBL} ${LIBEDIT} ${LIBTERMCAP}
-
-LFLAGS= -8	# 8-bit lex scanner for arithmetic
-
-CPPFLAGS+=-DSHELL -I. -I${.CURDIR}
-
-# XXX
-.if (${MACHINE_ARCH} == "powerpc")
-CFLAGS+= -w
-.endif
-
-.PATH:	${.CURDIR}/bltin ${.CURDIR}/../../usr.bin/printf
-
-CLEANFILES+= mkinit mknodes mksyntax
-CLEANFILES+= mkinit.o mknodes.o mksyntax.o
-CLEANFILES+= ${GENSRCS} y.tab.h
-
-token.h: mktokens
+.depend parser.o: token.def
+token.def: mktokens
 	sh ${.CURDIR}/mktokens
 
-builtins.c builtins.h: mkbuiltins builtins.def
-	cd ${.CURDIR}; sh mkbuiltins ${.OBJDIR}
+builtins.h builtins.c: ${.CURDIR}/mkbuiltins ${.CURDIR}/builtins
+	cd ${.CURDIR}; sh mkbuiltins
 
-init.c: mkinit ${SHSRCS}
-	./mkinit ${.ALLSRC:S/^mkinit$//}
+init.c: mkinit ${SRCS}
+	./mkinit '${CC} -c ${CFLAGS} init.c' ${.ALLSRC}
 
-nodes.c nodes.h: mknodes nodetypes nodes.c.pat
+mkinit: ${.CURDIR}/mkinit.c
+	${CC} ${CFLAGS} ${.CURDIR}/mkinit.c -o $@
+
+nodes.c nodes.h: mknodes ${.CURDIR}/nodetypes ${.CURDIR}/nodes.c.pat
 	./mknodes ${.CURDIR}/nodetypes ${.CURDIR}/nodes.c.pat
+
+mknodes: ${.CURDIR}/mknodes.c
+	${CC} ${CFLAGS} ${.CURDIR}/mknodes.c -o $@
+
+signames.c signames.h: mksignames
+	./mksignames
+
+mksignames: ${.CURDIR}/mksignames.c
+	${CC} ${CFLAGS} ${.CURDIR}/mksignames.c -o $@
 
 syntax.c syntax.h: mksyntax
 	./mksyntax
 
-.include <bsd.prog.mk>
+mksyntax: ${.CURDIR}/mksyntax.c ${.CURDIR}/parser.h
+	${CC} ${CFLAGS} ${.CURDIR}/mksyntax.c -o $@
 
-${OBJS}: builtins.h nodes.h syntax.h token.h
+.include <bsd.prog.mk>

@@ -1,8 +1,6 @@
-/*	$NetBSD: help.c,v 1.4 1997/10/12 21:24:53 christos Exp $	*/
-
 /*
- * Copyright (c) 1980, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1980 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,19 +31,11 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)help.c	8.1 (Berkeley) 5/31/93";
-#else
-__RCSID("$NetBSD: help.c,v 1.4 1997/10/12 21:24:53 christos Exp $");
-#endif
+static char sccsid[] = "@(#)help.c	5.4 (Berkeley) 6/1/90";
 #endif /* not lint */
 
-#include <stdio.h>
-#include <math.h>
-#include <unistd.h>
-#include "trek.h"
+# include	"trek.h"
 
 /*
 **  call starbase for help
@@ -70,31 +60,22 @@ __RCSID("$NetBSD: help.c,v 1.4 1997/10/12 21:24:53 christos Exp $");
 char	*Cntvect[3] =
 {"first", "second", "third"};
 
-/*ARGSUSED*/
-void
-help(v)
-	int v;
+help()
 {
-	int		i;
-	double		dist, x;
-	int		dx = 0, dy = 0;
-	int		j, l = 0;
+	register int		i;
+	double			dist, x;
+	register int		dx, dy;
+	int			j, l;
 
 	/* check to see if calling for help is reasonable ... */
-	if (Ship.cond == DOCKED) {
-		printf("Uhura: But Captain, we're already docked\n");
-		return;
-	}
+	if (Ship.cond == DOCKED)
+		return (printf("Uhura: But Captain, we're already docked\n"));
 
 	/* or possible */
-	if (damaged(SSRADIO)) {
-		out(SSRADIO);
-		return;
-	}
-	if (Now.bases <= 0) {
-		printf("Uhura: I'm not getting any response from starbase\n");
-		return;
-	}
+	if (damaged(SSRADIO))
+		return (out(SSRADIO));
+	if (Now.bases <= 0)
+		return (printf("Uhura: I'm not getting any response from starbase\n"));
 
 	/* tut tut, there goes the score */
 	Game.helps += 1;
@@ -162,7 +143,7 @@ help(v)
 				Ship.sectx = dx;
 				Ship.secty = dy;
 				Sect[dx][dy] = Ship.ship;
-				dock(0);
+				dock();
 				compkldist(0);
 				return;
 			}

@@ -1,8 +1,6 @@
-/*	$NetBSD: init.h,v 1.8 1995/05/11 21:29:14 christos Exp $	*/
-
 /*-
- * Copyright (c) 1991, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1991 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Kenneth Almquist.
@@ -35,9 +33,15 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)init.h	8.2 (Berkeley) 5/4/95
+ *	@(#)init.h	5.1 (Berkeley) 3/7/91
  */
 
-void init __P((void));
-void reset __P((void));
-void initshellproc __P((void));
+#ifdef __STDC__
+void init(void);
+void reset(void);
+void initshellproc(void);
+#else
+void init();
+void reset();
+void initshellproc();
+#endif

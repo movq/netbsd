@@ -1,8 +1,6 @@
-/*	$NetBSD: main.c,v 1.6 1997/10/13 21:03:55 christos Exp $	*/
-
 /*
- * Copyright (c) 1983, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1983 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,39 +31,29 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1983, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+char copyright[] =
+"@(#) Copyright (c) 1983 Regents of the University of California.\n\
+ All rights reserved.\n";
 #endif /* not lint */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)main.c	8.2 (Berkeley) 4/28/95";
-#else
-__RCSID("$NetBSD: main.c,v 1.6 1997/10/13 21:03:55 christos Exp $");
-#endif
+static char sccsid[] = "@(#)main.c	5.5 (Berkeley) 6/1/90";
 #endif /* not lint */
 
-#include "extern.h"
-#include <unistd.h>
-#include <stdlib.h>
-#include <string.h>
-
-int main __P((int, char **));
+#include "externs.h"
 
 /*ARGSUSED*/
-int
 main(argc, argv)
 	int argc;
-	char **argv;
+	register char **argv;
 {
-	char *p;
+	register char *p;
 	int i;
 
 	(void) srand(getpid());
 	issetuid = getuid() != geteuid();
-	if ((p = strrchr(*argv, '/')) != NULL)
+	if (p = rindex(*argv, '/'))
 		p++;
 	else
 		p = *argv;
@@ -87,7 +75,7 @@ main(argc, argv)
 			debug++;
 			break;
 		case 'x':
-			randomize++;
+			randomize;
 			break;
 		case 'l':
 			longfmt++;
@@ -103,7 +91,7 @@ main(argc, argv)
 		game = atoi(*argv);
 	else
 		game = -1;
-	if ((i = setjmp(restart)) != 0)
+	if (i = setjmp(restart))
 		mode = i;
 	switch (mode) {
 	case MODE_PLAYER:

@@ -1,7 +1,5 @@
-/*	$NetBSD: config.c,v 1.8 1997/10/17 06:42:09 mikel Exp $	*/
-
 /*
- * Copyright (c) 1989, 1993, 1995
+ * Copyright (c) 1989, 1993
  *	The Regents of the University of California.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -33,13 +31,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)config.c	8.8 (Berkeley) 1/31/95";
-#else
-__RCSID("$NetBSD: config.c,v 1.8 1997/10/17 06:42:09 mikel Exp $");
-#endif
+static char sccsid[] = "@(#)config.c	8.5 (Berkeley) 11/26/93";
 #endif /* not lint */
 
 #include <sys/types.h>
@@ -83,8 +76,8 @@ config(fname)
 	if ((cfp = fopen(fname, "r")) == NULL)
 		err(1, "%s", fname);
 	TAILQ_INIT(&head);
-	for (lcnt = 1; (p = fgetln(cfp, &len)) != NULL; ++lcnt) {
-		if (len == 1)			/* Skip empty lines. */
+	for (lcnt = 1; (p = fgetline(cfp, &len)) != NULL; ++lcnt) {
+		if (!len)			/* Skip empty lines. */
 			continue;
 		if (p[len - 1] != '\n') {	/* Skip corrupted lines. */
 			warnx("%s: line %d corrupted", fname, lcnt);
@@ -120,17 +113,15 @@ config(fname)
 			while (*++t && isspace(*t));
 			if ((ep = malloc(sizeof(ENTRY))) == NULL ||
 			    (ep->s = strdup(t)) == NULL)
-				err(1, "malloc");
+				err(1, NULL);
 			TAILQ_INSERT_TAIL(&tp->list, ep, q);
 		} else for (++t; (p = strtok(t, " \t\n")) != NULL; t = NULL) {
 			if ((ep = malloc(sizeof(ENTRY))) == NULL ||
 			    (ep->s = strdup(p)) == NULL)
-				err(1, "malloc");
+				err(1, NULL);
 			TAILQ_INSERT_TAIL(&tp->list, ep, q);
 		}
 	}
-
-	fclose(cfp);
 }
 
 /*
@@ -145,7 +136,7 @@ addlist(name)
 
 	if ((tp = calloc(1, sizeof(TAG))) == NULL ||
 	    (tp->s = strdup(name)) == NULL)
-		err(1, "malloc");
+		err(1, NULL);
 	TAILQ_INIT(&tp->list);
 	TAILQ_INSERT_TAIL(&head, tp, q);
 	return (tp);

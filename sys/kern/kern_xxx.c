@@ -1,8 +1,6 @@
-/*	$NetBSD: kern_xxx.c,v 1.40 1997/09/20 19:32:15 pk Exp $	*/
-
 /*
- * Copyright (c) 1982, 1986, 1989, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1982, 1986, 1989 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,119 +30,98 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)kern_xxx.c	8.2 (Berkeley) 11/14/93
+ *	@(#)kern_xxx.c	7.17 (Berkeley) 4/20/91
  */
 
-#include <sys/param.h>
-#include <sys/systm.h>
-#include <sys/kernel.h>
-#include <sys/proc.h>
-#include <sys/reboot.h>
-#include <vm/vm.h>
-#include <sys/sysctl.h>
-#include <sys/mount.h>
-#include <sys/syscallargs.h>
+#include "param.h"
+#include "systm.h"
+#include "kernel.h"
+#include "proc.h"
+#include "reboot.h"
 
 /* ARGSUSED */
-int
-sys_reboot(p, v, retval)
+gethostid(p, uap, retval)
 	struct proc *p;
-	void *v;
-	register_t *retval;
+	void *uap;
+	long *retval;
 {
-	struct sys_reboot_args /* {
-		syscallarg(int) opt;
-		syscallarg(char *) bootstr;
-	} */ *uap = v;
-	int error;
-	char *bootstr, bs[128];
 
-	if ((error = suser(p->p_ucred, &p->p_acflag)) != 0)
-		return (error);
-
-	/*
-	 * Only use the boot string if RB_STRING is set.
-	 */
-	if ((SCARG(uap, opt) & RB_STRING) &&
-	    (error = copyinstr(SCARG(uap, bootstr), bs, sizeof(bs), 0)) == 0)
-		bootstr = bs;
-	else
-		bootstr = NULL;
-	/*
-	 * Not all ports use the bootstr currently.
-	 */
-	cpu_reboot(SCARG(uap, opt), bootstr);
+	*retval = hostid;
 	return (0);
 }
 
-#ifdef SYSCALL_DEBUG
-#define	SCDEBUG_CALLS		0x0001	/* show calls */
-#define	SCDEBUG_RETURNS		0x0002	/* show returns */
-#define	SCDEBUG_ALL		0x0004	/* even syscalls that are implemented */
-#define	SCDEBUG_SHOWARGS	0x0008	/* show arguments to calls */
-
-int	scdebug = SCDEBUG_CALLS|SCDEBUG_RETURNS|SCDEBUG_SHOWARGS;
-
-void
-scdebug_call(p, code, args)
+/* ARGSUSED */
+sethostid(p, uap, retval)
 	struct proc *p;
-	register_t code, args[];
+	struct args {
+		long	hostid;
+	} *uap;
+	int *retval;
 {
-	struct sysent *sy;
-	struct emul *em;
-	int i;
-
-	if (!(scdebug & SCDEBUG_CALLS))
-		return;
-
-	em = p->p_emul;
-	sy = &em->e_sysent[code];
-	if (!(scdebug & SCDEBUG_ALL || code < 0 || code >= em->e_nsysent ||
-	     sy->sy_call == sys_nosys))
-		return;
-		
-	printf("proc %d (%s): %s num ", p->p_pid, p->p_comm, em->e_name);
-	if (code < 0 || code >= em->e_nsysent)
-		printf("OUT OF RANGE (%d)", code);
-	else {
-		printf("%d call: %s", code, em->e_syscallnames[code]);
-		if (scdebug & SCDEBUG_SHOWARGS) {
-			printf("(");
-			for (i = 0; i < sy->sy_argsize / sizeof(register_t);
-			    i++)
-				printf("%s0x%lx", i == 0 ? "" : ", ",
-				    (long)args[i]);
-			printf(")");
-		}
-	}
-	printf("\n");
-}
-
-void
-scdebug_ret(p, code, error, retval)
-	struct proc *p;
-	register_t code;
 	int error;
-	register_t retval[];
-{
-	struct sysent *sy;
-	struct emul *em;
 
-	if (!(scdebug & SCDEBUG_RETURNS))
-		return;
-
-	em = p->p_emul;
-	sy = &em->e_sysent[code];
-	if (!(scdebug & SCDEBUG_ALL || code < 0 || code >= em->e_nsysent ||
-	    sy->sy_call == sys_nosys))
-		return;
-		
-	printf("proc %d (%s): %s num ", p->p_pid, p->p_comm, em->e_name);
-	if (code < 0 || code >= em->e_nsysent)
-		printf("OUT OF RANGE (%d)", code);
-	else
-		printf("%d ret: err = %d, rv = 0x%lx,0x%lx", code,
-		    error, (long)retval[0], (long)retval[1]);
-	printf("\n");
+	if (error = suser(p->p_ucred, &p->p_acflag))
+		return (error);
+	hostid = uap->hostid;
+	return (0);
 }
-#endif /* SYSCALL_DEBUG */
+
+/* ARGSUSED */
+gethostname(p, uap, retval)
+	struct proc *p;
+	struct args {
+		char	*hostname;
+		u_int	len;
+	} *uap;
+	int *retval;
+{
+
+	if (uap->len > hostnamelen + 1)
+		uap->len = hostnamelen + 1;
+	return (copyout((caddr_t)hostname, (caddr_t)uap->hostname, uap->len));
+}
+
+/* ARGSUSED */
+sethostname(p, uap, retval)
+	struct proc *p;
+	register struct args {
+		char	*hostname;
+		u_int	len;
+	} *uap;
+	int *retval;
+{
+	int error;
+
+	if (error = suser(p->p_ucred, &p->p_acflag))
+		return (error);
+	if (uap->len > sizeof (hostname) - 1)
+		return (EINVAL);
+	hostnamelen = uap->len;
+	error = copyin((caddr_t)uap->hostname, hostname, uap->len);
+	hostname[hostnamelen] = 0;
+	return (error);
+}
+
+/* ARGSUSED */
+reboot(p, uap, retval)
+	struct proc *p;
+	struct args {
+		int	opt;
+	} *uap;
+	int *retval;
+{
+	int error;
+
+	if (error = suser(p->p_ucred, &p->p_acflag))
+		return (error);
+	boot(uap->opt);
+	return (0);
+}
+
+#ifdef COMPAT_43
+oquota()
+{
+
+	return (ENOSYS);
+}
+#endif

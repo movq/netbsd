@@ -1,8 +1,6 @@
-/*	$NetBSD: main.c,v 1.26 1997/10/14 16:31:22 christos Exp $	*/
-
 /*
- * Copyright (c) 1985, 1989, 1993, 1994
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1985, 1989 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,190 +31,94 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1985, 1989, 1993, 1994\n\
-	The Regents of the University of California.  All rights reserved.\n");
+char copyright[] =
+"@(#) Copyright (c) 1985, 1989 Regents of the University of California.\n\
+ All rights reserved.\n";
 #endif /* not lint */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)main.c	8.6 (Berkeley) 10/9/94";
-#else
-__RCSID("$NetBSD: main.c,v 1.26 1997/10/14 16:31:22 christos Exp $");
-#endif
+static char sccsid[] = "@(#)main.c	5.18 (Berkeley) 3/1/91";
 #endif /* not lint */
 
 /*
  * FTP User Program -- Command Interface.
  */
-#include <sys/types.h>
+#include "ftp_var.h"
 #include <sys/socket.h>
+#include <sys/ioctl.h>
+#include <sys/types.h>
 
-#include <err.h>
+#include <arpa/ftp.h>
+
+#include <signal.h>
+#include <stdio.h>
+#include <errno.h>
+#include <ctype.h>
 #include <netdb.h>
 #include <pwd.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
 
-#include "ftp_var.h"
-#include "pathnames.h"
+uid_t	getuid();
+void	intr(), lostpeer();
+extern	char *home;
+char	*getlogin();
 
-int main __P((int, char **));
-
-int
 main(argc, argv)
-	int argc;
 	char *argv[];
 {
-	struct servent *sp;
-	int ch, top, rval;
-	long port;
+	register char *cp;
+	int top;
 	struct passwd *pw = NULL;
-	char *cp, *ep, homedir[MAXPATHLEN];
-	int dumbterm;
+	char homedir[MAXPATHLEN];
 
 	sp = getservbyname("ftp", "tcp");
-	if (sp == 0)
-		ftpport = htons(FTP_PORT);	/* good fallback */
-	else
-		ftpport = sp->s_port;
-	sp = getservbyname("http", "tcp");
-	if (sp == 0)
-		httpport = htons(HTTP_PORT);	/* good fallback */
-	else
-		httpport = sp->s_port;
-	gateport = 0;
-	cp = getenv("FTPSERVERPORT");
-	if (cp != NULL) {
-		port = strtol(cp, &ep, 10);
-		if (port < 1 || port > 0xffff || *ep != '\0')
-			warnx("bad FTPSERVERPORT port number: %s (ignored)",
-			    cp);
-		else
-			gateport = htons(port);
-	}
-	if (gateport == 0) {
-		sp = getservbyname("ftpgate", "tcp");
-		if (sp == 0)
-			gateport = htons(GATE_PORT);
-		else
-			gateport = sp->s_port;
+	if (sp == 0) {
+		fprintf(stderr, "ftp: ftp/tcp: unknown service\n");
+		exit(1);
 	}
 	doglob = 1;
 	interactive = 1;
 	autologin = 1;
-	passivemode = 0;
-	preserve = 1;
-	verbose = 0;
-	progress = 0;
-	gatemode = 0;
-#ifndef SMALL
-	editing = 0;
-	el = NULL;
-	hist = NULL;
-#endif
-	mark = HASHBYTES;
-	marg_sl = sl_init();
-	if ((tmpdir = getenv("TMPDIR")) == NULL)
-		tmpdir = _PATH_TMP;
+	argc--, argv++;
+	while (argc > 0 && **argv == '-') {
+		for (cp = *argv + 1; *cp; cp++)
+			switch (*cp) {
 
-	cp = strrchr(argv[0], '/');
-	cp = (cp == NULL) ? argv[0] : cp + 1;
-	if (strcmp(cp, "pftp") == 0)
-		passivemode = 1;
-	else if (strcmp(cp, "gate-ftp") == 0)
-		gatemode = 1;
+			case 'd':
+				options |= SO_DEBUG;
+				debug++;
+				break;
+			
+			case 'v':
+				verbose++;
+				break;
 
-	gateserver = getenv("FTPSERVER");
-	if (gateserver == NULL || *gateserver == '\0')
-		gateserver = GATE_SERVER;
-	if (gatemode) {
-		if (*gateserver == '\0') {
-			warnx(
-"Neither $FTPSERVER nor GATE_SERVER is defined; disabling gate-ftp");
-			gatemode = 0;
-		}
+			case 't':
+				trace++;
+				break;
+
+			case 'i':
+				interactive = 0;
+				break;
+
+			case 'n':
+				autologin = 0;
+				break;
+
+			case 'g':
+				doglob = 0;
+				break;
+
+			default:
+				fprintf(stdout,
+				  "ftp: %c: unknown option\n", *cp);
+				exit(1);
+			}
+		argc--, argv++;
 	}
-
-	cp = getenv("TERM");
-	if (cp == NULL || strcmp(cp, "dumb") == 0)
-		dumbterm = 1;
-	else
-		dumbterm = 0;
 	fromatty = isatty(fileno(stdin));
-	if (fromatty) {
-		verbose = 1;		/* verbose if from a tty */
-#ifndef SMALL
-		if (! dumbterm)
-			editing = 1;	/* editing mode on if tty is usable */
-#endif
-	}
-	if (isatty(fileno(stdout)) && !dumbterm)
-		progress = 1;		/* progress bar on if tty is usable */
-
-	while ((ch = getopt(argc, argv, "adeginpP:tvV")) != -1) {
-		switch (ch) {
-		case 'a':
-			anonftp = 1;
-			break;
-
-		case 'd':
-			options |= SO_DEBUG;
-			debug++;
-			break;
-
-		case 'e':
-#ifndef SMALL
-			editing = 0;
-#endif
-			break;
-
-		case 'g':
-			doglob = 0;
-			break;
-
-		case 'i':
-			interactive = 0;
-			break;
-
-		case 'n':
-			autologin = 0;
-			break;
-
-		case 'p':
-			passivemode = 1;
-			break;
-
-		case 'P':
-			port = strtol(optarg, &ep, 10);
-			if (port < 1 || port > 0xffff || *ep != '\0')
-				warnx("bad port number: %s (ignored)", optarg);
-			else
-				ftpport = htons(port);
-			break;
-
-		case 't':
-			trace = 1;
-			break;
-
-		case 'v':
-			verbose = 1;
-			break;
-
-		case 'V':
-			verbose = 0;
-			break;
-
-		default:
-			usage();
-		}
-	}
-	argc -= optind;
-	argv += optind;
-
+	if (fromatty)
+		verbose++;
 	cpend = 0;	/* no pending replies */
 	proxy = 0;	/* proxy not active */
 	crflag = 1;	/* strip c.r. on ascii gets */
@@ -232,45 +134,19 @@ main(argc, argv)
 		pw = getpwuid(getuid());
 	if (pw != NULL) {
 		home = homedir;
-		(void)strcpy(home, pw->pw_dir);
+		(void) strcpy(home, pw->pw_dir);
 	}
-
-	setttywidth(0);
-	(void)signal(SIGWINCH, setttywidth);
-
-#ifdef __GNUC__			/* XXX: to shut up gcc warnings */
-	(void)&argc;
-	(void)&argv;
-#endif
-
 	if (argc > 0) {
-		if (strchr(argv[0], ':') != NULL) {
-			anonftp = 1;	/* Handle "automatic" transfers. */
-			rval = auto_fetch(argc, argv);
-			if (rval >= 0)		/* -1 == connected and cd-ed */
-				exit(rval);
-		} else {
-			char *xargv[5];
-
-			if (setjmp(toplevel))
-				exit(0);
-			(void)signal(SIGINT, (sig_t)intr);
-			(void)signal(SIGPIPE, (sig_t)lostpeer);
-			xargv[0] = __progname;
-			xargv[1] = argv[0];
-			xargv[2] = argv[1];
-			xargv[3] = argv[2];
-			xargv[4] = NULL;
-			setpeer(argc+1, xargv);
-		}
+		if (setjmp(toplevel))
+			exit(0);
+		(void) signal(SIGINT, intr);
+		(void) signal(SIGPIPE, lostpeer);
+		setpeer(argc + 1, argv - 1);
 	}
-#ifndef SMALL
-	controlediting();
-#endif /* !SMALL */
 	top = setjmp(toplevel) == 0;
 	if (top) {
-		(void)signal(SIGINT, (sig_t)intr);
-		(void)signal(SIGPIPE, (sig_t)lostpeer);
+		(void) signal(SIGINT, intr);
+		(void) signal(SIGPIPE, lostpeer);
 	}
 	for (;;) {
 		cmdscanner(top);
@@ -282,24 +158,24 @@ void
 intr()
 {
 
-	alarmtimer(0);
 	longjmp(toplevel, 1);
 }
 
 void
 lostpeer()
 {
+	extern FILE *cout;
+	extern int data;
 
-	alarmtimer(0);
 	if (connected) {
 		if (cout != NULL) {
-			(void)shutdown(fileno(cout), 1+1);
-			(void)fclose(cout);
+			(void) shutdown(fileno(cout), 1+1);
+			(void) fclose(cout);
 			cout = NULL;
 		}
 		if (data >= 0) {
-			(void)shutdown(data, 1+1);
-			(void)close(data);
+			(void) shutdown(data, 1+1);
+			(void) close(data);
 			data = -1;
 		}
 		connected = 0;
@@ -307,8 +183,8 @@ lostpeer()
 	pswitch(1);
 	if (connected) {
 		if (cout != NULL) {
-			(void)shutdown(fileno(cout), 1+1);
-			(void)fclose(cout);
+			(void) shutdown(fileno(cout), 1+1);
+			(void) fclose(cout);
 			cout = NULL;
 		}
 		connected = 0;
@@ -317,125 +193,96 @@ lostpeer()
 	pswitch(0);
 }
 
-/*
- * Generate a prompt
- */
-char *
-prompt()
+/*char *
+tail(filename)
+	char *filename;
 {
-	return ("ftp> ");
+	register char *s;
+	
+	while (*filename) {
+		s = rindex(filename, '/');
+		if (s == NULL)
+			break;
+		if (s[1])
+			return (s + 1);
+		*s = '\0';
+	}
+	return (filename);
 }
-
+*/
 /*
  * Command parser.
  */
-void
 cmdscanner(top)
 	int top;
 {
-	struct cmd *c;
-	int num;
+	register struct cmd *c;
+	register int l;
+	struct cmd *getcmd();
+	extern int help();
 
-	if (!top 
-#ifndef SMALL
-	    && !editing
-#endif /* !SMALL */
-	    )
-		(void)putchar('\n');
+	if (!top)
+		(void) putchar('\n');
 	for (;;) {
-#ifndef SMALL
-		if (!editing) {
-#endif /* !SMALL */
-			if (fromatty) {
-				fputs(prompt(), stdout);
-				(void)fflush(stdout);
-			}
-			if (fgets(line, sizeof(line), stdin) == NULL)
-				quit(0, 0);
-			num = strlen(line);
-			if (num == 0)
-				break;
-			if (line[--num] == '\n') {
-				if (num == 0)
-					break;
-				line[num] = '\0';
-			} else if (num == sizeof(line) - 2) {
-				puts("sorry, input line too long.");
-				while ((num = getchar()) != '\n' && num != EOF)
-					/* void */;
-				break;
-			} /* else it was a line without a newline */
-#ifndef SMALL
-		} else {
-			const char *buf;
-			HistEvent ev;
-			cursor_pos = NULL;
-
-			if ((buf = el_gets(el, &num)) == NULL || num == 0)
-				quit(0, 0);
-			if (line[--num] == '\n') {
-				if (num == 0)
-					break;
-			} else if (num >= sizeof(line)) {
-				puts("sorry, input line too long.");
-				break;
-			}
-			memcpy(line, buf, num);
-			line[num] = '\0';
-			history(hist, &ev, H_ENTER, buf);
+		if (fromatty) {
+			printf("ftp> ");
+			(void) fflush(stdout);
 		}
-#endif /* !SMALL */
-
+		if (fgets(line, sizeof line, stdin) == NULL)
+			quit();
+		l = strlen(line);
+		if (l == 0)
+			break;
+		if (line[--l] == '\n') {
+			if (l == 0)
+				break;
+			line[l] = '\0';
+		} else if (l == sizeof(line) - 2) {
+			printf("sorry, input line too long\n");
+			while ((l = getchar()) != '\n' && l != EOF)
+				/* void */;
+			break;
+		} /* else it was a line without a newline */
 		makeargv();
-		if (margc == 0)
+		if (margc == 0) {
 			continue;
-#if 0 && !defined(SMALL)	/* XXX: don't want el_parse */
-		/*
-		 * el_parse returns -1 to signal that it's not been handled
-		 * internally.
-		 */
-		if (el_parse(el, margc, margv) != -1)
-			continue;
-#endif /* !SMALL */
+		}
 		c = getcmd(margv[0]);
 		if (c == (struct cmd *)-1) {
-			puts("?Ambiguous command.");
+			printf("?Ambiguous command\n");
 			continue;
 		}
 		if (c == 0) {
-			puts("?Invalid command.");
+			printf("?Invalid command\n");
 			continue;
 		}
 		if (c->c_conn && !connected) {
-			puts("Not connected.");
+			printf("Not connected.\n");
 			continue;
 		}
-		confirmrest = 0;
 		(*c->c_handler)(margc, margv);
 		if (bell && c->c_bell)
-			(void)putchar('\007');
+			(void) putchar('\007');
 		if (c->c_handler != help)
 			break;
 	}
-	(void)signal(SIGINT, (sig_t)intr);
-	(void)signal(SIGPIPE, (sig_t)lostpeer);
+	(void) signal(SIGINT, intr);
+	(void) signal(SIGPIPE, lostpeer);
 }
 
 struct cmd *
 getcmd(name)
-	const char *name;
+	register char *name;
 {
-	const char *p, *q;
-	struct cmd *c, *found;
-	int nmatches, longest;
-
-	if (name == NULL)
-		return (0);
+	extern struct cmd cmdtab[];
+	register char *p, *q;
+	register struct cmd *c, *found;
+	register int nmatches, longest;
 
 	longest = 0;
 	nmatches = 0;
 	found = 0;
-	for (c = cmdtab; (p = c->c_name) != NULL; c++) {
+	for (c = cmdtab; p = c->c_name; c++) {
 		for (q = name; *q == *p++; q++)
 			if (*q == 0)		/* exact match? */
 				return (c);
@@ -459,43 +306,19 @@ getcmd(name)
 
 int slrflag;
 
-void
 makeargv()
 {
-	char *argp;
+	char **argp;
+	char *slurpstring();
 
+	margc = 0;
+	argp = margv;
 	stringbase = line;		/* scan from first of buffer */
 	argbase = argbuf;		/* store from first of buffer */
 	slrflag = 0;
-	marg_sl->sl_cur = 0;		/* reset to start of marg_sl */
-	for (margc = 0; ; margc++) {
-		argp = slurpstring();
-		sl_add(marg_sl, argp);
-		if (argp == NULL)
-			break;
-	}
-#ifndef SMALL
-	if (cursor_pos == line) {
-		cursor_argc = 0;
-		cursor_argo = 0;
-	} else if (cursor_pos != NULL) {
-		cursor_argc = margc;
-		cursor_argo = strlen(margv[margc-1]);
-	}
-#endif /* !SMALL */
+	while (*argp++ = slurpstring())
+		margc++;
 }
-
-#ifdef SMALL
-#define INC_CHKCURSOR(x)	(x)++
-#else  /* !SMALL */
-#define INC_CHKCURSOR(x)	{ (x)++ ; \
-				if (x == cursor_pos) { \
-					cursor_argc = margc; \
-					cursor_argo = ap-argbase; \
-					cursor_pos = NULL; \
-				} }
-						
-#endif /* !SMALL */
 
 /*
  * Parse string into argbuf;
@@ -506,15 +329,15 @@ char *
 slurpstring()
 {
 	int got_one = 0;
-	char *sb = stringbase;
-	char *ap = argbase;
+	register char *sb = stringbase;
+	register char *ap = argbase;
 	char *tmp = argbase;		/* will return this if token found */
 
 	if (*sb == '!' || *sb == '$') {	/* recognize ! as a token for shell */
 		switch (slrflag) {	/* and $ as token for macro invoke */
 			case 0:
 				slrflag++;
-				INC_CHKCURSOR(stringbase);
+				stringbase++;
 				return ((*sb == '!') ? "!" : "$");
 				/* NOTREACHED */
 			case 1:
@@ -534,8 +357,7 @@ S0:
 
 	case ' ':
 	case '\t':
-		INC_CHKCURSOR(sb);
-		goto S0;
+		sb++; goto S0;
 
 	default:
 		switch (slrflag) {
@@ -561,17 +383,13 @@ S1:
 		goto OUT;	/* end of token */
 
 	case '\\':
-		INC_CHKCURSOR(sb);
-		goto S2;	/* slurp next character */
+		sb++; goto S2;	/* slurp next character */
 
 	case '"':
-		INC_CHKCURSOR(sb);
-		goto S3;	/* slurp quoted string */
+		sb++; goto S3;	/* slurp quoted string */
 
 	default:
-		*ap = *sb;	/* add character to token */
-		ap++;
-		INC_CHKCURSOR(sb);
+		*ap++ = *sb++;	/* add character to token */
 		got_one = 1;
 		goto S1;
 	}
@@ -583,9 +401,7 @@ S2:
 		goto OUT;
 
 	default:
-		*ap = *sb;
-		ap++;
-		INC_CHKCURSOR(sb);
+		*ap++ = *sb++;
 		got_one = 1;
 		goto S1;
 	}
@@ -597,13 +413,10 @@ S3:
 		goto OUT;
 
 	case '"':
-		INC_CHKCURSOR(sb);
-		goto S1;
+		sb++; goto S1;
 
 	default:
-		*ap = *sb;
-		ap++;
-		INC_CHKCURSOR(sb);
+		*ap++ = *sb++;
 		got_one = 1;
 		goto S3;
 	}
@@ -614,7 +427,7 @@ OUT:
 	argbase = ap;			/* update storage pointer */
 	stringbase = sb;		/* update scan pointer */
 	if (got_one) {
-		return (tmp);
+		return(tmp);
 	}
 	switch (slrflag) {
 		case 0:
@@ -627,39 +440,65 @@ OUT:
 		default:
 			break;
 	}
-	return ((char *)0);
+	return((char *)0);
 }
+
+#define HELPINDENT (sizeof ("directory"))
 
 /*
  * Help command.
  * Call each command handler with argc == 0 and argv[0] == name.
  */
-void
 help(argc, argv)
 	int argc;
 	char *argv[];
 {
-	struct cmd *c;
+	extern struct cmd cmdtab[];
+	register struct cmd *c;
 
 	if (argc == 1) {
-		StringList *buf;
+		register int i, j, w, k;
+		int columns, width = 0, lines;
+		extern int NCMDS;
 
-		buf = sl_init();
-		printf("%sommands may be abbreviated.  Commands are:\n\n",
-		    proxy ? "Proxy c" : "C");
-		for (c = cmdtab; c < &cmdtab[NCMDS]; c++)
-			if (c->c_name && (!proxy || c->c_proxy))
-				sl_add(buf, c->c_name);
-		list_vertical(buf);
-		sl_free(buf, 0);
+		printf("Commands may be abbreviated.  Commands are:\n\n");
+		for (c = cmdtab; c < &cmdtab[NCMDS]; c++) {
+			int len = strlen(c->c_name);
+
+			if (len > width)
+				width = len;
+		}
+		width = (width + 8) &~ 7;
+		columns = 80 / width;
+		if (columns == 0)
+			columns = 1;
+		lines = (NCMDS + columns - 1) / columns;
+		for (i = 0; i < lines; i++) {
+			for (j = 0; j < columns; j++) {
+				c = cmdtab + j * lines + i;
+				if (c->c_name && (!proxy || c->c_proxy)) {
+					printf("%s", c->c_name);
+				}
+				else if (c->c_name) {
+					for (k=0; k < strlen(c->c_name); k++) {
+						(void) putchar(' ');
+					}
+				}
+				if (c + lines >= &cmdtab[NCMDS]) {
+					printf("\n");
+					break;
+				}
+				w = strlen(c->c_name);
+				while (w < width) {
+					w = (w + 8) &~ 7;
+					(void) putchar('\t');
+				}
+			}
+		}
 		return;
 	}
-
-#define HELPINDENT ((int) sizeof("disconnect"))
-
 	while (--argc > 0) {
-		char *arg;
-
+		register char *arg;
 		arg = *++argv;
 		c = getcmd(arg);
 		if (c == (struct cmd *)-1)
@@ -670,16 +509,4 @@ help(argc, argv)
 			printf("%-*s\t%s\n", HELPINDENT,
 				c->c_name, c->c_help);
 	}
-}
-
-void
-usage()
-{
-	(void)fprintf(stderr,
-	    "usage: %s [-adeginptvV] [host [port]]\n"
-	    "       %s host:path[/]\n"
-	    "       %s ftp://host[:port]/path[/]\n"
-	    "       %s http://host[:port]/file\n",
-	    __progname, __progname, __progname, __progname);
-	exit(1);
 }

@@ -1,5 +1,3 @@
-/*	$NetBSD: testdb.c,v 1.7 1997/10/18 08:49:36 lukem Exp $	*/
-
 /*-
  * Copyright (c) 1992, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -33,13 +31,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "from: @(#)testdb.c	8.1 (Berkeley) 6/6/93";
-#else
-__RCSID("$NetBSD: testdb.c,v 1.7 1997/10/18 08:49:36 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)testdb.c	8.1 (Berkeley) 6/6/93";
 #endif /* not lint */
 
 #include <sys/param.h>
@@ -59,11 +52,12 @@ __RCSID("$NetBSD: testdb.c,v 1.7 1997/10/18 08:49:36 lukem Exp $");
 int
 testdb()
 {
-	DB *db;
-	int cc, kd, ret, dbversionlen;
+	register DB *db;
+	register int cc, kd, ret, dbversionlen;
+	register char *cp, *uf;
 	DBT rec;
 	struct nlist nitem;
-	char dbversion[_POSIX2_LINE_MAX];
+	char dbname[MAXPATHLEN], dbversion[_POSIX2_LINE_MAX];
 	char kversion[_POSIX2_LINE_MAX];
 
 	ret = 0;
@@ -72,7 +66,11 @@ testdb()
 	if ((kd = open(_PATH_KMEM, O_RDONLY, 0)) < 0)
 		goto close;
 
-	if ((db = dbopen(_PATH_KVMDB, O_RDONLY, 0, DB_HASH, NULL)) == NULL)
+	uf = _PATH_UNIX;
+	if ((cp = rindex(uf, '/')) != 0)
+		uf = cp + 1;
+	(void) snprintf(dbname, sizeof(dbname), "%skvm_%s.db", _PATH_VARDB, uf);
+	if ((db = dbopen(dbname, O_RDONLY, 0, DB_HASH, NULL)) == NULL)
 		goto close;
 
 	/* Read the version out of the database */
@@ -80,9 +78,9 @@ testdb()
 	rec.size = sizeof(VRS_KEY) - 1;
 	if ((db->get)(db, &rec, &rec, 0))
 		goto close;
-	if (rec.data == 0 || rec.size == 0 || rec.size > sizeof(dbversion))
+	if (rec.data == 0 || rec.size > sizeof(dbversion))
 		goto close;
-	memmove(dbversion, rec.data, rec.size);
+	bcopy(rec.data, dbversion, rec.size);
 	dbversionlen = rec.size;
 
 	/* Read version string from kernel memory */
@@ -92,7 +90,7 @@ testdb()
 		goto close;
 	if (rec.data == 0 || rec.size != sizeof(struct nlist))
 		goto close;
-	memmove(&nitem, rec.data, sizeof(nitem));
+	bcopy(rec.data, &nitem, sizeof(nitem));
 	/*
 	 * Theoretically possible for lseek to be seeking to -1.  Not
 	 * that it's something to lie awake nights about, however.
@@ -105,7 +103,7 @@ testdb()
 		goto close;
 
 	/* If they match, we win */
-	ret = memcmp(dbversion, kversion, dbversionlen) == 0;
+	ret = bcmp(dbversion, kversion, dbversionlen) == 0;
 
 close:	if (kd >= 0)
 		(void)close(kd);

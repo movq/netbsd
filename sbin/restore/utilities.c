@@ -1,8 +1,6 @@
-/*	$NetBSD: utilities.c,v 1.13 1997/09/16 13:44:17 lukem Exp $	*/
-
 /*
- * Copyright (c) 1983, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1983 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,42 +31,23 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)utilities.c	8.5 (Berkeley) 4/28/95";
-#else
-__RCSID("$NetBSD: utilities.c,v 1.13 1997/09/16 13:44:17 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)utilities.c	5.6 (Berkeley) 6/1/90";
 #endif /* not lint */
 
-#include <sys/param.h>
-#include <sys/stat.h>
-
-#include <ufs/ufs/dinode.h>
-#include <ufs/ufs/dir.h>
-
-#include <errno.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
-
 #include "restore.h"
-#include "extern.h"
 
 /*
  * Insure that all the components of a pathname exist.
  */
-void
 pathcheck(name)
 	char *name;
 {
-	char *cp;
+	register char *cp;
 	struct entry *ep;
 	char *start;
 
-	start = strchr(name, '/');
+	start = index(name, '/');
 	if (start == 0)
 		return;
 	for (cp = start; *cp != '\0'; cp++) {
@@ -76,9 +55,8 @@ pathcheck(name)
 			continue;
 		*cp = '\0';
 		ep = lookupname(name);
-		if (ep == NULL) {
-			/* Safe; we know the pathname exists in the dump. */
-			ep = addentry(name, pathsearch(name)->d_ino, NODE);
+		if (ep == NIL) {
+			ep = addentry(name, psearch(name), NODE);
 			newnode(ep);
 		}
 		ep->e_flags |= NEW|KEEP;
@@ -89,9 +67,8 @@ pathcheck(name)
 /*
  * Change a name to a unique temporary name.
  */
-void
 mktempname(ep)
-	struct entry *ep;
+	register struct entry *ep;
 {
 	char oldname[MAXPATHLEN];
 
@@ -116,26 +93,24 @@ gentempname(ep)
 	struct entry *np;
 	long i = 0;
 
-	for (np = lookupino(ep->e_ino);
-	    np != NULL && np != ep; np = np->e_links)
+	for (np = lookupino(ep->e_ino); np != NIL && np != ep; np = np->e_links)
 		i++;
-	if (np == NULL)
+	if (np == NIL)
 		badentry(ep, "not on ino list");
-	(void) snprintf(name, sizeof(name), "%s%ld%d", TMPHDR, (long) i,
-	    ep->e_ino);
+	(void) sprintf(name, "%s%d%d", TMPHDR, i, ep->e_ino);
 	return (name);
 }
 
 /*
  * Rename a file or directory.
  */
-void
 renameit(from, to)
 	char *from, *to;
 {
 	if (!Nflag && rename(from, to) < 0) {
-		fprintf(stderr, "warning: cannot rename %s to %s: %s\n",
-		    from, to, strerror(errno));
+		fprintf(stderr, "Warning: cannot rename %s to %s", from, to);
+		(void) fflush(stderr);
+		perror("");
 		return;
 	}
 	vprintf(stdout, "rename %s to %s\n", from, to);
@@ -144,7 +119,6 @@ renameit(from, to)
 /*
  * Create a new node (directory).
  */
-void
 newnode(np)
 	struct entry *np;
 {
@@ -155,7 +129,9 @@ newnode(np)
 	cp = myname(np);
 	if (!Nflag && mkdir(cp, 0777) < 0) {
 		np->e_flags |= EXISTED;
-		fprintf(stderr, "warning: %s: %s\n", cp, strerror(errno));
+		fprintf(stderr, "Warning: ");
+		(void) fflush(stderr);
+		perror(cp);
 		return;
 	}
 	vprintf(stdout, "Make node %s\n", cp);
@@ -164,21 +140,22 @@ newnode(np)
 /*
  * Remove an old node (directory).
  */
-void
 removenode(ep)
-	struct entry *ep;
+	register struct entry *ep;
 {
 	char *cp;
 
 	if (ep->e_type != NODE)
 		badentry(ep, "removenode: not a node");
-	if (ep->e_entries != NULL)
+	if (ep->e_entries != NIL)
 		badentry(ep, "removenode: non-empty directory");
 	ep->e_flags |= REMOVED;
 	ep->e_flags &= ~TMPNAME;
 	cp = myname(ep);
 	if (!Nflag && rmdir(cp) < 0) {
-		fprintf(stderr, "warning: %s: %s\n", cp, strerror(errno));
+		fprintf(stderr, "Warning: ");
+		(void) fflush(stderr);
+		perror(cp);
 		return;
 	}
 	vprintf(stdout, "Remove node %s\n", cp);
@@ -187,9 +164,8 @@ removenode(ep)
 /*
  * Remove a leaf.
  */
-void
 removeleaf(ep)
-	struct entry *ep;
+	register struct entry *ep;
 {
 	char *cp;
 
@@ -199,7 +175,9 @@ removeleaf(ep)
 	ep->e_flags &= ~TMPNAME;
 	cp = myname(ep);
 	if (!Nflag && unlink(cp) < 0) {
-		fprintf(stderr, "warning: %s: %s\n", cp, strerror(errno));
+		fprintf(stderr, "Warning: ");
+		(void) fflush(stderr);
+		perror(cp);
 		return;
 	}
 	vprintf(stdout, "Remove leaf %s\n", cp);
@@ -208,7 +186,6 @@ removeleaf(ep)
 /*
  * Create a link.
  */
-int
 linkit(existing, new, type)
 	char *existing, *new;
 	int type;
@@ -217,15 +194,19 @@ linkit(existing, new, type)
 	if (type == SYMLINK) {
 		if (!Nflag && symlink(existing, new) < 0) {
 			fprintf(stderr,
-			    "warning: cannot create symbolic link %s->%s: %s\n",
-			    new, existing, strerror(errno));
+				"Warning: cannot create symbolic link %s->%s: ",
+				new, existing);
+			(void) fflush(stderr);
+			perror("");
 			return (FAIL);
 		}
 	} else if (type == HARDLINK) {
 		if (!Nflag && link(existing, new) < 0) {
 			fprintf(stderr,
-			    "warning: cannot create hard link %s->%s: %s\n",
-			    new, existing, strerror(errno));
+				"Warning: cannot create hard link %s->%s: ",
+				new, existing);
+			(void) fflush(stderr);
+			perror("");
 			return (FAIL);
 		}
 	} else {
@@ -238,56 +219,17 @@ linkit(existing, new, type)
 }
 
 /*
- * Create a whiteout.
- */
-int
-addwhiteout(name)
-	char *name;
-{
-
-	if (!Nflag && mknod(name, S_IFWHT, 0) < 0) {
-		fprintf(stderr, "warning: cannot create whiteout %s: %s\n",
-		    name, strerror(errno));
-		return (FAIL);
-	}
-	vprintf(stdout, "Create whiteout %s\n", name);
-	return (GOOD);
-}
-
-/*
- * Delete a whiteout.
- */
-void
-delwhiteout(ep)
-	struct entry *ep;
-{
-	char *name;
-
-	if (ep->e_type != LEAF)
-		badentry(ep, "delwhiteout: not a leaf");
-	ep->e_flags |= REMOVED;
-	ep->e_flags &= ~TMPNAME;
-	name = myname(ep);
-	if (!Nflag && undelete(name) < 0) {
-		fprintf(stderr, "warning: cannot delete whiteout %s: %s\n",
-		    name, strerror(errno));
-		return;
-	}
-	vprintf(stdout, "Delete whiteout %s\n", name);
-}
-
-/*
  * find lowest number file (above "start") that needs to be extracted
  */
 ino_t
 lowerbnd(start)
 	ino_t start;
 {
-	struct entry *ep;
+	register struct entry *ep;
 
 	for ( ; start < maxino; start++) {
 		ep = lookupino(start);
-		if (ep == NULL || ep->e_type == NODE)
+		if (ep == NIL || ep->e_type == NODE)
 			continue;
 		if (ep->e_flags & (NEW|EXTRACT))
 			return (start);
@@ -302,11 +244,11 @@ ino_t
 upperbnd(start)
 	ino_t start;
 {
-	struct entry *ep;
+	register struct entry *ep;
 
 	for ( ; start > ROOTINO; start--) {
 		ep = lookupino(start);
-		if (ep == NULL || ep->e_type == NODE)
+		if (ep == NIL || ep->e_type == NODE)
 			continue;
 		if (ep->e_flags & (NEW|EXTRACT))
 			return (start);
@@ -317,27 +259,25 @@ upperbnd(start)
 /*
  * report on a badly formed entry
  */
-void
 badentry(ep, msg)
-	struct entry *ep;
+	register struct entry *ep;
 	char *msg;
 {
 
 	fprintf(stderr, "bad entry: %s\n", msg);
 	fprintf(stderr, "name: %s\n", myname(ep));
 	fprintf(stderr, "parent name %s\n", myname(ep->e_parent));
-	if (ep->e_sibling != NULL)
+	if (ep->e_sibling != NIL)
 		fprintf(stderr, "sibling name: %s\n", myname(ep->e_sibling));
-	if (ep->e_entries != NULL)
+	if (ep->e_entries != NIL)
 		fprintf(stderr, "next entry name: %s\n", myname(ep->e_entries));
-	if (ep->e_links != NULL)
+	if (ep->e_links != NIL)
 		fprintf(stderr, "next link name: %s\n", myname(ep->e_links));
-	if (ep->e_next != NULL)
-		fprintf(stderr,
-		    "next hashchain name: %s\n", myname(ep->e_next));
+	if (ep->e_next != NIL)
+		fprintf(stderr, "next hashchain name: %s\n", myname(ep->e_next));
 	fprintf(stderr, "entry type: %s\n",
 		ep->e_type == NODE ? "NODE" : "LEAF");
-	fprintf(stderr, "inode number: %ld\n", (long)ep->e_ino);
+	fprintf(stderr, "inode number: %ld\n", ep->e_ino);
 	panic("flags: %s\n", flagvalues(ep));
 }
 
@@ -346,7 +286,7 @@ badentry(ep, msg)
  */
 char *
 flagvalues(ep)
-	struct entry *ep;
+	register struct entry *ep;
 {
 	static char flagbuf[BUFSIZ];
 
@@ -372,22 +312,19 @@ flagvalues(ep)
  */
 ino_t
 dirlookup(name)
-	const char *name;
+	char *name;
 {
-	struct direct *dp;
 	ino_t ino;
- 
-	ino = ((dp = pathsearch(name)) == NULL) ? 0 : dp->d_ino;
 
-	if (ino == 0 || TSTINO(ino, dumpmap) == 0)
-		fprintf(stderr, "%s is not on the tape\n", name);
+	ino = psearch(name);
+	if (ino == 0 || BIT(ino, dumpmap) == 0)
+		fprintf(stderr, "%s is not on tape\n", name);
 	return (ino);
 }
 
 /*
  * Elicit a reply.
  */
-int
 reply(question)
 	char *question;
 {
@@ -409,34 +346,18 @@ reply(question)
 /*
  * handle unexpected inconsistencies
  */
-#if __STDC__
-#include <stdarg.h>
-#else
-#include <varargs.h>
-#endif
-
-void
-#if __STDC__
-panic(const char *fmt, ...)
-#else
-panic(fmt, va_alist)
-	char *fmt;
-	va_dcl
-#endif
+/* VARARGS1 */
+panic(msg, d1, d2)
+	char *msg;
+	long d1, d2;
 {
-	va_list ap;
-#if __STDC__
-	va_start(ap, fmt);
-#else
-	va_start(ap);
-#endif
 
-	vfprintf(stderr, fmt, ap);
+	fprintf(stderr, msg, d1, d2);
 	if (yflag)
 		return;
 	if (reply("abort") == GOOD) {
 		if (reply("dump core") == GOOD)
 			abort();
-		exit(1);
+		done(1);
 	}
 }

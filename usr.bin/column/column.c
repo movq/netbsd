@@ -1,8 +1,6 @@
-/*	$NetBSD: column.c,v 1.7 1997/10/18 13:07:39 lukem Exp $	*/
-
 /*
- * Copyright (c) 1989, 1993, 1994
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1989 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,38 +31,21 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1989, 1993, 1994\n\
-	The Regents of the University of California.  All rights reserved.\n");
+char copyright[] =
+"@(#) Copyright (c) 1989 The Regents of the University of California.\n\
+ All rights reserved.\n";
 #endif /* not lint */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)column.c	8.4 (Berkeley) 5/4/95";
-#endif
-__RCSID("$NetBSD: column.c,v 1.7 1997/10/18 13:07:39 lukem Exp $");
+static char sccsid[] = "@(#)column.c	5.7 (Berkeley) 2/24/91";
 #endif /* not lint */
 
 #include <sys/types.h>
 #include <sys/ioctl.h>
-
-#include <ctype.h>
-#include <err.h>
-#include <limits.h>
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
-
-void  c_columnate __P((void));
-void *emalloc __P((int));
-void  input __P((FILE *));
-void  maketbl __P((void));
-int   main __P((int, char **));
-void  print __P((void));
-void  r_columnate __P((void));
-void  usage __P((void));
+#include <ctype.h>
 
 int termwidth = 80;		/* default terminal width */
 
@@ -74,24 +55,25 @@ int maxlength;			/* longest record */
 char **list;			/* array of pointers to records */
 char *separator = "\t ";	/* field separator for table option */
 
-int
 main(argc, argv)
 	int argc;
 	char **argv;
 {
+	extern char *optarg;
+	extern int errno, optind;
 	struct winsize win;
 	FILE *fp;
 	int ch, tflag, xflag;
-	char *p;
+	char *p, *getenv();
 
 	if (ioctl(1, TIOCGWINSZ, &win) == -1 || !win.ws_col) {
-		if ((p = getenv("COLUMNS")) != NULL)
+		if (p = getenv("COLUMNS"))
 			termwidth = atoi(p);
 	} else
 		termwidth = win.ws_col;
 
-	tflag = xflag = 0;
-	while ((ch = getopt(argc, argv, "c:s:tx")) != -1)
+	xflag = 0;
+	while ((ch = getopt(argc, argv, "c:s:tx")) != EOF)
 		switch(ch) {
 		case 'c':
 			termwidth = atoi(optarg);
@@ -115,11 +97,12 @@ main(argc, argv)
 	if (!*argv)
 		input(stdin);
 	else for (; *argv; ++argv)
-		if ((fp = fopen(*argv, "r")) != NULL) {
+		if (fp = fopen(*argv, "r")) {
 			input(fp);
 			(void)fclose(fp);
 		} else {
-			warn("%s", *argv);
+			(void)fprintf(stderr, "column: %s: %s\n", *argv,
+			    strerror(errno));
 			eval = 1;
 		}
 
@@ -138,10 +121,10 @@ main(argc, argv)
 }
 
 #define	TAB	8
-void
 c_columnate()
 {
-	int chcnt, col, cnt, endcol, numcols;
+	register int chcnt, col, cnt, numcols;
+	int endcol;
 	char **lp;
 
 	maxlength = (maxlength + TAB) & ~(TAB - 1);
@@ -156,7 +139,7 @@ c_columnate()
 			endcol = maxlength;
 			putchar('\n');
 		} else {
-			while ((cnt = ((chcnt + TAB) & ~(TAB - 1))) <= endcol) {
+			while ((cnt = (chcnt + TAB & ~(TAB - 1))) <= endcol) {
 				(void)putchar('\t');
 				chcnt = cnt;
 			}
@@ -167,10 +150,10 @@ c_columnate()
 		putchar('\n');
 }
 
-void
 r_columnate()
 {
-	int base, chcnt, cnt, col, endcol, numcols, numrows, row;
+	register int base, chcnt, cnt, col;
+	int endcol, numcols, numrows, row;
 
 	maxlength = (maxlength + TAB) & ~(TAB - 1);
 	numcols = termwidth / maxlength;
@@ -184,7 +167,7 @@ r_columnate()
 			chcnt += printf("%s", list[base]);
 			if ((base += numrows) >= entries)
 				break;
-			while ((cnt = ((chcnt + TAB) & ~(TAB - 1))) <= endcol) {
+			while ((cnt = (chcnt + TAB & ~(TAB - 1))) <= endcol) {
 				(void)putchar('\t');
 				chcnt = cnt;
 			}
@@ -194,11 +177,10 @@ r_columnate()
 	}
 }
 
-void
 print()
 {
-	int cnt;
-	char **lp;
+	register int cnt;
+	register char **lp;
 
 	for (cnt = entries, lp = list; cnt--; ++lp)
 		(void)printf("%s\n", *lp);
@@ -210,35 +192,33 @@ typedef struct _tbl {
 } TBL;
 #define	DEFCOLS	25
 
-void
 maketbl()
 {
-	TBL *t;
-	int coloff, cnt;
-	char *p, **lp;
+	register TBL *t;
+	register int coloff, cnt;
+	register char *p, **lp;
 	int *lens, maxcols;
 	TBL *tbl;
-	char **cols;
+	char **cols, *emalloc(), *realloc();
 
-	t = tbl = emalloc(entries * sizeof(TBL));
-	cols = emalloc((maxcols = DEFCOLS) * sizeof(char *));
-	lens = emalloc(maxcols * sizeof(int));
+	t = tbl = (TBL *)emalloc(entries * sizeof(TBL));
+	cols = (char **)emalloc((maxcols = DEFCOLS) * sizeof(char *));
+	lens = (int *)emalloc(maxcols * sizeof(int));
 	for (cnt = 0, lp = list; cnt < entries; ++cnt, ++lp, ++t) {
-		for (coloff = 0, p = *lp;
-		    (cols[coloff] = strtok(p, separator)) != NULL;
+		for (coloff = 0, p = *lp; cols[coloff] = strtok(p, separator);
 		    p = NULL)
 			if (++coloff == maxcols) {
-				if (!(cols = realloc(cols, (u_int)maxcols +
-				    DEFCOLS * sizeof(char *))) ||
-				    !(lens = realloc(lens,
+				if (!(cols = (char **)realloc((char *)cols,
+				    (u_int)maxcols + DEFCOLS * sizeof(char *))) ||
+				    !(lens = (int *)realloc((char *)lens,
 				    (u_int)maxcols + DEFCOLS * sizeof(int))))
-					err(1, "realloc");
-				memset((char *)lens + maxcols * sizeof(int),
-				    0, DEFCOLS * sizeof(int));
+					nomem();
+				bzero((char *)lens + maxcols * sizeof(int),
+				    DEFCOLS * sizeof(int));
 				maxcols += DEFCOLS;
 			}
-		t->list = emalloc(coloff * sizeof(char *));
-		t->len = emalloc(coloff * sizeof(int));
+		t->list = (char **)emalloc(coloff * sizeof(char *));
+		t->len = (int *)emalloc(coloff * sizeof(int));
 		for (t->cols = coloff; --coloff >= 0;) {
 			t->list[coloff] = cols[coloff];
 			t->len[coloff] = strlen(cols[coloff]);
@@ -255,24 +235,24 @@ maketbl()
 }
 
 #define	DEFNUM		1000
-#define	MAXLINELEN	(LINE_MAX + 1)
+#define	MAXLINELEN	(2048 + 1)
 
-void
 input(fp)
-	FILE *fp;
+	register FILE *fp;
 {
 	static int maxentry;
-	int len;
-	char *p, buf[MAXLINELEN];
+	register int len;
+	register char *p;
+	char buf[MAXLINELEN], *emalloc(), *realloc();
 
 	if (!list)
-		list = emalloc((maxentry = DEFNUM) * sizeof(char *));
+		list = (char **)emalloc((maxentry = DEFNUM) * sizeof(char *));
 	while (fgets(buf, MAXLINELEN, fp)) {
 		for (p = buf; *p && isspace(*p); ++p);
 		if (!*p)
 			continue;
-		if (!(p = strchr(p, '\n'))) {
-			warnx("line too long");
+		if (!(p = index(p, '\n'))) {
+			(void)fprintf(stderr, "column: line too long.\n");
 			eval = 1;
 			continue;
 		}
@@ -282,31 +262,37 @@ input(fp)
 			maxlength = len;
 		if (entries == maxentry) {
 			maxentry += DEFNUM;
-			if (!(list = realloc(list,
+			if (!(list =
+			    (char **)realloc((char *)list,
 			    (u_int)maxentry * sizeof(char *))))
-				err(1, "realloc");
+				nomem();
 		}
 		list[entries++] = strdup(buf);
 	}
 }
 
-void *
+char *
 emalloc(size)
 	int size;
 {
-	char *p;
+	char *p, *malloc();
 
-	if (!(p = malloc(size)))
-		err(1, "malloc");
-	memset(p, 0, size);
-	return (p);
+	/* NOSTRICT */
+	if (!(p = malloc((u_int)size)))
+		nomem();
+	bzero(p, size);
+	return(p);
 }
 
-void
+nomem()
+{
+	(void)fprintf(stderr, "column: out of memory.\n");
+	exit(1);
+}
+
 usage()
 {
-
 	(void)fprintf(stderr,
-	    "usage: column [-tx] [-c columns] [-s sep] [file ...]\n");
+	    "usage: column [-tx] [-c columns] [file ...]\n");
 	exit(1);
 }

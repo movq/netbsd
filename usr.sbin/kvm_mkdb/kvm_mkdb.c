@@ -1,9 +1,6 @@
-/*	$NetBSD: kvm_mkdb.c,v 1.14 1997/10/18 08:49:30 lukem Exp $	*/
-
 /*-
- * Copyright (c) 1996 Christopher G. Demetriou.  All rights reserved.
- * Copyright (c) 1990, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1990 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -34,60 +31,39 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1990, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+char copyright[] =
+"@(#) Copyright (c) 1990 The Regents of the University of California.\n\
+ All rights reserved.\n";
 #endif /* not lint */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "from: @(#)kvm_mkdb.c	8.3 (Berkeley) 5/4/95";
-#else
-__RCSID("$NetBSD: kvm_mkdb.c,v 1.14 1997/10/18 08:49:30 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)kvm_mkdb.c	5.11 (Berkeley) 4/27/91";
 #endif /* not lint */
 
 #include <sys/param.h>
 #include <sys/stat.h>
-
-#include <db.h>
-#include <err.h>
-#include <errno.h>
 #include <fcntl.h>
-#include <paths.h>
+#include <db.h>
+#include <errno.h>
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
+#include <paths.h>
 
-#include "extern.h"
+char *tmp;
+#define basename(cp)	((tmp=rindex((cp), '/')) ? tmp+1 : (cp))
 
-	int	main __P((int, char **));
-static	void	usage __P((void));
-
-HASHINFO openinfo = {
-	4096,		/* bsize */
-	128,		/* ffactor */
-	1024,		/* nelem */
-	2048 * 1024,	/* cachesize */
-	NULL,		/* hash() */
-	0		/* lorder */
-};
-
-static DB *db;
-static char dbtemp[MAXPATHLEN];
-
-int
 main(argc, argv)
 	int argc;
-	char *argv[];
+	char **argv;
 {
+	extern int optind;
+	DB *db;
 	int ch;
-	char *p, *nlistpath, *nlistname, dbname[MAXPATHLEN];
+	char *nlistpath, *nlistname, dbtemp[MAXPATHLEN], dbname[MAXPATHLEN];
 
-	while ((ch = getopt(argc, argv, "")) != -1)
-		switch (ch) {
+	while ((ch = getopt(argc, argv, "")) != EOF)
+		switch((char)ch) {
 		case '?':
 		default:
 			usage();
@@ -95,51 +71,44 @@ main(argc, argv)
 	argc -= optind;
 	argv += optind;
 
-	if (argc > 1)
-		usage();
-
-	/* If the existing db file matches the currently running kernel, exit */
-	if (testdb())
-		exit(0);
-
-#define	basename(cp)	((p = strrchr((cp), '/')) != NULL ? p + 1 : (cp))
-	nlistpath = argc > 0 ? argv[0] : _PATH_UNIX;
+	nlistpath = argc > 1 ? argv[0] : _PATH_UNIX;
 	nlistname = basename(nlistpath);
 
-	(void)snprintf(dbname, sizeof(dbname), "%s", _PATH_KVMDB);
-	(void)snprintf(dbtemp, sizeof(dbtemp), "%s.tmp", _PATH_KVMDB);
+	(void)sprintf(dbtemp, "%s/kvm_%s.tmp", _PATH_VARRUN, nlistname);
+	(void)sprintf(dbname, "%s/kvm_%s.db", _PATH_VARRUN, nlistname);
 	(void)umask(0);
-	db = dbopen(dbtemp, O_CREAT | O_EXLOCK | O_TRUNC | O_RDWR,
-	    S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH, DB_HASH, &openinfo);
-	if (db == NULL)
-		err(1, "%s", dbtemp);
-	create_knlist(nlistpath, db);
-	if (db->close(db)) {
-		warn("%s", dbtemp);
-		db = NULL;
-		punt();
+	db = hash_open(dbtemp, O_CREAT|O_WRONLY|O_EXCL,
+	    S_IRUSR|S_IWUSR|S_IRGRP|S_IROTH, NULL);
+	if (!db) {
+		(void)fprintf(stderr,
+		    "kvm_mkdb: %s: %s\n", dbtemp, strerror(errno));
+		exit(1);
 	}
-	db = NULL;
+	create_knlist(nlistpath, db);
+	(void)(db->close)(db);
 	if (rename(dbtemp, dbname)) {
-		warn("rename %s to %s", dbtemp, dbname);
-		punt();
+		(void)fprintf(stderr, "kvm_mkdb: %s to %s: %s.\n",
+		    dbtemp, dbname, strerror(errno));
+		exit(1);
 	}
 	exit(0);
 }
 
-void
-usage()
+error(n)
+	char *n;
 {
-	(void)fprintf(stderr, "usage: kvm_mkdb [file]\n");
+	int sverr;
+
+	sverr = errno;
+	(void)fprintf(stderr, "kvm_mkdb: ");
+	if (n)
+		(void)fprintf(stderr, "%s: ", n);
+	(void)fprintf(stderr, "%s\n", strerror(sverr));
 	exit(1);
 }
 
-void
-punt()
+usage()
 {
-
-	if (db != NULL)
-		db->close(db);
-	unlink(dbtemp);
+	(void)fprintf(stderr, "usage: kvm_mkdb [file]\n");
 	exit(1);
 }

@@ -1,5 +1,3 @@
-/*	$NetBSD: pax.c,v 1.6 1997/07/20 20:32:40 christos Exp $	*/
-
 /*-
  * Copyright (c) 1992 Keith Muller.
  * Copyright (c) 1992, 1993
@@ -37,18 +35,14 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1992, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+static char copyright[] =
+"@(#) Copyright (c) 1992, 1993\n\
+	The Regents of the University of California.  All rights reserved.\n";
 #endif /* not lint */
 
 #ifndef lint
-#if 0
 static char sccsid[] = "@(#)pax.c	8.2 (Berkeley) 4/18/94";
-#else
-__RCSID("$NetBSD: pax.c,v 1.6 1997/07/20 20:32:40 christos Exp $");
-#endif
 #endif /* not lint */
 
 #include <stdio.h>
@@ -83,7 +77,6 @@ int	nflag;			/* select first archive member match */
 int	tflag;			/* restore access time after read */
 int	uflag;			/* ignore older modification time files */
 int	vflag;			/* produce verbose output */
-int	zflag;			/* use gzip */
 int	Dflag;			/* same as uflag except inode change time */
 int	Hflag;			/* follow command line symlinks (write only) */
 int	Lflag;			/* follow symlinks when writing */
@@ -288,9 +281,9 @@ sig_cleanup(which_sig)
 	 */
 	vflag = vfpart = 1;
 	if (which_sig == SIGXCPU)
-		tty_warn(0, "Cpu time limit reached, cleaning up.");
+		warn(0, "Cpu time limit reached, cleaning up.");
 	else
-		tty_warn(0, "Signal caught, cleaning up.");
+		warn(0, "Signal caught, cleaning up.");
 
 	ar_close();
 	proc_dir();
@@ -368,7 +361,7 @@ gen_init()
 	    (sigaddset(&s_mask,SIGINT) < 0)||(sigaddset(&s_mask,SIGHUP) < 0) ||
 	    (sigaddset(&s_mask,SIGPIPE) < 0)||(sigaddset(&s_mask,SIGQUIT)<0) ||
 	    (sigaddset(&s_mask,SIGXCPU) < 0)||(sigaddset(&s_mask,SIGXFSZ)<0)) {
-		tty_warn(1, "Unable to set up signal mask");
+		warn(1, "Unable to set up signal mask");
 		return(-1);
 	}
 	n_hand.sa_mask = s_mask;

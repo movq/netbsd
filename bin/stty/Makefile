@@ -1,7 +1,6 @@
-#	$NetBSD: Makefile,v 1.10 1997/07/20 22:38:04 christos Exp $
-#	@(#)Makefile	8.1 (Berkeley) 5/31/93
+#	@(#)Makefile	5.4 (Berkeley) 6/5/91
 
 PROG=	stty
-SRCS=	cchar.c gfmt.c key.c modes.c print.c stty.c
+SRCS=	cchar.c gfmt.c key.c modes.c print.c stty.c util.c
 
 .include <bsd.prog.mk>

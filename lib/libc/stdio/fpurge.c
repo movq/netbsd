@@ -1,8 +1,6 @@
-/*	$NetBSD: fpurge.c,v 1.5 1997/07/13 20:15:01 christos Exp $	*/
-
 /*-
- * Copyright (c) 1990, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1990 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Chris Torek.
@@ -36,13 +34,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char sccsid[] = "@(#)fpurge.c	8.1 (Berkeley) 6/4/93";
-#else
-__RCSID("$NetBSD: fpurge.c,v 1.5 1997/07/13 20:15:01 christos Exp $");
-#endif
+static char sccsid[] = "@(#)fpurge.c	5.2 (Berkeley) 2/24/91";
 #endif /* LIBC_SCCS and not lint */
 
 #include <errno.h>

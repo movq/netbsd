@@ -1,8 +1,6 @@
-/*	$NetBSD: subr_log.c,v 1.13 1997/09/19 13:56:40 leo Exp $	*/
-
 /*
- * Copyright (c) 1982, 1986, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1982, 1986 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,25 +30,19 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)subr_log.c	8.1 (Berkeley) 6/10/93
+ *	@(#)subr_log.c	7.11 (Berkeley) 3/17/91
  */
 
 /*
  * Error log buffer for kernel printf's.
  */
 
-#include <sys/param.h>
-#include <sys/systm.h>
-#include <sys/proc.h>
-#include <sys/vnode.h>
-#include <sys/ioctl.h>
-#include <sys/msgbuf.h>
-#include <sys/file.h>
-#include <sys/signalvar.h>
-#include <sys/syslog.h>
-#include <sys/conf.h>
-#include <sys/select.h>
-#include <sys/poll.h>
+#include "param.h"
+#include "proc.h"
+#include "vnode.h"
+#include "ioctl.h"
+#include "msgbuf.h"
+#include "file.h"
 
 #define LOG_RDPRI	(PZERO + 1)
 
@@ -59,98 +51,56 @@
 
 struct logsoftc {
 	int	sc_state;		/* see above for possibilities */
-	struct	selinfo sc_selp;	/* process waiting on select call */
+	struct	proc *sc_selp;		/* process waiting on select call */
 	int	sc_pgid;		/* process/group for async I/O */
 } logsoftc;
 
 int	log_open;			/* also used in log() */
-int	msgbufmapped;			/* is the message buffer mapped */
-int	msgbufenabled;			/* is logging to the buffer enabled */
-struct	kern_msgbuf *msgbufp;		/* the mapped buffer, itself. */
-
-void
-initmsgbuf(buf, bufsize)
-	caddr_t buf;
-	size_t bufsize;
-{
-	register struct kern_msgbuf *mbp;
-	long new_bufs;
-
-	/* Sanity-check the given size. */
-	if (bufsize < sizeof(struct kern_msgbuf))
-		return;
-
-	mbp = msgbufp = (struct kern_msgbuf *)buf;
-
-#define	offsetof(type, member)	((size_t)(&((type *)0)->member))
-	new_bufs = bufsize - offsetof(struct kern_msgbuf, msg_bufc);
-#undef offsetof
-	if ((mbp->msg_magic != MSG_MAGIC) || (mbp->msg_bufs != new_bufs) ||
-	    (mbp->msg_bufr < 0) || (mbp->msg_bufr >= mbp->msg_bufs) ||
-	    (mbp->msg_bufx < 0) || (mbp->msg_bufx >= mbp->msg_bufs)) {
-		/*
-		 * If the buffer magic number is wrong, has changed
-		 * size (which shouldn't happen often), or is
-		 * internally inconsistent, initialize it.
-		 */
-
-		bzero(buf, bufsize);
-		mbp->msg_magic = MSG_MAGIC;
-		mbp->msg_bufs = new_bufs;
-	}
-
-	/* mark it as ready for use. */
-	msgbufmapped = msgbufenabled = 1;
-}
 
 /*ARGSUSED*/
-int
 logopen(dev, flags, mode, p)
 	dev_t dev;
 	int flags, mode;
 	struct proc *p;
 {
-	register struct kern_msgbuf *mbp = msgbufp;
+	register struct msgbuf *mbp = msgbufp;
 
 	if (log_open)
 		return (EBUSY);
 	log_open = 1;
 	logsoftc.sc_pgid = p->p_pid;		/* signal process only */
 	/*
-	 * The message buffer is initialized during system configuration.
-	 * If it's been clobbered, note that and return an error.  (This
-	 * allows a user to potentially read the buffer via /dev/kmem,
-	 * and try to figure out what clobbered it.
+	 * Potential race here with putchar() but since putchar should be
+	 * called by autoconf, msg_magic should be initialized by the time
+	 * we get here.
 	 */
 	if (mbp->msg_magic != MSG_MAGIC) {
-		msgbufenabled = 0;
-		return (ENXIO);
-	}
+		register int i;
 
+		mbp->msg_magic = MSG_MAGIC;
+		mbp->msg_bufx = mbp->msg_bufr = 0;
+		for (i=0; i < MSG_BSIZE; i++)
+			mbp->msg_bufc[i] = 0;
+	}
 	return (0);
 }
 
 /*ARGSUSED*/
-int
-logclose(dev, flag, mode, p)
+logclose(dev, flag)
 	dev_t dev;
-	int flag, mode;
-	struct proc *p;
 {
-
 	log_open = 0;
 	logsoftc.sc_state = 0;
-	return (0);
+	logsoftc.sc_selp = 0;
 }
 
 /*ARGSUSED*/
-int
 logread(dev, uio, flag)
 	dev_t dev;
 	struct uio *uio;
 	int flag;
 {
-	register struct kern_msgbuf *mbp = msgbufp;
+	register struct msgbuf *mbp = msgbufp;
 	register long l;
 	register int s;
 	int error = 0;
@@ -162,9 +112,8 @@ logread(dev, uio, flag)
 			return (EWOULDBLOCK);
 		}
 		logsoftc.sc_state |= LOG_RDWAIT;
-		error = tsleep((caddr_t)mbp, LOG_RDPRI | PCATCH,
-			       "klog", 0);
-		if (error) {
+		if (error = tsleep((caddr_t)mbp, LOG_RDPRI | PCATCH,
+		    "klog", 0)) {
 			splx(s);
 			return (error);
 		}
@@ -175,8 +124,8 @@ logread(dev, uio, flag)
 	while (uio->uio_resid > 0) {
 		l = mbp->msg_bufx - mbp->msg_bufr;
 		if (l < 0)
-			l = mbp->msg_bufs - mbp->msg_bufr;
-		l = min(l, uio->uio_resid);
+			l = MSG_BSIZE - mbp->msg_bufr;
+		l = MIN(l, uio->uio_resid);
 		if (l == 0)
 			break;
 		error = uiomove((caddr_t)&mbp->msg_bufc[mbp->msg_bufr],
@@ -184,44 +133,48 @@ logread(dev, uio, flag)
 		if (error)
 			break;
 		mbp->msg_bufr += l;
-		if (mbp->msg_bufr < 0 || mbp->msg_bufr >= mbp->msg_bufs)
+		if (mbp->msg_bufr < 0 || mbp->msg_bufr >= MSG_BSIZE)
 			mbp->msg_bufr = 0;
 	}
 	return (error);
 }
 
 /*ARGSUSED*/
-int
-logpoll(dev, events, p)
+logselect(dev, rw, p)
 	dev_t dev;
-	int events;
+	int rw;
 	struct proc *p;
 {
-	int revents = 0;
 	int s = splhigh();
 
-	if (events & (POLLIN | POLLRDNORM))
-		if (msgbufp->msg_bufr != msgbufp->msg_bufx)
-			revents |= events & (POLLIN | POLLRDNORM);
-		else
-			selrecord(p, &logsoftc.sc_selp);
+	switch (rw) {
 
+	case FREAD:
+		if (msgbufp->msg_bufr != msgbufp->msg_bufx) {
+			splx(s);
+			return (1);
+		}
+		logsoftc.sc_selp = p;
+		break;
+	}
 	splx(s);
-	return (revents);
+	return (0);
 }
 
-void
 logwakeup()
 {
 	struct proc *p;
 
 	if (!log_open)
 		return;
-	selwakeup(&logsoftc.sc_selp);
+	if (logsoftc.sc_selp) {
+		selwakeup(logsoftc.sc_selp, 0);
+		logsoftc.sc_selp = 0;
+	}
 	if (logsoftc.sc_state & LOG_ASYNC) {
 		if (logsoftc.sc_pgid < 0)
 			gsignal(-logsoftc.sc_pgid, SIGIO); 
-		else if ((p = pfind(logsoftc.sc_pgid)) != NULL)
+		else if (p = pfind(logsoftc.sc_pgid))
 			psignal(p, SIGIO);
 	}
 	if (logsoftc.sc_state & LOG_RDWAIT) {
@@ -231,13 +184,8 @@ logwakeup()
 }
 
 /*ARGSUSED*/
-int
-logioctl(dev, com, data, flag, p)
-	dev_t dev;
-	u_long com;
+logioctl(dev, com, data, flag)
 	caddr_t data;
-	int flag;
-	struct proc *p;
 {
 	long l;
 	int s;
@@ -250,8 +198,8 @@ logioctl(dev, com, data, flag, p)
 		l = msgbufp->msg_bufx - msgbufp->msg_bufr;
 		splx(s);
 		if (l < 0)
-			l += msgbufp->msg_bufs;
-		*(int *)data = l;
+			l += MSG_BSIZE;
+		*(off_t *)data = l;
 		break;
 
 	case FIONBIO:

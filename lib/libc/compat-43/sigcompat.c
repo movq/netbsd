@@ -1,5 +1,3 @@
-/*	$NetBSD: sigcompat.c,v 1.7 1997/07/13 18:50:14 christos Exp $	*/
-
 /*
  * Copyright (c) 1989 The Regents of the University of California.
  * All rights reserved.
@@ -33,38 +31,27 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char *sccsid = "@(#)sigcompat.c	5.3 (Berkeley) 2/24/91";
-#else
-__RCSID("$NetBSD: sigcompat.c,v 1.7 1997/07/13 18:50:14 christos Exp $");
-#endif
+static char sccsid[] = "@(#)sigcompat.c	5.3 (Berkeley) 2/24/91";
 #endif /* LIBC_SCCS and not lint */
 
 #include <sys/param.h>
 #include <signal.h>
 
-int
 sigvec(signo, sv, osv)
 	int signo;
 	struct sigvec *sv, *osv;
 {
 	int ret;
-	struct sigvec nsv;
 
-	if (sv) {
-		nsv = *sv;
-		nsv.sv_flags ^= SV_INTERRUPT;	/* !SA_INTERRUPT */
-	}
-	ret = sigaction(signo, sv ? (struct sigaction *)&nsv : NULL,
-	    (struct sigaction *)osv);
+	if (sv)
+		sv->sv_flags ^= SV_INTERRUPT;	/* !SA_INTERRUPT */
+	ret = sigaction(signo, (struct sigaction *)sv, (struct sigaction *)osv);
 	if (ret == 0 && osv)
 		osv->sv_flags ^= SV_INTERRUPT;	/* !SA_INTERRUPT */
 	return (ret);
 }
 
-int
 sigsetmask(mask)
 	int mask;
 {
@@ -76,7 +63,6 @@ sigsetmask(mask)
 	return (omask);
 }
 
-int
 sigblock(mask)
 	int mask;
 {
@@ -88,7 +74,6 @@ sigblock(mask)
 	return (omask);
 }
 
-int
 sigpause(mask)
 	int mask;
 {

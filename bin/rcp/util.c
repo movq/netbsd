@@ -1,5 +1,3 @@
-/*	$NetBSD: util.c,v 1.4 1997/07/20 20:47:33 christos Exp $	*/
-
 /*-
  * Copyright (c) 1992, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -33,13 +31,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
 static char sccsid[] = "@(#)util.c	8.2 (Berkeley) 4/2/94";
-#else
-__RCSID("$NetBSD: util.c,v 1.4 1997/07/20 20:47:33 christos Exp $");
-#endif
 #endif /* not lint */
 
 #include <sys/param.h>
@@ -111,11 +104,12 @@ bad:	warnx("%s: invalid user name", cp0);
 }
 
 int
-susystem(s)
+susystem(s, userid)
+	int userid;
 	char *s;
 {
 	sig_t istat, qstat;
-	int status;
+	int status, w;
 	pid_t pid;
 
 	pid = vfork();
@@ -124,6 +118,7 @@ susystem(s)
 		return (127);
 	
 	case 0:
+		(void)setuid(userid);
 		execl(_PATH_BSHELL, "sh", "-c", s, NULL);
 		_exit(127);
 	}

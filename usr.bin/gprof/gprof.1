@@ -1,7 +1,5 @@
-.\"	$NetBSD: gprof.1,v 1.9 1997/07/16 06:51:44 mikel Exp $
-.\"
-.\" Copyright (c) 1983, 1990, 1993
-.\"	The Regents of the University of California.  All rights reserved.
+.\" Copyright (c) 1983, 1990 The Regents of the University of California.
+.\" All rights reserved.
 .\"
 .\" Redistribution and use in source and binary forms, with or without
 .\" modification, are permitted provided that the following conditions
@@ -31,9 +29,9 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\"	@(#)gprof.1	8.1 (Berkeley) 6/6/93
+.\"	@(#)gprof.1	6.8 (Berkeley) 7/24/91
 .\"
-.Dd June 6, 1993
+.Dd July 24, 1991
 .Dt GPROF 1
 .Os BSD 4.2
 .Sh NAME
@@ -91,10 +89,10 @@ time and call counts of the cycle.
 .Pp
 Second, a flat profile is given,
 similar to that provided by
-.Xr prof 1 .
+.Xr prof  1  .
 This listing gives the total execution times, the call counts,
-the time in milliseconds the call spent in the routine itself, and
-the time in milliseconds the call spent in the routine itself including
+the time in milleseconds the call spent in the routine itself, and
+the time in milleseconds the call spent in the routine itself including
 its descendents.
 .Pp
 Finally, an index of the function names is provided.
@@ -115,14 +113,6 @@ The static call graph of the program is discovered by a heuristic
 that examines the text space of the object file.
 Static-only parents or children are shown
 with call counts of 0.
-.It Fl C Ar count
-Find a minimal set of arcs that can be broken to eliminate all cycles with
-.Ar count
-or more members.
-Caution: the algorithm used to break cycles is exponential,
-so using this option may cause 
-.Nm gprof
-to run for a very long time.
 .It Fl e Ar name 
 Suppresses the printing of the graph profile entry for routine
 .Ar name
@@ -214,17 +204,6 @@ This is useful with the
 .Fl c
 option for discovering which routines were never called.
 .El
-.Sh ENVIRONMENT
-.Bl -tag -width PROFDIR
-.It Ev PROFDIR
-If the environmental variable
-.Ev PROFDIR
-is set, profiling information is placed in that directory in a file named
-.Pa pid.progname .
-If it is set to a null value, no profiling information is output.
-Otherwise, profiling information is placed in the file
-.Pa gmon.out .
-.El
 .Sh FILES
 .Bl -tag -width gmon.sum -compact
 .It Pa a.out
@@ -235,10 +214,10 @@ Dynamic call graph and profile.
 Summarized dynamic call graph and profile.
 .El
 .Sh SEE ALSO
-.Xr cc 1 ,
-.Xr prof 1 ,
+.Xr monitor 3 ,
 .Xr profil 2 ,
-.Xr moncontrol 3
+.Xr cc 1 ,
+.Xr prof 1
 .Rs
 .%T "An Execution Profiler for Modular Programs"
 .%A S. Graham
@@ -287,7 +266,7 @@ propagated properly, unless the signal catcher was invoked during
 the execution of the profiling routine, in which case all is lost.
 .Pp
 The profiled program must call
-.Xr exit 3
+.Xr exit  2
 or return normally for the profiling information to be saved
 in the
 .Pa gmon.out

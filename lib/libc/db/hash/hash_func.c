@@ -1,5 +1,3 @@
-/*	$NetBSD: hash_func.c,v 1.7 1997/07/13 18:52:05 christos Exp $	*/
-
 /*-
  * Copyright (c) 1990, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -36,13 +34,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char sccsid[] = "@(#)hash_func.c	8.2 (Berkeley) 2/21/94";
-#else
-__RCSID("$NetBSD: hash_func.c,v 1.7 1997/07/13 18:52:05 christos Exp $");
-#endif
+static char sccsid[] = "@(#)hash_func.c	8.1 (Berkeley) 6/4/93";
 #endif /* LIBC_SCCS and not lint */
 
 #include <sys/types.h>
@@ -52,17 +45,16 @@ __RCSID("$NetBSD: hash_func.c,v 1.7 1997/07/13 18:52:05 christos Exp $");
 #include "page.h"
 #include "extern.h"
 
-static u_int32_t hash1 __P((const void *, size_t)) __attribute__((__unused__));
-static u_int32_t hash2 __P((const void *, size_t)) __attribute__((__unused__));
-static u_int32_t hash3 __P((const void *, size_t)) __attribute__((__unused__));
-static u_int32_t hash4 __P((const void *, size_t)) __attribute__((__unused__));
+static int hash1 __P((u_char *, int));
+static int hash2 __P((u_char *, int));
+static int hash3 __P((u_char *, int));
+static int hash4 __P((u_char *, int));
 
 /* Global default hash function */
-u_int32_t (*__default_hash) __P((const void *, size_t)) = hash4;
+int (*__default_hash) __P((u_char *, int)) = hash4;
 
+/******************************* HASH FUNCTIONS **************************/
 /*
- * HASH FUNCTIONS
- *
  * Assume that we've already split the bucket to which this key hashes,
  * calculate that bucket, and check that in fact we did already split it.
  *
@@ -72,16 +64,16 @@ u_int32_t (*__default_hash) __P((const void *, size_t)) = hash4;
 #define PRIME1		37
 #define PRIME2		1048583
 
-static u_int32_t
-hash1(keyarg, len)
-	const void *keyarg;
-	register size_t len;
+static int
+hash1(key, len)
+	register u_char *key;
+	register int len;
 {
-	register const u_char *key;
-	register u_int32_t h;
+	register int h;
 
+	h = 0;
 	/* Convert string to integer */
-	for (key = keyarg, h = 0; len--;)
+	while (len--)
 		h = h * PRIME1 ^ (*key++ - ' ');
 	h %= PRIME2;
 	return (h);
@@ -92,16 +84,14 @@ hash1(keyarg, len)
  */
 #define dcharhash(h, c)	((h) = 0x63c63cd9*(h) + 0x9c39c33d + (c))
 
-static u_int32_t
-hash2(keyarg, len)
-	const void *keyarg;
-	size_t len;
+static int
+hash2(key, len)
+	register u_char *key;
+	int len;
 {
-	register const u_char *e, *key;
-	register u_int32_t h;
-	register u_char c;
+	register u_char *e, c;
+	register int h;
 
-	key = keyarg;
 	e = key + len;
 	for (h = 0; key != e;) {
 		c = *key++;
@@ -121,99 +111,81 @@ hash2(keyarg, len)
  *
  * OZ's original sdbm hash
  */
-static u_int32_t
-hash3(keyarg, len)
-	const void *keyarg;
-	register size_t len;
+static int
+hash3(key, len)
+	register u_char *key;
+	register int len;
 {
-	register const u_char *key;
-	register size_t loop;
-	register u_int32_t h;
+	register int n, loop;
 
-#define HASHC   h = *key++ + 65599 * h
+#define HASHC   n = *key++ + 65599 * n
 
-	h = 0;
-	key = keyarg;
+	n = 0;
 	if (len > 0) {
 		loop = (len + 8 - 1) >> 3;
 
 		switch (len & (8 - 1)) {
 		case 0:
-			do {
+			do {	/* All fall throughs */
 				HASHC;
-				/* FALLTHROUGH */
 		case 7:
 				HASHC;
-				/* FALLTHROUGH */
 		case 6:
 				HASHC;
-				/* FALLTHROUGH */
 		case 5:
 				HASHC;
-				/* FALLTHROUGH */
 		case 4:
 				HASHC;
-				/* FALLTHROUGH */
 		case 3:
 				HASHC;
-				/* FALLTHROUGH */
 		case 2:
 				HASHC;
-				/* FALLTHROUGH */
 		case 1:
 				HASHC;
 			} while (--loop);
 		}
+
 	}
-	return (h);
+	return (n);
 }
 
 /* Hash function from Chris Torek. */
-static u_int32_t
-hash4(keyarg, len)
-	const void *keyarg;
-	register size_t len;
+static int
+hash4(key, len)
+	register u_char *key;
+	register int len;
 {
-	register const u_char *key;
-	register size_t loop;
-	register u_int32_t h;
+	register int h, loop;
 
 #define HASH4a   h = (h << 5) - h + *key++;
 #define HASH4b   h = (h << 5) + h + *key++;
 #define HASH4 HASH4b
 
 	h = 0;
-	key = keyarg;
 	if (len > 0) {
 		loop = (len + 8 - 1) >> 3;
 
 		switch (len & (8 - 1)) {
 		case 0:
-			do {
+			do {	/* All fall throughs */
 				HASH4;
-				/* FALLTHROUGH */
 		case 7:
 				HASH4;
-				/* FALLTHROUGH */
 		case 6:
 				HASH4;
-				/* FALLTHROUGH */
 		case 5:
 				HASH4;
-				/* FALLTHROUGH */
 		case 4:
 				HASH4;
-				/* FALLTHROUGH */
 		case 3:
 				HASH4;
-				/* FALLTHROUGH */
 		case 2:
 				HASH4;
-				/* FALLTHROUGH */
 		case 1:
 				HASH4;
 			} while (--loop);
 		}
+
 	}
 	return (h);
 }

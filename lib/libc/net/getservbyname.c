@@ -1,8 +1,6 @@
-/*	$NetBSD: getservbyname.c,v 1.6 1997/07/21 14:08:00 jtc Exp $	*/
-
 /*
- * Copyright (c) 1983, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1983 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,22 +31,12 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char sccsid[] = "@(#)getservbyname.c	8.1 (Berkeley) 6/4/93";
-#else
-__RCSID("$NetBSD: getservbyname.c,v 1.6 1997/07/21 14:08:00 jtc Exp $");
-#endif
+static char sccsid[] = "@(#)getservbyname.c	5.7 (Berkeley) 2/24/91";
 #endif /* LIBC_SCCS and not lint */
 
-#include "namespace.h"
 #include <netdb.h>
 #include <string.h>
-
-#ifdef __weak_alias
-__weak_alias(getservbyname,_getservbyname);
-#endif
 
 extern int _serv_stayopen;
 
@@ -60,7 +48,7 @@ getservbyname(name, proto)
 	register char **cp;
 
 	setservent(_serv_stayopen);
-	while ((p = getservent()) != NULL) {
+	while (p = getservent()) {
 		if (strcmp(name, p->s_name) == 0)
 			goto gotname;
 		for (cp = p->s_aliases; *cp; cp++)

@@ -1,8 +1,6 @@
-/*	$NetBSD: reverse.c,v 1.7 1997/10/19 23:45:10 lukem Exp $	*/
-
 /*-
- * Copyright (c) 1991, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1991 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Edward Sze-Tyan Wang.
@@ -36,19 +34,13 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)reverse.c	8.1 (Berkeley) 6/6/93";
-#endif
-__RCSID("$NetBSD: reverse.c,v 1.7 1997/10/19 23:45:10 lukem Exp $");
+static char sccsid[] = "@(#)reverse.c	5.3 (Berkeley) 2/12/92";
 #endif /* not lint */
 
 #include <sys/param.h>
 #include <sys/stat.h>
 #include <sys/mman.h>
-
-#include <limits.h>
 #include <errno.h>
 #include <unistd.h>
 #include <stdio.h>
@@ -92,17 +84,13 @@ reverse(fp, style, off, sbp)
 	else
 		switch(style) {
 		case FBYTES:
-		case RBYTES:
 			bytes(fp, off);
 			break;
 		case FLINES:
-		case RLINES:
 			lines(fp, off);
 			break;
 		case REVERSE:
 			r_buf(fp);
-			break;
-		default:
 			break;
 		}
 }
@@ -113,29 +101,23 @@ reverse(fp, style, off, sbp)
 static void
 r_reg(fp, style, off, sbp)
 	FILE *fp;
-	enum STYLE style;
+	register enum STYLE style;
 	long off;
 	struct stat *sbp;
 {
-	off_t size;
-	int llen;
-	char *p;
-	char *start;
+	register off_t size;
+	register int llen;
+	register char *p;
+	int fd;
 
 	if (!(size = sbp->st_size))
 		return;
 
-	if (size > SIZE_T_MAX) {
-		err(0, "%s: %s", fname, strerror(EFBIG));
-		return;
-	}
-
-	if ((start = mmap(NULL, (size_t)size,
-	    PROT_READ, 0, fileno(fp), (off_t)0)) == (caddr_t)-1) {
-		err(0, "%s: %s", fname, strerror(EFBIG));
-		return;
-	}
-	p = start + size - 1;
+	fd = fileno(fp);
+	if ((p =
+	    mmap(NULL, size, PROT_READ, MAP_FILE, fd, (off_t)0)) == (caddr_t)-1)
+		err("%s", strerror(errno));
+	p += size - 1;
 
 	if (style == RBYTES && off < size)
 		size = off;
@@ -152,8 +134,6 @@ r_reg(fp, style, off, sbp)
 		}
 	if (llen)
 		WR(p, llen);
-	if (munmap(start, (size_t)sbp->st_size))
-		err(0, "%s: %s", fname, strerror(errno));
 }
 
 typedef struct bf {
@@ -177,13 +157,12 @@ static void
 r_buf(fp)
 	FILE *fp;
 {
-	BF *mark, *tl, *tr;
-	int ch, len, llen;
-	char *p;
+	register BF *mark, *tl, *tr;
+	register int ch, len, llen;
+	register char *p;
 	off_t enomem;
 
 #define	BSZ	(128 * 1024)
-	tl =  NULL;
 	for (mark = NULL, enomem = 0;;) {
 		/*
 		 * Allocate a new block and link it into place in a doubly
@@ -193,7 +172,7 @@ r_buf(fp)
 		if (enomem || (tl = malloc(sizeof(BF))) == NULL ||
 		    (tl->l = malloc(BSZ)) == NULL) {
 			if (!mark)
-				err(1, "%s", strerror(errno));
+				err("%s", strerror(errno));
 			tl = enomem ? tl->next : mark;
 			enomem += tl->len;
 		} else if (mark) {
@@ -227,7 +206,7 @@ r_buf(fp)
 
 	if (enomem) {
 		(void)fprintf(stderr,
-		    "tail: warning: %qd bytes discarded\n", (long long)enomem);
+		    "tail: warning: %ld bytes discarded\n", enomem);
 		rval = 1;
 	}
 

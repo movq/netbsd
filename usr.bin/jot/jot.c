@@ -1,5 +1,3 @@
-/*	$NetBSD: jot.c,v 1.4 1997/10/19 03:34:49 lukem Exp $	*/
-
 /*-
  * Copyright (c) 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -33,17 +31,14 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+static char copyright[] =
+"@(#) Copyright (c) 1993\n\
+	The Regents of the University of California.  All rights reserved.\n";
 #endif /* not lint */
 
 #ifndef lint
-#if 0
 static char sccsid[] = "@(#)jot.c	8.1 (Berkeley) 6/6/93";
-#endif
-__RCSID("$NetBSD: jot.c,v 1.4 1997/10/19 03:34:49 lukem Exp $");
 #endif /* not lint */
 
 /*
@@ -53,7 +48,6 @@ __RCSID("$NetBSD: jot.c,v 1.4 1997/10/19 03:34:49 lukem Exp $");
  */
 
 #include <ctype.h>
-#include <err.h>
 #include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -78,14 +72,13 @@ int	prec;
 int	dox;
 int	chardata;
 int	nofinalnl;
-char	sepstring[BUFSIZ] = "\n";
+char	*sepstring = "\n";
 char	format[BUFSIZ];
 
 void	error __P((char *, char *));
 void	getargs __P((int, char *[]));
 void	getformat __P((void));
 int	getprec __P((char *));
-int	main __P((int, char **));
 void	putdata __P((double, long));
 
 int
@@ -95,9 +88,9 @@ main(argc, argv)
 {
 	double	xd, yd;
 	long	id;
-	double	*x = &xd;
-	double	*y = &yd;
-	long	*i = &id;
+	register double	*x = &xd;
+	register double	*y = &yd;
+	register long	*i = &id;
 
 	getargs(argc, argv);
 	if (randomize) {
@@ -121,8 +114,8 @@ getargs(ac, av)
 	int ac;
 	char *av[];
 {
-	unsigned int	mask = 0;
-	int		n = 0;
+	register unsigned int	mask = 0;
+	register int		n = 0;
 
 	while (--ac && **++av == '-' && !isdefault(*av))
 		switch ((*av)[1]) {
@@ -312,11 +305,11 @@ putdata(x, notlast)
 	double x;
 	long notlast;
 {
-	long	d = x;
-	long	*dp = &d;
+	long		d = x;
+	register long	*dp = &d;
 
 	if (boring)				/* repeated word */
-		printf("%s", format);
+		printf(format);
 	else if (dox)				/* scalar */
 		printf(format, *dp);
 	else					/* real */
@@ -329,7 +322,8 @@ void
 error(msg, s)
 	char *msg, *s;
 {
-	warnx(msg, s);
+	fprintf(stderr, "jot: ");
+	fprintf(stderr, msg, s);
 	fprintf(stderr,
 	    "\nusage:  jot [ options ] [ reps [ begin [ end [ s ] ] ] ]\n");
 	if (strncmp("jot - ", msg, 6) == 0)
@@ -348,8 +342,8 @@ int
 getprec(s)
 	char *s;
 {
-	char	*p;
-	char	*q;
+	register char	*p;
+	register char	*q;
 
 	for (p = s; *p; p++)
 		if (*p == '.')
@@ -365,7 +359,7 @@ getprec(s)
 void
 getformat()
 {
-	char	*p;
+	register char	*p;
 
 	if (boring)				/* no need to bother */
 		return;

@@ -1,8 +1,6 @@
-/*	$NetBSD: vis.c,v 1.8 1997/07/21 14:07:47 jtc Exp $	*/
-
 /*-
- * Copyright (c) 1989, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1989 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,26 +31,13 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char sccsid[] = "@(#)vis.c	8.1 (Berkeley) 7/19/93";
-#else
-__RCSID("$NetBSD: vis.c,v 1.8 1997/07/21 14:07:47 jtc Exp $");
-#endif
+static char sccsid[] = "@(#)vis.c	5.4 (Berkeley) 2/23/91";
 #endif /* LIBC_SCCS and not lint */
 
-#include "namespace.h"
 #include <sys/types.h>
-#include <limits.h>
 #include <ctype.h>
 #include <vis.h>
-
-#ifdef __weak_alias
-__weak_alias(strvis,_strvis);
-__weak_alias(strvisx,_strvisx);
-__weak_alias(vis,_vis);
-#endif
 
 #define	isoctal(c)	(((u_char)(c)) >= '0' && ((u_char)(c)) <= '7')
 
@@ -60,12 +45,16 @@ __weak_alias(vis,_vis);
  * vis - visually encode characters
  */
 char *
+#if __STDC__
+vis(register char *dst, register char c, register int flag, char nextc)
+#else
 vis(dst, c, flag, nextc)
-	register char *dst;
-	int c, nextc;
+	register char *dst, c;
+	char nextc;
 	register int flag;
+#endif
 {
-	if (((u_int)c <= UCHAR_MAX && isascii(c) && isgraph(c)) ||
+	if (isascii(c) && isgraph(c) ||
 	   ((flag & VIS_SP) == 0 && c == ' ') ||
 	   ((flag & VIS_TAB) == 0 && c == '\t') ||
 	   ((flag & VIS_NL) == 0 && c == '\n') ||
@@ -170,11 +159,11 @@ strvis(dst, src, flag)
 	int flag;
 {
 	register char c;
-	char *start;
+	char *start = dst;
 
-	for (start = dst; (c = *src) != '\0';)
-		dst = vis(dst, c, flag, *++src);
-	*dst = '\0';
+	for (;c = *src; src++)
+		dst = vis(dst, c, flag, *(src+1));
+
 	return (dst - start);
 }
 
@@ -185,16 +174,14 @@ strvisx(dst, src, len, flag)
 	register size_t len;
 	int flag;
 {
-	register char c;
-	char *start;
+	char *start = dst;
 
-	for (start = dst; len > 1; len--) {
-		c = *src;
-		dst = vis(dst, c, flag, *++src);
+	while (len > 1) {
+		dst = vis(dst, *src, flag, *(src+1));
+		len--;
 	}
 	if (len)
 		dst = vis(dst, *src, flag, '\0');
-	*dst = '\0';
 
 	return (dst - start);
 }

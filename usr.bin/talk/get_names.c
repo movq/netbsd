@@ -1,8 +1,6 @@
-/*	$NetBSD: get_names.c,v 1.5 1997/10/20 00:23:20 lukem Exp $	*/
-
 /*
- * Copyright (c) 1983, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1983 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,25 +31,24 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)get_names.c	8.1 (Berkeley) 6/6/93";
-#endif
-__RCSID("$NetBSD: get_names.c,v 1.5 1997/10/20 00:23:20 lukem Exp $");
+static char sccsid[] = "@(#)get_names.c	5.9 (Berkeley) 3/1/91";
 #endif /* not lint */
 
-#include "talk.h"
 #include <sys/param.h>
+#include <sys/socket.h>
+#include <protocols/talkd.h>
 #include <pwd.h>
-#include <unistd.h>
+#include "talk.h"
 
+char	*getlogin();
+char	*ttyname();
+char	*rindex();
 extern	CTL_MSG msg;
 
 /*
  * Determine the local and remote user, tty, and machines
  */
-void
 get_names(argc, argv)
 	int argc;
 	char *argv[];
@@ -59,9 +56,8 @@ get_names(argc, argv)
 	char hostname[MAXHOSTNAMELEN];
 	char *his_name, *my_name;
 	char *my_machine_name, *his_machine_name;
-	char *his_tty;
-	char *cp;
-	char *names;
+	char *my_tty, *his_tty;
+	register char *cp;
 
 	if (argc < 2 ) {
 		printf("Usage: talk user [ttyname]\n");
@@ -83,22 +79,21 @@ get_names(argc, argv)
 	gethostname(hostname, sizeof (hostname));
 	my_machine_name = hostname;
 	/* check for, and strip out, the machine name of the target */
-	names = strdup(argv[1]);
-	for (cp = names; *cp && !strchr("@:!.", *cp); cp++)
+	for (cp = argv[1]; *cp && !index("@:!.", *cp); cp++)
 		;
 	if (*cp == '\0') {
 		/* this is a local to local talk */
-		his_name = names;
+		his_name = argv[1];
 		his_machine_name = my_machine_name;
 	} else {
 		if (*cp++ == '@') {
 			/* user@host */
-			his_name = names;
+			his_name = argv[1];
 			his_machine_name = cp;
 		} else {
 			/* host.user or host!user or host:user */
 			his_name = cp;
-			his_machine_name = names;
+			his_machine_name = argv[1];
 		}
 		*--cp = '\0';
 	}

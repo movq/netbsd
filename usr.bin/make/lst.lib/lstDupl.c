@@ -1,8 +1,6 @@
-/*	$NetBSD: lstDupl.c,v 1.8 1997/09/28 03:31:21 lukem Exp $	*/
-
 /*
- * Copyright (c) 1988, 1989, 1990, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1988, 1989, 1990 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Adam de Boor.
@@ -36,18 +34,9 @@
  * SUCH DAMAGE.
  */
 
-#ifdef MAKE_BOOTSTRAP
-static char rcsid[] = "$NetBSD: lstDupl.c,v 1.8 1997/09/28 03:31:21 lukem Exp $";
-#else
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)lstDupl.c	8.1 (Berkeley) 6/6/93";
-#else
-__RCSID("$NetBSD: lstDupl.c,v 1.8 1997/09/28 03:31:21 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)lstDupl.c	5.3 (Berkeley) 6/1/90";
 #endif /* not lint */
-#endif
 
 /*-
  * listDupl.c --
@@ -73,13 +62,12 @@ __RCSID("$NetBSD: lstDupl.c,v 1.8 1997/09/28 03:31:21 lukem Exp $");
 Lst
 Lst_Duplicate (l, copyProc)
     Lst     	  l;	    	 /* the list to duplicate */
-    /* A function to duplicate each ClientData */
-    ClientData	  (*copyProc) __P((ClientData));
+    ClientData	  (*copyProc)(); /* A function to duplicate each ClientData */
 {
     register Lst 	nl;
     register ListNode  	ln;
     register List 	list = (List)l;
-
+    
     if (!LstValid (l)) {
 	return (NILLST);
     }
@@ -105,6 +93,6 @@ Lst_Duplicate (l, copyProc)
 	    ln = ln->nextPtr;
 	}
     }
-
+	
     return (nl);
 }

@@ -1,8 +1,6 @@
-/*	$NetBSD: move.c,v 1.15 1997/10/14 01:02:48 lukem Exp $	*/
-
 /*
- * Copyright (c) 1980, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1980 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,14 +31,9 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)move.c	8.1 (Berkeley) 7/19/93";
-#else
-__RCSID("$NetBSD: move.c,v 1.15 1997/10/14 01:02:48 lukem Exp $");
-#endif
-#endif				/* not lint */
+static char sccsid[] = "@(#)move.c	5.8 (Berkeley) 2/28/91";
+#endif /* not lint */
 
 /*************************************************************************
  *
@@ -91,163 +84,156 @@ __RCSID("$NetBSD: move.c,v 1.15 1997/10/14 01:02:48 lukem Exp $");
  *
  *		point(&p,x,y)	return point set to x,y.
  *
+ *		baudrate(x)	returns the baudrate of the terminal.
  *		delay(t)	causes an approximately constant delay
  *					independent of baudrate.
  *					Duration is ~ t/20 seconds.
  *
  ******************************************************************************/
 
-#if __STDC__
 #include <stdarg.h>
-#else
-#include <varargs.h>
-#endif
 #include "snake.h"
 
-int     CMlength;
-int     NDlength;
-int     BSlength;
-int     delaystr[10];
-speed_t ospeed;
+int CMlength;
+int NDlength;
+int BSlength;
+int delaystr[10];
+short ospeed;
 
 static char str[80];
 
-void
 move(sp)
-	struct point *sp;
+struct point *sp;
 {
-	int     distance;
-	int     tabcol, ct;
+	int distance;
+	int tabcol,ct;
 	struct point z;
 
-	if (sp->line < 0 || sp->col < 0 || sp->col > COLUMNS) {
-		pr("move to [%d,%d]?", sp->line, sp->col);
+	if (sp->line <0 || sp->col <0 || sp->col > COLUMNS){
+		pr("move to [%d,%d]?",sp->line,sp->col);
 		return;
 	}
-	if (sp->line >= LINES) {
-		move(point(&z, sp->col, LINES - 1));
-		while (sp->line-- >= LINES)
-			putchar('\n');
+	if (sp->line >= LINES){
+		move(point(&z,sp->col,LINES-1));
+		while(sp->line-- >= LINES)putchar('\n');
 		return;
 	}
+
 	if (CM != 0) {
-		char   *cmstr = tgoto(CM, sp->col, sp->line);
+		char *cmstr = tgoto(CM, sp->col, sp->line);
 
 		CMlength = strlen(cmstr);
-		if (cursor.line == sp->line) {
+		if(cursor.line == sp->line){
 			distance = sp->col - cursor.col;
-			if (distance == 0)
-				return;	/* Already there! */
-			if (distance > 0) {	/* Moving to the right */
-				if (distance * NDlength < CMlength) {
+			if(distance == 0)return;	/* Already there! */
+			if(distance > 0){	/* Moving to the right */
+				if(distance*NDlength < CMlength){
 					right(sp);
 					return;
 				}
-				if (TA) {
-					ct = sp->col & 7;
-					tabcol = (cursor.col | 7) + 1;
-					do {
+				if(TA){
+					ct=sp->col&7;
+					tabcol=(cursor.col|7)+1;
+					do{
 						ct++;
-						tabcol = (tabcol | 7) + 1;
+						tabcol=(tabcol|7)+1;
 					}
-					while (tabcol < sp->col);
-					if (ct < CMlength) {
+					while(tabcol<sp->col);
+					if(ct<CMlength){
 						right(sp);
 						return;
 					}
 				}
-			} else {/* Moving to the left */
-				if (-distance * BSlength < CMlength) {
+			} else {		/* Moving to the left */
+				if (-distance*BSlength < CMlength){
 					gto(sp);
 					return;
 				}
 			}
-			if (sp->col < CMlength) {
+			if(sp->col < CMlength){
 				cr();
 				right(sp);
 				return;
 			}
-			/* No more optimizations on same row. */
+				/* No more optimizations on same row. */
 		}
 		distance = sp->col - cursor.col;
 		distance = distance > 0 ?
-		    distance * NDlength : -distance * BSlength;
+			distance*NDlength : -distance * BSlength;
 		if (distance < 0)
-			pr("ERROR: distance is negative: %d", distance);
+			pr("ERROR: distance is negative: %d",distance);
 		distance += abs(sp->line - cursor.line);
-		if (distance >= CMlength) {
+		if(distance >= CMlength){
 			putpad(cmstr);
 			cursor.line = sp->line;
 			cursor.col = sp->col;
 			return;
 		}
 	}
+
 	/*
 	 * If we get here we have a terminal that can't cursor
 	 * address but has local motions or one which can cursor
 	 * address but can get there quicker with local motions.
 	 */
-	gto(sp);
+	 gto(sp);
 }
-
-void
 gto(sp)
-	struct point *sp;
+struct point *sp;
 {
 
-	int     distance, f, tfield;
+	int distance,f,tfield,j;
 
-	if (cursor.line > LINES || cursor.line < 0 ||
-	    cursor.col < 0 || cursor.col > COLUMNS)
+	if (cursor.line > LINES || cursor.line <0 ||
+	    cursor.col <0 || cursor.col > COLUMNS)
 		pr("ERROR: cursor is at %d,%d\n",
-		    cursor.line, cursor.col);
-	if (sp->line > LINES || sp->line < 0 ||
-	    sp->col < 0 || sp->col > COLUMNS)
-		pr("ERROR: target is %d,%d\n", sp->line, sp->col);
+			cursor.line,cursor.col);
+	if (sp->line > LINES || sp->line <0 ||
+	    sp->col <0 || sp->col >  COLUMNS)
+		pr("ERROR: target is %d,%d\n",sp->line,sp->col);
 	tfield = (sp->col) >> 3;
-	if (sp->line == cursor.line) {
-		if (sp->col > cursor.col)
-			right(sp);
-		else {
-			distance = (cursor.col - sp->col) * BSlength;
-			if (((TA) &&
-				(distance > tfield + ((sp->col) & 7) * NDlength)
+	if (sp->line == cursor.line){
+		if (sp->col > cursor.col)right(sp);
+		else{
+			distance = (cursor.col -sp->col)*BSlength;
+			if (((TA) && 
+			     (distance > tfield+((sp->col)&7)*NDlength)
 			    ) ||
-			    (((cursor.col) * NDlength) < distance)
-			    ) {
+			    (((cursor.col)*NDlength) < distance)
+			   ){
 				cr();
 				right(sp);
-			} else {
-				while (cursor.col > sp->col)
-					bs();
+			}
+			else{
+				while(cursor.col > sp->col) bs();
 			}
 		}
 		return;
 	}
-	/* must change row */
-	if (cursor.col - sp->col > (cursor.col >> 3)) {
-		if (cursor.col == 0)
-			f = 0;
-		else
-			f = -1;
-	} else
-		f = cursor.col >> 3;
-	if (((sp->line << 1) + 1 < cursor.line - f) && (HO != 0)) {
-		/*
-		 * home quicker than rlf:
-		 * (sp->line + f > cursor.line - sp->line)
-		 */
+				/*must change row */
+	if (cursor.col - sp->col > (cursor.col >> 3)){
+		if (cursor.col == 0)f = 0;
+		else f = -1;
+	}
+	else f = cursor.col >> 3;
+	if (((sp->line << 1) + 1 < cursor.line - f) && (HO != 0)){
+			/*
+			 * home quicker than rlf:
+			 * (sp->line + f > cursor.line - sp->line)
+			 */
 		putpad(HO);
 		cursor.col = cursor.line = 0;
 		gto(sp);
 		return;
 	}
-	if (((sp->line << 1) > cursor.line + LINES + 1 + f) && (LL != 0)) {
-		/* home,rlf quicker than lf (LINES+1 - sp->line + f < sp->line
-		 * - cursor.line) */
-		if (cursor.line > f + 1) {
-			/* is home faster than wraparound lf? (cursor.line +
-			 * 20 - sp->line > 21 - sp->line + f) */
+	if (((sp->line << 1) > cursor.line + LINES+1 + f) && (LL != 0)){
+		/* home,rlf quicker than lf
+		 * (LINES+1 - sp->line + f < sp->line - cursor.line) 
+		 */
+		if (cursor.line > f + 1){
+		/* is home faster than wraparound lf?
+		 * (cursor.line + 20 - sp->line > 21 - sp->line + f)
+		 */
 			ll();
 			gto(sp);
 			return;
@@ -255,25 +241,22 @@ gto(sp)
 	}
 	if ((LL != 0) && (sp->line > cursor.line + (LINES >> 1) - 1))
 		cursor.line += LINES;
-	while (sp->line > cursor.line)
-		down();
-	while (sp->line < cursor.line)
-		up();
-	gto(sp);		/* can recurse since cursor.line = sp->line */
+	while(sp->line > cursor.line)down();
+	while(sp->line < cursor.line)up();
+	gto(sp);		/*can recurse since cursor.line = sp->line */
 }
 
-void
 right(sp)
-	struct point *sp;
+struct point *sp;
 {
-	int     field, tfield;
-	int     tabcol, strlength;
+	int field,tfield;
+	int tabcol,strlength;
 
 	if (sp->col < cursor.col)
 		pr("ERROR:right() can't move left\n");
-	if (TA) {		/* If No Tabs: can't send tabs because
-				 * ttydrive loses count with control
-				 * characters. */
+	if(TA){		/* If No Tabs: can't send tabs because ttydrive
+			 * loses count with control characters.
+			 */
 		field = cursor.col >> 3;
 /*
  *	This code is useful for a terminal which wraps around on backspaces.
@@ -282,62 +265,56 @@ right(sp)
  *	have addressible cursors, too).
  */
 		if (BW && (CM == 0) &&
-		    ((sp->col << 1) - field > (COLUMNS - 8) << 1)
-		    ) {
-			if (cursor.line == 0) {
-				outch('\n');
-			}
-			outch('\r');
-			cursor.col = COLUMNS + 1;
-			while (cursor.col > sp->col)
-				bs();
-			if (cursor.line != 0)
-				outch('\n');
-			return;
-		}
+		    ((sp->col << 1) - field > (COLUMNS - 8) << 1 )
+		   ){
+	 		if (cursor.line == 0){  
+	 			outch('\n');
+	 		}
+	 		outch('\r');
+	 		cursor.col = COLUMNS + 1;
+	 		while(cursor.col > sp->col)bs();
+	 		if (cursor.line != 0) outch('\n');
+	 		return;
+	 	}
+
 		tfield = sp->col >> 3;
 
-		while (field < tfield) {
+		while (field < tfield){
 			putpad(TA);
 			cursor.col = ++field << 3;
 		}
-		tabcol = (cursor.col | 7) + 1;
-		strlength = (tabcol - sp->col) * BSlength + 1;
+		tabcol = (cursor.col|7) + 1;
+		strlength = (tabcol - sp->col)*BSlength + 1;
 		/* length of sequence to overshoot */
-		if (((sp->col - cursor.col) * NDlength > strlength) &&
+		if (((sp->col - cursor.col)*NDlength > strlength) &&
 		    (tabcol < COLUMNS)
-		    ) {
+		   ){
 			/*
 			 * Tab past and backup
 			 */
 			putpad(TA);
 			cursor.col = (cursor.col | 7) + 1;
-			while (cursor.col > sp->col)
-				bs();
+			while(cursor.col > sp->col)bs();
 		}
 	}
-	while (sp->col > cursor.col) {
+	while (sp->col > cursor.col){
 		nd();
 	}
 }
 
-void
-cr()
-{
+cr(){
 	outch('\r');
 	cursor.col = 0;
 }
 
-void
-clear()
-{
-	int     i;
+clear(){
+	int i;
 
-	if (CL) {
+	if (CL){
 		putpad(CL);
-		cursor.col = cursor.line = 0;
+		cursor.col=cursor.line=0;
 	} else {
-		for (i = 0; i < LINES; i++) {
+		for(i=0; i<LINES; i++) {
 			putchar('\n');
 		}
 		cursor.line = LINES - 1;
@@ -345,13 +322,10 @@ clear()
 	}
 }
 
-
-void
-home()
-{
+home(){
 	struct point z;
 
-	if (HO != 0) {
+	if(HO != 0){
 		putpad(HO);
 		cursor.col = cursor.line = 0;
 		return;
@@ -360,135 +334,97 @@ home()
 	move(&z);
 }
 
-void
-ll()
-{
-	int     l;
+ll(){
+	int j,l;
 	struct point z;
 
 	l = lcnt + 2;
-	if (LL != NULL && LINES == l) {
+	if(LL != NULL && LINES==l){
 		putpad(LL);
-		cursor.line = LINES - 1;
+		cursor.line = LINES-1;
 		cursor.col = 0;
 		return;
 	}
 	z.col = 0;
-	z.line = l - 1;
+	z.line = l-1;
 	move(&z);
 }
 
-void
-up()
-{
+up(){
 	putpad(UP);
 	cursor.line--;
 }
 
-void
-down()
-{
+down(){
 	putpad(DO);
 	cursor.line++;
-	if (cursor.line >= LINES)
-		cursor.line = LINES - 1;
+	if (cursor.line >= LINES)cursor.line=LINES-1;
 }
-
-void
-bs()
-{
-	if (cursor.col > 0) {
+bs(){
+	if (cursor.col > 0){
 		putpad(BS);
 		cursor.col--;
 	}
 }
 
-void
-nd()
-{
+nd(){
 	putpad(ND);
 	cursor.col++;
-	if (cursor.col == COLUMNS + 1) {
+	if (cursor.col == COLUMNS+1){
 		cursor.line++;
 		cursor.col = 0;
-		if (cursor.line >= LINES)
-			cursor.line = LINES - 1;
+		if (cursor.line >= LINES)cursor.line=LINES-1;
 	}
 }
 
-void
 pch(c)
-	int c;
 {
 	outch(c);
-	if (++cursor.col >= COLUMNS && AM) {
+	if(++cursor.col >= COLUMNS && AM) {
 		cursor.col = 0;
 		++cursor.line;
 	}
 }
 
-void
-#if __STDC__
-apr(struct point * ps, const char *fmt,...)
-#else
-apr(ps, fmt, va_alist)
+apr(ps, fmt)
 	struct point *ps;
-	char   *fmt;
-va_dcl
-#endif
+	char *fmt;
 {
 	struct point p;
 	va_list ap;
 
-	p.line = ps->line + 1;
-	p.col = ps->col + 1;
+	p.line = ps->line+1; p.col = ps->col+1;
 	move(&p);
-#if __STDC__
 	va_start(ap, fmt);
-#else
-	va_start(ap);
-#endif
-	(void) vsprintf(str, fmt, ap);
+	(void)vsprintf(str, fmt, ap);
 	va_end(ap);
 	pstring(str);
 }
 
-void
-#if __STDC__
-pr(const char *fmt,...)
-#else
-pr(fmt, va_alist)
-	char   *fmt;
-va_dcl
-#endif
+pr(fmt)
+	char *fmt;
 {
 	va_list ap;
 
-#if __STDC__
 	va_start(ap, fmt);
-#else
-	va_start(ap);
-#endif
-	(void) vsprintf(str, fmt, ap);
+	(void)vsprintf(str, fmt, ap);
 	va_end(ap);
 	pstring(str);
 }
 
-void
 pstring(s)
-	const char *s;
-{
+char *s;{
 	struct point z;
-	int     stcol;
+	int stcol;
 
 	stcol = cursor.col;
-	while (s[0] != '\0') {
-		switch (s[0]) {
+	while (s[0] != '\0'){
+		switch (s[0]){
 		case '\n':
-			move(point(&z, 0, cursor.line + 1));
+			move(point(&z,0,cursor.line+1));
 			break;
 		case '\r':
-			move(point(&z, stcol, cursor.line + 1));
+			move(point(&z,stcol,cursor.line+1));
 			break;
 		case '\t':
 			z.col = (((cursor.col + 8) >> 3) << 3);
@@ -502,133 +438,140 @@ pstring(s)
 			outch(CTRL('g'));
 			break;
 		default:
-			if (s[0] < ' ')
-				break;
+			if (s[0] < ' ')break;
 			pch(s[0]);
 		}
 		s++;
 	}
 }
 
-void
-pchar(ps, ch)
-	struct point *ps;
-	char    ch;
-{
+pchar(ps,ch)
+struct point *ps;
+char ch;{
 	struct point p;
-	p.col = ps->col + 1;
-	p.line = ps->line + 1;
+	p.col = ps->col + 1; p.line = ps->line + 1;
 	if (
-	    (p.col >= 0) &&
-	    (p.line >= 0) &&
-	    (
+		(p.col >= 0) &&
+		(p.line >= 0) &&
 		(
-		    (p.line < LINES) &&
-		    (p.col < COLUMNS)
-		) ||
-		(
-		    (p.col == COLUMNS) &&
-		    (p.line < LINES - 1)
-		)
-	    )
-	    ) {
+			(
+				(p.line < LINES) &&
+				(p.col < COLUMNS)
+			) ||
+			(
+	    			(p.col == COLUMNS) &&
+				(p.line < LINES-1)
+			)
+	  	)
+	){
 		move(&p);
 		pch(ch);
 	}
 }
 
-void
+			
 outch(c)
-	int c;
 {
 	putchar(c);
 }
 
-void
 putpad(str)
-	char *str;
+char *str;
 {
 	if (str)
 		tputs(str, 1, outch);
 }
-
-void
-delay(t)
-	int     t;
+baudrate()
 {
-	int     k, j;
 
-	k = (ospeed * t + 100) / 200;
-	for (j = 0; j < k; j++) {
+	switch (orig.sg_ospeed){
+	case B300:
+		return(300);
+	case B1200:
+		return(1200);
+	case B4800:
+		return(4800);
+	case B9600:
+		return(9600);
+	default:
+		return(0);
+	}
+}
+delay(t)
+int t;
+{
+	int k,j;
+
+	k = baudrate() * t / 300;
+	for(j=0;j<k;j++){
 		putchar(PC);
 	}
 }
 
-void
 done()
 {
 	cook();
 	exit(0);
 }
 
-void
 cook()
 {
 	delay(1);
 	putpad(TE);
 	putpad(KE);
 	fflush(stdout);
-	tcsetattr(0, TCSADRAIN, &orig);
+	stty(0, &orig);
+#ifdef TIOCSLTC
+	ioctl(0, TIOCSLTC, &olttyc);
+#endif
 }
 
-void
 raw()
 {
-	tcsetattr(0, TCSADRAIN, &new);
+	stty(0, &new);
+#ifdef TIOCSLTC
+	ioctl(0, TIOCSLTC, &nlttyc);
+#endif
 }
 
-struct point *
-point(ps, x, y)
-	struct point *ps;
-	int     x, y;
+struct point *point(ps,x,y)
+struct point *ps;
+int x,y;
 {
-	ps->col = x;
-	ps->line = y;
-	return (ps);
+	ps->col=x;
+	ps->line=y;
+	return(ps);
 }
 
-char   *ap;
+char *ap;
 
-void
 getcap()
 {
-	char   *term;
-	char   *xPC;
-#ifdef TIOCGWINSZ
-	struct winsize win;
-#endif
+	char *getenv();
+	char *term;
+	char *xPC;
+	struct point z;
+	void stop();
 
 	term = getenv("TERM");
-	if (term == 0)
-		errx(1, "No TERM in environment");
+	if (term==0) {
+		fprintf(stderr, "No TERM in environment\n");
+		exit(1);
+	}
+
 	switch (tgetent(tbuf, term)) {
 	case -1:
-		errx(2, "Cannot open termcap file");
+		fprintf(stderr, "Cannot open termcap file\n");
+		exit(2);
 	case 0:
-		errx(3, "unknown terminal `%s'", term);
+		fprintf(stderr, "%s: unknown terminal", term);
+		exit(3);
 	}
 
 	ap = tcapbuf;
 
-#ifdef TIOCGWINSZ
-	if (ioctl(0, TIOCGWINSZ, (char *) &win) < 0 ||
-	    (LINES = win.ws_row) == 0 || (COLUMNS = win.ws_col) == 0) {
-#endif
-		LINES = tgetnum("li");
-		COLUMNS = tgetnum("co");
-#ifdef TIOCGWINSZ
-	}
-#endif
+	LINES = tgetnum("li");
+	COLUMNS = tgetnum("co");
 	if (!lcnt)
 		lcnt = LINES - 2;
 	if (!ccnt)
@@ -644,13 +587,12 @@ getcap()
 	if (DO == 0)
 		DO = "\n";
 
-	BS = tgetstr("le", &ap);
-	if (BS == 0) {
-		/* try using obsolete capabilities */
-		BS = tgetstr("bc", &ap);
-		if (BS == 0 && tgetflag("bs"))
-			BS = "\b";
-	}
+	BS = tgetstr("bc", &ap);
+	if (BS == 0 && tgetflag("bs"))
+		BS = "\b";
+	if (BS)
+		xBC = *BS;
+
 	TA = tgetstr("ta", &ap);
 	if (TA == 0 && tgetflag("pt"))
 		TA = "\t";
@@ -664,12 +606,12 @@ getcap()
 	KR = tgetstr("kr", &ap);
 	KU = tgetstr("ku", &ap);
 	KD = tgetstr("kd", &ap);
-	if (KL && KR && KU && KD)
-		Klength = strlen(KL);
-	else
-		Klength = 0;
-	/* NOTE:   If KL, KR, KU, and KD are not all the same length, some
-	 * problems may arise, since tests are made on all of them together. */
+	Klength = strlen(KL);
+		/*	NOTE:   If KL, KR, KU, and KD are not
+		 *		all the same length, some problems
+		 *		may arise, since tests are made on
+		 *		all of them together.
+		 */
 
 	TI = tgetstr("ti", &ap);
 	TE = tgetstr("te", &ap);
@@ -680,33 +622,39 @@ getcap()
 	if (xPC)
 		PC = *xPC;
 
-	if ((CM == 0) &&
-	    (HO == 0 || UP == 0 || BS == 0 || ND == 0))
-		errx(5, "Terminal must have addressible cursor or home + 4 local motions");
-	if (ND == 0)
-		errx(5, "Terminal must have `nd' capability");
 	NDlength = strlen(ND);
-	if (BS == 0)
-		errx(5, "Terminal must have 'le' or `bs' or `bc' capability");
 	BSlength = strlen(BS);
+	if ((CM == 0) &&
+		(HO == 0 | UP==0 || BS==0 || ND==0)) {
+		fprintf(stderr, "Terminal must have addressible ");
+		fprintf(stderr, "cursor or home + 4 local motions\n");
+		exit(5);
+	}
+	if (tgetflag("os")) {
+		fprintf(stderr, "Terminal must not overstrike\n");
+		exit(5);
+	}
+	if (LINES <= 0 || COLUMNS <= 0) {
+		fprintf(stderr, "Must know the screen size\n");
+		exit(5);
+	}
 
-	if (tgetflag("os"))
-		errx(5, "Terminal must not overstrike");
-	if (LINES <= 0 || COLUMNS <= 0)
-		errx(5, "Must know the screen size");
-	tcgetattr(0, &orig);
-	new = orig;
-	new.c_lflag &= ~(ECHO | ICANON);
-	new.c_oflag &= ~(ONLCR | OXTABS);
-	signal(SIGINT, stop);
-	ospeed = cfgetospeed(&orig);
-	new.c_cc[VSUSP] = _POSIX_VDISABLE;
-	new.c_cc[VDSUSP] = _POSIX_VDISABLE;
+	gtty(0, &orig);
+	new=orig;
+	new.sg_flags &= ~(ECHO|CRMOD|ALLDELAY|XTABS);
+	new.sg_flags |= CBREAK;
+	signal(SIGINT,stop);
+	ospeed = orig.sg_ospeed;
+#ifdef TIOCGLTC
+	ioctl(0, TIOCGLTC, &olttyc);
+	nlttyc = olttyc;
+	nlttyc.t_suspc = '\377';
+	nlttyc.t_dsuspc = '\377';
+#endif
 	raw();
 
-	if (orig.c_oflag & OXTABS)
-		TA = 0;
+	if ((orig.sg_flags & XTABS) == XTABS) TA=0;
 	putpad(KS);
 	putpad(TI);
-	point(&cursor, 0, LINES - 1);
+	point(&cursor,0,LINES-1);
 }

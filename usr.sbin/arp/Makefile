@@ -1,7 +1,10 @@
-#	$NetBSD: Makefile,v 1.8 1995/03/01 11:50:52 chopps Exp $
-#	from: @(#)Makefile	8.2 (Berkeley) 4/18/94
+#	@(#)Makefile	5.3 (Berkeley) 5/11/90
 
 PROG=	arp
-MAN=	arp.4 arp.8
+BINGRP=	kmem
+BINMODE=2555
+DPADD=	${LIBUTIL}
+LDADD=	-lutil
+MAN8=	arp.0
 
 .include <bsd.prog.mk>

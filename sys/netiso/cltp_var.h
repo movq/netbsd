@@ -1,8 +1,6 @@
-/*	$NetBSD: cltp_var.h,v 1.8 1996/05/22 13:55:48 mycroft Exp $	*/
-
 /*
- * Copyright (c) 1989, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1989 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,7 +30,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)cltp_var.h	8.1 (Berkeley) 6/10/93
+ *	@(#)cltp_var.h	7.3 (Berkeley) 6/28/90
  */
 
 #define UD_TPDU_type	0x40	/* packet type */
@@ -41,25 +39,16 @@
 #define CLTPOVAL_DST	0xc2	/* Destination TSAP -- required */
 #define CLTPOVAL_CSM	0xc3	/* Checksum parameter -- optional */
 
-struct cltpstat {
-	int             cltps_hdrops;
-	int             cltps_badsum;
-	int             cltps_badlen;
-	int             cltps_noport;
-	int             cltps_ipackets;
-	int             cltps_opackets;
+struct	cltpstat {
+	int	cltps_hdrops;
+	int	cltps_badsum;
+	int	cltps_badlen;
+	int	cltps_noport;
+	int	cltps_ipackets;
+	int	cltps_opackets;
 };
 
-#ifdef _KERNEL
-struct isopcb   cltb;
-struct cltpstat cltpstat;
-
-/* cltp_usrreq.c */
-void cltp_init __P((void));
-void cltp_input __P((struct mbuf *, ...));
-void cltp_notify __P((struct isopcb *));
-void cltp_ctlinput __P((int, struct sockaddr *, void *));
-int cltp_output __P((struct mbuf *, ...));
-int cltp_usrreq __P((struct socket *, int, struct mbuf *, struct mbuf *,
-		     struct mbuf *, struct proc *));
+#ifdef KERNEL
+struct	isopcb cltb;
+struct	cltpstat cltpstat;
 #endif

@@ -1,5 +1,3 @@
-.\"	$NetBSD: setlocale.3,v 1.3 1997/07/14 23:19:47 kleink Exp $
-.\"
 .\" Copyright (c) 1993
 .\"	The Regents of the University of California.  All rights reserved.
 .\"
@@ -38,7 +36,7 @@
 .\"
 .Dd June 9, 1993
 .Dt SETLOCALE 3
-.Os NetBSD
+.Os
 .Sh NAME
 .Nm setlocale ,
 .Nm localeconv
@@ -79,7 +77,11 @@ and
 .Fn strxfrm .
 .It Dv LC_CTYPE
 Set a locale for the
-.Xr ctype 3
+.Xr ctype 3 ,
+.Xr mbrune 3 ,
+.Xr multibyte 3
+and
+.Xr rune 3
 functions.
 This controls recognition of upper and lower case,
 alphabetic or non-alphabetic characters,
@@ -267,16 +269,21 @@ which may be altered by later calls to
 .Fn setlocale
 or
 .Fn localeconv .
-.\" .Sh FILES							XXX
-.\" .Bl -tag -width /usr/share/locale/locale/category -compact	XXX
-.\" .It Pa $PATH_LOCALE/\fIlocale\fP/\fIcategory\fP		XXX
-.\" .It Pa /usr/share/locale/\fIlocale\fP/\fIcategory\fP	XXX
-.\" locale file for the locale \fIlocale\fP			XXX
-.\" and the category \fIcategory\fP.				XXX
-.\" .El
-.\" .Sh "SEE ALSO
-.\" .Xr strcoll 3 ,						XXX
-.\" .Xr strxfrm 3						XXX
+.Sh FILES
+.Bl -tag -width /usr/share/locale/locale/category -compact
+.It Pa $PATH_LOCALE/\fIlocale\fP/\fIcategory\fP
+.It Pa /usr/share/locale/\fIlocale\fP/\fIcategory\fP
+locale file for the locale \fIlocale\fP
+and the category \fIcategory\fP.
+.El
+.Sh "SEE ALSO
+.Xr euc 4 ,
+.Xr mbrune 3 ,
+.Xr multibyte 3 ,
+.Xr rune 3 ,
+.Xr strcoll 3 ,
+.Xr strxfrm 3 ,
+.Xr utf2 4
 .Sh STANDARDS
 The
 .Fn setlocale
@@ -289,8 +296,7 @@ The
 .Fn setlocale
 and
 .Fn localeconv
-functions first appeared in
-.Bx 4.4 .
+functions first appeared in 4.4BSD.
 .Sh BUGS
 The current implementation supports only the
 .Li "\&""C""

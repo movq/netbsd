@@ -1,8 +1,6 @@
-/*	$NetBSD: tipout.c,v 1.5 1996/12/29 10:34:12 cgd Exp $	*/
-
 /*
- * Copyright (c) 1983, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1983 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -34,10 +32,7 @@
  */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)tipout.c	8.1 (Berkeley) 6/6/93";
-#endif
-static char rcsid[] = "$NetBSD: tipout.c,v 1.5 1996/12/29 10:34:12 cgd Exp $";
+static char sccsid[] = "@(#)tipout.c	5.4 (Berkeley) 3/2/91";
 #endif /* not lint */
 
 #include "tip.h"
@@ -83,14 +78,14 @@ intEMT()
 	if (boolean(value(SCRIPT)) && fscript != NULL)
 		fclose(fscript);
 	if (pline == line) {
-		setboolean(value(SCRIPT), FALSE);
+		boolean(value(SCRIPT)) = FALSE;
 		reply = 'y';
 	} else {
 		if ((fscript = fopen(line, "a")) == NULL)
 			reply = 'n';
 		else {
 			reply = 'y';
-			setboolean(value(SCRIPT), TRUE);
+			boolean(value(SCRIPT)) = TRUE;
 		}
 	}
 	write(repdes[1], &reply, 1);
@@ -110,7 +105,7 @@ void
 intSYS()
 {
 
-	setboolean(value(BEAUTIFY), !boolean(value(BEAUTIFY)));
+	boolean(value(BEAUTIFY)) = !boolean(value(BEAUTIFY));
 	longjmp(sigbuf, 1);
 }
 
@@ -147,7 +142,7 @@ tipout()
 #define	ALLSIGS	sigmask(SIGEMT)|sigmask(SIGTERM)|sigmask(SIGIOT)|sigmask(SIGSYS)
 		omask = sigblock(ALLSIGS);
 		for (cp = buf; cp < buf + cnt; cp++)
-			*cp &= STRIP_PAR;
+			*cp &= 0177;
 		write(1, buf, cnt);
 		if (boolean(value(SCRIPT)) && fscript != NULL) {
 			if (!boolean(value(BEAUTIFY))) {

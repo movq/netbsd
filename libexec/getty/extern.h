@@ -1,5 +1,3 @@
-/*	$NetBSD: extern.h,v 1.4 1996/07/31 20:40:26 thorpej Exp $	*/
-
 /*
  * Copyright (c) 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -32,7 +30,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	from: @(#)extern.h	8.1 (Berkeley) 6/4/93
+ *	@(#)extern.h	8.1 (Berkeley) 6/4/93
  */
 
 struct delayval;
@@ -52,5 +50,7 @@ char	*portselector __P((void));
 void	 set_ttydefaults __P((int));
 void	 setchars __P((void));
 void	 setdefaults __P((void));
-void	 setflags __P((int));
+long	 setflags __P((int));
 int	 speed __P((int));
+
+int	 login_tty __P((int));			/* From libutil. */

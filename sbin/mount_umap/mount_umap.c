@@ -1,5 +1,3 @@
-/*	$NetBSD: mount_umap.c,v 1.7 1997/09/16 12:32:33 lukem Exp $	*/
-
 /*
  * Copyright (c) 1992, 1993, 1994
  *	The Regents of the University of California.  All rights reserved.
@@ -36,18 +34,15 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1992, 1993, 1994\n\
-	The Regents of the University of California.  All rights reserved.\n");
+char copyright[] =
+"@(#) Copyright (c) 1992, 1993, 1994\n\
+	The Regents of the University of California.  All rights reserved.\n";
 #endif /* not lint */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)mount_umap.c	8.5 (Berkeley) 4/26/95";
-#else
-__RCSID("$NetBSD: mount_umap.c,v 1.7 1997/09/16 12:32:33 lukem Exp $");
-#endif
+/*static char sccsid[] = "from: @(#)mount_umap.c	8.3 (Berkeley) 3/27/94";*/
+static char *rcsid = "$Id: mount_umap.c,v 1.1 1994/06/08 19:28:13 mycroft Exp $";
 #endif /* not lint */
 
 #include <sys/param.h>
@@ -82,12 +77,11 @@ __RCSID("$NetBSD: mount_umap.c,v 1.7 1997/09/16 12:32:33 lukem Exp $");
  * will, in turn, call the umap version of mount. 
  */
 
-const struct mntopt mopts[] = {
+struct mntopt mopts[] = {
 	MOPT_STDOPTS,
 	{ NULL }
 };
 
-int	main __P((int, char *[]));
 void	usage __P((void));
 
 int
@@ -98,22 +92,20 @@ main(argc, argv)
 	static char not[] = "; not mounted.";
 	struct stat statbuf;
 	struct umap_args args;
-	FILE *fp, *gfp;
-	long d1, d2;
-	u_long mapdata[MAPFILEENTRIES][2];
-	u_long gmapdata[GMAPFILEENTRIES][2];
+        FILE *fp, *gfp;
+        u_long gmapdata[GMAPFILEENTRIES][2], mapdata[MAPFILEENTRIES][2];
 	int ch, count, gnentries, mntflags, nentries;
 	char *gmapfile, *mapfile, *source, *target, buf[20];
 
 	mntflags = 0;
 	mapfile = gmapfile = NULL;
-	while ((ch = getopt(argc, argv, "g:o:u:")) != -1)
+	while ((ch = getopt(argc, argv, "g:o:u:")) != EOF)
 		switch (ch) {
 		case 'g':
 			gmapfile = optarg;
 			break;
 		case 'o':
-			getmntopts(optarg, mopts, &mntflags, 0);
+			getmntopts(optarg, mopts, &mntflags);
 			break;
 		case 'u':
 			mapfile = optarg;
@@ -160,7 +152,8 @@ main(argc, argv)
 	(void)printf("reading %d entries\n", nentries);
 #endif
 	for (count = 0; count < nentries; ++count) {
-		if ((fscanf(fp, "%lu %lu\n", &d1, &d2)) != 2) {
+		if ((fscanf(fp, "%lu %lu\n",
+		    &(mapdata[count][0]), &(mapdata[count][1]))) != 2) {
 			if (ferror(fp))
 				err(1, "%s%s", mapfile, not);
 			if (feof(fp))
@@ -169,8 +162,6 @@ main(argc, argv)
 			errx(1, "%s: illegal format (line %d)%s",
 			    mapfile, count + 2, not);
 		}
-		mapdata[count][0] = d1;
-		mapdata[count][1] = d2;
 #if 0
 		/* Fix a security hole. */
 		if (mapdata[count][1] == 0)
@@ -200,7 +191,7 @@ main(argc, argv)
 #endif /* MAPSECURITY */
 
 	if ((fscanf(gfp, "%d\n", &gnentries)) != 1)
-		errx(1, "nentries not found%s", not);
+		errx(1, "nentries not found%s", gmapfile, not);
 	if (gnentries > MAPFILEENTRIES)
 		errx(1,
 		    "maximum number of entries is %d%s", GMAPFILEENTRIES, not);
@@ -208,7 +199,7 @@ main(argc, argv)
 	(void)printf("reading %d group entries\n", gnentries);
 #endif
 
-	for (count = 0; count < gnentries; ++count) {
+	for (count = 0; count < gnentries; ++count)
 		if ((fscanf(gfp, "%lu %lu\n",
 		    &(gmapdata[count][0]), &(gmapdata[count][1]))) != 2) {
 			if (ferror(gfp))
@@ -219,9 +210,6 @@ main(argc, argv)
 			errx(1, "%s: illegal format (line %d)%s",
 			    gmapfile, count + 2, not);
 		}
-		gmapdata[count][0] = d1;
-		gmapdata[count][1] = d2;
-	}
 
 
 	/* Setup mount call args. */
@@ -232,7 +220,7 @@ main(argc, argv)
 	args.gmapdata = gmapdata;
 
 	if (mount(MOUNT_UMAP, argv[1], mntflags, &args))
-		err(1, "%s", "");
+		err(1, NULL);
 	exit(0);
 }
 

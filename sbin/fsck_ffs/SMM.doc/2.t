@@ -1,5 +1,3 @@
-.\"	$NetBSD: 2.t,v 1.2 1995/03/18 14:56:08 cgd Exp $
-.\"
 .\" Copyright (c) 1982, 1993
 .\"	The Regents of the University of California.  All rights reserved.
 .\"
@@ -31,7 +29,8 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\"	@(#)2.t	8.1 (Berkeley) 6/5/93
+.\"	from: @(#)2.t	8.1 (Berkeley) 6/5/93
+.\"	$Id: 2.t,v 1.1 1994/06/08 19:01:22 mycroft Exp $
 .\"
 .ds RH Overview of the file system
 .NH

@@ -1,5 +1,3 @@
-/*	$NetBSD: string.h,v 1.8 1997/10/16 23:26:26 christos Exp $	*/
-
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
  * All rights reserved.
@@ -39,9 +37,9 @@
 #define	_STRING_H_
 #include <machine/ansi.h>
 
-#ifdef	_BSD_SIZE_T_
-typedef	_BSD_SIZE_T_	size_t;
-#undef	_BSD_SIZE_T_
+#ifdef	_SIZE_T_
+typedef	_SIZE_T_	size_t;
+#undef	_SIZE_T_
 #endif
 
 #ifndef	NULL
@@ -72,11 +70,10 @@ char	*strrchr __P((const char *, int));
 size_t	 strspn __P((const char *, const char *));
 char	*strstr __P((const char *, const char *));
 char	*strtok __P((char *, const char *));
-char	*strtok_r __P((char *, const char *, char **));
 size_t	 strxfrm __P((char *, const char *, size_t));
 
 /* Nonstandard routines */
-#if !defined(_ANSI_SOURCE) && !defined(_POSIX_SOURCE)
+#ifndef _ANSI_SOURCE
 int	 bcmp __P((const void *, const void *, size_t));
 void	 bcopy __P((const void *, void *, size_t));
 void	 bzero __P((void *, size_t));
@@ -86,6 +83,7 @@ void	*memccpy __P((void *, const void *, int, size_t));
 char	*rindex __P((const char *, int));
 int	 strcasecmp __P((const char *, const char *));
 char	*strdup __P((const char *));
+void	 strmode __P((int, char *));
 int	 strncasecmp __P((const char *, const char *, size_t));
 char	*strsep __P((char **, const char *));
 void	 swab __P((const void *, void *, size_t));

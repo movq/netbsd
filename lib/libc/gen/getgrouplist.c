@@ -1,5 +1,3 @@
-/*	$NetBSD: getgrouplist.c,v 1.7 1997/07/21 14:07:06 jtc Exp $	*/
-
 /*
  * Copyright (c) 1991, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -33,67 +31,58 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-#if 0
 static char sccsid[] = "@(#)getgrouplist.c	8.1 (Berkeley) 6/4/93";
-#else
-__RCSID("$NetBSD: getgrouplist.c,v 1.7 1997/07/21 14:07:06 jtc Exp $");
-#endif
 #endif /* LIBC_SCCS and not lint */
 
 /*
  * get credential
  */
-#include "namespace.h"
 #include <sys/types.h>
 #include <string.h>
-#include <unistd.h>
 #include <grp.h>
-
-#ifdef __weak_alias
-__weak_alias(getgrouplist,_getgrouplist);
-#endif
 
 int
 getgrouplist(uname, agroup, groups, grpcnt)
 	const char *uname;
-	gid_t agroup;
-	gid_t *groups;
+	int agroup;
+	register int *groups;
 	int *grpcnt;
 {
 	register struct group *grp;
+	register struct passwd *pw;
 	register int i, ngroups;
 	int ret, maxgroups;
 
 	ret = 0;
 	ngroups = 0;
 	maxgroups = *grpcnt;
-
 	/*
-	 * install primary group
+	 * When installing primary group, duplicate it;
+	 * the first element of groups is the effective gid
+	 * and will be overwritten when a setgid file is executed.
 	 */
 	groups[ngroups++] = agroup;
-
+	if (maxgroups > 1)
+		groups[ngroups++] = agroup;
 	/*
 	 * Scan the group file to find additional groups.
 	 */
 	setgrent();
-	while ((grp = getgrent()) != NULL) {
+	while (grp = getgrent()) {
 		if (grp->gr_gid == agroup)
 			continue;
+		if (ngroups >= maxgroups) {
+			ret = -1;
+			break;
+		}
 		for (i = 0; grp->gr_mem[i]; i++) {
 			if (!strcmp(grp->gr_mem[i], uname)) {
-				if (ngroups >= maxgroups) {
-					ret = -1;
-					goto out;
-				}
 				groups[ngroups++] = grp->gr_gid;
 				break;
 			}
 		}
 	}
-out:
 	endgrent();
 	*grpcnt = ngroups;
 	return (ret);

@@ -1,8 +1,6 @@
-/*	$NetBSD: lpdchar.c,v 1.5 1997/07/17 05:44:32 mikel Exp $	*/
-
 /*
- * Copyright (c) 1983, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1983 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,13 +31,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)lpdchar.c	8.1 (Berkeley) 6/6/93";
-#else
-__RCSID("$NetBSD: lpdchar.c,v 1.5 1997/07/17 05:44:32 mikel Exp $");
-#endif
+static char sccsid[] = "@(#)lpdchar.c	5.4 (Berkeley) 6/1/90";
 #endif /* not lint */
 
 /*

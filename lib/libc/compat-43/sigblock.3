@@ -29,17 +29,16 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\"     from: @(#)sigblock.2	6.7 (Berkeley) 3/10/91
-.\"	$NetBSD: sigblock.3,v 1.6 1997/05/12 07:41:29 mikel Exp $
+.\"     @(#)sigblock.2	6.7 (Berkeley) 3/10/91
 .\"
 .Dd March 10, 1991
-.Dt SIGBLOCK 3
+.Dt SIGBLOCK 2
 .Os BSD 4.2
 .Sh NAME
 .Nm sigblock
 .Nd block signals
 .Sh SYNOPSIS
-.Fd #include <signal.h>
+.Fd #include <sys/signal.h>
 .Ft int
 .Fn sigblock "int mask"
 .Ft int
@@ -47,8 +46,8 @@
 .Sh DESCRIPTION
 .Bf -symbolic
 This interface is made obsolete by:
-.Xr sigprocmask 2 .
 .Ef
+.Xr sigprocmask 2 .
 .Pp
 .Fn Sigblock
 adds the signals specified in
@@ -73,13 +72,13 @@ imposed by the system.
 The previous set of masked signals is returned.
 .Sh SEE ALSO
 .Xr kill 2 ,
-.Xr sigaction 2 ,
 .Xr sigprocmask 2 ,
-.Xr sigsetmask 3 ,
+.Xr sigaction 2 ,
+.Xr sigsetmask 2 ,
 .Xr sigsetops 3
 .Sh HISTORY
 The
-.Fn sigblock
+.Nm
 function call appeared in
 .Bx 4.2
 and has been deprecated.

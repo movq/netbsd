@@ -1,7 +1,5 @@
-.\"	$NetBSD: passwd.1,v 1.9 1997/10/19 12:29:55 lukem Exp $
-.\"
-.\" Copyright (c) 1990, 1993
-.\"	The Regents of the University of California.  All rights reserved.
+.\" Copyright (c) 1990 The Regents of the University of California.
+.\" All rights reserved.
 .\"
 .\" Redistribution and use in source and binary forms, with or without
 .\" modification, are permitted provided that the following conditions
@@ -31,25 +29,22 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\"	from: @(#)passwd.1    8.1 (Berkeley) 6/6/93
+.\"	@(#)passwd.1	6.11 (Berkeley) 7/24/91
 .\"
-.Dd June 6, 1993
+.Dd July 24, 1991
 .Dt PASSWD 1
 .Os BSD 4
 .Sh NAME
 .Nm passwd
 .Nd modify a user's password
 .Sh SYNOPSIS
-.Nm
+.Nm passwd
 .Op Fl l
-.Op Fl y
-.Op Ar user
-.Nm yppasswd
 .Op Ar user
 .Sh DESCRIPTION
-.Nm
-changes the user's local or YP password.  First, the user is prompted
-for their current password.
+.Nm Passwd
+changes the user's Kerberos password.  First, the user is prompted for their
+current password.
 If the current password is correctly typed, a new password is
 requested.
 The new password must be entered twice to avoid typing errors.
@@ -61,28 +56,25 @@ Its total length must be less than
 (currently 128 characters).
 Numbers, upper case letters and meta characters
 are encouraged.
+.Pp
+Once the password has been verified,
+.Nm passwd
+communicates the new password information to
+the Kerberos authenticating host.
 .Bl -tag -width flag
 .It Fl l
 This option causes the password to be updated only in the local
-password file.  When changing only the local password,
+password file, and not with the Kerberos database.
+When changing only the local password,
 .Xr pwd_mkdb  8
 is used to update the password databases.
-.It Fl y
-This forces the YP password database entry to be changed, even if
-the user has an entry in the local database.  The
-.Xr rpc.yppasswdd 8
-daemon should be running on the YP master server.
-.Nm yppasswd
-is the equivalent of
-.Nm
-with the
-.Fl y
-flag.
 .El
 .Pp
-This is the behavior if no flags are specified:
-If the password is not in the local password database, then
-an attempt is made to use the YP database.
+To change another user's Kerberos password, one must first
+run
+.Xr kinit 1
+followed by
+.Xr passwd 1 .
 The super-user is not required to provide a user's current password
 if only the local password is modified.
 .Sh FILES
@@ -96,8 +88,11 @@ Temporary copy of the password file
 .El
 .Sh SEE ALSO
 .Xr chpass 1 ,
+.Xr kerberos 1 ,
+.Xr kinit 1 ,
 .Xr login 1 ,
 .Xr passwd 5 ,
+.Xr kpasswdd 8 ,
 .Xr pwd_mkdb 8 ,
 .Xr vipw 8
 .Rs
@@ -107,6 +102,6 @@ Temporary copy of the password file
 .Re
 .Sh HISTORY
 A
-.Nm
+.Nm passwd
 command appeared in
 .At v6 .

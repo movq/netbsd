@@ -1,8 +1,6 @@
-.\"	$NetBSD: portmap.8,v 1.4 1997/10/17 12:01:19 lukem Exp $
-.\"
 .\" Copyright (c) 1987 Sun Microsystems
-.\" Copyright (c) 1990, 1991, 1993
-.\"	The Regents of the University of California.  All rights reserved.
+.\" Copyright (c) 1990, 1991 The Regents of the University of California.
+.\" All rights reserved.
 .\"
 .\" Redistribution and use in source and binary forms, with or without
 .\" modification, are permitted provided that the following conditions
@@ -32,9 +30,9 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\"     from: @(#)portmap.8	8.1 (Berkeley) 6/6/93
+.\"     @(#)portmap.8	5.3 (Berkeley) 3/16/91
 .\"
-.Dd June 6, 1993
+.Dd March 16, 1991
 .Dt PORTMAP 8
 .Os BSD 4.3
 .Sh NAME
@@ -45,10 +43,10 @@ port to
 .Tn RPC
 program number mapper
 .Sh SYNOPSIS
-.Nm
+.Nm portmap
 .Op Fl d
 .Sh DESCRIPTION
-.Nm
+.Nm Portmap
 is a server that converts
 .Tn RPC
 program numbers into
@@ -61,7 +59,7 @@ calls.
 When an
 .Tn RPC
 server is started, it will tell
-.Nm
+.Nm portmap
 what port number it is listening to, and what
 .Tn RPC
 program numbers it is prepared to serve.
@@ -69,22 +67,22 @@ When a client wishes to make an
 .Tn RPC
 call to a given program number,
 it will first contact
-.Nm
+.Nm portmap
 on the server machine to determine
 the port number where
 .Tn RPC
 packets should be sent.
 .Pp
-.Nm
+.Nm Portmap
 must be started before any
 .Tn RPC
 servers are invoked.
 .Pp
 Normally
-.Nm
+.Nm portmap
 forks and dissociates itself from the terminal
 like any other daemon.
-.Nm
+.Nm Portmap
 then logs errors using
 .Xr syslog 3 .
 .Pp
@@ -92,7 +90,7 @@ Option available:
 .Bl -tag -width Ds
 .It Fl d
 (debug) prevents
-.Nm
+.Nm portmap
 from running as a daemon,
 and causes errors and debugging information
 to be printed to the standard error output.
@@ -103,7 +101,7 @@ to be printed to the standard error output.
 .Xr inetd 8
 .Sh BUGS
 If
-.Nm
+.Nm portmap
 crashes, all servers must be restarted.
 .Sh HISTORY
 The

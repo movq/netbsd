@@ -1,7 +1,5 @@
-.\"	$NetBSD: accept.2,v 1.7 1996/01/31 20:14:42 mycroft Exp $
-.\"
-.\" Copyright (c) 1983, 1990, 1991, 1993
-.\"	The Regents of the University of California.  All rights reserved.
+.\" Copyright (c) 1983, 1990, 1991 The Regents of the University of California.
+.\" All rights reserved.
 .\"
 .\" Redistribution and use in source and binary forms, with or without
 .\" modification, are permitted provided that the following conditions
@@ -31,9 +29,9 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\"     @(#)accept.2	8.2 (Berkeley) 12/11/93
+.\"     @(#)accept.2	6.6 (Berkeley) 4/29/91
 .\"
-.Dd December 11, 1993
+.Dd April 29, 1991
 .Dt ACCEPT 2
 .Os BSD 4.2
 .Sh NAME
@@ -109,10 +107,10 @@ or
 .Tn DATAKIT ,
 .Fn accept
 can be thought of
-as merely dequeuing the next connection
+as merely dequeueing the next connection
 request and not implying confirmation.
 Confirmation can be implied by a normal read or write on the new
-file descriptor, and rejection can be implied by closing the
+file desciptor, and rejection can be implied by closing the
 new socket.
 .Pp
 One can obtain user connection request data without confirming
@@ -138,7 +136,7 @@ integer that is a descriptor for the accepted socket.
 The
 .Fn accept
 will fail if:
-.Bl -tag -width Er
+.Bl -tag -width EWOULDBLOCK
 .It Bq Er EBADF
 The descriptor is invalid.
 .It Bq Er ENOTSOCK
@@ -154,10 +152,6 @@ user address space.
 .It Bq Er EWOULDBLOCK
 The socket is marked non-blocking and no connections
 are present to be accepted.
-.It Bq Er EMFILE
-The per-process descriptor table is full.
-.It Bq Er ENFILE
-The system file table is full.
 .El
 .Sh SEE ALSO
 .Xr bind 2 ,
@@ -167,6 +161,6 @@ The system file table is full.
 .Xr socket 2
 .Sh HISTORY
 The
-.Fn accept
+.Nm
 function appeared in 
 .Bx 4.2 .

@@ -1,8 +1,6 @@
-/*	$NetBSD: getttyent.c,v 1.12 1997/10/20 08:07:51 scottr Exp $	*/
-
 /*
- * Copyright (c) 1989, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1989 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,32 +31,17 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char sccsid[] = "@(#)getttyent.c	8.1 (Berkeley) 6/4/93";
-#else
-__RCSID("$NetBSD: getttyent.c,v 1.12 1997/10/20 08:07:51 scottr Exp $");
-#endif
+static char sccsid[] = "@(#)getttyent.c	5.10 (Berkeley) 3/23/91";
 #endif /* LIBC_SCCS and not lint */
 
-#include "namespace.h"
 #include <ttyent.h>
 #include <stdio.h>
 #include <ctype.h>
 #include <string.h>
 
-#ifdef __weak_alias
-__weak_alias(endttyent,_endttyent);
-__weak_alias(getttyent,_getttyent);
-__weak_alias(getttynam,_getttynam);
-__weak_alias(setttyent,_setttyent);
-#endif
-
 static char zapchar;
 static FILE *tf;
-static char *skip __P((char *));
-static char *value __P((char *));
 
 struct ttyent *
 getttynam(tty)
@@ -67,7 +50,7 @@ getttynam(tty)
 	register struct ttyent *t;
 
 	setttyent();
-	while ((t = getttyent()) != NULL)
+	while (t = getttyent())
 		if (!strcmp(tty, t->ty_name))
 			break;
 	endttyent();
@@ -80,8 +63,9 @@ getttyent()
 	static struct ttyent tty;
 	register int c;
 	register char *p;
-#define	MAXLINELENGTH	200
+#define	MAXLINELENGTH	100
 	static char line[MAXLINELENGTH];
+	static char *skip(), *value();
 
 	if (!tf && !setttyent())
 		return (NULL);
@@ -89,7 +73,7 @@ getttyent()
 		if (!fgets(p = line, sizeof(line), tf))
 			return (NULL);
 		/* skip lines that are too big */
-		if (!strchr(p, '\n')) {
+		if (!index(p, '\n')) {
 			while ((c = getc(tf)) != '\n' && c != EOF)
 				;
 			continue;
@@ -124,16 +108,6 @@ getttyent()
 			tty.ty_status |= TTY_ON;
 		else if (scmp(_TTYS_SECURE))
 			tty.ty_status |= TTY_SECURE;
-		else if (scmp(_TTYS_LOCAL))
-			tty.ty_status |= TTY_LOCAL;
-		else if (scmp(_TTYS_RTSCTS))
-			tty.ty_status |= TTY_RTSCTS;
-		else if (scmp(_TTYS_DTRCTS))
-			tty.ty_status |= TTY_DTRCTS;
-		else if (scmp(_TTYS_SOFTCAR))
-			tty.ty_status |= TTY_SOFTCAR;
-		else if (scmp(_TTYS_MDMBUF))
-			tty.ty_status |= TTY_MDMBUF;
 		else if (vcmp(_TTYS_WINDOW))
 			tty.ty_window = value(p);
 		else
@@ -146,7 +120,7 @@ getttyent()
 	tty.ty_comment = p;
 	if (*p == 0)
 		tty.ty_comment = 0;
-	if ((p = strchr(p, '\n')) != NULL)
+	if (p = index(p, '\n'))
 		*p = '\0';
 	return (&tty);
 }
@@ -196,7 +170,7 @@ value(p)
 	register char *p;
 {
 
-	return ((p = strchr(p, '=')) ? ++p : NULL);
+	return ((p = index(p, '=')) ? ++p : NULL);
 }
 
 int
@@ -204,9 +178,9 @@ setttyent()
 {
 
 	if (tf) {
-		rewind(tf);
+		(void)rewind(tf);
 		return (1);
-	} else if ((tf = fopen(_PATH_TTYS, "r")) != NULL)
+	} else if (tf = fopen(_PATH_TTYS, "r"))
 		return (1);
 	return (0);
 }

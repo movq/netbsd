@@ -1,5 +1,3 @@
-/*	$NetBSD: lfs_alloc.c,v 1.9 1997/07/04 20:22:17 drochner Exp $	*/
-
 /*
  * Copyright (c) 1991, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -32,11 +30,11 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)lfs_alloc.c	8.4 (Berkeley) 1/4/94
+ *	from: @(#)lfs_alloc.c	8.4 (Berkeley) 1/4/94
+ *	$Id: lfs_alloc.c,v 1.1 1994/06/08 11:42:24 mycroft Exp $
  */
 
 #include <sys/param.h>
-#include <sys/systm.h>
 #include <sys/kernel.h>
 #include <sys/buf.h>
 #include <sys/vnode.h>
@@ -49,23 +47,23 @@
 #include <ufs/ufs/quota.h>
 #include <ufs/ufs/inode.h>
 #include <ufs/ufs/ufsmount.h>
-#include <ufs/ufs/ufs_extern.h>
 
 #include <ufs/lfs/lfs.h>
 #include <ufs/lfs/lfs_extern.h>
 
+extern u_long nextgennumber;
+
 /* Allocate a new inode. */
 /* ARGSUSED */
 int
-lfs_valloc(v)
-	void *v;
-{
+lfs_valloc(ap)
 	struct vop_valloc_args /* {
 		struct vnode *a_pvp;
 		int a_mode;
 		struct ucred *a_cred;
 		struct vnode **a_vpp;
-	} */ *ap = v;
+	} */ *ap;
+{
 	struct lfs *fs;
 	struct buf *bp;
 	struct ifile *ifp;
@@ -97,10 +95,10 @@ lfs_valloc(v)
 	if (fs->lfs_free == LFS_UNUSED_INUM) {
 		vp = fs->lfs_ivnode;
 		ip = VTOI(vp);
-		blkno = lblkno(fs, ip->i_ffs_size);
+		blkno = lblkno(fs, ip->i_size);
 		lfs_balloc(vp, fs->lfs_bsize, blkno, &bp);
-		ip->i_ffs_size += fs->lfs_bsize;
-		vnode_pager_setsize(vp, ip->i_ffs_size);
+		ip->i_size += fs->lfs_bsize;
+		vnode_pager_setsize(vp, (u_long)ip->i_size);
 		vnode_pager_uncache(vp);
 
 		i = (blkno - fs->lfs_segtabsz - fs->lfs_cleansz) *
@@ -114,28 +112,29 @@ lfs_valloc(v)
 		}
 		ifp--;
 		ifp->if_nextfree = LFS_UNUSED_INUM;
-		if ((error = VOP_BWRITE(bp)) != 0)
+		if (error = VOP_BWRITE(bp))
 			return (error);
 	}
 
 	/* Create a vnode to associate with the inode. */
-	if ((error = lfs_vcreate(ap->a_pvp->v_mount, new_ino, &vp)) != 0)
+	if (error = lfs_vcreate(ap->a_pvp->v_mount, new_ino, &vp))
 		return (error);
 
 
 	ip = VTOI(vp);
 	/* Zero out the direct and indirect block addresses. */
-	bzero(&ip->i_din.ffs_din, sizeof(struct dinode));
-	ip->i_din.ffs_din.di_inumber = new_ino;
+	bzero(&ip->i_din, sizeof(struct dinode));
+	ip->i_din.di_inumber = new_ino;
 
 	/* Set a new generation number for this inode. */
-	ip->i_ffs_gen++;
+	if (++nextgennumber < (u_long)time.tv_sec)
+		nextgennumber = time.tv_sec;
+	ip->i_gen = nextgennumber;
 
 	/* Insert into the inode hash table. */
 	ufs_ihashins(ip);
 
-	error = ufs_vinit(vp->v_mount, lfs_specop_p, LFS_FIFOOPS, &vp);
-	if (error) {
+	if (error = ufs_vinit(vp->v_mount, lfs_specop_p, LFS_FIFOOPS, &vp)) {
 		vput(vp);
 		*ap->a_vpp = NULL;
 		return (error);
@@ -158,16 +157,13 @@ lfs_vcreate(mp, ino, vpp)
 	ino_t ino;
 	struct vnode **vpp;
 {
-	extern int (**lfs_vnodeop_p) __P((void *));
+	extern int (**lfs_vnodeop_p)();
 	struct inode *ip;
 	struct ufsmount *ump;
-	int error;
-#ifdef QUOTA
-	int i;
-#endif
+	int error, i;
 
 	/* Create the vnode. */
-	if ((error = getnewvnode(VT_LFS, mp, lfs_vnodeop_p, vpp)) != 0) {
+	if (error = getnewvnode(VT_LFS, mp, lfs_vnodeop_p, vpp)) {
 		*vpp = NULL;
 		return (error);
 	}
@@ -182,9 +178,9 @@ lfs_vcreate(mp, ino, vpp)
 	ip->i_devvp = ump->um_devvp;
 	ip->i_flag = IN_MODIFIED;
 	ip->i_dev = ump->um_dev;
-	ip->i_number = ip->i_din.ffs_din.di_inumber = ino;
-	ip->i_din.ffs_din.di_spare[0] = 0xdeadbeef;
-	ip->i_din.ffs_din.di_spare[1] = 0xdeadbeef;
+	ip->i_number = ip->i_din.di_inumber = ino;
+ip->i_din.di_spare[0] = 0xdeadbeef;
+ip->i_din.di_spare[1] = 0xdeadbeef;
 	ip->i_lfs = ump->um_lfs;
 #ifdef QUOTA
 	for (i = 0; i < MAXQUOTAS; i++)
@@ -192,9 +188,9 @@ lfs_vcreate(mp, ino, vpp)
 #endif
 	ip->i_lockf = 0;
 	ip->i_diroff = 0;
-	ip->i_ffs_mode = 0;
-	ip->i_ffs_size = 0;
-	ip->i_ffs_blocks = 0;
+	ip->i_mode = 0;
+	ip->i_size = 0;
+	ip->i_blocks = 0;
 	++ump->um_lfs->lfs_uinodes;
 	return (0);
 }
@@ -202,14 +198,13 @@ lfs_vcreate(mp, ino, vpp)
 /* Free an inode. */
 /* ARGUSED */
 int
-lfs_vfree(v)
-	void *v;
-{
+lfs_vfree(ap)
 	struct vop_vfree_args /* {
 		struct vnode *a_pvp;
 		ino_t a_ino;
 		int a_mode;
-	} */ *ap = v;
+	} */ *ap;
+{
 	SEGUSE *sup;
 	struct buf *bp;
 	struct ifile *ifp;

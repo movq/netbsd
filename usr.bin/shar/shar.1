@@ -1,7 +1,5 @@
-.\"	$NetBSD: shar.1,v 1.5 1997/10/19 23:05:28 lukem Exp $
-.\"
-.\" Copyright (c) 1990, 1993
-.\"	The Regents of the University of California.  All rights reserved.
+.\" Copyright (c) 1990 The Regents of the University of California.
+.\" All rights reserved.
 .\"
 .\" Redistribution and use in source and binary forms, with or without
 .\" modification, are permitted provided that the following conditions
@@ -31,30 +29,27 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\"     @(#)shar.1	8.1 (Berkeley) 6/6/93
+.\"     @(#)shar.1	5.3 (Berkeley) 4/21/91
 .\"
-.Dd June 6, 1993
+.Dd April 21, 1991
 .Dt SHAR 1
-.Os BSD 4.4
+.Os
 .Sh NAME
 .Nm shar
 .Nd create a shell archive of files
 .Sh SYNOPSIS
-.Nm
-.Ar
+.Nm shar Ar
 .Sh DESCRIPTION
-.Nm
+.Nm Shar
 writes an
 .Xr sh 1
 shell script to the standard output which will recreate the file
 hierarchy specified by the command line operands.
 Directories will be recreated and must be specified before the
-files they contain (the
-.Xr find 1
-utility does this correctly).
+files they contain.
 .Pp
-.Nm
-is normally used for distributing files by
+.Nm Shar
+is normally used for distributing small numbers of files by
 .Xr ftp  1
 or
 .Xr mail  1  .
@@ -64,21 +59,21 @@ or
 .Xr uuencode 1 ,
 .Xr tar 1
 .Sh BUGS
-.Nm
+.Nm Shar
 makes no provisions for special types of files or files containing
 magic characters.
 .Pp
 It is easy to insert trojan horses into
-.Nm
+.Nm shar
 files.
 It is strongly recommended that all shell archive files be examined
 before running them through
 .Xr sh  1  .
 Archives produced using this implementation of
-.Nm
+.Nm shar
 may be easily examined with the command:
 .Bd -literal -offset indent
-egrep -v '^[X#]' shar.file
+grep -v '^X' program.shar
 .Ed
 .Sh EXAMPLES
 To create a shell archive of the program
@@ -86,20 +81,20 @@ To create a shell archive of the program
 and mail it to Rick:
 .Bd -literal -offset indent
 cd ls
-shar `find . -print` \&|  mail -s "ls source" rick
+shar `find . -print`  mail -s "ls source" rick
 .Ed
 .Pp
 To recreate the program directory:
 .Bd -literal -offset indent
 mkdir ls
 cd ls
-\&...
+...
 <delete header lines and examine mailed archive>
-\&...
+...
 sh archive
 .Ed
 .Sh HISTORY
 The
 .Nm
-command appears in
-.Bx 4.4 .
+command
+.Ud .

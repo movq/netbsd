@@ -1,5 +1,3 @@
-/*	$NetBSD: search.c,v 1.5 1997/07/06 18:25:34 christos Exp $	*/
-
 /*-
  * Copyright (c) 1992, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -36,13 +34,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #if !defined(lint) && !defined(SCCSID)
-#if 0
 static char sccsid[] = "@(#)search.c	8.1 (Berkeley) 6/4/93";
-#else
-__RCSID("$NetBSD: search.c,v 1.5 1997/07/06 18:25:34 christos Exp $");
-#endif
 #endif /* not lint && not SCCSID */
 
 /*
@@ -50,9 +43,7 @@ __RCSID("$NetBSD: search.c,v 1.5 1997/07/06 18:25:34 christos Exp $");
  */
 #include "sys.h"
 #include <stdlib.h>
-#if defined(REGEX)
-#include <regex.h>
-#elif defined(REGEXP)
+#ifdef REGEXP
 #include <regexp.h>
 #endif
 #include "el.h"
@@ -111,42 +102,31 @@ el_match(str, pat)
     const char *str;
     const char *pat;
 {
-#if defined (REGEX)
-    regex_t re;
-    int rv;
-#elif defined (REGEXP)
-    regexp *rp;
-    int rv;
-#else 
+#ifndef REGEXP
     extern char *re_comp __P((const char *));
     extern int re_exec __P((const char *));
+#else
+    regexp *re;
+    int rv;
 #endif
 
     if (strstr(str, pat) != NULL)
 	return 1;
-
-#if defined(REGEX)
-    if (regcomp(&re, pat, 0) == 0) {
-	rv = regexec(&re, str, 0, NULL, 0) == 0;
-	regfree(&re);
-    } else {
-	rv = 0;
-    }
-    return rv;
-#elif defined(REGEXP)
-    if ((re = regcomp(pat)) != NULL) {
-	rv = regexec(re, str);
-	free((ptr_t) re);
-    } else {
-	rv = 0;
-    }
-    return rv;
-#else
+#ifndef REGEXP
     if (re_comp(pat) != NULL)
 	return 0;
     else
     return re_exec(str) == 1;
+#else
+    if ((re = regcomp(pat)) != NULL) {
+	rv = regexec(re, str);
+	free((ptr_t) re);
+    }
+    else
+	rv = 0;
+    return rv;
 #endif
+   
 }
 
 
@@ -468,11 +448,10 @@ cv_search(el, dir)
 	}
 #ifdef ANCHOR
 	if (el->el_search.patbuf[0] != '.' && el->el_search.patbuf[0] != '*') {
-	    (void)strncpy(tmpbuf, el->el_search.patbuf, sizeof(tmpbuf) - 1);
+	    (void) strcpy(tmpbuf, el->el_search.patbuf);
 	    el->el_search.patbuf[0] = '.';
 	    el->el_search.patbuf[1] = '*';
-	    (void)strncpy(&el->el_search.patbuf[2], tmpbuf,
-		sizeof(el->el_search.patbuf) - 3);
+	    (void) strcpy(&el->el_search.patbuf[2], tmpbuf);
 	    el->el_search.patlen++;
 	    el->el_search.patbuf[el->el_search.patlen++] = '.';
 	    el->el_search.patbuf[el->el_search.patlen++] = '*';
@@ -486,8 +465,7 @@ cv_search(el, dir)
 	tmpbuf[tmplen++] = '*';
 #endif
 	tmpbuf[tmplen] = '\0';
-	(void)strncpy(el->el_search.patbuf, tmpbuf,
-	    sizeof(el->el_search.patbuf) - 1);
+	(void) strcpy(el->el_search.patbuf, tmpbuf);
 	el->el_search.patlen = tmplen;
     }
     el->el_state.lastcmd = (el_action_t) dir; /* avoid c_setpat */

@@ -1,8 +1,6 @@
-/*	$NetBSD: yacc.c,v 1.4 1997/10/18 13:19:04 lukem Exp $	*/
-
 /*
- * Copyright (c) 1987, 1993, 1994
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1987 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,38 +31,27 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)yacc.c	8.3 (Berkeley) 4/2/94";
-#else
-__RCSID("$NetBSD: yacc.c,v 1.4 1997/10/18 13:19:04 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)yacc.c	5.6 (Berkeley) 2/26/91";
 #endif /* not lint */
 
-#include <ctype.h>
-#include <limits.h>
 #include <stdio.h>
 #include <string.h>
-
 #include "ctags.h"
 
 /*
  * y_entries:
  *	find the yacc tags and put them in.
  */
-void
 y_entries()
 {
-	int	c;
-	char	*sp;
-	bool	in_rule;
+	register int	c;
+	register char	*sp;
+	register bool	in_rule;
 	char	tok[MAXTOKEN];
 
-	in_rule = NO;
-
-	while (GETC(!=, EOF))
-		switch (c) {
+	while (GETC(!=,EOF))
+		switch ((char)c) {
 		case '\n':
 			SETLINE;
 			/* FALLTHROUGH */
@@ -74,7 +61,7 @@ y_entries()
 		case '\t':
 			break;
 		case '{':
-			if (skip_key('}'))
+			if (skip_key((int)'}'))
 				in_rule = NO;
 			break;
 		case '\'':
@@ -83,41 +70,42 @@ y_entries()
 				in_rule = NO;
 			break;
 		case '%':
-			if (GETC(==, '%'))
+			if (GETC(==,'%'))
 				return;
-			(void)ungetc(c, inf);
+			(void)ungetc(c,inf);
 			break;
 		case '/':
-			if (GETC(==, '*'))
+			if (GETC(==,'*'))
 				skip_comment();
 			else
-				(void)ungetc(c, inf);
+				(void)ungetc(c,inf);
 			break;
 		case '|':
 		case ';':
 			in_rule = NO;
 			break;
 		default:
-			if (in_rule || (!isalpha(c) && c != '.' && c != '_'))
+			if (in_rule || !isalpha(c) && c != (int)'.'
+			    && c != (int)'_')
 				break;
 			sp = tok;
 			*sp++ = c;
-			while (GETC(!=, EOF) && (intoken(c) || c == '.'))
+			while (GETC(!=,EOF) && (intoken(c) || c == (int)'.'))
 				*sp++ = c;
 			*sp = EOS;
 			getline();		/* may change before ':' */
 			while (iswhite(c)) {
-				if (c == '\n')
+				if (c == (int)'\n')
 					SETLINE;
-				if (GETC(==, EOF))
+				if (GETC(==,EOF))
 					return;
 			}
-			if (c == ':') {
-				pfnote(tok, lineno);
+			if (c == (int)':') {
+				pfnote(tok,lineno);
 				in_rule = YES;
 			}
 			else
-				(void)ungetc(c, inf);
+				(void)ungetc(c,inf);
 		}
 }
 
@@ -125,11 +113,10 @@ y_entries()
  * toss_yysec --
  *	throw away lines up to the next "\n%%\n"
  */
-void
 toss_yysec()
 {
-	int	c;			/* read character */
-	int	state;
+	register int	c,			/* read character */
+			state;
 
 	/*
 	 * state == 0 : waiting
@@ -138,21 +125,20 @@ toss_yysec()
 	 * state == 3 : recieved second %
 	 */
 	lineftell = ftell(inf);
-	for (state = 0; GETC(!=, EOF);)
-		switch (c) {
-		case '\n':
-			++lineno;
-			lineftell = ftell(inf);
-			if (state == 3)		/* done! */
-				return;
-			state = 1;		/* start over */
-			break;
-		case '%':
-			if (state)		/* if 1 or 2 */
-				++state;	/* goto 3 */
-			break;
-		default:
-			state = 0;		/* reset */
-			break;
+	for (state = 0;GETC(!=,EOF);)
+		switch ((char)c) {
+			case '\n':
+				++lineno;
+				lineftell = ftell(inf);
+				if (state == 3)		/* done! */
+					return;
+				state = 1;		/* start over */
+				break;
+			case '%':
+				if (state)		/* if 1 or 2 */
+					++state;	/* goto 3 */
+				break;
+			default:
+				state = 0;		/* reset */
 		}
 }

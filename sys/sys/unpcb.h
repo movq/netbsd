@@ -1,8 +1,6 @@
-/*	$NetBSD: unpcb.h,v 1.10 1997/06/24 19:12:53 thorpej Exp $	*/
-
 /*
- * Copyright (c) 1982, 1986, 1989, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1982, 1986, 1989 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,11 +30,8 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)unpcb.h	8.1 (Berkeley) 6/2/93
+ *	@(#)unpcb.h	7.6 (Berkeley) 6/28/90
  */
-
-#ifndef _SYS_UNPCB_H_
-#define _SYS_UNPCB_H_
 
 /*
  * Protocol control block for an active
@@ -62,12 +57,6 @@
  * Stream sockets keep copies of receive sockbuf sb_cc and sb_mbcnt
  * so that changes in the sockbuf may be computed to modify
  * back pressure on the sender accordingly.
- *
- * The unp_ctime holds the creation time of the socket: it might be part of
- * a socketpair created by pipe(2), and POSIX requires pipe(2) to initialize
- * a stat structure's st_[acm]time members with the pipe's creation time.
- * N.B.: updating st_[am]time when reading/writing the pipe is not required,
- *       so we just use a single timespec and do not implement that.
  */
 struct	unpcb {
 	struct	socket *unp_socket;	/* pointer back to socket */
@@ -76,13 +65,9 @@ struct	unpcb {
 	struct	unpcb *unp_conn;	/* control block of connected socket */
 	struct	unpcb *unp_refs;	/* referencing socket linked list */
 	struct 	unpcb *unp_nextref;	/* link in unp_refs list */
-	struct	sockaddr_un *unp_addr;	/* bound address of socket */
-	size_t	unp_addrlen;		/* size of socket address */
+	struct	mbuf *unp_addr;		/* bound address of socket */
 	int	unp_cc;			/* copy of rcv.sb_cc */
 	int	unp_mbcnt;		/* copy of rcv.sb_mbcnt */
-	struct	timespec unp_ctime;	/* holds creation time */
 };
 
 #define	sotounpcb(so)	((struct unpcb *)((so)->so_pcb))
-
-#endif /* !_SYS_UNPCB_H_ */

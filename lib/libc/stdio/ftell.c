@@ -1,8 +1,6 @@
-/*	$NetBSD: ftell.c,v 1.7 1997/07/13 20:15:07 christos Exp $	*/
-
 /*-
- * Copyright (c) 1990, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1990 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Chris Torek.
@@ -36,13 +34,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char sccsid[] = "@(#)ftell.c	8.1 (Berkeley) 6/4/93";
-#else
-__RCSID("$NetBSD: ftell.c,v 1.7 1997/07/13 20:15:07 christos Exp $");
-#endif
+static char sccsid[] = "@(#)ftell.c	5.4 (Berkeley) 2/5/91";
 #endif /* LIBC_SCCS and not lint */
 
 #include <stdio.h>
@@ -54,7 +47,7 @@ __RCSID("$NetBSD: ftell.c,v 1.7 1997/07/13 20:15:07 christos Exp $");
  */
 long
 ftell(fp)
-	register FILE *fp;
+	register const FILE *fp;
 {
 	register fpos_t pos;
 
@@ -67,7 +60,6 @@ ftell(fp)
 	 * Find offset of underlying I/O object, then
 	 * adjust for buffered bytes.
 	 */
-	__sflush(fp);		/* may adjust seek offset on append stream */
 	if (fp->_flags & __SOFF)
 		pos = fp->_offset;
 	else {

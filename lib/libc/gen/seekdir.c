@@ -1,8 +1,6 @@
-/*	$NetBSD: seekdir.c,v 1.6 1997/07/21 14:07:28 jtc Exp $	*/
-
 /*
- * Copyright (c) 1983, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1983 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,26 +31,16 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char sccsid[] = "@(#)seekdir.c	8.1 (Berkeley) 6/4/93";
-#else
-__RCSID("$NetBSD: seekdir.c,v 1.6 1997/07/21 14:07:28 jtc Exp $");
-#endif
+static char sccsid[] = "@(#)seekdir.c	5.7 (Berkeley) 6/1/90";
 #endif /* LIBC_SCCS and not lint */
 
-#include "namespace.h"
 #include <sys/param.h>
 #include <dirent.h>
 
-#ifdef __weak_alias
-__weak_alias(seekdir,_seekdir);
-#endif
-
 /*
  * Seek to an entry in a directory.
- * __seekdir is in telldir.c so that it can share opaque data structures.
+ * _seekdir is in telldir.c so that it can share opaque data structures.
  */
 void
 seekdir(dirp, loc)
@@ -60,5 +48,5 @@ seekdir(dirp, loc)
 	long loc;
 {
 
-	__seekdir(dirp, loc);
+	_seekdir(dirp, loc);
 }

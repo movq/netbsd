@@ -1,8 +1,6 @@
-.\"	$NetBSD: vacation.1,v 1.8 1997/10/20 02:53:02 lukem Exp $
-.\"
-.\" Copyright (c) 1985, 1987, 1990, 1991, 1993
-.\"	The Regents of the University of California.  All rights reserved.
-.\"
+.\" Copyright (c) 1985, 1987, 1990, 1991 Regents of the University of California.
+.\" All rights reserved.
+
 .\" Redistribution and use in source and binary forms, with or without
 .\" modification, are permitted provided that the following conditions
 .\" are met:
@@ -31,23 +29,23 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\"	@(#)vacation.1	8.2 (Berkeley) 4/28/95
+.\"	@(#)vacation.1	6.9 (Berkeley) 7/30/91
 .\"
-.Dd April 28, 1995
+.Dd July 30, 1991
 .Dt VACATION 1
 .Os BSD 4.3
 .Sh NAME
 .Nm vacation
 .Nd return ``I am not here'' indication
 .Sh SYNOPSIS
-.Nm
+.Nm vacation
 .Fl i
 .Op Fl r Ar interval
-.Nm
+.Nm vacation
 .Op Fl a Ar alias
 .Ar login
 .Sh DESCRIPTION
-.Nm
+.Nm Vacation
 returns a message to the sender of a message telling them that you
 are currently not reading your mail.  The intended use is in a
 .Pa .forward
@@ -113,17 +111,19 @@ or
 will be replied to (where these strings are
 case insensitive) nor is a notification sent if a
 .Dq Precedence: bulk
-.Dq Precedence: list
 or
 .Dq Precedence: junk
 line is included in the mail headers.
-The people who have sent you messages are maintained as a
-.Xr db 3
-database in the file
-.Pa .vacation.db
+The people who have sent you messages are maintained as an
+.Xr ndbm 3
+database in the files
+.Pa .vacation.pag
+and
+.Pa .vacation.dir
 in your home directory.
 .Pp
-.Nm
+.Pp
+.Nm Vacation
 expects a file
 .Pa .vacation.msg ,
 in your home directory, containing a message to be sent back to each
@@ -131,17 +131,17 @@ sender.  It should be an entire message (including headers).  For
 example, it might contain:
 .Pp
 .Bd -unfilled -offset indent -compact
-From: eric@CS.Berkeley.EDU (Eric Allman)
+From: eric@ucbmonet.Berkeley.EDU (Eric Allman)
 Subject: I am on vacation
 Delivered-By-The-Graces-Of: The Vacation program
 Precedence: bulk
 
 I am on vacation until July 22.  If you have something urgent,
-please contact Keith Bostic <bostic@CS.Berkeley.EDU>.
+please contact Joe Kalash <kalash@ucbingres.Berkeley.EDU>.
 --eric
 .Ed
 .Pp
-.Nm
+.Nm Vacation
 reads the first line from the standard input for a
 .Ux
 .Dq From
@@ -152,23 +152,25 @@ includes this
 line automatically.
 .Pp
 Fatal errors, such as calling
-.Nm
+.Nm vacation
 with incorrect arguments, or with non-existent
 .Ar login Ns Ar s ,
 are logged in the system log file, using
-.Xr syslog 3 .
+.Xr syslog 8 .
 .Sh FILES
 .Bl -tag -width "vacation.dirxxx" -compact
-.It Pa ~/.vacation.db
+.It Pa ~/.vacation.dir
 database file
 .It Pa ~/.vacation.msg
 message to send
+.It Pa ~/.vacation.pag
+database file
 .El
 .Sh SEE ALSO
-.Xr syslog 3 ,
-.Xr sendmail 8
+.Xr sendmail 8 ,
+.Xr syslog 8
 .Sh HISTORY
 The
-.Nm
+.Nm vacation
 command appeared in
 .Bx 4.3 .

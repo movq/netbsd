@@ -1,9 +1,7 @@
 #!/bin/sh -
 #
-#	$NetBSD: mkdep.gcc.sh,v 1.12 1997/07/22 05:20:06 cgd Exp $
-#
-# Copyright (c) 1991, 1993
-#	The Regents of the University of California.  All rights reserved.
+# Copyright (c) 1991 The Regents of the University of California.
+# All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions
@@ -33,32 +31,14 @@
 # OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 # SUCH DAMAGE.
 #
-#	@(#)mkdep.gcc.sh	8.1 (Berkeley) 6/6/93
+#	@(#)mkdep.gcc.sh	5.3 (Berkeley) 5/6/91
 #
 
-# If the user has set ${CC} then we use it, otherwise we use 'cc'.
-# We try to find the compiler in the user's path, and if that fails we
-# try to find it in the default path.  If we can't find it, we punt.
-# Once we find it, we canonicalize its name and set the path to the
-# default path so that other commands we use are picked properly.
-
-if ! type "${CC:=cc}" > /dev/null 2>&1; then
-	PATH=/bin:/usr/bin:/usr/ucb
-	export PATH
-	if ! type "${CC}" > /dev/null 2>&1; then
-		echo "mkdep: ${CC}: not found"
-		exit 1
-	fi
-fi
-cmd='set -- `type "${CC}"` ; eval echo \$$#'
-CC=`eval $cmd`
-export CC
 PATH=/bin:/usr/bin:/usr/ucb
 export PATH
 
 D=.depend			# default dependency file is .depend
 append=0
-pflag=
 
 while :
 	do case "$1" in
@@ -75,7 +55,7 @@ while :
 		# the -p flag produces "program: program.c" style dependencies
 		# so .o's don't get produced
 		-p)
-			pflag=p
+			SED='s;\.o;;'
 			shift ;;
 		*)
 			break ;;
@@ -91,11 +71,7 @@ TMP=/tmp/mkdep$$
 
 trap 'rm -f $TMP ; exit 1' 1 2 3 13 15
 
-if [ x$pflag = x ]; then
-	${CC} -M "$@" | sed -e 's;\([ \t][ \t]*\)\./;\1;g' > $TMP
-else
-	${CC} -M "$@" | sed -e 's;\.o\([ \t]*\):;\1:;' -e 's;\([ \t][ \t]*\)\./;\1;g' > $TMP
-fi
+cpp -M $* > $TMP
 
 if [ $? != 0 ]; then
 	echo 'mkdep: compile failed.'

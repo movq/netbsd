@@ -1,8 +1,6 @@
-/*	$NetBSD: idp_var.h,v 1.8 1996/05/22 13:56:18 mycroft Exp $	*/
-
 /*
- * Copyright (c) 1984, 1985, 1986, 1987, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1984, 1985, 1986, 1987 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,7 +30,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)idp_var.h	8.1 (Berkeley) 6/10/93
+ *	@(#)idp_var.h	7.4 (Berkeley) 6/28/90
  */
 
 /*
@@ -46,19 +44,6 @@ struct	idpstat {
 	int	idps_badlen;		/* ip length < ip header length */
 };
 
-#ifdef _KERNEL
-struct nspcb;
-struct mbuf;
-struct socket;
-struct idpstat	idpstat;
-
-void idp_input __P((struct mbuf *, ...));
-void idp_abort __P((struct nspcb *));
-void idp_drop __P((struct nspcb *, int));
-int idp_output __P((struct mbuf *, ...));
-int idp_ctloutput __P((int, struct socket *, int , int, struct mbuf **));
-int idp_usrreq __P((struct socket *, int, struct mbuf *, struct mbuf *,
-		    struct mbuf *, struct proc *));
-int idp_raw_usrreq __P((struct socket *, int, struct mbuf *, struct mbuf *,
-			struct mbuf *, struct proc *));
+#ifdef KERNEL
+struct	idpstat	idpstat;
 #endif

@@ -1,5 +1,3 @@
-/*	$NetBSD: whatis.c,v 1.7 1997/10/20 23:03:02 mikel Exp $	*/
-
 /*
  * Copyright (c) 1987, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -33,19 +31,14 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
-
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1987, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+static char copyright[] =
+"@(#) Copyright (c) 1987, 1993\n\
+	The Regents of the University of California.  All rights reserved.\n";
 #endif /* not lint */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)whatis.c	8.5 (Berkeley) 1/2/94";
-#else
-__RCSID("$NetBSD: whatis.c,v 1.7 1997/10/20 23:03:02 mikel Exp $");
-#endif
+static char sccsid[] = "@(#)whatis.c	8.5 (Berkeley) 11/26/93";
 #endif /* not lint */
 
 #include <sys/param.h>
@@ -53,34 +46,28 @@ __RCSID("$NetBSD: whatis.c,v 1.7 1997/10/20 23:03:02 mikel Exp $");
 
 #include <ctype.h>
 #include <err.h>
-#include <glob.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-#include "config.h"
-#include "pathnames.h"
+#include "../man/config.h"
+#include "../man/pathnames.h"
 
 #define	MAXLINELEN	256			/* max line handled */
 
 static int *found, foundman;
-
-int main __P((int, char **));
-void dashtrunc __P((char *, char *));
-int match __P((char *, char *));
-void usage __P((void));
-void whatis __P((char **, char *, int));
 
 int
 main(argc, argv)
 	int argc;
 	char *argv[];
 {
+	extern char *optarg;
+	extern int optind;
 	ENTRY *ep;
 	TAG *tp;
 	int ch, rv;
 	char *beg, *conffile, **p, *p_augment, *p_path;
-	glob_t pg;
 
 	conffile = NULL;
 	p_augment = p_path = NULL;
@@ -107,11 +94,11 @@ main(argc, argv)
 		usage();
 
 	if ((found = malloc((u_int)argc * sizeof(int))) == NULL)
-		err(1, "malloc");
+		err(1, NULL);
 	memset(found, 0, argc * sizeof(int));
 
 	for (p = argv; *p; ++p)			/* trim full paths */
-		if ((beg = strrchr(*p, '/')))
+		if (beg = rindex(*p, '/'))
 			*p = beg + 1;
 
 	if (p_augment)
@@ -122,15 +109,8 @@ main(argc, argv)
 		config(conffile);
 		ep = (tp = getlist("_whatdb")) == NULL ?
 		   NULL : tp->list.tqh_first;
-		for (; ep != NULL; ep = ep->q.tqe_next) {
-			if (glob(ep->s, GLOB_BRACE | GLOB_NOSORT | GLOB_QUOTE,
-			    NULL, &pg) != 0)
-				err(1, "glob");
-			if (pg.gl_pathc)
-				for (p = pg.gl_pathv; *p; p++)
-					whatis(argv, *p, 0);
-			globfree(&pg);
-		}
+		for (; ep != NULL; ep = ep->q.tqe_next)
+			whatis(argv, ep->s, 0);
 	}
 
 	if (!foundman) {
@@ -146,20 +126,20 @@ main(argc, argv)
 	exit(rv);
 }
 
-void
 whatis(argv, path, buildpath)
 	char **argv, *path;
 	int buildpath;
 {
-	char *end, *name, **p;
+	register char *end, *name, **p;
 	char buf[MAXLINELEN + 1], wbuf[MAXLINELEN + 1];
-	char hold[MAXPATHLEN + 1];
 
 	for (name = path; name; name = end) {	/* through name list */
-		if ((end = strchr(name, ':')))
+		if (end = index(name, ':'))
 			*end++ = '\0';
 
 		if (buildpath) {
+			char hold[MAXPATHLEN + 1];
+
 			(void)sprintf(hold, "%s/%s", name, _PATH_WHATIS);
 			name = hold;
 		}
@@ -191,12 +171,11 @@ whatis(argv, path, buildpath)
  * match --
  *	match a full word
  */
-int
 match(bp, str)
-	char *bp, *str;
+	register char *bp, *str;
 {
-	int len;
-	char *start;
+	register int len;
+	register char *start;
 
 	if (!*str || !*bp)
 		return(0);
@@ -216,11 +195,10 @@ match(bp, str)
  * dashtrunc --
  *	truncate a string at " - "
  */
-void
 dashtrunc(from, to)
-	char *from, *to;
+	register char *from, *to;
 {
-	int ch;
+	register int ch;
 
 	for (; (ch = *from) && ch != '\n' &&
 	    (ch != ' ' || from[1] != '-' || from[2] != ' '); ++from)
@@ -232,7 +210,6 @@ dashtrunc(from, to)
  * usage --
  *	print usage message and die
  */
-void
 usage()
 {
 	(void)fprintf(stderr,

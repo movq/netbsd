@@ -1,13 +1,10 @@
-/*	$NetBSD: def.objects.h,v 1.4 1997/10/19 16:57:16 christos Exp $	*/
+/* Copyright (c) Stichting Mathematisch Centrum, Amsterdam, 1985. */
+/* def.objects.h - version 1.0.3 */
 
-/*
- * Copyright (c) Stichting Mathematisch Centrum, Amsterdam, 1985.
- */
-#ifndef _DEF_OBJECTS_H_
-#define _DEF_OBJECTS_H_
 /* objects have letter " % ) ( 0 _ ` [ ! ? / = * */
 #include "config.h"
 #include "def.objclass.h"
+#define	NULL	(char *)0
 
 struct objclass objects[] = {
 
@@ -290,4 +287,3 @@ char obj_symbols[] = {
 	BALL_SYM, CHAIN_SYM, ROCK_SYM, ARMOR_SYM, POTION_SYM, SCROLL_SYM,
 	WAND_SYM, RING_SYM, GEM_SYM, 0 };
 int bases[sizeof(obj_symbols)];
-#endif /* _DEF_OBJECTS_H_ */

@@ -18,12 +18,6 @@
  *	3. Altered versions must be plainly marked as such, and must not
  *		be misrepresented as being the original software.
  */
-
-#include <sys/cdefs.h>
-#ifndef lint
-__RCSID("$NetBSD: regsub.c,v 1.5 1997/10/09 10:21:26 lukem Exp $");
-#endif /* not lint */
-
 #include <regexp.h>
 #include <stdio.h>
 #include <string.h>
@@ -49,6 +43,7 @@ char *dest;
 	register char c;
 	register int no;
 	register int len;
+	extern char *strncpy();
 
 	if (prog == NULL || source == NULL || dest == NULL) {
 		regerror("NULL parm to regsub");

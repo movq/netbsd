@@ -1,7 +1,5 @@
-.\"	$NetBSD: funopen.3,v 1.7 1997/01/23 08:10:04 mikel Exp $
-.\"
-.\" Copyright (c) 1990, 1991, 1993
-.\"	The Regents of the University of California.  All rights reserved.
+.\" Copyright (c) 1990, 1991 The Regents of the University of California.
+.\" All rights reserved.
 .\"
 .\" This code is derived from software contributed to Berkeley by
 .\" Chris Torek.
@@ -33,9 +31,9 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\"     @(#)funopen.3	8.1 (Berkeley) 6/9/93
+.\"     @(#)funopen.3	5.3 (Berkeley) 4/19/91
 .\"
-.Dd June 9, 1993
+.Dd April 19, 1991
 .Dt FUNOPEN 3
 .Os
 .Sh NAME
@@ -46,11 +44,11 @@
 .Sh SYNOPSIS
 .Fd #include <stdio.h>
 .Ft FILE *
-.Fn funopen "void  *cookie" "int  (*readfn)(void *, char *, int)" "int (*writefn)(void *, const char *, int)" "fpos_t (*seekfn)(void *, fpos_t, int)" "int (*closefn)(void *)"
+.Fn funopen "void  *cookie" "int  (*readfn)(void *, char *, int)" "int (writefn*)(void *, const char *, int)" "fpos_t (seekfn*)(void *, fpos_t, int)" "int (closefn*)(void *)"
 .Ft FILE *
 .Fn fropen "void  *cookie" "int  (*readfn)(void *, char *, int)"
 .Ft FILE *
-.Fn fwopen "void  *cookie" "int  (*writefn)(void *, const char *, int)"
+.Fn fwopen "void  *cookie" "int  (*writefn)(void *, char *, int)"
 .Sh DESCRIPTION
 The
 .Fn funopen
@@ -84,20 +82,14 @@ and
 must match those, respectively, of
 .Xr read 2 ,
 .Xr write 2 ,
-.Xr lseek 2 ,
+.Xr seek 2 ,
 and
-.Xr close 2 ;
-except that they are passed the
+.Xr close 2
+with the single exception that they are passed the
 .Fa cookie
 argument specified to 
 .Fn funopen
-in place of the traditional file descriptor argument,
-and
-.Fa seekfn
-uses
-.Li fpos_t
-instead of
-.Li off_t .
+in place of the traditional file descriptor argument.
 .Pp
 Read and write
 .Tn I/O
@@ -142,7 +134,7 @@ is returned and the global variable
 .Va errno
 is set to indicate the error.
 .Sh ERRORS
-.Bl -tag -width Er
+.Bl -tag -width [EINVAL]
 .It Bq Er EINVAL
 The
 .Fn funopen
@@ -165,9 +157,9 @@ specified for the routine
 .Xr fseek 3 ,
 .Xr setbuf 3
 .Sh HISTORY
-The
-.Fn funopen
-functions first appeared in 4.4BSD.
+These
+functions are
+.Ud .
 .Sh BUGS
 The
 .Fn funopen

@@ -1,7 +1,5 @@
-/*	$NetBSD: timedc.h,v 1.5 1997/10/17 14:20:22 lukem Exp $	*/
-
-/*-
- * Copyright (c) 1985, 1993 The Regents of the University of California.
+/*
+ * Copyright (c) 1983 Regents of the University of California.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -32,26 +30,25 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)timedc.h	8.1 (Berkeley) 6/6/93
+ *	@(#)timedc.h	2.4 (Berkeley) 6/1/90
  */
 
 #include <sys/param.h>
+#include <stdio.h>
 #include <sys/time.h>
-#ifdef sgi
-#include <sys/uio.h>
-#endif
+#include <errno.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
-#include <arpa/inet.h>
-
-#include <errno.h>
 #include <netdb.h>
-#include <stdio.h>
+#include <arpa/inet.h>
 
 extern int errno;
 
 #define ON		1
 #define OFF		0
+
+#define MSGS 		6
+#define TRIALS		5
 
 #define GOOD		1
 #define UNREACHABLE	2
@@ -61,8 +58,6 @@ extern int errno;
 struct	cmd {
 	char	*c_name;		/* command name */
 	char	*c_help;		/* help message */
-	void	(*c_handler) __P((int, char **)); /* routine to do the work */
+	int	(*c_handler)();		/* routine to do the work */
 	int	c_priv;			/* privileged command */
 };
-
-#include "timedc-extern.h"

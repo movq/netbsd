@@ -1,10 +1,8 @@
-#	$NetBSD: Makefile,v 1.6 1997/10/08 09:07:39 mrg Exp $
-#	from: @(#)Makefile	8.1 (Berkeley) 6/4/93
+#	@(#)Makefile	5.10 (Berkeley) 5/11/90
 
 PROG=	tftpd
 SRCS=	tftpd.c tftpsubs.c
-MAN=	tftpd.8
-CFLAGS+=-I${.CURDIR}/../../usr.bin/tftp
+MAN8=	tftpd.0
 .PATH:	${.CURDIR}/../../usr.bin/tftp
 
 .include <bsd.prog.mk>

@@ -1,5 +1,3 @@
-/*	$NetBSD: zopen.c,v 1.6 1997/09/15 10:58:39 lukem Exp $	*/
-
 /*-
  * Copyright (c) 1985, 1986, 1992, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -38,11 +36,7 @@
  */
 
 #if defined(LIBC_SCCS) && !defined(lint)
-#if 0
 static char sccsid[] = "@(#)zopen.c	8.1 (Berkeley) 6/27/93";
-#else
-static char rcsid[] = "$NetBSD: zopen.c,v 1.6 1997/09/15 10:58:39 lukem Exp $";
-#endif
 #endif /* LIBC_SCCS and not lint */
 
 /*-
@@ -208,7 +202,6 @@ static void	cl_hash __P((struct s_zstate *, count_int));
 static code_int	getcode __P((struct s_zstate *));
 static int	output __P((struct s_zstate *, code_int));
 static int	zclose __P((void *));
-FILE	       *zopen __P((const char *, const char *, int));
 static int	zread __P((void *, char *, int));
 static int	zwrite __P((void *, const char *, int));
 
@@ -244,8 +237,8 @@ zwrite(cookie, wbp, num)
 	const char *wbp;
 	int num;
 {
-	code_int i;
-	int c, disp;
+	register code_int i;
+	register int c, disp;
 	struct s_zstate *zs;
 	const u_char *bp;
 	u_char tmp;
@@ -261,11 +254,11 @@ zwrite(cookie, wbp, num)
 		goto middle;
 	state = S_MIDDLE;
 
-	maxmaxcode = 1L << maxbits;
+	maxmaxcode = 1L << BITS;
 	if (fwrite(magic_header,
 	    sizeof(char), sizeof(magic_header), fp) != sizeof(magic_header))
 		return (-1);
-	tmp = (u_char)(maxbits | block_compress);
+	tmp = (u_char)(BITS | block_compress);
 	if (fwrite(&tmp, sizeof(char), sizeof(tmp), fp) != sizeof(tmp))
 		return (-1);
 
@@ -380,8 +373,8 @@ output(zs, ocode)
 	struct s_zstate *zs;
 	code_int ocode;
 {
-	int bits, r_off;
-	char_type *bp;
+	register int bits, r_off;
+	register char_type *bp;
 
 	r_off = offset;
 	bits = n_bits;
@@ -394,7 +387,7 @@ output(zs, ocode)
 		 * Since ocode is always >= 8 bits, only need to mask the first
 		 * hunk on the left.
 		 */
-		*bp = (*bp & rmask[r_off]) | ((ocode << r_off) & lmask[r_off]);
+		*bp = (*bp & rmask[r_off]) | (ocode << r_off) & lmask[r_off];
 		bp++;
 		bits -= (8 - r_off);
 		ocode >>= 8 - r_off;
@@ -470,7 +463,7 @@ zread(cookie, rbp, num)
 	char *rbp;
 	int num;
 {
-	u_int count;
+	register u_int count;
 	struct s_zstate *zs;
 	u_char *bp, header[3];
 
@@ -579,9 +572,9 @@ static code_int
 getcode(zs)
 	struct s_zstate *zs;
 {
-	code_int gcode;
-	int r_off, bits;
-	char_type *bp;
+	register code_int gcode;
+	register int r_off, bits;
+	register char_type *bp;
 
 	bp = gbuf;
 	if (clear_flg > 0 || roffset >= size || free_ent > maxcode) {
@@ -638,7 +631,7 @@ static int
 cl_block(zs)			/* Table clear for block compress. */
 	struct s_zstate *zs;
 {
-	long rat;
+	register long rat;
 
 	checkpoint = in_count + CHECK_GAP;
 
@@ -666,10 +659,10 @@ cl_block(zs)			/* Table clear for block compress. */
 static void
 cl_hash(zs, cl_hsize)			/* Reset code table. */
 	struct s_zstate *zs;
-	count_int cl_hsize;
+	register count_int cl_hsize;
 {
-	count_int *htab_p;
-	long i, m1;
+	register count_int *htab_p;
+	register long i, m1;
 
 	m1 = -1;
 	htab_p = htab + cl_hsize;
@@ -704,7 +697,7 @@ zopen(fname, mode, bits)
 {
 	struct s_zstate *zs;
 
-	if ((mode[0] != 'r' && mode[0] != 'w') || mode[1] != '\0' ||
+	if (mode[0] != 'r' && mode[0] != 'w' || mode[1] != '\0' ||
 	    bits < 0 || bits > BITS) {
 		errno = EINVAL;
 		return (NULL);
@@ -714,7 +707,7 @@ zopen(fname, mode, bits)
 		return (NULL);
 
 	maxbits = bits ? bits : BITS;	/* User settable max # bits/code. */
-	maxmaxcode = 1 << maxbits;	/* Should NEVER generate this code. */
+	maxmaxcode = 1 << BITS;		/* Should NEVER generate this code. */
 	hsize = HSIZE;			/* For dynamic table sizing. */
 	free_ent = 0;			/* First unused entry. */
 	block_compress = BLOCK_MASK;
@@ -744,5 +737,4 @@ zopen(fname, mode, bits)
 		return (funopen(zs, NULL, zwrite, NULL, zclose));
 	}
 	/* NOTREACHED */
-	return (NULL);
 }

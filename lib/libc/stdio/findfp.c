@@ -1,8 +1,6 @@
-/*	$NetBSD: findfp.c,v 1.7 1997/07/13 20:14:58 christos Exp $	*/
-
 /*-
- * Copyright (c) 1990, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1990 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Chris Torek.
@@ -36,16 +34,10 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char sccsid[] = "@(#)findfp.c	8.2 (Berkeley) 1/4/94";
-#else
-__RCSID("$NetBSD: findfp.c,v 1.7 1997/07/13 20:14:58 christos Exp $");
-#endif
+static char sccsid[] = "@(#)findfp.c	5.10 (Berkeley) 2/24/91";
 #endif /* LIBC_SCCS and not lint */
 
-#include <sys/param.h>
 #include <unistd.h>
 #include <stdio.h>
 #include <errno.h>
@@ -56,15 +48,15 @@ __RCSID("$NetBSD: findfp.c,v 1.7 1997/07/13 20:14:58 christos Exp $");
 
 int	__sdidinit;
 
-#define	NDYNAMIC 10		/* add ten more whenever necessary */
+#define NSTATIC	20	/* stdin + stdout + stderr + the usual */
+#define	NDYNAMIC 10	/* add ten more whenever necessary */
 
 #define	std(flags, file) \
 	{0,0,0,flags,file,{0},0,__sF+file,__sclose,__sread,__sseek,__swrite}
 /*	 p r w flags file _bf z  cookie      close    read    seek    write */
 
-				/* the usual - (stdin + stdout + stderr) */
-static FILE usual[FOPEN_MAX - 3];
-static struct glue uglue = { 0, FOPEN_MAX - 3, usual };
+static FILE usual[NSTATIC - 3];	/* the usual */
+static struct glue uglue = { 0, NSTATIC - 3, usual };
 
 FILE __sF[3] = {
 	std(__SRD, STDIN_FILENO),		/* stdin */
@@ -72,9 +64,6 @@ FILE __sF[3] = {
 	std(__SWR|__SNBF, STDERR_FILENO)	/* stderr */
 };
 struct glue __sglue = { &uglue, 3, __sF };
-
-static struct glue *moreglue __P((int));
-void f_prealloc __P((void));
 
 static struct glue *
 moreglue(n)
@@ -84,10 +73,10 @@ moreglue(n)
 	register FILE *p;
 	static FILE empty;
 
-	g = (struct glue *)malloc(sizeof(*g) + ALIGNBYTES + n * sizeof(FILE));
+	g = (struct glue *)malloc(sizeof(*g) + n * sizeof(FILE));
 	if (g == NULL)
 		return (NULL);
-	p = (FILE *)ALIGN(g + 1);
+	p = (FILE *)(g + 1);
 	g->next = NULL;
 	g->niobs = n;
 	g->iobs = p;
@@ -137,13 +126,11 @@ found:
  * XXX.  Force immediate allocation of internal memory.  Not used by stdio,
  * but documented historically for certain applications.  Bad applications.
  */
-void
 f_prealloc()
 {
+	int n = getdtablesize() - NSTATIC + 20;		/* 20 for slop */
 	register struct glue *g;
-	int n;
 
-	n = getdtablesize() - FOPEN_MAX + 20;		/* 20 for slop. */
 	for (g = &__sglue; (n -= g->niobs) > 0 && g->next; g = g->next)
 		/* void */;
 	if (n > 0)

@@ -1,5 +1,3 @@
-/*	$NetBSD: map.c,v 1.4 1997/07/06 18:25:29 christos Exp $	*/
-
 /*-
  * Copyright (c) 1992, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -36,13 +34,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #if !defined(lint) && !defined(SCCSID)
-#if 0
 static char sccsid[] = "@(#)map.c	8.1 (Berkeley) 6/4/93";
-#else
-__RCSID("$NetBSD: map.c,v 1.4 1997/07/06 18:25:29 christos Exp $");
-#endif
 #endif /* not lint && not SCCSID */
 
 /*
@@ -1068,8 +1061,8 @@ map_init_emacs(el)
     map_init_nls(el);
 
     buf[0] = CONTROL('X');
-    buf[1] = CONTROL('X');
     buf[2] = 0;
+    buf[1] = CONTROL('X');
     key_add(el, buf, key_map_cmd(el, EM_EXCHANGE_MARK), XK_CMD);
     
     tty_bind_char(el, 1);

@@ -1,15 +1,11 @@
-/*	$NetBSD: x25.h,v 1.7 1996/02/13 22:05:51 christos Exp $	*/
-
 /*
  * Copyright (c) University of British Columbia, 1984
- * Copyright (c) 1990, 1992, 1993
- *	The Regents of the University of California.  All rights reserved.
- * 		 University of Erlangen-Nuremberg, Germany, 1992
- * 
- * This code is derived from software contributed to Berkeley by the
- * Laboratory for Computation Vision and the Computer Science Department
- * of the the University of British Columbia and the Computer Science
- * Department (IV) of the University of Erlangen-Nuremberg, Germany.
+ * Copyright (c) 1990 The Regents of the University of California.
+ * All rights reserved.
+ *
+ * This code is derived from software contributed to Berkeley by
+ * the Laboratory for Computation Vision and the Computer Science Department
+ * of the University of British Columbia.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -39,18 +35,15 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)x25.h	8.1 (Berkeley) 6/10/93
+ *	@(#)x25.h	7.8 (Berkeley) 5/29/91
  */
 
-#ifdef _KERNEL
+#ifdef KERNEL
 #define PRC_IFUP	3
 #define PRC_LINKUP	4
 #define PRC_LINKDOWN	5
 #define PRC_LINKRESET	6
 #define PRC_LINKDONTCOPY	7
-#ifndef PRC_DISCONNECT_REQUEST  
-#define PRC_DISCONNECT_REQUEST 10
-#endif
 #endif
 
 #define CCITTPROTO_HDLC		1
@@ -129,12 +122,11 @@ struct	x25config {
 	/* link level parameters */
 	u_short	xc_lproto:4,	/* link level protocol eg. CCITTPROTO_HDLC */
 		xc_lptype:4,	/* protocol type eg. HDLCPROTO_LAPB */
+		xc_lwsize:5,	/* link level window size */
 		xc_ltrace:1,	/* link level tracing flag */
-		xc_lwsize:7;	/* link level window size */
-	u_short	xc_lxidxchg:1,  /* link level XID exchange flag - NOT YET */
+		xc_rsvd1:2;	/* for use by other link-level protocols */
 	/* packet level parameters */
-	        xc_rsvd1:2,
-                xc_pwsize:3,	/* default window size */
+	u_short	xc_pwsize:3,	/* default window size */
 		xc_psize:4,	/* default packet size 7=128, 8=256, ... */
 		xc_type:3,	/* network type */
 #define X25_1976	0
@@ -144,7 +136,8 @@ struct	x25config {
 #define X25_BASIC	4
 		xc_ptrace:1,	/* packet level tracing flag */
 		xc_nodnic:1,	/* remove our dnic when calling on net */
-		xc_prepnd0:1;	/* prepend 0 when making offnet calls */
+		xc_prepnd0:1,	/* prepend 0 when making offnet calls */
+		xc_rsvd2:3;
 	u_short	xc_maxlcn;	/* max logical channels */
 	u_short	xc_dg_idletimo;	/* timeout for idle datagram circuits. */
 };
@@ -156,28 +149,4 @@ struct ifreq_x25 {
 };
 #define	SIOCSIFCONF_X25	_IOW('i', 12, struct ifreq_x25)	/* set ifnet config */
 #define	SIOCGIFCONF_X25	_IOWR('i',13, struct ifreq_x25)	/* get ifnet config */
-#endif
-
-#ifdef _KERNEL
-struct llinfo_x25;
-struct pklcd;
-struct sockaddr_in;
-struct x25_ifaddr;
-struct ifnet;
-struct rtentry;
-
-void x25_lxfree __P((struct llinfo_x25 *));
-int x25_ifinput __P((struct mbuf *, void *));
-int x25_connect_callback __P((struct mbuf *, void *));
-int x25_dgram_incoming __P((struct mbuf *, void *));
-int x25_ifoutput __P((struct ifnet *, struct mbuf *, struct sockaddr *, struct rtentry *));
-void x25_iftimeout __P((struct ifnet *));
-void x25_rtrequest __P((int , struct rtentry *, struct sockaddr *));
-void x25_rtinvert __P((int , struct sockaddr *, struct rtentry *));
-void x25_ddnip_to_ccitt __P((struct sockaddr *, struct rtentry *));
-void x25_dg_rtinit __P((struct sockaddr_x25 *, struct x25_ifaddr *, int ));
-void pk_init __P((void));
-int pk_user_protolisten __P((u_char *));
-int pk_rtattach __P((struct socket *, struct mbuf *));
-int x25_rtattach __P((struct pklcd *, struct rtentry *));
 #endif

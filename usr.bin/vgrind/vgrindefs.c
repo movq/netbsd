@@ -1,8 +1,6 @@
-/*	$NetBSD: vgrindefs.c,v 1.6 1997/10/20 03:01:29 lukem Exp $	*/
-
 /*
- * Copyright (c) 1980, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1980 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,19 +31,13 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)vgrindefs.c	8.1 (Berkeley) 6/6/93";
-#endif
-__RCSID("$NetBSD: vgrindefs.c,v 1.6 1997/10/20 03:01:29 lukem Exp $");
+static char sccsid[] = "@(#)vgrindefs.c	5.3 (Berkeley) 6/1/90";
 #endif /* not lint */
 
 #define	BUFSIZ	1024
 #define MAXHOP	32	/* max number of tc= indirections */
 
-#include <stdlib.h>
-#include <string.h>
 #include <ctype.h>
 /*
  * grindcap - routines for dealing with the language definitions data base
@@ -65,9 +57,10 @@ __RCSID("$NetBSD: vgrindefs.c,v 1.6 1997/10/20 03:01:29 lukem Exp $");
 static	char *tbuf;
 static	char *filename;
 static	int hopcount;	/* detect infinite loops in termcap, init 0 */
-static	char *tskip();
-static	char *tdecode();
+char	*tskip();
 char	*tgetstr();
+char	*tdecode();
+char	*getenv();
 
 /*
  * Get an entry for terminal name in buffer bp,
@@ -77,9 +70,9 @@ char	*tgetstr();
 tgetent(bp, name, file)
 	char *bp, *name, *file;
 {
-	char *cp;
-	int c;
-	int i = 0, cnt = 0;
+	register char *cp;
+	register int c;
+	register int i = 0, cnt = 0;
 	char ibuf[BUFSIZ];
 	char *cp2;
 	int tf;
@@ -136,7 +129,7 @@ tgetent(bp, name, file)
  */
 tnchktc()
 {
-	char *p, *q;
+	register char *p, *q;
 	char tcname[16];	/* name of similar terminal */
 	char tcbuf[BUFSIZ];
 	char *holdtbuf = tbuf;
@@ -184,7 +177,7 @@ tnchktc()
 tnamatch(np)
 	char *np;
 {
-	char *Np, *Bp;
+	register char *Np, *Bp;
 
 	Bp = tbuf;
 	if (*Bp == '#')
@@ -209,7 +202,7 @@ tnamatch(np)
  */
 static char *
 tskip(bp)
-	char *bp;
+	register char *bp;
 {
 
 	while (*bp && *bp != ':')
@@ -230,8 +223,8 @@ tskip(bp)
 tgetnum(id)
 	char *id;
 {
-	int i, base;
-	char *bp = tbuf;
+	register int i, base;
+	register char *bp = tbuf;
 
 	for (;;) {
 		bp = tskip(bp);
@@ -263,7 +256,7 @@ tgetnum(id)
 tgetflag(id)
 	char *id;
 {
-	char *bp = tbuf;
+	register char *bp = tbuf;
 
 	for (;;) {
 		bp = tskip(bp);
@@ -290,7 +283,7 @@ char *
 tgetstr(id, area)
 	char *id, **area;
 {
-	char *bp = tbuf;
+	register char *bp = tbuf;
 
 	for (;;) {
 		bp = tskip(bp);
@@ -313,11 +306,11 @@ tgetstr(id, area)
  */
 static char *
 tdecode(str, area)
-	char *str;
+	register char *str;
 	char **area;
 {
-	char *cp;
-	int c;
+	register char *cp;
+	register int c;
 	int i;
 
 	cp = *area;

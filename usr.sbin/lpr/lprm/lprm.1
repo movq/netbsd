@@ -1,7 +1,5 @@
-.\"	$NetBSD: lprm.1,v 1.7 1997/10/05 15:12:21 mrg Exp $
-.\"
-.\" Copyright (c) 1983, 1990, 1993
-.\"	The Regents of the University of California.  All rights reserved.
+.\" Copyright (c) 1983, 1990 The Regents of the University of California.
+.\" All rights reserved.
 .\"
 .\" Redistribution and use in source and binary forms, with or without
 .\" modification, are permitted provided that the following conditions
@@ -31,25 +29,25 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\"     @(#)lprm.1	8.1 (Berkeley) 6/6/93
+.\"     @(#)lprm.1	6.7 (Berkeley) 5/9/91
 .\"
-.Dd June 6, 1993
+.Dd May 9, 1991
 .Dt LPRM 1
 .Os BSD 4.2
 .Sh NAME
 .Nm lprm
 .Nd remove jobs from the line printer spooling queue
 .Sh SYNOPSIS
-.Nm
+.Nm lprm
 .Op Fl P Ns Ar printer
 .Op Fl
 .Op job # ...
 .Op Ar user ...
 .Sh DESCRIPTION
-.Nm
+.Nm Lprm
 will remove a job, or jobs, from a printer's spool queue.
 Since the spooling directory is protected from users, using
-.Nm
+.Nm lprm
 is normally the only method by which a user may remove a job.
 The owner of a job is determined by the user's login name
 and host name on the machine where the
@@ -66,16 +64,16 @@ Specify the queue associated with a specific
 If a single
 .Sq Fl
 is given,
-.Nm
+.Nm lprm
 will remove all jobs which a user
 owns.  If the super-user employs this flag, the spool queue will
 be emptied entirely.
 .It Ar user
 Causes
-.Nm
+.Nm lprm
 to attempt to remove any jobs queued belonging to that user
 (or users).  This form of invoking
-.Nm
+.Nm lprm
 is useful only to the super-user.
 .It Ar job\ \&#
 A user may dequeue an individual job by specifying its job number.
@@ -93,22 +91,22 @@ program, e.g.
 .El
 .Pp
 If neither arguments or options are given,
-.Nm
+.Nm Lprm
 will delete the currently active job if it is
 owned by the user who invoked
-.Nm "" .
+.Nm lprm  .
 .Pp
-.Nm
+.Nm Lprm
 announces the names of any files it removes and is silent if
 there are no jobs in the queue which match the request list.
 .Pp
-.Nm
+.Nm Lprm
 will kill off an active daemon, if necessary, before removing
 any spooling files.  If a daemon is killed, a new one is
 automatically restarted upon completion of file removals.
 .Sh ENVIRONMENT
 If the following environment variable exists, it is utilized by
-.Nm "" .
+.Nm lprm .
 .Bl -tag -width PRINTER
 .It Ev PRINTER
 If the environment variable
@@ -121,12 +119,12 @@ the default printer is assumed from
 .Ev PRINTER .
 .El
 .Sh FILES
-.Bl -tag -width /var/spool/output/*/lock/ -compact
+.Bl -tag -width /var/spool/*/lock/ -compact
 .It Pa /etc/printcap
 Printer characteristics file.
-.It Pa /var/spool/output/*
+.It Pa /var/spool/*
 Spooling directories.
-.It Pa /var/spool/output/*/lock
+.It Pa /var/spool/*/lock
 Lock file used to obtain the pid of the current
 daemon and the job number of the currently active job.
 .El
@@ -135,13 +133,13 @@ daemon and the job number of the currently active job.
 .Xr lpq 1 ,
 .Xr lpd 8
 .Sh DIAGNOSTICS
-.Dq Permission denied
-if the user tries to remove files other than his own.
+``Permission denied" if the user tries to remove files other than his
+own.
 .Sh BUGS
 Since there are race conditions possible in the update of the lock file,
 the currently active job may be incorrectly identified.
 .Sh HISTORY
 The
-.Nm
+.Nm lprm
 command appeared in
 .Bx 3.0 .

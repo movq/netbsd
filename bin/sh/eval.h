@@ -1,8 +1,6 @@
-/*	$NetBSD: eval.h,v 1.9 1995/09/11 17:05:43 christos Exp $	*/
-
 /*-
- * Copyright (c) 1991, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1991 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Kenneth Almquist.
@@ -35,7 +33,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)eval.h	8.2 (Berkeley) 5/4/95
+ *	@(#)eval.h	5.2 (Berkeley) 4/12/91
  */
 
 extern char *commandname;	/* currently executing command */
@@ -50,25 +48,18 @@ struct backcmd {		/* result of evalbackcmd */
 	struct job *jp;		/* job structure for command */
 };
 
-int evalcmd __P((int, char **));
-void evalstring __P((char *));
+
+#ifdef __STDC__
+void evalstring(char *);
 union node;	/* BLETCH for ansi C */
-void evaltree __P((union node *, int));
-void evalbackcmd __P((union node *, struct backcmd *));
-int bltincmd __P((int, char **));
-int breakcmd __P((int, char **));
-int returncmd __P((int, char **));
-int falsecmd __P((int, char **));
-int truecmd __P((int, char **));
-int execcmd __P((int, char **));
+void evaltree(union node *, int);
+void evalbackcmd(union node *, struct backcmd *);
+#else
+void evalstring();
+void evaltree();
+void evalbackcmd();
+#endif
 
 /* in_function returns nonzero if we are currently evaluating a function */
 #define in_function()	funcnest
 extern int funcnest;
-extern int evalskip;
-
-/* reasons for skipping commands (see comment on breakcmd routine) */
-#define SKIPBREAK	1
-#define SKIPCONT	2
-#define SKIPFUNC	3
-#define SKIPFILE	4

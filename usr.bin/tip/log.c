@@ -1,8 +1,6 @@
-/*	$NetBSD: log.c,v 1.4 1994/12/24 17:56:28 cgd Exp $	*/
-
 /*
- * Copyright (c) 1983, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1983 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -34,10 +32,7 @@
  */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)log.c	8.1 (Berkeley) 6/6/93";
-#endif
-static char rcsid[] = "$NetBSD: log.c,v 1.4 1994/12/24 17:56:28 cgd Exp $";
+static char sccsid[] = "@(#)log.c	5.4 (Berkeley) 6/1/90";
 #endif /* not lint */
 
 #include "tip.h"
@@ -54,7 +49,7 @@ logent(group, num, acu, message)
 {
 	char *user, *timestamp;
 	struct passwd *pwd;
-	time_t t;
+	long t;
 
 	if (flog == NULL)
 		return;

@@ -1,5 +1,3 @@
-/*	$NetBSD: ktrace.h,v 1.5 1997/07/23 05:37:59 mikel Exp $	*/
-
 /*-
  * Copyright (c) 1988, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -36,12 +34,8 @@
  */
 
 #define DEF_POINTS (KTRFAC_SYSCALL | KTRFAC_SYSRET | KTRFAC_NAMEI | \
-		  KTRFAC_GENIO | KTRFAC_PSIG | KTRFAC_EMUL)
+		  KTRFAC_GENIO | KTRFAC_PSIG)
 
 #define ALL_POINTS (DEF_POINTS | KTRFAC_CSW)
 
 #define DEF_TRACEFILE	"ktrace.out"
-
-#include <sys/cdefs.h>
-
-int	getpoints __P((char *));

@@ -1,5 +1,3 @@
-/*	$NetBSD: extern.h,v 1.5 1997/10/13 21:03:49 christos Exp $ */
-
 /*
  * Copyright (c) 1983, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -37,7 +35,6 @@
 
 #include <stdio.h>
 #include <signal.h>
-#include <string.h>
 #include <ctype.h>
 #include <setjmp.h>
 #include "machdep.h"
@@ -185,10 +182,10 @@ struct File {
 	int index;
 	char captain[20];		/* 0 */
 	short points;			/* 20 */
-	unsigned char loadL;		/* 22 */
-	unsigned char loadR;		/* 24 */
-	unsigned char readyL;		/* 26 */
-	unsigned char readyR;		/* 28 */
+	char loadL;			/* 22 */
+	char loadR;			/* 24 */
+	char readyL;			/* 26 */
+	char readyR;			/* 28 */
 	struct BP OBP[NBP];		/* 30 */
 	struct BP DBP[NBP];		/* 48 */
 	char struck;			/* 66 */
@@ -206,7 +203,7 @@ struct File {
 	char FS;			/* 230 */
 	char explode;			/* 232 */
 	char sink;			/* 234 */
-	unsigned char dir;
+	char dir;
 	short col;
 	short row;
 	char loadwith;
@@ -216,7 +213,7 @@ struct File {
 struct ship {
 	char *shipname;			/* 0 */
 	struct shipspecs *specs;	/* 2 */
-	unsigned char nationality;	/* 4 */
+	char nationality;		/* 4 */
 	short shiprow;			/* 6 */
 	short shipcol;			/* 8 */
 	char shipdir;			/* 10 */
@@ -227,7 +224,7 @@ struct scenario {
 	char winddir;			/* 0 */
 	char windspeed;			/* 2 */
 	char windchange;		/* 4 */
-	unsigned char vessels;		/* 12 */
+	char vessels;			/* 12 */
 	char *name;			/* 14 */
 	struct ship ship[NSHIP];	/* 16 */
 };
@@ -239,9 +236,9 @@ struct shipspecs {
 	char fs;
 	char ta;
 	short guns;
-	unsigned char class;
+	char class;
 	char hull;
-	unsigned char qual;
+	char qual;
 	char crew1;
 	char crew2;
 	char crew3;
@@ -249,10 +246,10 @@ struct shipspecs {
 	char gunR;
 	char carL;
 	char carR;
-	int rig1;
-	int rig2;
-	int rig3;
-	int rig4;
+	char rig1;
+	char rig2;
+	char rig3;
+	char rig4;
 	short pts;
 };
 struct shipspecs specs[];
@@ -298,143 +295,16 @@ int alive;
 int people;
 char hasdriver;
 
-/* assorted.c */
-void table __P((int, int, int, struct ship *, struct ship *, int));
-void Cleansnag __P((struct ship *, struct ship *, int, int));
+char *info();
+char *quality();
+double arctan();
+char *saywhat();
+struct ship *closestenemy();
 
-/* dr_1.c */
-void unfoul __P((void));
-void boardcomp __P((void));
-int fightitout __P((struct ship *, struct ship *, int));
-void resolve __P((void));
-void compcombat __P((void));
-int next __P((void));
-
-/* dr_2.c */
-void thinkofgrapples __P((void));
-void checkup __P((void));
-void prizecheck __P((void));
-int strend __P((char *));
-void closeon __P((struct ship *, struct ship *, char[], int, int, int));
-int score __P((char[], struct ship *, struct ship *, int));
-void move __P((char *, struct ship *, unsigned char *, short *, short *, char *));
-void try __P((char[], char [], int, int, int, int, int, struct ship *,
-    struct ship *, int *, int));
-void rmend __P((char *));
-
-/* dr_3.c */
-void moveall __P((void));
-int stillmoving __P((int));
-int isolated __P((struct ship *));
-int push __P((struct ship *, struct ship *));
-void step __P((int, struct ship *, char *));
-void sendbp __P((struct ship *, struct ship *, int, int));
-int toughmelee __P((struct ship *, struct ship *, int, int));
-void reload __P((void));
-void checksails __P((void));
-
-/* dr_4.c */
-void ungrap __P((struct ship *, struct ship *));
-void grap __P((struct ship *, struct ship *));
-
-/* dr_5.c */
-void subtract __P((struct ship *, int, int [3], struct ship *, int));
-int mensent __P((struct ship *, struct ship *, int[3], struct ship **, int *,
-    int));
-
-/* dr_main.c */
-int dr_main __P((void));
-
-/* game.c */
-int maxturns __P((struct ship *, char *));
-int maxmove __P((struct ship *, int, int));
-
-/* lo_main.c */
-int lo_main __P((void));
-
-/* misc.c */
-int range __P((struct ship *, struct ship *));
-struct ship *closestenemy __P((struct ship *, int, int));
-int angle __P((int, int));
-int gunsbear __P((struct ship *, struct ship *));
-int portside __P((struct ship *, struct ship *, int));
-int colours __P((struct ship *));
-void logger __P((struct ship *));
-
-/* parties.c */
-int meleeing __P((struct ship *, struct ship *));
-int boarding __P((struct ship *, int));
-void unboard __P((struct ship *, struct ship *, int));
-
-/* pl_1.c */
-void leave __P((int));
-void choke __P((int));
-void child __P((int));
-
-/* pl_2.c */
-void play __P((void));
-
-/* pl_3.c */
-void acceptcombat __P((void));
-void grapungrap __P((void));
-void unfoulplayer __P((void));
-
-/* pl_4.c */
-void changesail __P((void));
-void acceptsignal __P((void));
-void lookout __P((void));
-char *saywhat __P((struct ship *, int));
-void eyeball __P((struct ship *));
-
-/* pl_5.c */
-void acceptmove __P((void));
-void acceptboard __P((void));
-void parties __P((int[3], struct ship *, int, int));
-
-/* pl_6.c */
-void repair __P((void));
-int turned __P((void));
-void loadplayer __P((void));
-
-/* pl_7.c */
-void initscreen __P((void));
-void cleanupscreen __P((void));
-void newturn __P((int));
-void Signal __P((const char *, struct ship *, ...))
-	 __attribute__((__format__(__printf__,1,3)));
-void Msg __P((const char *, ...))
-	 __attribute__((__format__(__printf__,1,2)));
-void Scroll __P((void));
-void prompt __P((char *, struct ship *));
-void endprompt __P((int));
-int sgetch __P((char *, struct ship *, int));
-void sgetstr __P((char *, char *, int));
-void draw_screen __P((void));
-void draw_view __P((void));
-void draw_turn __P((void));
-void draw_stat __P((void));
-void draw_slot __P((void));
-void draw_board __P((void));
-void centerview __P((void));
-void upview __P((void));
-void downview __P((void));
-void leftview __P((void));
-void rightview __P((void));
-void adjustview __P((void));
-
-/* pl_main.c */
-int pl_main __P((void));
-void initialize __P((void));
-
-/* sync.c */
-void fmtship __P((char *, size_t, const char *, struct ship *));
-void makesignal __P((struct ship *, const char *, struct ship *, ...))
-	 __attribute__((__format__(__printf__,2,4)));
-void makemsg __P((struct ship *, const char *, ...))
-	 __attribute__((__format__(__printf__,2,3)));
-int sync_exists __P((int));
-int sync_open __P((void));
-void sync_close __P((int));
-void Write __P((int, struct ship *, int, long, long, long, long));
-int Sync __P((void));
-int sync_update __P((int, struct ship *, long, long, long, long));
+char *calloc();
+char *rindex();
+char *strcpy();
+char *strcat();
+char *strncpy();
+char *getenv();
+char *gets();

@@ -1,9 +1,6 @@
-/*	$NetBSD: uipc_usrreq.c,v 1.28 1997/10/17 17:35:08 christos Exp $	*/
-
 /*
- * Copyright (c) 1997 Christopher G. Demetriou.  All rights reserved.
- * Copyright (c) 1982, 1986, 1989, 1991, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1982, 1986, 1989, 1991 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,24 +30,23 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)uipc_usrreq.c	8.3 (Berkeley) 1/4/94
+ *	@(#)uipc_usrreq.c	7.26 (Berkeley) 6/3/91
  */
 
-#include <sys/param.h>
-#include <sys/systm.h>
-#include <sys/proc.h>
-#include <sys/filedesc.h>
-#include <sys/domain.h>
-#include <sys/protosw.h>
-#include <sys/socket.h>
-#include <sys/socketvar.h>
-#include <sys/unpcb.h>
-#include <sys/un.h>
-#include <sys/namei.h>
-#include <sys/vnode.h>
-#include <sys/file.h>
-#include <sys/stat.h>
-#include <sys/mbuf.h>
+#include "param.h"
+#include "proc.h"
+#include "filedesc.h"
+#include "domain.h"
+#include "protosw.h"
+#include "socket.h"
+#include "socketvar.h"
+#include "unpcb.h"
+#include "un.h"
+#include "namei.h"
+#include "vnode.h"
+#include "file.h"
+#include "stat.h"
+#include "mbuf.h"
 
 /*
  * Unix communications domain.
@@ -60,95 +56,34 @@
  *	rethink name space problems
  *	need a proper out-of-band
  */
-struct	sockaddr_un sun_noname = { sizeof(sun_noname), AF_UNIX };
+struct	sockaddr sun_noname = { sizeof(sun_noname), AF_UNIX };
 ino_t	unp_ino;			/* prototype for fake inode numbers */
 
-int
-unp_output(m, control, unp)
-	struct mbuf *m, *control;
-	struct unpcb *unp;
-{
-	struct socket *so2;
-	struct sockaddr_un *sun;
-
-	so2 = unp->unp_conn->unp_socket;
-	if (unp->unp_addr)
-		sun = unp->unp_addr;
-	else
-		sun = &sun_noname;
-	if (sbappendaddr(&so2->so_rcv, (struct sockaddr *)sun, m,
-	    control) == 0) {
-		m_freem(control);
-		m_freem(m);
-		return (EINVAL);
-	} else {
-		sorwakeup(so2);
-		return (0);
-	}
-}
-
-void
-unp_setsockaddr(unp, nam)
-	register struct unpcb *unp;
-	struct mbuf *nam;
-{
-	struct sockaddr_un *sun;
-
-	if (unp->unp_addr)
-		sun = unp->unp_addr;
-	else
-		sun = &sun_noname;
-	nam->m_len = sun->sun_len;
-	if (nam->m_len > MLEN)
-		MEXTMALLOC(nam, nam->m_len, M_WAITOK);
-	bcopy(sun, mtod(nam, caddr_t), (size_t)nam->m_len);
-}
-
-void
-unp_setpeeraddr(unp, nam)
-	register struct unpcb *unp;
-	struct mbuf *nam;
-{
-	struct sockaddr_un *sun;
-
-	if (unp->unp_conn && unp->unp_conn->unp_addr)
-		sun = unp->unp_conn->unp_addr;
-	else
-		sun = &sun_noname;
-	nam->m_len = sun->sun_len;
-	if (nam->m_len > MLEN)
-		MEXTMALLOC(nam, nam->m_len, M_WAITOK);
-	bcopy(sun, mtod(nam, caddr_t), (size_t)nam->m_len);
-}
-
 /*ARGSUSED*/
-int
-uipc_usrreq(so, req, m, nam, control, p)
+uipc_usrreq(so, req, m, nam, control)
 	struct socket *so;
 	int req;
 	struct mbuf *m, *nam, *control;
-	struct proc *p;
 {
 	struct unpcb *unp = sotounpcb(so);
 	register struct socket *so2;
 	register int error = 0;
+	struct proc *p = curproc;	/* XXX */
 
 	if (req == PRU_CONTROL)
 		return (EOPNOTSUPP);
-
-#ifdef DIAGNOSTIC
-	if (req != PRU_SEND && req != PRU_SENDOOB && control)
-		panic("uipc_usrreq: unexpected control mbuf");
-#endif
+	if (req != PRU_SEND && control && control->m_len) {
+		error = EOPNOTSUPP;
+		goto release;
+	}
 	if (unp == 0 && req != PRU_ATTACH) {
 		error = EINVAL;
 		goto release;
 	}
-
 	switch (req) {
 
 	case PRU_ATTACH:
-		if (unp != 0) {
+		if (unp) {
 			error = EISCONN;
 			break;
 		}
@@ -181,7 +116,19 @@ uipc_usrreq(so, req, m, nam, control, p)
 		break;
 
 	case PRU_ACCEPT:
-		unp_setpeeraddr(unp, nam);
+		/*
+		 * Pass back name of connected socket,
+		 * if it was bound and we are still connected
+		 * (our peer may have closed already!).
+		 */
+		if (unp->unp_conn && unp->unp_conn->unp_addr) {
+			nam->m_len = unp->unp_conn->unp_addr->m_len;
+			bcopy(mtod(unp->unp_conn->unp_addr, caddr_t),
+			    mtod(nam, caddr_t), (unsigned)nam->m_len);
+		} else {
+			nam->m_len = sizeof(sun_noname);
+			*(mtod(nam, struct sockaddr *)) = sun_noname;
+		}
 		break;
 
 	case PRU_SHUTDOWN:
@@ -226,25 +173,33 @@ uipc_usrreq(so, req, m, nam, control, p)
 		switch (so->so_type) {
 
 		case SOCK_DGRAM: {
+			struct sockaddr *from;
+
 			if (nam) {
-				if ((so->so_state & SS_ISCONNECTED) != 0) {
+				if (unp->unp_conn) {
 					error = EISCONN;
-					goto die;
-				}
-				error = unp_connect(so, nam, p);
-				if (error) {
-				die:
-					m_freem(control);
-					m_freem(m);
 					break;
 				}
+				error = unp_connect(so, nam, p);
+				if (error)
+					break;
 			} else {
-				if ((so->so_state & SS_ISCONNECTED) == 0) {
+				if (unp->unp_conn == 0) {
 					error = ENOTCONN;
-					goto die;
+					break;
 				}
 			}
-			error = unp_output(m, control, unp);
+			so2 = unp->unp_conn->unp_socket;
+			if (unp->unp_addr)
+				from = mtod(unp->unp_addr, struct sockaddr *);
+			else
+				from = &sun_noname;
+			if (sbappendaddr(&so2->so_rcv, from, m, control)) {
+				sorwakeup(so2);
+				m = 0;
+				control = 0;
+			} else
+				error = ENOBUFS;
 			if (nam)
 				unp_disconnect(unp);
 			break;
@@ -253,6 +208,10 @@ uipc_usrreq(so, req, m, nam, control, p)
 		case SOCK_STREAM:
 #define	rcv (&so2->so_rcv)
 #define	snd (&so->so_snd)
+			if (so->so_state & SS_CANTSENDMORE) {
+				error = EPIPE;
+				break;
+			}
 			if (unp->unp_conn == 0)
 				panic("uipc 3");
 			so2 = unp->unp_conn->unp_socket;
@@ -262,8 +221,8 @@ uipc_usrreq(so, req, m, nam, control, p)
 			 * Wake up readers.
 			 */
 			if (control) {
-				if (sbappendcontrol(rcv, m, control) == 0)
-					m_freem(control);
+				if (sbappendcontrol(rcv, m, control))
+					control = 0;
 			} else
 				sbappend(rcv, m);
 			snd->sb_mbmax -=
@@ -272,6 +231,7 @@ uipc_usrreq(so, req, m, nam, control, p)
 			snd->sb_hiwat -= rcv->sb_cc - unp->unp_conn->unp_cc;
 			unp->unp_conn->unp_cc = rcv->sb_cc;
 			sorwakeup(so2);
+			m = 0;
 #undef snd
 #undef rcv
 			break;
@@ -294,35 +254,45 @@ uipc_usrreq(so, req, m, nam, control, p)
 		((struct stat *) m)->st_dev = NODEV;
 		if (unp->unp_ino == 0)
 			unp->unp_ino = unp_ino++;
-		((struct stat *) m)->st_atimespec =
-		    ((struct stat *) m)->st_mtimespec =
-		    ((struct stat *) m)->st_ctimespec = unp->unp_ctime;
 		((struct stat *) m)->st_ino = unp->unp_ino;
 		return (0);
 
 	case PRU_RCVOOB:
-		error = EOPNOTSUPP;
-		break;
+		return (EOPNOTSUPP);
 
 	case PRU_SENDOOB:
-		m_freem(control);
-		m_freem(m);
 		error = EOPNOTSUPP;
 		break;
 
 	case PRU_SOCKADDR:
-		unp_setsockaddr(unp, nam);
+		if (unp->unp_addr) {
+			nam->m_len = unp->unp_addr->m_len;
+			bcopy(mtod(unp->unp_addr, caddr_t),
+			    mtod(nam, caddr_t), (unsigned)nam->m_len);
+		} else
+			nam->m_len = 0;
 		break;
 
 	case PRU_PEERADDR:
-		unp_setpeeraddr(unp, nam);
+		if (unp->unp_conn && unp->unp_conn->unp_addr) {
+			nam->m_len = unp->unp_conn->unp_addr->m_len;
+			bcopy(mtod(unp->unp_conn->unp_addr, caddr_t),
+			    mtod(nam, caddr_t), (unsigned)nam->m_len);
+		} else
+			nam->m_len = 0;
+		break;
+
+	case PRU_SLOWTIMO:
 		break;
 
 	default:
 		panic("piusrreq");
 	}
-
 release:
+	if (control)
+		m_freem(control);
+	if (m)
+		m_freem(m);
 	return (error);
 }
 
@@ -342,12 +312,11 @@ u_long	unpdg_recvspace = 4*1024;
 
 int	unp_rights;			/* file descriptors in flight */
 
-int
 unp_attach(so)
 	struct socket *so;
 {
+	register struct mbuf *m;
 	register struct unpcb *unp;
-	struct timeval tv;
 	int error;
 	
 	if (so->so_snd.sb_hiwat == 0 || so->so_rcv.sb_hiwat == 0) {
@@ -360,25 +329,19 @@ unp_attach(so)
 		case SOCK_DGRAM:
 			error = soreserve(so, unpdg_sendspace, unpdg_recvspace);
 			break;
-
-		default:
-			panic("unp_attach");
 		}
 		if (error)
 			return (error);
 	}
-	unp = malloc(sizeof(*unp), M_PCB, M_NOWAIT);
-	if (unp == NULL)
+	m = m_getclr(M_DONTWAIT, MT_PCB);
+	if (m == NULL)
 		return (ENOBUFS);
-	bzero((caddr_t)unp, sizeof(*unp));
+	unp = mtod(m, struct unpcb *);
+	so->so_pcb = (caddr_t)unp;
 	unp->unp_socket = so;
-	so->so_pcb = unp;
-	microtime(&tv);
-	TIMEVAL_TO_TIMESPEC(&tv, &unp->unp_ctime);
 	return (0);
 }
 
-void
 unp_detach(unp)
 	register struct unpcb *unp;
 {
@@ -394,121 +357,91 @@ unp_detach(unp)
 		unp_drop(unp->unp_refs, ECONNRESET);
 	soisdisconnected(unp->unp_socket);
 	unp->unp_socket->so_pcb = 0;
-	if (unp->unp_addr)
-		free(unp->unp_addr, M_SONAME);
-	if (unp_rights) {
-		/*
-		 * Normally the receive buffer is flushed later,
-		 * in sofree, but if our receive buffer holds references
-		 * to descriptors that are now garbage, we will dispose
-		 * of those descriptor references after the garbage collector
-		 * gets them (resulting in a "panic: closef: count < 0").
-		 */
-		sorflush(unp->unp_socket);
-		free(unp, M_PCB);
+	m_freem(unp->unp_addr);
+	(void) m_free(dtom(unp));
+	if (unp_rights)
 		unp_gc();
-	} else
-		free(unp, M_PCB);
 }
 
-int
 unp_bind(unp, nam, p)
 	struct unpcb *unp;
 	struct mbuf *nam;
 	struct proc *p;
 {
-	struct sockaddr_un *sun;
+	struct sockaddr_un *soun = mtod(nam, struct sockaddr_un *);
 	register struct vnode *vp;
+	register struct nameidata *ndp;
 	struct vattr vattr;
-	size_t addrlen;
 	int error;
 	struct nameidata nd;
 
-	if (unp->unp_vnode != 0)
+	ndp = &nd;
+	ndp->ni_dirp = soun->sun_path;
+	if (unp->unp_vnode != NULL)
 		return (EINVAL);
-
-	/*
-	 * Allocate the new sockaddr.  We have to allocate one
-	 * extra byte so that we can ensure that the pathname
-	 * is nul-terminated.
-	 */
-	addrlen = nam->m_len + 1;
-	sun = malloc(addrlen, M_SONAME, M_WAITOK);
-	m_copydata(nam, 0, nam->m_len, (caddr_t)sun);
-	*(((char *)sun) + nam->m_len) = '\0';
-
-	NDINIT(&nd, CREATE, FOLLOW | LOCKPARENT, UIO_SYSSPACE,
-	    sun->sun_path, p);
-
+	if (nam->m_len == MLEN) {
+		if (*(mtod(nam, caddr_t) + nam->m_len - 1) != 0)
+			return (EINVAL);
+	} else
+		*(mtod(nam, caddr_t) + nam->m_len) = 0;
 /* SHOULD BE ABLE TO ADOPT EXISTING AND wakeup() ALA FIFO's */
-	if ((error = namei(&nd)) != 0)
-		goto bad;
-	vp = nd.ni_vp;
+	ndp->ni_nameiop = CREATE | FOLLOW | LOCKPARENT;
+	ndp->ni_segflg = UIO_SYSSPACE;
+	if (error = namei(ndp, p))
+		return (error);
+	vp = ndp->ni_vp;
 	if (vp != NULL) {
-		VOP_ABORTOP(nd.ni_dvp, &nd.ni_cnd);
-		if (nd.ni_dvp == vp)
-			vrele(nd.ni_dvp);
+		VOP_ABORTOP(ndp);
+		if (ndp->ni_dvp == vp)
+			vrele(ndp->ni_dvp);
 		else
-			vput(nd.ni_dvp);
+			vput(ndp->ni_dvp);
 		vrele(vp);
-		error = EADDRINUSE;
-		goto bad;
+		return (EADDRINUSE);
 	}
 	VATTR_NULL(&vattr);
 	vattr.va_type = VSOCK;
-	vattr.va_mode = ACCESSPERMS;
-	VOP_LEASE(nd.ni_dvp, p, p->p_ucred, LEASE_WRITE);
-	error = VOP_CREATE(nd.ni_dvp, &nd.ni_vp, &nd.ni_cnd, &vattr);
-	if (error)
-		goto bad;
-	vp = nd.ni_vp;
+	vattr.va_mode = 0777;
+	if (error = VOP_CREATE(ndp, &vattr, p))
+		return (error);
+	vp = ndp->ni_vp;
 	vp->v_socket = unp->unp_socket;
 	unp->unp_vnode = vp;
-	unp->unp_addrlen = addrlen;
-	unp->unp_addr = sun;
+	unp->unp_addr = m_copy(nam, 0, (int)M_COPYALL);
 	VOP_UNLOCK(vp);
 	return (0);
-
- bad:
-	free(sun, M_SONAME);
-	return (error);
 }
 
-int
 unp_connect(so, nam, p)
 	struct socket *so;
 	struct mbuf *nam;
 	struct proc *p;
 {
-	register struct sockaddr_un *sun;
+	register struct sockaddr_un *soun = mtod(nam, struct sockaddr_un *);
 	register struct vnode *vp;
 	register struct socket *so2, *so3;
+	register struct nameidata *ndp;
 	struct unpcb *unp2, *unp3;
-	size_t addrlen;
 	int error;
 	struct nameidata nd;
 
-	/*
-	 * Allocate a temporary sockaddr.  We have to allocate one extra
-	 * byte so that we can ensure that the pathname is nul-terminated.
-	 * When we establish the connection, we copy the other PCB's
-	 * sockaddr to our own.
-	 */
-	addrlen = nam->m_len + 1;
-	sun = malloc(addrlen, M_SONAME, M_WAITOK);
-	m_copydata(nam, 0, nam->m_len, (caddr_t)sun);
-	*(((char *)sun) + nam->m_len) = '\0';
-
-	NDINIT(&nd, LOOKUP, FOLLOW | LOCKLEAF, UIO_SYSSPACE, sun->sun_path, p);
-
-	if ((error = namei(&nd)) != 0)
-		goto bad2;
-	vp = nd.ni_vp;
+	ndp = &nd;
+	ndp->ni_dirp = soun->sun_path;
+	if (nam->m_data + nam->m_len == &nam->m_dat[MLEN]) {	/* XXX */
+		if (*(mtod(nam, caddr_t) + nam->m_len - 1) != 0)
+			return (EMSGSIZE);
+	} else
+		*(mtod(nam, caddr_t) + nam->m_len) = 0;
+	ndp->ni_nameiop = LOOKUP | FOLLOW | LOCKLEAF;
+	ndp->ni_segflg = UIO_SYSSPACE;
+	if (error = namei(ndp, p))
+		return (error);
+	vp = ndp->ni_vp;
 	if (vp->v_type != VSOCK) {
 		error = ENOTSOCK;
 		goto bad;
 	}
-	if ((error = VOP_ACCESS(vp, VWRITE, p->p_ucred, p)) != 0)
+	if (error = VOP_ACCESS(vp, VWRITE, p->p_ucred, p))
 		goto bad;
 	so2 = vp->v_socket;
 	if (so2 == 0) {
@@ -527,24 +460,17 @@ unp_connect(so, nam, p)
 		}
 		unp2 = sotounpcb(so2);
 		unp3 = sotounpcb(so3);
-		if (unp2->unp_addr) {
-			unp3->unp_addr = malloc(unp2->unp_addrlen,
-			    M_SONAME, M_WAITOK);
-			bcopy(unp2->unp_addr, unp3->unp_addr,
-			    unp2->unp_addrlen);
-			unp3->unp_addrlen = unp2->unp_addrlen;
-		}
+		if (unp2->unp_addr)
+			unp3->unp_addr =
+				  m_copy(unp2->unp_addr, 0, (int)M_COPYALL);
 		so2 = so3;
 	}
 	error = unp_connect2(so, so2);
- bad:
+bad:
 	vput(vp);
- bad2:
-	free(sun, M_SONAME);
 	return (error);
 }
 
-int
 unp_connect2(so, so2)
 	register struct socket *so;
 	register struct socket *so2;
@@ -576,7 +502,6 @@ unp_connect2(so, so2)
 	return (0);
 }
 
-void
 unp_disconnect(unp)
 	struct unpcb *unp;
 {
@@ -622,7 +547,6 @@ unp_abort(unp)
 }
 #endif
 
-void
 unp_shutdown(unp)
 	struct unpcb *unp;
 {
@@ -633,7 +557,6 @@ unp_shutdown(unp)
 		socantrcvmore(so);
 }
 
-void
 unp_drop(unp, errno)
 	struct unpcb *unp;
 	int errno;
@@ -643,11 +566,10 @@ unp_drop(unp, errno)
 	so->so_error = errno;
 	unp_disconnect(unp);
 	if (so->so_head) {
-		so->so_pcb = 0;
+		so->so_pcb = (caddr_t) 0;
+		m_freem(unp->unp_addr);
+		(void) m_free(dtom(unp));
 		sofree(so);
-		if (unp->unp_addr)
-			free(unp->unp_addr, M_SONAME);
-		free(unp, M_PCB);
 	}
 }
 
@@ -658,116 +580,63 @@ unp_drain()
 }
 #endif
 
-int
 unp_externalize(rights)
 	struct mbuf *rights;
 {
 	struct proc *p = curproc;		/* XXX */
+	register int i;
 	register struct cmsghdr *cm = mtod(rights, struct cmsghdr *);
-	register int i, *fdp = (int *)(cm + 1);
-	register struct file **rp = (struct file **)ALIGN(cm + 1);
+	register struct file **rp = (struct file **)(cm + 1);
 	register struct file *fp;
-	int nfds = (cm->cmsg_len - ALIGN(sizeof(*cm))) / sizeof (struct file *);
+	int newfds = (cm->cmsg_len - sizeof(*cm)) / sizeof (int);
 	int f;
 
-	/* Make sure that the recipient has space */
-	if (!fdavail(p, nfds)) {
-		for (i = 0; i < nfds; i++) {
+	if (fdavail(p, newfds)) {
+		for (i = 0; i < newfds; i++) {
 			fp = *rp;
 			unp_discard(fp);
 			*rp++ = 0;
 		}
 		return (EMSGSIZE);
 	}
-
-	/*
-	 * Add file to the recipient's open file table, converting them
-	 * to integer file descriptors as we go.  Done in forward order
-	 * because an integer will always come in the same place or before
-	 * its corresponding struct file pointer.
-	 */
-	for (i = 0; i < nfds; i++) {
+	for (i = 0; i < newfds; i++) {
 		if (fdalloc(p, 0, &f))
 			panic("unp_externalize");
 		fp = *rp;
 		p->p_fd->fd_ofiles[f] = fp;
 		fp->f_msgcount--;
 		unp_rights--;
-		*fdp++ = f;
+		*(int *)rp++ = f;
 	}
-
-	/*
-	 * Adjust length, in case of transition from large struct file
-	 * pointers to ints.
-	 */
-	cm->cmsg_len = sizeof(*cm) + (nfds * sizeof(int));
-	rights->m_len = cm->cmsg_len;
 	return (0);
 }
 
-int
 unp_internalize(control, p)
 	struct mbuf *control;
 	struct proc *p;
 {
-	struct filedesc *fdescp = p->p_fd;
+	struct filedesc *fdp = p->p_fd;
 	register struct cmsghdr *cm = mtod(control, struct cmsghdr *);
 	register struct file **rp;
 	register struct file *fp;
-	register int i, fd, *fdp;
-	int nfds;
-	u_int neededspace;
+	register int i, fd;
+	int oldfds;
 
-	/* Sanity check the control message header */
 	if (cm->cmsg_type != SCM_RIGHTS || cm->cmsg_level != SOL_SOCKET ||
 	    cm->cmsg_len != control->m_len)
 		return (EINVAL);
-
-	/* Verify that the file descriptors are valid */
-	nfds = (cm->cmsg_len - sizeof (*cm)) / sizeof (int);
-	fdp = (int *)(cm + 1);
-	for (i = 0; i < nfds; i++) {
-		fd = *fdp++;
-		if ((unsigned)fd >= fdescp->fd_nfiles ||
-		    fdescp->fd_ofiles[fd] == NULL)
+	oldfds = (cm->cmsg_len - sizeof (*cm)) / sizeof (int);
+	rp = (struct file **)(cm + 1);
+	for (i = 0; i < oldfds; i++) {
+		fd = *(int *)rp++;
+		if ((unsigned)fd >= fdp->fd_nfiles ||
+		    fdp->fd_ofiles[fd] == NULL)
 			return (EBADF);
 	}
-
-	/* Make sure we have room for the struct file pointers */
-morespace:
-	neededspace = (ALIGN(sizeof (*cm)) + nfds * sizeof (struct file *)) -
-		control->m_len;
-	if (neededspace > M_TRAILINGSPACE(control)) {
-
-		/* if we already have a cluster, the message is just too big */
-		if (control->m_flags & M_EXT)
-			return (E2BIG);
-
-		/* allocate a cluster and try again */
-		MCLGET(control, M_WAIT);
-		if ((control->m_flags & M_EXT) == 0)
-			return (ENOBUFS);	/* allocation failed */
-
-		/* copy the data to the cluster */
-		bcopy(cm, mtod(control, char *), cm->cmsg_len);
-		cm = mtod(control, struct cmsghdr *);
-		goto morespace;
-	}
-
-	/* adjust message & mbuf to note amount of space actually used. */
-	cm->cmsg_len += neededspace;
-	control->m_len = cm->cmsg_len;
-
-	/*
-	 * Transform the file descriptors into struct file pointers, in
-	 * reverse order so that if pointers are bigger than ints, the
-	 * int won't get until we're done.
-	 */
-	fdp = ((int *)(cm + 1)) + nfds - 1;
-	rp = ((struct file **)ALIGN(cm + 1)) + nfds - 1;
-	for (i = 0; i < nfds; i++) {
-		fp = fdescp->fd_ofiles[*fdp--];
-		*rp-- = fp;
+	rp = (struct file **)(cm + 1);
+	for (i = 0; i < oldfds; i++) {
+		fp = fdp->fd_ofiles[*(int *)rp];
+		*rp++ = fp;
 		fp->f_count++;
 		fp->f_msgcount++;
 		unp_rights++;
@@ -776,24 +645,23 @@ morespace:
 }
 
 int	unp_defer, unp_gcing;
+int	unp_mark();
 extern	struct domain unixdomain;
 
-void
 unp_gc()
 {
-	register struct file *fp, *nextfp;
+	register struct file *fp;
 	register struct socket *so;
-	struct file **extra_ref, **fpp;
-	int nunref, i;
 
 	if (unp_gcing)
 		return;
 	unp_gcing = 1;
+restart:
 	unp_defer = 0;
-	for (fp = filehead.lh_first; fp != 0; fp = fp->f_list.le_next)
+	for (fp = filehead; fp; fp = fp->f_filef)
 		fp->f_flag &= ~(FMARK|FDEFER);
 	do {
-		for (fp = filehead.lh_first; fp != 0; fp = fp->f_list.le_next) {
+		for (fp = filehead; fp; fp = fp->f_filef) {
 			if (fp->f_count == 0)
 				continue;
 			if (fp->f_flag & FDEFER) {
@@ -831,78 +699,28 @@ unp_gc()
 			unp_scan(so->so_rcv.sb_mb, unp_mark);
 		}
 	} while (unp_defer);
-	/*
-	 * We grab an extra reference to each of the file table entries
-	 * that are not otherwise accessible and then free the rights
-	 * that are stored in messages on them.
-	 *
-	 * The bug in the orginal code is a little tricky, so I'll describe
-	 * what's wrong with it here.
-	 *
-	 * It is incorrect to simply unp_discard each entry for f_msgcount
-	 * times -- consider the case of sockets A and B that contain
-	 * references to each other.  On a last close of some other socket,
-	 * we trigger a gc since the number of outstanding rights (unp_rights)
-	 * is non-zero.  If during the sweep phase the gc code un_discards,
-	 * we end up doing a (full) closef on the descriptor.  A closef on A
-	 * results in the following chain.  Closef calls soo_close, which
-	 * calls soclose.   Soclose calls first (through the switch
-	 * uipc_usrreq) unp_detach, which re-invokes unp_gc.  Unp_gc simply
-	 * returns because the previous instance had set unp_gcing, and
-	 * we return all the way back to soclose, which marks the socket
-	 * with SS_NOFDREF, and then calls sofree.  Sofree calls sorflush
-	 * to free up the rights that are queued in messages on the socket A,
-	 * i.e., the reference on B.  The sorflush calls via the dom_dispose
-	 * switch unp_dispose, which unp_scans with unp_discard.  This second
-	 * instance of unp_discard just calls closef on B.
-	 *
-	 * Well, a similar chain occurs on B, resulting in a sorflush on B,
-	 * which results in another closef on A.  Unfortunately, A is already
-	 * being closed, and the descriptor has already been marked with
-	 * SS_NOFDREF, and soclose panics at this point.
-	 *
-	 * Here, we first take an extra reference to each inaccessible
-	 * descriptor.  Then, we call sorflush ourself, since we know
-	 * it is a Unix domain socket anyhow.  After we destroy all the
-	 * rights carried in messages, we do a last closef to get rid
-	 * of our extra reference.  This is the last close, and the
-	 * unp_detach etc will shut down the socket.
-	 *
-	 * 91/09/19, bsy@cs.cmu.edu
-	 */
-	extra_ref = malloc(nfiles * sizeof(struct file *), M_FILE, M_WAITOK);
-	for (nunref = 0, fp = filehead.lh_first, fpp = extra_ref; fp != 0;
-	    fp = nextfp) {
-		nextfp = fp->f_list.le_next;
+	for (fp = filehead; fp; fp = fp->f_filef) {
 		if (fp->f_count == 0)
 			continue;
-		if (fp->f_count == fp->f_msgcount && !(fp->f_flag & FMARK)) {
-			*fpp++ = fp;
-			nunref++;
-			fp->f_count++;
-		}
+		if (fp->f_count == fp->f_msgcount && (fp->f_flag & FMARK) == 0)
+			while (fp->f_msgcount)
+				unp_discard(fp);
 	}
-	for (i = nunref, fpp = extra_ref; --i >= 0; ++fpp)
-		sorflush((struct socket *)(*fpp)->f_data);
-	for (i = nunref, fpp = extra_ref; --i >= 0; ++fpp)
-		(void) closef(*fpp, (struct proc *)0);
-	free((caddr_t)extra_ref, M_FILE);
 	unp_gcing = 0;
 }
 
-void
 unp_dispose(m)
 	struct mbuf *m;
 {
+	int unp_discard();
 
 	if (m)
 		unp_scan(m, unp_discard);
 }
 
-void
 unp_scan(m0, op)
 	register struct mbuf *m0;
-	void (*op) __P((struct file *));
+	int (*op)();
 {
 	register struct mbuf *m;
 	register struct file **rp;
@@ -929,7 +747,6 @@ unp_scan(m0, op)
 	}
 }
 
-void
 unp_mark(fp)
 	struct file *fp;
 {
@@ -940,12 +757,11 @@ unp_mark(fp)
 	fp->f_flag |= (FMARK|FDEFER);
 }
 
-void
 unp_discard(fp)
 	struct file *fp;
 {
 
 	fp->f_msgcount--;
 	unp_rights--;
-	(void) closef(fp, (struct proc *)0);
+	(void) closef(fp, curproc);
 }

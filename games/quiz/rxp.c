@@ -1,12 +1,9 @@
-/*	$NetBSD: rxp.c,v 1.6 1997/09/20 14:28:19 lukem Exp $	*/
-
 /*-
- * Copyright (c) 1991, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1991 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
- * Jim R. Oldroyd at The Instruction Set and Keith Gabryelski at
- * Commodore Business Machines.
+ * Jim R. Oldroyd at The Instruction Set.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -37,13 +34,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)rxp.c	8.1 (Berkeley) 5/31/93";
-#else
-__RCSID("$NetBSD: rxp.c,v 1.6 1997/09/20 14:28:19 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)rxp.c	5.1 (Berkeley) 11/10/91";
 #endif /* not lint */
 
 /*
@@ -85,20 +77,20 @@ typedef short Rxp_t;			/* type for regexp tokens */
 static Rxp_t rxpbuf[RXP_LINE_SZ];	/* compiled regular expression buffer */
 char rxperr[128];			/* parser error message */
 
-static int	 rxp__compile __P((char *, int));
-static char	*rxp__expand __P((int));
-static int	 rxp__match __P((char *, int, Rxp_t *, Rxp_t *, char *));
+int	 rxp__compile __P((char *, int));
+char	*rxp__expand __P((int));
+int	 rxp__match __P((char *, int, Rxp_t *, Rxp_t *, char *));
 
 int
 rxp_compile(s)
-	char *	s;
+	register char *	s;
 {
 	return (rxp__compile(s, TRUE));
 }
 
 static int
 rxp__compile(s, first)
-	char *s;
+	register char *s;
 	int first;
 {
 	static Rxp_t *rp;
@@ -196,7 +188,7 @@ rxp__compile(s, first)
  */
 int
 rxp_match(s)
-	char *	s;
+	register char *	s;
 {
 	return (rxp__match(s, TRUE, NULL, NULL, NULL));
 }
@@ -211,8 +203,8 @@ rxp__match(s, first, j_succ, j_fail, sp_fail)
 {
 	static Rxp_t *rp;
 	static char *sp;
-	int ch;
-	Rxp_t *grp_end = NULL;
+	register int ch;
+	Rxp_t *grp_end;
 	int err;
 
 	if (first) {

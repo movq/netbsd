@@ -1,8 +1,6 @@
-/*	$NetBSD: spp_debug.c,v 1.8 1996/10/13 01:59:57 christos Exp $	*/
-
 /*
- * Copyright (c) 1984, 1985, 1986, 1987, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1984, 1985, 1986, 1987 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,41 +30,40 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)spp_debug.c	8.1 (Berkeley) 6/10/93
+ *	@(#)spp_debug.c	7.7 (Berkeley) 6/28/90
  */
 
-#include <sys/param.h>
-#include <sys/systm.h>
-#include <sys/mbuf.h>
-#include <sys/socket.h>
-#include <sys/socketvar.h>
-#include <sys/protosw.h>
-#include <sys/errno.h>
+#include "param.h"
+#include "systm.h"
+#include "mbuf.h"
+#include "socket.h"
+#include "socketvar.h"
+#include "protosw.h"
+#include "errno.h"
 
-#include <net/route.h>
-#include <net/if.h>
-#include <netinet/tcp_fsm.h>
+#include "../net/route.h"
+#include "../net/if.h"
+#include "../netinet/tcp_fsm.h"
 
-#include <netns/ns.h>
-#include <netns/ns_pcb.h>
-#include <netns/idp.h>
-#include <netns/idp_var.h>
-#include <netns/sp.h>
-#include <netns/spidp.h>
+#include "ns.h"
+#include "ns_pcb.h"
+#include "idp.h"
+#include "idp_var.h"
+#include "sp.h"
+#include "spidp.h"
 #define SPPTIMERS
-#include <netns/spp_timer.h>
-#include <netns/spp_var.h>
+#include "spp_timer.h"
+#include "spp_var.h"
 #define	SANAMES
-#include <netns/spp_debug.h>
+#include "spp_debug.h"
 
 int	sppconsdebug = 0;
 /*
  * spp debug routines
  */
-void
 spp_trace(act, ostate, sp, si, req)
 	short act;
-	u_int ostate;
+	u_char ostate;
 	struct sppcb *sp;
 	struct spidp *si;
 	int req;

@@ -1,5 +1,3 @@
-/*	$NetBSD: vfslist.c,v 1.2 1997/09/16 12:22:47 lukem Exp $	*/
-
 /*
  * Copyright (c) 1995
  *	The Regents of the University of California.  All rights reserved.
@@ -33,16 +31,10 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
 static char sccsid[] = "@(#)vfslist.c	8.1 (Berkeley) 5/8/95";
-#else
-__RCSID("$NetBSD: vfslist.c,v 1.2 1997/09/16 12:22:47 lukem Exp $");
-#endif
 #endif /* not lint */
 
-#include <err.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
@@ -85,7 +77,7 @@ makevfslist(fslist)
 		if (*nextcp == ',')
 			i++;
 	if ((av = malloc((size_t)(i + 2) * sizeof(char *))) == NULL) {
-		warn("malloc");
+		warn(NULL);
 		return (NULL);
 	}
 	nextcp = fslist;

@@ -1,5 +1,3 @@
-/*	$NetBSD: timed.h,v 1.5 1996/04/09 20:40:32 cgd Exp $	*/
-
 /*
  * Copyright (c) 1983 Regents of the University of California.
  * All rights reserved.
@@ -46,14 +44,11 @@
 #define ANYADDR 	NULL
 
 struct tsp {
-	u_int8_t tsp_type;
-	u_int8_t tsp_vers;
-	u_int16_t tsp_seq;
+	u_char	tsp_type;
+	u_char	tsp_vers;
+	u_short	tsp_seq;
 	union {
-		struct {
-			int32_t tv_sec;
-			int32_t tv_usec;
-		} tspu_time;
+		struct timeval tspu_time;
 		char tspu_hopcnt;
 	} tsp_u;
 	char tsp_name[MAXHOSTNAMELEN];

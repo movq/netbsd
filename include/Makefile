@@ -1,25 +1,90 @@
-#	$NetBSD: Makefile,v 1.69 1997/04/30 00:45:41 thorpej Exp $
 #	@(#)Makefile	5.45.1.1 (Berkeley) 5/6/91
+#
+# Doing a make install builds /usr/include
+#
+# The ``rm -rf''s used below are safe because rm doesn't follow symbolic
+# links.
+#
+all clean cleandir depend lint tags:
 
 # Missing: mp.h
 
-INCS=	a.out.h ar.h assert.h bitstring.h bm.h cpio.h ctype.h db.h dirent.h \
-	disktab.h dlfcn.h err.h fnmatch.h fstab.h fts.h glob.h grp.h ieeefp.h \
-	iso646.h kvm.h langinfo.h limits.h locale.h malloc.h math.h md4.h \
-	memory.h mpool.h ndbm.h netdb.h netgroup.h nlist.h nl_types.h \
-	paths.h pwd.h ranlib.h re_comp.h regex.h regexp.h resolv.h rmt.h \
-	search.h setjmp.h sgtty.h signal.h stab.h stddef.h stdio.h stdlib.h \
-	string.h strings.h stringlist.h struct.h sysexits.h tar.h time.h \
-	ttyent.h tzfile.h unistd.h util.h utime.h utmp.h vis.h
-INCS+=	arpa/ftp.h arpa/inet.h arpa/nameser.h arpa/telnet.h arpa/tftp.h
-INCS+=	protocols/dumprestore.h protocols/routed.h protocols/rwhod.h \
-	protocols/talkd.h protocols/timed.h
-INCS+=	rpc/auth.h rpc/auth_unix.h rpc/clnt.h rpc/pmap_clnt.h rpc/pmap_prot.h \
-	rpc/pmap_rmt.h rpc/rpc.h rpc/rpc_msg.h rpc/svc.h rpc/svc_auth.h \
-	rpc/types.h rpc/xdr.h
-INCS+=	rpcsvc/yp_prot.h rpcsvc/ypclnt.h
-INCSDIR=/usr/include
+FILES=	a.out.h ar.h assert.h bitstring.h ctype.h db.h dirent.h disktab.h \
+	fstab.h fts.h glob.h grp.h kvm.h limits.h locale.h math.h memory.h \
+	ndbm.h netdb.h nlist.h paths.h pwd.h ranlib.h regexp.h \
+	resolv.h setjmp.h sgtty.h stab.h stdarg.h stddef.h stdio.h \
+	stdlib.h string.h strings.h struct.h sysexits.h time.h ttyent.h \
+	tzfile.h unistd.h utime.h utmp.h varargs.h vis.h
+
+MFILES=	float.h frame.h
+LFILES=	errno.h fcntl.h signal.h syslog.h termios.h
+
+DIRS=arpa protocols
+LDIRS=	net netimp netinet netiso netns nfs sys ufs
 
 NOOBJ=	noobj
+
+# Define SHARED to indicate whether you want symbolic links to the system
+# source (``symlinks''), or a separate copy (``copies''); (latter useful
+# in environments where it's not possible to keep /sys publicly readable)
+# SHARED=	copies
+SHARED=	symlinks
+
+install: ${SHARED}
+	@echo installing ${FILES}
+	@-for i in ${FILES}; do \
+		cmp -s $$i ${DESTDIR}/usr/include/$$i || \
+		    install -c -o ${BINOWN} -g ${BINGRP} -m 444 $$i \
+		    ${DESTDIR}/usr/include/$$i; \
+	done
+	@echo installing ${DIRS}
+	@-for i in ${DIRS}; do \
+		if [ ! -d ${DESTDIR}/usr/include/$$i ]; \
+		then \
+			mkdir ${DESTDIR}/usr/include/$$i; \
+		fi; \
+		chown ${BINOWN}.${BINGRP} ${DESTDIR}/usr/include/$$i; \
+		chmod 755 ${DESTDIR}/usr/include/$$i; \
+		(cd $$i; for j in *.[ih]; do \
+			cmp -s $$j ${DESTDIR}/usr/include/$$i/$$j || \
+			install -c -o ${BINOWN} -g ${BINGRP} -m 444 $$j \
+			    ${DESTDIR}/usr/include/$$i/$$j; \
+		done); \
+	done
+	@echo installing ${LFILES}
+	@-for i in ${LFILES}; do \
+		rm -f ${DESTDIR}/usr/include/$$i; \
+		ln -s sys/$$i ${DESTDIR}/usr/include/$$i; \
+		chown ${BINOWN}.${BINGRP} ${DESTDIR}/usr/include/$$i; \
+	done
+	@echo installing ${MFILES}
+	@-for i in ${MFILES}; do \
+		rm -f ${DESTDIR}/usr/include/$$i; \
+		ln -s machine/$$i ${DESTDIR}/usr/include/$$i; \
+		chown ${BINOWN}.${BINGRP} ${DESTDIR}/usr/include/$$i; \
+	done
+
+copies:
+	@echo copies: ${LDIRS}
+	@-for i in ${LDIRS}; do \
+		rm -rf ${DESTDIR}/usr/include/$$i; \
+		cd /sys; \
+		tar cf - $$i/*.h | (cd ${DESTDIR}/usr/include; tar xpfB -); \
+	done
+	rm -f ${DESTDIR}/usr/include/machine
+	mkdir ${DESTDIR}/usr/include/machine
+	cd /sys/${MACHINE}/include; \
+	tar cf - *.h | (cd ${DESTDIR}/usr/include/machine; tar xpfB -); \
+
+symlinks:
+	@echo symlinks: ${LDIRS}
+	@for i in ${LDIRS}; do \
+		rm -rf ${DESTDIR}/usr/include/$$i; \
+		ln -s /sys/$$i ${DESTDIR}/usr/include/$$i; \
+		chown ${BINOWN}.${BINGRP} ${DESTDIR}/usr/include/$$i; \
+	done
+	rm -f ${DESTDIR}/usr/include/machine
+	ln -s /sys/${MACHINE}/include ${DESTDIR}/usr/include/machine
+	chown ${BINOWN}.${BINGRP} ${DESTDIR}/usr/include/machine
 
 .include <bsd.prog.mk>

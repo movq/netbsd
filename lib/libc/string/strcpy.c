@@ -1,5 +1,3 @@
-/*	$NetBSD: strcpy.c,v 1.7 1997/07/13 20:24:23 christos Exp $	*/
-
 /*
  * Copyright (c) 1988 Regents of the University of California.
  * All rights reserved.
@@ -33,20 +31,12 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char *sccsid = "@(#)strcpy.c	5.7 (Berkeley) 2/24/91";
-#else
-__RCSID("$NetBSD: strcpy.c,v 1.7 1997/07/13 20:24:23 christos Exp $");
-#endif
+static char sccsid[] = "@(#)strcpy.c	5.7 (Berkeley) 2/24/91";
 #endif /* LIBC_SCCS and not lint */
 
-#ifndef _KERNEL
+#include <sys/cdefs.h>
 #include <string.h>
-#else
-#include <lib/libkern/libkern.h>
-#endif
 
 char *
 strcpy(to, from)
@@ -55,6 +45,6 @@ strcpy(to, from)
 {
 	char *save = to;
 
-	for (; (*to = *from) != '\0'; ++from, ++to);
+	for (; *to = *from; ++from, ++to);
 	return(save);
 }

@@ -1,8 +1,6 @@
-/*	$NetBSD: nm.c,v 1.10 1997/10/19 07:18:53 lukem Exp $	*/
-
 /*
- * Copyright (c) 1989, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1989 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Hans Huebner.
@@ -36,68 +34,51 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1989, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+char copyright[] =
+"@(#) Copyright (c) 1989 The Regents of the University of California.\n\
+ All rights reserved.\n";
 #endif /* not lint */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)nm.c	8.1 (Berkeley) 6/6/93";
-#endif
-__RCSID("$NetBSD: nm.c,v 1.10 1997/10/19 07:18:53 lukem Exp $");
+static char sccsid[] = "@(#)nm.c	5.8 (Berkeley) 5/2/91";
 #endif /* not lint */
 
 #include <sys/types.h>
 #include <a.out.h>
-#include <link.h>
 #include <stab.h>
 #include <ar.h>
 #include <ranlib.h>
 #include <unistd.h>
-#include <err.h>
+#include <errno.h>
 #include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
-void   *emalloc __P((size_t));
-void   *erealloc __P((void *, size_t));
-int	fname __P((const void *, const void *));
-int	main __P((int, char **));
-void	print_symbol __P((char *, struct nlist *));
-int	process_file __P((char *));
-int	rname __P((const void *, const void *));
-int	show_archive __P((char *, FILE *));
-int	show_objfile __P((char *, FILE *));
-char	typeletter __P((u_char));
-char   *typestring __P((u_char));
-void	usage __P((void));
-int	value __P((const void *, const void *));
 
 int ignore_bad_archive_entries = 1;
 int print_only_external_symbols;
 int print_only_undefined_symbols;
 int print_all_symbols;
 int print_file_each_line;
-int print_weak_symbols;
 int fcount;
 
 int rev;
-int (*sfunc) __P((const void *, const void *)) = fname;
+int fname(), rname(), value();
+int (*sfunc)() = fname;
 
 /* some macros for symbol type (nlist.n_type) handling */
 #define	IS_DEBUGGER_SYMBOL(x)	((x) & N_STAB)
 #define	IS_EXTERNAL(x)		((x) & N_EXT)
 #define	SYMBOL_TYPE(x)		((x) & (N_TYPE | N_STAB))
 
+void *emalloc();
+
 /*
  * main()
  *	parse command line, execute process_file() for each file
  *	specified on the command line.
  */
-int
 main(argc, argv)
 	int argc;
 	char **argv;
@@ -105,16 +86,13 @@ main(argc, argv)
 	extern int optind;
 	int ch, errors;
 
-	while ((ch = getopt(argc, argv, "aglnopruw")) != -1) {
+	while ((ch = getopt(argc, argv, "agnopruw")) != EOF) {
 		switch (ch) {
 		case 'a':
 			print_all_symbols = 1;
 			break;
 		case 'g':
 			print_only_external_symbols = 1;
-			break;
-		case 'l':
-			print_weak_symbols = 1;
 			break;
 		case 'n':
 			sfunc = value;
@@ -161,7 +139,6 @@ main(argc, argv)
  *	show symbols in the file given as an argument.  Accepts archive and
  *	object files as input.
  */
-int
 process_file(fname)
 	char *fname;
 {
@@ -171,7 +148,7 @@ process_file(fname)
 	char magic[SARMAG];
     
 	if (!(fp = fopen(fname, "r"))) {
-		warn("cannot read %s", fname);
+		(void)fprintf(stderr, "nm: cannot read %s.\n", fname);
 		return(1);
 	}
 
@@ -183,7 +160,7 @@ process_file(fname)
 	 * header, and skip back to the beginning
 	 */
 	if (fread((char *)&exec_head, sizeof(exec_head), (size_t)1, fp) != 1) {
-		warnx("%s: bad format", fname);
+		(void)fprintf(stderr, "nm: %s: bad format.\n", fname);
 		(void)fclose(fp);
 		return(1);
 	}
@@ -193,7 +170,8 @@ process_file(fname)
 	if (N_BADMAG(exec_head)) {
 		if (fread(magic, sizeof(magic), (size_t)1, fp) != 1 ||
 		    strncmp(magic, ARMAG, SARMAG)) {
-			warnx("%s: not object file or archive", fname);
+			(void)fprintf(stderr,
+			    "nm: %s: not object file or archive.\n", fname);
 			(void)fclose(fp);
 			return(1);
 		}
@@ -208,7 +186,6 @@ process_file(fname)
  * show_archive()
  *	show symbols in the given archive file
  */
-int
 show_archive(fname, fp)
 	char *fname;
 	FILE *fp;
@@ -218,11 +195,8 @@ show_archive(fname, fp)
 	int i, rval;
 	long last_ar_off;
 	char *p, *name;
-	int baselen, namelen;
 
-	baselen = strlen(fname) + 3;
-	namelen = sizeof(ar_head.ar_name);
-	name = emalloc(baselen + namelen);
+	name = emalloc(sizeof(ar_head.ar_name) + strlen(fname) + 3);
 
 	rval = 0;
 
@@ -230,7 +204,8 @@ show_archive(fname, fp)
 	while (fread((char *)&ar_head, sizeof(ar_head), (size_t)1, fp) == 1) {
 		/* bad archive entry - stop processing this archive */
 		if (strncmp(ar_head.ar_fmag, ARFMAG, sizeof(ar_head.ar_fmag))) {
-			warnx("%s: bad format archive header", fname);
+			(void)fprintf(stderr,
+			    "nm: %s: bad format archive header", fname);
 			(void)free(name);
 			return(1);
 		}
@@ -250,31 +225,6 @@ show_archive(fname, fp)
 		p = name;
 		if (print_file_each_line)
 			p += sprintf(p, "%s:", fname);
-#ifdef AR_EFMT1
-		/*
-		 * BSD 4.4 extended AR format: #1/<namelen>, with name as the
-		 * first <namelen> bytes of the file
-		 */
-		if (		(ar_head.ar_name[0] == '#') &&
-				(ar_head.ar_name[1] == '1') &&
-				(ar_head.ar_name[2] == '/') && 
-				(isdigit(ar_head.ar_name[3]))) {
-
-			int len = atoi(&ar_head.ar_name[3]);
-			if (len > namelen) {
-				p -= (long)name;
-				name = (char *)erealloc(name, baselen+len);
-				namelen = len;
-				p += (long)name;
-			}
-			if (fread(p, len, 1, fp) != 1) {
-				warnx("%s: premature EOF", name);
-				(void)free(name);
-				return 1;
-			}
-			p += len;
-		} else
-#endif
 		for (i = 0; i < sizeof(ar_head.ar_name); ++i)
 			if (ar_head.ar_name[i] && ar_head.ar_name[i] != ' ')
 				*p++ = ar_head.ar_name[i];
@@ -283,18 +233,20 @@ show_archive(fname, fp)
 		/* get and check current object's header */
 		if (fread((char *)&exec_head, sizeof(exec_head),
 		    (size_t)1, fp) != 1) {
-			warnx("%s: premature EOF", name);
+			(void)fprintf(stderr, "nm: %s: premature EOF.\n", name);
 			(void)free(name);
 			return(1);
 		}
 
 		if (N_BADMAG(exec_head)) {
 			if (!ignore_bad_archive_entries) {
-				 warnx("%s: bad format", name);
+				(void)fprintf(stderr,
+				    "nm: %s: bad format.\n", name);
 				rval = 1;
 			}
 		} else {
-			(void)fseek(fp, (long)-sizeof(exec_head), SEEK_CUR);
+			(void)fseek(fp, (long)-sizeof(exec_head),
+			    SEEK_CUR);
 			if (!print_file_each_line)
 				(void)printf("\n%s:\n", name);
 			rval |= show_objfile(name, fp);
@@ -307,7 +259,8 @@ show_archive(fname, fp)
 #define even(x) (((x) + 1) & ~1)
 skip:		if (fseek(fp, last_ar_off + even(atol(ar_head.ar_size)),
 		    SEEK_SET)) {
-			warn("%s", fname);
+			(void)fprintf(stderr,
+			    "nm: %s: %s\n", fname, strerror(errno));
 			(void)free(name);
 			return(1);
 		}
@@ -322,20 +275,20 @@ skip:		if (fseek(fp, last_ar_off + even(atol(ar_head.ar_size)),
  *	file pointer for fp is expected to be at the beginning of an a.out
  *	header.
  */
-int
 show_objfile(objname, fp)
 	char *objname;
 	FILE *fp;
 {
-	struct nlist *names, *np;
-	int i, nnames, nrawnames;
+	register struct nlist *names, *np;
+	register int i, nnames, nrawnames;
 	struct exec head;
 	long stabsize;
 	char *stab;
 
 	/* read a.out header */
 	if (fread((char *)&head, sizeof(head), (size_t)1, fp) != 1) {
-		warnx("%s: cannot read header", objname);
+		(void)fprintf(stderr,
+		    "nm: %s: cannot read header.\n", objname);
 		return(1);
 	}
 
@@ -344,24 +297,28 @@ show_objfile(objname, fp)
 	 * to the beginning of the a.out header
 	 */
 	if (fseek(fp, (long)-sizeof(head), SEEK_CUR)) {
-		warn("%s", objname);
+		(void)fprintf(stderr,
+		    "nm: %s: %s\n", objname, strerror(errno));
 		return(1);
 	}
 
 	/* stop if this is no valid object file */
 	if (N_BADMAG(head)) {
-		warnx("%s: bad format", objname);
+		(void)fprintf(stderr,
+		    "nm: %s: bad format.\n", objname);
 		return(1);
 	}
 
 	/* stop if the object file contains no symbol table */
 	if (!head.a_syms) {
-		warnx("%s: no name list", objname);
+		(void)fprintf(stderr,
+		    "nm: %s: no name list.\n", objname);
 		return(1);
 	}
 
 	if (fseek(fp, (long)N_SYMOFF(head), SEEK_CUR)) {
-		warn("%s", objname);
+		(void)fprintf(stderr,
+		    "nm: %s: %s\n", objname, strerror(errno));
 		return(1);
 	}
 
@@ -369,7 +326,8 @@ show_objfile(objname, fp)
 	names = emalloc((size_t)head.a_syms);
 	nrawnames = head.a_syms / sizeof(*names);
 	if (fread((char *)names, (size_t)head.a_syms, (size_t)1, fp) != 1) {
-		warnx("%s: cannot read symbol table", objname);
+		(void)fprintf(stderr,
+		    "nm: %s: cannot read symbol table.\n", objname);
 		(void)free((char *)names);
 		return(1);
 	}
@@ -380,7 +338,8 @@ show_objfile(objname, fp)
 	 * _including_ the size specification itself.
 	 */
 	if (fread((char *)&stabsize, sizeof(stabsize), (size_t)1, fp) != 1) {
-		warnx("%s: cannot read stab size", objname);
+		(void)fprintf(stderr,
+		    "nm: %s: cannot read stab size.\n", objname);
 		(void)free((char *)names);
 		return(1);
 	}
@@ -392,7 +351,8 @@ show_objfile(objname, fp)
 	 */
 	stabsize -= 4;		/* we already have the size */
 	if (fread(stab + 4, (size_t)stabsize, (size_t)1, fp) != 1) {
-		warnx("%s: stab truncated..", objname);
+		(void)fprintf(stderr,
+		    "nm: %s: stab truncated..\n", objname);
 		(void)free((char *)names);
 		(void)free(stab);
 		return(1);
@@ -448,11 +408,12 @@ show_objfile(objname, fp)
  * print_symbol()
  *	show one symbol
  */
-void
 print_symbol(objname, sym)
 	char *objname;
-	struct nlist *sym;
+	register struct nlist *sym;
 {
+	char *typestring(), typeletter();
+
 	if (print_file_each_line)
 		(void)printf("%s:", objname);
 
@@ -475,14 +436,8 @@ print_symbol(objname, sym)
 	if (IS_DEBUGGER_SYMBOL(sym->n_type))
 		(void)printf(" - %02x %04x %5s ", sym->n_other,
 		    sym->n_desc&0xffff, typestring(sym->n_type));
-	else {
-		(void)printf(" %c", typeletter(sym->n_type));
-
-		if (print_weak_symbols)
-			putchar((N_BIND(sym) == BIND_WEAK) ? '*' : ' ');
-
-		putchar(' ');
-	}
+	else
+		(void)printf(" %c ", typeletter(sym->n_type));
 
 	/* print the symbol's name */
 	(void)puts(sym->n_un.n_name);
@@ -494,7 +449,7 @@ print_symbol(objname, sym)
  */
 char *
 typestring(type)
-	u_char type;
+	register u_char type;
 {
 	switch(type) {
 	case N_BCOMM:
@@ -561,46 +516,35 @@ typeletter(type)
 	case N_DATA:
 		return(IS_EXTERNAL(type) ? 'D' : 'd');
 	case N_FN:
-		/* NOTE: N_FN == N_WARNING,
-		 * in this case, the N_EXT bit is to considered as
-		 * part of the symbol's type itself.
-		 */
-		return(IS_EXTERNAL(type) ? 'F' : 'W');
+		return(IS_EXTERNAL(type) ? 'F' : 'f');
 	case N_TEXT:
 		return(IS_EXTERNAL(type) ? 'T' : 't');
-	case N_INDR:
-		return(IS_EXTERNAL(type) ? 'I' : 'i');
-	case N_SIZE:
-		return(IS_EXTERNAL(type) ? 'S' : 's');
 	case N_UNDF:
 		return(IS_EXTERNAL(type) ? 'U' : 'u');
 	}
 	return('?');
 }
 
-int
 fname(a0, b0)
-	const void *a0, *b0;
+	void *a0, *b0;
 {
-	const struct nlist *a = a0, *b = b0;
+	struct nlist *a = a0, *b = b0;
 
 	return(strcmp(a->n_un.n_name, b->n_un.n_name));
 }
 
-int
 rname(a0, b0)
-	const void *a0, *b0;
+	void *a0, *b0;
 {
-	const struct nlist *a = a0, *b = b0;
+	struct nlist *a = a0, *b = b0;
 
 	return(strcmp(b->n_un.n_name, a->n_un.n_name));
 }
 
-int
 value(a0, b0)
-	const void *a0, *b0;
+	void *a0, *b0;
 {
-	const struct nlist *a = a0, *b = b0;
+	register struct nlist *a = a0, *b = b0;
 
 	if (SYMBOL_TYPE(a->n_type) == N_UNDF)
 		if (SYMBOL_TYPE(b->n_type) == N_UNDF)
@@ -627,25 +571,12 @@ emalloc(size)
 	char *p;
 
 	/* NOSTRICT */
-	if ((p = malloc(size)) != NULL)
+	if (p = malloc(size))
 		return(p);
-	err(1, "malloc");
+	(void)fprintf(stderr, "nm: %s\n", strerror(errno));
 	exit(1);
 }
 
-void *
-erealloc(p, size)
-	void   *p;
-	size_t size;
-{
-	/* NOSTRICT */
-	if ((p = realloc(p, size)) != NULL)
-		return(p);
-	err(1, "realloc");
-	exit(1);
-}
-
-void
 usage()
 {
 	(void)fprintf(stderr, "usage: nm [-agnopruw] [file ...]\n");

@@ -1,8 +1,6 @@
-/*	$NetBSD: pass1b.c,v 1.12 1997/09/16 16:45:12 lukem Exp $	*/
-
 /*
- * Copyright (c) 1980, 1986, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1980, 1986 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,38 +31,27 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)pass1b.c	8.4 (Berkeley) 4/28/95";
-#else
-__RCSID("$NetBSD: pass1b.c,v 1.12 1997/09/16 16:45:12 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)pass1b.c	5.8 (Berkeley) 7/20/90";
 #endif /* not lint */
 
 #include <sys/param.h>
-#include <sys/time.h>
-
-#include <ufs/ufs/dinode.h>
-#include <ufs/ffs/fs.h>
-
+#include <ufs/dinode.h>
+#include <ufs/fs.h>
 #include <string.h>
-
 #include "fsck.h"
-#include "extern.h"
 
+int	pass1bcheck();
 static  struct dups *duphead;
-static int pass1bcheck __P((struct inodesc *));
 
-void
 pass1b()
 {
-	int c, i;
-	struct dinode *dp;
+	register int c, i;
+	register struct dinode *dp;
 	struct inodesc idesc;
 	ino_t inumber;
 
-	memset(&idesc, 0, sizeof(struct inodesc));
+	bzero((char *)&idesc, sizeof(struct inodesc));
 	idesc.id_type = ADDR;
 	idesc.id_func = pass1bcheck;
 	duphead = duplist;
@@ -84,13 +71,12 @@ pass1b()
 	}
 }
 
-static int
 pass1bcheck(idesc)
-	struct inodesc *idesc;
+	register struct inodesc *idesc;
 {
-	struct dups *dlp;
+	register struct dups *dlp;
 	int nfrags, res = KEEPON;
-	ufs_daddr_t blkno = idesc->id_blkno;
+	daddr_t blkno = idesc->id_blkno;
 
 	for (nfrags = idesc->id_numfrags; nfrags > 0; blkno++, nfrags--) {
 		if (chkrange(blkno, 1))

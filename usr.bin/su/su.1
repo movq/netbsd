@@ -1,5 +1,5 @@
-.\" Copyright (c) 1988, 1990, 1993, 1994
-.\"	The Regents of the University of California.  All rights reserved.
+.\" Copyright (c) 1988, 1990 The Regents of the University of California.
+.\" All rights reserved.
 .\"
 .\" Redistribution and use in source and binary forms, with or without
 .\" modification, are permitted provided that the following conditions
@@ -29,45 +29,36 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\"	from: @(#)su.1	8.2 (Berkeley) 4/18/94
-.\"	$NetBSD: su.1,v 1.14 1997/10/19 23:31:52 lukem Exp $
+.\"	@(#)su.1	6.12 (Berkeley) 7/29/91
 .\"
-.Dd April 18, 1994
+.Dd July 29, 1991
 .Dt SU 1
 .Os
 .Sh NAME
 .Nm su
 .Nd substitute user identity
 .Sh SYNOPSIS
-.Nm
+.Nm su
 .Op Fl Kflm
-.Op Ar login Op Ar "shell arguments"
+.Op Ar login
 .Sh DESCRIPTION
-.Nm
+.Nm Su
 requests the Kerberos password for
 .Ar login
 (or for
 .Dq Ar login Ns .root ,
 if no login is provided), and switches to
 that user and group ID after obtaining a Kerberos ticket granting ticket.
-A shell is then executed, and any additional
-.Ar "shell arguments"
-after the login name
-are passed to the shell.
-.Nm
+A shell is then executed.
+.Nm Su
 will resort to the local password file to find the password for
 .Ar login
 if there is a Kerberos error.
 If
-.Nm
+.Nm su
 is executed by root, no password is requested and a shell
 with the appropriate user ID is executed; no additional Kerberos tickets
 are obtained.
-.Pp
-Alternatively, if the user enters the password "s/key", authentication
-will use the S/Key one-time password system as described in
-.Xr skey 1 .
-S/Key is a Trademark of Bellcore.
 .Pp
 By default, the environment is unmodified with the exception of
 .Ev USER ,
@@ -83,7 +74,7 @@ is set to the target login, unless the target login has a user ID of 0,
 in which case it is unmodified.
 The invoked shell is the target login's.
 This is the traditional behavior of
-.Nm "" .
+.Nm su .
 .Pp
 The options are as follows:
 .Bl -tag -width Ds
@@ -116,7 +107,7 @@ is set to
 .Ev TERM
 is imported from your current environment.
 The invoked shell is the target login's, and
-.Nm
+.Nm su
 will change directory to the target login's home directory.
 .It Fl m
 Leave the environment unmodified.
@@ -126,7 +117,7 @@ shell (as defined by
 .Xr getusershell 3 )
 and the caller's real uid is
 non-zero,
-.Nm
+.Nm su
 will fail.
 .El
 .Pp
@@ -137,25 +128,12 @@ and
 options are mutually exclusive; the last one specified
 overrides any previous ones.
 .Pp
-Only users in group
-.Dq wheel
-(normally gid 0),
-as listed in
-.Pa /etc/group ,
+Only users in group 0 (normally
+.Dq wheel )
 can
-.Nm
+.Nm su
 to
-.Dq root ,
-unless group wheel does not exist or has no members.
-(If you do not want anybody to be able to
-.Nm
-to
-.Dq root ,
-make
-.Dq root
-the only member of group
-.Dq wheel ,
-which is the default.)
+.Dq root .
 .Pp
 By default (unless the prompt is reset by a startup file) the super-user
 prompt is set to
@@ -165,7 +143,6 @@ to remind one of its awesome power.
 .Xr csh 1 ,
 .Xr login 1 ,
 .Xr sh 1 ,
-.Xr skey 1 ,
 .Xr kinit 1 ,
 .Xr kerberos 1 ,
 .Xr passwd 5 ,
@@ -173,8 +150,8 @@ to remind one of its awesome power.
 .Xr environ 7
 .Sh ENVIRONMENT
 Environment variables used by
-.Nm "" :
-.Bl -tag -width "HOME"
+.Nm su :
+.Bl -tag -width HOME
 .It Ev HOME
 Default home directory of real user ID unless modified as
 specified above.
@@ -185,7 +162,7 @@ Provides terminal type which may be retained for the substituted
 user ID.
 .It Ev USER
 The user ID is always the effective ID (the target user ID) after an
-.Nm
+.Nm su
 unless the user ID is 0 (root).
 .El
 .Sh HISTORY
@@ -193,3 +170,7 @@ A
 .Nm
 command appeared in
 .At v7 .
+The version desribed
+here is an adaptation of the
+.Tn MIT
+Athena Kerberos command.

@@ -1,13 +1,23 @@
-#	$NetBSD: Makefile,v 1.19 1997/10/10 19:52:10 christos Exp $
-#	@(#)Makefile	8.1 (Berkeley) 6/5/93
+#	@(#)Makefile	5.10 (Berkeley) 5/11/90
 
 PROG=	restore
-LINKS=	${BINDIR}/restore ${BINDIR}/rrestore
-CPPFLAGS+=-DRRESTORE
-SRCS=	main.c interactive.c restore.c dirs.c symtab.c tape.c utilities.c \
-	dumprmt.c
-MAN=	restore.8
-MLINKS+=restore.8 rrestore.8
+SRCS=	main.c interactive.c restore.c dirs.c symtab.c tape.c utilities.c
+ROBJS=	main.o interactive.o restore.o dirs.o symtab.o rtape.o utilities.o \
+	dumprmt.o
+MAN8=	restore.0 rrestore.0
 .PATH:	${.CURDIR}/../dump
+CLEANFILES+=dumprmt.o rtape.o rrestore
+
+all: rrestore
+
+rrestore: ${ROBJS} ${LIBC}
+	${CC} ${CFLAGS} -o ${.TARGET} ${ROBJS}
+
+rtape.o: tape.c ${LIBC}
+	${CC} ${CFLAGS} -c -DRRESTORE ${.CURDIR}/tape.c -o ${.TARGET}
+
+afterinstall:
+	install ${STRIP} -o root -g ${BINGRP} -m 4755 rrestore \
+	    ${DESTDIR}${BINDIR}
 
 .include <bsd.prog.mk>

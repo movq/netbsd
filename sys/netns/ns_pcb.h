@@ -1,8 +1,6 @@
-/*	$NetBSD: ns_pcb.h,v 1.8 1997/07/18 19:30:42 thorpej Exp $	*/
-
 /*
- * Copyright (c) 1984, 1985, 1986, 1987, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1984, 1985, 1986, 1987 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,7 +30,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)ns_pcb.h	8.1 (Berkeley) 6/10/93
+ *	@(#)ns_pcb.h	7.4 (Berkeley) 6/28/90
  */
 
 /*
@@ -50,8 +48,8 @@ struct nspcb {
 	struct	ns_addr nsp_lastdst;	/* validate cached route for dg socks*/
 	long	nsp_notify_param;	/* extra info passed via ns_pcbnotify*/
 	short	nsp_flags;
-	u_int8_t nsp_dpt;		/* default packet type for idp_output*/
-	u_int8_t nsp_rpt;		/* last received packet type by
+	u_char	nsp_dpt;		/* default packet type for idp_output*/
+	u_char	nsp_rpt;		/* last received packet type by
 								idp_input() */
 };
 
@@ -76,6 +74,7 @@ struct nspcb {
 #define	NSRCVQ		2048
 
 
-#ifdef _KERNEL
+#ifdef KERNEL
 struct	nspcb nspcb;			/* head of list */
+struct	nspcb *ns_pcblookup();
 #endif

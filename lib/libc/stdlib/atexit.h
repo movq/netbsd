@@ -1,5 +1,3 @@
-/*	$NetBSD: atexit.h,v 1.5 1997/07/13 20:16:36 christos Exp $	*/
-
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
  * All rights reserved.
@@ -32,7 +30,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	from: @(#)atexit.h	5.1 (Berkeley) 5/15/90
+ *	@(#)atexit.h	5.1 (Berkeley) 5/15/90
  */
 
 /* must be at least 32 to guarantee ANSI conformance */
@@ -41,7 +39,7 @@
 struct atexit {
 	struct atexit *next;		/* next in list */
 	int ind;			/* next index in this table */
-	void (*fns[ATEXIT_SIZE]) __P((void));	/* the table itself */
+	void (*fns[ATEXIT_SIZE])();	/* the table itself */
 };
 
-extern struct atexit *__atexit;		/* points to head of LIFO stack */
+struct atexit *__atexit;	/* points to head of LIFO stack */

@@ -1,5 +1,3 @@
-/*	$NetBSD: llc_input.c,v 1.5 1996/10/13 02:10:07 christos Exp $	*/
-
 /* 
  * Copyright (C) Dirk Husemann, Computer Science Department IV, 
  * 		 University of Erlangen-Nuremberg, Germany, 1990, 1991, 1992
@@ -38,7 +36,8 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)llc_input.c	8.1 (Berkeley) 6/10/93
+ *	from: @(#)llc_input.c	8.1 (Berkeley) 6/10/93
+ *	$Id: llc_input.c,v 1.1 1994/05/13 06:04:29 mycroft Exp $
  */
 
 #include <sys/param.h>
@@ -59,8 +58,6 @@
 #include <netccitt/dll.h>
 #include <netccitt/llc_var.h>
 
-#include <machine/stdarg.h>
-
 /*
  * This module implements LLC as specified by ISO 8802-2.
  */
@@ -78,9 +75,11 @@ llcintr()
 	register int frame_kind;
 	register u_char cmdrsp;
 	struct llc_linkcb *linkp;
-	struct npaidbentry *sapinfo = NULL;
+	struct rtentry *sirt;
+	struct npaidbentry *sapinfo;
 	struct sdl_hdr *sdlhdr;
 	struct llc *frame;
+	char *c;
 	long expected_len;
 
 	struct ifnet   *ifp;
@@ -180,12 +179,10 @@ llcintr()
 		 */
 		cmdrsp = (frame->llc_ssap & 0x01);
 		frame->llc_ssap &= ~0x01;
-		llrt = rtalloc1((struct sockaddr *)&sdlhdr->sdlhdr_src, 0);
-		if (llrt)
+		if (llrt = rtalloc1((struct sockaddr *)&sdlhdr->sdlhdr_src, 0))
 			llrt->rt_refcnt--;
 #ifdef notyet
-		else
-			llrt = npaidb_enter(&sdlhdr->sdlhdr_src, 0, 0, 0);
+		else llrt = npaidb_enter(&sdlhdr->sdlhdr_src, 0, 0, 0);
 #endif /* notyet */
 		else {
 			/* 
@@ -285,7 +282,7 @@ llcintr()
 			/*
 			 * Pass it on thru the elements of procedure
 			 */
-			llc_input(m, linkp, cmdrsp);
+			llc_input(linkp, m, cmdrsp);
 	}
 	return;
 }
@@ -304,28 +301,13 @@ llcintr()
  *                         o ...
  *                 are then enacted accordingly.
  */
-int
-#if __STDC__
-llc_input(struct mbuf *m, ...)
-#else
-llc_input(m, va_alist)
-	struct mbuf *m;
-	va_dcl
-#endif
+llc_input(struct llc_linkcb *linkp, struct mbuf *m, u_char cmdrsp)
 {
 	int frame_kind;
 	int pollfinal;
 	int action = 0;
 	struct llc *frame;
-	struct llc_linkcb *linkp;
-	u_int cmdrsp;
-	va_list ap;
-
-	va_start(ap, m);
-	linkp = va_arg(ap, struct llc_linkcb *);
-	cmdrsp = va_arg(ap, u_int);
-	va_end(ap);
-
+	struct ifnet *ifp = linkp->llcl_if;
 
 	if ((frame = mtod(m, struct llc *)) == (struct llc *) 0) {
 		m_freem(m);
@@ -344,9 +326,9 @@ llc_input(m, va_alist)
 					  pollfinal)) {
 	case LLC_DATA_INDICATION:
 		m_adj(m, LLC_ISFRAMELEN);
-		if ((m = m_pullup(m, NLHDRSIZEGUESS)) != NULL) {
+		if (m = m_pullup(m, NLHDRSIZEGUESS)) {
 			m->m_pkthdr.rcvif = (struct ifnet *)linkp->llcl_nlnext;
-			(*linkp->llcl_sapinfo->si_input)(m, NULL, NULL, NULL);
+			(*linkp->llcl_sapinfo->si_input)(m);
 		}
 		break;
 	}
@@ -365,21 +347,18 @@ llc_input(m, va_alist)
  * This routine is called by configuration setup. It sets up a station control
  * block and notifies all registered upper level protocols.
  */
-void *
-llc_ctlinput(prc, addr, info)
-	int prc;
-	struct sockaddr *addr;
-	void *info;
+caddr_t
+llc_ctlinput(int prc, struct sockaddr *addr, caddr_t info)
 {
-	struct ifnet *ifp = NULL;
+	struct ifnet *ifp;
 	struct ifaddr *ifa;
 	struct dll_ctlinfo *ctlinfo = (struct dll_ctlinfo *)info;
 	u_char sap;
 	struct dllconfig *config;
 	caddr_t pcb;
 	struct rtentry *nlrt;
-	struct rtentry *llrt = NULL;
-	struct llc_linkcb *linkp = NULL;
+	struct rtentry *llrt;
+	struct llc_linkcb *linkp;
 	register int i;
 
 	/* info must point to something valid at all times */
@@ -432,7 +411,7 @@ llc_ctlinput(prc, addr, info)
 			linkp = LQFIRST;
 			while (LQVALID(linkp)) {
 				nlinkp = LQNEXT(linkp);
-				if ((linkp->llcl_if = ifp) != NULL) {
+				if (linkp->llcl_if = ifp) {
 					i = splimp();
 					(void)llc_statehandler(linkp, (struct llc *)0,
 							       NL_DISCONNECT_REQUEST,

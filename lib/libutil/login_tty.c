@@ -1,8 +1,6 @@
-/*	$NetBSD: login_tty.c,v 1.6 1997/06/29 18:44:06 christos Exp $	*/
-
 /*-
- * Copyright (c) 1990, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1990 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,21 +31,13 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char sccsid[] = "@(#)login_tty.c	8.1 (Berkeley) 6/4/93";
-#else
-__RCSID("$NetBSD: login_tty.c,v 1.6 1997/06/29 18:44:06 christos Exp $");
-#endif
+static char sccsid[] = "@(#)login_tty.c	1.2 (Berkeley) 6/21/90";
 #endif /* LIBC_SCCS and not lint */
 
 #include <sys/param.h>
 #include <sys/ioctl.h>
-#include <unistd.h>
-#include <util.h>
 
-int
 login_tty(fd)
 	int fd;
 {

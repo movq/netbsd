@@ -1,9 +1,7 @@
-/*	$NetBSD: ccitt_proto.c,v 1.6 1996/02/13 22:04:21 christos Exp $	*/
-
 /*
  * Copyright (c) University of British Columbia, 1984
- * Copyright (c) 1990, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1990 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * the Laboratory for Computation Vision and the Computer Science Department
@@ -37,61 +35,61 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)ccitt_proto.c	8.1 (Berkeley) 6/10/93
+ *	@(#)ccitt_proto.c	7.5 (Berkeley) 8/30/90
  */
+#define HDLC
+#include "param.h"
+#include "socket.h"
+#include "protosw.h"
+#include "domain.h"
 
-#include <sys/param.h>
-#include <sys/socket.h>
-#include <sys/protosw.h>
-#include <sys/domain.h>
-
-#include <netccitt/x25.h>
-
-#include <net/radix.h>
+#include "x25.h"
 
 /*
- * Definitions of protocols supported in the CCITT domain.
+ *	Definitions of protocols supported in the CCITT domain.
  */
 
+#ifdef BSD4_3
 extern	struct domain ccittdomain;
 #define DOMAIN &ccittdomain
+#else
+#define DOMAIN PF_CCITT
+#endif
 
-#ifdef LLC
-#include <net/if.h>
-#include <net/if_dl.h>
-#include <net/if_llc.h>
-#include <netccitt/dll.h>
-#include <netccitt/llc_var.h>
+#ifdef XE
+int	xe_output (), xe_ctlinput (), xe_init(), xe_timer();
 #endif
 #ifdef HDLC
-#include <netccitt/hdlc.h>
-#include <netccitt/hd_var.h>
+int	hd_output (), hd_ctlinput (), hd_init (), hd_timer ();
 #endif
-#include <netccitt/pk_extern.h>
+int	pk_usrreq (), pk_timer (), pk_init (), pk_ctloutput ();
 
 struct protosw ccittsw[] = {
-#ifdef LLC
-{	0,		DOMAIN,		IEEEPROTO_802LLC,0,
-	0,		llc_output,	llc_ctlinput,	0,
+#ifdef XE
+ {	0,		DOMAIN,		IEEEPROTO_802LLC,0,
+	0,		xe_output,	xe_ctlinput,	0,
 	0,
-	llc_init,	0,	 	llc_timer,	0,
-},
+	xe_init,	0,	 	xe_timer,	0,
+ },
 #endif
 #ifdef HDLC
-{	0,		DOMAIN,		CCITTPROTO_HDLC,0,
+ {	0,		DOMAIN,		CCITTPROTO_HDLC,0,
 	0,		hd_output,	hd_ctlinput,	0,
 	0,
 	hd_init,	0,	 	hd_timer,	0,
-},
+ },
 #endif
-{	SOCK_STREAM,	DOMAIN,		CCITTPROTO_X25,	PR_CONNREQUIRED|PR_ATOMIC|PR_WANTRCVD,
-	pk_input,	0,		pk_ctlinput,	pk_ctloutput,
+ {	SOCK_STREAM,	DOMAIN,		CCITTPROTO_X25,	PR_CONNREQUIRED|PR_ATOMIC|PR_WANTRCVD,
+	0,		0,		0,		pk_ctloutput,
 	pk_usrreq,
 	pk_init,	0,		pk_timer,	0,
-}
+ }
 };
 
 struct domain ccittdomain =
+#ifdef BSD4_3
 	{ AF_CCITT, "ccitt", 0, 0, 0, ccittsw,
-		&ccittsw[sizeof(ccittsw)/sizeof(ccittsw[0])], 0,
-		rn_inithead, 32, sizeof (struct sockaddr_x25) };
+		&ccittsw[sizeof(ccittsw)/sizeof(ccittsw[0])] };
+#else
+	{ AF_CCITT, "ccitt", ccittsw, &ccittsw[sizeof(ccittsw)/sizeof(ccittsw[0])] };
+#endif

@@ -1,8 +1,6 @@
-/*	$NetBSD: rwho.c,v 1.9 1997/10/19 15:03:06 mrg Exp $	*/
-
 /*
- * Copyright (c) 1983, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1983 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,33 +31,26 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1983, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+char copyright[] =
+"@(#) Copyright (c) 1983 The Regents of the University of California.\n\
+ All rights reserved.\n";
 #endif /* not lint */
 
 #ifndef lint
-/*static char sccsid[] = "from: @(#)rwho.c	8.1 (Berkeley) 6/6/93";*/
-__RCSID("$NetBSD: rwho.c,v 1.9 1997/10/19 15:03:06 mrg Exp $");
+static char sccsid[] = "@(#)rwho.c	5.5 (Berkeley) 6/1/90";
 #endif /* not lint */
 
 #include <sys/param.h>
+#include <sys/dir.h>
 #include <sys/file.h>
-
 #include <protocols/rwhod.h>
-
-#include <dirent.h>
-#include <err.h>
-#include <errno.h>
 #include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
 
 DIR	*dirp;
 
 struct	whod wd;
+int	utmpcmp();
 #define	NUSERS	1000
 struct	myutmp {
 	char	myhost[MAXHOSTNAMELEN];
@@ -74,13 +65,10 @@ int	nusers;
  */
 #define	down(w,now)	((now) - (w)->wd_recvtime > 11 * 60)
 
-int	utmpcmp __P((const void *, const void *));
-int	main __P((int, char **));
-
+char	*ctime(), *strcpy();
 time_t	now;
 int	aflg;
 
-int
 main(argc, argv)
 	int argc;
 	char **argv;
@@ -88,14 +76,15 @@ main(argc, argv)
 	extern char *optarg;
 	extern int optind;
 	int ch;
-	struct dirent *dp;
+	struct direct *dp;
 	int cc, width;
-	struct whod *w = &wd;
-	struct whoent *we;
-	struct myutmp *mp;
-	int f, n, i, nhosts;
+	register struct whod *w = &wd;
+	register struct whoent *we;
+	register struct myutmp *mp;
+	int f, n, i;
+	time_t time();
 
-	while ((ch = getopt(argc, argv, "a")) != -1)
+	while ((ch = getopt(argc, argv, "a")) != EOF)
 		switch((char)ch) {
 		case 'a':
 			aflg = 1;
@@ -110,9 +99,8 @@ main(argc, argv)
 		exit(1);
 	}
 	mp = myutmp;
-	nhosts = 0;
 	(void)time(&now);
-	while ((dp = readdir(dirp)) != NULL) {
+	while (dp = readdir(dirp)) {
 		if (dp->d_ino == 0 || strncmp(dp->d_name, "whod.", 5))
 			continue;
 		f = open(dp->d_name, O_RDONLY);
@@ -123,7 +111,6 @@ main(argc, argv)
 			(void) close(f);
 			continue;
 		}
-		nhosts++;
 		if (down(w,now)) {
 			(void) close(f);
 			continue;
@@ -145,8 +132,6 @@ main(argc, argv)
 		}
 		(void) close(f);
 	}
-	if (nhosts == 0)
-		errx(0, "no hosts in %s.", _PATH_RWHODIR);
 	qsort((char *)myutmp, nusers, sizeof (struct myutmp), utmpcmp);
 	mp = myutmp;
 	width = 0;
@@ -184,15 +169,11 @@ main(argc, argv)
 	exit(0);
 }
 
-int
-utmpcmp(v1, v2)
-	const void *v1, *v2;
+utmpcmp(u1, u2)
+	struct myutmp *u1, *u2;
 {
-	const struct myutmp *u1, *u2;
 	int rc;
 
-	u1 = v1;
-	u2 = v2;
 	rc = strncmp(u1->myutmp.out_name, u2->myutmp.out_name, 8);
 	if (rc)
 		return (rc);

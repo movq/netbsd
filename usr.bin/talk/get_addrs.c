@@ -1,8 +1,6 @@
-/*	$NetBSD: get_addrs.c,v 1.4 1997/10/20 00:23:18 lukem Exp $	*/
-
 /*
- * Copyright (c) 1983, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1983 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,21 +31,18 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)get_addrs.c	8.1 (Berkeley) 6/6/93";
-#endif
-__RCSID("$NetBSD: get_addrs.c,v 1.4 1997/10/20 00:23:18 lukem Exp $");
+static char sccsid[] = "@(#)get_addrs.c	5.7 (Berkeley) 3/1/91";
 #endif /* not lint */
 
-#include "talk.h"
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <protocols/talkd.h>
 #include <netdb.h>
 #include <stdio.h>
-#include <unistd.h>
 #include "talk_ctl.h"
 
-void
 get_addrs(my_machine_name, his_machine_name)
 	char *my_machine_name, *his_machine_name;
 {
@@ -62,7 +57,7 @@ get_addrs(my_machine_name, his_machine_name)
 		herror((char *)NULL);
 		exit(-1);
 	}
-	memmove((char *)&my_machine_addr, hp->h_addr, hp->h_length);
+	bcopy(hp->h_addr, (char *)&my_machine_addr, hp->h_length);
 	/*
 	 * If the callee is on-machine, just copy the
 	 * network address, otherwise do a lookup...
@@ -74,7 +69,7 @@ get_addrs(my_machine_name, his_machine_name)
 			herror((char *)NULL);
 			exit(-1);
 		}
-		memmove((char *) &his_machine_addr, hp->h_addr, hp->h_length);
+		bcopy(hp->h_addr, (char *) &his_machine_addr, hp->h_length);
 	} else
 		his_machine_addr = my_machine_addr;
 	/* find the server's port */

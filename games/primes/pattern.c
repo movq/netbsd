@@ -1,8 +1,6 @@
-/*	$NetBSD: pattern.c,v 1.4 1997/10/12 01:04:43 lukem Exp $	*/
-
 /*
- * Copyright (c) 1989, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1989 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Landon Curt Noll.
@@ -36,13 +34,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)pattern.c	8.1 (Berkeley) 5/31/93";
-#else
-__RCSID("$NetBSD: pattern.c,v 1.4 1997/10/12 01:04:43 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)pattern.c	5.2 (Berkeley) 6/1/90";
 #endif /* not lint */
 
 /*

@@ -1,8 +1,6 @@
-/*	$NetBSD: comp.c,v 1.5 1997/10/12 00:53:45 lukem Exp $	*/
-
 /*
- * Copyright (c) 1982, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1982 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,13 +31,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)comp.c	8.1 (Berkeley) 5/31/93";
-#else
-__RCSID("$NetBSD: comp.c,v 1.5 1997/10/12 00:53:45 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)comp.c	5.4 (Berkeley) 6/1/90";
 #endif /* not lint */
 
 # include	"mille.h"
@@ -50,18 +43,17 @@ __RCSID("$NetBSD: comp.c,v 1.5 1997/10/12 00:53:45 lukem Exp $");
 
 # define	V_VALUABLE	40
 
-void
 calcmove()
 {
-	CARD		card;
-	int		*value;
-	PLAY		*pp, *op;
-	bool		foundend, cango, canstop, foundlow;
-	unsgn int	i, count200, badcount, nummin, nummax, diff;
-	int		curmin, curmax;
-	CARD		safe, oppos;
-	int		valbuf[HAND_SZ], count[NUM_CARDS];
-	bool		playit[HAND_SZ];
+	register CARD		card;
+	register int		*value;
+	register PLAY		*pp, *op;
+	register bool		foundend, cango, canstop, foundlow;
+	register unsgn int	i, count200, badcount, nummin, nummax, diff;
+	register int		curmin, curmax;
+	register CARD		safe, oppos;
+	int			valbuf[HAND_SZ], count[NUM_CARDS];
+	bool			playit[HAND_SZ];
 
 	wmove(Score, ERR_Y, ERR_X);	/* get rid of error messages	*/
 	wclrtoeol(Score);
@@ -71,8 +63,6 @@ calcmove()
 	cango = 0;
 	canstop = FALSE;
 	foundend = FALSE;
-
-	/* Try for a Coup Forre, and see what we have. */
 	for (i = 0; i < NUM_CARDS; i++)
 		count[i] = 0;
 	for (i = 0; i < HAND_SZ; i++) {
@@ -80,7 +70,7 @@ calcmove()
 		switch (card) {
 		  case C_STOP:	case C_CRASH:
 		  case C_FLAT:	case C_EMPTY:
-			if ((playit[i] = canplay(pp, op, card)) != 0)
+			if (playit[i] = canplay(pp, op, card))
 				canstop = TRUE;
 			goto norm;
 		  case C_LIMIT:
@@ -113,16 +103,12 @@ norm:
 			playit[i] = TRUE;
 			break;
 		}
-		if (card >= 0)
-			++count[card];
+		++count[card];
 	}
-
-	/* No Coup Forre.  Draw to fill hand, then restart, as needed. */
 	if (pp->hand[0] == C_INIT && Topcard > Deck) {
 		Movetype = M_DRAW;
 		return;
 	}
-
 #ifdef DEBUG
 	if (Debug)
 		fprintf(outf, "CALCMOVE: cango = %d, canstop = %d, safe = %d\n",
@@ -388,8 +374,16 @@ normbad:
 	if (cango) {
 play_it:
 		mvaddstr(MOVE_Y + 1, MOVE_X, "PLAY\n");
-		Movetype = M_PLAY;
-		Card_no = nummax;
+#ifdef DEBUG
+		if (Debug)
+			getmove();
+		if (!Debug || Movetype == M_DRAW) {
+#else
+		if (Movetype == M_DRAW) {
+#endif
+			Movetype = M_PLAY;
+			Card_no = nummax;
+		}
 	}
 	else {
 		if (issafety(pp->hand[nummin])) { /* NEVER discard a safety */
@@ -397,27 +391,31 @@ play_it:
 			goto play_it;
 		}
 		mvaddstr(MOVE_Y + 1, MOVE_X, "DISCARD\n");
-		Movetype = M_DISCARD;
-		Card_no = nummin;
+#ifdef DEBUG
+		if (Debug)
+			getmove();
+		if (!Debug || Movetype == M_DRAW) {
+#else
+		if (Movetype == M_DRAW) {
+#endif
+			Movetype = M_DISCARD;
+			Card_no = nummin;
+		}
 	}
 	mvprintw(MOVE_Y + 2, MOVE_X, "%16s", C_name[pp->hand[Card_no]]);
 }
 
-/*
- * Return true if the given player could conceivably win with his next card.
- */
-int
 onecard(pp)
-	PLAY	*pp;
+register PLAY	*pp;
 {
-	CARD	bat, spd, card;
+	register CARD	bat, spd, card;
 
 	bat = pp->battle;
 	spd = pp->speed;
 	card = -1;
 	if (pp->can_go || ((isrepair(bat) || bat == C_STOP || spd == C_LIMIT) &&
 			   Numseen[S_RIGHT_WAY] != 0) ||
-	    (bat >= 0 && Numseen[safety(bat)] != 0))
+	    Numseen[safety(bat)] != 0)
 		switch (End - pp->mileage) {
 		  case 200:
 			if (pp->nummiles[C_200] == 2)
@@ -439,10 +437,9 @@ onecard(pp)
 	return FALSE;
 }
 
-int
 canplay(pp, op, card)
-	PLAY	*pp, *op;
-	CARD	card;
+register PLAY	*pp, *op;
+register CARD	card;
 {
 	switch (card) {
 	  case C_200:

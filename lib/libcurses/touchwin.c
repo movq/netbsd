@@ -1,8 +1,6 @@
-/*	$NetBSD: touchwin.c,v 1.7 1997/07/22 07:37:07 mikel Exp $	*/
-
 /*
- * Copyright (c) 1981, 1993, 1994
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1981 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,95 +31,53 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)touchwin.c	8.2 (Berkeley) 5/4/94";
-#else
-__RCSID("$NetBSD: touchwin.c,v 1.7 1997/07/22 07:37:07 mikel Exp $");
-#endif
+static char sccsid[] = "@(#)touchwin.c	5.4 (Berkeley) 6/1/90";
 #endif /* not lint */
 
-#include "curses.h"
+# include	"curses.ext"
 
 /*
- * touchline --
- *	Touch a given line.
+ * make it look like the whole window has been changed.
+ *
  */
-int
-touchline(win, y, sx, ex)
-	WINDOW *win;
-	register int y, sx, ex;
-{
-	return (__touchline(win, y, sx, ex, 1));
-}
-
-
-/*
- * touchwin --
- *	Make it look like the whole window has been changed.
- */
-int
 touchwin(win)
-	register WINDOW *win;
+register WINDOW	*win;
 {
-	register int y, maxy;
+	register int	y, maxy;
 
-#ifdef DEBUG
-	__CTRACE("touchwin: (%0.2o)\n", win);
-#endif
-	maxy = win->maxy;
+# ifdef	DEBUG
+	fprintf(outf, "TOUCHWIN(%0.2o)\n", win);
+# endif
+	maxy = win->_maxy;
 	for (y = 0; y < maxy; y++)
-		__touchline(win, y, 0, win->maxx - 1, 1);
-	return (OK);
+		touchline(win, y, 0, win->_maxx - 1);
 }
 
-
-int
-__touchwin(win)
-	register WINDOW *win;
+/*
+ * touch a given line
+ */
+touchline(win, y, sx, ex)
+register WINDOW	*win;
+register int	y, sx, ex;
 {
-	register int y, maxy;
-
-#ifdef DEBUG
-	__CTRACE("touchwin: (%0.2o)\n", win);
-#endif
-	maxy = win->maxy;
-	for (y = 0; y < maxy; y++)
-		__touchline(win, y, 0, win->maxx - 1, 0);
-	return (OK);
-}
-
-int
-__touchline(win, y, sx, ex, force)
-	register WINDOW *win;
-	register int y, sx, ex;
-	int force;
-{
-#ifdef DEBUG
-	__CTRACE("touchline: (%0.2o, %d, %d, %d, %d)\n", win, y, sx, ex, force);
-	__CTRACE("touchline: first = %d, last = %d\n",
-	    *win->lines[y]->firstchp, *win->lines[y]->lastchp);
-#endif
-	if (force)
-		win->lines[y]->flags |= __FORCEPAINT;
-	sx += win->ch_off;
-	ex += win->ch_off;
-	if (!(win->lines[y]->flags & __ISDIRTY)) {
-		win->lines[y]->flags |= __ISDIRTY;
-		*win->lines[y]->firstchp = sx;
-		*win->lines[y]->lastchp = ex;
-	} else {
-		if (*win->lines[y]->firstchp > sx)
-			*win->lines[y]->firstchp = sx;
-		if (*win->lines[y]->lastchp < ex)
-			*win->lines[y]->lastchp = ex;
+# ifdef DEBUG
+	fprintf(outf, "TOUCHLINE(%0.2o, %d, %d, %d)\n", win, y, sx, ex);
+	fprintf(outf, "TOUCHLINE:first = %d, last = %d\n", win->_firstch[y], win->_lastch[y]);
+# endif
+	sx += win->_ch_off;
+	ex += win->_ch_off;
+	if (win->_firstch[y] == _NOCHANGE) {
+		win->_firstch[y] = sx;
+		win->_lastch[y] = ex;
 	}
-#ifdef DEBUG
-	__CTRACE("touchline: first = %d, last = %d\n",
-	    *win->lines[y]->firstchp, *win->lines[y]->lastchp);
-#endif
-	return (OK);
+	else {
+		if (win->_firstch[y] > sx)
+			win->_firstch[y] = sx;
+		if (win->_lastch[y] < ex)
+			win->_lastch[y] = ex;
+	}
+# ifdef	DEBUG
+	fprintf(outf, "TOUCHLINE:first = %d, last = %d\n", win->_firstch[y], win->_lastch[y]);
+# endif
 }
-
-

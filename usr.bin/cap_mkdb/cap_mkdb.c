@@ -1,8 +1,6 @@
-/*	$NetBSD: cap_mkdb.c,v 1.8 1997/10/19 14:05:48 mrg Exp $	*/
-
 /*-
- * Copyright (c) 1992, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1992 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,17 +31,14 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1992, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+static char copyright[] =
+"@(#) Copyright (c) 1992 The Regents of the University of California.\n\
+ All rights reserved.\n";
 #endif /* not lint */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)cap_mkdb.c	8.2 (Berkeley) 4/27/95";
-#endif
-__RCSID("$NetBSD: cap_mkdb.c,v 1.8 1997/10/19 14:05:48 mrg Exp $");
+static char sccsid[] = "@(#)cap_mkdb.c	5.6 (Berkeley) 3/8/93";
 #endif /* not lint */
 
 #include <sys/param.h>
@@ -59,23 +54,13 @@ __RCSID("$NetBSD: cap_mkdb.c,v 1.8 1997/10/19 14:05:48 mrg Exp $");
 #include <string.h>
 #include <unistd.h>
 
-void	db_build __P((char **));
-void	dounlink __P((void));
-int	main __P((int, char **));
-void	usage __P((void));
+void	 db_build __P((char **));
+void	 dounlink __P((void));
+void	 usage __P((void));
 
 DB *capdbp;
 int verbose;
 char *capdb, *capname, buf[8 * 1024];
-
-HASHINFO openinfo = {
-	4096,		/* bsize */
-	16,		/* ffactor */
-	256,		/* nelem */
-	2048 * 1024,	/* cachesize */
-	NULL,		/* hash() */
-	0		/* lorder */
-};
 
 /*
  * Mkcapdb creates a capability hash database for quick retrieval of capability
@@ -92,7 +77,7 @@ main(argc, argv)
 	int c;
 
 	capname = NULL;
-	while ((c = getopt(argc, argv, "f:v")) != -1) {
+	while ((c = getopt(argc, argv, "f:v")) != EOF) {
 		switch(c) {
 		case 'f':
 			capname = optarg;
@@ -117,9 +102,9 @@ main(argc, argv)
 	 */
 	(void)snprintf(buf, sizeof(buf), "%s.db", capname ? capname : *argv);
 	if ((capname = strdup(buf)) == NULL)
-		err(1, "strdup");
-	if ((capdbp = dbopen(capname, O_CREAT | O_TRUNC | O_RDWR,
-	    DEFFILEMODE, DB_HASH, &openinfo)) == NULL)
+		err(1, "");
+	if ((capdbp = dbopen(capname,
+	    O_CREAT | O_TRUNC | O_RDWR, DEFFILEMODE, DB_HASH, NULL)) == NULL)
 		err(1, "%s", buf);
 
 	if (atexit(dounlink))
@@ -174,12 +159,12 @@ db_build(ifiles)
 		if (bplen <= len + 2) {
 			bplen += MAX(256, len + 2);
 			if ((data.data = realloc(data.data, bplen)) == NULL)
-				err(1, "realloc");
+				err(1, "");
 		}
 
 		/* Find the end of the name field. */
 		if ((p = strchr(bp, ':')) == NULL) {
-			warnx("no name field: %.*s", (int)(MIN(len, 20)), bp);
+			warnx("no name field: %.*s", MIN(len, 20), bp);
 			continue;
 		}
 
@@ -190,7 +175,7 @@ db_build(ifiles)
 			break;
 		case 2:
 			((char *)(data.data))[0] = TCERR;
-			warnx("Record not tc expanded: %.*s", (int)(p - bp),bp);
+			warnx("Record not tc expanded: %.*s", p - bp, bp);
 			break;
 		}
 
@@ -208,7 +193,7 @@ db_build(ifiles)
 			/* NOTREACHED */
 		case 1:
 			warnx("ignored duplicate: %.*s",
-			    (int)key.size, (char *)key.data);
+			    key.size, (char *)key.data);
 			continue;
 		}
 		++reccnt;
@@ -234,7 +219,7 @@ db_build(ifiles)
 					/* NOTREACHED */
 				case 1:
 					warnx("ignored duplicate: %.*s",
-					    (int)key.size, (char *)key.data);
+					    key.size, (char *)key.data);
 				}
 				t = p + 1;
 			}

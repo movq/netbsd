@@ -1,7 +1,5 @@
-.\"	$NetBSD: makekey.8,v 1.7 1997/10/20 02:39:33 enami Exp $
-.\"
-.\" Copyright (c) 1990, 1991, 1993
-.\"	The Regents of the University of California.  All rights reserved.
+.\" Copyright (c) 1990, 1991 The Regents of the University of California.
+.\" All rights reserved.
 .\"
 .\" Redistribution and use in source and binary forms, with or without
 .\" modification, are permitted provided that the following conditions
@@ -31,19 +29,19 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\"     from: @(#)makekey.8	8.2 (Berkeley) 12/11/93
+.\"     @(#)makekey.8	6.5 (Berkeley) 7/1/91
 .\"
-.Dd December 11, 1993
+.Dd July 1, 1991
 .Dt MAKEKEY 8
 .Os
 .Sh NAME
 .Nm makekey
 .Nd make encrypted keys or passwords
 .Sh SYNOPSIS
-.Nm
+.Nm makekey
 .Sh DESCRIPTION
-.Nm
-encrypts a key and salt which it reads from the standard input
+.Nm Makekey
+encypts a key and salt which it reads from the standard input
 and writes the result to the standard output.
 The key is expected to be
 ten bytes; the salt is expected to be two bytes.
@@ -53,9 +51,9 @@ for more information on what characters the key and salt can contain
 and how the encrypted value is calculated.
 .Sh SEE ALSO
 .Xr login 1 ,
+.Xr crypt 1 ,
 .Xr crypt 3
 .Sh HISTORY
 A
 .Nm
-command appeared in 
-.At v7 .
+command appeared in Version 7 AT&T UNIX.

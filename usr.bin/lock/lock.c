@@ -1,11 +1,6 @@
-/*	$NetBSD: lock.c,v 1.10 1997/10/19 04:15:40 lukem Exp $	*/
-
 /*
- * Copyright (c) 1980, 1987, 1993
- *	The Regents of the University of California.  All rights reserved.
- *
- * This code is derived from software contributed to Berkeley by
- * Bob Toxen.
+ * Copyright (c) 1980, 1987 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -36,17 +31,14 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1980, 1987, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+char copyright[] =
+"@(#) Copyright (c) 1980, 1987 Regents of the University of California.\n\
+ All rights reserved.\n";
 #endif /* not lint */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)lock.c	8.1 (Berkeley) 6/6/93";
-#endif
-__RCSID("$NetBSD: lock.c,v 1.10 1997/10/19 04:15:40 lukem Exp $");
+static char sccsid[] = "@(#)lock.c	5.13 (Berkeley) 6/1/90";
 #endif /* not lint */
 
 /*
@@ -60,65 +52,57 @@ __RCSID("$NetBSD: lock.c,v 1.10 1997/10/19 04:15:40 lukem Exp $");
 #include <sys/param.h>
 #include <sys/stat.h>
 #include <sys/time.h>
-#include <signal.h>
-
-#include <ctype.h>
-#include <err.h>
+#include <sys/signal.h>
+#include <sgtty.h>
 #include <pwd.h>
 #include <stdio.h>
-#include <stdlib.h>
+#include <ctype.h>
 #include <string.h>
-#include <termios.h>
-#include <unistd.h>
-#ifdef SKEY
-#include <skey.h>
-#endif
 
 #define	TIMEOUT	15
 
-void	bye __P((int));
-void	hi __P((int));
-int	main __P((int, char **));
-void	quit __P((int));
-#ifdef SKEY
-int	skey_auth __P((char *));
-#endif
+void quit(), bye(), hi();
 
 struct timeval	timeout;
 struct timeval	zerotime;
-struct termios	tty, ntty;
+struct sgttyb	tty, ntty;
 long	nexttime;			/* keep the timeout time */
 
-int
+/*ARGSUSED*/
 main(argc, argv)
 	int argc;
 	char **argv;
 {
 	extern char *optarg;
+	extern int errno, optind;
 	struct passwd *pw;
 	struct timeval timval;
 	struct itimerval ntimer, otimer;
 	struct tm *timp;
-	time_t curtime;
 	int ch, sectimeout, usemine;
 	char *ap, *mypw, *ttynam, *tzn;
 	char hostname[MAXHOSTNAMELEN], s[BUFSIZ], s1[BUFSIZ];
+	char *crypt(), *ttyname();
 
 	sectimeout = TIMEOUT;
 	mypw = NULL;
 	usemine = 0;
-
-	if (!(pw = getpwuid(getuid())))
-		errx(1, "unknown uid %d.", getuid());
-
-	while ((ch = getopt(argc, argv, "pt:")) != -1)
+	while ((ch = getopt(argc, argv, "pt:")) != EOF)
 		switch((char)ch) {
 		case 't':
-			if ((sectimeout = atoi(optarg)) <= 0)
-				errx(1, "illegal timeout value: %s", optarg);
+			if ((sectimeout = atoi(optarg)) <= 0) {
+				(void)fprintf(stderr,
+				    "lock: illegal timeout value.\n");
+				exit(1);
+			}
 			break;
 		case 'p':
 			usemine = 1;
+			if (!(pw = getpwuid(getuid()))) {
+				(void)fprintf(stderr,
+				    "lock: unknown uid %d.\n", getuid());
+				exit(1);
+			}
 			mypw = strdup(pw->pw_passwd);
 			break;
 		case '?':
@@ -131,29 +115,33 @@ main(argc, argv)
 
 	setuid(getuid());		/* discard privs */
 
-	if (tcgetattr(0, &tty) < 0)	/* get information for header */
+	if (ioctl(0, TIOCGETP, &tty))	/* get information for header */
 		exit(1);
 	gethostname(hostname, sizeof(hostname));
-	if (!(ttynam = ttyname(0)))
-		errx(1, "not a terminal?");
-	if (gettimeofday(&timval, (struct timezone *)NULL))
-		err(1, "gettimeofday");
-	curtime = timval.tv_sec;
+	if (!(ttynam = ttyname(0))) {
+		(void)printf("lock: not a terminal?\n");
+		exit(1);
+	}
+	if (gettimeofday(&timval, (struct timezone *)NULL)) {
+		(void)fprintf(stderr,
+		    "lock: gettimeofday: %s\n", strerror(errno));
+		exit(1);
+	}
 	nexttime = timval.tv_sec + (sectimeout * 60);
-	timp = localtime(&curtime);
+	timp = localtime(&timval.tv_sec);
 	ap = asctime(timp);
 	tzn = timp->tm_zone;
 
 	(void)signal(SIGINT, quit);
 	(void)signal(SIGQUIT, quit);
-	ntty = tty; ntty.c_lflag &= ~ECHO;
-	(void)tcsetattr(0, TCSADRAIN, &ntty);
+	ntty = tty; ntty.sg_flags &= ~ECHO;
+	(void)ioctl(0, TIOCSETP, &ntty);
 
 	if (!mypw) {
 		/* get key and check again */
 		(void)printf("Key: ");
 		if (!fgets(s, sizeof(s), stdin) || *s == '\n')
-			quit(0);
+			quit();
 		(void)printf("\nAgain: ");
 		/*
 		 * Don't need EOF test here, if we get EOF, then s1 != s
@@ -162,11 +150,11 @@ main(argc, argv)
 		(void)fgets(s1, sizeof(s1), stdin);
 		(void)putchar('\n');
 		if (strcmp(s1, s)) {
-			(void)printf("\alock: passwords didn't match.\n");
-			(void)tcsetattr(0, TCSADRAIN, &tty);
+			(void)printf("\07lock: passwords didn't match.\n");
+			ioctl(0, TIOCSETP, &tty);
 			exit(1);
 		}
-		s[0] = '\0';
+		s[0] = NULL;
 		mypw = s1;
 	}
 
@@ -188,61 +176,25 @@ main(argc, argv)
 		(void)printf("Key: ");
 		if (!fgets(s, sizeof(s), stdin)) {
 			clearerr(stdin);
-			hi(0);
+			hi();
 			continue;
 		}
 		if (usemine) {
 			s[strlen(s) - 1] = '\0';
-#ifdef SKEY
-			if (strcasecmp(s, "s/key") == 0) {
-				if (skey_auth(pw->pw_name))
-					break;
-			}
-#endif
 			if (!strcmp(mypw, crypt(s, mypw)))
 				break;
 		}
 		else if (!strcmp(s, s1))
 			break;
-		(void)printf("\a\n");
-		if (tcsetattr(0, TCSADRAIN, &ntty) < 0)
+		(void)printf("\07\n");
+		if (ioctl(0, TIOCGETP, &ntty))
 			exit(1);
 	}
-	quit(0);
-	/* NOTREACHED */
-	return (0);
+	quit();
 }
-
-#ifdef SKEY
-/*
- * We can't use libskey's skey_authenticate() since it
- * handles signals in a way that's inappropriate
- * for our needs. Instead we roll our own.
- */
-int
-skey_auth(char *user)
-{
-	char s[128], *ask, *skey_keyinfo __P((char *name));
-	int ret = 0;
-
-	if (!skey_haskey(user) && (ask = skey_keyinfo(user))) {
-		printf("\n[%s]\nResponse: ", ask);
-		if (!fgets(s, sizeof(s), stdin) || *s == '\n')
-			clearerr(stdin);
-		else {
-			s[strlen(s) - 1] = '\0';
-			if (skey_passcheck(user, s) != -1)
-				ret = 1;
-		}
-	} else
-		printf("Sorry, you have no s/key.\n");
-	return ret;
-}
-#endif
 
 void
-hi(dummy)
-	int dummy;
+hi()
 {
 	struct timeval timval;
 
@@ -252,19 +204,17 @@ hi(dummy)
 }
 
 void
-quit(dummy)
-	int dummy;
+quit()
 {
 	(void)putchar('\n');
-	(void)tcsetattr(0, TCSADRAIN, &tty);
+	(void)ioctl(0, TIOCSETP, &tty);
 	exit(0);
 }
 
 void
-bye(dummy)
-	int dummy;
+bye()
 {
-	(void)tcsetattr(0, TCSADRAIN, &tty);
+	(void)ioctl(0, TIOCSETP, &tty);
 	(void)printf("lock: timeout\n");
 	exit(1);
 }

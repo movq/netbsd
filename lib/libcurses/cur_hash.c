@@ -1,5 +1,3 @@
-/*	$NetBSD: cur_hash.c,v 1.5 1997/07/22 07:36:33 mikel Exp $	*/
-
 /*
  * Copyright (c) 1992, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -33,18 +31,12 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)cur_hash.c	8.1 (Berkeley) 6/4/93";
-#else
-__RCSID("$NetBSD: cur_hash.c,v 1.5 1997/07/22 07:36:33 mikel Exp $");
-#endif
+static char sccsid[] = "@(#)hash.c	8.1 (Berkeley) 6/4/93";
 #endif	/* not lint */
 
 #include <sys/types.h>
 
-#include "curses.h"
 
 /*
  * __hash() is "hashpjw" from the Dragon Book, Aho, Sethi & Ullman, p.436.
@@ -60,7 +52,7 @@ __hash(s, len)
 	i = 0;
         while (i < len) {
                 h = (h << 4) + s[i];
-                if ((g = h & 0xf0000000) != 0) {
+                if (g = h & 0xf0000000) {
                         h = h ^ (g >> 24);
                         h = h ^ g;
                 }

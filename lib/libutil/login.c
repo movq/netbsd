@@ -1,8 +1,6 @@
-/*	$NetBSD: login.c,v 1.8 1997/08/25 19:31:46 kleink Exp $	*/
-
 /*
- * Copyright (c) 1988, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1988 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,23 +31,14 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char sccsid[] = "@(#)login.c	8.1 (Berkeley) 6/4/93";
-#else
-__RCSID("$NetBSD: login.c,v 1.8 1997/08/25 19:31:46 kleink Exp $");
-#endif
+static char sccsid[] = "@(#)login.c	5.4 (Berkeley) 6/1/90";
 #endif /* LIBC_SCCS and not lint */
 
 #include <sys/types.h>
-
-#include <fcntl.h>
-#include <unistd.h>
-#include <stdlib.h>
+#include <sys/file.h>
 #include <utmp.h>
 #include <stdio.h>
-#include <util.h>
 
 void
 login(ut)
@@ -57,15 +46,16 @@ login(ut)
 {
 	register int fd;
 	int tty;
+	off_t lseek();
 
 	tty = ttyslot();
 	if (tty > 0 && (fd = open(_PATH_UTMP, O_WRONLY|O_CREAT, 0644)) >= 0) {
-		(void)lseek(fd, (off_t)(tty * sizeof(struct utmp)), SEEK_SET);
-		(void)write(fd, ut, sizeof(struct utmp));
+		(void)lseek(fd, (long)(tty * sizeof(struct utmp)), L_SET);
+		(void)write(fd, (char *)ut, sizeof(struct utmp));
 		(void)close(fd);
 	}
 	if ((fd = open(_PATH_WTMP, O_WRONLY|O_APPEND, 0)) >= 0) {
-		(void)write(fd, ut, sizeof(struct utmp));
+		(void)write(fd, (char *)ut, sizeof(struct utmp));
 		(void)close(fd);
 	}
 }

@@ -1,8 +1,6 @@
-/*	$NetBSD: gprof.c,v 1.9 1997/01/30 09:20:55 matthias Exp $	*/
-
 /*
- * Copyright (c) 1983, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1983 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -34,17 +32,13 @@
  */
 
 #ifndef lint
-static char copyright[] =
-"@(#) Copyright (c) 1983, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n";
+char copyright[] =
+"@(#) Copyright (c) 1983 Regents of the University of California.\n\
+ All rights reserved.\n";
 #endif /* not lint */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)gprof.c	8.1 (Berkeley) 6/6/93";
-#else
-static char rcsid[] = "$NetBSD: gprof.c,v 1.9 1997/01/30 09:20:55 matthias Exp $";
-#endif
+static char sccsid[] = "@(#)gprof.c	5.7 (Berkeley) 4/24/91";
 #endif /* not lint */
 
 #include "gprof.h"
@@ -55,8 +49,6 @@ char	*whoami = "gprof";
      *	things which get -E excluded by default.
      */
 char	*defaultEs[] = { "mcount" , "__mcleanup" , 0 };
-
-static struct gmonhdr	gmonhdr;
 
 main(argc, argv)
     int argc;
@@ -78,12 +70,8 @@ main(argc, argv)
 	case 'b':
 	    bflag = FALSE;
 	    break;
-	case 'C':
-	    Cflag = TRUE;
-	    cyclethreshold = atoi( *++argv );
-	    break;
 	case 'c':
-#if defined(vax) || defined(tahoe) || defined(sparc)
+#if defined(vax) || defined(tahoe)
 	    cflag = TRUE;
 #else
 	    fprintf(stderr, "gprof: -c isn't supported on this architecture yet\n");
@@ -92,8 +80,8 @@ main(argc, argv)
 	    break;
 	case 'd':
 	    dflag = TRUE;
-	    setlinebuf(stdout);
-	    debug |= atoi( *++argv );
+	    (*argv)++;
+	    debug |= atoi( *argv );
 	    debug |= ANYDEBUG;
 #	    ifdef DEBUG
 		printf("[main] debug = %d\n", debug);
@@ -159,6 +147,15 @@ main(argc, argv)
 	addlist( elist , *sp );
     }
 	/*
+	 *	how many ticks per second?
+	 *	if we can't tell, report time in ticks.
+	 */
+    hz = hertz();
+    if (hz == 0) {
+	hz = 1;
+	fprintf(stderr, "time is in ticks, not seconds\n");
+    }
+	/*
 	 *	get information about a.out file.
 	 */
     getnfile();
@@ -171,14 +168,6 @@ main(argc, argv)
 	    gmonname = *argv;
 	}
     } while ( *argv++ != 0 );
-	/*
-	 *	how many ticks per second?
-	 *	if we can't tell, report time in ticks.
-	 */
-    if (hz == 0) {
-	hz = 1;
-	fprintf(stderr, "time is in ticks, not seconds\n");
-    }
 	/*
 	 *	dump out a gmon.sum file if requested
 	 */
@@ -254,9 +243,9 @@ getstrtab(nfile)
 		whoami , a_outname );
 	done();
     }
-    strtab = calloc(ssiz, 1);
+    strtab = (char *)calloc(ssiz, 1);
     if (strtab == NULL) {
-	fprintf(stderr, "%s: %s: no room for %d bytes of string table\n",
+	fprintf(stderr, "%s: %s: no room for %d bytes of string table",
 		whoami , a_outname , ssiz);
 	done();
     }
@@ -334,7 +323,8 @@ getsymtab(nfile)
 gettextspace( nfile )
     FILE	*nfile;
 {
-
+    char	*malloc();
+    
     if ( cflag == 0 ) {
 	return;
     }
@@ -391,56 +381,36 @@ FILE *
 openpfile(filename)
     char *filename;
 {
-    struct gmonhdr	tmp;
-    FILE		*pfile;
-    int			size;
-    int			rate;
+    struct hdr	tmp;
+    FILE	*pfile;
 
     if((pfile = fopen(filename, "r")) == NULL) {
 	perror(filename);
 	done();
     }
-    fread(&tmp, sizeof(struct gmonhdr), 1, pfile);
-    if ( s_highpc != 0 && ( tmp.lpc != gmonhdr.lpc ||
-	 tmp.hpc != gmonhdr.hpc || tmp.ncnt != gmonhdr.ncnt ) ) {
+    fread(&tmp, sizeof(struct hdr), 1, pfile);
+    if ( s_highpc != 0 && ( tmp.lowpc != h.lowpc ||
+	 tmp.highpc != h.highpc || tmp.ncnt != h.ncnt ) ) {
 	fprintf(stderr, "%s: incompatible with first gmon file\n", filename);
 	done();
     }
-    gmonhdr = tmp;
-    if ( gmonhdr.version == GMONVERSION ) {
-	rate = gmonhdr.profrate;
-	size = sizeof(struct gmonhdr);
-    } else {
-	fseek(pfile, sizeof(struct ophdr), SEEK_SET);
-	size = sizeof(struct ophdr);
-	gmonhdr.profrate = rate = hertz();
-	gmonhdr.version = GMONVERSION;
-    }
-    if (hz == 0) {
-	hz = rate;
-    } else if (hz != rate) {
-	fprintf(stderr,
-	    "%s: profile clock rate (%d) %s (%d) in first gmon file\n",
-	    filename, rate, "incompatible with clock rate", hz);
-	done();
-    }
-    s_lowpc = (unsigned long) gmonhdr.lpc;
-    s_highpc = (unsigned long) gmonhdr.hpc;
-    lowpc = (unsigned long)gmonhdr.lpc / sizeof(UNIT);
-    highpc = (unsigned long)gmonhdr.hpc / sizeof(UNIT);
-    sampbytes = gmonhdr.ncnt - size;
+    h = tmp;
+    s_lowpc = (unsigned long) h.lowpc;
+    s_highpc = (unsigned long) h.highpc;
+    lowpc = (unsigned long)h.lowpc / sizeof(UNIT);
+    highpc = (unsigned long)h.highpc / sizeof(UNIT);
+    sampbytes = h.ncnt - sizeof(struct hdr);
     nsamples = sampbytes / sizeof (UNIT);
 #   ifdef DEBUG
 	if ( debug & SAMPLEDEBUG ) {
-	    printf( "[openpfile] hdr.lpc 0x%x hdr.hpc 0x%x hdr.ncnt %d\n",
-		gmonhdr.lpc , gmonhdr.hpc , gmonhdr.ncnt );
+	    printf( "[openpfile] hdr.lowpc 0x%x hdr.highpc 0x%x hdr.ncnt %d\n",
+		h.lowpc , h.highpc , h.ncnt );
 	    printf( "[openpfile]   s_lowpc 0x%x   s_highpc 0x%x\n" ,
 		s_lowpc , s_highpc );
 	    printf( "[openpfile]     lowpc 0x%x     highpc 0x%x\n" ,
 		lowpc , highpc );
 	    printf( "[openpfile] sampbytes %d nsamples %d\n" ,
 		sampbytes , nsamples );
-	    printf( "[openpfile] sample rate %d\n" , hz );
 	}
 #   endif DEBUG
     return(pfile);
@@ -454,8 +424,6 @@ tally( rawp )
 
     parentp = nllookup( rawp -> raw_frompc );
     childp = nllookup( rawp -> raw_selfpc );
-    if ( parentp == 0 || childp == 0 )
-	return;
     if ( kflag
 	 && onlist( kfromlist , parentp -> name )
 	 && onlist( ktolist , childp -> name ) ) {
@@ -489,7 +457,7 @@ dumpsum( sumfile )
     /*
      * dump the header; use the last header read in
      */
-    if ( fwrite( &gmonhdr , sizeof gmonhdr , 1 , sfile ) != 1 ) {
+    if ( fwrite( &h , sizeof h , 1 , sfile ) != 1 ) {
 	perror( sumfile );
 	done();
     }
@@ -649,8 +617,6 @@ asgnsamples()
 		    }
 #		endif DEBUG
 		nl[j].time += overlap * time / scale;
-		if ( onlist( Elist , nl[j].name ) )
-			totime -= overlap * time / scale;
 	    }
 	}
     }
@@ -714,7 +680,7 @@ funcsymbol( nlistp )
 {
     extern char	*strtab;	/* string table from a.out */
     extern int	aflag;		/* if static functions aren't desired */
-    char	*name, c;
+    char	*name;
 
 	/*
 	 *	must be a text symbol,
@@ -728,24 +694,9 @@ funcsymbol( nlistp )
 	 *	can't have any `funny' characters in name,
 	 *	where `funny' includes	`.', .o file names
 	 *			and	`$', pascal labels.
-	 *	need to make an exception for sparc .mul & co.
-	 *	perhaps we should just drop this code entirely...
 	 */
-    name = strtab + nlistp -> n_un.n_strx;
-#ifdef sparc
-    if (nlistp -> n_value & 3)
-	return FALSE;
-    if ( *name == '.' ) {
-	char *p = name + 1;
-	if ( *p == 'u' )
-	    p++;
-	if ( strcmp ( p, "mul" ) == 0 || strcmp ( p, "div" ) == 0 ||
-	     strcmp ( p, "rem" ) == 0 )
-		return TRUE;
-    }
-#endif
-    while ( c = *name++ ) {
-	if ( c == '.' || c == '$' ) {
+    for ( name = strtab + nlistp -> n_un.n_strx ; *name ; name += 1 ) {
+	if ( *name == '.' || *name == '$' ) {
 	    return FALSE;
 	}
     }

@@ -1,8 +1,6 @@
-/*	$NetBSD: init.c,v 1.7 1997/10/12 00:53:59 lukem Exp $	*/
-
 /*
- * Copyright (c) 1982, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1982 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,13 +31,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)init.c	8.1 (Berkeley) 5/31/93";
-#else
-__RCSID("$NetBSD: init.c,v 1.7 1997/10/12 00:53:59 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)init.c	5.4 (Berkeley) 6/1/90";
 #endif /* not lint */
 
 # include	"mille.h"
@@ -48,14 +41,13 @@ __RCSID("$NetBSD: init.c,v 1.7 1997/10/12 00:53:59 lukem Exp $");
  * @(#)init.c	1.1 (Berkeley) 4/1/82
  */
 
-void
-init()
-{
-	PLAY	*pp;
-	int	i, j;
-	CARD	card;
+init() {
 
-	memset(Numseen, 0, sizeof Numseen);
+	reg PLAY	*pp;
+	reg int		i, j;
+	reg CARD	card;
+
+	bzero(Numseen, sizeof Numseen);
 	Numgos = 0;
 
 	for (i = 0; i < 2; i++) {
@@ -92,17 +84,16 @@ init()
 	End = 700;
 }
 
-void
-shuffle()
-{
-	int	i, r;
-	CARD	temp;
+shuffle() {
+
+	reg int		i, r;
+	reg CARD	temp;
 
 	for (i = 0; i < DECK_SZ; i++) {
 		r = roll(1, DECK_SZ) - 1;
 		if (r < 0 || r > DECK_SZ - 1) {
-			warnx("shuffle: card no. error: %d", r);
-			die(1);
+			fprintf(stderr, "shuffle: card no. error: %d\n", r);
+			die();
 		}
 		temp = Deck[r];
 		Deck[r] = Deck[i];
@@ -111,11 +102,10 @@ shuffle()
 	Topcard = &Deck[DECK_SZ];
 }
 
-void
-newboard()
-{
-	int		i;
-	PLAY		*pp;
+newboard() {
+
+	register int	i;
+	register PLAY	*pp;
 	static int	first = TRUE;
 
 	if (first) {
@@ -170,11 +160,10 @@ newboard()
 	newscore();
 }
 
-void
-newscore()
-{
-	int		i, new;
-	PLAY		*pp;
+newscore() {
+
+	reg int		i, new;
+	register PLAY	*pp;
 	static int	was_full = -1;
 	static int	last_win = -1;
 
@@ -195,7 +184,8 @@ newscore()
 		mvaddstr(4, 37, "300");
 		new = TRUE;
 	}
-	else if ((Window == W_FULL || Finished) ^ was_full) {
+	else if (((Window == W_FULL || Finished) ^ was_full) ||
+		 pp->was_finished != Finished) {
 		move(5, 1);
 		clrtobot();
 		new = TRUE;
@@ -206,8 +196,8 @@ newscore()
 		for (i = 0; i < SCORE_Y; i++)
 			mvaddch(i, 0, '|');
 		move(SCORE_Y - 1, 1);
-		for (i = 0; i < SCORE_X; i++)
-			addch('_');
+		while (addch('_') != ERR)
+			continue;
 		for (pp = Player; pp <= &Player[COMP]; pp++) {
 			pp->sh_hand_tot = -1;
 			pp->sh_total = -1;

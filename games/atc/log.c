@@ -1,8 +1,6 @@
-/*	$NetBSD: log.c,v 1.6 1997/10/11 02:01:02 lukem Exp $	*/
-
 /*-
- * Copyright (c) 1990, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1990 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Ed James.
@@ -45,26 +43,16 @@
  * For more info on this and all of my stuff, mail edjames@berkeley.edu.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)log.c	8.1 (Berkeley) 5/31/93";
-#else
-__RCSID("$NetBSD: log.c,v 1.6 1997/10/11 02:01:02 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)log.c	5.7 (Berkeley) 10/30/90";
 #endif not lint
 
 #include "include.h"
 #include "pathnames.h"
 
-int
-compar(va, vb)
-	const void *va, *vb;
-{
+compar(a, b)
 	SCORE	*a, *b;
-
-	a = (SCORE *)va;
-	b = (SCORE *)vb;
+{
 	if (b->planes == a->planes)
 		return (b->time - a->time);
 	else
@@ -83,7 +71,6 @@ compar(va, vb)
 
 char	*
 timestr(t)
-	int t;
 {
 	static char	s[80];
 
@@ -101,21 +88,21 @@ timestr(t)
 	return (s);
 }
 
-int
 log_score(list_em)
-	int list_em;
 {
-	int		i, fd, num_scores = 0, good, changed = 0, found = 0;
+	register int	i, fd, num_scores = 0, good, changed = 0, found = 0;
 	struct passwd	*pw;
 	FILE		*fp;
-	char		*cp;
+	char		*cp, *index(), *rindex();
 	SCORE		score[100], thisscore;
+#ifdef SYSV
 	struct utsname	name;
+#endif
 
 	umask(0);
 	fd = open(_PATH_SCORE, O_CREAT|O_RDWR, 0644);
 	if (fd < 0) {
-		warn("open %s", _PATH_SCORE);
+		perror(_PATH_SCORE);
 		return (-1);
 	}
 	/*
@@ -124,7 +111,7 @@ log_score(list_em)
 	 */
 	fp = fdopen(fd, "r+");
 	if (fp == NULL) {
-		warn("fdopen %s", _PATH_SCORE);
+		perror(_PATH_SCORE);
 		return (-1);
 	}
 #ifdef BSD
@@ -134,7 +121,7 @@ log_score(list_em)
 	while (lockf(fileno(fp), F_LOCK, 1) < 0)
 #endif
 	{
-		warn("flock %s", _PATH_SCORE);
+		perror("flock");
 		return (-1);
 	}
 	for (;;) {
@@ -156,11 +143,18 @@ log_score(list_em)
 			return (-1);
 		}
 		strcpy(thisscore.name, pw->pw_name);
+#ifdef BSD
+		if (gethostname(thisscore.host, sizeof (thisscore.host)) < 0) {
+			perror("gethostname");
+			return (-1);
+		}
+#endif
+#ifdef SYSV
 		uname(&name);
-		strncpy(thisscore.host, name.sysname, sizeof(thisscore.host)-1);
-		thisscore.host[sizeof(thisscore.host) - 1] = '\0';
+		strcpy(thisscore.host, name.sysname);
+#endif
 
-		cp = strrchr(file, '/');
+		cp = rindex(file, '/');
 		if (cp == NULL) {
 			fprintf(stderr, "log: where's the '/' in %s?\n", file);
 			return (-1);
@@ -192,19 +186,19 @@ log_score(list_em)
 				if (thisscore.time > score[i].time) {
 					if (num_scores < NUM_SCORES)
 						num_scores++;
-					memcpy(&score[num_scores - 1],
-					       &score[i],
-					       sizeof (score[i]));
-					memcpy(&score[i], &thisscore,
-					       sizeof (score[i]));
+					bcopy(&score[i],
+						&score[num_scores - 1], 
+						sizeof (score[i]));
+					bcopy(&thisscore, &score[i],
+						sizeof (score[i]));
 					changed++;
 					break;
 				}
 			}
 		}
 		if (!found && !changed && num_scores < NUM_SCORES) {
-			memcpy(&score[num_scores], &thisscore,
-			       sizeof (score[num_scores]));
+			bcopy(&thisscore, &score[num_scores], 
+				sizeof (score[num_scores]));
 			num_scores++;
 			changed++;
 		}
@@ -240,7 +234,7 @@ log_score(list_em)
 		"game", "time", "real time", "planes safe");
 	puts("-------------------------------------------------------------------------------");
 	for (i = 0; i < num_scores; i++) {
-		cp = strchr(score[i].host, '.');
+		cp = index(score[i].host, '.');
 		if (cp != NULL)
 			*cp = '\0';
 		printf("%2d:  %-8s  %-8s  %-18s  %4d  %9s  %4d\n", i + 1,
@@ -250,12 +244,4 @@ log_score(list_em)
 	}
 	putchar('\n');
 	return (0);
-}
-
-void
-log_score_quit(dummy)
-	int dummy;
-{
-	(void)log_score(0);
-	exit(0);
 }

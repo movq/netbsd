@@ -1,7 +1,5 @@
-.\"	$NetBSD: ctags.1,v 1.5 1997/10/18 13:18:24 lukem Exp $
-.\"
-.\" Copyright (c) 1987, 1990, 1993
-.\"	The Regents of the University of California.  All rights reserved.
+.\" Copyright (c) 1987, 1990 The Regents of the University of California.
+.\" All rights reserved.
 .\"
 .\" Redistribution and use in source and binary forms, with or without
 .\" modification, are permitted provided that the following conditions
@@ -31,38 +29,37 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\"     @(#)ctags.1	8.1 (Berkeley) 6/6/93
+.\"     @(#)ctags.1	6.8 (Berkeley) 4/24/91
 .\"
-.Dd June 6, 1993
+.Dd April 24, 1991
 .Dt CTAGS 1
 .Os BSD 4
 .Sh NAME
 .Nm ctags
 .Nd create a tags file
 .Sh SYNOPSIS
-.Nm
+.Nm ctags
 .Op Fl BFadtuwvx
 .Op Fl f Ar tagsfile
 .Ar name ...
 .Sh DESCRIPTION
-.Nm
+.Nm Ctags
 makes a tags file for
 .Xr ex 1
 from the specified C,
 Pascal, Fortran,
 .Tn YACC ,
-lex, and lisp sources.
-A tags file gives the locations of specified objects in a group of files.
-Each line of the tags file contains the object name, the file in which it
-is defined, and a search pattern for the object definition, separated by
-white-space.
+lex, and lisp sources.  A tags file gives the
+locations of specified objects in a group of files.  Each line of the
+tags file contains the object name, the file in which it is defined,
+and a search pattern for the object definition, separated by white-space.
 Using the
 .Ar tags
 file,
 .Xr ex 1
-can quickly locate these object definitions.
-Depending upon the options provided to
-.Nm "" ,
+can quickly locate these object
+definitions.  Depending on the options provided to
+.Nm ctags ,
 objects will consist of subroutines, typedefs, defines, structs,
 enums and unions.
 .Bl -tag -width Ds
@@ -86,7 +83,7 @@ that take arguments are tagged automatically.
 .It Fl f
 Places the tag descriptions in a file called
 .Ar tagsfile .
-The default behaviour is to place them in a file called
+The default behaviour is to place them in a file
 .Ar tags .
 .It Fl t
 create tags for typedefs, structs, unions, and enums.
@@ -115,7 +112,7 @@ vgrind \-x index
 .It Fl w
 suppress warning diagnostics.
 .It Fl x
-.Nm
+.Nm ctags
 produces a list of object
 names, the line number and file name on which each is defined, as well
 as the text of that line and prints this on the standard output.  This
@@ -124,18 +121,18 @@ function index.
 .El
 .Pp
 Files whose names end in
-.Sq \&.c
+.Nm \&.c
 or
-.Sq \&.h
+.Nm \&.h
 are assumed to be C
 source files and are searched for C style routine and macro definitions.
 Files whose names end in
-.Sq \&.y
+.Nm \&.y
 are assumed to be
 .Tn YACC
 source files.
 Files whose names end in
-.Sq \&.l
+.Nm \&.l
 are assumed to be lisp files if their
 first non-blank character is `;', `(', or `[',
 otherwise, they are
@@ -150,10 +147,10 @@ is created by prepending
 .Ar M
 to the name of the file, with the
 trailing
-.Sq \&.c
+.Nm \&.c
 and any leading pathname components removed.  This
 makes use of
-.Nm
+.Nm ctags
 practical in directories with more than one
 program.
 .Pp
@@ -170,24 +167,24 @@ the second section of the lex file.
 default output tags file
 .El
 .Sh DIAGNOSTICS
-.Nm
-exits with a value of 1 if an error occurred, 0 otherwise.
-Duplicate objects are not considered errors.
+.Nm Ctags
+exits with a value of 1 if an error occurred, where
+duplicate objects are not considered errors, 0 otherwise.
 .Sh SEE ALSO
 .Xr ex 1 ,
 .Xr vi 1
 .Sh BUGS
 Recognition of
-.Em functions  ,
-.Em subroutines
+.Nm functions  ,
+.Nm subroutines
 and
-.Em procedures
+.Nm procedures
 for
 .Tn FORTRAN
 and Pascal is done is a very simpleminded way.  No attempt
 is made to deal with block structure; if you have two Pascal procedures
 in different blocks with the same name you lose.
-.Nm
+.Nm Ctags
 doesn't
 understand about Pascal types.
 .Pp
@@ -195,12 +192,12 @@ The method of deciding whether to look for C, Pascal or
 .Tn FORTRAN
 functions is a hack.
 .Pp
-.Nm
+.Nm Ctags
 relies on the input being well formed, and any syntactical
 errors will completely confuse it.  It also finds some legal syntax
-confusing; for example, since it doesn't understand
-.Li #ifdef Ns 's
-(incidentally, that's a feature, not a bug), any code with unbalanced
+confusing; for example, as it doesn't understand
+.Li #ifdef Ns 's ,
+(incidentally, that's a feature, not a bug) any code with unbalanced
 braces inside
 .Li #ifdef Ns 's
 will cause it to become somewhat disoriented.

@@ -1,5 +1,3 @@
-/*	$NetBSD: ffs_tables.c,v 1.2 1994/06/29 06:46:35 cgd Exp $	*/
-
 /*
  * Copyright (c) 1982, 1986, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -32,7 +30,8 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)ffs_tables.c	8.1 (Berkeley) 6/11/93
+ *	from: @(#)ffs_tables.c	8.1 (Berkeley) 6/11/93
+ *	$Id: ffs_tables.c,v 1.1 1994/06/08 11:42:08 mycroft Exp $
  */
 
 #include <sys/param.h>

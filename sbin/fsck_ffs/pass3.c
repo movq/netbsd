@@ -1,8 +1,6 @@
-/*	$NetBSD: pass3.c,v 1.10 1997/09/16 16:45:19 lukem Exp $	*/
-
 /*
- * Copyright (c) 1980, 1986, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1980, 1986 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,28 +31,18 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)pass3.c	8.2 (Berkeley) 4/27/95";
-#else
-__RCSID("$NetBSD: pass3.c,v 1.10 1997/09/16 16:45:19 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)pass3.c	5.10 (Berkeley) 6/1/90";
 #endif /* not lint */
 
 #include <sys/param.h>
-#include <sys/time.h>
-
-#include <ufs/ufs/dinode.h>
-#include <ufs/ffs/fs.h>
-
+#include <ufs/dinode.h>
+#include <ufs/fs.h>
 #include "fsck.h"
-#include "extern.h"
 
-void
 pass3()
 {
-	struct inoinfo **inpp, *inp;
+	register struct inoinfo **inpp, *inp;
 	ino_t orphan;
 	int loopcnt;
 

@@ -1,5 +1,3 @@
-/*	$NetBSD: strtouq.c,v 1.7 1997/07/13 20:17:04 christos Exp $	*/
-
 /*-
  * Copyright (c) 1992 The Regents of the University of California.
  * All rights reserved.
@@ -33,21 +31,15 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-#if 0
 static char sccsid[] = "@(#)strtouq.c	5.1 (Berkeley) 6/26/92";
-#else
-__RCSID("$NetBSD: strtouq.c,v 1.7 1997/07/13 20:17:04 christos Exp $");
-#endif
 #endif /* LIBC_SCCS and not lint */
 
-#include "namespace.h"
 #include <sys/types.h>
 
-#include <ctype.h>
-#include <errno.h>
 #include <limits.h>
+#include <errno.h>
+#include <ctype.h>
 #include <stdlib.h>
 
 /*
@@ -57,14 +49,15 @@ __RCSID("$NetBSD: strtouq.c,v 1.7 1997/07/13 20:17:04 christos Exp $");
  * alphabets and digits are each contiguous.
  */
 u_quad_t
-_strtouq(nptr, endptr, base)
+strtouq(nptr, endptr, base)
 	const char *nptr;
 	char **endptr;
 	register int base;
 {
-	register const char *s;
-	register u_quad_t acc, cutoff;
+	register const char *s = nptr;
+	register u_quad_t acc;
 	register int c;
+	register u_quad_t qbase, cutoff;
 	register int neg, any, cutlim;
 
 	/*
@@ -72,7 +65,7 @@ _strtouq(nptr, endptr, base)
 	 */
 	s = nptr;
 	do {
-		c = (unsigned char) *s++;
+		c = *s++;
 	} while (isspace(c));
 	if (c == '-') {
 		neg = 1;
@@ -90,10 +83,10 @@ _strtouq(nptr, endptr, base)
 	}
 	if (base == 0)
 		base = c == '0' ? 8 : 10;
-
-	cutoff = UQUAD_MAX / (u_quad_t)base;
-	cutlim = UQUAD_MAX % (u_quad_t)base;
-	for (acc = 0, any = 0;; c = (unsigned char) *s++) {
+	qbase = (unsigned)base;
+	cutoff = (u_quad_t)UQUAD_MAX / qbase;
+	cutlim = (u_quad_t)UQUAD_MAX % qbase;
+	for (acc = 0, any = 0;; c = *s++) {
 		if (isdigit(c))
 			c -= '0';
 		else if (isalpha(c))
@@ -102,21 +95,20 @@ _strtouq(nptr, endptr, base)
 			break;
 		if (c >= base)
 			break;
-		if (any < 0)
-			continue;
-		if (acc > cutoff || (acc == cutoff && c > cutlim)) {
+		if (any < 0 || acc > cutoff || acc == cutoff && c > cutlim)
 			any = -1;
-			acc = UQUAD_MAX;
-			errno = ERANGE;
-		} else {
+		else {
 			any = 1;
-			acc *= (u_quad_t)base;
+			acc *= qbase;
 			acc += c;
 		}
 	}
-	if (neg && any > 0)
+	if (any < 0) {
+		acc = UQUAD_MAX;
+		errno = ERANGE;
+	} else if (neg)
 		acc = -acc;
 	if (endptr != 0)
-		*endptr = (char *) (any ? s - 1 : nptr);
+		*endptr = any ? s - 1 : (char *)nptr;
 	return (acc);
 }

@@ -1,5 +1,3 @@
-/*	$NetBSD: lfs_syscalls.c,v 1.13 1997/06/11 10:10:01 bouyer Exp $	*/
-
 /*-
  * Copyright (c) 1991, 1993, 1994
  *	The Regents of the University of California.  All rights reserved.
@@ -32,19 +30,17 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)lfs_syscalls.c	8.6 (Berkeley) 6/16/94
+ *	from: @(#)lfs_syscalls.c	8.5 (Berkeley) 4/20/94
+ *	$Id: lfs_syscalls.c,v 1.1 1994/06/08 11:42:46 mycroft Exp $
  */
 
 #include <sys/param.h>
-#include <sys/systm.h>
 #include <sys/proc.h>
 #include <sys/buf.h>
 #include <sys/mount.h>
 #include <sys/vnode.h>
 #include <sys/malloc.h>
 #include <sys/kernel.h>
-
-#include <sys/syscallargs.h>
 
 #include <ufs/ufs/quota.h>
 #include <ufs/ufs/inode.h>
@@ -53,7 +49,6 @@
 
 #include <ufs/lfs/lfs.h>
 #include <ufs/lfs/lfs_extern.h>
-
 #define BUMP_FIP(SP) \
 	(SP)->fip = (FINFO *) (&(SP)->fip->fi_blocks[(SP)->fip->fi_nblocks])
 
@@ -83,22 +78,22 @@ struct buf *lfs_fakebuf __P((struct vnode *, int, size_t, caddr_t));
  *  0 on success
  * -1/errno is return on error.
  */
+struct lfs_markv_args {
+	fsid_t *fsidp;		/* file system */
+	BLOCK_INFO *blkiov;	/* block array */
+	int blkcnt;		/* count of block array entries */
+};
 int
-lfs_markv(p, v, retval)
+lfs_markv(p, uap, retval)
 	struct proc *p;
-	void *v;
-	register_t *retval;
+	struct lfs_markv_args *uap;
+	int *retval;
 {
-	struct lfs_markv_args /* {
-		syscallarg(fsid_t *) fsidp;
-		syscallarg(struct block_info *) blkiov;
-		syscallarg(int) blkcnt;
-	} */ *uap = v;
 	struct segment *sp;
 	BLOCK_INFO *blkp;
 	IFILE *ifp;
 	struct buf *bp, **bpp;
-	struct inode *ip = NULL;
+	struct inode *ip;
 	struct lfs *fs;
 	struct mount *mntp;
 	struct vnode *vp;
@@ -109,18 +104,17 @@ lfs_markv(p, v, retval)
 	u_long bsize;
 	int cnt, error;
 
-	if ((error = suser(p->p_ucred, &p->p_acflag)) != 0)
+	if (error = suser(p->p_ucred, &p->p_acflag))
 		return (error);
 
-	if ((error = copyin(SCARG(uap, fsidp), &fsid, sizeof(fsid_t))) != 0)
+	if (error = copyin(uap->fsidp, &fsid, sizeof(fsid_t)))
 		return (error);
 	if ((mntp = getvfs(&fsid)) == NULL)
 		return (EINVAL);
 
-	cnt = SCARG(uap, blkcnt);
+	cnt = uap->blkcnt;
 	start = malloc(cnt * sizeof(BLOCK_INFO), M_SEGMENT, M_WAITOK);
-	error = copyin(SCARG(uap, blkiov), start, cnt * sizeof(BLOCK_INFO));
-	if (error)
+	if (error = copyin(uap->blkiov, start, cnt * sizeof(BLOCK_INFO)))
 		goto err1;
 
 	/* Mark blocks/inodes dirty.  */
@@ -211,7 +205,7 @@ lfs_markv(p, v, retval)
 			    (error = copyin(blkp->bi_bp, bp->b_data,
 			    bsize)))
 				goto err2;
-			if ((error = VOP_BWRITE(bp)) != 0);
+			if (error = VOP_BWRITE(bp))
 				goto err2;
 		}
 		while (lfs_gatherblock(sp, bp, NULL));
@@ -261,17 +255,17 @@ err1:
  *  0 on success
  * -1/errno is return on error.
  */
+struct lfs_bmapv_args {
+	fsid_t *fsidp;		/* file system */
+	BLOCK_INFO *blkiov;	/* block array */
+	int blkcnt;		/* count of block array entries */
+};
 int
-lfs_bmapv(p, v, retval)
+lfs_bmapv(p, uap, retval)
 	struct proc *p;
-	void *v;
-	register_t *retval;
+	struct lfs_bmapv_args *uap;
+	int *retval;
 {
-	struct lfs_bmapv_args /* {
-		syscallarg(fsid_t *) fsidp;
-		syscallarg(struct block_info *) blkiov;
-		syscallarg(int) blkcnt;
-	} */ *uap = v;
 	BLOCK_INFO *blkp;
 	struct mount *mntp;
 	struct vnode *vp;
@@ -280,19 +274,17 @@ lfs_bmapv(p, v, retval)
 	daddr_t daddr;
 	int cnt, error, step;
 
-	if ((error = suser(p->p_ucred, &p->p_acflag)) != 0)
+	if (error = suser(p->p_ucred, &p->p_acflag))
 		return (error);
 
-	error = copyin(SCARG(uap, fsidp), &fsid, sizeof(fsid_t));
-	if (error)
+	if (error = copyin(uap->fsidp, &fsid, sizeof(fsid_t)))
 		return (error);
 	if ((mntp = getvfs(&fsid)) == NULL)
 		return (EINVAL);
 
-	cnt = SCARG(uap, blkcnt);
+	cnt = uap->blkcnt;
 	start = blkp = malloc(cnt * sizeof(BLOCK_INFO), M_SEGMENT, M_WAITOK);
-	error = copyin(SCARG(uap, blkiov), blkp, cnt * sizeof(BLOCK_INFO));
-	if (error) {
+	if (error = copyin(uap->blkiov, blkp, cnt * sizeof(BLOCK_INFO))) {
 		free(blkp, M_SEGMENT);
 		return (error);
 	}
@@ -310,7 +302,7 @@ lfs_bmapv(p, v, retval)
 		}
 		blkp->bi_daddr = daddr;
         }
-	copyout(start, SCARG(uap, blkiov), cnt * sizeof(BLOCK_INFO));
+	copyout(start, uap->blkiov, cnt * sizeof(BLOCK_INFO));
 	free(start, M_SEGMENT);
 	return (0);
 }
@@ -323,16 +315,16 @@ lfs_bmapv(p, v, retval)
  *  0 on success
  * -1/errno is return on error.
  */
+struct lfs_segclean_args {
+	fsid_t *fsidp;		/* file system */
+	u_long segment;		/* segment number */
+}; 
 int
-lfs_segclean(p, v, retval)
+lfs_segclean(p, uap, retval)
 	struct proc *p;
-	void *v;
-	register_t *retval;
+	struct lfs_segclean_args *uap;
+	int *retval;
 {
-	struct lfs_segclean_args /* {
-		syscallarg(fsid_t *) fsidp;
-		syscallarg(u_long) segment;
-	} */ *uap = v;
 	CLEANERINFO *cip;
 	SEGUSE *sup;
 	struct buf *bp;
@@ -341,20 +333,20 @@ lfs_segclean(p, v, retval)
 	fsid_t fsid;
 	int error;
 
-	if ((error = suser(p->p_ucred, &p->p_acflag)) != 0)
+	if (error = suser(p->p_ucred, &p->p_acflag))
 		return (error);
 
-	if ((error = copyin(SCARG(uap, fsidp), &fsid, sizeof(fsid_t))) != 0)
+	if (error = copyin(uap->fsidp, &fsid, sizeof(fsid_t)))
 		return (error);
 	if ((mntp = getvfs(&fsid)) == NULL)
 		return (EINVAL);
 
 	fs = VFSTOUFS(mntp)->um_lfs;
 
-	if (datosn(fs, fs->lfs_curseg) == SCARG(uap, segment))
+	if (datosn(fs, fs->lfs_curseg) == uap->segment)
 		return (EBUSY);
 
-	LFS_SEGENTRY(sup, fs, SCARG(uap, segment), bp);
+	LFS_SEGENTRY(sup, fs, uap->segment, bp);
 	if (sup->su_flags & SEGUSE_ACTIVE) {
 		brelse(bp);
 		return (EBUSY);
@@ -384,16 +376,16 @@ lfs_segclean(p, v, retval)
  *  1 on timeout
  * -1/errno is return on error.
  */
+struct lfs_segwait_args {
+	fsid_t *fsidp;		/* file system */
+	struct timeval *tv;	/* timeout */
+};
 int
-lfs_segwait(p, v, retval)
+lfs_segwait(p, uap, retval)
 	struct proc *p;
-	void *v;
-	register_t *retval;
+	struct lfs_segwait_args *uap;
+	int *retval;
 {
-	struct lfs_segwait_args /* {
-		syscallarg(fsid_t *) fsidp;
-		syscallarg(struct timeval *) tv;
-	} */ *uap = v;
 	extern int lfs_allclean_wakeup;
 	struct mount *mntp;
 	struct timeval atv;
@@ -402,11 +394,11 @@ lfs_segwait(p, v, retval)
 	u_long timeout;
 	int error, s;
 
-	if ((error = suser(p->p_ucred, &p->p_acflag)) != 0) {
+	if (error = suser(p->p_ucred, &p->p_acflag)) {
 		return (error);
 }
 #ifdef WHEN_QUADS_WORK
-	if (error = copyin(SCARG(uap, fsidp), &fsid, sizeof(fsid_t)))
+	if (error = copyin(uap->fsidp, &fsid, sizeof(fsid_t)))
 		return (error);
 	if (fsid == (fsid_t)-1)
 		addr = &lfs_allclean_wakeup;
@@ -416,7 +408,7 @@ lfs_segwait(p, v, retval)
 		addr = &VFSTOUFS(mntp)->um_lfs->lfs_nextseg;
 	}
 #else
-	if ((error = copyin(SCARG(uap, fsidp), &fsid, sizeof(fsid_t))) != 0)
+	if (error = copyin(uap->fsidp, &fsid, sizeof(fsid_t)))
 		return (error);
 	if ((mntp = getvfs(&fsid)) == NULL)
 		addr = &lfs_allclean_wakeup;
@@ -424,14 +416,13 @@ lfs_segwait(p, v, retval)
 		addr = &VFSTOUFS(mntp)->um_lfs->lfs_nextseg;
 #endif
 
-	if (SCARG(uap, tv)) {
-		error = copyin(SCARG(uap, tv), &atv, sizeof(struct timeval));
-		if (error)
+	if (uap->tv) {
+		if (error = copyin(uap->tv, &atv, sizeof(struct timeval)))
 			return (error);
 		if (itimerfix(&atv))
 			return (EINVAL);
 		s = splclock();
-		timeradd(&atv, &time, &atv);
+		timevaladd(&atv, (struct timeval *)&time);
 		timeout = hzto(&atv);
 		splx(s);
 	} else
@@ -474,7 +465,7 @@ lfs_fastvget(mp, ino, daddr, vpp, dinp)
 		if ((*vpp)->v_flag & VXLOCK)
 			printf ("Cleaned vnode VXLOCKED\n");
 		ip = VTOI(*vpp);
-		if (ip->i_flag & IN_LOCKED)
+		if (ip->i_flags & IN_LOCKED)
 			printf("cleaned vnode locked\n");
 		if (!(ip->i_flag & IN_MODIFIED)) {
 			++ump->um_lfs->lfs_uinodes;
@@ -485,7 +476,7 @@ lfs_fastvget(mp, ino, daddr, vpp, dinp)
 	}
 
 	/* Allocate new vnode/inode. */
-	if ((error = lfs_vcreate(mp, ino, &vp)) != 0) {
+	if (error = lfs_vcreate(mp, ino, &vp)) {
 		*vpp = NULL;
 		return (error);
 	}
@@ -508,15 +499,12 @@ lfs_fastvget(mp, ino, daddr, vpp, dinp)
 	ip->i_lfs = ump->um_lfs;
 
 	/* Read in the disk contents for the inode, copy into the inode. */
-	if (dinp) {
-		error = copyin(dinp, &ip->i_din.ffs_din, sizeof(struct dinode));
-		if (error)
+	if (dinp)
+		if (error = copyin(dinp, &ip->i_din, sizeof(struct dinode)))
 			return (error);
-	}
 	else {
-		error = bread(ump->um_devvp, daddr,
-			      (int)ump->um_lfs->lfs_bsize, NOCRED, &bp);
-		if (error) {
+		if (error = bread(ump->um_devvp, daddr,
+		    (int)ump->um_lfs->lfs_bsize, NOCRED, &bp)) {
 			/*
 			 * The inode does not contain anything useful, so it
 			 * would be misleading to leave it on its hash chain.
@@ -530,7 +518,7 @@ lfs_fastvget(mp, ino, daddr, vpp, dinp)
 			*vpp = NULL;
 			return (error);
 		}
-		ip->i_din.ffs_din =
+		ip->i_din =
 		    *lfs_ifind(ump->um_lfs, ino, (struct dinode *)bp->b_data);
 		brelse(bp);
 	}
@@ -542,8 +530,7 @@ lfs_fastvget(mp, ino, daddr, vpp, dinp)
 	 * Initialize the vnode from the inode, check for aliases.  In all
 	 * cases re-init ip, the underlying vnode/inode may have changed.
 	 */
-	error = ufs_vinit(mp, lfs_specop_p, LFS_FIFOOPS, &vp);
-	if (error) {
+	if (error = ufs_vinit(mp, lfs_specop_p, LFS_FIFOOPS, &vp)) {
 		lfs_vunref(vp);
 		*vpp = NULL;
 		return (error);

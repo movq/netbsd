@@ -1,5 +1,4 @@
 #!/bin/sh -
-#	$NetBSD: whoami.sh,v 1.3 1997/01/09 20:20:06 tls Exp $
 #
 # Copyright (c) 1991, 1993
 #	The Regents of the University of California.  All rights reserved.
@@ -33,7 +32,7 @@
 # SUCH DAMAGE.
 #
 #	from: @(#)whoami.sh	8.1 (Berkeley) 6/6/93
-#	$NetBSD: whoami.sh,v 1.3 1997/01/09 20:20:06 tls Exp $
+#	$Id: whoami.sh,v 1.1 1994/05/05 22:50:17 cgd Exp $
 #
 
 id -un

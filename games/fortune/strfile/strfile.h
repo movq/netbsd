@@ -1,8 +1,6 @@
-/*	$NetBSD: strfile.h,v 1.3 1995/03/23 08:28:49 cgd Exp $	*/
-
 /*-
- * Copyright (c) 1991, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1991 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Ken Arnold.
@@ -35,7 +33,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)strfile.h	8.1 (Berkeley) 5/31/93
+ *	@(#)strfile.h	5.8 (Berkeley) 4/8/91
  */
 
 #define	STR_ENDSTRING(line,tbl) \

@@ -1,9 +1,7 @@
-/*	$NetBSD: procfs_regs.c,v 1.11 1997/08/27 08:52:54 thorpej Exp $	*/
-
 /*
+ * Copyright (c) 1993 The Regents of the University of California.
  * Copyright (c) 1993 Jan-Simon Pendry
- * Copyright (c) 1993
- *	The Regents of the University of California.  All rights reserved.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Jan-Simon Pendry.
@@ -36,7 +34,10 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)procfs_regs.c	8.4 (Berkeley) 6/15/94
+ * From:
+ *	Id: procfs_regs.c,v 4.1 1993/12/17 10:47:45 jsp Rel
+ *
+ *	$Id: procfs_regs.c,v 1.1 1994/01/05 07:51:24 cgd Exp $
  */
 
 #include <sys/param.h>
@@ -45,25 +46,19 @@
 #include <sys/kernel.h>
 #include <sys/proc.h>
 #include <sys/vnode.h>
-#include <sys/ptrace.h>
 #include <machine/reg.h>
 #include <miscfs/procfs/procfs.h>
 
-int
-procfs_doregs(curp, p, pfs, uio)
-	struct proc *curp;		/* tracer */
-	struct proc *p;			/* traced */
+pfs_doregs(curp, p, pfs, uio)
+	struct proc *curp;
+	struct proc *p;
 	struct pfsnode *pfs;
 	struct uio *uio;
 {
-#if defined(PT_GETREGS) || defined(PT_SETREGS)
 	int error;
 	struct reg r;
 	char *kv;
 	int kl;
-
-	if ((error = procfs_checkioperm(curp, p)) != 0)
-		return (EPERM);
 
 	kl = sizeof(r);
 	kv = (char *) &r;
@@ -73,38 +68,19 @@ procfs_doregs(curp, p, pfs, uio)
 	if (kl > uio->uio_resid)
 		kl = uio->uio_resid;
 
-	PHOLD(p);
-
 	if (kl < 0)
 		error = EINVAL;
 	else
-		error = process_read_regs(p, &r);
+		error = procfs_read_regs(p, &r);
 	if (error == 0)
 		error = uiomove(kv, kl, uio);
 	if (error == 0 && uio->uio_rw == UIO_WRITE) {
-		if (p->p_stat != SSTOP)
+		if ((p->p_flag & SSTOP) == 0)
 			error = EBUSY;
 		else
-			error = process_write_regs(p, &r);
+			error = procfs_write_regs(p, &r);
 	}
-
-	PRELE(p);
 
 	uio->uio_offset = 0;
 	return (error);
-#else
-	return (EINVAL);
-#endif
-}
-
-int
-procfs_validregs(p)
-	struct proc *p;
-{
-
-#if defined(PT_SETREGS) || defined(PT_GETREGS)
-	return ((p->p_flag & P_SYSTEM) == 0);
-#else
-	return (0);
-#endif
 }

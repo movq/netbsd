@@ -1,8 +1,6 @@
-/*	$NetBSD: rest.c,v 1.4 1997/10/12 21:25:10 christos Exp $	*/
-
 /*
- * Copyright (c) 1980, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1980 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,18 +31,12 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)rest.c	8.1 (Berkeley) 5/31/93";
-#else
-__RCSID("$NetBSD: rest.c,v 1.4 1997/10/12 21:25:10 christos Exp $");
-#endif
+static char sccsid[] = "@(#)rest.c	5.4 (Berkeley) 6/1/90";
 #endif /* not lint */
 
-#include <stdio.h>
-#include "trek.h"
-#include "getpar.h"
+# include	"trek.h"
+# include	"getpar.h"
 
 /*
 **  REST FOR REPAIRS
@@ -60,13 +52,10 @@ __RCSID("$NetBSD: rest.c,v 1.4 1997/10/12 21:25:10 christos Exp $");
 **	rest period if anything momentous happens.
 */
 
-/*ARGSUSED*/
-void
-rest(v)
-	int v;
+rest()
 {
-	double		t;
-	int		percent;
+	double			t;
+	register int		percent;
 
 	/* get the time to rest */
 	t = getfltpar("How long");

@@ -1,5 +1,3 @@
-/*	$NetBSD: umap.h,v 1.7 1997/10/06 09:32:35 thorpej Exp $	*/
-
 /*
  * Copyright (c) 1992, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -36,7 +34,8 @@
  * SUCH DAMAGE.
  *
  *	from: @(#)null_vnops.c       1.5 (Berkeley) 7/10/92
- *	@(#)umap.h	8.3 (Berkeley) 1/21/94
+ *	from: @(#)umap.h	8.3 (Berkeley) 1/21/94
+ *	$Id: umap.h,v 1.1 1994/06/08 11:33:50 mycroft Exp $
  */
 
 #define MAPFILEENTRIES 64
@@ -48,8 +47,8 @@ struct umap_args {
 	char		*target;	/* Target of loopback  */
 	int 		nentries;       /* # of entries in user map array */
 	int 		gnentries;	/* # of entries in group map array */
-	u_long 		(*mapdata)[2];	/* pointer to array of user mappings */
-	u_long 		(*gmapdata)[2];	/* pointer to array of group mappings */
+	uid_t 		(*mapdata)[2];	/* pointer to array of user mappings */
+	gid_t 		(*gmapdata)[2];	/* pointer to array of group mappings */
 };
 
 struct umap_mount {
@@ -57,18 +56,19 @@ struct umap_mount {
 	struct vnode	*umapm_rootvp;	/* Reference to root umap_node */
 	int             info_nentries;  /* number of uid mappings */
 	int		info_gnentries;	/* number of gid mappings */
-	u_long		info_mapdata[MAPFILEENTRIES][2]; /* mapping data for 
+	uid_t		info_mapdata[MAPFILEENTRIES][2]; /* mapping data for 
 	    user mapping in ficus */
-	u_long		info_gmapdata[GMAPFILEENTRIES][2]; /*mapping data for 
+	gid_t		info_gmapdata[GMAPFILEENTRIES][2]; /*mapping data for 
 	    group mapping in ficus */
 };
 
-#ifdef _KERNEL
+#ifdef KERNEL
 /*
  * A cache of vnode references
  */
 struct umap_node {
-	LIST_ENTRY(umap_node) umap_hash;	/* Hash list */
+	struct umap_node	*umap_forw;	/* Hash chain */
+	struct umap_node	*umap_back;
 	struct vnode	*umap_lowervp;	/* Aliased vnode - VREFed once */
 	struct vnode	*umap_vnode;	/* Back pointer to vnode/umap_node */
 };
@@ -87,9 +87,6 @@ extern struct vnode *umap_checkvp __P((struct vnode *vp, char *fil, int lno));
 #define	UMAPVPTOLOWERVP(vp) (VTOUMAP(vp)->umap_lowervp)
 #endif
 
-extern int (**umap_vnodeop_p) __P((void *));
-extern struct vfsops umapfs_vfsops;
-
-void umapfs_init __P((void));
-
-#endif /* _KERNEL */
+extern int (**umap_vnodeop_p)();
+extern struct vfsops umap_vfsops;
+#endif /* KERNEL */

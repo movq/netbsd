@@ -1,8 +1,6 @@
-/*	$NetBSD: ps.h,v 1.12 1996/10/02 18:07:27 ws Exp $	*/
-
 /*-
- * Copyright (c) 1990, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1990 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,48 +30,38 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)ps.h	8.1 (Berkeley) 5/31/93
+ *	@(#)ps.h	5.3 (Berkeley) 6/3/91
  */
 
 #define	UNLIMITED	0	/* unlimited terminal width */
-enum type {
-	CHAR, UCHAR, SHORT, USHORT, INT, UINT, LONG, ULONG, KPTR,
-	INT32, UINT32
-};
+enum type { CHAR, UCHAR, SHORT, USHORT, LONG, ULONG, KPTR };
 
 struct usave {
+	struct	proc *u_procp;
 	struct	timeval u_start;
 	struct	rusage u_ru;
 	struct	rusage u_cru;
 	char	u_acflag;
-	char	u_valid;
 };
 
-#define KI_PROC(ki) (&(ki)->ki_p->kp_proc)
-#define KI_EPROC(ki) (&(ki)->ki_p->kp_eproc)
-
-typedef struct kinfo {
-	struct kinfo_proc *ki_p;	/* proc structure */
-	struct usave ki_u;	/* interesting parts of user */
+typedef struct _kinfo {
+	struct proc *ki_p;	/* proc structure */
+	struct eproc *ki_e;	/* extra stuff */
+	struct usave *ki_u;	/* interesting parts of user */
+	char *ki_args;		/* exec args (should be char **) */
+	char *ki_env;		/* environment (should be char **) */
 } KINFO;
 
 /* Variables. */
-typedef struct varent {
-	struct varent *next;
-	struct var *var;
-} VARENT;
-
-typedef struct var {
+typedef struct _var {
 	char	*name;		/* name(s) of variable */
 	char	*header;	/* default header */
 	char	*alias;		/* aliases */
 #define	COMM	0x01		/* needs exec arguments and environment (XXX) */
 #define	LJUST	0x02		/* left adjust on output (trailing blanks) */
 #define	USER	0x04		/* needs user structure */
-#define	INF127	0x08		/* 127 = infinity: if > 127, print 127. */
 	u_int	flag;
-				/* output routine */
-	void	(*oproc) __P((struct kinfo *, struct varent *));
+	int	(*oproc)();	/* output routine */
 	short	width;		/* printing width */
 	/*
 	 * The following (optional) elements are hooks for passing information
@@ -83,9 +71,15 @@ typedef struct var {
 	int	off;		/* offset in structure */
 	enum	type type;	/* type of element */
 	char	*fmt;		/* printf format */
+	char	*time;		/* time format */
 	/*
 	 * glue to link selected fields together
 	 */
 } VAR;
+
+struct varent {
+	VAR *var;
+	struct varent *next;
+};
 
 #include "extern.h"

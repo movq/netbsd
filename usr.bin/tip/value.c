@@ -1,8 +1,6 @@
-/*	$NetBSD: value.c,v 1.6 1997/02/11 09:24:09 mrg Exp $	*/
-
 /*
- * Copyright (c) 1983, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1983 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -34,10 +32,7 @@
  */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)value.c	8.1 (Berkeley) 6/6/93";
-#endif
-static char rcsid[] = "$NetBSD: value.c,v 1.6 1997/02/11 09:24:09 mrg Exp $";
+static char sccsid[] = "@(#)value.c	5.5 (Berkeley) 3/2/91";
 #endif /* not lint */
 
 #include "tip.h"
@@ -62,15 +57,14 @@ vinit()
 			if (cp = getenv(p->v_name))
 				p->v_value = cp;
 		if (p->v_type&IREMOTE)
-			setnumber(p->v_value, *address(p->v_value));
+			number(p->v_value) = *address(p->v_value);
 	}
 	/*
 	 * Read the .tiprc file in the HOME directory
 	 *  for sets
 	 */
-	/* 8 == 1 + strlen("/.tiprc") */
-	(void)strncpy(file, value(HOME), sizeof(file) - 8);
-	strcat(file, "/.tiprc");	/* XXX strcat is safe */
+	strcpy(file, value(HOME));
+	strcat(file, "/.tiprc");
 	if ((f = fopen(file, "r")) != NULL) {
 		register char *tp;
 
@@ -108,40 +102,41 @@ vassign(p, v)
 			return;
 		if (!(p->v_type&(ENVIRON|INIT)))
 			free(p->v_value);
-		if ((p->v_value = strdup(v)) == NOSTR) {
+		if ((p->v_value = malloc(size(v)+1)) == NOSTR) {
 			printf("out of core\r\n");
 			return;
 		}
 		p->v_type &= ~(ENVIRON|INIT);
+		strcpy(p->v_value, v);
 		break;
 
 	case NUMBER:
 		if (number(p->v_value) == number(v))
 			return;
-		setnumber(p->v_value, number(v));
+		number(p->v_value) = number(v);
 		break;
 
 	case BOOL:
 		if (boolean(p->v_value) == (*v != '!'))
 			return;
-		setboolean(p->v_value, (*v != '!'));
+		boolean(p->v_value) = (*v != '!');
 		break;
 
 	case CHAR:
 		if (character(p->v_value) == *v)
 			return;
-		setcharacter(p->v_value, *v);
+		character(p->v_value) = *v;
 	}
 	p->v_access |= CHANGED;
 }
 
 static void vprint();
-static void vtoken();
 
 vlex(s)
 	register char *s;
 {
 	register value_t *p;
+	static void vtoken();
 
 	if (equal(s, "all")) {
 		for (p = vtable; p->v_name; p++)

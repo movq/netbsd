@@ -1,8 +1,6 @@
-/*	$NetBSD: fseek.c,v 1.10 1997/10/19 18:07:27 mycroft Exp $	*/
-
 /*-
- * Copyright (c) 1990, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1990 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Chris Torek.
@@ -36,13 +34,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char sccsid[] = "@(#)fseek.c	8.3 (Berkeley) 1/2/94";
-#else
-__RCSID("$NetBSD: fseek.c,v 1.10 1997/10/19 18:07:27 mycroft Exp $");
-#endif
+static char sccsid[] = "@(#)fseek.c	5.7 (Berkeley) 2/24/91";
 #endif /* LIBC_SCCS and not lint */
 
 #include <sys/types.h>
@@ -59,13 +52,16 @@ __RCSID("$NetBSD: fseek.c,v 1.10 1997/10/19 18:07:27 mycroft Exp $");
  * Seek the given file to the given offset.
  * `Whence' must be one of the three SEEK_* macros.
  */
-int
 fseek(fp, offset, whence)
 	register FILE *fp;
 	long offset;
 	int whence;
 {
-	register fpos_t (*seekfn) __P((void *, fpos_t, int));
+#if __STDC__
+	register fpos_t (*seekfn)(void *, fpos_t, int);
+#else
+	register fpos_t (*seekfn)();
+#endif
 	fpos_t target, curoff;
 	size_t n;
 	struct stat st;
@@ -95,7 +91,6 @@ fseek(fp, offset, whence)
 		 * we have to first find the current stream offset a la
 		 * ftell (see ftell for details).
 		 */
-		__sflush(fp);	/* may adjust seek offset on append stream */
 		if (fp->_flags & __SOFF)
 			curoff = fp->_offset;
 		else {
@@ -141,7 +136,7 @@ fseek(fp, offset, whence)
 	if ((fp->_flags & __SOPT) == 0) {
 		if (seekfn != __sseek ||
 		    fp->_file < 0 || fstat(fp->_file, &st) ||
-		    !S_ISREG(st.st_mode)) {
+		    (st.st_mode & S_IFMT) != S_IFREG) {
 			fp->_flags |= __SNPT;
 			goto dumb;
 		}
@@ -165,7 +160,7 @@ fseek(fp, offset, whence)
 		if (fp->_flags & __SOFF)
 			curoff = fp->_offset;
 		else {
-			curoff = (*seekfn)(fp->_cookie, (fpos_t)0, SEEK_CUR);
+			curoff = (*seekfn)(fp->_cookie, 0L, SEEK_CUR);
 			if (curoff == POS_ERR)
 				goto dumb;
 		}
@@ -181,7 +176,6 @@ fseek(fp, offset, whence)
 	 * file offset for the first byte in the current input buffer.
 	 */
 	if (HASUB(fp)) {
-		curoff += fp->_r;	/* kill off ungetc */
 		n = fp->_up - fp->_bf._base;
 		curoff -= n;
 		n += fp->_ur;
@@ -195,7 +189,7 @@ fseek(fp, offset, whence)
 	 * If the target offset is within the current buffer,
 	 * simply adjust the pointers, clear EOF, undo ungetc(),
 	 * and return.  (If the buffer was modified, we have to
-	 * skip this; see fgetln.c.)
+	 * skip this; see fgetline.c.)
 	 */
 	if ((fp->_flags & __SMOD) == 0 &&
 	    target >= curoff && target < curoff + n) {
@@ -221,7 +215,6 @@ fseek(fp, offset, whence)
 	if ((*seekfn)(fp->_cookie, curoff, SEEK_SET) == POS_ERR)
 		goto dumb;
 	fp->_r = 0;
- 	fp->_p = fp->_bf._base;
 	if (HASUB(fp))
 		FREEUB(fp);
 	fp->_flags &= ~__SEOF;
@@ -240,7 +233,7 @@ fseek(fp, offset, whence)
 	 */
 dumb:
 	if (__sflush(fp) ||
-	    (*seekfn)(fp->_cookie, (fpos_t)offset, whence) == POS_ERR) {
+	    (*seekfn)(fp->_cookie, offset, whence) == POS_ERR) {
 		return (EOF);
 	}
 	/* success: clear EOF indicator and discard ungetc() data */

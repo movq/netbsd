@@ -1,5 +1,3 @@
-/*	$NetBSD: unistd.h,v 1.42 1997/10/16 23:26:24 christos Exp $	*/
-
 /*-
  * Copyright (c) 1991 The Regents of the University of California.
  * All rights reserved.
@@ -42,22 +40,29 @@
 #include <sys/types.h>
 #include <sys/unistd.h>
 
-#define	STDIN_FILENO	0	/* standard input file descriptor */
+#define	 STDIN_FILENO	0	/* standard input file descriptor */
 #define	STDOUT_FILENO	1	/* standard output file descriptor */
 #define	STDERR_FILENO	2	/* standard error file descriptor */
+
+/* fnmatch(3) defines */
+#define	FNM_PATHNAME	0x01	/* match pathnames, not filenames */
+#ifndef _POSIX_SOURCE
+#define	FNM_QUOTE	0x02	/* escape special chars with \ */
+#endif
 
 #ifndef NULL
 #define	NULL		0	/* null pointer constant */
 #endif
 
+typedef	int ssize_t;		/* count of bytes or error indication */
+
 __BEGIN_DECLS
-__dead void	 _exit __P((int)) __attribute__((noreturn));
+void	 _exit __P((int));
 int	 access __P((const char *, int));
-unsigned alarm __P((unsigned));
+u_int	 alarm __P((u_int));
 int	 chdir __P((const char *));
 int	 chown __P((const char *, uid_t, gid_t));
 int	 close __P((int));
-size_t	 confstr __P((int, char *, size_t));
 char	*cuserid __P((char *));
 int	 dup __P((int));
 int	 dup2 __P((int, int));
@@ -73,8 +78,7 @@ char	*getcwd __P((char *, size_t));
 gid_t	 getegid __P((void));
 uid_t	 geteuid __P((void));
 gid_t	 getgid __P((void));
-int	 getgrouplist __P((const char *, gid_t, gid_t *, int *));
-int	 getgroups __P((int, gid_t *));
+int	 getgroups __P((int, int *));		/* XXX (gid_t *) */
 char	*getlogin __P((void));
 pid_t	 getpgrp __P((void));
 pid_t	 getpid __P((void));
@@ -92,7 +96,7 @@ int	 setgid __P((gid_t));
 int	 setpgid __P((pid_t, pid_t));
 pid_t	 setsid __P((void));
 int	 setuid __P((uid_t));
-unsigned sleep __P((unsigned));
+u_int	 sleep __P((u_int));
 long	 sysconf __P((int));			/* not yet */
 pid_t	 tcgetpgrp __P((int));
 int	 tcsetpgrp __P((int, pid_t));
@@ -106,7 +110,9 @@ ssize_t	 write __P((int, const void *, size_t));
 #include <sys/time.h>
 
 int	 acct __P((const char *));
+int	 async_daemon __P((void));
 char	*brk __P((const char *));
+int	 chflags __P((const char *, long));
 int	 chroot __P((const char *));
 char	*crypt __P((const char *, const char *));
 int	 des_cipher __P((const char *, char *, long, int));
@@ -115,10 +121,11 @@ int	 encrypt __P((char *, int));
 void	 endusershell __P((void));
 int	 exect __P((const char *, char * const *, char * const *));
 int	 fchdir __P((int));
-int	 fchown __P((int, uid_t, gid_t));
+int	 fchflags __P((int, long));
+int	 fchown __P((int, int, int));
+int	 fnmatch __P((const char *, const char *, int));
 int	 fsync __P((int));
 int	 ftruncate __P((int, off_t));
-int	 getdomainname __P((char *, int));
 int	 getdtablesize __P((void));
 long	 gethostid __P((void));
 int	 gethostname __P((char *, int));
@@ -127,67 +134,51 @@ int	 getpagesize __P((void));
 char	*getpass __P((const char *));
 char	*getusershell __P((void));
 char	*getwd __P((char *));			/* obsoleted by getcwd() */
-int	 initgroups __P((const char *, gid_t));
-int	 iruserok __P((u_int32_t, int, const char *, const char *));
-int	 lchown __P((const char *, uid_t, gid_t));
+int	 initgroups __P((const char *, int));
 int	 mknod __P((const char *, mode_t, dev_t));
 int	 mkstemp __P((char *));
 char	*mktemp __P((char *));
-int	 nfssvc __P((int, void *));
+int	 nfssvc __P((int));
 int	 nice __P((int));
-void	 psignal __P((unsigned int, const char *));
-extern __const char *__const sys_siglist[];
-int	 profil __P((char *, size_t, u_long, u_int));
+void	 psignal __P((u_int, const char *));
+extern char *sys_siglist[];
+int	 profil __P((char *, int, int, int));
 int	 rcmd __P((char **, int, const char *,
 		const char *, const char *, int *));
 char	*re_comp __P((const char *));
 int	 re_exec __P((const char *));
 int	 readlink __P((const char *, char *, int));
-int	 reboot __P((int, char *));
+int	 reboot __P((int));
 int	 revoke __P((const char *));
 int	 rresvport __P((int *));
 int	 ruserok __P((const char *, int, const char *, const char *));
 char	*sbrk __P((int));
 int	 select __P((int, fd_set *, fd_set *, fd_set *, struct timeval *));
-int	 setdomainname __P((const char *, int));
 int	 setegid __P((gid_t));
 int	 seteuid __P((uid_t));
-int	 setgroups __P((int, const gid_t *));
-int	 sethostid __P((long));
+int	 setgroups __P((int, const int *));
+void	 sethostid __P((long));
 int	 sethostname __P((const char *, int));
 int	 setkey __P((const char *));
 int	 setlogin __P((const char *));
 void	*setmode __P((const char *));
 int	 setpgrp __P((pid_t pid, pid_t pgrp));	/* obsoleted by setpgid() */
-int	 setregid __P((gid_t, gid_t));
-int	 setreuid __P((uid_t, uid_t));
+int	 setregid __P((int, int));
+int	 setreuid __P((int, int));
 int	 setrgid __P((gid_t));
 int	 setruid __P((uid_t));
 void	 setusershell __P((void));
-void	 strmode __P((mode_t, char *));
-char	*strsignal __P((int));
-int	 swapctl __P((int, const void *, int));
-int	 swapon __P((const char *));		/* obsoleted by swapctl() */
+int	 swapon __P((const char *));
 int	 symlink __P((const char *, const char *));
 void	 sync __P((void));
 int	 syscall __P((int, ...));
-quad_t	 __syscall __P((quad_t, ...));
 int	 truncate __P((const char *, off_t));
 int	 ttyslot __P((void));
 u_int	 ualarm __P((u_int, u_int));
-int	 undelete __P((const char *));
 void	 usleep __P((u_int));
 void	*valloc __P((size_t));			/* obsoleted by malloc() */
-pid_t	 vfork __P((void));
+int	 vfork __P((void));
 
-int	 getopt __P((int, char * const *, const char *));
-extern	 char *optarg;			/* getopt(3) external variables */
-extern	 int opterr;
-extern	 int optind;
-extern	 int optopt;
-extern	 int optreset;
-int	 getsubopt __P((char **, char * const *, char **));
-extern	 char *suboptarg;		/* getsubopt(3) external variable */
 #endif /* !_POSIX_SOURCE */
 __END_DECLS
 

@@ -1,8 +1,6 @@
-/*	$NetBSD: getpass.c,v 1.11 1997/07/21 14:07:12 jtc Exp $	*/
-
 /*
- * Copyright (c) 1988, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1988 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,27 +31,15 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char sccsid[] = "@(#)getpass.c	8.1 (Berkeley) 6/4/93";
-#else
-__RCSID("$NetBSD: getpass.c,v 1.11 1997/07/21 14:07:12 jtc Exp $");
-#endif
+static char sccsid[] = "@(#)getpass.c	5.9 (Berkeley) 5/6/91";
 #endif /* LIBC_SCCS and not lint */
 
-#include "namespace.h"
-#include <termios.h>
-#include <signal.h>
-
-#include <paths.h>
-#include <pwd.h>
+#include <sys/termios.h>
+#include <sys/signal.h>
 #include <stdio.h>
 #include <unistd.h>
-
-#ifdef __weak_alias
-__weak_alias(getpass,_getpass);
-#endif
+#include <pwd.h>
 
 char *
 getpass(prompt)
@@ -63,30 +49,25 @@ getpass(prompt)
 	register int ch;
 	register char *p;
 	FILE *fp, *outfp;
+	long omask;
 	int echo;
 	static char buf[_PASSWORD_LEN + 1];
-	sigset_t oset, nset;
 
 	/*
 	 * read and write to /dev/tty if possible; else read from
 	 * stdin and write to stderr.
 	 */
-	if ((outfp = fp = fopen(_PATH_TTY, "w+")) == NULL) {
+	if ((outfp = fp = fopen("/dev/tty", "w+")) == NULL) {
 		outfp = stderr;
 		fp = stdin;
 	}
-
 	/*
 	 * note - blocking signals isn't necessarily the
 	 * right thing, but we leave it for now.
 	 */
-	sigemptyset(&nset);
-	sigaddset(&nset, SIGINT);
-	sigaddset(&nset, SIGTSTP);
-	(void)sigprocmask(SIG_BLOCK, &nset, &oset);
-
+	omask = sigblock(sigmask(SIGINT)|sigmask(SIGTSTP));
 	(void)tcgetattr(fileno(fp), &term);
-	if ((echo = (term.c_lflag & ECHO)) != 0) {
+	if (echo = (term.c_lflag & ECHO)) {
 		term.c_lflag &= ~ECHO;
 		(void)tcsetattr(fileno(fp), TCSAFLUSH|TCSASOFT, &term);
 	}
@@ -99,9 +80,9 @@ getpass(prompt)
 	(void)write(fileno(outfp), "\n", 1);
 	if (echo) {
 		term.c_lflag |= ECHO;
-		(void)tcsetattr(fileno(fp), TCSAFLUSH|TCSASOFT, &term);
+		tcsetattr(fileno(fp), TCSAFLUSH|TCSASOFT, &term);
 	}
-	(void)sigprocmask(SIG_SETMASK, &oset, NULL);
+	(void)sigsetmask(omask);
 	if (fp != stdin)
 		(void)fclose(fp);
 	return(buf);

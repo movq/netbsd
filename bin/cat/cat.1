@@ -1,7 +1,5 @@
-.\"	$NetBSD: cat.1,v 1.13 1997/10/20 08:50:59 enami Exp $
-.\"
-.\" Copyright (c) 1989, 1990, 1993
-.\"	The Regents of the University of California.  All rights reserved.
+.\" Copyright (c) 1989, 1990 The Regents of the University of California.
+.\" All rights reserved.
 .\"
 .\" This code is derived from software contributed to Berkeley by
 .\" the Institute of Electrical and Electronics Engineers, Inc.
@@ -34,27 +32,27 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\"     @(#)cat.1	8.3 (Berkeley) 5/2/95
+.\"     @(#)cat.1	6.16 (Berkeley) 6/27/91
 .\"
-.Dd May 2, 1995
+.Dd June 27, 1991
 .Dt CAT 1
 .Os BSD 3
 .Sh NAME
 .Nm cat
 .Nd concatenate and print files
 .Sh SYNOPSIS
-.Nm
+.Nm cat
 .Op Fl benstuv
 .Op Fl
 .Op Ar
 .Sh DESCRIPTION
 The
-.Nm
+.Nm cat
 utility reads files sequentially, writing them to the standard output.
 The
 .Ar file
 operands are processed in command line order.
-A single dash represents the standard input.
+A single dash represents standard input.
 .Pp
 The options are as follows:
 .Bl -tag -width Ds
@@ -70,7 +68,9 @@ option, and displays a dollar sign
 at the end of each line
 as well.
 .It Fl n
-Number the output lines, starting at 1.
+Number the
+.Ar output
+lines, starting at 1.
 .It Fl s
 Squeeze multiple adjacent empty lines, causing the output to be
 single spaced.
@@ -78,7 +78,7 @@ single spaced.
 Implies the
 .Fl v
 option, and displays tab characters as
-.Ql ^I
+.Pq Ql ^I
 as well.
 .It Fl u
 The
@@ -86,7 +86,7 @@ The
 option guarantees that the output is unbuffered.
 .It Fl v
 Displays non-printing characters so they are visible.
-Control characters print as
+Control characters print line
 .Ql ^X
 for control-X; the delete
 character (octal 0177) prints as
@@ -97,19 +97,18 @@ Non-ascii characters (with the high bit set) are printed as
 .El
 .Pp
 The
-.Nm
+.Nm cat
 utility exits 0 on success, and >0 if an error occurs.
 .Sh BUGS
 Because of the shell language mechanism used to perform output
 redirection, the command
-.Dq Li cat file1 file2 > file1
+.Dq Li cat file1 file 2 > file1
 will cause the original data in file1 to be destroyed!
 .Sh SEE ALSO
 .Xr head 1 ,
 .Xr more 1 ,
 .Xr pr 1 ,
-.Xr tail 1 ,
-.Xr vis 1
+.Xr tail 1
 .Rs
 .%A Rob Pike
 .%T "UNIX Style, or cat -v Considered Harmful"
@@ -119,4 +118,4 @@ will cause the original data in file1 to be destroyed!
 .Sh HISTORY
 A
 .Nm
-utility appeared in Version 6 AT&T UNIX.
+command appeared in Version 6 AT&T UNIX.

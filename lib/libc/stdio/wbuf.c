@@ -1,8 +1,6 @@
-/*	$NetBSD: wbuf.c,v 1.7 1997/07/13 20:15:39 christos Exp $	*/
-
 /*-
- * Copyright (c) 1990, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1990 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Chris Torek.
@@ -36,16 +34,10 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char sccsid[] = "@(#)wbuf.c	8.1 (Berkeley) 6/4/93";
-#else
-__RCSID("$NetBSD: wbuf.c,v 1.7 1997/07/13 20:15:39 christos Exp $");
-#endif
+static char sccsid[] = "@(#)wbuf.c	5.6 (Berkeley) 1/20/91";
 #endif /* LIBC_SCCS and not lint */
 
-#include <errno.h>
 #include <stdio.h>
 #include "local.h"
 
@@ -54,7 +46,6 @@ __RCSID("$NetBSD: wbuf.c,v 1.7 1997/07/13 20:15:39 christos Exp $");
  * the given file.  Flush the buffer out if it is or becomes full,
  * or if c=='\n' and the file is line buffered.
  */
-int
 __swbuf(c, fp)
 	register int c;
 	register FILE *fp;
@@ -69,10 +60,8 @@ __swbuf(c, fp)
 	 * calls might wrap _w from negative to positive.
 	 */
 	fp->_w = fp->_lbfsize;
-	if (cantwrite(fp)) {
-		errno = EBADF;
+	if (cantwrite(fp))
 		return (EOF);
-	}
 	c = (unsigned char)c;
 
 	/*

@@ -1,7 +1,5 @@
-.\"	$NetBSD: cap_mkdb.1,v 1.7 1997/10/18 12:31:01 lukem Exp $
-.\"
-.\" Copyright (c) 1992, 1993
-.\"	The Regents of the University of California.  All rights reserved.
+.\" Copyright (c) 1992 The Regents of the University of California.
+.\" All rights reserved.
 .\"
 .\" Redistribution and use in source and binary forms, with or without
 .\" modification, are permitted provided that the following conditions
@@ -31,9 +29,9 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\"	@(#)cap_mkdb.1	8.1 (Berkeley) 6/6/93
+.\"	@(#)cap_mkdb.1	5.4 (Berkeley) 3/6/93
 .\"
-.Dd June 6, 1993
+.Dd "March 6, 1993"
 .Dt CAP_MKDB 1
 .Os
 .Sh NAME
@@ -41,14 +39,14 @@
 .Nd create capability database
 .Pp
 .Sh SYNOPSIS
-.Nm
+.Nm cap_mkdb
 .Op Fl v
 .Op Fl f Ar outfile
 .Ar file1
 .Op Ar file2 ...
 .Pp
 .Sh DESCRIPTION
-.Nm
+.Nm Cap_mkdb 
 builds a hashed database out of the
 .Xr getcap 3 
 logical database constructed by the concatenation of the specified
@@ -85,7 +83,7 @@ that couldn't be expanded.
 .Pp
 The second type is a key which consists of one of the names from the
 first capability of the record with a data field consisting a special
-byte followed by the first capability of the record.
+byte followed by the the first capability of the record.
 The special byte is a 2.
 .Pp
 In normal operation names are looked up in the database, resulting
@@ -95,7 +93,7 @@ pair of the first type which has the real data associated with the
 name.
 .Sh RETURN VALUE
 The
-.Nm
+.Nm cap_mkdb 
 utility exits 0 on success and >0 if an error occurs.
 .Sh SEE ALSO
 .Xr dbopen 3 ,

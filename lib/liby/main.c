@@ -31,24 +31,11 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
 static char sccsid[] = "@(#)main.c	5.3 (Berkeley) 1/13/91";
-#else
-__RCSID("$NetBSD: main.c,v 1.4 1997/10/09 12:05:36 lukem Exp $");
-#endif
 #endif /* not lint */
 
-#include <stdlib.h>
-
-extern int yyparse __P((void));
-int main __P((int, char *[]));
-
-int
-main(argc, argv)
-	int argc;
-	char *argv[];
+main()
 {
 	exit(yyparse());
 }

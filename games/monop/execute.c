@@ -1,8 +1,6 @@
-/*	$NetBSD: execute.c,v 1.4 1997/10/12 17:45:09 christos Exp $	*/
-
 /*
- * Copyright (c) 1980, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1980 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,41 +31,33 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)execute.c	8.1 (Berkeley) 5/31/93";
-#else
-__RCSID("$NetBSD: execute.c,v 1.4 1997/10/12 17:45:09 christos Exp $");
-#endif
+static char sccsid[] = "@(#)execute.c	5.5 (Berkeley) 2/28/91";
 #endif /* not lint */
 
-#include "monop.ext"
-#include <fcntl.h>
-#include <stdlib.h>
-#include <unistd.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <sys/time.h>
+# include	"monop.ext"
+# include	<sys/types.h>
+# include	<sys/stat.h>
+# include	<sys/time.h>
 
 # define	SEGSIZE	8192
 
 typedef	struct stat	STAT;
 typedef	struct tm	TIME;
 
-static char	buf[257];
+extern char	etext[],	/* end of text space			*/
+		rub();
+
+static char	buf[257],
+		*yn_only[]	= { "yes", "no"};
 
 static bool	new_play;	/* set if move on to new player		*/
-
-static void show_move __P((void));
 
 /*
  *	This routine executes the given command by index number
  */
-void
 execute(com_num)
-int	com_num; 
-{
+reg int	com_num; {
 
 	new_play = FALSE;	/* new_play is true if fixing	*/
 	(*func[com_num])();
@@ -81,12 +71,10 @@ int	com_num;
 /*
  *	This routine moves a piece around.
  */
-void
-do_move() 
-{
+do_move() {
 
-	int		r1, r2;
-	bool	was_jail;
+	reg int		r1, r2;
+	reg bool	was_jail;
 
 	new_play = was_jail = FALSE;
 	printf("roll is %d, %d\n", r1=roll(1, 6), r2=roll(1, 6));
@@ -114,12 +102,10 @@ ret:
 /*
  *	This routine moves a normal move
  */
-void
 move(rl)
-int	rl; 
-{
+reg int	rl; {
 
-	int	old_loc;
+	reg int	old_loc;
 
 	old_loc = cur_p->loc;
 	cur_p->loc = (cur_p->loc + rl) % N_SQRS;
@@ -132,11 +118,9 @@ int	rl;
 /*
  *	This routine shows the results of a move
  */
-static void
-show_move() 
-{
+show_move() {
 
-	SQUARE	*sqp;
+	reg SQUARE	*sqp;
 
 	sqp = &board[cur_p->loc];
 	printf("That puts you on %s\n", sqp->name);
@@ -164,7 +148,7 @@ show_move()
 				cur_p->money -= sqp->cost;
 			}
 			else if (num_play > 2)
-				bid();
+				bid(sqp);
 		}
 		else if (sqp->owner == player)
 			printf("You own it.\n");
@@ -175,15 +159,14 @@ show_move()
 /*
  *	This routine saves the current game for use at a later date
  */
-void
-save() 
-{
+save() {
 
-	char	*sp;
-	int		outf, num;
+	reg char	*sp;
+	reg int		outf, num;
 	time_t		t;
+	int		*dat_end;
 	struct stat	sb;
-	char 		*start, *end;
+	unsgn		start, end;
 
 	printf("Which file do you wish to save it in? ");
 	sp = buf;
@@ -196,7 +179,7 @@ save()
 	 */
 
 	if (stat(buf, &sb) > -1
-	    && getyn("File exists.  Do you wish to overwrite? ") > 0)
+	    && getyn("File exists.  Do you wish to overwrite? ", yn_only) > 0)
 		return;
 
 	if ((outf=creat(buf, 0644)) < 0) {
@@ -209,7 +192,11 @@ save()
 	for (sp = buf; *sp != '\n'; sp++)
 		continue;
 	*sp = '\0';
+# if 0
+	start = (((int) etext + (SEGSIZE-1)) / SEGSIZE ) * SEGSIZE;
+# else
 	start = 0;
+# endif
 	end = sbrk(0);
 	while (start < end) {		/* write out entire data space */
 		num = start + 16 * 1024 > end ? end - start : 16 * 1024;
@@ -222,11 +209,9 @@ save()
 /*
  *	This routine restores an old game from a file
  */
-void
-restore() 
-{
+restore() {
 
-	char	*sp;
+	reg char	*sp;
 
 	printf("Which file do you wish to restore from? ");
 	for (sp = buf; (*sp=getchar()) != '\n'; sp++)
@@ -238,15 +223,13 @@ restore()
  *	This does the actual restoring.  It returns TRUE if the
  * backup was successful, else false.
  */
-int
 rest_f(file)
-char	*file; 
-{
+reg char	*file; {
 
-	char	*sp;
-	int		inf, num;
+	reg char	*sp;
+	reg int		inf, num;
 	char		buf[80];
-	char 		*start, *end;
+	unsgn		start, end;
 	STAT		sbuf;
 
 	if ((inf=open(file, 0)) < 0) {
@@ -258,7 +241,11 @@ char	*file;
 		perror(file);
 		exit(1);
 	}
+# if 0
+	start = (((int) etext + (SEGSIZE-1)) / SEGSIZE ) * SEGSIZE;
+# else
 	start = 0;
+# endif
 	brk(end = start + sbuf.st_size);
 	while (start < end) {		/* write out entire data space */
 		num = start + 16 * 1024 > end ? end - start : 16 * 1024;

@@ -1,5 +1,3 @@
-/*	$NetBSD: pigs.c,v 1.7 1997/10/19 23:36:31 lukem Exp $	*/
-
 /*-
  * Copyright (c) 1980, 1992, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -33,12 +31,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
 static char sccsid[] = "@(#)pigs.c	8.2 (Berkeley) 9/23/93";
-#endif
-__RCSID("$NetBSD: pigs.c,v 1.7 1997/10/19 23:36:31 lukem Exp $");
 #endif /* not lint */
 
 /*
@@ -57,7 +51,6 @@ __RCSID("$NetBSD: pigs.c,v 1.7 1997/10/19 23:36:31 lukem Exp $");
 #include <nlist.h>
 #include <pwd.h>
 #include <stdlib.h>
-#include <string.h>
 
 #include "extern.h"
 #include "systat.h"
@@ -95,7 +88,7 @@ closepigs(w)
 void
 showpigs()
 {
-	int i, j, y, k;
+	register int i, j, y, k;
 	struct	eproc *ep;
 	float total;
 	int factor;
@@ -114,11 +107,11 @@ showpigs()
  		total = 1.0;
 	factor = 50.0/total;
 
-	qsort(pt, nproc + 1, sizeof (struct p_times), compar);
+        qsort(pt, nproc + 1, sizeof (struct p_times), compar);
 	y = 1;
 	i = nproc + 1;
-	if (i > getmaxy(wnd)-1)
-		i = getmaxy(wnd)-1;
+	if (i > wnd->maxy-1)
+		i = wnd->maxy-1;
 	for (k = 0; i > 0 && pt[k].pt_pctcpu > 0.01; i--, y++, k++) {
 		if (pt[k].pt_kp == NULL) {
 			uname = "";
@@ -126,13 +119,13 @@ showpigs()
 		}
 		else {
 			ep = &pt[k].pt_kp->kp_eproc;
-			uname = user_from_uid(ep->e_ucred.cr_uid, 0);
+			uname = (char *)user_from_uid(ep->e_ucred.cr_uid, 0);
 			pname = pt[k].pt_kp->kp_proc.p_comm;
 		}
 		wmove(wnd, y, 0);
 		wclrtoeol(wnd);
 		mvwaddstr(wnd, y, 0, uname);
-		sprintf(pidname, "%10.10s", pname);
+		sprintf(pidname, "%10.10s", pname, 0);
 		mvwaddstr(wnd, y, 9, pidname);
 		wmove(wnd, y, 20);
 		for (j = pt[k].pt_pctcpu*factor + 0.5; j > 0; j--)
@@ -179,10 +172,10 @@ initpigs()
 void
 fetchpigs()
 {
-	int i;
-	float time;
-	struct proc *pp;
-	float *pctp;
+	register int i;
+	register float time;
+	register struct proc *pp;
+	register float *pctp;
 	struct kinfo_proc *kpp;
 	long ctime[CPUSTATES];
 	double t;

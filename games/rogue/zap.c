@@ -1,8 +1,6 @@
-/*	$NetBSD: zap.c,v 1.4 1997/10/12 11:46:15 lukem Exp $	*/
-
 /*
- * Copyright (c) 1988, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1988 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Timothy C. Stoehr.
@@ -36,13 +34,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)zap.c	8.1 (Berkeley) 5/31/93";
-#else
-__RCSID("$NetBSD: zap.c,v 1.4 1997/10/12 11:46:15 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)zap.c	5.3 (Berkeley) 6/1/90";
 #endif /* not lint */
 
 /*
@@ -61,7 +54,9 @@ __RCSID("$NetBSD: zap.c,v 1.4 1997/10/12 11:46:15 lukem Exp $");
 
 boolean wizard = 0;
 
-void
+extern boolean being_held, score_only, detect_monster;
+extern short cur_room;
+
 zapp()
 {
 	short wch;
@@ -118,8 +113,8 @@ zapp()
 
 object *
 get_zapped_monster(dir, row, col)
-	short dir;
-	short *row, *col;
+short dir;
+short *row, *col;
 {
 	short orow, ocol;
 
@@ -139,10 +134,9 @@ get_zapped_monster(dir, row, col)
 	}
 }
 
-void
 zap_monster(monster, kind)
-	object *monster;
-	unsigned short kind;
+object *monster;
+unsigned short kind;
 {
 	short row, col;
 	object *nm;
@@ -207,9 +201,8 @@ zap_monster(monster, kind)
 	}
 }
 
-void
 tele_away(monster)
-	object *monster;
+object *monster;
 {
 	short row, col;
 
@@ -227,7 +220,6 @@ tele_away(monster)
 	}
 }
 
-void
 wizardize()
 {
 	char buf[100];
@@ -250,9 +242,8 @@ wizardize()
 	}
 }
 
-void
 wdrain_life(monster)
-	object *monster;
+object *monster;
 {
 	short hp;
 	object *lmon, *nm;
@@ -280,9 +271,8 @@ wdrain_life(monster)
 	relight();
 }
 
-void
 bounce(ball, dir, row, col, r)
-	short ball, dir, row, col, r;
+short ball, dir, row, col, r;
 {
 	short orow, ocol;
 	char buf[DCOLS], *s;

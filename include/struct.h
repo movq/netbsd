@@ -1,5 +1,3 @@
-/*	$NetBSD: struct.h,v 1.3 1994/10/26 00:56:32 cgd Exp $	*/
-
 /*-
  * Copyright (c) 1983 The Regents of the University of California.
  * All rights reserved.

@@ -1,16 +1,11 @@
-/*	$NetBSD: pk_var.h,v 1.9 1996/05/23 23:35:29 mycroft Exp $	*/
-
-/* 
- * Copyright (c) Computing Centre, University of British Columbia, 1985 
- * Copyright (C) Computer Science Department IV, 
- * 		 University of Erlangen-Nuremberg, Germany, 1990, 1991, 1992
- * Copyright (c) 1992, 1993
- *	The Regents of the University of California.  All rights reserved.
- * 
- * This code is derived from software contributed to Berkeley by the
- * Laboratory for Computation Vision and the Computer Science Department
- * of the the University of British Columbia and the Computer Science
- * Department (IV) of the University of Erlangen-Nuremberg, Germany.
+/*
+ * Copyright (c) University of British Columbia, 1984
+ * Copyright (c) 1990 The Regents of the University of California.
+ * All rights reserved.
+ *
+ * This code is derived from software contributed to Berkeley by
+ * the Laboratory for Computation Vision and the Computer Science Department
+ * of the University of British Columbia.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -40,8 +35,9 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)pk_var.h	8.1 (Berkeley) 6/10/93
+ *	@(#)pk_var.h	7.11 (Berkeley) 5/29/91
  */
+
 
 /*
  *
@@ -54,11 +50,9 @@ struct pklcd {
 		struct	pklcd_q *q_forw;	/* debugging chain */
 		struct	pklcd_q *q_back;	/* debugging chain */
 	} lcd_q;
-	int	(*lcd_upper) 		/* switch to socket vs datagram vs ...*/
-			__P((struct mbuf *, void *));
+	int	(*lcd_upper)();		/* switch to socket vs datagram vs ...*/
 	caddr_t	lcd_upnext;		/* reference for lcd_upper() */
-	void	(*lcd_send)		/* if X.25 front end, direct connect */
-			__P((struct pklcd *));
+	int	(*lcd_send)();		/* if X.25 front end, direct connect */
 	caddr_t lcd_downnext;		/* reference for lcd_send() */
 	short   lcd_lcn;		/* Logical channel number */
 	short   lcd_state;		/* Logical Channel state */
@@ -89,7 +83,7 @@ struct pklcd {
 	long    lcd_txcnt;		/* Data packet transmit count */
 	long    lcd_rxcnt;		/* Data packet receive count */
 	short   lcd_intrcnt;		/* Interrupt packet transmit count */
-	TAILQ_ENTRY(pklcd) lcd_listen;	/* Next lcd on listen queue */
+	struct	pklcd *lcd_listen;	/* Next lcd on listen queue */
 	struct	pkcb *lcd_pkp;		/* Network this lcd is attached to */
 	struct	mbuf *lcd_cps;		/* Complete Packet Sequence reassembly*/
 	long	lcd_cpsmax;		/* Max length for CPS */
@@ -104,33 +98,15 @@ struct pklcd {
  */
 
 struct	pkcb {
-	struct pkcb_q {
-		struct pkcb_q *q_forw;
-		struct pkcb_q *q_backw;
-	} pk_q;
+	struct	pkcb *pk_next;
 	short	pk_state;		/* packet level status */
-	u_short	pk_maxlcn;		/* local copy of xc_maxlcn */
-	int	(*pk_lloutput)		/* link level output procedure */
-			__P((struct mbuf *, ...));
-	void    *(*pk_llctlinput)	/* link level ctloutput procedure */
-			__P((int, struct sockaddr *, void *));
+	short	pk_maxlcn;		/* local copy of xc_maxlcn */
+	int	(*pk_lloutput) ();	/* link level output procedure */
 	caddr_t pk_llnext;		/* handle for next level down */
 	struct	x25config *pk_xcp;	/* network specific configuration */
 	struct	x25_ifaddr *pk_ia;	/* backpointer to ifaddr */
 	struct	pklcd **pk_chan;	/* actual size == xc_maxlcn+1 */
-	short	pk_dxerole;		/* DXE role of PLE over LLC2 */
-	short	pk_restartcolls;	/* counting RESTART collisions til resolved */
-	struct	rtentry *pk_rt;		/* back pointer to route */
-	struct  rtentry *pk_llrt;       /* pointer to reverse mapping */
-	u_short pk_refcount;  		/* ref count */
 };
-
-#define FOR_ALL_PKCBS(p) for((p) = (struct pkcb *)(pkcb_q.q_forw); \
-			     (pkcb_q.q_forw != &pkcb_q) && ((struct pkcb_q *)(p) != &pkcb_q); \
-			     (p) = (struct pkcb *)((p) -> pk_q.q_forw))
-
-#define	PQEMPTY		(pkcb_q.q_forw == &pkcb_q)
-
 /*
  *	Interface address, x25 version. Exactly one of these structures is 
  *	allocated for each interface with an x25 address.
@@ -143,10 +119,8 @@ struct x25_ifaddr {
 #define ia_ifp	ia_ifa.ifa_ifp
 #define	ia_flags ia_ifa.ifa_flags
 	struct	x25config ia_xc;	/* network specific configuration */
-	struct  pkcb *ia_pkcb;
 #define ia_maxlcn ia_xc.xc_maxlcn
-	int	(*ia_start)		/* connect, confirm method */
-			__P((struct pklcd *));
+	int	(*ia_start) ();		/* connect, confirm method */
 	struct	sockaddr_x25 ia_dstaddr; /* reserve space for route dst */
 };
 
@@ -155,7 +129,8 @@ struct x25_ifaddr {
  * packet switching via X.25 virtual circuits.
  */
 struct llinfo_x25 {
-	LIST_ENTRY(llinfo_x25) lx_list;
+	struct	llinfo_x25 *lx_next;	/* chain together in linked list */
+	struct	llinfo_x25 *lx_prev;	/* chain together in linked list */
 	struct	rtentry *lx_rt;		/* back pointer to route */
 	struct	pklcd *lx_lcd;		/* local connection block */
 	struct	x25_ifaddr *lx_ia;	/* may not be same as rt_ifa */
@@ -180,44 +155,6 @@ struct llinfo_x25 {
 #define LXF_LISTEN	0x4		/* accepting incoming calls */
 
 /*
- * Definitions for accessing bitfields/bitslices inside X.25 structs
- */
-
-
-struct x25bitslice {
-	unsigned int bs_mask;
-	unsigned int bs_shift;
-};
-
-#define	calling_addrlen	0
-#define	called_addrlen	1
-#define	q_bit	        2
-#define	d_bit           3
-#define	fmt_identifier	4
-#define	lc_group_number	1
-#define	p_r             5
-#define	m_bit           6
-#define	p_s             7
-#define	zilch           8
-
-#define	X25GBITS(Arg, Index)	(((Arg) & x25_bitslice[(Index)].bs_mask) >> x25_bitslice[(Index)].bs_shift)
-#define	X25SBITS(Arg, Index, Val)	(Arg) |= (((Val) << x25_bitslice[(Index)].bs_shift) & x25_bitslice[(Index)].bs_mask)
-#define	X25CSBITS(Arg, Index, Val)	(Arg) = (((Val) << x25_bitslice[(Index)].bs_shift) & x25_bitslice[(Index)].bs_mask)
-
-extern struct x25bitslice x25_bitslice[];
-
-
-#define ISOFIFTTYPE(i,t) ((i)->if_type == (t))
-#define ISISO8802(i) ((ISOFIFTTYPE(i, IFT_ETHER) || \
-		       ISOFIFTTYPE(i, IFT_ISO88023) || \
-		       ISOFIFTTYPE(i, IFT_ISO88024) || \
-		       ISOFIFTTYPE(i, IFT_ISO88025) || \
-		       ISOFIFTTYPE(i, IFT_ISO88026) || \
-		       ISOFIFTTYPE(i, IFT_P10) || \
-		       ISOFIFTTYPE(i, IFT_P80) || \
-		       ISOFIFTTYPE(i, IFT_FDDI)))
-
-/*
  * miscellenous debugging info
  */
 struct mbuf_cache {
@@ -227,11 +164,10 @@ struct mbuf_cache {
 	struct	mbuf **mbc_cache;
 };
 
-#if defined(_KERNEL) && defined(CCITT)
-#include <sys/queue.h>
-
-extern struct pkcb_q pkcb_q;
-TAILQ_HEAD(, pklcd) pk_listenhead;
+#if defined(KERNEL) && defined(CCITT)
+struct	pkcb *pkcbhead;		/* head of linked list of networks */
+struct	pklcd *pk_listenhead;
+struct	pklcd *pk_attach();
 
 extern char	*pk_name[], *pk_state[];
 int	pk_t20, pk_t21, pk_t22, pk_t23;

@@ -1,8 +1,6 @@
-/*	$NetBSD: playgame.c,v 1.4 1997/10/11 01:16:36 lukem Exp $	*/
-
 /*-
- * Copyright (c) 1983, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1983 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,32 +31,26 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)playgame.c	8.1 (Berkeley) 5/31/93";
-#else
-__RCSID("$NetBSD: playgame.c,v 1.4 1997/10/11 01:16:36 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)playgame.c	5.3 (Berkeley) 4/8/91";
 #endif /* not lint */
 
-#include	"hangman.h"
+# include	"hangman.h"
 
 /*
  * playgame:
  *	play a game
  */
-void
 playgame()
 {
-	bool *bp;
+	register bool	*bp;
 
 	getword();
 	Errors = 0;
 	bp = Guessed;
 	while (bp < &Guessed[26])
 		*bp++ = FALSE;
-	while (Errors < MAXERRS && strchr(Known, '-') != NULL) {
+	while (Errors < MAXERRS && index(Known, '-') != NULL) {
 		prword();
 		prdata();
 		prman();

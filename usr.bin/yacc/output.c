@@ -1,5 +1,3 @@
-/*	$NetBSD: output.c,v 1.6 1997/07/25 16:46:35 perry Exp $	*/
-
 /*
  * Copyright (c) 1989 The Regents of the University of California.
  * All rights reserved.
@@ -36,13 +34,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)output.c	5.7 (Berkeley) 5/24/93";
-#else
-__RCSID("$NetBSD: output.c,v 1.6 1997/07/25 16:46:35 perry Exp $");
-#endif
+static char sccsid[] = "@(#)output.c	5.6 (Berkeley) 1/20/91";
 #endif /* not lint */
 
 #include "defs.h"
@@ -63,41 +56,12 @@ static short *check;
 static int lowzero;
 static int high;
 
-void output __P((void));
-void output_prefix __P((void));
-void output_rule_data __P((void));
-void output_yydefred __P((void));
-void output_actions __P((void));
-void token_actions __P((void));
-void goto_actions __P((void));
-int default_goto __P((int));
-void save_column __P((int, int));
-void sort_actions __P((void));
-void pack_table __P((void));
-int matching_vector __P((int));
-int pack_vector __P((int));
-void output_base __P((void));
-void output_table __P((void));
-void output_check __P((void));
-int is_C_identifier __P((char *));
-void output_defines __P((void));
-void output_stored_text __P((void));
-void output_debug __P((void));
-void output_stype __P((void));
-void output_trailing_text __P((void));
-void output_semantic_actions __P((void));
-void free_itemsets __P((void));
-void free_shifts __P((void));
-void free_reductions __P((void));
 
-
-void
 output()
 {
     free_itemsets();
     free_shifts();
     free_reductions();
-    output_prefix();
     output_stored_text();
     output_defines();
     output_rule_data();
@@ -114,78 +78,14 @@ output()
     write_section(trailer);
 }
 
-void
-output_prefix()
-{
-    if (symbol_prefix == NULL)
-	symbol_prefix = "yy";
-    else
-    {
-	++outline;
-	fprintf(code_file, "#define yyparse %sparse\n", symbol_prefix);
-	++outline;
-	fprintf(code_file, "#define yylex %slex\n", symbol_prefix);
-	++outline;
-	fprintf(code_file, "#define yyerror %serror\n", symbol_prefix);
-	++outline;
-	fprintf(code_file, "#define yychar %schar\n", symbol_prefix);
-	++outline;
-	fprintf(code_file, "#define yyval %sval\n", symbol_prefix);
-	++outline;
-	fprintf(code_file, "#define yylval %slval\n", symbol_prefix);
-	++outline;
-	fprintf(code_file, "#define yydebug %sdebug\n", symbol_prefix);
-	++outline;
-	fprintf(code_file, "#define yynerrs %snerrs\n", symbol_prefix);
-	++outline;
-	fprintf(code_file, "#define yyerrflag %serrflag\n", symbol_prefix);
-	++outline;
-	fprintf(code_file, "#define yyss %sss\n", symbol_prefix);
-	++outline;
-	fprintf(code_file, "#define yysslim %ssslim\n", symbol_prefix);
-	++outline;
-	fprintf(code_file, "#define yyssp %sssp\n", symbol_prefix);
-	++outline;
-	fprintf(code_file, "#define yyvs %svs\n", symbol_prefix);
-	++outline;
-	fprintf(code_file, "#define yyvsp %svsp\n", symbol_prefix);
-	++outline;
-	fprintf(code_file, "#define yystacksize %sstacksize\n", symbol_prefix);
-	++outline;
-	fprintf(code_file, "#define yylhs %slhs\n", symbol_prefix);
-	++outline;
-	fprintf(code_file, "#define yylen %slen\n", symbol_prefix);
-	++outline;
-	fprintf(code_file, "#define yydefred %sdefred\n", symbol_prefix);
-	++outline;
-	fprintf(code_file, "#define yydgoto %sdgoto\n", symbol_prefix);
-	++outline;
-	fprintf(code_file, "#define yysindex %ssindex\n", symbol_prefix);
-	++outline;
-	fprintf(code_file, "#define yyrindex %srindex\n", symbol_prefix);
-	++outline;
-	fprintf(code_file, "#define yygindex %sgindex\n", symbol_prefix);
-	++outline;
-	fprintf(code_file, "#define yytable %stable\n", symbol_prefix);
-	++outline;
-	fprintf(code_file, "#define yycheck %scheck\n", symbol_prefix);
-	++outline;
-	fprintf(code_file, "#define yyname %sname\n", symbol_prefix);
-	++outline;
-	fprintf(code_file, "#define yyrule %srule\n", symbol_prefix);
-    }
-    ++outline;
-    fprintf(code_file, "#define YYPREFIX \"%s\"\n", symbol_prefix);
-}
 
-void
 output_rule_data()
 {
-    int i;
-    int j;
+    register int i;
+    register int j;
 
   
-    fprintf(output_file, "short %slhs[] = {%42d,", symbol_prefix,
+    fprintf(output_file, "short yylhs[] = {%42d,",
 	    symbol_value[start_symbol]);
 
     j = 10;
@@ -205,7 +105,7 @@ output_rule_data()
     if (!rflag) outline += 2;
     fprintf(output_file, "\n};\n");
 
-    fprintf(output_file, "short %slen[] = {%42d,", symbol_prefix, 2);
+    fprintf(output_file, "short yylen[] = {%42d,", 2);
 
     j = 10;
     for (i = 3; i < nrules; i++)
@@ -225,12 +125,12 @@ output_rule_data()
     fprintf(output_file, "\n};\n");
 }
 
-void
+
 output_yydefred()
 {
-    int i, j;
+    register int i, j;
 
-    fprintf(output_file, "short %sdefred[] = {%39d,", symbol_prefix,
+    fprintf(output_file, "short yydefred[] = {%39d,",
 	    (defred[0] ? defred[0] - 2 : 0));
 
     j = 10;
@@ -252,7 +152,7 @@ output_yydefred()
     fprintf(output_file, "\n};\n");
 }
 
-void
+
 output_actions()
 {
     nvectors = 2*nstates + nvars;
@@ -280,14 +180,14 @@ output_actions()
     output_check();
 }
 
-void
+
 token_actions()
 {
-    int i, j;
-    int shiftcount, reducecount;
-    int max, min;
-    short *actionrow, *r, *s;
-    action *p;
+    register int i, j;
+    register int shiftcount, reducecount;
+    register int max, min;
+    register short *actionrow, *r, *s;
+    register action *p;
 
     actionrow = NEW2(2*ntokens, short);
     for (i = 0; i < nstates; ++i)
@@ -365,15 +265,14 @@ token_actions()
     FREE(actionrow);
 }
 
-void
 goto_actions()
 {
-    int i, j, k;
+    register int i, j, k;
 
     state_count = NEW2(nstates, short);
 
     k = default_goto(start_symbol + 1);
-    fprintf(output_file, "short %sdgoto[] = {%40d,", symbol_prefix, k);
+    fprintf(output_file, "short yydgoto[] = {%40d,", k);
     save_column(start_symbol + 1, k);
 
     j = 10;
@@ -402,11 +301,11 @@ int
 default_goto(symbol)
 int symbol;
 {
-    int i;
-    int m;
-    int n;
-    int default_state;
-    int max;
+    register int i;
+    register int m;
+    register int n;
+    register int default_state;
+    register int max;
 
     m = goto_map[symbol];
     n = goto_map[symbol + 1];
@@ -434,19 +333,19 @@ int symbol;
 }
 
 
-void
+
 save_column(symbol, default_state)
 int symbol;
 int default_state;
 {
-    int i;
-    int m;
-    int n;
-    short *sp;
-    short *sp1;
-    short *sp2;
-    int count;
-    int symno;
+    register int i;
+    register int m;
+    register int n;
+    register short *sp;
+    register short *sp1;
+    register short *sp2;
+    register int count;
+    register int symno;
 
     m = goto_map[symbol];
     n = goto_map[symbol + 1];
@@ -477,14 +376,13 @@ int default_state;
     width[symno] = sp1[-1] - sp[0] + 1;
 }
 
-void
 sort_actions()
 {
-  int i;
-  int j;
-  int k;
-  int t;
-  int w;
+  register int i;
+  register int j;
+  register int k;
+  register int t;
+  register int w;
 
   order = NEW2(nvectors, short);
   nentries = 0;
@@ -513,12 +411,11 @@ sort_actions()
 }
 
 
-void
 pack_table()
 {
-    int i;
-    int place;
-    int state;
+    register int i;
+    register int place;
+    register int state;
 
     base = NEW2(nvectors, short);
     pos = NEW2(nentries, short);
@@ -580,13 +477,13 @@ int
 matching_vector(vector)
 int vector;
 {
-    int i;
-    int j;
-    int k;
-    int t;
-    int w;
-    int match;
-    int prev;
+    register int i;
+    register int j;
+    register int k;
+    register int t;
+    register int w;
+    register int match;
+    register int prev;
 
     i = order[vector];
     if (i >= 2*nstates)
@@ -621,12 +518,12 @@ int
 pack_vector(vector)
 int vector;
 {
-    int i, j, k, l;
-    int t;
-    int loc;
-    int ok;
-    short *from;
-    short *to;
+    register int i, j, k, l;
+    register int t;
+    register int loc;
+    register int ok;
+    register short *from;
+    register short *to;
     int newmax;
 
     i = order[vector];
@@ -694,12 +591,12 @@ int vector;
 }
 
 
-void
+
 output_base()
 {
-    int i, j;
+    register int i, j;
 
-    fprintf(output_file, "short %ssindex[] = {%39d,", symbol_prefix, base[0]);
+    fprintf(output_file, "short yysindex[] = {%39d,", base[0]);
 
     j = 10;
     for (i = 1; i < nstates; i++)
@@ -717,7 +614,7 @@ output_base()
     }
 
     if (!rflag) outline += 2;
-    fprintf(output_file, "\n};\nshort %srindex[] = {%39d,", symbol_prefix,
+    fprintf(output_file, "\n};\nshort yyrindex[] = {%39d,",
 	    base[nstates]);
 
     j = 10;
@@ -736,7 +633,7 @@ output_base()
     }
 
     if (!rflag) outline += 2;
-    fprintf(output_file, "\n};\nshort %sgindex[] = {%39d,", symbol_prefix,
+    fprintf(output_file, "\n};\nshort yygindex[] = {%39d,",
 	    base[2*nstates]);
 
     j = 10;
@@ -760,16 +657,15 @@ output_base()
 }
 
 
-void
+
 output_table()
 {
-    int i;
-    int j;
+    register int i;
+    register int j;
 
     ++outline;
     fprintf(code_file, "#define YYTABLESIZE %d\n", high);
-    fprintf(output_file, "short %stable[] = {%40d,", symbol_prefix,
-	    table[0]);
+    fprintf(output_file, "short yytable[] = {%40d,", table[0]);
 
     j = 10;
     for (i = 1; i <= high; i++)
@@ -792,14 +688,13 @@ output_table()
 }
 
 
-void
+
 output_check()
 {
-    int i;
-    int j;
+    register int i;
+    register int j;
 
-    fprintf(output_file, "short %scheck[] = {%40d,", symbol_prefix,
-	    check[0]);
+    fprintf(output_file, "short yycheck[] = {%40d,", check[0]);
 
     j = 10;
     for (i = 1; i <= high; i++)
@@ -826,8 +721,8 @@ int
 is_C_identifier(name)
 char *name;
 {
-    char *s;
-    int c;
+    register char *s;
+    register int c;
 
     s = name;
     c = *s;
@@ -846,7 +741,7 @@ char *name;
 
     if (!isalpha(c) && c != '_' && c != '$')
 	return (0);
-    while ((c = *++s) != '\0')
+    while (c = *++s)
     {
 	if (!isalnum(c) && c != '_' && c != '$')
 	    return (0);
@@ -855,11 +750,10 @@ char *name;
 }
 
 
-void
 output_defines()
 {
-    int c, i;
-    char *s;
+    register int c, i;
+    register char *s;
 
     for (i = 2; i < ntokens; ++i)
     {
@@ -884,7 +778,7 @@ output_defines()
 		    putc(c, code_file);
 		    if (dflag) putc(c, defines_file);
 		}
-		while ((c = *++s) != '\0');
+		while (c = *++s);
 	    }
 	    ++outline;
 	    fprintf(code_file, " %d\n", symbol_value[i]);
@@ -902,17 +796,15 @@ output_defines()
 	if (union_file == NULL) open_error(union_file_name);
 	while ((c = getc(union_file)) != EOF)
 	    putc(c, defines_file);
-	fprintf(defines_file, " YYSTYPE;\nextern YYSTYPE %slval;\n",
-		symbol_prefix);
+	fprintf(defines_file, " YYSTYPE;\nextern YYSTYPE yylval;\n");
     }
 }
 
 
-void
 output_stored_text()
 {
-    int c;
-    FILE *in, *out;
+    register int c;
+    register FILE *in, *out;
 
     fclose(text_file);
     text_file = fopen(text_file_name, "r");
@@ -936,10 +828,9 @@ output_stored_text()
 }
 
 
-void
 output_debug()
 {
-    int i, j, k, max;
+    register int i, j, k, max;
     char **symnam, *s;
 
     ++outline;
@@ -970,11 +861,11 @@ output_debug()
     symnam[0] = "end-of-file";
 
     if (!rflag) ++outline;
-    fprintf(output_file, "#if YYDEBUG\nchar *%sname[] = {", symbol_prefix);
+    fprintf(output_file, "#if YYDEBUG\nchar *yyname[] = {");
     j = 80;
     for (i = 0; i <= max; ++i)
     {
-	if ((s = symnam[i]) != NULL)
+	if (s = symnam[i])
 	{
 	    if (s[0] == '"')
 	    {
@@ -1096,7 +987,7 @@ output_debug()
     FREE(symnam);
 
     if (!rflag) ++outline;
-    fprintf(output_file, "char *%srule[] = {\n", symbol_prefix);
+    fprintf(output_file, "char *yyrule[] = {\n");
     for (i = 2; i < nrules; ++i)
     {
 	fprintf(output_file, "\"%s :", symbol_name[rlhs[i]]);
@@ -1151,7 +1042,6 @@ output_debug()
 }
 
 
-void
 output_stype()
 {
     if (!unionized && ntags == 0)
@@ -1162,11 +1052,10 @@ output_stype()
 }
 
 
-void
 output_trailing_text()
 {
-    int c, last;
-    FILE *in, *out;
+    register int c, last;
+    register FILE *in, *out;
 
     if (line == 0)
 	return;
@@ -1220,11 +1109,10 @@ output_trailing_text()
 }
 
 
-void
 output_semantic_actions()
 {
-    int c, last;
-    FILE *out;
+    register int c, last;
+    register FILE *out;
 
     fclose(action_file);
     action_file = fopen(action_file_name, "r");
@@ -1258,10 +1146,9 @@ output_semantic_actions()
 }
 
 
-void
 free_itemsets()
 {
-    core *cp, *next;
+    register core *cp, *next;
 
     FREE(state_table);
     for (cp = first_state; cp; cp = next)
@@ -1272,10 +1159,9 @@ free_itemsets()
 }
 
 
-void
 free_shifts()
 {
-    shifts *sp, *next;
+    register shifts *sp, *next;
 
     FREE(shift_table);
     for (sp = first_shift; sp; sp = next)
@@ -1286,10 +1172,10 @@ free_shifts()
 }
 
 
-void
+
 free_reductions()
 {
-    reductions *rp, *next;
+    register reductions *rp, *next;
 
     FREE(reduction_table);
     for (rp = first_reduction; rp; rp = next)

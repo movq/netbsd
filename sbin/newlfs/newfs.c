@@ -1,5 +1,3 @@
-/*	$NetBSD: newfs.c,v 1.9 1997/09/15 11:40:30 lukem Exp $	*/
-
 /*-
  * Copyright (c) 1989, 1992, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -33,18 +31,15 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1989, 1992, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+static char copyright[] =
+"@(#) Copyright (c) 1989, 1992, 1993\n\
+	The Regents of the University of California.  All rights reserved.\n";
 #endif /* not lint */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)newfs.c	8.3 (Berkeley) 4/22/94";
-#else
-__RCSID("$NetBSD: newfs.c,v 1.9 1997/09/15 11:40:30 lukem Exp $");
-#endif
+/*static char sccsid[] = "from: @(#)newfs.c	8.3 (Berkeley) 4/22/94";*/
+static char *rcsid = "$Id: newfs.c,v 1.1 1994/06/08 19:31:24 mycroft Exp $";
 #endif /* not lint */
 
 /*
@@ -57,7 +52,6 @@ __RCSID("$NetBSD: newfs.c,v 1.9 1997/09/15 11:40:30 lukem Exp $");
 #include <sys/disklabel.h>
 #include <sys/file.h>
 #include <sys/mount.h>
-#include <sys/sysctl.h>
 
 #include <ufs/ufs/dir.h>
 #include <ufs/ufs/dinode.h>
@@ -69,7 +63,6 @@ __RCSID("$NetBSD: newfs.c,v 1.9 1997/09/15 11:40:30 lukem Exp $");
 #include <ctype.h>
 #include <string.h>
 #include <paths.h>
-#include <util.h>
 #include "config.h"
 #include "extern.h"
 
@@ -117,12 +110,9 @@ int	unlabeled;
 char	device[MAXPATHLEN];
 char	*progname, *special;
 
-int main __P((int, char **));
 static struct disklabel *getdisklabel __P((char *, int));
 static struct disklabel *debug_readlabel __P((int));
-#ifdef notdef
 static void rewritelabel __P((char *, int, struct disklabel *));
-#endif
 static void usage __P((void));
 
 int
@@ -130,14 +120,15 @@ main(argc, argv)
 	int argc;
 	char *argv[];
 {
-	int ch;
-	struct partition *pp;
-	struct disklabel *lp;
+	register int ch;
+	register struct partition *pp;
+	register struct disklabel *lp;
+	struct partition oldpartition;
 	struct stat st;
-	int debug, lfs, fsi, fso, segsize, maxpartitions;
+	int debug, lfs, fsi, fso, segsize;
 	char *cp, *opstring;
 
-	if ((progname = strrchr(*argv, '/')) != NULL)
+	if (progname = rindex(*argv, '/'))
 		++progname;
 	else
 		progname = *argv;
@@ -147,17 +138,13 @@ main(argc, argv)
 		Nflag++;
 	}
 
-	maxpartitions = getmaxpartitions();
-	if (maxpartitions > 26)
-		fatal("insane maxpartitions value %d", maxpartitions);
-
 	/* -F is mfs only and MUST come first! */
 	opstring = "F:B:DLNS:T:a:b:c:d:e:f:i:k:l:m:n:o:p:r:s:t:u:x:";
 	if (!mfs)
 		opstring += 2;
 
 	debug = lfs = segsize = 0;
-	while ((ch = getopt(argc, argv, opstring)) != -1)
+	while ((ch = getopt(argc, argv, opstring)) != EOF)
 		switch(ch) {
 		case 'B':	/* LFS segment size */
 			if ((segsize = atoi(optarg)) < LFS_MINSEGSIZE)
@@ -283,7 +270,7 @@ main(argc, argv)
 	 * prefix, try /dev/r%s and then /dev/%s.
 	 */
 	special = argv[0];
-	if (strchr(special, '/') == NULL) {
+	if (index(special, '/') == NULL) {
 		(void)sprintf(device, "%sr%s", _PATH_DEV, special);
 		if (stat(device, &st) == -1)
 			(void)sprintf(device, "%s%s", _PATH_DEV, special);
@@ -307,10 +294,8 @@ main(argc, argv)
 	if (!debug && !mfs && !S_ISCHR(st.st_mode))
 		(void)printf("%s: %s: not a character-special device\n",
 		    progname, special);
-	cp = strchr(argv[0], '\0') - 1;
-	if (!debug
-	    && (cp == 0 || ((*cp < 'a' || *cp > ('a' + maxpartitions - 1))
-	    && !isdigit(*cp))))
+	cp = index(argv[0], '\0') - 1;
+	if (!debug && (cp == 0 || (*cp < 'a' || *cp > 'h') && !isdigit(*cp)))
 		fatal("%s: can't figure out file system partition", argv[0]);
 
 #ifdef COMPAT
@@ -349,7 +334,7 @@ getdisklabel(s, fd)
 	if (ioctl(fd, DIOCGDINFO, (char *)&lab) < 0) {
 #ifdef COMPAT
 		if (disktype) {
-			struct disklabel *lp;
+			struct disklabel *lp, *getdiskbyname();
 
 			unlabeled++;
 			lp = getdiskbyname(disktype);
@@ -381,12 +366,11 @@ debug_readlabel(fd)
 	return(&lab);
 }
 
-#ifdef notdef
 static void
 rewritelabel(s, fd, lp)
 	char *s;
 	int fd;
-	struct disklabel *lp;
+	register struct disklabel *lp;
 {
 #ifdef COMPAT
 	if (unlabeled)
@@ -401,7 +385,7 @@ rewritelabel(s, fd, lp)
 	}
 #if vax
 	if (lp->d_type == DTYPE_SMD && lp->d_flags & D_BADSECT) {
-		int i;
+		register i;
 		int cfd;
 		daddr_t alt;
 		char specname[64];
@@ -418,12 +402,12 @@ rewritelabel(s, fd, lp)
 		cfd = open(specname, O_WRONLY);
 		if (cfd < 0)
 			fatal("%s: %s", specname, strerror(errno));
-		memset(blk, 0, sizeof(blk));
+		bzero(blk, sizeof(blk));
 		*(struct disklabel *)(blk + LABELOFFSET) = *lp;
 		alt = lp->d_ncylinders * lp->d_secpercyl - lp->d_nsectors;
 		for (i = 1; i < 11 && i < lp->d_nsectors; i += 2) {
-			if (lseek(cfd, (off_t)((alt + i) * lp->d_secsize),
-			    SEEK_SET) == -1)
+			if (lseek(cfd, (off_t)(alt + i) * lp->d_secsize,
+			    L_SET) == -1)
 				fatal("lseek to badsector area: %s",
 				    strerror(errno));
 			if (write(cfd, blk, lp->d_secsize) < lp->d_secsize)
@@ -433,9 +417,8 @@ rewritelabel(s, fd, lp)
 		}
 		close(cfd);
 	}
-#endif /* vax */
+#endif
 }
-#endif /* notdef */
 
 void
 usage()

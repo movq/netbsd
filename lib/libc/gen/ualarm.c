@@ -1,8 +1,6 @@
-/*	$NetBSD: ualarm.c,v 1.6 1997/07/21 14:07:43 jtc Exp $	*/
-
 /*
- * Copyright (c) 1985, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1985 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,22 +31,12 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char sccsid[] = "@(#)ualarm.c	8.1 (Berkeley) 6/4/93";
-#else
-__RCSID("$NetBSD: ualarm.c,v 1.6 1997/07/21 14:07:43 jtc Exp $");
-#endif
+static char sccsid[] = "@(#)ualarm.c	5.5 (Berkeley) 2/23/91";
 #endif /* LIBC_SCCS and not lint */
 
-#include "namespace.h"
 #include <sys/time.h>
 #include <unistd.h>
-
-#ifdef __weak_alias
-__weak_alias(ualarm,_ualarm);
-#endif
 
 #define	USPS	1000000		/* # of microseconds in a second */
 

@@ -1,8 +1,6 @@
-/*	$NetBSD: lstRemove.c,v 1.7 1997/09/28 03:31:33 lukem Exp $	*/
-
 /*
- * Copyright (c) 1988, 1989, 1990, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1988, 1989, 1990 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Adam de Boor.
@@ -36,18 +34,9 @@
  * SUCH DAMAGE.
  */
 
-#ifdef MAKE_BOOTSTRAP
-static char rcsid[] = "$NetBSD: lstRemove.c,v 1.7 1997/09/28 03:31:33 lukem Exp $";
-#else
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)lstRemove.c	8.1 (Berkeley) 6/6/93";
-#else
-__RCSID("$NetBSD: lstRemove.c,v 1.7 1997/09/28 03:31:33 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)lstRemove.c	5.3 (Berkeley) 6/1/90";
 #endif /* not lint */
-#endif
 
 /*-
  * LstRemove.c --
@@ -83,7 +72,7 @@ Lst_Remove (l, ln)
 	!LstNodeValid (ln, l)) {
 	    return (FAILURE);
     }
-
+    
     /*
      * unlink it from the list
      */
@@ -93,7 +82,7 @@ Lst_Remove (l, ln)
     if (lNode->prevPtr != NilListNode) {
 	lNode->prevPtr->nextPtr = lNode->nextPtr;
     }
-
+    
     /*
      * if either the firstPtr or lastPtr of the list point to this node,
      * adjust them accordingly
@@ -126,7 +115,7 @@ Lst_Remove (l, ln)
     if (list->firstPtr == lNode) {
 	list->firstPtr = NilListNode;
     }
-
+    
     /*
      * note that the datum is unmolested. The caller must free it as
      * necessary and as expected.
@@ -136,7 +125,7 @@ Lst_Remove (l, ln)
     } else {
 	lNode->flags |= LN_DELETED;
     }
-
+    
     return (SUCCESS);
 }
 

@@ -1,5 +1,3 @@
-.\"	$NetBSD: sysctl.8,v 1.15 1997/10/18 21:20:24 kml Exp $
-.\"
 .\" Copyright (c) 1993
 .\"	The Regents of the University of California.  All rights reserved.
 .\"
@@ -33,7 +31,7 @@
 .\"
 .\"	@(#)sysctl.8	8.1 (Berkeley) 6/6/93
 .\"
-.Dd June 6, 1993
+.Dd "June 6, 1993"
 .Dt SYSCTL 8
 .Os
 .Sh NAME
@@ -109,9 +107,6 @@ privilege can change the value.
 .It kern.maxvnodes	integer	yes
 .It kern.maxproc	integer	yes
 .It kern.maxfiles	integer	yes
-.It kern.maxpartitions	integer	no
-.It kern.rawpartition	integer	no
-.It kern.msgbufsize	integer	no
 .It kern.argmax	integer	no
 .It kern.securelevel	integer	raise only
 .It kern.hostname	string	yes
@@ -131,28 +126,13 @@ privilege can change the value.
 .It kern.no_trunc	integer	no
 .It kern.vdisable	integer	no
 .It kern.boottime	struct	no
-.It kern.autonicetime	integer	yes
-.It kern.autoniceval	integer	yes
 .It vm.loadavg	struct	no
 .It machdep.console_device	dev_t	no
 .It net.inet.ip.forwarding	integer	yes
 .It net.inet.ip.redirect	integer	yes
 .It net.inet.ip.ttl	integer	yes
-.It net.inet.ip.forwsrcrt	integer	yes
-.It net.inet.ip.directed-broadcast	integer		yes
-.It net.inet.ip.allowsrcrt	integer	yes
-.It net.inet.ip.subnetsarelocal	integer	yes
-.It net.inet.ip.mtudisc	integer	yes
 .It net.inet.icmp.maskrepl	integer	yes
-.It net.inet.tcp.rfc1323	integer	yes
-.It net.inet.tcp.sendspace	integer	yes
-.It net.inet.tcp.recvspace	integer	yes
-.It net.inet.tcp.syn_cache_limit	integer	yes
-.It net.inet.tcp.syn_bucket_limit	integer	yes
-.It net.inet.tcp.syn_cache_interval	integer	yes
 .It net.inet.udp.checksum	integer	yes
-.It net.inet.udp.sendspace	integer	yes
-.It net.inet.tcp.recvspace	integer	yes
 .It hw.machine	string	no
 .It hw.model	string	no
 .It hw.ncpu	integer	no
@@ -160,7 +140,6 @@ privilege can change the value.
 .It hw.physmem	integer	no
 .It hw.usermem	integer	no
 .It hw.pagesize	integer	no
-.It hw.machine_arch	string	no
 .It user.cs_path	string	no
 .It user.bc_base_max	integer	no
 .It user.bc_dim_max	integer	no
@@ -179,12 +158,6 @@ privilege can change the value.
 .It user.posix2_localedef	integer	no
 .It user.posix2_sw_dev	integer	no
 .It user.posix2_upe	integer	no
-.It ddb.radix	integer		yes
-.It ddb.maxoff	integer 	yes
-.It ddb.maxwidth	integer		yes
-.It ddb.tabstops	integer		yes
-.It ddb.lines	integer		yes
-.It ddb.onpanic	integer		yes
 .El
 .Sh EXAMPLES
 .Pp

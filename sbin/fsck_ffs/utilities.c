@@ -1,8 +1,6 @@
-/*	$NetBSD: utilities.c,v 1.22 1997/09/24 09:24:24 lukem Exp $	*/
-
 /*
- * Copyright (c) 1980, 1986, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1980, 1986 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,38 +31,23 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)utilities.c	8.6 (Berkeley) 5/19/95";
-#else
-__RCSID("$NetBSD: utilities.c,v 1.22 1997/09/24 09:24:24 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)utilities.c	5.30 (Berkeley) 7/26/91";
 #endif /* not lint */
 
 #include <sys/param.h>
-#include <sys/time.h>
-
-#include <ufs/ufs/dinode.h>
-#include <ufs/ufs/dir.h>
-#include <ufs/ffs/fs.h>
-
-#include <ctype.h>
-#include <err.h>
+#include <ufs/dinode.h>
+#include <ufs/fs.h>
+#include <ufs/dir.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
-
-#include "fsutil.h"
+#include <ctype.h>
 #include "fsck.h"
-#include "extern.h"
 
 long	diskreads, totalreads;	/* Disk cache statistics */
+long	lseek();
 
-static void rwerror __P((char *, ufs_daddr_t));
-
-int
 ftypeok(dp)
 	struct dinode *dp;
 {
@@ -86,7 +69,6 @@ ftypeok(dp)
 	}
 }
 
-int
 reply(question)
 	char *question;
 {
@@ -122,17 +104,16 @@ reply(question)
 /*
  * Malloc buffers and set up cache.
  */
-void
 bufinit()
 {
-	struct bufarea *bp;
+	register struct bufarea *bp;
 	long bufcnt, i;
 	char *bufp;
 
 	pbp = pdirbp = (struct bufarea *)0;
 	bufp = malloc((unsigned int)sblock.fs_bsize);
 	if (bufp == 0)
-		errx(EEXIT, "cannot allocate buffer pool");
+		errexit("cannot allocate buffer pool\n");
 	cgblk.b_un.b_buf = bufp;
 	initbarea(&cgblk);
 	bufhead.b_next = bufhead.b_prev = &bufhead;
@@ -145,7 +126,7 @@ bufinit()
 		if (bp == NULL || bufp == NULL) {
 			if (i >= MINBUFS)
 				break;
-			errx(EEXIT, "cannot allocate buffer pool");
+			errexit("cannot allocate buffer pool\n");
 		}
 		bp->b_un.b_buf = bufp;
 		bp->b_prev = &bufhead;
@@ -162,10 +143,10 @@ bufinit()
  */
 struct bufarea *
 getdatablk(blkno, size)
-	ufs_daddr_t blkno;
+	daddr_t blkno;
 	long size;
 {
-	struct bufarea *bp;
+	register struct bufarea *bp;
 
 	for (bp = bufhead.b_next; bp != &bufhead; bp = bp->b_next)
 		if (bp->b_bno == fsbtodb(&sblock, blkno))
@@ -174,7 +155,7 @@ getdatablk(blkno, size)
 		if ((bp->b_flags & B_INUSE) == 0)
 			break;
 	if (bp == &bufhead)
-		errx(EEXIT, "deadlocked buffer pool");
+		errexit("deadlocked buffer pool\n");
 	getblk(bp, blkno, size);
 	/* fall through */
 foundit:
@@ -191,11 +172,11 @@ foundit:
 
 void
 getblk(bp, blk, size)
-	struct bufarea *bp;
-	ufs_daddr_t blk;
+	register struct bufarea *bp;
+	daddr_t blk;
 	long size;
 {
-	ufs_daddr_t dblk;
+	daddr_t dblk;
 
 	dblk = fsbtodb(&sblock, blk);
 	if (bp->b_bno != dblk) {
@@ -207,12 +188,11 @@ getblk(bp, blk, size)
 	}
 }
 
-void
 flush(fd, bp)
 	int fd;
-	struct bufarea *bp;
+	register struct bufarea *bp;
 {
-	int i, j;
+	register int i, j;
 
 	if (!bp->b_dirty)
 		return;
@@ -233,30 +213,23 @@ flush(fd, bp)
 	}
 }
 
-static void
 rwerror(mesg, blk)
 	char *mesg;
-	ufs_daddr_t blk;
+	daddr_t blk;
 {
 
 	if (preen == 0)
 		printf("\n");
-	pfatal("CANNOT %s: BLK %d", mesg, blk);
+	pfatal("CANNOT %s: BLK %ld", mesg, blk);
 	if (reply("CONTINUE") == 0)
-		exit(EEXIT);
+		errexit("Program terminated\n");
 }
 
-void
-ckfini(markclean)
-	int markclean;
+ckfini()
 {
-	struct bufarea *bp, *nbp;
-	int ofsmodified, cnt = 0;
+	register struct bufarea *bp, *nbp;
+	int cnt = 0;
 
-	if (fswritefd < 0) {
-		(void)close(fsreadfd);
-		return;
-	}
 	flush(fswritefd, &sblk);
 	if (havesb && sblk.b_bno != SBOFF / dev_bsize &&
 	    !preen && reply("UPDATE STANDARD SUPERBLOCK")) {
@@ -266,7 +239,7 @@ ckfini(markclean)
 	}
 	flush(fswritefd, &cgblk);
 	free(cgblk.b_un.b_buf);
-	for (bp = bufhead.b_prev; bp && bp != &bufhead; bp = nbp) {
+	for (bp = bufhead.b_prev; bp != &bufhead; bp = nbp) {
 		cnt++;
 		flush(fswritefd, bp);
 		nbp = bp->b_prev;
@@ -274,29 +247,8 @@ ckfini(markclean)
 		free((char *)bp);
 	}
 	if (bufhead.b_size != cnt)
-		errx(EEXIT, "Panic: lost %d buffers", bufhead.b_size - cnt);
+		errexit("Panic: lost %d buffers\n", bufhead.b_size - cnt);
 	pbp = pdirbp = (struct bufarea *)0;
-	if (markclean && (sblock.fs_clean & FS_ISCLEAN) == 0) {
-		/*
-		 * Mark the file system as clean, and sync the superblock.
-		 */
-		if (preen)
-			pwarn("MARKING FILE SYSTEM CLEAN\n");
-		else if (!reply("MARK FILE SYSTEM CLEAN"))
-			markclean = 0;
-		if (markclean) {
-			sblock.fs_clean = FS_ISCLEAN;
-			sbdirty();
-			ofsmodified = fsmodified;
-			flush(fswritefd, &sblk);
-#if LITE2BORKEN
-			fsmodified = ofsmodified;
-#endif
-			if (!preen)
-				printf(
-				    "\n***** FILE SYSTEM MARKED CLEAN *****\n");
-		}
-	}
 	if (debug)
 		printf("cache missed %ld of %ld (%d%%)\n", diskreads,
 		    totalreads, (int)(diskreads * 100 / totalreads));
@@ -304,32 +256,28 @@ ckfini(markclean)
 	(void)close(fswritefd);
 }
 
-int
 bread(fd, buf, blk, size)
 	int fd;
 	char *buf;
-	ufs_daddr_t blk;
+	daddr_t blk;
 	long size;
 {
 	char *cp;
 	int i, errs;
-	off_t offset;
 
-	offset = blk;
-	offset *= dev_bsize;
-	if (lseek(fd, offset, 0) < 0)
+	if (lseek(fd, blk * dev_bsize, 0) < 0)
 		rwerror("SEEK", blk);
 	else if (read(fd, buf, (int)size) == size)
 		return (0);
 	rwerror("READ", blk);
-	if (lseek(fd, offset, 0) < 0)
+	if (lseek(fd, blk * dev_bsize, 0) < 0)
 		rwerror("SEEK", blk);
 	errs = 0;
-	memset(buf, 0, (size_t)size);
+	bzero(buf, (size_t)size);
 	printf("THE FOLLOWING DISK SECTORS COULD NOT BE READ:");
 	for (cp = buf, i = 0; i < size; i += secsize, cp += secsize) {
 		if (read(fd, cp, (int)secsize) != secsize) {
-			(void)lseek(fd, offset + i + secsize, 0);
+			(void)lseek(fd, blk * dev_bsize + i + secsize, 0);
 			if (secsize != dev_bsize && dev_bsize != 1)
 				printf(" %ld (%ld),",
 				    (blk * dev_bsize + i) / secsize,
@@ -343,34 +291,30 @@ bread(fd, buf, blk, size)
 	return (errs);
 }
 
-void
 bwrite(fd, buf, blk, size)
 	int fd;
 	char *buf;
-	ufs_daddr_t blk;
+	daddr_t blk;
 	long size;
 {
 	int i;
 	char *cp;
-	off_t offset;
 
 	if (fd < 0)
 		return;
-	offset = blk;
-	offset *= dev_bsize;
-	if (lseek(fd, offset, 0) < 0)
+	if (lseek(fd, blk * dev_bsize, 0) < 0)
 		rwerror("SEEK", blk);
 	else if (write(fd, buf, (int)size) == size) {
 		fsmodified = 1;
 		return;
 	}
 	rwerror("WRITE", blk);
-	if (lseek(fd, offset, 0) < 0)
+	if (lseek(fd, blk * dev_bsize, 0) < 0)
 		rwerror("SEEK", blk);
 	printf("THE FOLLOWING SECTORS COULD NOT BE WRITTEN:");
 	for (cp = buf, i = 0; i < size; i += dev_bsize, cp += dev_bsize)
 		if (write(fd, cp, (int)dev_bsize) != dev_bsize) {
-			(void)lseek(fd, offset + i + dev_bsize, 0);
+			(void)lseek(fd, blk * dev_bsize + i + dev_bsize, 0);
 			printf(" %ld,", blk + i / dev_bsize);
 		}
 	printf("\n");
@@ -380,11 +324,10 @@ bwrite(fd, buf, blk, size)
 /*
  * allocate a data block with the specified number of fragments
  */
-ufs_daddr_t
 allocblk(frags)
 	long frags;
 {
-	int i, j, k;
+	register int i, j, k;
 
 	if (frags <= 0 || frags > sblock.fs_frag)
 		return (0);
@@ -411,9 +354,8 @@ allocblk(frags)
 /*
  * Free a previously allocated block
  */
-void
 freeblk(blkno, frags)
-	ufs_daddr_t blkno;
+	daddr_t blkno;
 	long frags;
 {
 	struct inodesc idesc;
@@ -426,27 +368,23 @@ freeblk(blkno, frags)
 /*
  * Find a pathname
  */
-void
 getpathname(namebuf, curdir, ino)
 	char *namebuf;
 	ino_t curdir, ino;
 {
 	int len;
-	char *cp;
+	register char *cp;
 	struct inodesc idesc;
 	static int busy = 0;
+	extern int findname();
 
-	if (curdir == ino && ino == ROOTINO) {
-		(void)strcpy(namebuf, "/");
-		return;
-	}
 	if (busy ||
 	    (statemap[curdir] != DSTATE && statemap[curdir] != DFOUND)) {
 		(void)strcpy(namebuf, "?");
 		return;
 	}
 	busy = 1;
-	memset(&idesc, 0, sizeof(struct inodesc));
+	bzero((char *)&idesc, sizeof(struct inodesc));
 	idesc.id_type = DATA;
 	idesc.id_fix = IGNORE;
 	cp = &namebuf[MAXPATHLEN - 1];
@@ -470,7 +408,7 @@ getpathname(namebuf, curdir, ino)
 			break;
 		len = strlen(namebuf);
 		cp -= len;
-		memmove(cp, namebuf, (size_t)len);
+		bcopy(namebuf, cp, (size_t)len);
 		*--cp = '/';
 		if (cp < &namebuf[MAXNAMLEN])
 			break;
@@ -479,15 +417,13 @@ getpathname(namebuf, curdir, ino)
 	busy = 0;
 	if (ino != ROOTINO)
 		*--cp = '?';
-	memmove(namebuf, cp, (size_t)(&namebuf[MAXPATHLEN] - cp));
+	bcopy(cp, namebuf, (size_t)(&namebuf[MAXPATHLEN] - cp));
 }
 
 void
-catch(sig)
-	int sig;
+catch()
 {
-	if (!doinglevel2)
-		ckfini(0);
+	ckfini();
 	exit(12);
 }
 
@@ -497,8 +433,7 @@ catch(sig)
  * so that reboot sequence may be interrupted.
  */
 void
-catchquit(sig)
-	int sig;
+catchquit()
 {
 	extern returntosingle;
 
@@ -512,8 +447,7 @@ catchquit(sig)
  * Used by child processes in preen.
  */
 void
-voidquit(sig)
-	int sig;
+voidquit()
 {
 
 	sleep(1);
@@ -524,9 +458,8 @@ voidquit(sig)
 /*
  * determine whether an inode should be fixed.
  */
-int
 dofix(idesc, msg)
-	struct inodesc *idesc;
+	register struct inodesc *idesc;
 	char *msg;
 {
 
@@ -557,8 +490,62 @@ dofix(idesc, msg)
 		return (0);
 
 	default:
-		errx(EEXIT, "UNKNOWN INODESC FIX MODE %d", idesc->id_fix);
+		errexit("UNKNOWN INODESC FIX MODE %d\n", idesc->id_fix);
 	}
 	/* NOTREACHED */
-	return (0);
 }
+
+/* VARARGS1 */
+errexit(s1, s2, s3, s4)
+	char *s1;
+{
+	printf(s1, s2, s3, s4);
+	exit(8);
+}
+
+/*
+ * An unexpected inconsistency occured.
+ * Die if preening, otherwise just print message and continue.
+ */
+/* VARARGS1 */
+pfatal(s, a1, a2, a3)
+	char *s;
+{
+
+	if (preen) {
+		printf("%s: ", devname);
+		printf(s, a1, a2, a3);
+		printf("\n");
+		printf("%s: UNEXPECTED INCONSISTENCY; RUN fsck MANUALLY.\n",
+			devname);
+		exit(8);
+	}
+	printf(s, a1, a2, a3);
+}
+
+/*
+ * Pwarn just prints a message when not preening,
+ * or a warning (preceded by filename) when preening.
+ */
+/* VARARGS1 */
+pwarn(s, a1, a2, a3, a4, a5, a6)
+	char *s;
+{
+
+	if (preen)
+		printf("%s: ", devname);
+	printf(s, a1, a2, a3, a4, a5, a6);
+}
+
+#ifndef lint
+/*
+ * Stub for routines from kernel.
+ */
+panic(s)
+	char *s;
+{
+
+	pfatal("INTERNAL INCONSISTENCY:");
+	errexit(s);
+}
+#endif

@@ -1,8 +1,6 @@
-/*	$NetBSD: tput.c,v 1.10 1997/10/20 00:50:53 lukem Exp $	*/
-
 /*-
- * Copyright (c) 1980, 1988, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1980, 1988 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,46 +31,32 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1980, 1988, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+char copyright[] =
+"@(#) Copyright (c) 1980, 1988 The Regents of the University of California.\n\
+ All rights reserved.\n";
 #endif /* not lint */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)tput.c	8.3 (Berkeley) 4/28/95";
-#endif
-__RCSID("$NetBSD: tput.c,v 1.10 1997/10/20 00:50:53 lukem Exp $");
+static char sccsid[] = "@(#)tput.c	5.7 (Berkeley) 6/7/90";
 #endif /* not lint */
 
-#include <termios.h>
-
-#include <err.h>
+#include <sys/termios.h>
 #include <stdio.h>
-#include <stdlib.h>
-#include <termcap.h>
 #include <unistd.h>
 
-	int   main __P((int, char **));
-static void   outc __P((int));
-static void   prlongname __P((char *));
-static void   setospeed __P((void));
-static void   usage __P((void));
-static char **process __P((char *, char *, char **));
-
-int
 main(argc, argv)
 	int argc;
 	char **argv;
 {
 	extern char *optarg;
 	extern int optind;
-	int ch, exitval, n;
+	int ch, exitval, n, outc();
 	char *cptr, *p, *term, buf[1024], tbuf[1024];
+	char *getenv(), *tgetstr(), *realname();
 
 	term = NULL;
-	while ((ch = getopt(argc, argv, "T:")) != -1)
+	while ((ch = getopt(argc, argv, "T:")) != EOF)
 		switch(ch) {
 		case 'T':
 			term = optarg;
@@ -84,13 +68,17 @@ main(argc, argv)
 	argc -= optind;
 	argv += optind;
 
-	if (!term && !(term = getenv("TERM")))
-errx(2, "no terminal type specified and no TERM environmental variable.");
-	if (tgetent(tbuf, term) != 1)
-		err(2, "tgetent failure");
+	if (!term && !(term = getenv("TERM"))) {
+		(void)fprintf(stderr, "tput: no terminal type specified.\n");
+		exit(2);
+	}
+	if (tgetent(tbuf, term) != 1) {
+		(void)fprintf(stderr, "tput: tgetent failure.\n");
+		exit(2);
+	}
 	setospeed();
-	for (exitval = 0; (p = *argv) != NULL; ++argv) {
-		switch (*p) {
+	for (cptr = buf, exitval = 0; p = *argv; ++argv) {
+		switch(*p) {
 		case 'c':
 			if (!strcmp(p, "clear"))
 				p = "cl";
@@ -100,123 +88,43 @@ errx(2, "no terminal type specified and no TERM environmental variable.");
 				p = "is";
 			break;
 		case 'l':
-			if (!strcmp(p, "longname")) {
+			if (!strcmp(p, "longname"))
 				prlongname(tbuf);
-				continue;
-			}
-			break;
+			continue;
 		case 'r':
 			if (!strcmp(p, "reset"))
 				p = "rs";
 			break;
 		}
-		cptr = buf;
 		if (tgetstr(p, &cptr))
-			argv = process(p, buf, argv);
+			(void)tputs(buf, 1, outc);
 		else if ((n = tgetnum(p)) != -1)
 			(void)printf("%d\n", n);
 		else
 			exitval = !tgetflag(p);
-
-		if (argv == NULL)
-			break;
 	}
-	exit(argv ? exitval : 2);
+	exit(exitval);
 }
 
-static void
 prlongname(buf)
 	char *buf;
 {
+	register char *p;
 	int savech;
-	char *p, *savep;
+	char *savep;
 
-	for (p = buf; *p && *p != ':'; ++p)
-		continue;
+	for (p = buf; *p && *p != ':'; ++p);
 	savech = *(savep = p);
-	for (*p = '\0'; p >= buf && *p != '|'; --p)
-		continue;
+	for (*p = '\0'; p >= buf && *p != '|'; --p);
 	(void)printf("%s\n", p + 1);
 	*savep = savech;
 }
 
-static char **
-process(cap, str, argv)
-	char *cap, *str, **argv;
-{
-	static char errfew[] =
-	    "not enough arguments (%d) for capability `%s'";
-	static char errmany[] =
-	    "too many arguments (%d) for capability `%s'";
-	static char erresc[] =
-	    "unknown %% escape `%c' for capability `%s'";
-	char *cp;
-	int arg_need, arg_rows, arg_cols;
-
-	/* Count how many values we need for this capability. */
-	for (cp = str, arg_need = 0; *cp != '\0'; cp++)
-		if (*cp == '%')
-			    switch (*++cp) {
-			    case 'd':
-			    case '2':
-			    case '3':
-			    case '.':
-			    case '+':
-				    arg_need++;
-				    break;
-			    case '%':
-			    case '>':
-			    case 'i':
-			    case 'r':
-			    case 'n':
-			    case 'B':
-			    case 'D':
-				    break;
-			    default:
-				/*
-				 * hpux has lot's of them, but we complain
-				 */
-				 errx(2, erresc, *cp, cap);
-			    }
-
-	/* And print them. */
-	switch (arg_need) {
-	case 0:
-		(void)tputs(str, 1, outc);
-		break;
-	case 1:
-		arg_cols = 0;
-
-		if (*++argv == NULL || *argv[0] == '\0')
-			errx(2, errfew, 1, cap);
-		arg_rows = atoi(*argv);
-
-		(void)tputs(tgoto(str, arg_cols, arg_rows), 1, outc);
-		break;
-	case 2:
-		if (*++argv == NULL || *argv[0] == '\0')
-			errx(2, errfew, 2, cap);
-		arg_rows = atoi(*argv);
-
-		if (*++argv == NULL || *argv[0] == '\0')
-			errx(2, errfew, 2, cap);
-		arg_cols = atoi(*argv);
-
-		(void) tputs(tgoto(str, arg_cols, arg_rows), arg_rows, outc);
-		break;
-
-	default:
-		errx(2, errmany, arg_need, cap);
-	}
-	return (argv);
-}
-
-static void
 setospeed()
 {
-#undef ospeed
-	extern short ospeed;
+	extern int errno, ospeed;
 	struct termios t;
+	char *strerror();
 
 	if (tcgetattr(STDOUT_FILENO, &t) != -1)
 		ospeed = 0;
@@ -224,14 +132,12 @@ setospeed()
 		ospeed = cfgetospeed(&t);
 }
 
-static void
 outc(c)
 	int c;
 {
-	(void)putchar(c);
+	putchar(c);
 }
 
-static void
 usage()
 {
 	(void)fprintf(stderr, "usage: tput [-T term] attribute ...\n");

@@ -1,5 +1,3 @@
-/*	$NetBSD: vi.c,v 1.3 1997/07/06 18:25:39 christos Exp $	*/
-
 /*-
  * Copyright (c) 1992, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -36,13 +34,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #if !defined(lint) && !defined(SCCSID)
-#if 0
 static char sccsid[] = "@(#)vi.c	8.1 (Berkeley) 6/4/93";
-#else
-__RCSID("$NetBSD: vi.c,v 1.3 1997/07/06 18:25:39 christos Exp $");
-#endif
 #endif /* not lint && not SCCSID */
 
 /*
@@ -51,8 +44,7 @@ __RCSID("$NetBSD: vi.c,v 1.3 1997/07/06 18:25:39 christos Exp $");
 #include "sys.h"
 #include "el.h"
 
-private el_action_t cv_action	__P((EditLine *, int));
-private el_action_t cv_paste	__P((EditLine *, int));
+private el_action_t cv_action __P((EditLine *, int));
 
 /* cv_action():
  *	Handle vi actions.
@@ -111,7 +103,7 @@ cv_action(el, c)
 /* cv_paste():
  *	Paste previous deletion before or after the cursor
  */
-private el_action_t
+protected el_action_t
 cv_paste(el, c)
     EditLine *el;
     int c;

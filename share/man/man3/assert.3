@@ -1,7 +1,5 @@
-.\"	$NetBSD: assert.3,v 1.5 1994/11/30 15:24:30 jtc Exp $
-.\"
-.\" Copyright (c) 1991, 1993
-.\"	The Regents of the University of California.  All rights reserved.
+.\" Copyright (c) 1991 Regents of the University of California.
+.\" All rights reserved.
 .\"
 .\" Redistribution and use in source and binary forms, with or without
 .\" modification, are permitted provided that the following conditions
@@ -31,9 +29,9 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\"     @(#)assert.3	8.1 (Berkeley) 6/9/93
+.\"     @(#)assert.3	6.3 (Berkeley) 4/19/91
 .\"
-.Dd June 9, 1993
+.Dd April 19, 1991
 .Dt ASSERT 3
 .Os
 .Sh NAME
@@ -50,11 +48,11 @@ macro tests the given
 and if it is false,
 the calling process is terminated.
 A
-diagnostic message is written to
+diagnostic message is written to the
 .Em stderr
-and the
-.Xr abort 3
-function is called, effectively terminating the program.
+and the function
+.Xr _exit 2
+is called effectively terminating the program.
 .Pp
 If
 .Ar expression
@@ -68,9 +66,9 @@ The
 macro
 may be removed at compile time with
 the
-.Xr cc 1
-option
-.Fl DNDEBUG .
+.Fl NDEBUG
+option, see
+.Xr cc 1 .
 .Sh DIAGNOSTICS
 The following diagnostic message is written to
 .Em stderr
@@ -78,19 +76,11 @@ if
 .Ar expression
 is false:
 .Bd -literal -offset indent
-"assertion \e"%s\e" failed: file \e"%s\e", line %d\en", \e
+"assertion \e"%s\e" failed: file \e"%s\e", line %d\n", \e
 		    "expression", __FILE__, __LINE__);
 .Ed
-.Sh SEE ALSO
-.Xr cc 1 ,
-.Xr abort 3
-.Sh STANDARDS
+.Sh HISTORY
 The
 .Fn assert
-macro conforms to
-.St -ansiC .
-.Sh HISTORY
-A
-.Nm assert
-macro appeared in
-.At v6 .
+function is
+.Ud .

@@ -1,5 +1,3 @@
-/*	$NetBSD: tar.h,v 1.3 1995/03/21 09:07:51 cgd Exp $	*/
-
 /*-
  * Copyright (c) 1992 Keith Muller.
  * Copyright (c) 1992, 1993

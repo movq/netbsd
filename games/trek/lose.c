@@ -1,8 +1,6 @@
-/*	$NetBSD: lose.c,v 1.4 1997/10/12 21:24:58 christos Exp $	*/
-
 /*
- * Copyright (c) 1980, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1980 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,20 +31,12 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)lose.c	8.1 (Berkeley) 5/31/93";
-#else
-__RCSID("$NetBSD: lose.c,v 1.4 1997/10/12 21:24:58 christos Exp $");
-#endif
+static char sccsid[] = "@(#)lose.c	5.6 (Berkeley) 6/26/90";
 #endif /* not lint */
 
-#include <stdio.h>
-#include <setjmp.h>
-#include <unistd.h>
-#include "trek.h"
-#include "getpar.h"
+# include	"trek.h"
+# include	<setjmp.h>
 
 /*
 **  PRINT OUT LOSER MESSAGES
@@ -73,7 +63,6 @@ char	*Losemsg[] =
 	"Your last crew member died",
 };
 
-void
 lose(why)
 int	why;
 {

@@ -1,8 +1,7 @@
-/*	$NetBSD: portal.h,v 1.7 1996/02/09 22:40:40 christos Exp $	*/
-
 /*
- * Copyright (c) 1992, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1992 The Regents of the University of California
+ * Copyright (c) 1990, 1992 Jan-Simon Pendry
+ * All rights reserved.
  *
  * This code is derived from software donated to Berkeley by
  * Jan-Simon Pendry.
@@ -35,8 +34,10 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	from: Id: portal.h,v 1.3 1992/05/30 10:05:24 jsp Exp
- *	@(#)portal.h	8.4 (Berkeley) 1/21/94
+ * From:
+ *	Id: portal.h,v 1.4 1993/09/22 17:57:12 jsp Exp
+ *
+ *	$Id: portal.h,v 1.1 1994/01/05 14:23:21 cgd Exp $
  */
 
 struct portal_args {
@@ -45,14 +46,12 @@ struct portal_args {
 };
 
 struct portal_cred {
-	int		pcr_flag;		/* File open mode */
-	uid_t		pcr_uid;		/* From ucred */
-	gid_t		pcr_gid;		/* From ucred */
-	short		pcr_ngroups;		/* From ucred */
-	gid_t		pcr_groups[NGROUPS];	/* From ucred */
+	uid_t		pcr_uid;	/* From ucred */
+	gid_t		pcr_gid;	/* From ucred */
 };
 
-#ifdef _KERNEL
+
+#ifdef KERNEL
 struct portalmount {
 	struct vnode	*pm_root;	/* Root node */
 	struct file	*pm_server;	/* Held reference to server socket */
@@ -69,6 +68,6 @@ struct portalnode {
 
 #define PORTAL_ROOTFILEID	2
 
-extern int (**portal_vnodeop_p) __P((void *));
+extern struct vnodeops portal_vnodeops;
 extern struct vfsops portal_vfsops;
-#endif /* _KERNEL */
+#endif /* KERNEL */

@@ -1,5 +1,3 @@
-/*	$NetBSD: mfsiom.h,v 1.2 1994/06/29 06:47:14 cgd Exp $	*/
-
 /*
  * Copyright (c) 1989, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -32,7 +30,8 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)mfsiom.h	8.1 (Berkeley) 6/11/93
+ *	from: @(#)mfsiom.h	8.1 (Berkeley) 6/11/93
+ *	$Id: mfsiom.h,v 1.1 1994/06/08 11:42:58 mycroft Exp $
  */
 
 #define MFS_MAPREG	(MAXPHYS/NBPG + 2) /* Kernel mapping pte's */

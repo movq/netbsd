@@ -1,5 +1,5 @@
-.\" Copyright (c) 1983, 1990, 1991, 1993
-.\"	The Regents of the University of California.  All rights reserved.
+.\" Copyright (c) 1983, 1990, 1991 Regents of the University of California.
+.\" All rights reserved.
 .\"
 .\" This code is derived from software contributed to Berkeley by
 .\" Robert Elz at The University of Melbourne.
@@ -31,10 +31,9 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\"     from: @(#)quotaon.8	8.2 (Berkeley) 12/11/93
-.\"	$NetBSD: quotaon.8,v 1.5 1997/10/18 04:37:56 lukem Exp $
+.\"     @(#)quotaon.8	6.7 (Berkeley) 3/16/91
 .\"
-.Dd December 11, 1993
+.Dd March 16, 1991
 .Dt QUOTAON 8
 .Os BSD 4.2
 .Sh NAME
@@ -42,12 +41,12 @@
 .Nm quotaoff
 .Nd turn filesystem quotas on and off
 .Sh SYNOPSIS
-.Nm
+.Nm quotaon
 .Op Fl g
 .Op Fl u
 .Op Fl v
 .Ar filesystem Ar ...
-.Nm ""
+.Nm quotaon
 .Op Fl g
 .Op Fl u
 .Op Fl v
@@ -63,17 +62,17 @@
 .Op Fl v
 .Fl a
 .Sh DESCRIPTION
-.Nm
+.Nm Quotaon
 announces to the system that disk quotas should be enabled on one or more
 filesystems.
-.Nm quotaoff
+.Nm Quotaoff
 announces to the system that the specified
 filesystems should have any disk quotas
 diskquotas turned off.
 The filesystems specified must have entries in
 .Pa /etc/fstab
 and be mounted.
-.Nm
+.Nm Quotaon
 expects each filesystem to have quota files named
 .Pa quota.user
 and
@@ -89,7 +88,7 @@ Available options:
 If the
 .Fl a
 flag is supplied in place of any filesystem names,
-.Nm "" Ns / Ns Nm quotaoff
+.Nm quotaon Ns / Ns quotaoff
 will enable/disable all the filesystems indicated in
 .Pa /etc/fstab
 to be read-write with disk quotas.
@@ -106,7 +105,7 @@ Only user quotas listed in
 should be enabled/disabled.
 .It Fl v
 Causes
-.Nm
+.Nm quotaon
 and
 .Nm quotaoff
 to print a message for each filesystem where quotas are turned on or off.

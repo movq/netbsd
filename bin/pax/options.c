@@ -1,5 +1,3 @@
-/*	$NetBSD: options.c,v 1.9 1997/09/14 14:54:34 lukem Exp $	*/
-
 /*-
  * Copyright (c) 1992 Keith Muller.
  * Copyright (c) 1992, 1993
@@ -37,13 +35,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
 static char sccsid[] = "@(#)options.c	8.2 (Berkeley) 4/18/94";
-#else
-__RCSID("$NetBSD: options.c,v 1.9 1997/09/14 14:54:34 lukem Exp $");
-#endif
 #endif /* not lint */
 
 #include <sys/types.h>
@@ -75,17 +68,14 @@ static int no_op __P((void));
 static void printflg __P((unsigned int));
 static int c_frmt __P((const void *, const void *));
 static off_t str_offt __P((char *));
-static void pax_options __P((int, char **));
+static void pax_options __P((register int, register char **));
 static void pax_usage __P((void));
-static void tar_options __P((int, char **));
+static void tar_options __P((register int, register char **));
 static void tar_usage __P((void));
 #ifdef notdef
-static void cpio_options __P((int, char **));
+static void cpio_options __P((register int, register char **));
 static void cpio_usage __P((void));
 #endif
-
-#define GZIP_CMD	"gzip"		/* command to run as gzip */
-#define COMPRESS_CMD	"compress"	/* command to run as compress */
 
 /*
  *	Format specific routine table - MUST BE IN SORTED ORDER BY NAME
@@ -98,34 +88,34 @@ static void cpio_usage __P((void));
 
 FSUB fsub[] = {
 /* 0: OLD BINARY CPIO */
-	{ "bcpio", 5120, sizeof(HD_BCPIO), 1, 0, 0, 1, bcpio_id, cpio_strd,
-	bcpio_rd, bcpio_endrd, cpio_stwr, bcpio_wr, cpio_endwr, NULL,
-	cpio_subtrail, rd_wrfile, wr_rdfile, bad_opt },
+	"bcpio", 5120, sizeof(HD_BCPIO), 1, 0, 0, 1, bcpio_id, cpio_strd,
+	bcpio_rd, bcpio_endrd, cpio_stwr, bcpio_wr, cpio_endwr, cpio_trail,
+	rd_wrfile, wr_rdfile, bad_opt,
 
 /* 1: OLD OCTAL CHARACTER CPIO */
-	{ "cpio", 5120, sizeof(HD_CPIO), 1, 0, 0, 1, cpio_id, cpio_strd,
-	cpio_rd, cpio_endrd, cpio_stwr, cpio_wr, cpio_endwr, NULL,
-	cpio_subtrail, rd_wrfile, wr_rdfile, bad_opt },
+	"cpio", 5120, sizeof(HD_CPIO), 1, 0, 0, 1, cpio_id, cpio_strd,
+	cpio_rd, cpio_endrd, cpio_stwr, cpio_wr, cpio_endwr, cpio_trail,
+	rd_wrfile, wr_rdfile, bad_opt,
 
 /* 2: SVR4 HEX CPIO */
-	{ "sv4cpio", 5120, sizeof(HD_VCPIO), 1, 0, 0, 1, vcpio_id, cpio_strd,
-	vcpio_rd, vcpio_endrd, cpio_stwr, vcpio_wr, cpio_endwr, NULL,
-	cpio_subtrail, rd_wrfile, wr_rdfile, bad_opt },
+	"sv4cpio", 5120, sizeof(HD_VCPIO), 1, 0, 0, 1, vcpio_id, cpio_strd,
+	vcpio_rd, vcpio_endrd, cpio_stwr, vcpio_wr, cpio_endwr, cpio_trail,
+	rd_wrfile, wr_rdfile, bad_opt,
 
 /* 3: SVR4 HEX CPIO WITH CRC */
-	{ "sv4crc", 5120, sizeof(HD_VCPIO), 1, 0, 0, 1, crc_id, crc_strd,
-	vcpio_rd, vcpio_endrd, crc_stwr, vcpio_wr, cpio_endwr, NULL,
-	cpio_subtrail, rd_wrfile, wr_rdfile, bad_opt },
+	"sv4crc", 5120, sizeof(HD_VCPIO), 1, 0, 0, 1, crc_id, crc_strd,
+	vcpio_rd, vcpio_endrd, crc_stwr, vcpio_wr, cpio_endwr, cpio_trail,
+	rd_wrfile, wr_rdfile, bad_opt,
 
 /* 4: OLD TAR */
-	{ "tar", 10240, BLKMULT, 0, 1, BLKMULT, 0, tar_id, no_op,
+	"tar", 10240, BLKMULT, 0, 1, BLKMULT, 0, tar_id, no_op,
 	tar_rd, tar_endrd, no_op, tar_wr, tar_endwr, tar_trail,
-	NULL, rd_wrfile, wr_rdfile, tar_opt },
+	rd_wrfile, wr_rdfile, tar_opt,
 
 /* 5: POSIX USTAR */
-	{ "ustar", 10240, BLKMULT, 0, 1, BLKMULT, 0, ustar_id, ustar_strd,
+	"ustar", 10240, BLKMULT, 0, 1, BLKMULT, 0, ustar_id, ustar_strd,
 	ustar_rd, tar_endrd, ustar_stwr, ustar_wr, tar_endwr, tar_trail,
-	NULL, rd_wrfile, wr_rdfile, bad_opt }
+	rd_wrfile, wr_rdfile, bad_opt,
 };
 #define F_TAR	4	/* format when called as tar */
 #define DEFLT	5	/* default write format from list above */
@@ -145,12 +135,12 @@ int ford[] = {5, 4, 3, 2, 1, 0, -1 };
 
 #if __STDC__
 void
-options(int argc, char **argv)
+options(register int argc, register char **argv)
 #else
 void
 options(argc, argv)
-	int argc;
-	char **argv;
+	register int argc;
+	register char **argv;
 #endif
 {
 
@@ -183,19 +173,19 @@ options(argc, argv)
 
 #if __STDC__
 static void
-pax_options(int argc, char **argv)
+pax_options(register int argc, register char **argv)
 #else
 static void
 pax_options(argc, argv)
-	int argc;
-	char **argv;
+	register int argc;
+	register char **argv;
 #endif
 {
-	int c;
-	int i;
+	register int c;
+	register int i;
 	unsigned int flg = 0;
 	unsigned int bflg = 0;
-	char *pt;
+	register char *pt;
         FSUB tmp;
 	extern char *optarg;
 	extern int optind;
@@ -203,8 +193,8 @@ pax_options(argc, argv)
 	/*
 	 * process option flags
 	 */
-	while ((c=getopt(argc,argv,"ab:cdf:iklno:p:rs:tuvwx:zB:DE:G:HLPT:U:XYZ"))
-	    != -1) {
+	while ((c=getopt(argc,argv,"ab:cdf:iklno:p:rs:tuvwx:B:DE:G:HLPT:U:XYZ"))
+	    != EOF) {
 		switch (c) {
 		case 'a':
 			/*
@@ -218,7 +208,7 @@ pax_options(argc, argv)
 			 */
 			flg |= BF;
 			if ((wrblksz = (int)str_offt(optarg)) <= 0) {
-				tty_warn(1, "Invalid block size %s", optarg);
+				warn(1, "Invalid block size %s", optarg);
 				pax_usage();
 			}
 			break;
@@ -320,8 +310,7 @@ pax_options(argc, argv)
 					pmode = 1;
 					break;
 				default:
-					tty_warn(1,
-					    "Invalid -p string: %c", *pt);
+					warn(1, "Invalid -p string: %c", *pt);
 					pax_usage();
 					break;
 				}
@@ -376,25 +365,17 @@ pax_options(argc, argv)
 			 * specify an archive format on write
 			 */
 			tmp.name = optarg;
-			frmt = (FSUB *)bsearch((void *)&tmp, (void *)fsub,
-			    sizeof(fsub)/sizeof(FSUB), sizeof(FSUB), c_frmt);
-			if (frmt != NULL) {
+			if (frmt = (FSUB *)bsearch((void *)&tmp, (void *)fsub,
+			    sizeof(fsub)/sizeof(FSUB), sizeof(FSUB), c_frmt)) {
 				flg |= XF;
 				break;
 			}
-			tty_warn(1, "Unknown -x format: %s", optarg);
+			warn(1, "Unknown -x format: %s", optarg);
 			(void)fputs("pax: Known -x formats are:", stderr);
 			for (i = 0; i < (sizeof(fsub)/sizeof(FSUB)); ++i)
 				(void)fprintf(stderr, " %s", fsub[i].name);
 			(void)fputs("\n\n", stderr);
 			pax_usage();
-			break;
-		case 'z':
-			/*
-			 * use gzip.  Non standard option.
-			 */
-			zflag = 1;
-			gzip_program = GZIP_CMD;
 			break;
 		case 'B':
 			/*
@@ -402,12 +383,11 @@ pax_options(argc, argv)
 			 * single archive volume.
 			 */
 			if ((wrlimit = str_offt(optarg)) <= 0) {
-				tty_warn(1, "Invalid write limit %s", optarg);
+				warn(1, "Invalid write limit %s", optarg);
 				pax_usage();
 			}
 			if (wrlimit % BLKMULT) {
-				tty_warn(1,
-				    "Write limit is not a %d byte multiple",
+				warn(1, "Write limit is not a %d byte multiple",
 				    BLKMULT);
 				pax_usage();
 			}
@@ -431,8 +411,7 @@ pax_options(argc, argv)
 			if (strcmp(NONE, optarg) == 0)
 				maxflt = -1;
 			else if ((maxflt = atoi(optarg)) < 0) {
-				tty_warn(1,
-				    "Error count value must be positive");
+				warn(1, "Error count value must be positive");
 				pax_usage();
 			}
 			break;
@@ -567,7 +546,7 @@ pax_options(argc, argv)
 		break;
 	case COPY:
 		if (optind >= argc) {
-			tty_warn(0, "Destination directory was not supplied");
+			warn(0, "Destination directory was not supplied");
 			pax_usage();
 		}
 		--argc;
@@ -595,31 +574,43 @@ pax_options(argc, argv)
 
 #if __STDC__
 static void
-tar_options(int argc, char **argv)
+tar_options(register int argc, register char **argv)
 #else
 static void
 tar_options(argc, argv)
-	int argc;
-	char **argv;
+	register int argc;
+	register char **argv;
 #endif
 {
-	int c;
+	register char *cp;
 	int fstdin = 0;
 
+	if (argc < 2)
+		tar_usage();
 	/*
 	 * process option flags
 	 */
-	while ((c = getoldopt(argc, argv, "b:cef:moprutvwxzBHLPXZ014578")) 
-	    != -1)  {
-		switch(c) {
+	++argv;
+	for (cp = *argv++; *cp != '\0'; ++cp) {
+		switch (*cp) {
+		case '-':
+			/*
+			 * skip over -
+			 */
+			break;
 		case 'b':
 			/*
 			 * specify blocksize
 			 */
-			if ((wrblksz = (int)str_offt(optarg)) <= 0) {
-				tty_warn(1, "Invalid block size %s", optarg);
+			if (*argv == (char *)NULL) {
+				warn(1,"blocksize must be specified with 'b'");
 				tar_usage();
 			}
+			if ((wrblksz = (int)str_offt(*argv)) <= 0) {
+				warn(1, "Invalid block size %s", *argv);
+				tar_usage();
+			}
+			++argv;
 			break;
 		case 'c':
 			/*
@@ -637,16 +628,21 @@ tar_options(argc, argv)
 			/*
 			 * filename where the archive is stored
 			 */
-			if ((optarg[0] == '-') && (optarg[1]== '\0')) {
+			if (*argv == (char *)NULL) {
+				warn(1, "filename must be specified with 'f'");
+				tar_usage();
+			}
+			if ((argv[0][0] == '-') && (argv[0][1]== '\0')) {
 				/*
 				 * treat a - as stdin
 				 */
-				fstdin = 1;
+				++argv;
+				++fstdin;
 				arcname = (char *)0;
 				break;
 			}
 			fstdin = 0;
-			arcname = optarg;
+			arcname = *argv++;
 			break;
 		case 'm':
 			/*
@@ -699,13 +695,6 @@ tar_options(argc, argv)
 			 */
 			act = EXTRACT;
 			break;
-		case 'z':
-			/*
-			 * use gzip.  Non standard option.
-			 */
-			zflag = 1;
-			gzip_program = GZIP_CMD;
-			break;
 		case 'B':
 			/*
 			 * Nothing to do here, this is pax default
@@ -735,13 +724,6 @@ tar_options(argc, argv)
 			 */
 			Xflag = 1;
 			break;
-		case 'Z':
-			/*
-			 * use compress.
-			 */
-			zflag = 1;
-			gzip_program = COMPRESS_CMD;
-			break;
 		case '0':
 			arcname = DEV_0;
 			break;
@@ -765,8 +747,6 @@ tar_options(argc, argv)
 			break;
 		}
 	}
-	argc -= optind;
-	argv += optind;
 
 	/*
 	 * if we are writing (ARCHIVE) specify tar, otherwise run like pax
@@ -812,12 +792,12 @@ tar_options(argc, argv)
 
 #if __STDC__
 static void
-cpio_options(int argc, char **argv)
+cpio_options(register int argc, register char **argv)
 #else
 static void
 cpio_options(argc, argv)
-	int argc;
-	char **argv;
+	register int argc;
+	register char **argv;
 #endif
 {
 }
@@ -841,7 +821,7 @@ printflg(flg)
 	int pos = 0;
 
 	(void)fprintf(stderr,"%s: Invalid combination of options:", argv0);
-	while ((nxt = ffs(flg)) != 0) {
+	while (nxt = ffs(flg)) {
 		flg = flg >> nxt;
 		pos += nxt;
 		(void)fprintf(stderr, " -%c", flgch[pos-1]);
@@ -905,14 +885,14 @@ int
 bad_opt()
 #endif
 {
-	OPLIST *opt;
+	register OPLIST *opt;
 
 	if (ophead == NULL)
 		return(0);
 	/*
 	 * print all we were given
 	 */
-	tty_warn(1,"These format options are not supported");
+	warn(1,"These format options are not supported");
 	while ((opt = opt_next()) != NULL)
 		(void)fprintf(stderr, "\t%s = %s\n", opt->name, opt->value);
 	pax_usage();
@@ -930,20 +910,20 @@ bad_opt()
 
 #if __STDC__
 int
-opt_add(char *str)
+opt_add(register char *str)
 #else
 int
 opt_add(str)
-	char *str;
+	register char *str;
 #endif
 {
-	OPLIST *opt;
-	char *frpt;
-	char *pt;
-	char *endpt;
+	register OPLIST *opt;
+	register char *frpt;
+	register char *pt;
+	register char *endpt;
 
 	if ((str == NULL) || (*str == '\0')) {
-		tty_warn(0, "Invalid option name");
+		warn(0, "Invalid option name");
 		return(-1);
 	}
 	frpt = endpt = str;
@@ -957,11 +937,11 @@ opt_add(str)
 		if ((endpt = strchr(frpt, ',')) != NULL)
 			*endpt = '\0';
 		if ((pt = strchr(frpt, '=')) == NULL) {
-			tty_warn(0, "Invalid options format");
+			warn(0, "Invalid options format");
 			return(-1);
 		}
 		if ((opt = (OPLIST *)malloc(sizeof(OPLIST))) == NULL) {
-			tty_warn(0, "Unable to allocate space for option list");
+			warn(0, "Unable to allocate space for option list");
 			return(-1);
 		}
 		*pt++ = '\0';

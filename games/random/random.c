@@ -1,5 +1,3 @@
-/*	$NetBSD: random.c,v 1.5 1997/10/12 01:14:22 lukem Exp $	*/
-
 /*
  * Copyright (c) 1994
  *	The Regents of the University of California.  All rights reserved.
@@ -36,22 +34,17 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1994\n\
-	The Regents of the University of California.  All rights reserved.\n");
+static char copyright[] =
+"@(#) Copyright (c) 1994\n\
+	The Regents of the University of California.  All rights reserved.\n";
 #endif /* not lint */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)random.c	8.6 (Berkeley) 6/1/94";
-#else
-__RCSID("$NetBSD: random.c,v 1.5 1997/10/12 01:14:22 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)random.c	8.5 (Berkeley) 4/5/94";
 #endif /* not lint */
 
 #include <sys/types.h>
-#include <sys/time.h>
 
 #include <err.h>
 #include <errno.h>
@@ -59,9 +52,7 @@ __RCSID("$NetBSD: random.c,v 1.5 1997/10/12 01:14:22 lukem Exp $");
 #include <stdlib.h>
 #include <time.h>
 #include <unistd.h>
-#include <limits.h>
 
-int  main __P((int, char **));
 void usage __P((void));
 
 int
@@ -69,14 +60,14 @@ main(argc, argv)
 	int argc;
 	char *argv[];
 {
-	struct timeval tp;
+	extern int optind;
+	time_t now;
 	double denom;
 	int ch, random_exit, selected, unbuffer_output;
 	char *ep;
 
-	denom = 0;
 	random_exit = unbuffer_output = 0;
-	while ((ch = getopt(argc, argv, "er")) != -1)
+	while ((ch = getopt(argc, argv, "er")) != EOF)
 		switch (ch) {
 		case 'e':
 			random_exit = 1;
@@ -110,8 +101,8 @@ main(argc, argv)
 		/* NOTREACHED */
 	}
 
-	(void)gettimeofday(&tp, NULL);
-	srandom((u_int)(tp.tv_usec + tp.tv_sec + getpid()));
+	(void)time(&now);
+	srandom((u_int)(now + getpid()));
 
 	/* Compute a random exit status between 0 and denom - 1. */
 	if (random_exit)

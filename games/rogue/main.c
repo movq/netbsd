@@ -1,8 +1,6 @@
-/*	$NetBSD: main.c,v 1.4 1997/10/12 11:45:22 lukem Exp $	*/
-
 /*
- * Copyright (c) 1988, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1988 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Timothy C. Stoehr.
@@ -36,18 +34,14 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1988, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+char copyright[] =
+"@(#) Copyright (c) 1988 The Regents of the University of California.\n\
+ All rights reserved.\n";
 #endif /* not lint */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)main.c	8.1 (Berkeley) 5/31/93";
-#else
-__RCSID("$NetBSD: main.c,v 1.4 1997/10/12 11:45:22 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)main.c	5.3 (Berkeley) 6/1/90";
 #endif /* not lint */
 
 /*
@@ -64,12 +58,11 @@ __RCSID("$NetBSD: main.c,v 1.4 1997/10/12 11:45:22 lukem Exp $");
 
 #include "rogue.h"
 
-int	main __P((int, char **));
+extern short party_room;
 
-int
 main(argc, argv)
-	int argc;
-	char *argv[];
+int argc;
+char *argv[];
 {
 	if (init(argc, argv)) {		/* restored game */
 		goto PL;

@@ -1,7 +1,5 @@
-.\"	$NetBSD: MAKEDEV.8,v 1.4 1997/10/19 13:04:16 mrg Exp $
-.\"
-.\" Copyright (c) 1991, 1993
-.\"	The Regents of the University of California.  All rights reserved.
+.\" Copyright (c) 1991 The Regents of the University of California.
+.\" All rights reserved.
 .\"
 .\" Redistribution and use in source and binary forms, with or without
 .\" modification, are permitted provided that the following conditions
@@ -31,9 +29,9 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\"	from: @(#)MAKEDEV.8	8.1 (Berkeley) 6/5/93
+.\"	@(#)MAKEDEV.8	5.2 (Berkeley) 3/22/91
 .\"
-.TH MAKEDEV 8 "June 5, 1993"
+.TH MAKEDEV 8 "March 22, 1991"
 .UC 7
 .SH NAME
 MAKEDEV \- create system and device special files
@@ -44,9 +42,9 @@ The shell script
 .IR MAKEDEV ,
 found in the ``/dev'' directory, is used to create the common special
 files.
-.\" See
-.\" .IR special (8)
-.\" for a more complete discussion of special files.
+See
+.IR special (8)
+for a more complete discussion of special files.
 .PP
 .I MAKEDEV
 takes any number of device names as arguments, where the names are
@@ -231,7 +229,7 @@ unibus versatec parallel interface
 .SH FILES
 /dev		The special file directory.
 .SH SEE ALSO
+.IR mknod (1), 
 .IR intro (4),
 .IR config (8),
-.IR mknod (8)
-.\" .IR special (8)
+.IR special (8)

@@ -1,8 +1,7 @@
-#	$NetBSD: Makefile,v 1.5 1997/10/17 10:48:48 mrg Exp $
-#	from @(#)Makefile	8.1 (Berkeley) 6/5/93
+#	@(#)Makefile	5.8.1.1 (Berkeley) 5/7/91
 
 # Missing:  ms
 
-SUBDIR=	dict doc lkm man me misc mk skel tabset termcap tmac zoneinfo
+SUBDIR=	dict doc man me misc mk skel tabset termcap tmac zoneinfo
 
 .include <bsd.subdir.mk>

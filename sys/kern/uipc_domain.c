@@ -1,8 +1,6 @@
-/*	$NetBSD: uipc_domain.c,v 1.17 1997/04/04 14:22:21 christos Exp $	*/
-
 /*
- * Copyright (c) 1982, 1986, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1982, 1986 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,23 +30,17 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)uipc_domain.c	8.2 (Berkeley) 10/18/93
+ *	@(#)uipc_domain.c	7.9 (Berkeley) 3/4/91
  */
 
-#include <sys/param.h>
-#include <sys/socket.h>
-#include <sys/protosw.h>
-#include <sys/domain.h>
-#include <sys/mbuf.h>
-#include <sys/time.h>
-#include <sys/kernel.h>
-#include <sys/systm.h>
-#include <sys/proc.h>
-#include <vm/vm.h>
-#include <sys/sysctl.h>
-
-void	pffasttimo __P((void *));
-void	pfslowtimo __P((void *));
+#include <sys/cdefs.h>
+#include "param.h"
+#include "socket.h"
+#include "protosw.h"
+#include "domain.h"
+#include "mbuf.h"
+#include "time.h"
+#include "kernel.h"
 
 #define	ADDDOMAIN(x)	{ \
 	extern struct domain __CONCAT(x,domain); \
@@ -56,7 +48,6 @@ void	pfslowtimo __P((void *));
 	domains = &__CONCAT(x,domain); \
 }
 
-void
 domaininit()
 {
 	register struct domain *dp;
@@ -75,20 +66,15 @@ domaininit()
 #ifdef ISO
 	ADDDOMAIN(iso);
 #endif
+#ifdef RMP
+	ADDDOMAIN(rmp);
+#endif
 #ifdef CCITT
 	ADDDOMAIN(ccitt);
 #endif
-#ifdef NATM
-	ADDDOMAIN(natm);
-#endif
-#ifdef NETATALK
-	ADDDOMAIN(atalk);
-#endif
-#ifdef notdef /* XXXX */
 #include "imp.h"
 #if NIMP > 0
 	ADDDOMAIN(imp);
-#endif
 #endif
 #endif
 
@@ -100,12 +86,12 @@ domaininit()
 				(*pr->pr_init)();
 	}
 
-	if (max_linkhdr < 16)		/* XXX */
-		max_linkhdr = 16;
+if (max_linkhdr < 16)		/* XXX */
+max_linkhdr = 16;
 	max_hdr = max_linkhdr + max_protohdr;
 	max_datalen = MHLEN - max_hdr;
-	timeout(pffasttimo, NULL, 1);
-	timeout(pfslowtimo, NULL, 1);
+	pffasttimo();
+	pfslowtimo();
 }
 
 struct protosw *
@@ -152,45 +138,6 @@ found:
 	return (maybe);
 }
 
-int
-net_sysctl(name, namelen, oldp, oldlenp, newp, newlen, p)
-	int *name;
-	u_int namelen;
-	void *oldp;
-	size_t *oldlenp;
-	void *newp;
-	size_t newlen;
-	struct proc *p;
-{
-	register struct domain *dp;
-	register struct protosw *pr;
-	int family, protocol;
-
-	/*
-	 * All sysctl names at this level are nonterminal;
-	 * next two components are protocol family and protocol number,
-	 * then at least one addition component.
-	 */
-	if (namelen < 3)
-		return (EISDIR);		/* overloaded */
-	family = name[0];
-	protocol = name[1];
-
-	if (family == 0)
-		return (0);
-	for (dp = domains; dp; dp = dp->dom_next)
-		if (dp->dom_family == family)
-			goto found;
-	return (ENOPROTOOPT);
-found:
-	for (pr = dp->dom_protosw; pr < dp->dom_protoswNPROTOSW; pr++)
-		if (pr->pr_protocol == protocol && pr->pr_sysctl)
-			return ((*pr->pr_sysctl)(name + 2, namelen - 2,
-			    oldp, oldlenp, newp, newlen));
-	return (ENOPROTOOPT);
-}
-
-void
 pfctlinput(cmd, sa)
 	int cmd;
 	struct sockaddr *sa;
@@ -201,12 +148,10 @@ pfctlinput(cmd, sa)
 	for (dp = domains; dp; dp = dp->dom_next)
 		for (pr = dp->dom_protosw; pr < dp->dom_protoswNPROTOSW; pr++)
 			if (pr->pr_ctlinput)
-				(*pr->pr_ctlinput)(cmd, sa, NULL);
+				(*pr->pr_ctlinput)(cmd, sa, (caddr_t) 0);
 }
 
-void
-pfslowtimo(arg)
-	void *arg;
+pfslowtimo()
 {
 	register struct domain *dp;
 	register struct protosw *pr;
@@ -215,12 +160,10 @@ pfslowtimo(arg)
 		for (pr = dp->dom_protosw; pr < dp->dom_protoswNPROTOSW; pr++)
 			if (pr->pr_slowtimo)
 				(*pr->pr_slowtimo)();
-	timeout(pfslowtimo, NULL, hz/2);
+	timeout(pfslowtimo, (caddr_t)0, hz/2);
 }
 
-void
-pffasttimo(arg)
-	void *arg;
+pffasttimo()
 {
 	register struct domain *dp;
 	register struct protosw *pr;
@@ -229,5 +172,5 @@ pffasttimo(arg)
 		for (pr = dp->dom_protosw; pr < dp->dom_protoswNPROTOSW; pr++)
 			if (pr->pr_fasttimo)
 				(*pr->pr_fasttimo)();
-	timeout(pffasttimo, NULL, hz/5);
+	timeout(pffasttimo, (caddr_t)0, hz/5);
 }

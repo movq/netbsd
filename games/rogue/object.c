@@ -1,8 +1,6 @@
-/*	$NetBSD: object.c,v 1.6 1997/10/15 12:43:35 mycroft Exp $	*/
-
 /*
- * Copyright (c) 1988, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1988 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Timothy C. Stoehr.
@@ -36,13 +34,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)object.c	8.1 (Berkeley) 5/31/93";
-#else
-__RCSID("$NetBSD: object.c,v 1.6 1997/10/15 12:43:35 mycroft Exp $");
-#endif
+static char sccsid[] = "@(#)object.c	5.3 (Berkeley) 6/1/90";
 #endif /* not lint */
 
 /*
@@ -66,18 +59,13 @@ object *free_list = (object *) 0;
 char *fruit = (char *) 0;
 
 fighter rogue = {
-	INIT_AW,	/* armor */
-	INIT_AW,	/* weapon */
-	INIT_RINGS,	/* left ring */
-	INIT_RINGS,	/* right ring */
-	INIT_HP,	/* Hp current */
-	INIT_HP,	/* Hp max */
-	INIT_STR,	/* Str current */
-	INIT_STR,	/* Str max */
+	INIT_AW,	/* armor, weapon */
+	INIT_RINGS,	/* rings */
+	INIT_HP,	/* Hp current,max */
+	INIT_STR,	/* Str current,max */
 	INIT_PACK,	/* pack */
 	INIT_GOLD,	/* gold */
-	INIT_EXPLEVEL,	/* exp level */
-	INIT_EXP,	/* exp points */
+	INIT_EXP,	/* exp level,points */
 	0, 0,		/* row, col */
 	INIT_CHAR,	/* char */
 	INIT_MOVES	/* moves */
@@ -165,7 +153,11 @@ struct id id_rings[RINGS] = {
 	 {270, "                                 ", "of searching ",0},
 };
 
-void
+extern short cur_level, max_level;
+extern short party_room;
+extern char *error_file;
+extern boolean is_wood[];
+
 put_objects()
 {
 	short i, n;
@@ -188,7 +180,6 @@ put_objects()
 	put_gold();
 }
 
-void
 put_gold()
 {
 	short i, j;
@@ -218,10 +209,9 @@ put_gold()
 	}
 }
 
-void
 plant_gold(row, col, is_maze)
-	short row, col;
-	boolean is_maze;
+short row, col;
+boolean is_maze;
 {
 	object *obj;
 
@@ -236,9 +226,8 @@ plant_gold(row, col, is_maze)
 	(void) add_to_pack(obj, &level_objects, 0);
 }
 
-void
 place_at(obj, row, col)
-	object *obj;
+object *obj;
 {
 	obj->row = row;
 	obj->col = col;
@@ -248,8 +237,8 @@ place_at(obj, row, col)
 
 object *
 object_at(pack, row, col)
-	object *pack;
-	short row, col;
+register object *pack;
+short row, col;
 {
 	object *obj = (object *) 0;
 
@@ -279,9 +268,8 @@ get_letter_object(ch)
 	return(obj);
 }
 
-void
 free_stuff(objlist)
-	object *objlist;
+object *objlist;
 {
 	object *obj;
 
@@ -295,7 +283,7 @@ free_stuff(objlist)
 
 char *
 name_of(obj)
-	object *obj;
+object *obj;
 {
 	char *retstring;
 
@@ -415,9 +403,8 @@ gr_what_is()
 	return(what_is);
 }
 
-void
 gr_scroll(obj)
-	object *obj;
+object *obj;
 {
 	short percent;
 
@@ -454,9 +441,8 @@ gr_scroll(obj)
 	}
 }
 
-void
 gr_potion(obj)
-	object *obj;
+object *obj;
 {
 	short percent;
 
@@ -495,10 +481,9 @@ gr_potion(obj)
 	}
 }
 
-void
 gr_weapon(obj, assign_wk)
-	object *obj;
-	int assign_wk;
+object *obj;
+int assign_wk;
 {
 	short percent;
 	short i;
@@ -520,13 +505,13 @@ gr_weapon(obj, assign_wk)
 	percent = get_rand(1, 96);
 	blessing = get_rand(1, 3);
 
+	if (percent <= 16) {
+		increment = 1;
+	} else if (percent <= 32) {
+		increment = -1;
+		obj->is_cursed = 1;
+	}
 	if (percent <= 32) {
-		if (percent <= 16) {
-			increment = 1;
-		} else {
-			increment = -1;
-			obj->is_cursed = 1;
-		}
 		for (i = 0; i < blessing; i++) {
 			if (coin_toss()) {
 				obj->hit_enchant += increment;
@@ -561,9 +546,8 @@ gr_weapon(obj, assign_wk)
 	}
 }
 
-void
 gr_armor(obj)
-	object *obj;
+object *obj;
 {
 	short percent;
 	short blessing;
@@ -588,19 +572,17 @@ gr_armor(obj)
 	}
 }
 
-void
 gr_wand(obj)
-	object *obj;
+object *obj;
 {
 	obj->what_is = WAND;
 	obj->which_kind = get_rand(0, (WANDS - 1));
 	obj->class = get_rand(3, 7);
 }
 
-void
 get_food(obj, force_ration)
-	object *obj;
-	boolean force_ration;
+object *obj;
+boolean force_ration;
 {
 	obj->what_is = FOOD;
 
@@ -611,7 +593,6 @@ get_food(obj, force_ration)
 	}
 }
 
-void
 put_stairs()
 {
 	short row, col;
@@ -620,9 +601,8 @@ put_stairs()
 	dungeon[row][col] |= STAIRS;
 }
 
-int
 get_armor_class(obj)
-	object *obj;
+object *obj;
 {
 	if (obj) {
 		return(obj->class + obj->d_enchant);
@@ -651,15 +631,13 @@ alloc_object()
 	return(obj);
 }
 
-void
 free_object(obj)
-	object *obj;
+object *obj;
 {
 	obj->next_object = free_list;
 	free_list = obj;
 }
 
-void
 make_party()
 {
 	short n;
@@ -672,7 +650,6 @@ make_party()
 	}
 }
 
-void
 show_objects()
 {
 	object *obj;
@@ -688,8 +665,7 @@ show_objects()
 		rc = get_mask_char(obj->what_is);
 
 		if (dungeon[row][col] & MONSTER) {
-			if ((monster =
-			    object_at(&level_monsters, row, col)) != NULL) {
+			if (monster = object_at(&level_monsters, row, col)) {
 				monster->trail_char = rc;
 			}
 		}
@@ -711,7 +687,6 @@ show_objects()
 	}
 }
 
-void
 put_amulet()
 {
 	object *obj;
@@ -721,9 +696,8 @@ put_amulet()
 	rand_place(obj);
 }
 
-void
 rand_place(obj)
-	object *obj;
+object *obj;
 {
 	short row, col;
 
@@ -731,14 +705,12 @@ rand_place(obj)
 	place_at(obj, row, col);
 }
 
-void
 c_object_for_wizard()
 {
 	short ch, max, wk;
 	object *obj;
 	char buf[80];
 
-	max = 0;
 	if (pack_count((object *) 0) >= MAX_PACK_COUNT) {
 		message("pack full", 0);
 		return;

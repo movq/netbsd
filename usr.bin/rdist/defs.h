@@ -1,8 +1,6 @@
-/*	$NetBSD: defs.h,v 1.10 1997/10/19 19:31:16 mycroft Exp $	*/
-
 /*
- * Copyright (c) 1983, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1983 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,7 +30,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	from: @(#)defs.h	8.1 (Berkeley) 6/9/93
+ *	@(#)defs.h	5.9 (Berkeley) 8/27/90
  */
 
 #include <sys/param.h>
@@ -40,15 +38,12 @@
 #include <sys/stat.h>
 #include <sys/time.h>
 #include <sys/file.h>
-
 #include <netinet/in.h>
-
 #include <stdio.h>
 #include <ctype.h>
-#include <unistd.h>
-#include <string.h>
-#include <stdlib.h>
-
+#include <errno.h>
+#include <pwd.h>
+#include <grp.h>
 #include "pathnames.h"
 
 /*
@@ -101,6 +96,8 @@
 #define INSERT	1
 #define REPLACE	2
 
+#define ISDIR(m) (((m) & S_IFMT) == S_IFDIR)
+
 #define ALLOC(x) (struct x *) malloc(sizeof(struct x))
 
 struct namelist {	/* for making lists of strings */
@@ -144,38 +141,18 @@ extern int rem;			/* remote file descriptor */
 extern int iamremote;		/* acting as remote server */
 extern char tempfile[];		/* file name for logging changes */
 extern struct linkbuf *ihead;	/* list of files with more than one link */
-extern char host[];		/* host name of master copy */
-extern char buf[BUFSIZ];	/* general purpose buffer */
-
 extern struct passwd *pw;	/* pointer to static area used by getpwent */
 extern struct group *gr;	/* pointer to static area used by getgrent */
-extern uid_t userid;		/* user's user ID */
-extern gid_t groupid;		/* user's group ID */
+extern char host[];		/* host name of master copy */
+extern char buf[];		/* general purpose buffer */
+extern int errno;		/* system error number */
 
-int	 any __P((int, char *));
-char	*colon __P((char *));
-void	 cleanup __P((int));
-void	 define __P((char *));
-void	 docmds __P((char **, int, char **));
-void	 error __P((const char *, ...));
-int	 except __P((char *));
-struct namelist *
-	 expand __P((struct namelist *, int));
-char	*exptilde __P((char [], char *));
-void	 fatal __P((const char *, ...));
-int	 inlist __P((struct namelist *, char *));
-void	 insert __P((char *,
-	    struct namelist *, struct namelist *, struct subcmd *));
-void	 install __P((char *, char *, int, int));
-void	 log __P((FILE *, const char *, ...));
-struct namelist *
-	 lookup __P((char *, int, struct namelist *));
-void	 lostconn __P((int));
-struct namelist *
-	 makenl __P((char *));
-struct subcmd *
-	 makesubcmd __P((int));
-void	 prnames __P((struct namelist *));
-void	 server __P((void));
-void	 yyerror __P((char *));
-int	 yyparse __P((void));
+char *makestr();
+struct namelist *makenl();
+struct subcmd *makesubcmd();
+struct namelist *lookup();
+struct namelist *expand();
+char *exptilde();
+char *malloc();
+char *rindex();
+char *index();

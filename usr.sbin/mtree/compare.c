@@ -1,8 +1,6 @@
-/*	$NetBSD: compare.c,v 1.13 1997/10/17 11:46:30 lukem Exp $	*/
-
 /*-
- * Copyright (c) 1989, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1989 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,251 +31,173 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)compare.c	8.1 (Berkeley) 6/6/93";
-#else
-__RCSID("$NetBSD: compare.c,v 1.13 1997/10/17 11:46:30 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)compare.c	5.7 (Berkeley) 5/25/90";
 #endif /* not lint */
 
 #include <sys/param.h>
 #include <sys/stat.h>
-#include <fcntl.h>
 #include <fts.h>
 #include <errno.h>
 #include <stdio.h>
 #include <time.h>
-#include <unistd.h>
 #include "mtree.h"
-#include "extern.h"
 
-extern int tflag, uflag;
-
-static char *ftype __P((u_int));
-
-#define	INDENTNAMELEN	8
 #define	LABEL \
-	if (!label++) { \
-		len = printf("%s: ", RP(p)); \
-		if (len > INDENTNAMELEN) { \
-			tab = "\t"; \
-			(void)printf("\n"); \
-		} else { \
-			tab = ""; \
-			(void)printf("%*s", INDENTNAMELEN - (int)len, ""); \
-		} \
-	}
+	if (!label++) \
+		(void)printf("%s: ", RP(p)); \
 
-int
 compare(name, s, p)
 	char *name;
-	NODE *s;
-	FTSENT *p;
+	register NODE *s;
+	register FTSENT *p;
 {
-	u_long len, val;
-	int fd, label;
-	char *cp, *tab;
+	extern int exitval, uflag;
+	int label;
+	char *ftype(), *inotype(), *rlink();
 
-	tab = NULL;
 	label = 0;
 	switch(s->type) {
 	case F_BLOCK:
-		if (!S_ISBLK(p->fts_statp->st_mode))
+		if (!S_ISBLK(p->fts_statb.st_mode))
 			goto typeerr;
 		break;
 	case F_CHAR:
-		if (!S_ISCHR(p->fts_statp->st_mode))
+		if (!S_ISCHR(p->fts_statb.st_mode))
 			goto typeerr;
 		break;
 	case F_DIR:
-		if (!S_ISDIR(p->fts_statp->st_mode))
+		if (!S_ISDIR(p->fts_statb.st_mode))
 			goto typeerr;
 		break;
 	case F_FIFO:
-		if (!S_ISFIFO(p->fts_statp->st_mode))
+		if (!S_ISFIFO(p->fts_statb.st_mode))
 			goto typeerr;
 		break;
 	case F_FILE:
-		if (!S_ISREG(p->fts_statp->st_mode))
+		if (!S_ISREG(p->fts_statb.st_mode))
 			goto typeerr;
 		break;
 	case F_LINK:
-		if (!S_ISLNK(p->fts_statp->st_mode))
+		if (!S_ISLNK(p->fts_statb.st_mode))
 			goto typeerr;
 		break;
 	case F_SOCK:
-		if (!S_ISSOCK(p->fts_statp->st_mode)) {
+		if (!S_ISFIFO(p->fts_statb.st_mode)) {
 typeerr:		LABEL;
-			(void)printf("\ttype (%s, %s)\n",
-			    ftype(s->type), inotype(p->fts_statp->st_mode));
+			(void)printf("\n\ttype (%s, %s)",
+			    ftype(s->type), inotype(p->fts_statb.st_mode));
 		}
 		break;
 	}
-	/* Set the uid/gid first, then set the mode. */
-	if (s->flags & (F_UID | F_UNAME) && s->st_uid != p->fts_statp->st_uid) {
+	if (s->flags & F_MODE && s->st_mode != (p->fts_statb.st_mode & MBITS)) {
 		LABEL;
-		(void)printf("%suser (%u, %u",
-		    tab, s->st_uid, p->fts_statp->st_uid);
-		if (uflag)
-			if (chown(p->fts_accpath, s->st_uid, -1))
-				(void)printf(", not modified: %s)\n",
-				    strerror(errno));
-			else
-				(void)printf(", modified)\n");
-		else
-			(void)printf(")\n");
-		tab = "\t";
-	}
-	if (s->flags & (F_GID | F_GNAME) && s->st_gid != p->fts_statp->st_gid) {
-		LABEL;
-		(void)printf("%sgid (%u, %u",
-		    tab, s->st_gid, p->fts_statp->st_gid);
-		if (uflag)
-			if (chown(p->fts_accpath, -1, s->st_gid))
-				(void)printf(", not modified: %s)\n",
-				    strerror(errno));
-			else
-				(void)printf(", modified)\n");
-		else
-			(void)printf(")\n");
-		tab = "\t";
-	}
-	if (s->flags & F_MODE &&
-	    s->st_mode != (p->fts_statp->st_mode & MBITS)) {
-		LABEL;
-		(void)printf("%spermissions (%#o, %#o",
-		    tab, s->st_mode, p->fts_statp->st_mode & MBITS);
+		(void)printf("\n\tpermissions (%#o, %#o%s",
+		    s->st_mode, p->fts_statb.st_mode & MBITS, uflag ? "" : ")");
 		if (uflag)
 			if (chmod(p->fts_accpath, s->st_mode))
-				(void)printf(", not modified: %s)\n",
+				(void)printf(", not modified: %s)",
 				    strerror(errno));
 			else
-				(void)printf(", modified)\n");
-		else
-			(void)printf(")\n");
-		tab = "\t";
+				(void)printf(", modified)");
+	}
+	if (s->flags & F_OWNER && s->st_uid != p->fts_statb.st_uid) {
+		LABEL;
+		(void)printf("\n\towner (%u, %u%s",
+		    s->st_uid, p->fts_statb.st_uid, uflag ? "" : ")");
+		if (uflag)
+			if (chown(p->fts_accpath, s->st_uid, -1))
+				(void)printf(", not modified: %s)",
+				    strerror(errno));
+			else
+				(void)printf(", modified)");
+	}
+	if (s->flags & F_GROUP && s->st_gid != p->fts_statb.st_gid) {
+		LABEL;
+		(void)printf("\n\tgroup (%u, %u%s",
+		    s->st_gid, p->fts_statb.st_gid, uflag ? "" : ")");
+		if (uflag)
+			if (chown(p->fts_accpath, -1, s->st_gid))
+				(void)printf(", not modified: %s)",
+				    strerror(errno));
+			else
+				(void)printf(", modified)");
 	}
 	if (s->flags & F_NLINK && s->type != F_DIR &&
-	    s->st_nlink != p->fts_statp->st_nlink) {
+	    s->st_nlink != p->fts_statb.st_nlink) {
 		LABEL;
-		(void)printf("%slink count (%u, %u)\n",
-		    tab, s->st_nlink, p->fts_statp->st_nlink);
-		tab = "\t";
+		(void)printf("\n\tlink count (%u, %u)",
+		    s->st_nlink, p->fts_statb.st_nlink);
 	}
-	if (s->flags & F_SIZE && s->st_size != p->fts_statp->st_size) {
+	if (s->flags & F_SIZE && s->st_size != p->fts_statb.st_size) {
 		LABEL;
-		(void)printf("%ssize (%qd, %qd)\n",
-		    tab, s->st_size, p->fts_statp->st_size);
-		tab = "\t";
+		(void)printf("\n\tsize (%ld, %ld)",
+		    s->st_size, p->fts_statb.st_size);
 	}
-	/*
-	 * XXX
-	 * Since utimes(2) only takes a timeval, there's no point in
-	 * comparing the low bits of the timespec nanosecond field.  This
-	 * will only result in mismatches that we can never fix.
-	 *
-	 * Doesn't display microsecond differences.
-	 */
-	if (s->flags & F_TIME) {
-		struct timeval tv[2];
+	if (s->flags & F_SLINK) {
+		char *cp;
 
-		TIMESPEC_TO_TIMEVAL(&tv[0], &s->st_mtimespec);
-		TIMESPEC_TO_TIMEVAL(&tv[1], &p->fts_statp->st_mtimespec);
-		if (tv[0].tv_sec != tv[1].tv_sec ||
-		    tv[0].tv_usec != tv[1].tv_usec) {
+		if (strcmp(cp = rlink(name), s->slink)) {
 			LABEL;
-			(void)printf("%smodification time (%.24s, ",
-			    tab, ctime(&s->st_mtimespec.tv_sec));
-			(void)printf("%.24s",
-			    ctime(&p->fts_statp->st_mtimespec.tv_sec));
-			if (tflag) {
-				tv[1] = tv[0];
-				if (utimes(p->fts_accpath, tv))
-					(void)printf(", not modified: %s)\n",
-					    strerror(errno));
-				else
-					(void)printf(", modified)\n");
-			} else
-				(void)printf(")\n");
-			tab = "\t";
+			(void)printf("\n\tlink ref (%s, %s)", cp, s->slink);
 		}
 	}
-	if (s->flags & F_CKSUM)
-		if ((fd = open(p->fts_accpath, O_RDONLY, 0)) < 0) {
-			LABEL;
-			(void)printf("%scksum: %s: %s\n",
-			    tab, p->fts_accpath, strerror(errno));
-			tab = "\t";
-		} else if (crc(fd, &val, &len)) {
-			(void)close(fd);
-			LABEL;
-			(void)printf("%scksum: %s: %s\n",
-			    tab, p->fts_accpath, strerror(errno));
-			tab = "\t";
-		} else {
-			(void)close(fd);
-			if (s->cksum != val) {
-				LABEL;
-				(void)printf("%scksum (%lu, %lu)\n", 
-				    tab, s->cksum, val);
-			}
-			tab = "\t";
-		}
-	if (s->flags & F_SLINK && strcmp(cp = rlink(name), s->slink)) {
+	if (s->flags & F_TIME && s->st_mtime != p->fts_statb.st_mtime) {
 		LABEL;
-		(void)printf("%slink ref (%s, %s)\n", tab, cp, s->slink);
+		(void)printf("\n\tmodification time (%.24s, ",
+		    ctime(&s->st_mtime));
+		(void)printf("%.24s)", ctime(&p->fts_statb.st_mtime));
 	}
-	return (label);
+	if (label) {
+		exitval = 2;
+		putchar('\n');
+	}
 }
 
 char *
 inotype(type)
-	u_int type;
+	mode_t type;
 {
 	switch(type & S_IFMT) {
 	case S_IFBLK:
-		return ("block");
+		return("block");
 	case S_IFCHR:
-		return ("char");
+		return("char");
 	case S_IFDIR:
-		return ("dir");
-	case S_IFIFO:
-		return ("fifo");
+		return("dir");
 	case S_IFREG:
-		return ("file");
+		return("file");
 	case S_IFLNK:
-		return ("link");
+		return("link");
 	case S_IFSOCK:
-		return ("socket");
+		return("socket");
 	default:
-		return ("unknown");
+		return("unknown");
 	}
 	/* NOTREACHED */
 }
 
-static char *
+char *
 ftype(type)
 	u_int type;
 {
 	switch(type) {
 	case F_BLOCK:
-		return ("block");
+		return("block");
 	case F_CHAR:
-		return ("char");
+		return("char");
 	case F_DIR:
-		return ("dir");
+		return("dir");
 	case F_FIFO:
-		return ("fifo");
+		return("fifo");
 	case F_FILE:
-		return ("file");
+		return("file");
 	case F_LINK:
-		return ("link");
+		return("link");
 	case F_SOCK:
-		return ("socket");
+		return("socket");
 	default:
-		return ("unknown");
+		return("unknown");
 	}
 	/* NOTREACHED */
 }
@@ -286,11 +206,15 @@ char *
 rlink(name)
 	char *name;
 {
+	register int len;
 	static char lbuf[MAXPATHLEN];
-	int len;
 
-	if ((len = readlink(name, lbuf, sizeof(lbuf))) == -1)
-		err("%s: %s", name, strerror(errno));
+	len = readlink(name, lbuf, sizeof(lbuf));
+	if (len == -1) {
+		(void)fprintf(stderr, "mtree: %s: %s.\n",
+		    name, strerror(errno));
+		exit(1);
+	}
 	lbuf[len] = '\0';
-	return (lbuf);
+	return(lbuf);
 }

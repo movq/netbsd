@@ -1,12 +1,6 @@
-/*	$NetBSD: sparc.h,v 1.3 1995/04/19 07:16:25 cgd Exp $	*/
-
 /*-
- * Copyright (c) 1992, 1993
- *	The Regents of the University of California.  All rights reserved.
- *
- * This software was developed by the Computer Systems Engineering group
- * at Lawrence Berkeley Laboratory under DARPA contract BG 91-66 and
- * contributed to Berkeley.
+ * Copyright (c) 1991 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -36,13 +30,14 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)sparc.h	8.1 (Berkeley) 6/6/93
+ *	from: @(#)hp300.h	5.1 (Berkeley) 4/18/91
+ *	$Id: sparc.h,v 1.1 1993/12/02 19:12:23 pk Exp $
  */
 
-/*
- * offset (in bytes) of the code from the entry address of a routine.
- * (see asgnsamples for use and explanation.)
- */
+    /*
+     *	offset (in bytes) of the code from the entry address of a routine.
+     *	(see asgnsamples for use and explanation.)
+     */
 #define OFFSET_OF_CODE	0
 #define	UNITS_TO_CODE	(OFFSET_OF_CODE / sizeof(UNIT))
 

@@ -1,8 +1,6 @@
-/*	$NetBSD: lastcomm.c,v 1.13 1997/10/19 14:12:22 mrg Exp $	*/
-
 /*
- * Copyright (c) 1980, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1980 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,141 +31,105 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1980, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+char copyright[] =
+"@(#) Copyright (c) 1980 Regents of the University of California.\n\
+ All rights reserved.\n";
 #endif /* not lint */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)lastcomm.c	8.2 (Berkeley) 4/29/95";
-#endif
-__RCSID("$NetBSD: lastcomm.c,v 1.13 1997/10/19 14:12:22 mrg Exp $");
+static char sccsid[] = "@(#)lastcomm.c	5.11 (Berkeley) 6/1/90";
 #endif /* not lint */
 
+/*
+ * last command
+ */
 #include <sys/param.h>
-#include <sys/stat.h>
 #include <sys/acct.h>
-
-#include <ctype.h>
-#include <err.h>
-#include <fcntl.h>
-#include <math.h>
-#include <pwd.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <struct.h>
-#include <tzfile.h>
-#include <unistd.h>
+#include <sys/file.h>
+#include <sys/stat.h>
 #include <utmp.h>
+#include <struct.h>
+#include <ctype.h>
+#include <stdio.h>
 #include "pathnames.h"
 
-time_t	 expand __P((u_int));
-char	*flagbits __P((int));
-char	*getdev __P((dev_t));
-int	 main __P((int, char **));
-int	 requested __P((char *[], struct acct *));
-void	 usage __P((void));
+struct	acct buf[DEV_BSIZE / sizeof (struct acct)];
 
-int
+time_t	expand();
+char	*flagbits();
+char	*getdev();
+
 main(argc, argv)
 	int argc;
 	char *argv[];
 {
-	char *p;
-	struct acct ab;
+	extern int optind;
+	extern char *optarg;
+	register struct acct *acp;
+	register int bn, cc;
 	struct stat sb;
-	FILE *fp;
-	off_t size;
-	time_t t;
-	double delta;
-	int ch;
-	char *acctfile;
+	int ch, fd;
+	char *acctfile, *ctime(), *strcpy(), *user_from_uid();
+	long lseek();
 
 	acctfile = _PATH_ACCT;
-	while ((ch = getopt(argc, argv, "f:")) != -1)
+	while ((ch = getopt(argc, argv, "f:")) != EOF)
 		switch((char)ch) {
 		case 'f':
 			acctfile = optarg;
 			break;
 		case '?':
 		default:
-			usage();
+			fputs("lastcomm [ -f file ]\n", stderr);
+			exit(1);
 		}
-	argc -= optind;
 	argv += optind;
 
-	/* Open the file. */
-	if ((fp = fopen(acctfile, "r")) == NULL || fstat(fileno(fp), &sb))
-		err(1, "%s", acctfile);
-
-	/*
-	 * Round off to integral number of accounting records, probably
-	 * not necessary, but it doesn't hurt.
-	 */
-	size = sb.st_size - sb.st_size % sizeof(struct acct);
-
-	/* Check if any records to display. */
-	if (size < sizeof(struct acct))
-		exit(0);
-
-	/*
-	 * Seek to before the last entry in the file; use lseek(2) in case
-	 * the file is bigger than a "long".
-	 */
-	size -= sizeof(struct acct);
-	if (lseek(fileno(fp), size, SEEK_SET) == -1)
-		err(1, "%s", acctfile);
-
-	for (;;) {
-		if (fread(&ab, sizeof(struct acct), 1, fp) != 1)
-			err(1, "%s", acctfile);
-
-		if (ab.ac_comm[0] == '\0') {
-			ab.ac_comm[0] = '?';
-			ab.ac_comm[1] = '\0';
-		} else
-			for (p = &ab.ac_comm[0];
-			    p < &ab.ac_comm[fldsiz(acct, ac_comm)] && *p; ++p)
-				if (!isprint(*p))
-					*p = '?';
-		if (!*argv || requested(argv, &ab)) {
-
-			t = expand(ab.ac_utime) + expand(ab.ac_stime);
-			(void)printf(
-			    "%-*.*s %-7s %-*.*s %-*.*s %6.2f secs %.16s",
-			     (int)fldsiz(acct, ac_comm),
-			     (int)fldsiz(acct, ac_comm),
-			     ab.ac_comm, flagbits(ab.ac_flag),
-			     UT_NAMESIZE, UT_NAMESIZE,
-			     user_from_uid(ab.ac_uid, 0), UT_LINESIZE,
-			     UT_LINESIZE, getdev(ab.ac_tty),
-			     t / (double)AHZ, ctime(&ab.ac_btime));
-			delta = expand(ab.ac_etime) / (double)AHZ;
-			printf(" (%1.0f:%02.0f:%05.2f)\n",
-			       delta / SECSPERHOUR,
-			       fmod(delta, SECSPERHOUR) / SECSPERMIN,
-			       fmod(delta, SECSPERMIN));
-		}
-		/* are we at the beginning of the file yet? */
-		if (size == 0)
-			break;
-		/* seek backward over the one we read and the next to read */
-		if (fseek(fp, 2 * -(long)sizeof(struct acct), SEEK_CUR) == -1)
-			err(1, "%s", acctfile);
-		/* and account for its size */
-		size -= sizeof(struct acct);
+	fd = open(acctfile, O_RDONLY);
+	if (fd < 0) {
+		perror(acctfile);
+		exit(1);
 	}
-	exit(0);
+	(void)fstat(fd, &sb);
+	setpassent(1);
+	for (bn = btodb(sb.st_size); bn >= 0; bn--) {
+		(void)lseek(fd, (off_t)dbtob(bn), L_SET);
+		cc = read(fd, buf, DEV_BSIZE);
+		if (cc < 0) {
+			perror("read");
+			break;
+		}
+		acp = buf + (cc / sizeof (buf[0])) - 1;
+		for (; acp >= buf; acp--) {
+			register char *cp;
+			time_t x;
+
+			if (acp->ac_comm[0] == '\0')
+				(void)strcpy(acp->ac_comm, "?");
+			for (cp = &acp->ac_comm[0];
+			     cp < &acp->ac_comm[fldsiz(acct, ac_comm)] && *cp;
+			     cp++)
+				if (!isascii(*cp) || iscntrl(*cp))
+					*cp = '?';
+			if (*argv && !ok(argv, acp))
+				continue;
+			x = expand(acp->ac_utime) + expand(acp->ac_stime);
+			printf("%-*.*s %s %-*s %-*s %6.2f secs %.16s\n",
+				fldsiz(acct, ac_comm), fldsiz(acct, ac_comm),
+				acp->ac_comm, flagbits(acp->ac_flag),
+				UT_NAMESIZE, user_from_uid(acp->ac_uid, 0),
+				UT_LINESIZE, getdev(acp->ac_tty),
+				x / (double)AHZ, ctime(&acp->ac_btime));
+		}
+	}
 }
 
 time_t
-expand(t)
-	u_int t;
+expand (t)
+	unsigned t;
 {
-	time_t nt;
+	register time_t nt;
 
 	nt = t & 017777;
 	t >>= 13;
@@ -180,60 +142,130 @@ expand(t)
 
 char *
 flagbits(f)
-	int f;
+	register int f;
 {
-	static char flags[20] = "-";
-	char *p;
+	static char flags[20];
+	char *p, *strcpy();
 
-#define	BIT(flag, ch)	if (f & flag) *p++ = ch
-
-	p = flags + 1;
+#define	BIT(flag, ch)	if (f & flag) *p++ = ch;
+	p = strcpy(flags, "-    ");
 	BIT(ASU, 'S');
 	BIT(AFORK, 'F');
 	BIT(ACOMPAT, 'C');
 	BIT(ACORE, 'D');
 	BIT(AXSIG, 'X');
-	*p = '\0';
 	return (flags);
 }
 
-int
-requested(argv, acp)
-	char *argv[];
-	struct acct *acp;
+ok(argv, acp)
+	register char *argv[];
+	register struct acct *acp;
 {
+	register char *cp;
+	char *user_from_uid();
+
 	do {
-		if (!strcmp(user_from_uid(acp->ac_uid, 0), *argv))
-			return (1);
-		if (!strcmp(getdev(acp->ac_tty), *argv))
-			return (1);
+		cp = user_from_uid(acp->ac_uid, 0);
+		if (!strcmp(cp, *argv)) 
+			return(1);
+		if ((cp = getdev(acp->ac_tty)) && !strcmp(cp, *argv))
+			return(1);
 		if (!strncmp(acp->ac_comm, *argv, fldsiz(acct, ac_comm)))
-			return (1);
+			return(1);
 	} while (*++argv);
-	return (0);
+	return(0);
+}
+
+#include <sys/dir.h>
+
+#define N_DEVS		43		/* hash value for device names */
+#define NDEVS		500		/* max number of file names in /dev */
+
+struct	devhash {
+	dev_t	dev_dev;
+	char	dev_name [UT_LINESIZE + 1];
+	struct	devhash * dev_nxt;
+};
+struct	devhash *dev_hash[N_DEVS];
+struct	devhash *dev_chain;
+#define HASH(d)	(((int) d) % N_DEVS)
+
+setupdevs()
+{
+	register DIR * fd;
+	register struct devhash * hashtab;
+	register ndevs = NDEVS;
+	struct direct * dp;
+	char *malloc();
+
+	/*NOSTRICT*/
+	hashtab = (struct devhash *)malloc(NDEVS * sizeof(struct devhash));
+	if (hashtab == (struct devhash *)0) {
+		fputs("No mem for dev table\n", stderr);
+		return;
+	}
+	if ((fd = opendir(_PATH_DEV)) == NULL) {
+		perror(_PATH_DEV);
+		return;
+	}
+	while (dp = readdir(fd)) {
+		if (dp->d_ino == 0)
+			continue;
+		if (dp->d_name[0] != 't' && strcmp(dp->d_name, "console"))
+			continue;
+		(void)strncpy(hashtab->dev_name, dp->d_name, UT_LINESIZE);
+		hashtab->dev_name[UT_LINESIZE] = 0;
+		hashtab->dev_nxt = dev_chain;
+		dev_chain = hashtab;
+		hashtab++;
+		if (--ndevs <= 0)
+			break;
+	}
+	closedir(fd);
 }
 
 char *
 getdev(dev)
 	dev_t dev;
 {
-	static dev_t lastdev = (dev_t)-1;
+	register struct devhash *hp, *nhp;
+	struct stat statb;
+	char name[fldsiz(devhash, dev_name) + 6];
+	static dev_t lastdev = (dev_t) -1;
 	static char *lastname;
+	static int init = 0;
+	char *strcpy(), *strcat();
 
-	if (dev == NODEV)			/* Special case. */
+	if (dev == NODEV)
 		return ("__");
-	if (dev == lastdev)			/* One-element cache. */
+	if (dev == lastdev)
 		return (lastname);
-	lastdev = dev;
-	if ((lastname = devname(dev, S_IFCHR)) == NULL)
-		lastname = "??";
-	return (lastname);
-}
-
-void
-usage()
-{
-	(void)fprintf(stderr,
-	    "lastcomm [ -f file ] [command ...] [user ...] [tty ...]\n");
-	exit(1);
+	if (!init) {
+		setupdevs();
+		init++;
+	}
+	for (hp = dev_hash[HASH(dev)]; hp; hp = hp->dev_nxt)
+		if (hp->dev_dev == dev) {
+			lastdev = dev;
+			return (lastname = hp->dev_name);
+		}
+	for (hp = dev_chain; hp; hp = nhp) {
+		nhp = hp->dev_nxt;
+		(void)strcpy(name, _PATH_DEV);
+		strcat(name, hp->dev_name);
+		if (stat(name, &statb) < 0)	/* name truncated usually */
+			continue;
+		if ((statb.st_mode & S_IFMT) != S_IFCHR)
+			continue;
+		hp->dev_dev = statb.st_rdev;
+		hp->dev_nxt = dev_hash[HASH(hp->dev_dev)];
+		dev_hash[HASH(hp->dev_dev)] = hp;
+		if (hp->dev_dev == dev) {
+			dev_chain = nhp;
+			lastdev = dev;
+			return (lastname = hp->dev_name);
+		}
+	}
+	dev_chain = (struct devhash *) 0;
+	return ("??");
 }

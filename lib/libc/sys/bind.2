@@ -1,7 +1,5 @@
-.\"	$NetBSD: bind.2,v 1.8 1995/10/12 15:40:46 jtc Exp $
-.\"
-.\" Copyright (c) 1983, 1993
-.\"	The Regents of the University of California.  All rights reserved.
+.\" Copyright (c) 1983 The Regents of the University of California.
+.\" All rights reserved.
 .\"
 .\" Redistribution and use in source and binary forms, with or without
 .\" modification, are permitted provided that the following conditions
@@ -31,9 +29,9 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\"     @(#)bind.2	8.1 (Berkeley) 6/4/93
+.\"     @(#)bind.2	6.9 (Berkeley) 3/10/91
 .\"
-.Dd June 4, 1993
+.Dd March 10, 1991
 .Dt BIND 2
 .Os BSD 4.2
 .Sh NAME
@@ -43,7 +41,7 @@
 .Fd #include <sys/types.h>
 .Fd #include <sys/socket.h>
 .Ft int
-.Fn bind "int s" "const struct sockaddr *name" "int namelen"
+.Fn bind "int s" "struct sockaddr *name" "int namelen"
 .Sh DESCRIPTION
 .Fn Bind
 assigns a name to an unnamed socket.
@@ -73,7 +71,7 @@ further specified in the global
 The
 .Fn bind
 call will fail if:
-.Bl -tag -width Er
+.Bl -tag -width EADDRNOTAVA
 .It Bq Er EBADF
 .Fa S
 is not a valid descriptor.
@@ -97,15 +95,14 @@ address space.
 .El
 .Pp
 The following errors are specific to binding names in the UNIX domain.
-.Bl -tag -width Er
+.Bl -tag -width EADDRNOTAVA
 .It Bq Er ENOTDIR
 A component of the path prefix is not a directory.
+.It Bq Er EINVAL
+The pathname contains a character with the high-order bit set.
 .It Bq Er ENAMETOOLONG
-A component of a pathname exceeded 
-.Dv {NAME_MAX}
-characters, or an entire path name exceeded 
-.Dv {PATH_MAX}
-characters.
+A component of a pathname exceeded 255 characters,
+or an entire path name exceeded 1023 characters.
 .It Bq Er ENOENT
 A prefix component of the path name does not exist.
 .It Bq Er ELOOP
@@ -124,6 +121,6 @@ An empty pathname was specified.
 .Xr getsockname 2
 .Sh HISTORY
 The
-.Fn bind
+.Nm
 function call appeared in
 .Bx 4.2 .

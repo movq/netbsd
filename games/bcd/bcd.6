@@ -1,7 +1,5 @@
-.\"	$NetBSD: bcd.6,v 1.7 1997/10/10 09:54:16 lukem Exp $
-.\"
-.\" Copyright (c) 1988, 1991, 1993
-.\"	The Regents of the University of California.  All rights reserved.
+.\" Copyright (c) 1988 Regents of the University of California.
+.\" All rights reserved.
 .\"
 .\" Redistribution and use in source and binary forms, with or without
 .\" modification, are permitted provided that the following conditions
@@ -31,37 +29,23 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\"	@(#)bcd.6	8.1 (Berkeley) 5/31/93
+.\"	@(#)bcd.6	6.7 (Berkeley) 6/23/90
 .\"
-.Dd May 31, 1993
-.Dt "BCD" 6
-.Os
-.Sh NAME
-.Nm bcd ,
-.Nm ppt ,
-.Nm morse
-.Nd "reformat input as punch cards, paper tape or morse code"
-.Sh SYNOPSIS
-.Nm
-.Op Ar string ...
-.Nm ppt
-.Op Ar string ...
-.Nm morse
-.Op Fl s Ar string ...
-.Sh DESCRIPTION
-The
-.Nm "" ,
-.Nm ppt
-and
-.Nm morse
-commands read the given input and reformats it in the form of
-punched cards, paper tape or morse code respectively.
-Acceptable input are command line arguments or the standard input.
-.Pp
-Available option:
-.Bl -tag -width flag
-.It Fl s
-The
-.Fl s
-option for morse produces dots and dashes rather than words.
-.El
+.TH "BCD" 6 "June 23, 1990"
+.UC 7
+.SH NAME
+bcd \- format input as punch cards
+.br
+ppt \- format input as paper tape
+.br
+morse \- format input as morse code
+.SH SYNOPSIS
+\fBbcd\fP [string ...]
+.br
+\fBppt\fP [string ...]
+.br
+\fBmorse\fP [-s] [string ...]
+.SH DESCRIPTION
+\fIBcd\fP, \fIppt\fP and \fImorse\fP convert command line arguments, if
+provided, or standard input into a form familiar to old-timers.  The
+\fI-s\fP option for morse produces dots and dashes rather than words.

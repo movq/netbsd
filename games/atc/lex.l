@@ -1,9 +1,7 @@
 %{
-/*	$NetBSD: lex.l,v 1.5 1997/10/10 13:38:51 lukem Exp $	*/
-
 /*-
- * Copyright (c) 1990, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1990 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Ed James.
@@ -46,19 +44,11 @@
  * For more info on this and all of my stuff, mail edjames@berkeley.edu.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)lex.l	8.1 (Berkeley) 5/31/93";
-#else
-__RCSID("$NetBSD: lex.l,v 1.5 1997/10/10 13:38:51 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)lex.l	5.2 (Berkeley) 4/30/90";
 #endif /* not lint */
 
-#include "include.h"
-#undef ECHO		/* XXX: work around lex(1) vs termios lameness */
 #include "y.tab.h"
-
 extern int	line;
 
 %}

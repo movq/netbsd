@@ -1,8 +1,6 @@
-/*	$NetBSD: cards.c,v 1.4 1997/10/10 12:32:22 lukem Exp $	*/
-
-/*-
- * Copyright (c) 1980, 1993
- *	The Regents of the University of California.  All rights reserved.
+/*
+ * Copyright (c) 1980 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,124 +31,131 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)cards.c	8.1 (Berkeley) 5/31/93";
-#else
-__RCSID("$NetBSD: cards.c,v 1.4 1997/10/10 12:32:22 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)cards.c	5.5 (Berkeley) 2/28/91";
 #endif /* not lint */
 
-#include <curses.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <time.h>
-
-#include "deck.h"
-#include "cribbage.h"
+#include	<stdio.h>
+#include	"deck.h"
 
 
 /*
- * Initialize a deck of cards to contain one of each type.
+ * initialize a deck of cards to contain one of each type
  */
-void
-makedeck(d)
-	CARD    d[];
-{
-	int i, j, k;
 
-	i = time(NULL);
-	i = ((i & 0xff) << 8) | ((i >> 8) & 0xff) | 1;
-	srand(i);
+makedeck( d )
+
+    CARD	d[];
+{
+	register  int		i, j, k;
+	long			time();
+
+	i = time( (long *) 0 );
+	i = ( (i&0xff) << 8 ) | ( (i >> 8)&0xff ) | 1;
+	srand( i );
 	k = 0;
-	for (i = 0; i < RANKS; i++)
-		for (j = 0; j < SUITS; j++) {
-			d[k].suit = j;
-			d[k++].rank = i;
-		}
-}
-
-/*
- * Given a deck of cards, shuffle it -- i.e. randomize it
- * see Knuth, vol. 2, page 125.
- */
-void
-shuffle(d)
-	CARD d[];
-{
-	int j, k;
-	CARD c;
-
-	for (j = CARDS; j > 0; --j) {
-		k = (rand() >> 4) % j;		/* random 0 <= k < j */
-		c = d[j - 1];			/* exchange (j - 1) and k */
-		d[j - 1] = d[k];
-		d[k] = c;
+	for( i = 0; i < RANKS; i++ )  {
+	    for( j = 0; j < SUITS; j++ )  {
+		d[k].suit = j;
+		d[k++].rank = i;
+	    }
 	}
 }
+
+
+
+/*
+ * given a deck of cards, shuffle it -- i.e. randomize it
+ * see Knuth, vol. 2, page 125
+ */
+
+shuffle( d )
+
+    CARD	d[];
+{
+	register  int		j, k;
+	CARD			c;
+
+	for( j = CARDS; j > 0; --j )  {
+	    k = ( rand() >> 4 ) % j;		/* random 0 <= k < j */
+	    c = d[j - 1];			/* exchange (j - 1) and k */
+	    d[j - 1] = d[k];
+	    d[k] = c;
+	}
+}
+
+
 
 /*
  * return true if the two cards are equal...
  */
-int
-eq(a, b)
-	CARD a, b;
+
+eq( a, b )
+
+    CARD		a, b;
 {
-	return ((a.rank == b.rank) && (a.suit == b.suit));
+	return(  ( a.rank == b.rank )  &&  ( a.suit == b.suit )  );
 }
+
+
 
 /*
  * isone returns TRUE if a is in the set of cards b
  */
-int
-isone(a, b, n)
-	CARD a, b[];
-	int n;
-{
-	int i;
 
-	for (i = 0; i < n; i++)
-		if (eq(a, b[i]))
-			return (TRUE);
-	return (FALSE);
+isone( a, b, n )
+
+    CARD		a, b[];
+    int			n;
+{
+	register  int		i;
+
+	for( i = 0; i < n; i++ )  {
+	    if(  eq( a, b[i] )   )  return( TRUE );
+	}
+	return( FALSE );
 }
+
+
 
 /*
  * remove the card a from the deck d of n cards
  */
-void
-cremove(a, d, n)
-	CARD a, d[];
-	int n;
-{
-	int i, j;
 
-	for (i = j = 0; i < n; i++)
-		if (!eq(a, d[i]))
-			d[j++] = d[i];
-	if (j < n)
-		d[j].suit = d[j].rank = EMPTY;
+cremove( a, d, n )
+
+    CARD		a, d[];
+    int			n;
+{
+	register  int		i, j;
+
+	j = 0;
+	for( i = 0; i < n; i++ )  {
+	    if(  !eq( a, d[i] )  )  d[j++] = d[i];
+	}
+	if(  j < n  )  d[j].suit = d[j].rank = EMPTY;
 }
+
+
 
 /*
  * sorthand:
  *	Sort a hand of n cards
  */
-void
 sorthand(h, n)
-	CARD h[];
-	int n;
+register CARD		h[];
+int			n;
 {
-	CARD *cp, *endp;
-	CARD c;
+	register CARD		*cp, *endp;
+	CARD			c;
 
 	for (endp = &h[n]; h < endp - 1; h++)
-		for (cp = h + 1; cp < endp; cp++)
-			if ((cp->rank < h->rank) ||
-			    (cp->rank == h->rank && cp->suit < h->suit)) {
-				c = *h;
-				*h = *cp;
-				*cp = c;
-			}
+	    for (cp = h + 1; cp < endp; cp++)
+		if ((cp->rank < h->rank) ||
+		     (cp->rank == h->rank && cp->suit < h->suit)) {
+		    c = *h;
+		    *h = *cp;
+		    *cp = c;
+		}
 }
+

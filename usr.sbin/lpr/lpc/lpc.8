@@ -1,7 +1,5 @@
-.\"	$NetBSD: lpc.8,v 1.8 1997/10/05 15:12:09 mrg Exp $
-.\"
-.\" Copyright (c) 1983, 1991, 1993
-.\"	The Regents of the University of California.  All rights reserved.
+.\" Copyright (c) 1983, 1991 The Regents of the University of California.
+.\" All rights reserved.
 .\"
 .\" Redistribution and use in source and binary forms, with or without
 .\" modification, are permitted provided that the following conditions
@@ -31,27 +29,27 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\"     @(#)lpc.8	8.5 (Berkeley) 4/28/95
+.\"     @(#)lpc.8	6.4 (Berkeley) 3/16/91
 .\"
-.Dd April 28, 1995
+.Dd March 16, 1991
 .Dt LPC 8
 .Os BSD 4.2
 .Sh NAME
 .Nm lpc
 .Nd line printer control program
 .Sh SYNOPSIS
-.Nm
+.Nm lpc
 .Oo
 .Ar command
 .Op Ar argument ...
 .Oc
 .Sh DESCRIPTION
-.Nm
+.Nm Lpc
 is used by the system administrator to control the
 operation of the line printer system.  
 For each line printer configured in
 .Pa /etc/printcap ,
-.Nm
+.Nm lpc
 may be used to:
 .Bl -bullet -offset indent
 .It
@@ -62,32 +60,32 @@ disable or enable a printer's spooling queue,
 rearrange the order of jobs in a spooling queue,
 .It
 find the status of printers, and their associated
-spooling queues and printer daemons.
+spooling queues and printer dameons.
 .El
 .Pp
 Without any arguments,
-.Nm
+.Nm lpc
 will prompt for commands from the standard input.
 If arguments are supplied,
-.Nm
+.Nm lpc
 interprets the first argument as a command and the remaining
 arguments as parameters to the command.  The standard input
 may be redirected causing
-.Nm
+.Nm lpc
 to read commands from file.
-Commands may be abbreviated;
+Commands may be abreviated;
 the following is the list of recognized commands.
 .Pp
 .Bl -tag -width Ds -compact
 .It Ic \&? No [ command ... ]
 .It Ic help No [ command ... ]
 Print a short description of each command specified in the argument list,
-or, if no argument is given, a list of the recognized commands.
+or, if no arguments are given, a list of the recognized commands.
 .Pp
 .It Ic abort  No {\ all\ |\ printer\ }
 Terminate an active spooling daemon on the local host immediately and
 then disable printing (preventing new daemons from being started by
-.Xr lpr 1 )
+.Xr lpr )
 for the specified printers.
 .Pp
 .It Ic clean  No {\ all\ |\ printer\ }
@@ -98,7 +96,7 @@ from the specified printer queue(s) on the local machine.
 .It Ic disable  No {\ all\ |\ printer\ }
 Turn the specified printer queues off.  This prevents new
 printer jobs from being entered into the queue by
-.Xr lpr 1 .
+.Xr lpr .
 .Pp
 .It Ic down No {\ all\ |\ printer\ } message ...
 Turn the specified printer queue off, disable printing and put
@@ -119,13 +117,12 @@ to put new jobs in the spool queue.
 .It Ic exit
 .It Ic quit
 Exit from lpc.
-.ne 1i
 .Pp
 .It Ic restart  No {\ all\ |\ printer\ }
 Attempt to start a new printer daemon. 
 This is useful when some abnormal condition causes the daemon to
-die unexpectedly, leaving jobs in the queue.
-.Xr Lpq 1
+die unexpectedly leaving jobs in the queue.
+.Xr Lpq
 will report that there is no daemon present when this condition occurs. 
 If the user is the super-user,
 try to abort the current daemon first (i.e., kill and restart a stuck daemon).
@@ -147,12 +144,12 @@ Place the jobs in the order listed at the top of the printer queue.
 Enable everything and start a new printer daemon. Undoes the effects of
 .Ic down .
 .Sh FILES
-.Bl -tag -width /var/spool/output/*/lock -compact
+.Bl -tag -width /var/spool/*/lockx -compact
 .It Pa /etc/printcap
 printer description file
-.It Pa /var/spool/output/*
+.It Pa /var/spool/*
 spool directories
-.It Pa /var/spool/output/*/lock
+.It Pa /var/spool/*/lock
 lock file for queue control
 .El
 .Sh SEE ALSO
@@ -164,11 +161,11 @@ lock file for queue control
 .Sh DIAGNOSTICS
 .Bl -tag -width Ds
 .It Sy "?Ambiguous command"
-abbreviation matches more than one command
+abreviation matches more than one command
 .It Sy "?Invalid command"
 no match was found
 .It Sy "?Privileged command"
-you must be a member of group "operator" or root to execute this command
+command can be executed by root only
 .El
 .Sh HISTORY
 The

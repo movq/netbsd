@@ -1,8 +1,6 @@
-/*	$NetBSD: main.c,v 1.8 1997/10/19 14:25:30 mycroft Exp $	*/
-
 /*
- * Copyright (c) 1983, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1983 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,24 +31,15 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1983, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+char copyright[] =
+"@(#) Copyright (c) 1983 Regents of the University of California.\n\
+ All rights reserved.\n";
 #endif /* not lint */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)main.c	8.1 (Berkeley) 6/9/93";
-#else
-__RCSID("$NetBSD: main.c,v 1.8 1997/10/19 14:25:30 mycroft Exp $");
-#endif
+static char sccsid[] = "@(#)main.c	5.6 (Berkeley) 8/27/90";
 #endif /* not lint */
-
-#include <sys/types.h>
-
-#include <errno.h>
-#include <pwd.h>
 
 #include "defs.h"
 
@@ -77,22 +66,17 @@ char	host[32];	/* host name */
 int	nerrs;		/* number of errors while sending/receiving */
 char	user[10];	/* user's name */
 char	homedir[128];	/* user's home directory */
-uid_t	userid;		/* user's user ID */
-gid_t	groupid;	/* user's group ID */
+int	userid;		/* user's user ID */
+int	groupid;	/* user's group ID */
 
 struct	passwd *pw;	/* pointer to static area used by getpwent */
 struct	group *gr;	/* pointer to static area used by getgrent */
 
-int	main __P((int, char **));
-static void usage __P((void));
-static void docmdargs __P((int, char *[]));
-
-int
 main(argc, argv)
 	int argc;
 	char *argv[];
 {
-	char *arg;
+	register char *arg;
 	int cmdargs = 0;
 	char *dhosts[NHOSTS], **hp = dhosts;
 
@@ -107,7 +91,7 @@ main(argc, argv)
 	gethostname(host, sizeof(host));
 	strcpy(tempfile, _PATH_TMP);
 	strcat(tempfile, _RDIST_TMP);
-	if ((tempname = strrchr(tempfile, '/')) != 0)
+	if ((tempname = rindex(tempfile, '/')) != 0)
 		tempname++;
 	else
 		tempname = tempfile;
@@ -201,7 +185,7 @@ main(argc, argv)
 	}
 	*hp = NULL;
 
-	seteuid(userid);
+	setreuid(0, userid);
 	mktemp(tempfile);
 
 	if (iamremote) {
@@ -231,7 +215,6 @@ main(argc, argv)
 	exit(nerrs != 0);
 }
 
-static void
 usage()
 {
 	printf("Usage: rdist [-nqbhirvwyD] [-f distfile] [-d var=value] [-m host] [file ...]\n");
@@ -242,13 +225,12 @@ usage()
 /*
  * rcp like interface for distributing files.
  */
-static void
 docmdargs(nargs, args)
 	int nargs;
 	char *args[];
 {
-	struct namelist *nl, *prev;
-	char *cp;
+	register struct namelist *nl, *prev;
+	register char *cp;
 	struct namelist *files, *hosts;
 	struct subcmd *cmds;
 	char *dest;
@@ -258,7 +240,6 @@ docmdargs(nargs, args)
 	if (nargs < 2)
 		usage();
 
-	files = NULL;
 	prev = NULL;
 	for (i = 0; i < nargs - 1; i++) {
 		nl = makenl(args[i]);
@@ -271,7 +252,7 @@ docmdargs(nargs, args)
 	}
 
 	cp = args[i];
-	if ((dest = strchr(cp, ':')) != NULL)
+	if ((dest = index(cp, ':')) != NULL)
 		*dest++ = '\0';
 	tnl.n_name = cp;
 	hosts = expand(&tnl, E_ALL);
@@ -299,9 +280,8 @@ docmdargs(nargs, args)
 /*
  * Print a list of NAME blocks (mostly for debugging).
  */
-void
 prnames(nl)
-	struct namelist *nl;
+	register struct namelist *nl;
 {
 	printf("( ");
 	while (nl != NULL) {
@@ -309,4 +289,15 @@ prnames(nl)
 		nl = nl->n_next;
 	}
 	printf(")\n");
+}
+
+/*VARARGS*/
+warn(fmt, a1, a2,a3)
+	char *fmt;
+{
+	extern int yylineno;
+
+	fprintf(stderr, "rdist: line %d: Warning: ", yylineno);
+	fprintf(stderr, fmt, a1, a2, a3);
+	fputc('\n', stderr);
 }

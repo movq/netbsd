@@ -1,8 +1,6 @@
-/*	$NetBSD: roll.c,v 1.6 1997/10/12 17:45:25 christos Exp $	*/
-
 /*
- * Copyright (c) 1980, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1980 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,17 +31,9 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)roll.c	8.1 (Berkeley) 5/31/93";
-#else
-__RCSID("$NetBSD: roll.c,v 1.6 1997/10/12 17:45:25 christos Exp $");
-#endif
+static char sccsid[] = "@(#)roll.c	5.5 (Berkeley) 6/1/90";
 #endif /* not lint */
-
-#include "monop.ext"
-#include <stdlib.h>
 
 /*
  *	This routine rolls ndie nside-sided dice.
@@ -51,16 +41,14 @@ __RCSID("$NetBSD: roll.c,v 1.6 1997/10/12 17:45:25 christos Exp $");
 
 # define	reg	register
 
-# if defined(pdp11)
+# if !defined(vax) && !defined(tahoe)
 # define	MAXRAND	32767L
 
-int
 roll(ndie, nsides)
-int	ndie, nsides;
-{
+int	ndie, nsides; {
 
-	long	tot;
-	unsigned	n, r;
+	reg long	tot;
+	reg unsigned	n, r;
 
 	tot = 0;
 	n = ndie;
@@ -71,17 +59,16 @@ int	ndie, nsides;
 
 # else
 
-int
 roll(ndie, nsides)
-int	ndie, nsides; {
+reg int	ndie, nsides; {
 
-	int		tot, r;
-	double	num_sides;
+	reg int		tot, r;
+	reg double	num_sides;
 
 	num_sides = nsides;
 	tot = 0;
 	while (ndie--)
-		tot += (r = rand()) * (num_sides / RAND_MAX) + 1;
+		tot += (r = rand()) * (num_sides / 017777777777) + 1;
 	return tot;
 }
 # endif

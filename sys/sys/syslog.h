@@ -1,8 +1,6 @@
-/*	$NetBSD: syslog.h,v 1.17 1997/06/29 18:55:36 christos Exp $	*/
-
 /*
- * Copyright (c) 1982, 1986, 1988, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1982, 1986, 1988 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,11 +30,8 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)syslog.h	8.1 (Berkeley) 6/2/93
+ *	@(#)syslog.h	7.20 (Berkeley) 2/23/91
  */
-
-#ifndef _SYS_SYSLOG_H_
-#define _SYS_SYSLOG_H_
 
 #define	_PATH_LOG	"/dev/log"
 
@@ -73,19 +68,19 @@ typedef struct _code {
 } CODE;
 
 CODE prioritynames[] = {
-	{ "alert",	LOG_ALERT },
-	{ "crit",	LOG_CRIT },
-	{ "debug",	LOG_DEBUG },
-	{ "emerg",	LOG_EMERG },
-	{ "err",	LOG_ERR },
-	{ "error",	LOG_ERR },		/* DEPRECATED */
-	{ "info",	LOG_INFO },
-	{ "none",	INTERNAL_NOPRI },	/* INTERNAL */
-	{ "notice",	LOG_NOTICE },
-	{ "panic", 	LOG_EMERG },		/* DEPRECATED */
-	{ "warn",	LOG_WARNING },		/* DEPRECATED */
-	{ "warning",	LOG_WARNING },
-	{ NULL,		-1 }
+	"alert",	LOG_ALERT,
+	"crit",		LOG_CRIT,
+	"debug",	LOG_DEBUG,
+	"emerg",	LOG_EMERG,
+	"err",		LOG_ERR,
+	"error",	LOG_ERR,		/* DEPRECATED */
+	"info",		LOG_INFO,
+	"none",		INTERNAL_NOPRI,		/* INTERNAL */
+	"notice",	LOG_NOTICE,
+	"panic", 	LOG_EMERG,		/* DEPRECATED */
+	"warn",		LOG_WARNING,		/* DEPRECATED */
+	"warning",	LOG_WARNING,
+	NULL,		-1,
 };
 #endif
 
@@ -101,7 +96,6 @@ CODE prioritynames[] = {
 #define	LOG_UUCP	(8<<3)	/* UUCP subsystem */
 #define	LOG_CRON	(9<<3)	/* clock daemon */
 #define	LOG_AUTHPRIV	(10<<3)	/* security/authorization messages (private) */
-#define	LOG_FTP		(11<<3)	/* ftp daemon */
 
 	/* other codes through 15 reserved for system use */
 #define	LOG_LOCAL0	(16<<3)	/* reserved for local use */
@@ -120,33 +114,32 @@ CODE prioritynames[] = {
 
 #ifdef SYSLOG_NAMES
 CODE facilitynames[] = {
-	{ "auth",	LOG_AUTH },
-	{ "authpriv",	LOG_AUTHPRIV },
-	{ "cron", 	LOG_CRON },
-	{ "daemon",	LOG_DAEMON },
-	{ "ftp",	LOG_FTP },
-	{ "kern",	LOG_KERN },
-	{ "lpr",	LOG_LPR },
-	{ "mail",	LOG_MAIL },
-	{ "mark", 	INTERNAL_MARK },	/* INTERNAL */
-	{ "news",	LOG_NEWS },
-	{ "security",	LOG_AUTH },		/* DEPRECATED */
-	{ "syslog",	LOG_SYSLOG },
-	{ "user",	LOG_USER },
-	{ "uucp",	LOG_UUCP },
-	{ "local0",	LOG_LOCAL0 },
-	{ "local1",	LOG_LOCAL1 },
-	{ "local2",	LOG_LOCAL2 },
-	{ "local3",	LOG_LOCAL3 },
-	{ "local4",	LOG_LOCAL4 },
-	{ "local5",	LOG_LOCAL5 },
-	{ "local6",	LOG_LOCAL6 },
-	{ "local7",	LOG_LOCAL7 },
-	{ NULL,		-1 }
+	"auth",		LOG_AUTH,
+	"authpriv",	LOG_AUTHPRIV,
+	"cron", 	LOG_CRON,
+	"daemon",	LOG_DAEMON,
+	"kern",		LOG_KERN,
+	"lpr",		LOG_LPR,
+	"mail",		LOG_MAIL,
+	"mark", 	INTERNAL_MARK,		/* INTERNAL */
+	"news",		LOG_NEWS,
+	"security",	LOG_AUTH,		/* DEPRECATED */
+	"syslog",	LOG_SYSLOG,
+	"user",		LOG_USER,
+	"uucp",		LOG_UUCP,
+	"local0",	LOG_LOCAL0,
+	"local1",	LOG_LOCAL1,
+	"local2",	LOG_LOCAL2,
+	"local3",	LOG_LOCAL3,
+	"local4",	LOG_LOCAL4,
+	"local5",	LOG_LOCAL5,
+	"local6",	LOG_LOCAL6,
+	"local7",	LOG_LOCAL7,
+	NULL,		-1,
 };
 #endif
 
-#ifdef _KERNEL
+#ifdef KERNEL
 #define	LOG_PRINTF	-1	/* pseudo-priority to indicate use of printf */
 #endif
 
@@ -169,36 +162,17 @@ CODE facilitynames[] = {
 #define	LOG_NOWAIT	0x10	/* don't wait for console forks: DEPRECATED */
 #define	LOG_PERROR	0x20	/* log to stderr as well */
 
-#ifndef _KERNEL
+#ifndef KERNEL
 
-/*
- * Don't use va_list in the vsyslog() prototype.   Va_list is typedef'd in two
- * places (<machine/varargs.h> and <machine/stdarg.h>), so if we include one
- * of them here we may collide with the utility's includes.  It's unreasonable
- * for utilities to have to include one of them to include syslog.h, so we get
- * _BSD_VA_LIST_ from <machine/ansi.h> and use it.
- */
-#include <machine/ansi.h>
 #include <sys/cdefs.h>
+#include <stdarg.h>
 
 __BEGIN_DECLS
 void	closelog __P((void));
 void	openlog __P((const char *, int, int));
 int	setlogmask __P((int));
-void	syslog __P((int, const char *, ...))
-    __attribute__((__format__(__printf__,2,3)));
-void	vsyslog __P((int, const char *, _BSD_VA_LIST_));
+void	syslog __P((int, const char *, ...));
+void	vsyslog __P((int, const char *, va_list));
 __END_DECLS
 
-#else /* !_KERNEL */
-
-void	logpri __P((int));
-void	log __P((int, const char *, ...))
-    __kprintf_attribute__((__format__(__kprintf__,2,3)));
-void	addlog __P((const char *, ...))
-    __kprintf_attribute__((__format__(__kprintf__,1,2)));
-void	logwakeup __P((void));
-
-#endif /* !_KERNEL */
-
-#endif /* !_SYS_SYSLOG_H_ */
+#endif /* !KERNEL */

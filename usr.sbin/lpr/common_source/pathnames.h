@@ -1,8 +1,6 @@
-/*	$NetBSD: pathnames.h,v 1.6 1997/03/14 01:17:34 mycroft Exp $	*/
-
 /*
- * Copyright (c) 1989, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1989 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,7 +30,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *      @(#)pathnames.h	8.1 (Berkeley) 6/6/93
+ *	@(#)pathnames.h	5.4 (Berkeley) 6/1/90
  */
 
 #include <paths.h>
@@ -41,7 +39,7 @@
 #define	_PATH_DEFSPOOL		"/var/spool/output/lpd"
 #define	_PATH_HOSTSEQUIV	"/etc/hosts.equiv"
 #define	_PATH_HOSTSLPD		"/etc/hosts.lpd"
-#define	_PATH_MASTERLOCK	"/var/run/lpd.pid"
+#define	_PATH_MASTERLOCK	"/var/spool/output/lpd.lock"
 #define	_PATH_PR		"/usr/bin/pr"
 #define	_PATH_PRINTCAP		"/etc/printcap"
 #define	_PATH_SOCKETNAME	"/var/run/printer"

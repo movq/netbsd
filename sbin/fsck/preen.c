@@ -1,8 +1,6 @@
-/*	$NetBSD: preen.c,v 1.17 1997/09/16 14:52:35 lukem Exp $	*/
-
 /*
- * Copyright (c) 1990, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1990 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,229 +31,170 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)preen.c	8.5 (Berkeley) 4/28/95";
-#else
-__RCSID("$NetBSD: preen.c,v 1.17 1997/09/16 14:52:35 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)preen.c	5.7 (Berkeley) 3/19/91";
 #endif /* not lint */
 
 #include <sys/param.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
-#include <sys/queue.h>
-
-#include <err.h>
-#include <ctype.h>
 #include <fstab.h>
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <unistd.h>
+#include <ctype.h>
 
-#include "fsutil.h"
+char	*rawname(), *unrawname(), *blockcheck();
 
-struct partentry {
-	TAILQ_ENTRY(partentry)	 p_entries;
-	char		  	*p_devname;	/* device name */
-	char			*p_mntpt;	/* mount point */
-	char		  	*p_type;	/* filesystem type */
-	void			*p_auxarg;	/* auxiliary argument */
-};
+struct part {
+	struct	part *next;		/* forward link of partitions on disk */
+	char	*name;			/* device name */
+	char	*fsname;		/* mounted filesystem name */
+	long	auxdata;		/* auxillary data for application */
+} *badlist, **badnext = &badlist;
 
-TAILQ_HEAD(part, partentry) badh;
+struct disk {
+	char	*name;			/* disk base name */
+	struct	disk *next;		/* forward link for list of disks */
+	struct	part *part;		/* head of list of partitions on disk */
+	int	pid;			/* If != 0, pid of proc working on */
+} *disks;
 
-struct diskentry {
-	TAILQ_ENTRY(diskentry) 	    d_entries;
-	char		       	   *d_name;	/* disk base name */
-	TAILQ_HEAD(prt, partentry)  d_part;	/* list of partitions on disk */
-	int			    d_pid;	/* 0 or pid of fsck proc */
-};
+int	nrun, ndisks;
+char	hotroot;
 
-TAILQ_HEAD(disk, diskentry) diskh;
-
-static int nrun = 0, ndisks = 0;
-
-static struct diskentry *finddisk __P((const char *));
-static void addpart __P((const char *, const char *, const char *, void *));
-static int startdisk __P((struct diskentry *, 
-    int (*)(const char *, const char *, const char *, void *, pid_t *)));
-static void printpart __P((void));
-
-int
-checkfstab(flags, maxrun, docheck, checkit)
-	int flags, maxrun;
-	void *(*docheck) __P((struct fstab *));
-	int (*checkit) __P((const char *, const char *, const char *, void *,
-	    pid_t *));
+checkfstab(preen, maxrun, docheck, chkit)
+	int preen, maxrun;
+	int (*docheck)(), (*chkit)();
 {
-	struct fstab *fs;
-	struct diskentry *d, *nextdisk;
-	struct partentry *p;
+	register struct fstab *fsp;
+	register struct disk *dk, *nextdisk;
+	register struct part *pt;
 	int ret, pid, retcode, passno, sumstatus, status;
-	void *auxarg;
+	long auxdata;
 	char *name;
 
-	TAILQ_INIT(&badh);
-	TAILQ_INIT(&diskh);
-
 	sumstatus = 0;
-
 	for (passno = 1; passno <= 2; passno++) {
 		if (setfsent() == 0) {
-			warnx("Can't open checklist file: %s\n", _PATH_FSTAB);
+			fprintf(stderr, "Can't open checklist file: %s\n",
+			    _PATH_FSTAB);
 			return (8);
 		}
-		while ((fs = getfsent()) != 0) {
-			if ((auxarg = (*docheck)(fs)) == NULL)
+		while ((fsp = getfsent()) != 0) {
+			if ((auxdata = (*docheck)(fsp)) == 0)
 				continue;
-
-			name = blockcheck(fs->fs_spec);
-			if (flags & CHECK_DEBUG)
-				printf("pass %d, name %s\n", passno, name);
-
-			if ((flags & CHECK_PREEN) == 0 ||
-			    (passno == 1 && fs->fs_passno == 1)) {
-				if (name == NULL) {
-					if (flags & CHECK_PREEN)
-						return 8;
-					else
-						continue;
-				}
-				sumstatus = (*checkit)(fs->fs_vfstype,
-				    name, fs->fs_file, auxarg, NULL);
-
-				if (sumstatus)
-					return (sumstatus);
-			} else if (passno == 2 && fs->fs_passno > 1) {
-				if (name == NULL) {
-					(void) fprintf(stderr,
-					    "BAD DISK NAME %s\n", fs->fs_spec);
+			if (preen == 0 || passno == 1 && fsp->fs_passno == 1) {
+				if (name = blockcheck(fsp->fs_spec)) {
+					if (sumstatus = (*chkit)(name,
+					    fsp->fs_file, auxdata, 0))
+						return (sumstatus);
+				} else if (preen)
+					return (8);
+			} else if (passno == 2 && fsp->fs_passno > 1) {
+				if ((name = blockcheck(fsp->fs_spec)) == NULL) {
+					fprintf(stderr, "BAD DISK NAME %s\n",
+						fsp->fs_spec);
 					sumstatus |= 8;
 					continue;
 				}
-				addpart(fs->fs_vfstype, name, fs->fs_file,
-				    auxarg);
+				addpart(name, fsp->fs_file, auxdata);
 			}
 		}
-		if ((flags & CHECK_PREEN) == 0)
-			return 0;
+		if (preen == 0)
+			return (0);
 	}
-
-	if (flags & CHECK_DEBUG)
-		printpart();
-
-	if (flags & CHECK_PREEN) {
+	if (preen) {
 		if (maxrun == 0)
 			maxrun = ndisks;
 		if (maxrun > ndisks)
 			maxrun = ndisks;
-		nextdisk = diskh.tqh_first;
+		nextdisk = disks;
 		for (passno = 0; passno < maxrun; ++passno) {
-			if ((ret = startdisk(nextdisk, checkit)) != 0)
-				return ret;
-			nextdisk = nextdisk->d_entries.tqe_next;
+			while (ret = startdisk(nextdisk, chkit) && nrun > 0)
+				sleep(10);
+			if (ret)
+				return (ret);
+			nextdisk = nextdisk->next;
 		}
-
 		while ((pid = wait(&status)) != -1) {
-			for (d = diskh.tqh_first; d; d = d->d_entries.tqe_next)
-				if (d->d_pid == pid)
+			for (dk = disks; dk; dk = dk->next)
+				if (dk->pid == pid)
 					break;
-
-			if (d == NULL) {
-				warnx("Unknown pid %d\n", pid);
+			if (dk == 0) {
+				printf("Unknown pid %d\n", pid);
 				continue;
 			}
-
-
 			if (WIFEXITED(status))
 				retcode = WEXITSTATUS(status);
 			else
 				retcode = 0;
-
-			p = d->d_part.tqh_first;
-
-			if (flags & (CHECK_DEBUG|CHECK_VERBOSE))
-				(void) printf("done %s: %s (%s) = 0x%x\n",
-				    p->p_type, p->p_devname, p->p_mntpt,
-				    status);
-
 			if (WIFSIGNALED(status)) {
-				(void) fprintf(stderr,
-				    "%s: %s (%s): EXITED WITH SIGNAL %d\n",
-				    p->p_type, p->p_devname, p->p_mntpt,
-				    WTERMSIG(status));
+				printf("%s (%s): EXITED WITH SIGNAL %d\n",
+					dk->part->name, dk->part->fsname,
+					WTERMSIG(status));
 				retcode = 8;
 			}
-
-			TAILQ_REMOVE(&d->d_part, p, p_entries);
-
 			if (retcode != 0) {
-				TAILQ_INSERT_TAIL(&badh, p, p_entries);
 				sumstatus |= retcode;
-			} else {
-				free(p->p_type);
-				free(p->p_devname);
-				free(p);
-			}
-			d->d_pid = 0;
+				*badnext = dk->part;
+				badnext = &dk->part->next;
+				dk->part = dk->part->next;
+				*badnext = NULL;
+			} else
+				dk->part = dk->part->next;
+			dk->pid = 0;
 			nrun--;
-
-			if (d->d_part.tqh_first == NULL)
+			if (dk->part == NULL)
 				ndisks--;
 
 			if (nextdisk == NULL) {
-				if (d->d_part.tqh_first) {
-					if ((ret = startdisk(d, checkit)) != 0)
-						return ret;
+				if (dk->part) {
+					while (ret = startdisk(dk, chkit) &&
+					    nrun > 0)
+						sleep(10);
+					if (ret)
+						return (ret);
 				}
 			} else if (nrun < maxrun && nrun < ndisks) {
 				for ( ;; ) {
-					nextdisk = nextdisk->d_entries.tqe_next;
-					if (nextdisk == NULL)
-						nextdisk = diskh.tqh_first;
-					if (nextdisk->d_part.tqh_first != NULL
-					    && nextdisk->d_pid == 0)
+					if ((nextdisk = nextdisk->next) == NULL)
+						nextdisk = disks;
+					if (nextdisk->part != NULL &&
+					    nextdisk->pid == 0)
 						break;
 				}
-				if ((ret = startdisk(nextdisk, checkit)) != 0)
-					return ret;
+				while (ret = startdisk(nextdisk, chkit) &&
+				    nrun > 0)
+					sleep(10);
+				if (ret)
+					return (ret);
 			}
 		}
 	}
 	if (sumstatus) {
-		p = badh.tqh_first;
-		if (p == NULL)
+		if (badlist == 0)
 			return (sumstatus);
-
-		(void) fprintf(stderr,
-			"THE FOLLOWING FILE SYSTEM%s HAD AN %s\n\t",
-			p->p_entries.tqe_next ? "S" : "",
-			"UNEXPECTED INCONSISTENCY:");
-
-		for (; p; p = p->p_entries.tqe_next)
-			(void) fprintf(stderr,
-			    "%s: %s (%s)%s", p->p_type, p->p_devname,
-			    p->p_mntpt, p->p_entries.tqe_next ? ", " : "\n");
-
-		return sumstatus;
+		fprintf(stderr, "THE FOLLOWING FILE SYSTEM%s HAD AN %s\n\t",
+			badlist->next ? "S" : "", "UNEXPECTED INCONSISTENCY:");
+		for (pt = badlist; pt; pt = pt->next)
+			fprintf(stderr, "%s (%s)%s", pt->name, pt->fsname,
+			    pt->next ? ", " : "\n");
+		return (sumstatus);
 	}
-	(void) endfsent();
+	(void)endfsent();
 	return (0);
 }
 
-
-static struct diskentry *
+struct disk *
 finddisk(name)
-	const char *name;
+	char *name;
 {
-	const char *p;
-	size_t len = 0;
-	struct diskentry *d;
+	register struct disk *dk, **dkp;
+	register char *p;
+	size_t len;
 
-	for (len = strlen(name), p = name + len - 1; p >= name; --p)
+	for (p = name + strlen(name) - 1; p >= name; --p)
 		if (isdigit(*p)) {
 			len = p - name + 1;
 			break;
@@ -263,78 +202,153 @@ finddisk(name)
 	if (p < name)
 		len = strlen(name);
 
-	for (d = diskh.tqh_first; d != NULL; d = d->d_entries.tqe_next)
-		if (strncmp(d->d_name, name, len) == 0 && d->d_name[len] == 0)
-			return d;
-
-	d = emalloc(sizeof(*d));
-	d->d_name = estrdup(name);
-	d->d_name[len] = '\0';
-	TAILQ_INIT(&d->d_part);
-	d->d_pid = 0;
-
-	TAILQ_INSERT_TAIL(&diskh, d, d_entries);
-	ndisks++;
-
-	return d;
-}
-
-
-static void
-printpart()
-{
-	struct diskentry *d;
-	struct partentry *p;
-
-	for (d = diskh.tqh_first; d != NULL; d = d->d_entries.tqe_next) {
-		(void) printf("disk %s: ", d->d_name);
-		for (p = d->d_part.tqh_first; p != NULL;
-		    p = p->p_entries.tqe_next)
-			(void) printf("%s ", p->p_devname);
-		(void) printf("\n");
+	for (dk = disks, dkp = &disks; dk; dkp = &dk->next, dk = dk->next) {
+		if (strncmp(dk->name, name, len) == 0 &&
+		    dk->name[len] == 0)
+			return (dk);
 	}
+	if ((*dkp = (struct disk *)malloc(sizeof(struct disk))) == NULL) {
+		fprintf(stderr, "out of memory");
+		exit (8);
+	}
+	dk = *dkp;
+	if ((dk->name = malloc(len + 1)) == NULL) {
+		fprintf(stderr, "out of memory");
+		exit (8);
+	}
+	(void)strncpy(dk->name, name, len);
+	dk->name[len] = '\0';
+	dk->part = NULL;
+	dk->next = NULL;
+	dk->pid = 0;
+	ndisks++;
+	return (dk);
 }
 
-
-static void
-addpart(type, devname, mntpt, auxarg)
-	const char *type, *devname, *mntpt;
-	void *auxarg;
+addpart(name, fsname, auxdata)
+	char *name, *fsname;
+	long auxdata;
 {
-	struct diskentry *d = finddisk(devname);
-	struct partentry *p;
+	struct disk *dk = finddisk(name);
+	register struct part *pt, **ppt = &dk->part;
 
-	for (p = d->d_part.tqh_first; p != NULL; p = p->p_entries.tqe_next)
-		if (strcmp(p->p_devname, devname) == 0) {
-			warnx("%s in fstab more than once!\n", devname);
+	for (pt = dk->part; pt; ppt = &pt->next, pt = pt->next)
+		if (strcmp(pt->name, name) == 0) {
+			printf("%s in fstab more than once!\n", name);
 			return;
 		}
-
-	p = emalloc(sizeof(*p));
-	p->p_devname = estrdup(devname);
-	p->p_mntpt = estrdup(mntpt);
-	p->p_type = estrdup(type);
-	p->p_auxarg = auxarg;
-
-	TAILQ_INSERT_TAIL(&d->d_part, p, p_entries);
+	if ((*ppt = (struct part *)malloc(sizeof(struct part))) == NULL) {
+		fprintf(stderr, "out of memory");
+		exit (8);
+	}
+	pt = *ppt;
+	if ((pt->name = malloc(strlen(name) + 1)) == NULL) {
+		fprintf(stderr, "out of memory");
+		exit (8);
+	}
+	(void)strcpy(pt->name, name);
+	if ((pt->fsname = malloc(strlen(fsname) + 1)) == NULL) {
+		fprintf(stderr, "out of memory");
+		exit (8);
+	}
+	(void)strcpy(pt->fsname, fsname);
+	pt->next = NULL;
+	pt->auxdata = auxdata;
 }
 
-
-static int
-startdisk(d, checkit)
-	struct diskentry *d;
-	int (*checkit) __P((const char *, const char *, const char *, void *,
-	    pid_t *));
+startdisk(dk, checkit)
+	register struct disk *dk;
+	int (*checkit)();
 {
-	struct partentry *p = d->d_part.tqh_first;
-	int rv;
+	register struct part *pt = dk->part;
 
-	while ((rv = (*checkit)(p->p_type, p->p_devname, p->p_mntpt,
-	    p->p_auxarg, &d->d_pid)) != 0 && nrun > 0)
-		sleep(10);
+	dk->pid = fork();
+	if (dk->pid < 0) {
+		perror("fork");
+		return (8);
+	}
+	if (dk->pid == 0)
+		exit((*checkit)(pt->name, pt->fsname, pt->auxdata, 1));
+	nrun++;
+	return (0);
+}
 
-	if (rv == 0)
-		nrun++;
+char *
+blockcheck(name)
+	char *name;
+{
+	struct stat stslash, stblock, stchar;
+	char *raw;
+	int retried = 0;
 
-	return rv;
+	hotroot = 0;
+	if (stat("/", &stslash) < 0) {
+		perror("/");
+		printf("Can't stat root\n");
+		return (0);
+	}
+retry:
+	if (stat(name, &stblock) < 0) {
+		perror(name);
+		printf("Can't stat %s\n", name);
+		return (0);
+	}
+	if ((stblock.st_mode & S_IFMT) == S_IFBLK) {
+		if (stslash.st_dev == stblock.st_rdev)
+			hotroot++;
+		raw = rawname(name);
+		if (stat(raw, &stchar) < 0) {
+			perror(raw);
+			printf("Can't stat %s\n", raw);
+			return (name);
+		}
+		if ((stchar.st_mode & S_IFMT) == S_IFCHR) {
+			return (raw);
+		} else {
+			printf("%s is not a character device\n", raw);
+			return (name);
+		}
+	} else if ((stblock.st_mode & S_IFMT) == S_IFCHR && !retried) {
+		name = unrawname(name);
+		retried++;
+		goto retry;
+	}
+	printf("Can't make sense out of name %s\n", name);
+	return (0);
+}
+
+char *
+unrawname(name)
+	char *name;
+{
+	char *dp;
+	struct stat stb;
+
+	if ((dp = rindex(name, '/')) == 0)
+		return (name);
+	if (stat(name, &stb) < 0)
+		return (name);
+	if ((stb.st_mode & S_IFMT) != S_IFCHR)
+		return (name);
+	if (dp[1] != 'r')
+		return (name);
+	(void)strcpy(&dp[1], &dp[2]);
+	return (name);
+}
+
+char *
+rawname(name)
+	char *name;
+{
+	static char rawbuf[32];
+	char *dp;
+
+	if ((dp = rindex(name, '/')) == 0)
+		return (0);
+	*dp = 0;
+	(void)strcpy(rawbuf, name);
+	*dp = '/';
+	(void)strcat(rawbuf, "/r");
+	(void)strcat(rawbuf, &dp[1]);
+	return (rawbuf);
 }

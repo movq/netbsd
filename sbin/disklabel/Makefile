@@ -1,20 +1,16 @@
-#	$NetBSD: Makefile,v 1.29 1997/10/18 07:28:47 mark Exp $
-#	@(#)Makefile	8.2 (Berkeley) 3/17/94
+#	@(#)Makefile	5.6 (Berkeley) 4/1/91
 
 PROG=	disklabel
-SRCS=	disklabel.c dkcksum.c interact.c
-MAN=	disklabel.5 disklabel.8
-LDADD+= -lutil
-DPADD+= ${LIBUTIL}
+SRCS=	disklabel.c dkcksum.c
+MAN8=	disklabel.0
+BINGRP=operator
+BINMODE=2550
+CLEANFILES=disklabel.5.0
 
-# XXX new boot blocks don't need this; we'll leave it for a while. --pm
-#.if (${MACHINE} == "i386")
-#CPPFLAGS+= -DNUMBOOT=2
-#.endif
+all: disklabel.5.0
 
-.if (${MACHINE} == "hp300") || (${MACHINE} == "vax") \
-	|| (${MACHINE} == "arm32")
-CPPFLAGS+= -DNUMBOOT=1
-.endif
+beforeinstall:
+	install -c -o ${MANOWN} -g ${MANGRP} -m ${MANMODE} disklabel.5.0 \
+	    ${DESTDIR}${MANDIR}5/disklabel.0
 
 .include <bsd.prog.mk>

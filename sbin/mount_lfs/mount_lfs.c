@@ -1,5 +1,3 @@
-/*	$NetBSD: mount_lfs.c,v 1.6 1997/09/16 12:29:21 lukem Exp $	*/
-
 /*-
  * Copyright (c) 1993, 1994
  *	The Regents of the University of California.  All rights reserved.
@@ -33,18 +31,15 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1993, 1994\n\
-	The Regents of the University of California.  All rights reserved.\n");
+static char copyright[] =
+"@(#) Copyright (c) 1993, 1994\n\
+	The Regents of the University of California.  All rights reserved.\n";
 #endif /* not lint */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)mount_lfs.c	8.4 (Berkeley) 4/26/95";
-#else
-__RCSID("$NetBSD: mount_lfs.c,v 1.6 1997/09/16 12:29:21 lukem Exp $");
-#endif
+/*static char sccsid[] = "from: @(#)mount_lfs.c	8.3 (Berkeley) 3/27/94";*/
+static char *rcsid = "$Id: mount_lfs.c,v 1.1 1994/06/08 19:15:57 mycroft Exp $";
 #endif /* not lint */
 
 #include <sys/param.h>
@@ -59,15 +54,14 @@ __RCSID("$NetBSD: mount_lfs.c,v 1.6 1997/09/16 12:29:21 lukem Exp $");
 #include "mntopts.h"
 #include "pathnames.h"
 
-const struct mntopt mopts[] = {
+struct mntopt mopts[] = {
 	MOPT_STDOPTS,
 	MOPT_UPDATE,
 	{ NULL }
 };
 
-int	main __P((int, char *[]));
-void	invoke_cleaner __P((char *));
 void	usage __P((void));
+void	invoke_cleaner __P((char *));
 
 int short_rds, cleaner_debug;
 
@@ -82,7 +76,7 @@ main(argc, argv)
 
 	options = NULL;
 	mntflags = noclean = 0;
-	while ((ch = getopt(argc, argv, "dno:s")) != -1)
+	while ((ch = getopt(argc, argv, "dno:s")) != EOF)
 		switch (ch) {
 		case 'd':
 			cleaner_debug = 1;
@@ -91,7 +85,7 @@ main(argc, argv)
 			noclean = 1;
 			break;
 		case 'o':
-			getmntopts(optarg, mopts, &mntflags, 0);
+			getmntopts(optarg, mopts, &mntflags);
 			break;
 		case 's':
 			short_rds = 1;
@@ -117,7 +111,7 @@ main(argc, argv)
 		args.export.ex_flags = 0;
 
 	if (mount(MOUNT_LFS, fs_name, mntflags, &args))
-		err(1, "%s", "");
+		err(1, NULL);
 
 	if (!noclean)
 		invoke_cleaner(fs_name);

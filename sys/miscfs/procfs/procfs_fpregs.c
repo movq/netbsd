@@ -1,5 +1,3 @@
-/*	$NetBSD: procfs_fpregs.c,v 1.6 1997/08/27 08:52:52 thorpej Exp $	*/
-
 /*
  * Copyright (c) 1993 Jan-Simon Pendry
  * Copyright (c) 1993
@@ -36,7 +34,9 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)procfs_fpregs.c	8.2 (Berkeley) 6/15/94
+ *	from: Id: procfs_regs.c,v 3.2 1993/12/15 09:40:17 jsp Exp
+ *	from: @(#)procfs_fpregs.c	8.1 (Berkeley) 1/27/94
+ *	$Id: procfs_fpregs.c,v 1.1 1994/06/08 11:33:35 mycroft Exp $
  */
 
 #include <sys/param.h>
@@ -51,8 +51,8 @@
 
 int
 procfs_dofpregs(curp, p, pfs, uio)
-	struct proc *curp;		/* tracer */
-	struct proc *p;			/* traced */
+	struct proc *curp;
+	struct proc *p;
 	struct pfsnode *pfs;
 	struct uio *uio;
 {
@@ -62,9 +62,6 @@ procfs_dofpregs(curp, p, pfs, uio)
 	char *kv;
 	int kl;
 
-	if ((error = procfs_checkioperm(curp, p)) != 0)
-		return (error);
-
 	kl = sizeof(r);
 	kv = (char *) &r;
 
@@ -72,8 +69,6 @@ procfs_dofpregs(curp, p, pfs, uio)
 	kl -= uio->uio_offset;
 	if (kl > uio->uio_resid)
 		kl = uio->uio_resid;
-
-	PHOLD(p);
 
 	if (kl < 0)
 		error = EINVAL;
@@ -87,8 +82,6 @@ procfs_dofpregs(curp, p, pfs, uio)
 		else
 			error = process_write_fpregs(p, &r);
 	}
-
-	PRELE(p);
 
 	uio->uio_offset = 0;
 	return (error);

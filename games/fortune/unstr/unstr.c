@@ -1,8 +1,6 @@
-/*	$NetBSD: unstr.c,v 1.4 1997/10/11 07:59:09 lukem Exp $	*/
-
 /*-
- * Copyright (c) 1991, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1991 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Ken Arnold.
@@ -36,18 +34,14 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1991, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+char copyright[] =
+"@(#) Copyright (c) 1991 The Regents of the University of California.\n\
+ All rights reserved.\n";
 #endif /* not lint */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)unstr.c	8.1 (Berkeley) 5/31/93";
-#else
-__RCSID("$NetBSD: unstr.c,v 1.4 1997/10/11 07:59:09 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)unstr.c	5.8 (Berkeley) 4/8/91";
 #endif /* not lint */
 
 /*
@@ -63,14 +57,11 @@ __RCSID("$NetBSD: unstr.c,v 1.4 1997/10/11 07:59:09 lukem Exp $");
  *	Ken Arnold		Aug 13, 1978
  */
 
-# include	<sys/types.h>
-# include	<sys/param.h>
 # include	<machine/endian.h>
-# include	<ctype.h>
-# include	<err.h>
-# include	<stdio.h>
-# include	<string.h>
+# include	<sys/param.h>
 # include	"strfile.h"
+# include	<stdio.h>
+# include	<ctype.h>
 
 # ifndef MAXPATHLEN
 # define	MAXPATHLEN	1024
@@ -82,23 +73,24 @@ char	*Infile,			/* name of input file */
 
 FILE	*Inf, *Dataf;
 
-void	getargs __P((char *[]));
-int	main __P((int, char *[]));
-void	order_unstr __P((STRFILE *));
+char	*strcat(), *strcpy();
 
 /* ARGSUSED */
-int
 main(ac, av)
-	int	ac;
-	char	**av;
+int	ac;
+char	**av;
 {
 	static STRFILE	tbl;		/* description table */
 
 	getargs(av);
-	if ((Inf = fopen(Infile, "r")) == NULL)
-		err(1, "fopen %s", Infile);
-	if ((Dataf = fopen(Datafile, "r")) == NULL)
-		err(1, "fopen %s", Datafile);
+	if ((Inf = fopen(Infile, "r")) == NULL) {
+		perror(Infile);
+		exit(1);
+	}
+	if ((Dataf = fopen(Datafile, "r")) == NULL) {
+		perror(Datafile);
+		exit(1);
+	}
 	(void) fread((char *) &tbl, sizeof tbl, 1, Dataf);
 	tbl.str_version = ntohl(tbl.str_version);
 	tbl.str_numstr = ntohl(tbl.str_numstr);
@@ -116,9 +108,8 @@ main(ac, av)
 	exit(0);
 }
 
-void
 getargs(av)
-	char	*av[];
+register char	*av[];
 {
 	if (!*++av) {
 		(void) fprintf(stderr, "usage: unstr datafile\n");
@@ -129,14 +120,13 @@ getargs(av)
 	(void) strcat(Datafile, ".dat");
 }
 
-void
 order_unstr(tbl)
-	STRFILE	*tbl;
+register STRFILE	*tbl;
 {
-	int	i;
-	char	*sp;
-	off_t	pos;
-	char	buf[BUFSIZ];
+	register int	i;
+	register char	*sp;
+	auto off_t	pos;
+	char		buf[BUFSIZ];
 
 	for (i = 0; i < tbl->str_numstr; i++) {
 		(void) fread((char *) &pos, 1, sizeof pos, Dataf);

@@ -1,8 +1,6 @@
-/*	$NetBSD: caesar.c,v 1.6 1997/10/11 02:40:39 lukem Exp $	*/
-
 /*
- * Copyright (c) 1989, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1989 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Rick Adams.
@@ -41,27 +39,19 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1989, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+char copyright[] =
+"@(#) Copyright (c) 1989 The Regents of the University of California.\n\
+ All rights reserved.\n";
 #endif /* not lint */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)caesar.c	8.1 (Berkeley) 5/31/93";
-#else
-__RCSID("$NetBSD: caesar.c,v 1.6 1997/10/11 02:40:39 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)caesar.c	5.4 (Berkeley) 6/1/90";
 #endif /* not lint */
 
-#include <ctype.h>
-#include <err.h>
-#include <errno.h>
 #include <math.h>
 #include <stdio.h>
-#include <string.h>
-#include <stdlib.h>
+#include <ctype.h>
 #include <unistd.h>
 
 #define	LINELENGTH	2048
@@ -79,35 +69,35 @@ double stdf[26] = {
 	2.62, 0.81, 1.88, 0.23,  2.07, 0.06,
 };
 
-
-int	main __P((int, char *[]));
-void	printit __P((char *));
-
-int
 main(argc, argv)
 	int argc;
 	char **argv;
 {
-	int ch, dot, i, nread, winnerdot;
-	char *inbuf;
+	extern int errno;
+	register int ch, dot, i, nread, winnerdot;
+	register char *inbuf;
 	int obs[26], try, winner;
+	char *malloc(), *strerror();
 
-	winnerdot = 0;
 	if (argc > 1)
 		printit(argv[1]);
 
-	if (!(inbuf = malloc(LINELENGTH)))
-		errx(1, "out of memory");
+	if (!(inbuf = malloc(LINELENGTH))) {
+		(void)fprintf(stderr, "caesar: out of memory.\n");
+		exit(1);
+	}
 
 	/* adjust frequency table to weight low probs REAL low */
 	for (i = 0; i < 26; ++i)
 		stdf[i] = log(stdf[i]) + log(26.0 / 100.0);
 
 	/* zero out observation table */
-	memset(obs, 0, 26 * sizeof(int));
+	bzero(obs, 26 * sizeof(int));
 
-	if ((nread = read(STDIN_FILENO, inbuf, LINELENGTH)) < 0)
-		err(1, "reading from stdin");
+	if ((nread = read(STDIN_FILENO, inbuf, LINELENGTH)) < 0) {
+		(void)fprintf(stderr, "caesar: %s\n", strerror(errno));
+		exit(1);
+	}
 	for (i = nread; i--;) {
 		ch = inbuf[i];
 		if (islower(ch))
@@ -141,20 +131,23 @@ main(argc, argv)
 		}
 		if (nread < LINELENGTH)
 			break;
-		if ((nread = read(STDIN_FILENO, inbuf, LINELENGTH)) < 0)
-			err(1, "reading from stdin");
+		if ((nread = read(STDIN_FILENO, inbuf, LINELENGTH)) < 0) {
+			(void)fprintf(stderr, "caesar: %s\n", strerror(errno));
+			exit(1);
+		}
 	}
 	exit(0);
 }
 
-void
 printit(arg)
 	char *arg;
 {
-	int ch, rot;
+	register int ch, rot;
 
-	if ((rot = atoi(arg)) < 0)
-		errx(1, "bad rotation value.");
+	if ((rot = atoi(arg)) < 0) {
+		(void)fprintf(stderr, "caesar: bad rotation value.\n");
+		exit(1);
+	}
 	while ((ch = getchar()) != EOF)
 		putchar(ROTATE(ch, rot));
 	exit(0);

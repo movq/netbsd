@@ -1,8 +1,6 @@
-/*	$NetBSD: init_field.c,v 1.5 1997/10/12 14:09:57 lukem Exp $	*/
-
 /*
- * Copyright (c) 1980, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1980 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,13 +31,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)init_field.c	8.1 (Berkeley) 5/31/93";
-#else
-__RCSID("$NetBSD: init_field.c,v 1.5 1997/10/12 14:09:57 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)init_field.c	5.4 (Berkeley) 6/1/90";
 #endif /* not lint */
 
 # include	"robots.h"
@@ -49,10 +42,11 @@ __RCSID("$NetBSD: init_field.c,v 1.5 1997/10/12 14:09:57 lukem Exp $");
  *	Lay down the initial pattern whih is constant across all levels,
  *	and initialize all the global variables.
  */
-void
 init_field()
 {
-	int		i;
+	register int	i;
+	register WINDOW	*wp;
+	register int	j;
 	static bool	first = TRUE;
 	static char	*desc[] = {
 				"Directions:",
@@ -82,6 +76,7 @@ init_field()
 
 	Dead = FALSE;
 	Waiting = FALSE;
+	flushok(stdscr, TRUE);
 	Score = 0;
 
 	erase();

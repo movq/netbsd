@@ -1,5 +1,3 @@
-/*	$NetBSD: divdi3.c,v 1.4 1997/07/13 20:01:43 christos Exp $	*/
-
 /*-
  * Copyright (c) 1992, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -37,13 +35,9 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char sccsid[] = "@(#)divdi3.c	8.1 (Berkeley) 6/4/93";
-#else
-__RCSID("$NetBSD: divdi3.c,v 1.4 1997/07/13 20:01:43 christos Exp $");
-#endif
+/*static char *sccsid = "from: @(#)divdi3.c	8.1 (Berkeley) 6/4/93";*/
+static char *rcsid = "$Id: divdi3.c,v 1.1 1993/09/16 06:05:52 mycroft Exp $";
 #endif /* LIBC_SCCS and not lint */
 
 #include "quad.h"
@@ -57,18 +51,16 @@ __divdi3(a, b)
 	quad_t a, b;
 {
 	u_quad_t ua, ub, uq;
-	int neg = 0;
-
-	ua = a;
-	ub = b;
+	int neg;
 
 	if (a < 0)
-		ua = -ua, neg ^= 1;
+		ua = -(u_quad_t)a, neg = 1;
+	else
+		ua = a, neg = 0;
 	if (b < 0)
-		ub = -ub, neg ^= 1;
-
+		ub = -(u_quad_t)b, neg ^= 1;
+	else
+		ub = b;
 	uq = __qdivrem(ua, ub, (u_quad_t *)0);
-	if (neg)
-		uq = - uq;
-	return uq;
+	return (neg ? -uq : uq);
 }

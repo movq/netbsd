@@ -1,5 +1,3 @@
-/*	$NetBSD: muldi3.c,v 1.3 1997/07/13 20:01:51 christos Exp $	*/
-
 /*-
  * Copyright (c) 1992, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -37,13 +35,9 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char sccsid[] = "@(#)muldi3.c	8.1 (Berkeley) 6/4/93";
-#else
-__RCSID("$NetBSD: muldi3.c,v 1.3 1997/07/13 20:01:51 christos Exp $");
-#endif
+/*static char *sccsid = "from: @(#)muldi3.c	8.1 (Berkeley) 6/4/93";*/
+static char *rcsid = "$Id: muldi3.c,v 1.1 1993/09/16 06:06:05 mycroft Exp $";
 #endif /* LIBC_SCCS and not lint */
 
 #include "quad.h"

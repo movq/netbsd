@@ -1,5 +1,3 @@
-/*	$NetBSD: ftp.h,v 1.3 1994/10/26 00:56:43 cgd Exp $	*/
-
 /*
  * Copyright (c) 1983, 1989 Regents of the University of California.
  * All rights reserved.

@@ -1,8 +1,6 @@
-/*	$NetBSD: ns_ntoa.c,v 1.7 1997/07/18 04:55:59 thorpej Exp $	*/
-
 /*
- * Copyright (c) 1986, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1986 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,35 +31,29 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char sccsid[] = "@(#)ns_ntoa.c	8.1 (Berkeley) 6/4/93";
-#else
-__RCSID("$NetBSD: ns_ntoa.c,v 1.7 1997/07/18 04:55:59 thorpej Exp $");
-#endif
+static char sccsid[] = "@(#)ns_ntoa.c	6.6 (Berkeley) 2/24/91";
 #endif /* LIBC_SCCS and not lint */
 
 #include <sys/param.h>
 #include <netns/ns.h>
 #include <stdio.h>
 
-static char *spectHex __P((char *));
-
 char *
 ns_ntoa(addr)
 	struct ns_addr addr;
 {
 	static char obuf[40];
-	union { union ns_net net_e; u_int32_t long_e; } net;
-	u_int16_t port = htons(addr.x_port);
+	union { union ns_net net_e; u_long long_e; } net;
+	u_short port = htons(addr.x_port);
 	register char *cp;
 	char *cp2;
-	register u_int8_t *up = addr.x_host.c_host;
-	u_int8_t *uplim = up + 6;
+	register u_char *up = addr.x_host.c_host;
+	u_char *uplim = up + 6;
+	static char *spectHex();
 
 	net.net_e = addr.x_net;
-	sprintf(obuf, "%x", ntohl(net.long_e));
+	sprintf(obuf, "%lx", ntohl(net.long_e));
 	cp = spectHex(obuf);
 	cp2 = cp + 1;
 	while (*up==0 && up < uplim) up++;

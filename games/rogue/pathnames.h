@@ -1,8 +1,6 @@
-/*	$NetBSD: pathnames.h,v 1.3 1995/04/22 10:27:59 cgd Exp $	*/
-
 /*-
- * Copyright (c) 1990, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1990 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,7 +30,9 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)pathnames.h	8.1 (Berkeley) 5/31/93
+ *	@(#)pathnames.h	5.1 (Berkeley) 6/1/90
  */
 
 #define	_PATH_SCOREFILE	"/var/games/rogue.scores"
+#define	_PATH_LOCKFILE	"/var/games/rogue.lock"
+

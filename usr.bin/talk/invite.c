@@ -1,8 +1,6 @@
-/*	$NetBSD: invite.c,v 1.4 1997/10/20 00:23:23 lukem Exp $	*/
-
 /*
- * Copyright (c) 1983, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1983 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,21 +31,20 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)invite.c	8.1 (Berkeley) 6/6/93";
-#endif
-__RCSID("$NetBSD: invite.c,v 1.4 1997/10/20 00:23:23 lukem Exp $");
+static char sccsid[] = "@(#)invite.c	5.8 (Berkeley) 3/1/91";
 #endif /* not lint */
 
-#include "talk.h"
+#include <sys/types.h>
+#include <sys/socket.h>
 #include <sys/time.h>
 #include <signal.h>
+#include <netinet/in.h>
+#include <protocols/talkd.h>
 #include <errno.h>
 #include <setjmp.h>
-#include <unistd.h>
 #include "talk_ctl.h"
+#include "talk.h"
 
 /*
  * There wasn't an invitation waiting, so send a request containing
@@ -62,12 +59,12 @@ __RCSID("$NetBSD: invite.c,v 1.4 1997/10/20 00:23:23 lukem Exp $");
  * invitations.
  */
 int	local_id, remote_id;
+void	re_invite();
 jmp_buf invitebuf;
 
-void
 invite_remote()
 {
-	int new_sockt;
+	int nfd, read_mask, template, new_sockt;
 	struct itimerval itimer;
 	CTL_RESPONSE response;
 
@@ -121,8 +118,7 @@ invite_remote()
  * Routine called on interupt to re-invite the callee
  */
 void
-re_invite(dummy)
-	int dummy;
+re_invite()
 {
 
 	message("Ringing your party again");
@@ -149,7 +145,6 @@ static	char *answers[] = {
 /*
  * Transmit the invitation and process the response
  */
-void
 announce_invite()
 {
 	CTL_RESPONSE response;
@@ -170,7 +165,6 @@ announce_invite()
 /*
  * Tell the daemon to remove your invitation
  */
-void
 send_delete()
 {
 

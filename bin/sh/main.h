@@ -1,8 +1,6 @@
-/*	$NetBSD: main.h,v 1.8 1995/05/11 21:29:27 christos Exp $	*/
-
 /*-
- * Copyright (c) 1991, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1991 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Kenneth Almquist.
@@ -35,13 +33,16 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)main.h	8.2 (Berkeley) 5/4/95
+ *	@(#)main.h	5.1 (Berkeley) 3/7/91
  */
 
 extern int rootpid;	/* pid of main shell */
 extern int rootshell;	/* true if we aren't a child of the main shell */
 
-void readcmdfile __P((char *));
-void cmdloop __P((int));
-int dotcmd __P((int, char **));
-int exitcmd __P((int, char **));
+#ifdef __STDC__
+void readcmdfile(char *);
+void cmdloop(int);
+#else
+void readcmdfile();
+void cmdloop();
+#endif

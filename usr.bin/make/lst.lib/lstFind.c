@@ -1,8 +1,6 @@
-/*	$NetBSD: lstFind.c,v 1.8 1997/09/28 03:31:23 lukem Exp $	*/
-
 /*
- * Copyright (c) 1988, 1989, 1990, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1988, 1989, 1990 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Adam de Boor.
@@ -36,18 +34,9 @@
  * SUCH DAMAGE.
  */
 
-#ifdef MAKE_BOOTSTRAP
-static char rcsid[] = "$NetBSD: lstFind.c,v 1.8 1997/09/28 03:31:23 lukem Exp $";
-#else
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)lstFind.c	8.1 (Berkeley) 6/6/93";
-#else
-__RCSID("$NetBSD: lstFind.c,v 1.8 1997/09/28 03:31:23 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)lstFind.c	5.3 (Berkeley) 6/1/90";
 #endif /* not lint */
-#endif
 
 /*-
  * LstFind.c --
@@ -74,7 +63,7 @@ LstNode
 Lst_Find (l, d, cProc)
     Lst		l;
     ClientData	d;
-    int		(*cProc) __P((ClientData, ClientData));
+    int		(*cProc)();
 {
     return (Lst_FindFrom (l, Lst_First(l), d, cProc));
 }

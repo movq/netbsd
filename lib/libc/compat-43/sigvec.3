@@ -29,11 +29,10 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\"     from: @(#)sigvec.2	6.7 (Berkeley) 4/29/91
-.\"	$NetBSD: sigvec.3,v 1.8 1997/05/12 07:37:38 mikel Exp $
+.\"     @(#)sigvec.2	6.7 (Berkeley) 4/29/91
 .\"
 .Dd April 29, 1991
-.Dt SIGVEC 3
+.Dt SIGVEC 2
 .Os BSD 4
 .Sh NAME
 .Nm sigvec
@@ -50,12 +49,11 @@ struct sigvec {
 .Fn sigvec "int sig" "struct sigvec *vec" "struct sigvec *ovec"
 .Sh DESCRIPTION
 .Bf -symbolic
-This interface is made obsolete by
-.Xr sigaction 2 .
+This interface is made obsolete by sigaction(2).
 .Ef
 .Pp
 The system defines a set of signals that may be delivered to a process.
-Signal delivery resembles the occurrence of a hardware interrupt:
+Signal delivery resembles the occurence of a hardware interrupt:
 the signal is blocked from further occurrence, the current process 
 context is saved, and a new one is built.  A process may specify a
 .Em handler
@@ -82,9 +80,9 @@ defines the set of signals currently blocked from delivery
 to a process.  The signal mask for a process is initialized
 from that of its parent (normally 0).  It
 may be changed with a
-.Xr sigblock 3
+.Xr sigblock 2
 or
-.Xr sigsetmask 3
+.Xr sigsetmask 2
 call, or when a signal is delivered to the process.
 .Pp
 When a signal
@@ -104,9 +102,9 @@ must arrange to restore the previous context itself.
 When a signal is delivered to a process a new signal mask is
 installed for the duration of the process' signal handler
 (or until a
-.Xr sigblock 3
+.Xr sigblock
 or
-.Xr sigsetmask 3
+.Xr sigsetmask
 call is made).
 This mask is formed by taking the current signal mask,
 adding the signal to be delivered, and 
@@ -261,7 +259,7 @@ is set to indicated the reason.
 .Fn Sigvec
 will fail and no new signal handler will be installed if one
 of the following occurs:
-.Bl -tag -width Er
+.Bl -tag -width [EINVAL]
 .It Bq Er EFAULT
 Either
 .Fa vec
@@ -279,19 +277,20 @@ or
 .Dv SIGSTOP .
 .El
 .Sh SEE ALSO
-.Xr kill 1 ,
-.Xr kill 2 ,
-.Xr ptrace 2 ,
 .Xr sigaction 2 ,
+.Xr kill 1 ,
+.Xr ptrace 2 ,
+.Xr kill 2 ,
 .Xr sigprocmask 2 ,
-.Xr sigstack 2 ,
 .Xr sigsuspend 2 ,
-.Xr setjmp 3 ,
-.Xr sigblock 3 ,
-.Xr siginterrupt 3 ,
-.Xr sigpause 3 ,
-.Xr sigsetmask 3 ,
+.Xr sigblock 2 ,
+.Xr sigsetmask 2 ,
+.Xr sigpause 2 ,
+.Xr sigstack 2 ,
+.Xr sigvec 2 ,
 .Xr sigsetops 3 ,
+.Xr setjmp 3 ,
+.Xr siginterrupt 3 ,
 .Xr tty 4
 .Sh EXAMPLE
 On the

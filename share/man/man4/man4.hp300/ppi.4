@@ -1,7 +1,5 @@
-.\"	$NetBSD: ppi.4,v 1.4 1997/10/19 12:57:25 mrg Exp $
-.\"
-.\" Copyright (c) 1990, 1991, 1993
-.\"	The Regents of the University of California.  All rights reserved.
+.\" Copyright (c) 1990, 1991 The Regents of the University of California.
+.\" All rights reserved.
 .\"
 .\" This code is derived from software contributed to Berkeley by
 .\" the Systems Programming Group of the University of Utah Computer
@@ -35,9 +33,9 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\"     from: @(#)ppi.4	8.1 (Berkeley) 6/9/93
+.\"     @(#)ppi.4	5.2 (Berkeley) 3/27/91
 .\"
-.Dd June 9, 1993
+.Dd March 27, 1991
 .Dt PPI 4 hp300
 .Os
 .Sh NAME
@@ -72,6 +70,11 @@ The device files appear as follows:
 None.
 .Sh SEE ALSO
 .Xr hpib 4 .
+.Sh HISTORY
+The
+.Nm
+interface
+.Ud
 .Sh BUGS
 This driver is very primitive, it handshakes data out byte by byte.
 It should use

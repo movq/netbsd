@@ -1,8 +1,6 @@
-/*	$NetBSD: flush_in.c,v 1.5 1997/10/12 14:09:56 lukem Exp $	*/
-
 /*
- * Copyright (c) 1980, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1980 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,23 +31,21 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)flush_in.c	8.1 (Berkeley) 5/31/93";
-#else
-__RCSID("$NetBSD: flush_in.c,v 1.5 1997/10/12 14:09:56 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)flush_in.c	5.4 (Berkeley) 6/1/90";
 #endif /* not lint */
 
-# include	"robots.h"
+# include	<curses.h>
 
 /*
  * flush_in:
  *	Flush all pending input.
  */
-void
 flush_in()
 {
-	tcflush(fileno(stdin), TCIFLUSH);
+# ifdef TIOCFLUSH
+	ioctl(fileno(stdin), TIOCFLUSH, NULL);
+# else TIOCFLUSH
+	crmode();
+# endif TIOCFLUSH
 }

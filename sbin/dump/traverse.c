@@ -1,8 +1,6 @@
-/*	$NetBSD: traverse.c,v 1.19 1997/09/16 06:41:23 lukem Exp $	*/
-
 /*-
- * Copyright (c) 1980, 1988, 1991, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1980, 1988, 1991 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,55 +31,34 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)traverse.c	8.7 (Berkeley) 6/15/95";
-#else
-__RCSID("$NetBSD: traverse.c,v 1.19 1997/09/16 06:41:23 lukem Exp $");
-#endif
+/* from: static char sccsid[] = "@(#)traverse.c	5.21 (Berkeley) 7/19/92"; */
+static char *rcsid = "$Id: traverse.c,v 1.1 1993/12/22 10:24:59 cgd Exp $";
 #endif /* not lint */
 
+#ifdef sunos
+#include <stdio.h>
+#include <ctype.h>
 #include <sys/param.h>
+#include <ufs/fs.h>
+#else
+#include <sys/param.h>
+#include <ufs/fs.h>
+#endif
 #include <sys/time.h>
 #include <sys/stat.h>
-#ifdef sunos
-#include <sys/vnode.h>
-
-#include <ufs/fs.h>
-#include <ufs/fsdir.h>
-#include <ufs/inode.h>
-#else
-#include <ufs/ufs/dir.h>
-#include <ufs/ufs/dinode.h>
-#include <ufs/ffs/fs.h>
-#endif
-
+#include <ufs/dir.h>
+#include <ufs/dinode.h>
 #include <protocols/dumprestore.h>
-
-#include <ctype.h>
-#include <errno.h>
-#include <fts.h>
-#include <stdio.h>
 #ifdef __STDC__
-#include <string.h>
 #include <unistd.h>
+#include <string.h>
 #endif
-
 #include "dump.h"
 
+void	dmpindir();
 #define	HASDUMPEDFILE	0x1
 #define	HASSUBDIRS	0x2
-
-#ifdef	FS_44INODEFMT
-typedef	quad_t fsizeT;
-#else
-typedef	int32_t fsizeT;
-#endif
-
-static	int dirindir __P((ino_t ino, daddr_t blkno, int level, long *size));
-static	void dmpindir __P((ino_t ino, daddr_t blk, int level, fsizeT *size));
-static	int searchdir __P((ino_t ino, daddr_t blkno, long size, long filesize));
 
 /*
  * This is an estimation of the number of TP_BSIZE blocks in the file.
@@ -92,7 +69,7 @@ static	int searchdir __P((ino_t ino, daddr_t blkno, long size, long filesize));
  */
 long
 blockest(dp)
-	struct dinode *dp;
+	register struct dinode *dp;
 {
 	long blkest, sizeest;
 
@@ -123,49 +100,6 @@ blockest(dp)
 	return (blkest + 1);
 }
 
-/* Auxiliary macro to pick up files changed since previous dump. */
-#define	CHANGEDSINCE(dp, t) \
-	((dp)->di_mtime >= (t) || (dp)->di_ctime >= (t))
-
-/* The WANTTODUMP macro decides whether a file should be dumped. */
-#ifdef UF_NODUMP
-#define	WANTTODUMP(dp) \
-	(CHANGEDSINCE(dp, spcl.c_ddate) && \
-	 (nonodump || ((dp)->di_flags & UF_NODUMP) != UF_NODUMP))
-#else
-#define	WANTTODUMP(dp) CHANGEDSINCE(dp, spcl.c_ddate)
-#endif
-
-/*
- * Determine if given inode should be dumped
- */
-void
-mapfileino(ino, tapesize, dirskipped)
-	ino_t ino;
-	long *tapesize;
-	int *dirskipped;
-{
-	int mode;
-	struct dinode *dp;
-
-	dp = getino(ino);
-	if ((mode = (dp->di_mode & IFMT)) == 0)
-		return;
-	SETINO(ino, usedinomap);
-	if (mode == IFDIR)
-		SETINO(ino, dumpdirmap);
-	if (WANTTODUMP(dp)) {
-		SETINO(ino, dumpinomap);
-		if (mode != IFREG && mode != IFDIR && mode != IFLNK)
-			*tapesize += 1;
-		else
-			*tapesize += blockest(dp);
-		return;
-	}
-	if (mode == IFDIR)
-		*dirskipped = 1;
-}
-
 /*
  * Dump pass 1.
  *
@@ -173,88 +107,43 @@ mapfileino(ino, tapesize, dirskipped)
  * that have been modified since the previous dump time. Also, find all
  * the directories in the filesystem.
  */
-int
-mapfiles(maxino, tapesize, disk, dirv)
+mapfiles(maxino, tapesize)
 	ino_t maxino;
 	long *tapesize;
-	char *disk;
-	char * const *dirv;
 {
+	register int mode;
+	register ino_t ino;
+	register struct dinode *dp;
 	int anydirskipped = 0;
 
-	if (dirv != NULL) {
-		char	 curdir[MAXPATHLEN];
-		FTS	*dirh;
-		FTSENT	*entry;
-		int	 d;
-
-		if (getcwd(curdir, sizeof(curdir)) == NULL) {
-			msg("Can't determine cwd: %s\n", strerror(errno));
-			dumpabort(0);
-		}
-		if ((dirh = fts_open(dirv, FTS_PHYSICAL|FTS_SEEDOT|FTS_XDEV,
-		    		    NULL)) == NULL) {
-			msg("fts_open failed: %s\n", strerror(errno));
-			dumpabort(0);
-		}
-		while ((entry = fts_read(dirh)) != NULL) {
-			switch (entry->fts_info) {
-			case FTS_DNR:		/* an error */
-			case FTS_ERR:
-			case FTS_NS:
-				msg("Can't fts_read %s: %s\n", entry->fts_path,
-				    strerror(errno));
-			case FTS_DP:		/* already seen dir */
+	for (ino = 0; ino < maxino; ino++) {
+		dp = getino(ino);
+		if ((mode = (dp->di_mode & IFMT)) == 0)
+			continue;
+		SETINO(ino, usedinomap);
+		if (mode == IFDIR)
+			SETINO(ino, dumpdirmap);
+#ifdef BSD44
+		if ((dp->di_mtime.ts_sec >= spcl.c_ddate ||
+		    dp->di_ctime.ts_sec >= spcl.c_ddate)
+#    ifndef sunos
+		    && (dp->di_flags & NODUMP) != NODUMP
+#    endif /* sunos */
+#else
+		if ((dp->di_mtime >= spcl.c_ddate ||
+		    dp->di_ctime >= spcl.c_ddate)
+#endif /* BSD44 */
+		    ) {
+			SETINO(ino, dumpinomap);
+			if (mode != IFREG && mode != IFDIR && mode != IFLNK) {
+				*tapesize += 1;
 				continue;
 			}
-			mapfileino(entry->fts_statp->st_ino, tapesize,
-			    &anydirskipped);
+			*tapesize += blockest(dp);
+			continue;
 		}
-		(void)fts_close(dirh);
-
-		/*
-		 * Add any parent directories
-		 */
-		for (d = 0 ; dirv[d] != NULL ; d++) {
-			char path[MAXPATHLEN];
-
-			if (dirv[d][0] != '/')
-				(void)snprintf(path, sizeof(path), "%s/%s",
-				    curdir, dirv[d]);
-			else
-				(void)snprintf(path, sizeof(path), "%s",
-				    dirv[d]);
-			while (strcmp(path, disk) != 0) {
-				char *p;
-				struct stat sb;
-
-				if (*path == '\0')
-					break;
-				if ((p = strrchr(path, '/')) == NULL)
-					break;
-				if (p == path)
-					break;
-				*p = '\0';
-				if (stat(path, &sb) == -1) {
-					msg("Can't stat %s: %s\n", path,
-					    strerror(errno));
-					break;
-				}
-				mapfileino(sb.st_ino, tapesize, &anydirskipped);
-			}
-		}
-
-		/*
-		 * Ensure that the root inode actually appears in the
-		 * file list for a subdir
-		 */
-		mapfileino(ROOTINO, tapesize, &anydirskipped);
-	} else {
-		ino_t ino;
-
-		for (ino = ROOTINO; ino < maxino; ino++) {
-			mapfileino(ino, tapesize, &anydirskipped);
-		}
+		if (mode == IFDIR)
+			anydirskipped = 1;
 	}
 	/*
 	 * Restore gets very upset if the root is not dumped,
@@ -276,24 +165,23 @@ mapfiles(maxino, tapesize, disk, dirv)
  * its parent may now qualify for the same treatment on this or a later
  * pass using this algorithm.
  */
-int
 mapdirs(maxino, tapesize)
 	ino_t maxino;
 	long *tapesize;
 {
-	struct	dinode *dp;
-	int i, isdir;
-	char *map;
-	ino_t ino;
+	register struct	dinode *dp;
+	register int i, isdir;
+	register char *map;
+	register ino_t ino;
 	long filesize;
 	int ret, change = 0;
 
-	isdir = 0;		/* XXX just to get gcc to shut up */
-	for (map = dumpdirmap, ino = 1; ino < maxino; ino++) {
-		if (((ino - 1) % NBBY) == 0)	/* map is offset by 1 */
+	for (map = dumpdirmap, ino = 0; ino < maxino; ) {
+		if ((ino % NBBY) == 0)
 			isdir = *map++;
 		else
 			isdir >>= 1;
+		ino++;
 		if ((isdir & 1) == 0 || TSTINO(ino, dumpinomap))
 			continue;
 		dp = getino(ino);
@@ -334,7 +222,6 @@ mapdirs(maxino, tapesize)
  * as directories. Quit as soon as any entry is found that will
  * require the directory to be dumped.
  */
-static int
 dirindir(ino, blkno, ind_level, filesize)
 	ino_t ino;
 	daddr_t blkno;
@@ -342,7 +229,7 @@ dirindir(ino, blkno, ind_level, filesize)
 	long *filesize;
 {
 	int ret = 0;
-	int i;
+	register int i;
 	daddr_t	idblk[MAXNINDIR];
 
 	bread(fsbtodb(sblock, blkno), (char *)idblk, (int)sblock->fs_bsize);
@@ -373,15 +260,14 @@ dirindir(ino, blkno, ind_level, filesize)
  * any of the entries are on the dump list and to see if the directory
  * contains any subdirectories.
  */
-static int
 searchdir(ino, blkno, size, filesize)
 	ino_t ino;
 	daddr_t blkno;
-	long size;
+	register long size;
 	long filesize;
 {
-	struct direct *dp;
-	long loc, ret = 0;
+	register struct direct *dp;
+	register long loc, ret = 0;
 	char dblk[MAXBSIZE];
 
 	bread(fsbtodb(sblock, blkno), dblk, (int)size);
@@ -423,11 +309,11 @@ searchdir(ino, blkno, size, filesize)
  */
 void
 dumpino(dp, ino)
-	struct dinode *dp;
+	register struct dinode *dp;
 	ino_t ino;
 {
 	int ind_level, cnt;
-	fsizeT size;
+	long size;
 	char buf[TP_BSIZE];
 
 	if (newtape) {
@@ -438,45 +324,56 @@ dumpino(dp, ino)
 	spcl.c_dinode = *dp;
 	spcl.c_type = TS_INODE;
 	spcl.c_count = 0;
-	switch (dp->di_mode & IFMT) {
 
-	case 0:
+	switch (IFTODT(dp->di_mode)) {
+
+	case DT_UNKNOWN:
 		/*
 		 * Freed inode.
 		 */
 		return;
 
-	case IFLNK:
+	case DT_LNK:
+#ifdef BSD44
 		/*
 		 * Check for short symbolic link.
 		 */
 		if (dp->di_size > 0 &&
-#ifdef FS_44INODEFMT
-		    (dp->di_size < sblock->fs_maxsymlinklen ||
-		     (sblock->fs_maxsymlinklen == 0 && dp->di_blocks == 0))) {
-#else
-		    dp->di_blocks == 0) {
-#endif
+		    dp->di_size < sblock->fs_maxsymlinklen) {
 			spcl.c_addr[0] = 1;
 			spcl.c_count = 1;
 			writeheader(ino);
-			memmove(buf, dp->di_shortlink, (u_long)dp->di_size);
+			bcopy((caddr_t)dp->di_shortlink, buf,
+			    (u_long)dp->di_size);
 			buf[dp->di_size] = '\0';
 			writerec(buf, 0);
 			return;
 		}
+#endif
+#ifdef NetBSD
+		if (DFASTLINK(*dp)) {
+			spcl.c_addr[0] = 1;
+			spcl.c_count = 1;
+			writeheader(ino);
+			bcopy((caddr_t)dp->di_symlink, buf,
+			    (u_long)dp->di_size);
+			buf[dp->di_size] = '\0';
+			writerec(buf, 0);
+			return;
+		}
+#endif
 		/* fall through */
 
-	case IFDIR:
-	case IFREG:
+	case DT_DIR:
+	case DT_REG:
 		if (dp->di_size > 0)
 			break;
 		/* fall through */
 
-	case IFIFO:
-	case IFSOCK:
-	case IFCHR:
-	case IFBLK:
+	case DT_FIFO:
+	case DT_SOCK:
+	case DT_CHR:
+	case DT_BLK:
 		writeheader(ino);
 		return;
 
@@ -484,6 +381,7 @@ dumpino(dp, ino)
 		msg("Warning: undefined file type 0%o\n", dp->di_mode & IFMT);
 		return;
 	}
+
 	if (dp->di_size > NDADDR * sblock->fs_bsize)
 		cnt = NDADDR * sblock->fs_frag;
 	else
@@ -501,12 +399,12 @@ dumpino(dp, ino)
 /*
  * Read indirect blocks, and pass the data blocks to be dumped.
  */
-static void
+void
 dmpindir(ino, blk, ind_level, size)
 	ino_t ino;
 	daddr_t blk;
 	int ind_level;
-	fsizeT *size;
+	long *size;
 {
 	int i, cnt;
 	daddr_t idblk[MAXNINDIR];
@@ -514,7 +412,7 @@ dmpindir(ino, blk, ind_level, size)
 	if (blk != 0)
 		bread(fsbtodb(sblock, blk), (char *)idblk, (int) sblock->fs_bsize);
 	else
-		memset(idblk, 0, (int)sblock->fs_bsize);
+		bzero((char *)idblk, (int)sblock->fs_bsize);
 	if (ind_level <= 0) {
 		if (*size < NINDIR(sblock) * sblock->fs_bsize)
 			cnt = howmany(*size, sblock->fs_fsize);
@@ -541,7 +439,7 @@ blksout(blkp, frags, ino)
 	int frags;
 	ino_t ino;
 {
-	daddr_t *bp;
+	register daddr_t *bp;
 	int i, j, count, blks, tbperdb;
 
 	blks = howmany(frags * sblock->fs_fsize, TP_BSIZE);
@@ -578,7 +476,7 @@ dumpmap(map, type, ino)
 	int type;
 	ino_t ino;
 {
-	int i;
+	register int i;
 	char *cp;
 
 	spcl.c_type = type;
@@ -595,14 +493,14 @@ void
 writeheader(ino)
 	ino_t ino;
 {
-	int32_t sum, cnt, *lp;
+	register long sum, cnt, *lp;
 
 	spcl.c_inumber = ino;
 	spcl.c_magic = NFS_MAGIC;
 	spcl.c_checksum = 0;
-	lp = (int32_t *)&spcl;
+	lp = (long *)&spcl;
 	sum = 0;
-	cnt = sizeof(union u_spcl) / (4 * sizeof(int32_t));
+	cnt = sizeof(union u_spcl) / (4 * sizeof(long));
 	while (--cnt >= 0) {
 		sum += *lp++;
 		sum += *lp++;
@@ -623,7 +521,7 @@ getino(inum)
 	curino = inum;
 	if (inum >= minino && inum < maxino)
 		return (&inoblock[inum - minino]);
-	bread(fsbtodb(sblock, ino_to_fsba(sblock, inum)), (char *)inoblock,
+	bread(fsbtodb(sblock, itod(sblock, inum)), (char *)inoblock,
 	    (int)sblock->fs_bsize);
 	minino = inum - (inum % INOPB(sblock));
 	maxino = minino + INOPB(sblock);
@@ -649,7 +547,7 @@ bread(blkno, buf, size)
 	extern int errno;
 
 loop:
-	if (lseek(diskfd, ((off_t)blkno << dev_bshift), 0) < 0)
+	if ((int)lseek(diskfd, ((off_t)blkno << dev_bshift), 0) < 0)
 		msg("bread: lseek fails\n");
 	if ((cnt = read(diskfd, buf, size)) == size)
 		return;
@@ -687,9 +585,9 @@ loop:
 	/*
 	 * Zero buffer, then try to read each sector of buffer separately.
 	 */
-	memset(buf, 0, size);
+	bzero(buf, size);
 	for (i = 0; i < size; i += dev_bsize, buf += dev_bsize, blkno++) {
-		if (lseek(diskfd, ((off_t)blkno << dev_bshift), 0) < 0)
+		if ((int)lseek(diskfd, ((off_t)blkno << dev_bshift), 0) < 0)
 			msg("bread: lseek2 fails!\n");
 		if ((cnt = read(diskfd, buf, (int)dev_bsize)) == dev_bsize)
 			continue;

@@ -1,5 +1,3 @@
-/*	$NetBSD: kern_lock.c,v 1.4 1997/10/09 12:49:44 mycroft Exp $	*/
-
 /* 
  * Copyright (c) 1995
  *	The Regents of the University of California.  All rights reserved.
@@ -42,7 +40,6 @@
 #include <sys/param.h>
 #include <sys/proc.h>
 #include <sys/lock.h>
-#include <sys/systm.h>
 #include <machine/cpu.h>
 
 /*
@@ -50,7 +47,7 @@
  * Locks provide shared/exclusive sychronization.
  */
 
-#ifdef LOCKDEBUG
+#ifdef DEBUG
 #define COUNT(p, x) if (p) (p)->p_locks += (x)
 #else
 #define COUNT(p, x)
@@ -115,7 +112,7 @@ void
 lockinit(lkp, prio, wmesg, timo, flags)
 	struct lock *lkp;
 	int prio;
-	const char *wmesg;
+	char *wmesg;
 	int timo;
 	int flags;
 {
@@ -395,8 +392,8 @@ lockmgr(lkp, flags, interlkp, p)
 		     lkp->lk_sharecount != 0 || lkp->lk_waitcount != 0); ) {
 			lkp->lk_flags |= LK_WAITDRAIN;
 			simple_unlock(&lkp->lk_interlock);
-			if ((error = tsleep((void *)&lkp->lk_flags,
-			    lkp->lk_prio, lkp->lk_wmesg, lkp->lk_timo)))
+			if (error = tsleep((void *)&lkp->lk_flags, lkp->lk_prio,
+			    lkp->lk_wmesg, lkp->lk_timo))
 				return (error);
 			if ((extflags) & LK_SLEEPFAIL)
 				return (ENOLCK);
@@ -428,7 +425,6 @@ lockmgr(lkp, flags, interlkp, p)
  * Print out information about state of a lock. Used by VOP_PRINT
  * routines to display ststus about contained locks.
  */
-void
 lockmgr_printinfo(lkp)
 	struct lock *lkp;
 {
@@ -443,7 +439,7 @@ lockmgr_printinfo(lkp)
 		printf(" with %d pending", lkp->lk_waitcount);
 }
 
-#if defined(LOCKDEBUG) && NCPUS == 1
+#if defined(DEBUG) && NCPUS == 1
 #include <sys/kernel.h>
 #include <vm/vm.h>
 #include <sys/sysctl.h>
@@ -476,9 +472,7 @@ _simple_lock(alp, id, l)
 			panic("%s:%d: simple_lock: lock held", id, l);
 		printf("%s:%d: simple_lock: lock held\n", id, l);
 		if (lockpausetime == 1) {
-#ifdef BACKTRACE
 			BACKTRACE(curproc);
-#endif
 		} else if (lockpausetime > 1) {
 			printf("%s:%d: simple_lock: lock held...", id, l);
 			tsleep(&lockpausetime, PCATCH | PPAUSE, "slock",
@@ -522,9 +516,7 @@ _simple_unlock(alp, id, l)
 			panic("%s:%d: simple_unlock: lock not held", id, l);
 		printf("%s:%d: simple_unlock: lock not held\n", id, l);
 		if (lockpausetime == 1) {
-#ifdef BACKTRACE
 			BACKTRACE(curproc);
-#endif
 		} else if (lockpausetime > 1) {
 			printf("%s:%d: simple_unlock: lock not held...", id, l);
 			tsleep(&lockpausetime, PCATCH | PPAUSE, "sunlock",
@@ -536,4 +528,4 @@ _simple_unlock(alp, id, l)
 	if (curproc)
 		curproc->p_simple_locks--;
 }
-#endif /* LOCKDEBUG && NCPUS == 1 */
+#endif /* DEBUG && NCPUS == 1 */

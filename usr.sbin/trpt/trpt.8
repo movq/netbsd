@@ -1,7 +1,5 @@
-.\"	$NetBSD: trpt.8,v 1.10 1997/10/17 13:57:46 lukem Exp $
-.\"
-.\" Copyright (c) 1983, 1991, 1993
-.\"	The Regents of the University of California.  All rights reserved.
+.\" Copyright (c) 1983, 1991 The Regents of the University of California.
+.\" All rights reserved.
 .\"
 .\" Redistribution and use in source and binary forms, with or without
 .\" modification, are permitted provided that the following conditions
@@ -31,26 +29,27 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\"     @(#)trpt.8	8.2 (Berkeley) 12/11/93
+.\"     @(#)trpt.8	6.5 (Berkeley) 3/16/91
 .\"
-.Dd December 11, 1993
+.Dd March 16, 1991
 .Dt TRPT 8
 .Os BSD 4.2
 .Sh NAME
 .Nm trpt
 .Nd transliterate protocol trace
 .Sh SYNOPSIS
-.Nm
+.Nm trpt
 .Op Fl a
 .Op Fl f
 .Op Fl j
 .Op Fl p Ar hex-address
 .Op Fl s
 .Op Fl t
-.Op Fl N Ar system
-.Op Fl M Ar core
+.Oo
+.Ar system Op Ar core
+.Oc
 .Sh DESCRIPTION
-.Nm
+.Nm Trpt
 interrogates the buffer of
 .Tn TCP
 trace records created
@@ -60,7 +59,7 @@ when a socket is marked for
 .Xr setsockopt 2 ) ,
 and prints a readable description of these records.
 When no options are supplied, 
-.Nm
+.Nm trpt
 prints all the trace records found in the system
 grouped according to
 .Tn TCP
@@ -92,20 +91,10 @@ sequencing information.
 in addition to the normal output,
 print the values for all timers at each
 point in the trace.
-.It Fl M Ar core
-Extract values associated with the name list from
-.Pa core
-instead of the default
-.Pa /dev/kmem .
-.It Fl N Ar system
-Extract the name list from
-.Pa system
-instead of the default
-.Pa /netbsd .
 .El
 .Pp
 The recommended use of
-.Nm
+.Nm trpt
 is as follows.
 Isolate the problem and enable debugging on the
 socket(s) involved in the connection.
@@ -115,7 +104,7 @@ associated with the sockets using the
 option to 
 .Xr netstat 1 .
 Then run
-.Nm
+.Nm trpt
 with the
 .Fl p
 option, supplying the associated
@@ -129,12 +118,15 @@ many sockets using the debugging option, the
 option may be useful in checking to see if
 any trace records are present for the socket in
 question.
+The
+.Pp
+If debugging is being performed on a system or
+core file other than the default, the last two
+arguments may be used to supplant the defaults.
 .Sh FILES
 .Bl -tag -width /dev/kmem -compact
+.It Pa /vmunix
 .It Pa /dev/kmem
-default kernel memory
-.It Pa /netbsd
-default system namelist
 .El
 .Sh SEE ALSO
 .Xr netstat 1 ,
@@ -149,7 +141,7 @@ others which should be self explanatory.
 .El
 .Sh BUGS
 Should also print the data for each input or output,
-but this is not saved in the trace record.
+but this is not saved in the race record.
 .Pp
 The output format is inscrutable and should be described
 here.

@@ -1,5 +1,3 @@
-/*	$NetBSD: getpagesize.c,v 1.7 1997/07/21 14:07:11 jtc Exp $	*/
-
 /*
  * Copyright (c) 1989, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -33,38 +31,23 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-#if 0
 static char sccsid[] = "@(#)getpagesize.c	8.1 (Berkeley) 6/4/93";
-#else
-__RCSID("$NetBSD: getpagesize.c,v 1.7 1997/07/21 14:07:11 jtc Exp $");
-#endif
 #endif /* LIBC_SCCS and not lint */
 
-#include "namespace.h"
 #include <sys/param.h>
 #include <sys/sysctl.h>
-#include <unistd.h>
-
-#ifdef __weak_alias
-__weak_alias(getpagesize,_getpagesize);
-#endif
 
 int
 getpagesize()
 {
-	static int pagsz;
+	int mib[2], value;
+	size_t size;
 
-	if (pagsz == 0) {
-		int mib[2];
-		size_t size;
-
-		mib[0] = CTL_HW;
-		mib[1] = HW_PAGESIZE;
-		size = sizeof pagsz;
-		if (sysctl(mib, 2, &pagsz, &size, NULL, 0) == -1)
-			return (-1);
-	}
-	return (pagsz);
+	mib[0] = CTL_HW;
+	mib[1] = HW_PAGESIZE;
+	size = sizeof value;
+	if (sysctl(mib, 2, &value, &size, NULL, 0) == -1)
+		return (-1);
+	return (value);
 }

@@ -1,11 +1,8 @@
-#	$NetBSD: Makefile.inc,v 1.5 1995/02/27 13:19:23 cgd Exp $
-#	@(#)Makefile.inc	8.2 (Berkeley) 2/21/94
+#	@(#)Makefile.inc	5.1 (Berkeley) 2/24/91
 #
-CFLAGS+=-D__DBINTERFACE_PRIVATE
+.PATH: ${.CURDIR}/db
 
 .include "${.CURDIR}/db/btree/Makefile.inc"
-.include "${.CURDIR}/db/db/Makefile.inc"
 .include "${.CURDIR}/db/hash/Makefile.inc"
-.include "${.CURDIR}/db/man/Makefile.inc"
-.include "${.CURDIR}/db/mpool/Makefile.inc"
-.include "${.CURDIR}/db/recno/Makefile.inc"
+
+MAN3+=	db.0

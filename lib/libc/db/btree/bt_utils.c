@@ -1,7 +1,5 @@
-/*	$NetBSD: bt_utils.c,v 1.8 1997/07/13 18:52:00 christos Exp $	*/
-
 /*-
- * Copyright (c) 1990, 1993, 1994
+ * Copyright (c) 1990, 1993
  *	The Regents of the University of California.  All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
@@ -36,13 +34,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char sccsid[] = "@(#)bt_utils.c	8.8 (Berkeley) 7/20/94";
-#else
-__RCSID("$NetBSD: bt_utils.c,v 1.8 1997/07/13 18:52:00 christos Exp $");
-#endif
+static char sccsid[] = "@(#)bt_utils.c	8.1 (Berkeley) 6/4/93";
 #endif /* LIBC_SCCS and not lint */
 
 #include <sys/param.h>
@@ -55,91 +48,63 @@ __RCSID("$NetBSD: bt_utils.c,v 1.8 1997/07/13 18:52:00 christos Exp $");
 #include "btree.h"
 
 /*
- * __bt_ret --
- *	Build return key/data pair.
+ * __BT_RET -- Build return key/data pair as a result of search or scan.
  *
  * Parameters:
  *	t:	tree
- *	e:	key/data pair to be returned
+ *	d:	LEAF to be returned to the user.
  *	key:	user's key structure (NULL if not to be filled in)
- *	rkey:	memory area to hold key
- *	data:	user's data structure (NULL if not to be filled in)
- *	rdata:	memory area to hold data
- *       copy:	always copy the key/data item
+ *	data:	user's data structure
  *
  * Returns:
  *	RET_SUCCESS, RET_ERROR.
  */
 int
-__bt_ret(t, e, key, rkey, data, rdata, copy)
+__bt_ret(t, e, key, data)
 	BTREE *t;
 	EPG *e;
-	DBT *key, *rkey, *data, *rdata;
-	int copy;
+	DBT *key, *data;
 {
-	BLEAF *bl;
-	void *p;
+	register BLEAF *bl;
+	register void *p;
 
 	bl = GETBLEAF(e->page, e->index);
 
-	/*
-	 * We must copy big keys/data to make them contigous.  Otherwise,
-	 * leave the page pinned and don't copy unless the user specified
-	 * concurrent access.
-	 */
+	if (bl->flags & P_BIGDATA) {
+		if (__ovfl_get(t, bl->bytes + bl->ksize,
+		    &data->size, &t->bt_dbuf, &t->bt_dbufsz))
+			return (RET_ERROR);
+	} else {
+		/* Use +1 in case the first record retrieved is 0 length. */
+		if (bl->dsize + 1 > t->bt_dbufsz) {
+			if ((p = realloc(t->bt_dbuf, bl->dsize + 1)) == NULL)
+				return (RET_ERROR);
+			t->bt_dbuf = p;
+			t->bt_dbufsz = bl->dsize + 1;
+		}
+		memmove(t->bt_dbuf, bl->bytes + bl->ksize, bl->dsize);
+		data->size = bl->dsize;
+	}
+	data->data = t->bt_dbuf;
+
 	if (key == NULL)
-		goto dataonly;
+		return (RET_SUCCESS);
 
 	if (bl->flags & P_BIGKEY) {
 		if (__ovfl_get(t, bl->bytes,
-		    &key->size, &rkey->data, &rkey->size))
+		    &key->size, &t->bt_kbuf, &t->bt_kbufsz))
 			return (RET_ERROR);
-		key->data = rkey->data;
-	} else if (copy || F_ISSET(t, B_DB_LOCK)) {
-		if (bl->ksize > rkey->size) {
-			p = (void *)(rkey->data == NULL ?
-			    malloc(bl->ksize) : realloc(rkey->data, bl->ksize));
-			if (p == NULL)
-				return (RET_ERROR);
-			rkey->data = p;
-			rkey->size = bl->ksize;
-		}
-		memmove(rkey->data, bl->bytes, bl->ksize);
-		key->size = bl->ksize;
-		key->data = rkey->data;
 	} else {
-		key->size = bl->ksize;
-		key->data = bl->bytes;
-	}
-
-dataonly:
-	if (data == NULL)
-		return (RET_SUCCESS);
-
-	if (bl->flags & P_BIGDATA) {
-		if (__ovfl_get(t, bl->bytes + bl->ksize,
-		    &data->size, &rdata->data, &rdata->size))
-			return (RET_ERROR);
-		data->data = rdata->data;
-	} else if (copy || F_ISSET(t, B_DB_LOCK)) {
-		/* Use +1 in case the first record retrieved is 0 length. */
-		if (bl->dsize + 1 > rdata->size) {
-			p = (void *)(rdata->data == NULL ?
-			    malloc(bl->dsize + 1) :
-			    realloc(rdata->data, bl->dsize + 1));
-			if (p == NULL)
+		if (bl->ksize > t->bt_kbufsz) {
+			if ((p = realloc(t->bt_kbuf, bl->ksize)) == NULL)
 				return (RET_ERROR);
-			rdata->data = p;
-			rdata->size = bl->dsize + 1;
+			t->bt_kbuf = p;
+			t->bt_kbufsz = bl->ksize;
 		}
-		memmove(rdata->data, bl->bytes + bl->ksize, bl->dsize);
-		data->size = bl->dsize;
-		data->data = rdata->data;
-	} else {
-		data->size = bl->dsize;
-		data->data = bl->bytes + bl->ksize;
+		memmove(t->bt_kbuf, bl->bytes, bl->ksize);
+		key->size = bl->ksize;
 	}
-
+	key->data = t->bt_kbuf;
 	return (RET_SUCCESS);
 }
 
@@ -200,9 +165,9 @@ __bt_cmp(t, k1, e)
 
 	if (bigkey) {
 		if (__ovfl_get(t, bigkey,
-		    &k2.size, &t->bt_rdata.data, &t->bt_rdata.size))
+		    &k2.size, &t->bt_dbuf, &t->bt_dbufsz))
 			return (RET_ERROR);
-		k2.data = t->bt_rdata.data;
+		k2.data = t->bt_dbuf;
 	}
 	return ((*t->bt_cmp)(k1, &k2));
 }
@@ -223,20 +188,14 @@ int
 __bt_defcmp(a, b)
 	const DBT *a, *b;
 {
-	register size_t len;
 	register u_char *p1, *p2;
+	register int diff, len;
 
-	/*
-	 * XXX
-	 * If a size_t doesn't fit in an int, this routine can lose.
-	 * What we need is a integral type which is guaranteed to be
-	 * larger than a size_t, and there is no such thing.
-	 */
 	len = MIN(a->size, b->size);
 	for (p1 = a->data, p2 = b->data; len--; ++p1, ++p2)
-		if (*p1 != *p2)
-			return ((int)*p1 - (int)*p2);
-	return ((int)a->size - (int)b->size);
+		if (diff = *p1 - *p2)
+			return (diff);
+	return (a->size - b->size);
 }
 
 /*
@@ -249,12 +208,13 @@ __bt_defcmp(a, b)
  * Returns:
  *	Number of bytes needed to distinguish b from a.
  */
-size_t
+int
 __bt_defpfx(a, b)
 	const DBT *a, *b;
 {
 	register u_char *p1, *p2;
-	register size_t cnt, len;
+	register int len;
+	int cnt;
 
 	cnt = 1;
 	len = MIN(a->size, b->size);

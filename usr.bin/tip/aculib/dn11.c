@@ -1,8 +1,6 @@
-/*	$NetBSD: dn11.c,v 1.4 1995/10/29 00:49:53 pk Exp $	*/
-
 /*
- * Copyright (c) 1983, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1983 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -34,10 +32,7 @@
  */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)dn11.c	8.1 (Berkeley) 6/6/93";
-#endif
-static char rcsid[] = "$NetBSD: dn11.c,v 1.4 1995/10/29 00:49:53 pk Exp $";
+static char sccsid[] = "@(#)dn11.c	5.4 (Berkeley) 3/2/91";
 #endif /* not lint */
 
 /*
@@ -57,7 +52,6 @@ dn_dialer(num, acu)
 	char *p, *q, phone[40];
 	int lt, nw, connected = 1;
 	register int timelim;
-	struct termios cntrl;
 
 	if (boolean(value(VERBOSE)))
 		printf("\nstarting call...");
@@ -101,9 +95,7 @@ dn_dialer(num, acu)
 		return (0);
 	}
 	alarm(0);
-	tcgetattr(dn, &cntrl);
-	cntrl.c_cflag |= HUPCL;
-	tcsetattr(dn, TCSANOW, &cntrl);
+	ioctl(dn, TIOCHPCL, 0);
 	signal(SIGALRM, SIG_DFL);
 	while ((nw = wait(&lt)) != child && nw != -1)
 		;

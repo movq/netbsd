@@ -1,8 +1,6 @@
-/*	$NetBSD: pass4.c,v 1.14 1997/09/20 06:16:32 lukem Exp $	*/
-
 /*
- * Copyright (c) 1980, 1986, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1980, 1986 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,39 +31,28 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)pass4.c	8.4 (Berkeley) 4/28/95";
-#else
-__RCSID("$NetBSD: pass4.c,v 1.14 1997/09/20 06:16:32 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)pass4.c	5.10 (Berkeley) 7/20/90";
 #endif /* not lint */
 
 #include <sys/param.h>
-#include <sys/time.h>
-
-#include <ufs/ufs/dinode.h>
-#include <ufs/ffs/fs.h>
-
-#include <err.h>
+#include <ufs/dinode.h>
+#include <ufs/fs.h>
 #include <stdlib.h>
 #include <string.h>
-
-#include "fsutil.h"
 #include "fsck.h"
-#include "extern.h"
 
-void
+int	pass4check();
+
 pass4()
 {
-	ino_t inumber;
-	struct zlncnt *zlnp;
+	register ino_t inumber;
+	register struct zlncnt *zlnp;
 	struct dinode *dp;
 	struct inodesc idesc;
 	int n;
 
-	memset(&idesc, 0, sizeof(struct inodesc));
+	bzero((char *)&idesc, sizeof(struct inodesc));
 	idesc.id_type = ADDR;
 	idesc.id_func = pass4check;
 	for (inumber = ROOTINO; inumber <= lastino; inumber++) {
@@ -109,19 +96,18 @@ pass4()
 			break;
 
 		default:
-			errx(EEXIT, "BAD STATE %d FOR INODE I=%d",
+			errexit("BAD STATE %d FOR INODE I=%d",
 			    statemap[inumber], inumber);
 		}
 	}
 }
 
-int
 pass4check(idesc)
-	struct inodesc *idesc;
+	register struct inodesc *idesc;
 {
-	struct dups *dlp;
+	register struct dups *dlp;
 	int nfrags, res = KEEPON;
-	ufs_daddr_t blkno = idesc->id_blkno;
+	daddr_t blkno = idesc->id_blkno;
 
 	for (nfrags = idesc->id_numfrags; nfrags > 0; blkno++, nfrags--) {
 		if (chkrange(blkno, 1)) {

@@ -1,5 +1,3 @@
-/*	$NetBSD: sgtty.h,v 1.4 1995/06/05 19:40:33 pk Exp $	*/
-
 /*
  * Copyright (c) 1985 The Regents of the University of California.
  * All rights reserved.
@@ -39,9 +37,3 @@
 #define	USE_OLD_TTY
 #endif
 #include <sys/ioctl.h>
-#include <sys/cdefs.h>
-
-__BEGIN_DECLS
-int gtty __P((int, struct sgttyb *));
-int stty __P((int, struct sgttyb *));
-__END_DECLS

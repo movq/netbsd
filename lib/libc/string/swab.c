@@ -1,5 +1,3 @@
-/*	$NetBSD: swab.c,v 1.4 1997/07/13 20:24:37 christos Exp $	*/
-
 /*
  * Copyright (c) 1988 Regents of the University of California.
  * All rights reserved.
@@ -36,13 +34,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char *sccsid = "@(#)swab.c	5.10 (Berkeley) 3/6/91";
-#else
-__RCSID("$NetBSD: swab.c,v 1.4 1997/07/13 20:24:37 christos Exp $");
-#endif
+static char sccsid[] = "@(#)swab.c	5.10 (Berkeley) 3/6/91";
 #endif /* LIBC_SCCS and not lint */
 
 #include <string.h>

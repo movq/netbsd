@@ -1,8 +1,6 @@
-/*	$NetBSD: misc.c,v 1.8 1997/10/19 13:40:17 lukem Exp $	*/
-
 /*-
- * Copyright (c) 1990, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1990 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Hugh Smith at The University of Guelph.
@@ -36,67 +34,51 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)misc.c	8.1 (Berkeley) 6/6/93";
-#else
-__RCSID("$NetBSD: misc.c,v 1.8 1997/10/19 13:40:17 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)misc.c	5.2 (Berkeley) 2/26/91";
 #endif /* not lint */
 
 #include <sys/param.h>
-#include <dirent.h>
-#include <err.h>
+#include <sys/signal.h>
 #include <errno.h>
-#include <signal.h>
+#include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
-#include <archive.h>
-#include "extern.h"
 #include "pathnames.h"
 
-char		*tname = "temporary file";
+extern char *archive;			/* archive name */
+char *tname = "temporary file";		/* temporary file "name" */
 
-int
 tmp()
 {
-	static char *envtmp;
 	sigset_t set, oset;
-	static int first;
 	int fd;
 	char path[MAXPATHLEN];
 
-	if (!first) {
-		envtmp = getenv("TMPDIR");
-		first = 1;
-	}
+	bcopy(_PATH_RANTMP, path, sizeof(_PATH_RANTMP));
 
-	if (envtmp)
-		(void)snprintf(path, MAXPATHLEN, "%s/%s", envtmp,
-		    strrchr(_NAME_RANTMP, '/'));
-	else
-		memmove(path, _PATH_RANTMP, sizeof(_PATH_RANTMP));
-
-	sigfillset(&set);
+	sigemptyset(&set);
+	sigaddset(&set, SIGHUP);
+	sigaddset(&set, SIGINT);
+	sigaddset(&set, SIGQUIT);
+	sigaddset(&set, SIGTERM);
 	(void)sigprocmask(SIG_BLOCK, &set, &oset);
 	if ((fd = mkstemp(path)) == -1)
-		err(1, "mkstemp %s", path);
-	(void)unlink(path);
-	(void)sigprocmask(SIG_SETMASK, &oset, NULL);
+		error(tname);
+        (void)unlink(path);
+	(void)sigprocmask(SIG_SETMASK, &oset, (sigset_t *)NULL);
 	return(fd);
 }
 
 void *
 emalloc(len)
-	size_t len;
+	int len;
 {
-	void *p;
+	char *p;
 
-	if ((p = malloc((u_int)len)) == NULL)
-		err(1, "malloc");
+	if (!(p = malloc((u_int)len)))
+		error(archive);
 	return(p);
 }
 
@@ -104,14 +86,20 @@ char *
 rname(path)
 	char *path;
 {
-	char *ind;
+	register char *ind;
 
-	return((ind = strrchr(path, '/')) ? ind + 1 : path);
+	return((ind = rindex(path, '/')) ? ind + 1 : path);
 }
 
-void
 badfmt()
 {
 	errno = EFTYPE;
-	err(1, "%s", archive);
+	error(archive);
+}
+
+error(name)
+	char *name;
+{
+	(void)fprintf(stderr, "ranlib: %s: %s\n", name, strerror(errno));
+	exit(1);
 }

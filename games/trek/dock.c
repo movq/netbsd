@@ -1,8 +1,6 @@
-/*	$NetBSD: dock.c,v 1.4 1997/10/12 21:24:41 christos Exp $	*/
-
 /*
- * Copyright (c) 1980, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1980 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,17 +31,11 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)dock.c	8.1 (Berkeley) 5/31/93";
-#else
-__RCSID("$NetBSD: dock.c,v 1.4 1997/10/12 21:24:41 christos Exp $");
-#endif
+static char sccsid[] = "@(#)dock.c	5.4 (Berkeley) 6/1/90";
 #endif /* not lint */
 
-#include <stdio.h>
-#include "trek.h"
+# include	"trek.h"
 
 /*
 **  DOCK TO STARBASE
@@ -60,19 +52,14 @@ __RCSID("$NetBSD: dock.c,v 1.4 1997/10/12 21:24:41 christos Exp $");
 **	are docked.
 */
 
-/*ARGSUSED*/
-void
-dock(v)
-	int v;
+dock()
 {
-	int		i, j;
-	int		ok;
-	struct event	*e;
+	register int		i, j;
+	int			ok;
+	register struct event	*e;
 
-	if (Ship.cond == DOCKED) {
-		printf("Chekov: But captain, we are already docked\n");
-		return;
-	}
+	if (Ship.cond == DOCKED)
+		return (printf("Chekov: But captain, we are already docked\n"));
 	/* check for ok to dock, i.e., adjacent to a starbase */
 	ok = 0;
 	for (i = Ship.sectx - 1; i <= Ship.sectx + 1 && !ok; i++)
@@ -90,10 +77,8 @@ dock(v)
 			}
 		}
 	}
-	if (!ok) {
-		printf("Chekov: But captain, we are not adjacent to a starbase.\n");
-		return;
-	}
+	if (!ok)
+		return (printf("Chekov: But captain, we are not adjacent to a starbase.\n"));
 
 	/* restore resources */
 	Ship.energy = Param.energy;
@@ -134,13 +119,10 @@ dock(v)
 **	is to reschedule any damages so that they will take longer.
 */
 
-/*ARGSUSED*/
-void
-undock(v)
-	int v;
+undock()
 {
-	struct event	*e;
-	int		i;
+	register struct event	*e;
+	register int		i;
 
 	if (Ship.cond != DOCKED)
 	{

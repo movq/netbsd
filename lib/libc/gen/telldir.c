@@ -1,8 +1,6 @@
-/*	$NetBSD: telldir.c,v 1.6 1997/07/21 14:07:38 jtc Exp $	*/
-
 /*
- * Copyright (c) 1983, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1983 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,24 +31,14 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char sccsid[] = "@(#)telldir.c	8.1 (Berkeley) 6/4/93";
-#else
-__RCSID("$NetBSD: telldir.c,v 1.6 1997/07/21 14:07:38 jtc Exp $");
-#endif
+static char sccsid[] = "@(#)telldir.c	5.9 (Berkeley) 2/23/91";
 #endif /* LIBC_SCCS and not lint */
 
-#include "namespace.h"
 #include <sys/param.h>
 #include <dirent.h>
 #include <stdlib.h>
 #include <unistd.h>
-
-#ifdef __weak_alias
-__weak_alias(telldir,_telldir);
-#endif
 
 /*
  * The option SINGLEUSE may be defined to say that a telldir
@@ -104,13 +92,14 @@ telldir(dirp)
  * Only values returned by "telldir" should be passed to seekdir.
  */
 void
-__seekdir(dirp, loc)
+_seekdir(dirp, loc)
 	register DIR *dirp;
 	long loc;
 {
 	register struct ddloc *lp;
 	register struct ddloc **prevlp;
 	struct dirent *dp;
+	extern long lseek();
 
 	prevlp = &dd_hash[LOCHASH(loc)];
 	lp = *prevlp;
@@ -124,7 +113,7 @@ __seekdir(dirp, loc)
 		return;
 	if (lp->loc_loc == dirp->dd_loc && lp->loc_seek == dirp->dd_seek)
 		goto found;
-	(void) lseek(dirp->dd_fd, (off_t)lp->loc_seek, SEEK_SET);
+	(void) lseek(dirp->dd_fd, lp->loc_seek, 0);
 	dirp->dd_seek = lp->loc_seek;
 	dirp->dd_loc = 0;
 	while (dirp->dd_loc < lp->loc_loc) {

@@ -1,8 +1,6 @@
-/*	$NetBSD: print.c,v 1.4 1997/06/29 19:13:03 christos Exp $	*/
-
 /*
- * Copyright (c) 1983, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1983 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,13 +31,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)print.c	8.1 (Berkeley) 6/4/93";
-#else
-__RCSID("$NetBSD: print.c,v 1.4 1997/06/29 19:13:03 christos Exp $");
-#endif
+static char sccsid[] = "@(#)print.c	5.8 (Berkeley) 2/26/91";
 #endif /* not lint */
 
 /* debug print routines */
@@ -49,7 +42,6 @@ __RCSID("$NetBSD: print.c,v 1.4 1997/06/29 19:13:03 christos Exp $");
 #include <protocols/talkd.h>
 #include <syslog.h>
 #include <stdio.h>
-#include "extern.h"
 
 static	char *types[] =
     { "leave_invite", "look_up", "delete", "announce" };
@@ -59,10 +51,9 @@ static	char *answers[] =
       "unknown_request", "badversion", "badaddr", "badctladdr" };
 #define	NANSWERS	(sizeof (answers) / sizeof (answers[0]))
 
-void
 print_request(cp, mp)
 	char *cp;
-	CTL_MSG *mp;
+	register CTL_MSG *mp;
 {
 	char tbuf[80], *tp;
 	
@@ -75,10 +66,9 @@ print_request(cp, mp)
 	    cp, tp, mp->id_num, mp->l_name, mp->r_name, mp->r_tty);
 }
 
-void
 print_response(cp, rp)
 	char *cp;
-	CTL_RESPONSE *rp;
+	register CTL_RESPONSE *rp;
 {
 	char tbuf[80], *tp, abuf[80], *ap;
 	

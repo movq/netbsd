@@ -1,8 +1,6 @@
-/*	$NetBSD: logname.c,v 1.7 1997/10/19 04:20:06 lukem Exp $	*/
-
 /*-
- * Copyright (c) 1991, 1993, 1994
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1991 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,29 +31,22 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1991, 1993, 1994\n\
-	The Regents of the University of California.  All rights reserved.\n");
+char copyright[] =
+"@(#) Copyright (c) 1991 The Regents of the University of California.\n\
+ All rights reserved.\n";
 #endif /* not lint */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)logname.c	8.2 (Berkeley) 4/3/94";
-#endif
-__RCSID("$NetBSD: logname.c,v 1.7 1997/10/19 04:20:06 lukem Exp $");
+static char sccsid[] = "@(#)logname.c	5.1 (Berkeley) 6/28/91";
 #endif /* not lint */
 
+#include <errno.h>
+#include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <locale.h>
-#include <unistd.h>
-#include <err.h>
+#include <string.h>
 
-int	main __P((int, char **));
-void	usage __P((void));
-
-int
 main(argc, argv)
 	int argc;
 	char *argv[];
@@ -63,28 +54,23 @@ main(argc, argv)
 	int ch;
 	char *p;
 
-	setlocale(LC_ALL, "");
-
-	while ((ch = getopt(argc, argv, "")) != -1)
-		switch (ch) {
+	while ((ch = getopt(argc, argv, "")) != EOF)
+		switch(ch) {
 		case '?':
 		default:
 			usage();
-			/* NOTREACHED */
 		}
+	argc -= optind;
+	argv += optind;
 
-	if (argc != optind) {
-		usage();
-		/* NOTREACHED */
+	if ((p = getlogin()) == NULL) {
+		(void)fprintf(stderr, "logname: %s\n", strerror(errno));
+		exit(1);
 	}
-
-	if ((p = getlogin()) == NULL)
-		err(1, "getlogin");
 	(void)printf("%s\n", p);
 	exit(0);
 }
 
-void
 usage()
 {
 	(void)fprintf(stderr, "usage: logname\n");

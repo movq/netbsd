@@ -1,8 +1,6 @@
-/*	$NetBSD: getpar.h,v 1.4 1997/10/12 21:24:51 christos Exp $	*/
-
 /*
- * Copyright (c) 1980, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1980 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,23 +30,16 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)getpar.h	8.1 (Berkeley) 5/31/93
+ *	@(#)getpar.h	5.4 (Berkeley) 6/1/90
  */
 
-typedef void (*cmdfun) __P((int));
 struct cvntab		/* used for getcodpar() paramater list */
 {
 	char	*abrev;
 	char	*full;
-	cmdfun	value;
+	int	(*value)();
 	int	value2;
 };
 
-int getintpar __P((char *));
-double getfltpar __P((char *));
-int getynpar __P((char *));
-struct cvntab *getcodpar __P((char *, struct cvntab[]));
-void getstrpar __P((char *, char *, int, char *));
-int testnl __P((void));
-void skiptonl __P((int));
-int readdelim __P((int));
+extern double		getfltpar();
+extern struct cvntab	*getcodpar();

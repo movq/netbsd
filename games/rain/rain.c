@@ -1,8 +1,6 @@
-/*	$NetBSD: rain.c,v 1.10 1997/10/13 22:01:54 cjs Exp $	*/
-
 /*
- * Copyright (c) 1980, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1980 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,18 +31,14 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1980, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+char copyright[] =
+"@(#) Copyright (c) 1980 Regents of the University of California.\n\
+ All rights reserved.\n";
 #endif /* not lint */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)rain.c	8.1 (Berkeley) 5/31/93";
-#else
-__RCSID("$NetBSD: rain.c,v 1.10 1997/10/13 22:01:54 cjs Exp $");
-#endif
+static char sccsid[] = "@(#)rain.c	5.6 (Berkeley) 2/28/91";
 #endif /* not lint */
 
 /*
@@ -53,69 +47,66 @@ __RCSID("$NetBSD: rain.c,v 1.10 1997/10/13 22:01:54 cjs Exp $");
  */
 
 #include <sys/types.h>
-#include <sys/ioctl.h>
-#include <err.h>
-#include <signal.h>
 #include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <termcap.h>
-#include <termios.h>
+#ifdef USG
+#include <termio.h>
+#else
+#include <sgtty.h>
+#endif
+#include <signal.h>
 
 #define	cursor(c, r)	tputs(tgoto(CM, c, r), 1, fputchar)
 
-static struct termios sg, old_tty;
+#ifdef USG
+static struct termio sg, old_tty;
+#else
+static struct sgttyb sg, old_tty;
+#endif
 
-void	fputchar __P((int));
-int	main __P((int, char **));
-void	onsig __P((int));
+int	fputchar();
+char	*LL, *TE, *tgoto();
 
-
-char	*LL, *TE;
-
-int
 main(argc, argv)
 	int argc;
 	char **argv;
 {
+	extern short ospeed;
 	extern char *UP;
-	int x, y, j;
-	char *CM, *BC, *DN, *ND, *term;
-	char *TI, *tcp, *mp, tcb[100];
-	long cols, lines;
+	register int x, y, j;
+	register char *CM, *BC, *DN, *ND, *term;
+	char *TI, *tcp, *mp, tcb[100],
+		*malloc(), *getenv(), *strcpy(), *tgetstr();
+	long cols, lines, random();
 	int xpos[5], ypos[5];
-#ifdef TIOCGWINSZ
-	struct winsize ws;
-#endif
+	static void onsig();
 
-	if (!(term = getenv("TERM")))
-		errx(1, "TERM: parameter not set");
-	if (!(mp = malloc((u_int)1024)))
-		errx(1, "out of space");
-	if (tgetent(mp, term) <= 0)
-		errx(1, "unknown terminal type `%s'", term);
+	if (!(term = getenv("TERM"))) {
+		fprintf(stderr, "%s: TERM: parameter not set\n", *argv);
+		exit(1);
+	}
+	if (!(mp = malloc((u_int)1024))) {
+		fprintf(stderr, "%s: out of space.\n", *argv);
+		exit(1);
+	}
+	if (tgetent(mp, term) <= 0) {
+		fprintf(stderr, "%s: %s: unknown terminal type\n", *argv, term);
+		exit(1);
+	}
 	tcp = tcb;
-	if (!(CM = tgetstr("cm", &tcp)))
-		errx(1, "terminal not capable of cursor motion");
+	if (!(CM = tgetstr("cm", &tcp))) {
+		fprintf(stderr, "%s: terminal not capable of cursor motion\n", *argv);
+		exit(1);
+	}
 	if (!(BC = tgetstr("bc", &tcp)))
 		BC = "\b";
 	if (!(DN = tgetstr("dn", &tcp)))
 		DN = "\n";
 	if (!(ND = tgetstr("nd", &tcp)))
 		ND = " ";
-#ifdef TIOCGWINSZ
-	if (ioctl(fileno(stdout), TIOCGWINSZ, &ws) != -1 &&
-	    ws.ws_col && ws.ws_row) {
-		cols = ws.ws_col;
-		lines = ws.ws_row;
-	} else
-#endif
-	{
-		if ((cols = tgetnum("co")) == -1)
-			cols = 80;
-		if ((lines = tgetnum("li")) == -1)
-			lines = 24;
-	}
+	if ((cols = tgetnum("co")) == -1)
+		cols = 80;
+	if ((lines = tgetnum("li")) == -1)
+		lines = 24;
 	cols -= 4;
 	lines -= 4;
 	TE = tgetstr("te", &tcp);
@@ -128,18 +119,32 @@ main(argc, argv)
 		}
 		(void)strcpy(LL, tgoto(CM, 0, 23));
 	}
+#ifdef USG
+	ioctl(1, TCGETA, &sg);
+	ospeed = sg.c_cflag&CBAUD;
+#else
+	gtty(1, &sg);
+	ospeed = sg.sg_ospeed;
+#endif
 	(void)signal(SIGHUP, onsig);
 	(void)signal(SIGINT, onsig);
 	(void)signal(SIGQUIT, onsig);
 	(void)signal(SIGSTOP, onsig);
 	(void)signal(SIGTSTP, onsig);
 	(void)signal(SIGTERM, onsig);
-	tcgetattr(1, &sg);
-	old_tty = sg;
+#ifdef USG
+	ioctl(1, TCGETA, &old_tty);	/* save tty bits for exit */
+	ioctl(1, TCGETA, &sg);
 	sg.c_iflag &= ~ICRNL;
 	sg.c_oflag &= ~ONLCR;
 	sg.c_lflag &= ~ECHO;
-	tcsetattr(1, TCSADRAIN, &sg);
+	ioctl(1, TCSETAW, &sg);
+#else
+	gtty(1, &old_tty);		/* save tty bits for exit */
+	gtty(1, &sg);
+	sg.sg_flags &= ~(CRMOD|ECHO);
+	stty(1, &sg);
+#endif
 	if (TI)
 		tputs(TI, 1, fputchar);
 	tputs(tgetstr("cl", &tcp), 1, fputchar);
@@ -217,21 +222,24 @@ main(argc, argv)
 	}
 }
 
-void
-onsig(dummy)
-	int dummy;
+static void
+onsig()
 {
 	tputs(LL, 1, fputchar);
 	if (TE)
 		tputs(TE, 1, fputchar);
 	(void)fflush(stdout);
-	tcsetattr(1, TCSADRAIN, &old_tty);
+#ifdef USG
+	ioctl(1, TCSETAW, &old_tty);
+#else
+	stty(1, &old_tty);
+#endif
 	exit(0);
 }
 
-void
+static
 fputchar(c)
-	int c;
+	char c;
 {
-	(void)putchar(c);
+	putchar(c);
 }

@@ -1,8 +1,6 @@
-/*	$NetBSD: visual.c,v 1.4 1997/10/12 21:25:26 christos Exp $	*/
-
 /*
- * Copyright (c) 1980, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1980 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,18 +31,11 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)visual.c	8.1 (Berkeley) 5/31/93";
-#else
-__RCSID("$NetBSD: visual.c,v 1.4 1997/10/12 21:25:26 christos Exp $");
-#endif
+static char sccsid[] = "@(#)visual.c	5.4 (Berkeley) 6/1/90";
 #endif /* not lint */
 
-#include <stdio.h>
-#include "trek.h"
-#include "getpar.h"
+# include	"trek.h"
 
 /*
 **  VISUAL SCAN
@@ -58,27 +49,24 @@ __RCSID("$NetBSD: visual.c,v 1.4 1997/10/12 21:25:26 christos Exp $");
 /* This struct[] has the delta x, delta y for particular directions */
 struct xy	Visdelta[11] =
 {
-	{ -1,	-1 },
-	{ -1,	 0 },
-	{ -1,	 1 },
-	{  0,	 1 },
-	{  1,	 1 },
-	{  1,	 0 },
-	{  1,	-1 },
-	{  0,	-1 },
-	{ -1,	-1 },
-	{ -1,	 0 },
-	{ -1,	 1 }
+	-1,	-1,
+	-1,	 0,
+	-1,	 1,
+	 0,	 1,
+	 1,	 1,
+	 1,	 0,
+	 1,	-1,
+	 0,	-1,
+	-1,	-1,
+	-1,	 0,
+	-1,	 1
 };
 
-/*ARGSUSED*/
-void
-visual(z)
-	int z;
+visual()
 {
-	int		ix, iy;
-	int		co;
-	struct xy	*v;
+	register int		ix, iy;
+	int			co;
+	register struct xy	*v;
 
 	co = getintpar("direction");
 	if (co < 0 || co > 360)

@@ -1,8 +1,6 @@
-/*	$NetBSD: fread.c,v 1.7 1997/07/13 20:15:03 christos Exp $	*/
-
 /*-
- * Copyright (c) 1990, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1990 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Chris Torek.
@@ -36,20 +34,13 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char sccsid[] = "@(#)fread.c	8.2 (Berkeley) 12/11/93";
-#else
-__RCSID("$NetBSD: fread.c,v 1.7 1997/07/13 20:15:03 christos Exp $");
-#endif
+static char sccsid[] = "@(#)fread.c	5.4 (Berkeley) 5/4/91";
 #endif /* LIBC_SCCS and not lint */
 
 #include <stdio.h>
 #include <string.h>
-#include "local.h"
 
-size_t
 fread(buf, size, count, fp)
 	void *buf;
 	size_t size, count;
@@ -60,19 +51,14 @@ fread(buf, size, count, fp)
 	register int r;
 	size_t total;
 
-	/*
-	 * The ANSI standard requires a return value of 0 for a count
-	 * or a size of 0.  Peculiarily, it imposes no such requirements
-	 * on fwrite; it only requires fread to be broken.
-	 */
 	if ((resid = count * size) == 0)
-		return (0);
+		return (count);
 	if (fp->_r < 0)
 		fp->_r = 0;
 	total = resid;
 	p = buf;
 	while (resid > (r = fp->_r)) {
-		(void)memcpy((void *)p, (void *)fp->_p, (size_t)r);
+		(void) bcopy((void *)fp->_p, (void *)p, (size_t)r);
 		fp->_p += r;
 		/* fp->_r = 0 ... done in __srefill */
 		p += r;
@@ -82,7 +68,7 @@ fread(buf, size, count, fp)
 			return ((total - resid) / size);
 		}
 	}
-	(void)memcpy((void *)p, (void *)fp->_p, resid);
+	(void) bcopy((void *)fp->_p, (void *)p, resid);
 	fp->_r -= resid;
 	fp->_p += resid;
 	return (count);

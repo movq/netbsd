@@ -1,8 +1,6 @@
-/*	$NetBSD: temp.c,v 1.6 1997/10/19 05:03:57 lukem Exp $	*/
-
 /*
- * Copyright (c) 1980, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1980 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,17 +31,11 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)temp.c	8.1 (Berkeley) 6/6/93";
-#else
-__RCSID("$NetBSD: temp.c,v 1.6 1997/10/19 05:03:57 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)temp.c	5.15 (Berkeley) 2/3/91";
 #endif /* not lint */
 
 #include "rcv.h"
-#include "extern.h"
 
 /*
  * Mail -- a mail program
@@ -51,27 +43,26 @@ __RCSID("$NetBSD: temp.c,v 1.6 1997/10/19 05:03:57 lukem Exp $");
  * Give names to all the temporary files that we will need.
  */
 
-char	*tempMail;
-char	*tempQuit;
-char	*tempEdit;
-char	*tempResid;
-char	*tempMesg;
-char	*tmpdir;
+char	tempMail[24];
+char	tempQuit[24];
+char	tempEdit[24];
+char	tempResid[24];
+char	tempMesg[24];
 
-void
 tinit()
 {
-	char *cp;
+	register char *cp;
 
-	if ((tmpdir = getenv("TMPDIR")) == NULL) {
-		tmpdir = _PATH_TMP;
-	}
-
-	tempMail  = tempnam (tmpdir, "Rs");
-	tempResid = tempnam (tmpdir, "Rq");
-	tempQuit  = tempnam (tmpdir, "Rm");
-	tempEdit  = tempnam (tmpdir, "Re");
-	tempMesg  = tempnam (tmpdir, "Rx");
+	strcpy(tempMail, _PATH_TMP);
+	mktemp(strcat(tempMail, "RsXXXXXX"));
+	strcpy(tempResid, _PATH_TMP);
+	mktemp(strcat(tempResid, "RqXXXXXX"));
+	strcpy(tempQuit, _PATH_TMP);
+	mktemp(strcat(tempQuit, "RmXXXXXX"));
+	strcpy(tempEdit, _PATH_TMP);
+	mktemp(strcat(tempEdit, "ReXXXXXX"));
+	strcpy(tempMesg, _PATH_TMP);
+	mktemp(strcat(tempMesg, "RxXXXXXX"));
 
 	/*
 	 * It's okay to call savestr in here because main will
@@ -85,9 +76,11 @@ tinit()
 		}
 	} else {
 		if ((cp = username()) == NOSTR) {
-			myname = "nobody";
-			if (rcvmode)
+			myname = "ubluit";
+			if (rcvmode) {
+				printf("Who are you!?\n");
 				exit(1);
+			}
 		} else
 			myname = savestr(cp);
 	}

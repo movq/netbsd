@@ -1,7 +1,5 @@
-.\"	$NetBSD: sigsuspend.2,v 1.5 1997/07/14 23:20:20 kleink Exp $
-.\"
-.\" Copyright (c) 1983, 1991, 1993
-.\"	The Regents of the University of California.  All rights reserved.
+.\" Copyright (c) 1983, 1991 The Regents of the University of California.
+.\" All rights reserved.
 .\"
 .\" Redistribution and use in source and binary forms, with or without
 .\" modification, are permitted provided that the following conditions
@@ -31,16 +29,16 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\"	@(#)sigsuspend.2	8.1 (Berkeley) 6/4/93
+.\"	@(#)sigsuspend.2	6.3 (Berkeley) 7/23/91
 .\"
-.Dd June 4, 1993
+.Dd July 23, 1991
 .Dt SIGSUSPEND 2
 .Os
 .Sh NAME
 .Nm sigsuspend
 .Nd atomically release blocked signals and wait for interrupt
 .Sh SYNOPSIS
-.Fd #include <signal.h>
+.Fd #include <sys/signal.h>
 .Ft int
 .Fn sigsuspend "const sigset_t *sigmask"
 .Sh DESCRIPTION
@@ -77,5 +75,6 @@ set to
 .Sh STANDARDS
 The
 .Nm sigsupend
-function conforms to
-.St -p1003.1-90 .
+function call
+conforms to
+.St -p1003.1-88 .

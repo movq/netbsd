@@ -1,8 +1,6 @@
-/*	$NetBSD: pathnames.h,v 1.4 1995/03/25 06:39:50 glass Exp $	*/
-
 /*-
- * Copyright (c) 1991, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1991 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Hugh Smith at The University of Guelph.
@@ -35,7 +33,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)pathnames.h	8.1 (Berkeley) 6/6/93
+ *	@(#)pathnames.h	5.4 (Berkeley) 4/12/91
  */
 
 #define	_NAME_ARTMP	"ar.XXXXXX"

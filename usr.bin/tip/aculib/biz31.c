@@ -1,8 +1,6 @@
-/*	$NetBSD: biz31.c,v 1.5 1997/02/11 09:24:14 mrg Exp $	*/
-
 /*
- * Copyright (c) 1983, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1983 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -34,10 +32,7 @@
  */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)biz31.c	8.1 (Berkeley) 6/6/93";
-#endif
-static char rcsid[] = "$NetBSD: biz31.c,v 1.5 1997/02/11 09:24:14 mrg Exp $";
+static char sccsid[] = "@(#)biz31.c	5.4 (Berkeley) 6/1/90";
 #endif /* not lint */
 
 #include "tip.h"
@@ -90,7 +85,7 @@ biz_dialer(num, mod)
 	if (timeout) {
 		char line[80];
 
-		(void)snprintf(line, sizeof line, "%d second dial timeout",
+		sprintf(line, "%d second dial timeout",
 			number(value(DIALTIMEOUT)));
 		logent(value(HOST), num, "biz", line);
 	}
@@ -123,7 +118,7 @@ biz31_disconnect()
 
 	write(FD, DISCONNECT_CMD, 4);
 	sleep(2);
-	tcflush(FD, TCIOFLUSH);
+	ioctl(FD, TIOCFLUSH);
 }
 
 biz31_abort()
@@ -231,7 +226,7 @@ bizsync(fd)
 
 retry:
 	if (ioctl(fd, IOCTL, (caddr_t)&b) >= 0 && chars(b) > 0)
-		tcflush(FD, TCIOFLUSH);
+		ioctl(fd, TIOCFLUSH);
 	write(fd, "\rp>\r", 4);
 	sleep(1);
 	if (ioctl(fd, IOCTL, (caddr_t)&b) >= 0) {

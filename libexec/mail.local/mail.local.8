@@ -1,5 +1,3 @@
-.\"	$NetBSD: mail.local.8,v 1.6 1997/10/20 02:38:33 enami Exp $
-.\"
 .\" Copyright (c) 1990 The Regents of the University of California.
 .\" All rights reserved.
 .\"
@@ -31,23 +29,22 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\"	from: @(#)mail.local.8	8.2 (Berkeley) 12/11/93
+.\"	@(#)mail.local.8	6.8 (Berkeley) 4/27/91
 .\"
-.Dd December 11, 1993
+.Dd April 27, 1991
 .Dt MAIL.LOCAL 8
 .Os
 .Sh NAME
 .Nm mail.local
 .Nd store mail in a mailbox
 .Sh SYNOPSIS
-.Nm
-.Op Fl l
+.Nm mail.local
 .Op Fl f Ar from
 .Ar user ...
 .Sh DESCRIPTION
-.Nm
+.Nm Mail.local
 reads the standard input up to an end-of-file and appends it to each
-.Ar user's
+.Ar user 's
 .Pa mail
 file.
 The
@@ -55,13 +52,9 @@ The
 must be a valid user name.
 .Pp
 The options are as follows:
-.Bl -tag -width xxxxxxx
+.Bl -tag -width xxxfrom
 .It Fl f Ar from
 Specify the sender's name.
-.It Fl l
-Request that
-.Nm username.lock
-files be used for locking.
 .El
 .Pp
 Individual mail messages in the mailbox are delimited by an empty
@@ -72,11 +65,7 @@ A blank line is appended to each message.
 A greater-than character (``>'') is prepended to any line in the message
 which could be mistaken for a ``From '' delimiter line.
 .Pp
-If the
-.Op Fl l
-flag is specified mailbox locking is done with
-.Nm username.lock
-files. Otherwise, the mailbox is exclusively locked with
+The mail files are exclusively locked with 
 .Xr flock 2
 while mail is appended.
 .Pp
@@ -85,7 +74,7 @@ If the ``biff'' service is returned by
 the biff server is notified of delivered mail.
 .Pp
 The
-.Nm
+.Nm mail.local
 utility exits 0 on success, and >0 if an error occurs.
 .Sh ENVIRONMENT
 .Bl -tag -width indent
@@ -108,9 +97,9 @@ user's mailbox directory
 .Xr sendmail 8
 .Sh HISTORY
 A superset of
-.Nm
+.Nm mail.local
 (handling mailbox reading as well as mail delivery)
 appeared in
-.At v7
+.At v7 .
 as the program
 .Nm mail .

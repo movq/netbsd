@@ -1,16 +1,15 @@
-#	$NetBSD: Makefile,v 1.13 1997/10/10 19:51:04 christos Exp $
-#	@(#)Makefile	8.3 (Berkeley) 3/27/94
+#	from: @(#)Makefile	8.1 (Berkeley) 6/5/93
+#	$Id: Makefile,v 1.1 1994/01/12 20:01:27 cgd Exp $
+
+.if exists(${.CURDIR}/../../sys)
+CFLAGS= -I${.CURDIR}/../../sys
+.else
+CFLAGS= -I/sys
+.endif
 
 PROG=	mount_portal
-SRCS=	mount_portal.c activate.c conf.c getmntopts.c pt_conf.c \
-	pt_exec.c pt_file.c pt_tcp.c
-MAN=	mount_portal.8
-
-MOUNT=	${.CURDIR}/../mount
-CPPFLAGS+= -I${.CURDIR}/../../sys -I${MOUNT}
-.PATH:	${MOUNT}
-
-DPADD=	$(LIBCOMPAT)
-LDADD=	-lcompat
+PTAL=	pt_conf.c pt_exec.c pt_file.c pt_tcp.c
+SRCS=	mount_portal.c conf.c activate.c ${PTAL}
+MAN8=	mount_portal.0
 
 .include <bsd.prog.mk>

@@ -1,8 +1,6 @@
-/*	$NetBSD: comm.c,v 1.11 1997/10/18 13:04:27 lukem Exp $	*/
-
 /*
- * Copyright (c) 1989, 1993, 1994
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1989 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Case Larsen.
@@ -36,53 +34,41 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1989, 1993, 1994\n\
-	The Regents of the University of California.  All rights reserved.\n");
+char copyright[] =
+"@(#) Copyright (c) 1989 The Regents of the University of California.\n\
+ All rights reserved.\n";
 #endif /* not lint */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)comm.c	8.4 (Berkeley) 5/4/95";
-#endif
-__RCSID("$NetBSD: comm.c,v 1.11 1997/10/18 13:04:27 lukem Exp $");
+static char sccsid[] = "@(#)comm.c	5.7 (Berkeley) 11/1/90";
 #endif /* not lint */
 
-#include <err.h>
+#include <sys/file.h>
 #include <limits.h>
-#include <locale.h>
 #include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
 
-#define	MAXLINELEN	(LINE_MAX + 1)
+#define	MAXLINELEN	(_POSIX2_LINE_MAX + 1)
 
 char *tabs[] = { "", "\t", "\t\t" };
 
-FILE   *file __P((const char *));
-int	main __P((int, char **));
-void	show __P((FILE *, char *, char *));
-void	usage __P((void));
-
-int
-main(argc, argv)
+main(argc,argv)
 	int argc;
-	char **argv;
+	char *argv[];
 {
-	int comp, file1done, file2done, read1, read2;
+	register int comp, file1done, file2done, read1, read2;
+	register char *col1, *col2, *col3;
 	int ch, flag1, flag2, flag3;
-	FILE *fp1, *fp2;
-	char *col1, *col2, *col3;
+	FILE *fp1, *fp2, *file();
 	char **p, line1[MAXLINELEN], line2[MAXLINELEN];
+	extern int optind;
 
-	setlocale(LC_ALL, "");
-
-	file1done = file2done = 0;
 	flag1 = flag2 = flag3 = 1;
-	while ((ch = getopt(argc, argv, "123")) != -1)
+	while ((ch = getopt(argc, argv, "-123")) != EOF)
 		switch(ch) {
+		case '-':
+			--optind;
+			goto done;
 		case '1':
 			flag1 = 0;
 			break;
@@ -96,7 +82,7 @@ main(argc, argv)
 		default:
 			usage();
 		}
-	argc -= optind;
+done:	argc -= optind;
 	argv += optind;
 
 	if (argc != 2)
@@ -135,11 +121,10 @@ main(argc, argv)
 		}
 
 		/* lines are the same */
-		if (!(comp = strcoll(line1, line2))) {
+		if (!(comp = strcmp(line1, line2))) {
 			read1 = read2 = 1;
 			if (col3)
-				if (printf("%s%s", col3, line1) < 0)
-					break;
+				(void)printf("%s%s", col3, line1);
 			continue;
 		}
 
@@ -148,49 +133,43 @@ main(argc, argv)
 			read1 = 1;
 			read2 = 0;
 			if (col1)
-				if (printf("%s%s", col1, line1) < 0)
-					break;
+				(void)printf("%s%s", col1, line1);
 		} else {
 			read1 = 0;
 			read2 = 1;
 			if (col2)
-				if (printf("%s%s", col2, line2) < 0)
-					break;
+				(void)printf("%s%s", col2, line2);
 		}
 	}
-
-	if (ferror (stdout) || fclose (stdout) == EOF)
-		err(1, "stdout");
-
 	exit(0);
 }
 
-void
 show(fp, offset, buf)
 	FILE *fp;
 	char *offset, *buf;
 {
-	while (printf("%s%s", offset, buf) >= 0 && fgets(buf, MAXLINELEN, fp))
-		;
+	do {
+		(void)printf("%s%s", offset, buf);
+	} while (fgets(buf, MAXLINELEN, fp));
 }
 
 FILE *
 file(name)
-	const char *name;
+	char *name;
 {
 	FILE *fp;
 
 	if (!strcmp(name, "-"))
-		return (stdin);
-	if ((fp = fopen(name, "r")) == NULL)
-		err(1, "%s", name);
-	return (fp);
+		return(stdin);
+	if (!(fp = fopen(name, "r"))) {
+		(void)fprintf(stderr, "comm: can't read %s.\n", name);
+		exit(1);
+	}
+	return(fp);
 }
 
-void
 usage()
 {
-
-	(void)fprintf(stderr, "usage: comm [-123] file1 file2\n");
+	(void)fprintf(stderr, "usage: comm [-123] [ - ] file1 file2\n");
 	exit(1);
 }

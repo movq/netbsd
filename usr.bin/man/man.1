@@ -29,16 +29,16 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\"     @(#)man.1	8.2 (Berkeley) 1/2/94
+.\"     @(#)man.1	8.2 (Berkeley) 11/26/93
 .\"
-.Dd January 2, 1994
+.Dd November 26, 1993
 .Dt MAN 1
 .Os BSD 4
 .Sh NAME
 .Nm man
 .Nd display the on-line manual pages
 .Sh SYNOPSIS
-.Nm
+.Nm man
 .Op Fl achw
 .Op Fl C Ar file
 .Op Fl M Ar path
@@ -47,7 +47,7 @@
 .Ar name Ar ...
 .Sh DESCRIPTION
 The
-.Nm
+.Nm man
 utility
 displays the
 .Bx
@@ -82,7 +82,7 @@ Display only the
 lines of the requested manual pages.
 .It Fl M
 Override the list of standard directories which
-.Nm
+.Nm man
 searches for manual pages.
 The supplied
 .Ar path
@@ -91,11 +91,11 @@ This search path may also be set using the environment variable
 .Ev MANPATH .
 The subdirectories to be searched, and their search order,
 is specified by the ``_subdir'' line in the
-.Nm
+.Nm man
 configuration file.
 .It Fl m
 Augment the list of standard directories which
-.Nm
+.Nm man
 searches for manual pages.
 The supplied
 .Ar path
@@ -108,11 +108,11 @@ option or the
 environment variable.
 The subdirectories to be searched, and their search order,
 is specified by the ``_subdir'' line in the
-.Nm
+.Nm man
 configuration file.
 .It Fl w
 List the pathnames of the manual pages which
-.Nm
+.Nm man
 would display for the specified
 .Ar section
 and
@@ -123,10 +123,10 @@ combination.
 The optional
 .Ar section
 argument restricts the directories that
-.Nm
+.Nm man
 will search.
 The
-.Nm
+.Nm man
 configuration file (see
 .Xr man.conf 5 )
 specifies the possible
@@ -134,13 +134,13 @@ specifies the possible
 values that are currently available.
 If only a single argument is specified or if the first argument is
 not a valid section,
-.Nm
+.Nm man
 assumes that the argument is the name of a manual page to be displayed.
 .Sh ENVIRONMENT
 .Bl -tag -width MANPATHX
 .It Ev MACHINE
 As some manual pages are intended only for specific architectures,
-.Nm
+.Nm man
 searches any subdirectories,
 with the same name as the current architecture,
 in every directory which it searches.
@@ -151,7 +151,7 @@ variable
 to the name of a specific architecture.
 .It Ev MANPATH
 The standard search path used by
-.Nm
+.Nm man
 may be overridden by specifying a path in the
 .Ev MANPATH
 environment
@@ -159,7 +159,7 @@ variable.
 The format of the path is a colon (``:'') separated list of directories.
 The subdirectories to be searched as well as their search order
 is specified by the ``_subdir'' line in the
-.Nm
+.Nm man
 configuration file.
 .It Ev PAGER
 Any value of the environment variable
@@ -179,7 +179,7 @@ default man configuration file.
 .Xr man.conf 5
 .Sh BUGS
 The on-line manual pages are, by necessity, forgiving toward stupid
-display devices, causing a few manual pages to be not as nicely formatted
+display devices, causing a few manual pages to not as nicely formatted
 as their typeset counterparts.
 .Sh HISTORY
 A

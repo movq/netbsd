@@ -1,8 +1,6 @@
-/*	$NetBSD: getcodi.c,v 1.4 1997/10/12 21:24:49 christos Exp $	*/
-
 /*
- * Copyright (c) 1980, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1980 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,17 +31,11 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)getcodi.c	8.1 (Berkeley) 5/31/93";
-#else
-__RCSID("$NetBSD: getcodi.c,v 1.4 1997/10/12 21:24:49 christos Exp $");
-#endif
+static char sccsid[] = "@(#)getcodi.c	5.4 (Berkeley) 6/1/90";
 #endif /* not lint */
 
-#include "getpar.h"
-#include "trek.h"
+# include	"getpar.h"
 
 /*
 **  get course and distance
@@ -55,7 +47,6 @@ __RCSID("$NetBSD: getcodi.c,v 1.4 1997/10/12 21:24:49 christos Exp $");
 **	(meaning to drop the request).
 */
 
-int
 getcodi(co, di)
 int	*co;
 double	*di;

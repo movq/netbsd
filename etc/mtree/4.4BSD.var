@@ -1,5 +1,3 @@
-#	$NetBSD: 4.4BSD.var,v 1.4 1997/10/17 19:16:43 fair Exp $
-#
 #	   user: bostic
 #	machine: vangogh.CS.Berkeley.EDU
 #	   tree: /var
@@ -37,8 +35,8 @@ backups         type=dir mode=0755
 
 
 # ./crash
-/set type=file gname=wheel uname=root mode=0660
-crash           type=dir uname=root mode=0770
+/set type=file gname=wheel uname=root mode=0664
+crash           type=dir uname=root mode=0775
 # ./crash
 ..
 
@@ -108,7 +106,7 @@ rdist           type=dir mode=0775
 
 # ./mail
 /set type=file gname=guest uname=root mode=0600
-mail            type=dir uname=root gname=wheel mode=1777
+mail            type=dir uname=root gname=wheel mode=0755
 # ./mail
 ..
 

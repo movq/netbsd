@@ -1,5 +1,3 @@
-/*	$NetBSD: lfs_balloc.c,v 1.4 1997/06/11 10:09:55 bouyer Exp $	*/
-
 /*
  * Copyright (c) 1989, 1991, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -32,10 +30,10 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)lfs_balloc.c	8.1 (Berkeley) 6/11/93
+ *	from: @(#)lfs_balloc.c	8.1 (Berkeley) 6/11/93
+ *	$Id: lfs_balloc.c,v 1.1 1994/06/08 11:42:26 mycroft Exp $
  */
 #include <sys/param.h>
-#include <sys/systm.h>
 #include <sys/buf.h>
 #include <sys/proc.h>
 #include <sys/vnode.h>
@@ -48,7 +46,6 @@
 #include <ufs/ufs/quota.h>
 #include <ufs/ufs/inode.h>
 #include <ufs/ufs/ufsmount.h>
-#include <ufs/ufs/ufs_extern.h>
 
 #include <ufs/lfs/lfs.h>
 #include <ufs/lfs/lfs_extern.h>
@@ -81,8 +78,7 @@ lfs_balloc(vp, iosize, lbn, bpp)
 	 */
 
 	*bpp = NULL;
-	error = ufs_bmaparray(vp, lbn, &daddr, &indirs[0], &num, NULL);
-	if (error)
+	if (error = ufs_bmaparray(vp, lbn, &daddr, &indirs[0], &num, NULL ))
 		return (error);
 
 	*bpp = bp = getblk(vp, lbn, fs->lfs_bsize, 0, 0);
@@ -100,7 +96,7 @@ lfs_balloc(vp, iosize, lbn, bpp)
 						brelse(ibp);
 						error = ENOSPC;
 					} else {
-						ip->i_ffs_blocks += bb;
+						ip->i_blocks += bb;
 						ip->i_lfs->lfs_bfree -= bb;
 						clrbuf(ibp);
 						error = VOP_BWRITE(ibp);
@@ -123,7 +119,7 @@ lfs_balloc(vp, iosize, lbn, bpp)
 				brelse(bp);
 				return(ENOSPC);
 			} else {
-				ip->i_ffs_blocks += bb;
+				ip->i_blocks += bb;
 				ip->i_lfs->lfs_bfree -= bb;
 				if (iosize != fs->lfs_bsize)
 					clrbuf(bp);

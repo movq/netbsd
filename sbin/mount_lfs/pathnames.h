@@ -1,5 +1,3 @@
-/*	$NetBSD: pathnames.h,v 1.2 1995/03/18 14:57:33 cgd Exp $	*/
-
 /*-
  * Copyright (c) 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -32,7 +30,8 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)pathnames.h	8.1 (Berkeley) 6/8/93
+ *	from: @(#)pathnames.h	8.1 (Berkeley) 6/8/93
+ *	$Id: pathnames.h,v 1.1 1994/06/08 19:15:59 mycroft Exp $
  */
 
 #define _PATH_LFS_CLEANERD	"/usr/libexec/lfs_cleanerd"

@@ -1,5 +1,3 @@
-/*	$NetBSD: closure.c,v 1.5 1997/07/25 16:46:29 perry Exp $	*/
-
 /*
  * Copyright (c) 1989 The Regents of the University of California.
  * All rights reserved.
@@ -36,13 +34,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)closure.c	5.3 (Berkeley) 5/24/93";
-#else
-__RCSID("$NetBSD: closure.c,v 1.5 1997/07/25 16:46:29 perry Exp $");
-#endif
+static char sccsid[] = "@(#)closure.c	5.2 (Berkeley) 6/1/90";
 #endif /* not lint */
 
 #include "defs.h"
@@ -54,17 +47,15 @@ unsigned *ruleset;
 static unsigned *first_derives;
 static unsigned *EFF;
 
-void set_EFF __P((void));
 
-void
 set_EFF()
 {
-    unsigned *row;
-    int symbol;
-    short *sp;
-    int rowsize;
-    int i;
-    int rule;
+    register unsigned *row;
+    register int symbol;
+    register short *sp;
+    register int rowsize;
+    register int i;
+    register int rule;
 
     rowsize = WORDSIZE(nvars);
     EFF = NEW2(nvars * rowsize, unsigned);
@@ -93,76 +84,74 @@ set_EFF()
 }
 
 
-void
 set_first_derives()
 {
-    unsigned *rrow;
-    unsigned *vrow;
-    int j;
-    unsigned k;
-    unsigned cword;
-    short *rp;
+  register unsigned *rrow;
+  register unsigned *vrow;
+  register int j;
+  register unsigned mask;
+  register unsigned cword;
+  register short *rp;
 
-    int rule;
-    int i;
-    int rulesetsize;
-    int varsetsize;
+  int rule;
+  int i;
+  int rulesetsize;
+  int varsetsize;
 
-    cword = 0;
+  rulesetsize = WORDSIZE(nrules);
+  varsetsize = WORDSIZE(nvars);
+  first_derives = NEW2(nvars * rulesetsize, unsigned) - ntokens * rulesetsize;
 
-    rulesetsize = WORDSIZE(nrules);
-    varsetsize = WORDSIZE(nvars);
-    first_derives = NEW2(nvars * rulesetsize, unsigned) - ntokens * rulesetsize;
+  set_EFF();
 
-    set_EFF();
-
-    rrow = first_derives + ntokens * rulesetsize;
-    for (i = start_symbol; i < nsyms; i++)
+  rrow = first_derives + ntokens * rulesetsize;
+  for (i = start_symbol; i < nsyms; i++)
     {
-	vrow = EFF + ((i - ntokens) * varsetsize);
-	k = BITS_PER_WORD;
-	for (j = start_symbol; j < nsyms; k++, j++)
+      vrow = EFF + ((i - ntokens) * varsetsize);
+      cword = *vrow++;
+      mask = 1;
+      for (j = start_symbol; j < nsyms; j++)
 	{
-	    if (k >= BITS_PER_WORD)
+	  if (cword & mask)
 	    {
-		cword = *vrow++;
-		k = 0;
+	      rp = derives[j];
+	      while ((rule = *rp++) >= 0)
+		{
+		  SETBIT(rrow, rule);
+		}
 	    }
 
-	    if (cword & (1 << k))
+	  mask <<= 1;
+	  if (mask == 0)
 	    {
-		rp = derives[j];
-		while ((rule = *rp++) >= 0)
-		{
-		    SETBIT(rrow, rule);
-		}
+	      cword = *vrow++;
+	      mask = 1;
 	    }
 	}
 
-	vrow += varsetsize;
-	rrow += rulesetsize;
+      vrow += varsetsize;
+      rrow += rulesetsize;
     }
 
 #ifdef	DEBUG
-    print_first_derives();
+  print_first_derives();
 #endif
 
-    FREE(EFF);
+  FREE(EFF);
 }
 
 
-void
 closure(nucleus, n)
 short *nucleus;
 int n;
 {
-    int ruleno;
-    unsigned word;
-    unsigned i;
-    short *csp;
-    unsigned *dsp;
-    unsigned *rsp;
-    int rulesetsize;
+    register int ruleno;
+    register unsigned word;
+    register unsigned mask;
+    register short *csp;
+    register unsigned *dsp;
+    register unsigned *rsp;
+    register int rulesetsize;
 
     short *csend;
     unsigned *rsend;
@@ -194,22 +183,27 @@ int n;
     for (rsp = ruleset; rsp < rsend; ++rsp)
     {
 	word = *rsp;
-	if (word)
+	if (word == 0)
+	    ruleno += BITS_PER_WORD;
+	else
 	{
-	    for (i = 0; i < BITS_PER_WORD; ++i)
+	    mask = 1;
+	    while (mask)
 	    {
-		if (word & (1 << i))
+		if (word & mask)
 		{
-		    itemno = rrhs[ruleno+i];
+		    itemno = rrhs[ruleno];
 		    while (csp < csend && *csp < itemno)
 			*itemsetend++ = *csp++;
 		    *itemsetend++ = itemno;
 		    while (csp < csend && *csp == itemno)
 			++csp;
 		}
+
+		    mask <<= 1;
+		    ++ruleno;
 	    }
 	}
-	ruleno += BITS_PER_WORD;
     }
 
     while (csp < csend)
@@ -221,7 +215,7 @@ int n;
 }
 
 
-void
+
 finalize_closure()
 {
   FREE(itemset);
@@ -235,7 +229,7 @@ finalize_closure()
 print_closure(n)
 int n;
 {
-  short *isp;
+  register short *isp;
 
   printf("\n\nn = %d\n\n", n);
   for (isp = itemset; isp < itemsetend; isp++)
@@ -245,10 +239,10 @@ int n;
 
 print_EFF()
 {
-    int i, j;
-    unsigned *rowp;
-    unsigned word;
-    unsigned k;
+    register int i, j, k;
+    register unsigned *rowp;
+    register unsigned word;
+    register unsigned mask;
 
     printf("\n\nEpsilon Free Firsts\n");
 
@@ -258,17 +252,18 @@ print_EFF()
 	rowp = EFF + ((i - start_symbol) * WORDSIZE(nvars));
 	word = *rowp++;
 
-	k = BITS_PER_WORD;
-	for (j = 0; j < nvars; k++, j++)
+	mask = 1;
+	for (j = 0; j < nvars; j++)
 	{
-	    if (k >= BITS_PER_WORD)
+	    if (word & mask)
+		printf("  %s", symbol_name[start_symbol + j]);
+
+	    mask <<= 1;
+	    if (mask == 0)
 	    {
 		word = *rowp++;
-		k = 0;
+		mask = 1;
 	    }
-
-	    if (word & (1 << k))
-		printf("  %s", symbol_name[start_symbol + j]);
 	}
     }
 }
@@ -276,29 +271,31 @@ print_EFF()
 
 print_first_derives()
 {
-    int i;
-    int j;
-    unsigned *rp;
-    unsigned cword;
-    unsigned k;
+  register int i;
+  register int j;
+  register unsigned *rp;
+  register unsigned cword;
+  register unsigned mask;
 
-    printf("\n\n\nFirst Derives\n");
+  printf("\n\n\nFirst Derives\n");
 
-    for (i = start_symbol; i < nsyms; i++)
+  for (i = start_symbol; i < nsyms; i++)
     {
-	printf("\n%s derives\n", symbol_name[i]);
-	rp = first_derives + i * WORDSIZE(nrules);
-	k = BITS_PER_WORD;
-	for (j = 0; j <= nrules; k++, j++)
+      printf("\n%s derives\n", symbol_name[i]);
+      rp = first_derives + i * WORDSIZE(nrules);
+      cword = *rp++;
+      mask = 1;
+      for (j = 0; j <= nrules; j++)
         {
-	  if (k >= BITS_PER_WORD)
-	  {
-	      cword = *rp++;
-	      k = 0;
-	  }
-
-	  if (cword & (1 << k))
+	  if (cword & mask)
 	    printf("   %d\n", j);
+
+	  mask <<= 1;
+	  if (mask == 0)
+	    {
+	      cword = *rp++;
+	      mask = 1;
+	    }
 	}
     }
 

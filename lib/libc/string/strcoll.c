@@ -1,5 +1,3 @@
-/*	$NetBSD: strcoll.c,v 1.5 1997/07/13 20:24:22 christos Exp $	*/
-
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
  * All rights reserved.
@@ -36,21 +34,16 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char *sccsid = "@(#)strcoll.c	5.2 (Berkeley) 1/26/91";
-#else
-__RCSID("$NetBSD: strcoll.c,v 1.5 1997/07/13 20:24:22 christos Exp $");
-#endif
+static char sccsid[] = "@(#)strcoll.c	5.2 (Berkeley) 1/26/91";
 #endif /* LIBC_SCCS and not lint */
 
+#include <sys/cdefs.h>
 #include <string.h>
 
 /*
  * Compare strings according to LC_COLLATE category of current locale.
  */
-int
 strcoll(s1, s2)
 	const char *s1, *s2;
 {

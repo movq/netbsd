@@ -1,7 +1,6 @@
-/*	$NetBSD: lpf.c,v 1.6 1997/10/05 15:12:05 mrg Exp $	*/
 /*
- * Copyright (c) 1983, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1983 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,15 +31,14 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1983, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
-#if 0
-static char sccsid[] = "@(#)lpf.c	8.1 (Berkeley) 6/6/93";
-#else
-__RCSID("$NetBSD: lpf.c,v 1.6 1997/10/05 15:12:05 mrg Exp $");
-#endif
+char copyright[] =
+"@(#) Copyright (c) 1983 Regents of the University of California.\n\
+ All rights reserved.\n";
+#endif /* not lint */
+
+#ifndef lint
+static char sccsid[] = "@(#)lpf.c	5.4 (Berkeley) 6/1/90";
 #endif /* not lint */
 
 /*
@@ -52,10 +50,8 @@ __RCSID("$NetBSD: lpf.c,v 1.6 1997/10/05 15:12:05 mrg Exp $");
  *	to try to gain a little speed.
  */
 
-#include <signal.h>
-#include <unistd.h>
-#include <stdlib.h>
 #include <stdio.h>
+#include <signal.h>
 
 #define MAXWIDTH  132
 #define MAXREP    10
@@ -72,18 +68,15 @@ char	*name;		/* user's login name */
 char	*host;		/* user's machine name */
 char	*acctfile;	/* accounting information file */
 
-int main __P((int, char *[]));
-
-int
 main(argc, argv) 
 	int argc;
 	char *argv[];
 {
-	FILE *p = stdin, *o = stdout;
-	int i, col;
-	char *cp;
-	int done, linedone, maxrep, ch;
-	char *limit;
+	register FILE *p = stdin, *o = stdout;
+	register int i, col;
+	register char *cp;
+	int done, linedone, maxrep;
+	char ch, *limit;
 
 	while (--argc) {
 		if (*(cp = *++argv) == '-') {
@@ -170,7 +163,7 @@ main(argc, argv)
 				}
 
 			default:
-				if (col >= width || (!literal && ch < ' ')) {
+				if (col >= width || !literal && ch < ' ') {
 					col++;
 					break;
 				}

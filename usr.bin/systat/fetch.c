@@ -1,5 +1,3 @@
-/*	$NetBSD: fetch.c,v 1.3 1997/07/21 07:05:01 mrg Exp $	*/
-
 /*-
  * Copyright (c) 1980, 1992, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -33,12 +31,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
 static char sccsid[] = "@(#)fetch.c	8.1 (Berkeley) 6/6/93";
-#endif
-__RCSID("$NetBSD: fetch.c,v 1.3 1997/07/21 07:05:01 mrg Exp $");
 #endif /* not lint */
 
 #include <sys/types.h>

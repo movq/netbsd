@@ -1,10 +1,8 @@
-#	$NetBSD: Makefile,v 1.6 1997/10/08 09:07:22 mrg Exp $
-# from: @(#)Makefile	8.1 (Berkeley) 7/19/93
+#	@(#)Makefile	5.3 (Berkeley) 1/17/91
 
 PROG=	mail.local
-MAN=	mail.local.8
+MAN8=	mail.local.0
 BINOWN=	root
 BINMODE=4555
-#INSTALLFLAGS=-fschg
 
 .include <bsd.prog.mk>

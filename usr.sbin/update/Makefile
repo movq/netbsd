@@ -1,7 +1,7 @@
-#	$NetBSD: Makefile,v 1.6 1997/03/12 18:50:06 mycroft Exp $
-#	@(#)Makefile	8.1 (Berkeley) 6/6/93
+#	@(#)Makefile	5.5 (Berkeley) 6/29/90
 
 PROG=	update
-MAN=	update.8
+MAN8=	update.0
+LDADD=	-lutil
 
 .include <bsd.prog.mk>

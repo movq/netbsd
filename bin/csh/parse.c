@@ -1,8 +1,6 @@
-/*	$NetBSD: parse.c,v 1.8 1997/07/04 21:24:07 christos Exp $	*/
-
 /*-
- * Copyright (c) 1980, 1991, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1980, 1991 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,13 +31,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)parse.c	8.1 (Berkeley) 5/31/93";
-#else
-__RCSID("$NetBSD: parse.c,v 1.8 1997/07/04 21:24:07 christos Exp $");
-#endif
+static char sccsid[] = "@(#)parse.c	5.11 (Berkeley) 6/8/91";
 #endif /* not lint */
 
 #include <sys/types.h>
@@ -84,7 +77,7 @@ static int aleft;
 extern int hleft;
 void
 alias(lex)
-    struct wordent *lex;
+    register struct wordent *lex;
 {
     jmp_buf osetexit;
 
@@ -104,7 +97,7 @@ alias(lex)
 
 static void
 asyntax(p1, p2)
-    struct wordent *p1, *p2;
+    register struct wordent *p1, *p2;
 {
     while (p1 != p2)
 	if (any(";&\n", p1->word[0]))
@@ -118,10 +111,10 @@ asyntax(p1, p2)
 static void
 asyn0(p1, p2)
     struct wordent *p1;
-    struct wordent *p2;
+    register struct wordent *p2;
 {
-    struct wordent *p;
-    int l = 0;
+    register struct wordent *p;
+    register int l = 0;
 
     for (p = p1; p != p2; p = p->next)
 	switch (p->word[0]) {
@@ -158,11 +151,11 @@ asyn0(p1, p2)
 static void
 asyn3(p1, p2)
     struct wordent *p1;
-    struct wordent *p2;
+    register struct wordent *p2;
 {
-    struct varent *ap;
+    register struct varent *ap;
     struct wordent alout;
-    bool redid;
+    register bool redid;
 
     if (p1 == p2)
 	return;
@@ -208,9 +201,9 @@ asyn3(p1, p2)
 
 static struct wordent *
 freenod(p1, p2)
-    struct wordent *p1, *p2;
+    register struct wordent *p1, *p2;
 {
-    struct wordent *retp = p1->prev;
+    register struct wordent *retp = p1->prev;
 
     while (p1 != p2) {
 	xfree((ptr_t) p1->word);
@@ -225,7 +218,7 @@ freenod(p1, p2)
 #define	PHERE	1
 #define	PIN	2
 #define	POUT	4
-#define	PERR	8
+#define	PDIAG	8
 
 /*
  * syntax
@@ -234,7 +227,7 @@ freenod(p1, p2)
  */
 struct command *
 syntax(p1, p2, flags)
-    struct wordent *p1, *p2;
+    register struct wordent *p1, *p2;
     int     flags;
 {
 
@@ -256,8 +249,8 @@ syn0(p1, p2, flags)
     struct wordent *p1, *p2;
     int     flags;
 {
-    struct wordent *p;
-    struct command *t, *t1;
+    register struct wordent *p;
+    register struct command *t, *t1;
     int     l;
 
     l = 0;
@@ -324,8 +317,8 @@ syn1(p1, p2, flags)
     struct wordent *p1, *p2;
     int     flags;
 {
-    struct wordent *p;
-    struct command *t;
+    register struct wordent *p;
+    register struct command *t;
     int     l;
 
     l = 0;
@@ -365,9 +358,9 @@ syn1a(p1, p2, flags)
     struct wordent *p1, *p2;
     int     flags;
 {
-    struct wordent *p;
-    struct command *t;
-    int l = 0;
+    register struct wordent *p;
+    register struct command *t;
+    register int l = 0;
 
     for (p = p1; p != p2; p = p->next)
 	switch (p->word[0]) {
@@ -406,9 +399,9 @@ syn1b(p1, p2, flags)
     struct wordent *p1, *p2;
     int     flags;
 {
-    struct wordent *p;
-    struct command *t;
-    int l = 0;
+    register struct wordent *p;
+    register struct command *t;
+    register int l = 0;
 
     for (p = p1; p != p2; p = p->next)
 	switch (p->word[0]) {
@@ -446,9 +439,9 @@ syn2(p1, p2, flags)
     struct wordent *p1, *p2;
     int     flags;
 {
-    struct wordent *p, *pn;
-    struct command *t;
-    int l = 0;
+    register struct wordent *p, *pn;
+    register struct command *t;
+    register int l = 0;
     int     f;
 
     for (p = p1; p != p2; p = p->next)
@@ -469,7 +462,7 @@ syn2(p1, p2, flags)
 	    f = flags | POUT;
 	    pn = p->next;
 	    if (pn != p2 && pn->word[0] == '&') {
-		f |= PERR;
+		f |= PDIAG;
 		t->t_dflg |= F_STDERR;
 	    }
 	    t->t_dtyp = NODE_PIPE;
@@ -497,10 +490,10 @@ syn3(p1, p2, flags)
     struct wordent *p1, *p2;
     int     flags;
 {
-    struct wordent *p;
+    register struct wordent *p;
     struct wordent *lp, *rp;
-    struct command *t;
-    int l;
+    register struct command *t;
+    register int l;
     Char  **av;
     int     n, c;
     bool    specp = 0;
@@ -601,7 +594,7 @@ again:
 		t->t_dflg |= F_APPEND;
 	    if (p->next != p2 && eq(p->next->word, STRand)) {
 		t->t_dflg |= F_STDERR, p = p->next;
-		if (flags & (POUT | PERR)) {
+		if (flags & (POUT | PDIAG)) {
 		    seterror(ERR_OUTRED);
 		    continue;
 		}
@@ -617,7 +610,7 @@ again:
 		seterror(ERR_MISRED);
 		continue;
 	    }
-	    if ((flags & POUT) && ((flags & PERR) == 0 || t->t_drit))
+	    if ((flags & POUT) && (flags & PDIAG) == 0 || t->t_drit)
 		seterror(ERR_OUTRED);
 	    else
 		t->t_drit = Strsave(p->word);
@@ -673,9 +666,9 @@ again:
 
 void
 freesyn(t)
-    struct command *t;
+    register struct command *t;
 {
-    Char **v;
+    register Char **v;
 
     if (t == 0)
 	return;

@@ -1,5 +1,3 @@
-/*	$NetBSD: memory.h,v 1.3 1994/10/26 00:56:06 cgd Exp $	*/
-
 /*
  * Copyright (c) 1988 Regents of the University of California.
  * All rights reserved.

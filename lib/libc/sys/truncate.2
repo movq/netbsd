@@ -1,7 +1,5 @@
-.\"	$NetBSD: truncate.2,v 1.7 1995/02/27 12:39:00 cgd Exp $
-.\"
-.\" Copyright (c) 1983, 1991, 1993
-.\"	The Regents of the University of California.  All rights reserved.
+.\" Copyright (c) 1983, 1991 The Regents of the University of California.
+.\" All rights reserved.
 .\"
 .\" Redistribution and use in source and binary forms, with or without
 .\" modification, are permitted provided that the following conditions
@@ -31,14 +29,13 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\"     @(#)truncate.2	8.1 (Berkeley) 6/4/93
+.\"     @(#)truncate.2	6.9 (Berkeley) 3/10/91
 .\"
-.Dd June 4, 1993
+.Dd March 10, 1991
 .Dt TRUNCATE 2
 .Os BSD 4.2
 .Sh NAME
-.Nm truncate ,
-.Nm ftruncate
+.Nm truncate
 .Nd truncate a file to a specified length
 .Sh SYNOPSIS
 .Fd #include <unistd.h>
@@ -68,15 +65,14 @@ specifies the error.
 .Sh ERRORS
 .Fn Truncate
 succeeds unless:
-.Bl -tag -width Er
+.Bl -tag -width [ENOTDIR]
 .It Bq Er ENOTDIR
 A component of the path prefix is not a directory.
+.It Bq Er EINVAL
+The pathname contains a character with the high-order bit set.
 .It Bq Er ENAMETOOLONG
-A component of a pathname exceeded 
-.Dv {NAME_MAX}
-characters, or an entire path name exceeded 
-.Dv {PATH_MAX}
-characters.
+A component of a pathname exceeded 255 characters,
+or an entire path name exceeded 1023 characters.
 .It Bq Er ENOENT
 The named file does not exist.
 .It Bq Er EACCES
@@ -100,7 +96,7 @@ points outside the process's allocated address space.
 .Pp
 .Fn Ftruncate
 succeeds unless:
-.Bl -tag -width Er
+.Bl -tag -width [ENOTDIR]
 .It Bq Er EBADF
 The
 .Fa fd
@@ -121,8 +117,6 @@ These calls should be generalized to allow ranges
 of bytes in a file to be discarded.
 .Sh HISTORY
 The
-.Fn truncate
-and
-.Fn ftruncate
-function calls appeared in
+.Nm
+function call appeared in
 .Bx 4.2 .

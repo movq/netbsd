@@ -1,8 +1,6 @@
-/*	$NetBSD: biz22.c,v 1.6 1997/02/11 09:24:11 mrg Exp $	*/
-
 /*
- * Copyright (c) 1983, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1983 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -34,10 +32,7 @@
  */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)biz22.c	8.1 (Berkeley) 6/6/93";
-#endif
-static char rcsid[] = "$NetBSD: biz22.c,v 1.6 1997/02/11 09:24:11 mrg Exp $";
+static char sccsid[] = "@(#)biz22.c	5.5 (Berkeley) 3/2/91";
 #endif /* not lint */
 
 #include "tip.h"
@@ -47,8 +42,6 @@ static char rcsid[] = "$NetBSD: biz22.c,v 1.6 1997/02/11 09:24:11 mrg Exp $";
 static	void sigALRM();
 static	int timeout = 0;
 static	jmp_buf timeoutbuf;
-
-static int cmd(), detect();
 
 /*
  * Dial up on a BIZCOMP Model 1022 with either
@@ -61,6 +54,7 @@ biz_dialer(num, mod)
 {
 	register int connected = 0;
 	char cbuf[40];
+	static int cmd(), detect();
 
 	if (boolean(value(VERBOSE)))
 		printf("\nstarting call...");
@@ -72,13 +66,15 @@ biz_dialer(num, mod)
 		printf("can't initialize bizcomp...");
 		return (0);
 	}
-	(void)strncpy(cbuf, "\02.\r", sizeof(cbuf) - 1);
+	strcpy(cbuf, "\02.\r");
 	cbuf[1] = *mod;
 	if (cmd(cbuf)) {
 		printf("can't set dialing mode...");
 		return (0);
 	}
-	(void)snprintf(cbuf, sizeof cbuf, "\02D%s\r", num);
+	strcpy(cbuf, "\02D");
+	strcat(cbuf, num);
+	strcat(cbuf, "\r");
 	write(FD, cbuf, strlen(cbuf));
 	if (!detect("7\r")) {
 		printf("can't get dial tone...");
@@ -96,7 +92,7 @@ biz_dialer(num, mod)
 	if (timeout) {
 		char line[80];
 
-		(void)snprintf(line, sizeof line, "%d second dial timeout",
+		sprintf(line, "%d second dial timeout",
 			number(value(DIALTIMEOUT)));
 		logent(value(HOST), num, "biz1022", line);
 	}
@@ -126,7 +122,7 @@ biz22_disconnect()
 
 	write(FD, DISCONNECT_CMD, 4);
 	sleep(2);
-	tcflush(FD, TCIOFLUSH);
+	ioctl(FD, TIOCFLUSH, &rw);
 }
 
 biz22_abort()

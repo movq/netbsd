@@ -1,5 +1,3 @@
-/*	$NetBSD: floatdisf.c,v 1.4 1997/07/13 20:01:47 christos Exp $	*/
-
 /*-
  * Copyright (c) 1992, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -37,13 +35,9 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char sccsid[] = "@(#)floatdisf.c	8.1 (Berkeley) 6/4/93";
-#else
-__RCSID("$NetBSD: floatdisf.c,v 1.4 1997/07/13 20:01:47 christos Exp $");
-#endif
+/*static char *sccsid = "from: @(#)floatdisf.c	8.1 (Berkeley) 6/4/93";*/
+static char *rcsid = "$Id: floatdisf.c,v 1.1 1993/09/16 06:05:59 mycroft Exp $";
 #endif /* LIBC_SCCS and not lint */
 
 #include "quad.h"
@@ -76,7 +70,7 @@ __floatdisf(x)
 	 *
 	 * Using double here may be excessive paranoia.
 	 */
-	f = (double)u.ul[H] * (((long)1 << (LONG_BITS - 2)) * 4.0);
+	f = (double)u.ul[H] * ((1 << (LONG_BITS - 2)) * 4.0);
 	f += u.ul[L];
 
 	return (neg ? -f : f);

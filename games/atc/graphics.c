@@ -1,8 +1,6 @@
-/*	$NetBSD: graphics.c,v 1.4 1997/10/10 02:07:11 lukem Exp $	*/
-
 /*-
- * Copyright (c) 1990, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1990 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Ed James.
@@ -45,16 +43,14 @@
  * For more info on this and all of my stuff, mail edjames@berkeley.edu.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)graphics.c	8.1 (Berkeley) 5/31/93";
-#else
-__RCSID("$NetBSD: graphics.c,v 1.4 1997/10/10 02:07:11 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)graphics.c	5.3 (Berkeley) 10/30/90";
 #endif /* not lint */
 
 #include "include.h"
+#ifdef SYSV
+#include <errno.h>
+#endif
 
 #define C_TOPBOTTOM		'-'
 #define C_LEFTRIGHT		'|'
@@ -66,7 +62,6 @@ __RCSID("$NetBSD: graphics.c,v 1.4 1997/10/10 02:07:11 lukem Exp $");
 
 WINDOW	*radar, *cleanradar, *credit, *input, *planes;
 
-int
 getAChar()
 {
 #ifdef BSD
@@ -80,7 +75,6 @@ getAChar()
 #endif
 }
 
-void
 erase_all()
 {
 	PLANE	*pp;
@@ -95,7 +89,6 @@ erase_all()
 	}
 }
 
-void
 draw_all()
 {
 	PLANE	*pp;
@@ -115,7 +108,6 @@ draw_all()
 	fflush(stdout);
 }
 
-void
 init_gr()
 {
 	static char	buffer[BUFSIZ];
@@ -128,12 +120,11 @@ init_gr()
 	planes = newwin(LINES - INPUT_LINES, PLANE_COLS, 0, COLS - PLANE_COLS);
 }
 
-void
 setup_screen(scp)
 	C_SCREEN	*scp;
 {
-	int	i, j;
-	char	str[3], *airstr;
+	register int	i, j;
+	char		str[3], *airstr;
 
 	str[2] = '\0';
 
@@ -220,10 +211,8 @@ setup_screen(scp)
 	fflush(stdout);
 }
 
-void
 draw_line(w, x, y, lx, ly, s)
 	WINDOW	*w;
-	int	 x, y, lx, ly;
 	char	*s;
 {
 	int	dx, dy;
@@ -240,9 +229,7 @@ draw_line(w, x, y, lx, ly, s)
 	}
 }
 
-void
 ioclrtoeol(pos)
-	int pos;
 {
 	wmove(input, 0, pos);
 	wclrtoeol(input);
@@ -250,18 +237,14 @@ ioclrtoeol(pos)
 	fflush(stdout);
 }
 
-void
 iomove(pos)
-	int pos;
 {
 	wmove(input, 0, pos);
 	wrefresh(input);
 	fflush(stdout);
 }
 
-void
 ioaddstr(pos, str)
-	int	 pos;
 	char	*str;
 {
 	wmove(input, 0, pos);
@@ -270,7 +253,6 @@ ioaddstr(pos, str)
 	fflush(stdout);
 }
 
-void
 ioclrtobot()
 {
 	wclrtobot(input);
@@ -278,9 +260,7 @@ ioclrtobot()
 	fflush(stdout);
 }
 
-void
 ioerror(pos, len, str)
-	int	 pos, len;
 	char	*str;
 {
 	int	i;
@@ -294,9 +274,7 @@ ioerror(pos, len, str)
 	fflush(stdout);
 }
 
-void
-quit(dummy)
-	int dummy;
+quit()
 {
 	int			c, y, x;
 #ifdef BSD
@@ -333,12 +311,13 @@ quit(dummy)
 	wmove(input, y, x);
 	wrefresh(input);
 	fflush(stdout);
+	return;
 }
 
-void
 planewin()
 {
 	PLANE	*pp;
+	char	*command();
 	int	warning = 0;
 
 #ifdef BSD
@@ -378,7 +357,6 @@ planewin()
 	fflush(stdout);
 }
 
-void
 loser(p, s)
 	PLANE	*p;
 	char	*s;
@@ -413,7 +391,6 @@ loser(p, s)
 	exit(0);
 }
 
-void
 redraw()
 {
 	clear();
@@ -432,7 +409,7 @@ redraw()
 	fflush(stdout);
 }
 
-void
+
 done_screen()
 {
 	clear();

@@ -1,8 +1,6 @@
-/*	$NetBSD: docmd.c,v 1.16 1997/10/19 14:50:58 mrg Exp $	*/
-
 /*
- * Copyright (c) 1983, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1983 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,54 +31,31 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)docmd.c	8.1 (Berkeley) 6/9/93";
-#else
-__RCSID("$NetBSD: docmd.c,v 1.16 1997/10/19 14:50:58 mrg Exp $");
-#endif
+static char sccsid[] = "@(#)docmd.c	5.8 (Berkeley) 3/1/91";
 #endif /* not lint */
 
-#include <sys/types.h>
-#include <sys/ioctl.h>
-
-#include <errno.h>
-#include <netdb.h>
-#include <regex.h>
-#include <setjmp.h>
-
 #include "defs.h"
+#include <setjmp.h>
+#include <netdb.h>
 
 FILE	*lfp;			/* log file for recording files updated */
 struct	subcmd *subcmds;	/* list of sub-commands for current cmd */
 jmp_buf	env;
 
-static int	 remerr = -1;	/* Remote stderr */
-
-static int	 makeconn __P((char *));
-static int	 okname __P((char *));
-static void	 closeconn __P((void));
-static void	 cmptime __P((char *));
-static void	 doarrow __P((char **,
-		    struct namelist *, char *, struct subcmd *));
-static void	 dodcolon __P((char **,
-		    struct namelist *, char *, struct subcmd *));
-static void	 notify __P((char *, char *, struct namelist *, time_t));
-static void	 rcmptime __P((struct stat *));
+void cleanup(), lostconn();
 
 /*
  * Do the commands in cmds (initialized by yyparse).
  */
-void
 docmds(dhosts, argc, argv)
 	char **dhosts;
 	int argc;
 	char **argv;
 {
-	struct cmd *c;
-	struct namelist *f;
-	char **cpp;
+	register struct cmd *c;
+	register struct namelist *f;
+	register char **cpp;
 	extern struct cmd *cmds;
 
 	signal(SIGHUP, cleanup);
@@ -128,25 +103,19 @@ docmds(dhosts, argc, argv)
 /*
  * Process commands for sending files to other machines.
  */
-static void
 doarrow(filev, files, rhost, cmds)
 	char **filev;
 	struct namelist *files;
 	char *rhost;
 	struct subcmd *cmds;
 {
-	struct namelist *f;
-	struct subcmd *sc;
-	char **cpp;
+	register struct namelist *f;
+	register struct subcmd *sc;
+	register char **cpp;
 	int n, ddir, opts = options;
 
-#if __GNUC__		/* XXX borken compiler alert! */
-	(void)&opts;
-#endif
-
 	if (debug)
-		printf("doarrow(%lx, %s, %lx)\n",
-		    (long)files, rhost, (long)cmds);
+		printf("doarrow(%x, %s, %x)\n", files, rhost, cmds);
 
 	if (files == NULL) {
 		error("no files to be updated\n");
@@ -173,7 +142,7 @@ doarrow(filev, files, rhost, cmds)
 			for (cpp = filev; *cpp; cpp++)
 				if (strcmp(f->n_name, *cpp) == 0)
 					goto found;
-			if (!nflag && lfp)
+			if (!nflag)
 				(void) fclose(lfp);
 			continue;
 		}
@@ -193,8 +162,7 @@ doarrow(filev, files, rhost, cmds)
 done:
 	if (!nflag) {
 		(void) signal(SIGPIPE, cleanup);
-		if (lfp)
-			(void) fclose(lfp);
+		(void) fclose(lfp);
 		lfp = NULL;
 	}
 	for (sc = cmds; sc != NULL; sc = sc->sc_next)
@@ -206,9 +174,8 @@ done:
 			free(ihead);
 			if ((opts & IGNLNKS) || ihead->count == 0)
 				continue;
-			if (lfp)
-				log(lfp, "%s: Warning: missing links\n",
-					ihead->pathname);
+			log(lfp, "%s: Warning: missing links\n",
+				ihead->pathname);
 		}
 	}
 }
@@ -216,16 +183,16 @@ done:
 /*
  * Create a connection to the rdist server on the machine rhost.
  */
-static int
 makeconn(rhost)
 	char *rhost;
 {
-	char *ruser, *cp;
+	register char *ruser, *cp;
 	static char *cur_host = NULL;
 	static int port = -1;
 	char tuser[20];
 	int n;
 	extern char user[];
+	extern int userid;
 
 	if (debug)
 		printf("makeconn(%s)\n", rhost);
@@ -236,7 +203,7 @@ makeconn(rhost)
 		closeconn();
 	}
 	cur_host = rhost;
-	cp = strchr(rhost, '@');
+	cp = index(rhost, '@');
 	if (cp != NULL) {
 		char c = *cp;
 
@@ -253,8 +220,7 @@ makeconn(rhost)
 		ruser = user;
 	if (!qflag)
 		printf("updating host %s\n", rhost);
-	(void) snprintf(buf, sizeof(buf), "%s -Server%s", _PATH_RDIST,
-	    qflag ? " -q" : "");
+	(void) sprintf(buf, "%s -Server%s", _PATH_RDIST, qflag ? " -q" : "");
 	if (port < 0) {
 		struct servent *sp;
 
@@ -269,18 +235,18 @@ makeconn(rhost)
 	}
 
 	fflush(stdout);
-	seteuid(0);
-	rem = rcmd(&rhost, port, user, ruser, buf, &remerr);
-	seteuid(userid);
+	setreuid(userid, 0);
+	rem = rcmd(&rhost, port, user, ruser, buf, 0);
+	setreuid(0, userid);
 	if (rem < 0)
 		return(0);
 	cp = buf;
 	if (read(rem, cp, 1) != 1)
-		lostconn(0);
+		lostconn();
 	if (*cp == 'V') {
 		do {
 			if (read(rem, cp, 1) != 1)
-				lostconn(0);
+				lostconn();
 		} while (*cp++ != '\n' && cp < &buf[BUFSIZ]);
 		*--cp = '\0';
 		cp = buf;
@@ -290,13 +256,8 @@ makeconn(rhost)
 		if (*cp == '\0' && n == VERSION)
 			return(1);
 		error("connection failed: version numbers don't match (local %d, remote %d)\n", VERSION, n);
-	} else {
+	} else
 		error("connection failed: version numbers don't match\n");
-		error("got unexpected input:");
-		do {
-			error("%c", *cp);
-		} while (*cp != '\n' && read(rem, cp, 1) == 1);
-	}
 	closeconn();
 	return(0);
 }
@@ -304,7 +265,6 @@ makeconn(rhost)
 /*
  * Signal end of previous connection.
  */
-static void
 closeconn()
 {
 	if (debug)
@@ -313,48 +273,24 @@ closeconn()
 	if (rem >= 0) {
 		(void) write(rem, "\2\n", 2);
 		(void) close(rem);
-		(void) close(remerr);
 		rem = -1;
-		remerr = -1;
 	}
 }
 
 void
-lostconn(signo)
-	int signo;
+lostconn()
 {
-	char buf[BUFSIZ];
-	int nr = -1;
-
-	if (remerr != -1)
-		if (ioctl(remerr, FIONREAD, &nr) != -1) {
-			if (nr >= sizeof(buf))
-				nr = sizeof(buf) - 1;
-			if ((nr = read(remerr, buf, nr)) > 0) {
-				buf[nr] = '\0';
-				if (buf[nr - 1] == '\n')
-					buf[--nr] = '\0';
-			}
-		}
-
-	if (nr <= 0)
-		(void) strcpy(buf, "lost connection");
-
 	if (iamremote)
-		cleanup(0);
-	if (lfp)
-		log(lfp, "rdist: %s\n", buf);
-	else
-		error("%s\n", buf);
+		cleanup();
+	log(lfp, "rdist: lost connection\n");
 	longjmp(env, 1);
 }
 
-static int
 okname(name)
-	char *name;
+	register char *name;
 {
-	char *cp = name;
-	int c;
+	register char *cp = name;
+	register int c;
 
 	do {
 		c = *cp;
@@ -377,17 +313,17 @@ extern	char target[], *tp;
 /*
  * Process commands for comparing files to time stamp files.
  */
-static void
 dodcolon(filev, files, stamp, cmds)
 	char **filev;
 	struct namelist *files;
 	char *stamp;
 	struct subcmd *cmds;
 {
-	struct subcmd *sc;
-	struct namelist *f;
-	char **cpp;
+	register struct subcmd *sc;
+	register struct namelist *f;
+	register char **cpp;
 	struct timeval tv[2];
+	struct timezone tz;
 	struct stat stb;
 
 	if (debug)
@@ -402,7 +338,7 @@ dodcolon(filev, files, stamp, cmds)
 		return;
 	}
 	if (debug)
-		printf("%s: %lu\n", stamp, (u_long)stb.st_mtime);
+		printf("%s: %d\n", stamp, stb.st_mtime);
 
 	subcmds = cmds;
 	lastmod = stb.st_mtime;
@@ -410,10 +346,10 @@ dodcolon(filev, files, stamp, cmds)
 		tfp = NULL;
 	else {
 		if ((tfp = fopen(tempfile, "w")) == NULL) {
-			error("%s: %s\n", tempfile, strerror(errno));
+			error("%s: %s\n", stamp, strerror(errno));
 			return;
 		}
-		(void) gettimeofday(&tv[0], (struct timezone *)0);
+		(void) gettimeofday(&tv[0], &tz);
 		tv[1] = tv[0];
 		(void) utimes(stamp, tv);
 	}
@@ -442,7 +378,6 @@ dodcolon(filev, files, stamp, cmds)
 /*
  * Compare the mtime of file to the list of time stamps.
  */
-static void
 cmptime(name)
 	char *name;
 {
@@ -491,18 +426,17 @@ cmptime(name)
 		log(tfp, "new: %s\n", name);
 }
 
-static void
 rcmptime(st)
 	struct stat *st;
 {
-	DIR *d;
-	struct direct *dp;
-	char *cp;
+	register DIR *d;
+	register struct direct *dp;
+	register char *cp;
 	char *otp;
 	int len;
 
 	if (debug)
-		printf("rcmptime(%lx)\n", (long)st);
+		printf("rcmptime(%x)\n", st);
 
 	if ((d = opendir(target)) == NULL) {
 		error("%s: %s\n", target, strerror(errno));
@@ -510,7 +444,7 @@ rcmptime(st)
 	}
 	otp = tp;
 	len = tp - target;
-	while ((dp = readdir(d)) != NULL) {
+	while (dp = readdir(d)) {
 		if (!strcmp(dp->d_name, ".") || !strcmp(dp->d_name, ".."))
 			continue;
 		if (len + 1 + strlen(dp->d_name) >= BUFSIZ - 1) {
@@ -520,7 +454,7 @@ rcmptime(st)
 		tp = otp;
 		*tp++ = '/';
 		cp = dp->d_name;
-		while ((*tp++ = *cp++) != 0)
+		while (*tp++ = *cp++)
 			;
 		tp--;
 		cmptime(target);
@@ -535,15 +469,14 @@ rcmptime(st)
  * rhost == NULL if we are mailing a list of changes compared to at time
  * stamp file.
  */
-static void
 notify(file, rhost, to, lmod)
 	char *file, *rhost;
-	struct namelist *to;
+	register struct namelist *to;
 	time_t lmod;
 {
-	int fd, len;
+	register int fd, len;
+	FILE *pf, *popen();
 	struct stat stb;
-	FILE *pf;
 
 	if ((options & VERIFY) || to == NULL)
 		return;
@@ -572,7 +505,7 @@ notify(file, rhost, to, lmod)
 	/*
 	 * Create a pipe to mailling program.
 	 */
-	(void)snprintf(buf, sizeof(buf), "%s -oi -t", _PATH_SENDMAIL);
+	(void)sprintf(buf, "%s -oi -t", _PATH_SENDMAIL);
 	pf = popen(buf, "w");
 	if (pf == NULL) {
 		error("notify: \"%s\" failed\n", _PATH_SENDMAIL);
@@ -613,12 +546,11 @@ notify(file, rhost, to, lmod)
 /*
  * Return true if name is in the list.
  */
-int
 inlist(list, file)
 	struct namelist *list;
 	char *file;
 {
-	struct namelist *nl;
+	register struct namelist *nl;
 
 	for (nl = list; nl != NULL; nl = nl->n_next)
 		if (!strcmp(file, nl->n_name))
@@ -629,14 +561,11 @@ inlist(list, file)
 /*
  * Return TRUE if file is in the exception list.
  */
-int
 except(file)
 	char *file;
 {
-	struct	subcmd *sc;
-	struct	namelist *nl;
-	int err;
-	regex_t s;
+	register struct	subcmd *sc;
+	register struct	namelist *nl;
 
 	if (debug)
 		printf("except(%s)\n", file);
@@ -650,16 +579,8 @@ except(file)
 					return(1);
 				continue;
 			}
-			if ((err = regcomp(&s, nl->n_name, 0)) != 0) {
-				char ebuf[BUFSIZ];
-				(void) regerror(err, &s, ebuf, sizeof(ebuf));
-				error("%s: %s\n", nl->n_name, ebuf);
-			}
-			if (regexec(&s, file, 0, NULL, 0) == 0) {
-				regfree(&s);
+			if (regexec(file, regcomp(nl->n_name)) > 0)
 				return(1);
-			}
-			regfree(&s);
 		}
 	}
 	return(0);
@@ -667,7 +588,7 @@ except(file)
 
 char *
 colon(cp)
-	char *cp;
+	register char *cp;
 {
 
 	while (*cp) {

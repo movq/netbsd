@@ -1,5 +1,3 @@
-/*	$NetBSD: extern.h,v 1.3 1995/04/24 12:22:37 cgd Exp $	*/
-
 /*-
  * Copyright (c) 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -61,7 +59,7 @@ void	 prtable __P((char *[],
 void	 putstr __P((char *));
 void	 redraw __P((void));
 void	 results __P((void));
-int	 setup __P((int, time_t));
+int	 setup __P((int, long));
 void	 showboard __P((char *));
 void	 showstr __P((char *, int));
 void	 showword __P((int));

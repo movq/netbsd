@@ -1,5 +1,3 @@
-/*	$NetBSD: pr_time.c,v 1.8 1997/10/20 03:08:44 lukem Exp $	*/
-
 /*-
  * Copyright (c) 1990, 1993, 1994
  *	The Regents of the University of California.  All rights reserved.
@@ -33,13 +31,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
 static char sccsid[] = "@(#)pr_time.c	8.2 (Berkeley) 4/4/94";
-#else
-__RCSID("$NetBSD: pr_time.c,v 1.8 1997/10/20 03:08:44 lukem Exp $");
-#endif
 #endif /* not lint */
 
 #include <sys/types.h>
@@ -56,37 +49,36 @@ __RCSID("$NetBSD: pr_time.c,v 1.8 1997/10/20 03:08:44 lukem Exp $");
  *	Print the time since the user logged in. 
  *
  *	Note: SCCS forces the bizarre string manipulation, things like
- *	%I% get replaced in the source code.
+ *	8.2 get replaced in the source code.
  */
 void
 pr_attime(started, now)
 	time_t *started, *now;
 {
 	static char buf[256];
-	int tnow_yday;
 	struct tm *tp;
 	time_t diff;
-	char *fmt;
+	char fmt[20];
 
-	tnow_yday = localtime(now)->tm_yday;
 	tp = localtime(started);
 	diff = *now - *started;
 
 	/* If more than a week, use day-month-year. */
 	if (diff > SECSPERDAY * DAYSPERWEEK)
-		fmt = "%d%b%y";
+		(void)strcpy(fmt, "%d%b%y");
 
 	/* If not today, use day-hour-am/pm. */
-	else if (tp->tm_yday != tnow_yday)
-		fmt = __CONCAT("%a%", "I%p");
+	else if (*now / SECSPERDAY != *started / SECSPERDAY) {
+		(void)strcpy(fmt, __CONCAT("%a%", "I%p"));
+	}
 
 	/* Default is hh:mm{am,pm}. */
-	else
-		fmt = __CONCAT("%l:%", "M%p");
+	else {
+		(void)strcpy(fmt, __CONCAT("%l:%", "M%p"));
+	}
 
 	(void)strftime(buf, sizeof(buf), fmt, tp);
-	buf[sizeof(buf) - 1] = '\0';
-	(void)fputs(buf, stdout);
+	(void)printf("%s", buf);
 }
 
 /*
@@ -97,19 +89,16 @@ void
 pr_idle(idle)
 	time_t idle;
 {
-	int days = idle / SECSPERDAY;
-
 	/* If idle more than 36 hours, print as a number of days. */
 	if (idle >= 36 * SECSPERHOUR)
-		printf(days == 1 ? "  %dday " : " %ddays ", days);
+		(void)printf(" %ddays ", idle / SECSPERDAY);
 
 	/* If idle more than an hour, print as HH:MM. */
 	else if (idle >= SECSPERHOUR)
 		(void)printf(" %2d:%02d ",
-		    (int)(idle / SECSPERHOUR),
-		    (int)((idle % SECSPERHOUR) / SECSPERMIN));
+		    idle / SECSPERHOUR, (idle % SECSPERHOUR) / SECSPERMIN);
 
 	/* Else print the minutes idle. */
 	else
-		(void)printf("    %2d ", (int)(idle / SECSPERMIN));
+		(void)printf("    %2d ", idle / SECSPERMIN);
 }

@@ -1,8 +1,6 @@
-/*	$NetBSD: parties.c,v 1.5 1997/10/13 19:44:47 christos Exp $	*/
-
 /*
- * Copyright (c) 1983, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1983 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,24 +31,18 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)parties.c	8.2 (Berkeley) 4/28/95";
-#else
-__RCSID("$NetBSD: parties.c,v 1.5 1997/10/13 19:44:47 christos Exp $");
-#endif
+static char sccsid[] = "@(#)parties.c	5.4 (Berkeley) 6/1/90";
 #endif /* not lint */
 
-#include "extern.h"
+#include "externs.h"
 
-int
 meleeing(from, to)
 struct ship *from;
-struct ship *to;
+register struct ship *to;
 {
-	struct BP *p = from->file->OBP;
-	struct BP *q = p + NBP;
+	register struct BP *p = from->file->OBP;
+	register struct BP *q = p + NBP;
 
 	for (; p < q; p++)
 		if (p->turnsent && p->toship == to)
@@ -58,13 +50,12 @@ struct ship *to;
 	return 0;
 }
 
-int
 boarding(from, isdefense)
-struct ship *from;
+register struct ship *from;
 char isdefense;
 {
-	struct BP *p = isdefense ? from->file->DBP : from->file->OBP;
-	struct BP *q = p + NBP;
+	register struct BP *p = isdefense ? from->file->DBP : from->file->OBP;
+	register struct BP *q = p + NBP;
 
 	for (; p < q; p++)
 		if (p->turnsent)
@@ -72,13 +63,12 @@ char isdefense;
 	return 0;
 }
 
-void
 unboard(ship, to, isdefense)
-struct ship *ship, *to;
-char isdefense;
+register struct ship *ship, *to;
+register char isdefense;
 {
-	struct BP *p = isdefense ? ship->file->DBP : ship->file->OBP;
-	int n;
+	register struct BP *p = isdefense ? ship->file->DBP : ship->file->OBP;
+	register n;
 
 	for (n = 0; n < NBP; p++, n++)
 		if (p->turnsent && (p->toship == to || isdefense || ship == to))

@@ -1,8 +1,6 @@
-/*	$NetBSD: ctl.c,v 1.4 1997/10/20 00:23:14 lukem Exp $	*/
-
 /*
- * Copyright (c) 1983, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1983 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,12 +31,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)ctl.c	8.1 (Berkeley) 6/6/93";
-#endif
-__RCSID("$NetBSD: ctl.c,v 1.4 1997/10/20 00:23:14 lukem Exp $");
+static char sccsid[] = "@(#)ctl.c	5.7 (Berkeley) 3/1/91";
 #endif /* not lint */
 
 /*
@@ -47,8 +41,11 @@ __RCSID("$NetBSD: ctl.c,v 1.4 1997/10/20 00:23:14 lukem Exp $");
  * the progress
  */
 
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <protocols/talkd.h>
+#include <netinet/in.h>
 #include "talk.h"
-#include <arpa/inet.h>
 #include "talk_ctl.h"
 
 struct	sockaddr_in daemon_addr = { sizeof(daemon_addr), AF_INET };
@@ -67,7 +64,6 @@ int	invitation_waiting = 0;
 
 CTL_MSG msg;
 
-void
 open_sockt()
 {
 	int length;
@@ -85,7 +81,6 @@ open_sockt()
 }
 
 /* open the ctl socket */
-void
 open_ctl() 
 {
 	int length;
@@ -105,14 +100,13 @@ open_ctl()
 }
 
 /* print_addr is a debug print routine */
-void
 print_addr(addr)
 	struct sockaddr_in addr;
 {
 	int i;
 
-	printf("addr = %s, port = %o, family = %o zero = ",
-		inet_ntoa(addr.sin_addr), addr.sin_port, addr.sin_family);
+	printf("addr = %x, port = %o, family = %o zero = ",
+		addr.sin_addr, addr.sin_port, addr.sin_family);
 	for (i = 0; i<8;i++)
 	printf("%o ", (int)addr.sin_zero[i]);
 	putchar('\n');

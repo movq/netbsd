@@ -1,8 +1,6 @@
-/*	$NetBSD: main.c,v 1.6 1997/10/13 22:18:32 cjs Exp $	*/
-
 /*
- * Copyright (c) 1980, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1980 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,29 +31,20 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1980, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+char copyright[] =
+"@(#) Copyright (c) 1980 Regents of the University of California.\n\
+ All rights reserved.\n";
 #endif /* not lint */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)main.c	8.1 (Berkeley) 5/31/93";
-#else
-__RCSID("$NetBSD: main.c,v 1.6 1997/10/13 22:18:32 cjs Exp $");
-#endif
+static char sccsid[] = "@(#)main.c	5.7 (Berkeley) 2/28/91";
 #endif /* not lint */
 
-#include <stdio.h>
-#include <setjmp.h>
-#include <termios.h>
-#include <stdlib.h>
-#include <unistd.h>
-#include <err.h>
-#include <time.h>
-#include "trek.h"
-#include "getpar.h"
+# include	"trek.h"
+# include	<stdio.h>
+# include	<sgtty.h>
+# include	<setjmp.h>
 
 # define	PRIO		00	/* default priority */
 
@@ -160,36 +149,30 @@ int	Mother	= 51 + (51 << 8);
 
 jmp_buf env;
 
-int main __P((int, char **));
-
-int
 main(argc, argv)
 int	argc;
 char	**argv;
 {
-	time_t		curtime;
 	long			vect;
-	char		opencode;
+	/* extern FILE		*f_log; */
+	register char		opencode;
 	int			prio;
-	int		ac;
-	char		**av;
-	struct	termios		argp;
+	register int		ac;
+	register char		**av;
+	struct	sgttyb		argp;
 
 	av = argv;
 	ac = argc;
 	av++;
-	time(&curtime);
-	vect = (long) curtime;
+	time(&vect);
 	srand(vect);
 	opencode = 'w';
 	prio = PRIO;
-
-	if (tcgetattr(1, &argp) == 0)
+	if (gtty(1, &argp) == 0)
 	{
-		if (cfgetispeed(&argp) < B1200)
+		if ((argp.sg_ispeed ) < B1200)
 			Etc.fast++;
 	}
-
 	while (ac > 1 && av[0][0] == '-')
 	{
 		switch (av[0][1])
@@ -229,7 +212,7 @@ char	**argv;
 		av++;
 	}
 	if (ac > 2)
-		errx(1, "arg count");
+		syserr(0, "arg count");
 		/*
 	if (ac > 1)
 		f_log = fopen(av[0], opencode);
@@ -249,5 +232,4 @@ char	**argv;
 	} while (getynpar("Another game"));
 
 	fflush(stdout);
-	return 0;
 }

@@ -29,24 +29,21 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\"     from: @(#)sigpause.2	6.6 (Berkeley) 3/10/91
-.\"	$NetBSD: sigpause.3,v 1.7 1997/05/12 07:37:35 mikel Exp $
+.\"     @(#)sigpause.2	6.6 (Berkeley) 3/10/91
 .\"
 .Dd March 10, 1991
-.Dt SIGPAUSE 3
+.Dt SIGPAUSE 2
 .Os BSD 4
 .Sh NAME
 .Nm sigpause
 .Nd atomically release blocked signals and wait for interrupt
 .Sh SYNOPSIS
-.Fd #include <signal.h>
+.Fd #include <sys/signal.h>
 .Ft int
 .Fn sigpause "int sigmask"
 .Sh DESCRIPTION
-.Bf -symbolic
-This interface is made obsolete by
+.Sy This interface is made obsolete by
 .Xr sigsuspend 2 .
-.Ef
 .Pp
 .Fn Sigpause
 assigns 
@@ -61,17 +58,17 @@ signals are to be blocked.
 always terminates by being interrupted, returning -1 with
 .Va errno
 set to
-.Dv EINTR .
+.Dv EINTR
 .Sh SEE ALSO
+.Xr sigsuspend 2 ,
 .Xr kill 2 ,
 .Xr sigaction 2 ,
 .Xr sigprocmask 2 ,
-.Xr sigsuspend 2 ,
-.Xr sigblock 3 ,
-.Xr sigvec 3
+.Xr sigblock 2 ,
+.Xr sigvec 2
 .Sh HISTORY
 The
-.Fn sigpause
+.Nm
 function call appeared in
 .Bx 4.2
 and has been deprecated.

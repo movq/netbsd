@@ -1,8 +1,6 @@
-/*	$NetBSD: timezone.c,v 1.10 1997/10/20 15:50:29 christos Exp $	*/
-
 /*
- * Copyright (c) 1987, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1987 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,16 +31,10 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char sccsid[] = "@(#)timezone.c	8.1 (Berkeley) 6/4/93";
-#else
-__RCSID("$NetBSD: timezone.c,v 1.10 1997/10/20 15:50:29 christos Exp $");
-#endif
+static char sccsid[] = "@(#)timezone.c	5.10 (Berkeley) 2/23/91";
 #endif /* LIBC_SCCS and not lint */
 
-#include "namespace.h"
 #include <sys/types.h>
 #include <sys/time.h>
 #include <stdio.h>
@@ -50,9 +42,7 @@ __RCSID("$NetBSD: timezone.c,v 1.10 1997/10/20 15:50:29 christos Exp $");
 #include <string.h>
 #include <tzfile.h>
 
-#ifdef __weak_alias
-__weak_alias(timezone,_timezone);
-#endif
+char *_tztab();
 
 /*
  * timezone --
@@ -61,8 +51,6 @@ __weak_alias(timezone,_timezone);
  *	giving the name of the local timezone.  Should be replaced, in the
  *	application code, by a call to localtime.
  */
-
-char *_tztab __P((int, int));
 
 static char	czone[TZ_MAX_CHARS];		/* space for zone name */
 
@@ -74,8 +62,8 @@ timezone(zone, dst)
 	register char	*beg,
 			*end;
 
-	if ((beg = getenv("TZNAME")) != NULL) {	/* set in environment */
-		if ((end = strchr(beg, ',')) != NULL) {	/* "PST,PDT" */
+	if (beg = getenv("TZNAME")) {		/* set in environment */
+		if (end = index(beg, ',')) {	/* "PST,PDT" */
 			if (dst)
 				return(++end);
 			*end = '\0';
@@ -94,22 +82,22 @@ static struct zone {
 	char	*stdzone;
 	char	*dlzone;
 } zonetab[] = {
-	{ -1*60,	"MET",	"MET DST" },	/* Middle European */
-	{ -2*60,	"EET",	"EET DST" },	/* Eastern European */
-	{ 4*60,		"AST",	"ADT" },	/* Atlantic */
-	{ 5*60,		"EST",	"EDT" },	/* Eastern */
-	{ 6*60,		"CST",	"CDT" },	/* Central */
-	{ 7*60,		"MST",	"MDT" },	/* Mountain */
-	{ 8*60,		"PST",	"PDT" },	/* Pacific */
+	-1*60,	"MET",	"MET DST",	/* Middle European */
+	-2*60,	"EET",	"EET DST",	/* Eastern European */
+	4*60,	"AST",	"ADT",		/* Atlantic */
+	5*60,	"EST",	"EDT",		/* Eastern */
+	6*60,	"CST",	"CDT",		/* Central */
+	7*60,	"MST",	"MDT",		/* Mountain */
+	8*60,	"PST",	"PDT",		/* Pacific */
 #ifdef notdef
 	/* there's no way to distinguish this from WET */
-	{ 0,		"GMT",	0 },		/* Greenwich */
+	0,	"GMT",	0,		/* Greenwich */
 #endif
-	{ 0*60,		"WET",	"WET DST" },	/* Western European */
-	{ -10*60,	"EST",	"EST" },	/* Aust: Eastern */
-     	{ -10*60+30,	"CST",	"CST" },	/* Aust: Central */
- 	{ -8*60,	"WST",	0 },		/* Aust: Western */
-	{ -1,		NULL,	NULL }
+	0*60,	"WET",	"WET DST",	/* Western European */
+	-10*60,	"EST",	"EST",		/* Aust: Eastern */
+     -10*60+30,	"CST",	"CST",		/* Aust: Central */
+	-8*60,	"WST",	0,		/* Aust: Western */
+	-1
 };
 
 /*
@@ -141,7 +129,6 @@ _tztab(zone,dst)
 	}
 	else
 		sign = '-';
-	(void)snprintf(czone, TZ_MAX_CHARS, "GMT%c%d:%02d", sign, zone / 60,
-	     zone % 60);
+	(void)sprintf(czone,"GMT%c%d:%02d",sign,zone / 60,zone % 60);
 	return(czone);
 }

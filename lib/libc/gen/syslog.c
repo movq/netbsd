@@ -1,8 +1,6 @@
-/*	$NetBSD: syslog.c,v 1.12 1997/07/21 14:07:37 jtc Exp $	*/
-
 /*
- * Copyright (c) 1983, 1988, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1983, 1988 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,51 +31,34 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char sccsid[] = "@(#)syslog.c	8.4 (Berkeley) 3/18/94";
-#else
-__RCSID("$NetBSD: syslog.c,v 1.12 1997/07/21 14:07:37 jtc Exp $");
-#endif
+static char sccsid[] = "@(#)syslog.c	5.34 (Berkeley) 6/26/91";
 #endif /* LIBC_SCCS and not lint */
 
-#include "namespace.h"
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <sys/file.h>
 #include <sys/syslog.h>
 #include <sys/uio.h>
+#include <sys/errno.h>
 #include <netdb.h>
-
-#include <errno.h>
-#include <fcntl.h>
-#include <paths.h>
-#include <stdio.h>
 #include <string.h>
-#include <time.h>
-#include <unistd.h>
-
 #if __STDC__
 #include <stdarg.h>
 #else
 #include <varargs.h>
 #endif
-
-#ifdef __weak_alias
-__weak_alias(closelog,_closelog);
-__weak_alias(openlog,_openlog);
-__weak_alias(setlogmask,_setlogmask);
-__weak_alias(syslog,_syslog);
-__weak_alias(vsyslog,_vsyslog);
-#endif
+#include <time.h>
+#include <unistd.h>
+#include <paths.h>
+#include <stdio.h>
 
 static int	LogFile = -1;		/* fd for log */
 static int	connected;		/* have done connect */
 static int	LogStat = 0;		/* status bits, set by openlog() */
-static const char *LogTag = NULL;	/* string to tag the entry with */
+static const char *LogTag = "syslog";	/* string to tag the entry with */
 static int	LogFacility = LOG_USER;	/* default facility code */
 static int	LogMask = 0xff;		/* mask of priorities to be logged */
-extern char	*__progname;		/* Program name, from crt0. */
 
 /*
  * syslog, vsyslog --
@@ -111,126 +92,82 @@ vsyslog(pri, fmt, ap)
 	va_list ap;
 {
 	register int cnt;
-	register char ch, *p, *t;
-	time_t now;
+	register char *p;
+	time_t now, time();
 	int fd, saved_errno;
-#define	TBUF_LEN	2048
-#define	FMT_LEN		1024
-	char *stdp = NULL;	/* pacify gcc */
-	char tbuf[TBUF_LEN], fmt_cpy[FMT_LEN];
-	int tbuf_left, fmt_left, prlen;
+	char tbuf[2048], fmt_cpy[1024], *stdp, *ctime();
 
-#define	INTERNALLOG	LOG_ERR|LOG_CONS|LOG_PERROR|LOG_PID
-	/* Check for invalid bits. */
-	if (pri & ~(LOG_PRIMASK|LOG_FACMASK)) {
-		syslog(INTERNALLOG,
-		    "syslog: unknown facility/priority: %x", pri);
-		pri &= LOG_PRIMASK|LOG_FACMASK;
-	}
-
-	/* Check priority against setlogmask values. */
-	if (!(LOG_MASK(LOG_PRI(pri)) & LogMask))
+	/* check for invalid bits or no priority set */
+	if (!LOG_PRI(pri) || (pri &~ (LOG_PRIMASK|LOG_FACMASK)) ||
+	    !(LOG_MASK(pri) & LogMask))
 		return;
 
 	saved_errno = errno;
 
-	/* Set default facility if none specified. */
+	/* set default facility if none specified */
 	if ((pri & LOG_FACMASK) == 0)
 		pri |= LogFacility;
 
-	/* Build the message. */
-	
-	/*
- 	 * Although it's tempting, we can't ignore the possibility of
-	 * overflowing the buffer when assembling the "fixed" portion
-	 * of the message.  Strftime's "%h" directive expands to the
-	 * locale's abbreviated month name, but if the user has the
-	 * ability to construct to his own locale files, it may be
-	 * arbitrarily long.
-	 */
+	/* build the message */
 	(void)time(&now);
-
-	p = tbuf;  
-	tbuf_left = TBUF_LEN;
-	
-#define	DEC()	\
-	do {					\
-		if (prlen >= tbuf_left)		\
-			prlen = tbuf_left - 1;	\
-		p += prlen;			\
-		tbuf_left -= prlen;		\
-	} while (0)
-
-	prlen = snprintf(p, tbuf_left, "<%d>", pri);
-	DEC();
-
-	prlen = strftime(p, tbuf_left, "%h %e %T ", localtime(&now));
-	DEC();
-
+	(void)sprintf(tbuf, "<%d>%.15s ", pri, ctime(&now) + 4);
+	for (p = tbuf; *p; ++p);
 	if (LogStat & LOG_PERROR)
 		stdp = p;
-	if (LogTag == NULL)
-		LogTag = __progname;
-	if (LogTag != NULL) {
-		prlen = snprintf(p, tbuf_left, "%s", LogTag);
-		DEC();
+	if (LogTag) {
+		(void)strcpy(p, LogTag);
+		for (; *p; ++p);
 	}
 	if (LogStat & LOG_PID) {
-		prlen = snprintf(p, tbuf_left, "[%d]", getpid());
-		DEC();
+		(void)sprintf(p, "[%d]", getpid());
+		for (; *p; ++p);
 	}
-	if (LogTag != NULL) {
-		if (tbuf_left > 1) {
-			*p++ = ':';
-			tbuf_left--;
-		}
-		if (tbuf_left > 1) {
-			*p++ = ' ';
-			tbuf_left--;
-		}
+	if (LogTag) {
+		*p++ = ':';
+		*p++ = ' ';
 	}
 
-	/* 
-	 * We wouldn't need this mess if printf handled %m, or if 
-	 * strerror() had been invented before syslog().
-	 */
-	for (t = fmt_cpy, fmt_left = FMT_LEN; (ch = *fmt) != '\0'; ++fmt) {
-		if (ch == '%' && fmt[1] == 'm') {
-			++fmt;
-			prlen = snprintf(t, fmt_left, "%s",
-			    strerror(saved_errno));
-			if (prlen >= fmt_left)
-				prlen = fmt_left - 1;
-			t += prlen;
-			fmt_left -= prlen;
-		} else {
-			if (fmt_left > 1) {
-				*t++ = ch;
-				fmt_left--;
+	/* substitute error message for %m */
+	{
+		register char ch, *t1, *t2;
+		char *strerror();
+
+		for (t1 = fmt_cpy; ch = *fmt; ++fmt)
+			if (ch == '%' && fmt[1] == 'm') {
+				++fmt;
+				for (t2 = strerror(saved_errno);
+				    *t1 = *t2++; ++t1);
 			}
-		}
+			else
+				*t1++ = ch;
+		*t1 = '\0';
 	}
-	*t = '\0';
 
-	prlen = vsnprintf(p, tbuf_left, fmt_cpy, ap);
-	DEC();
-	cnt = p - tbuf;
+	(void)vsprintf(p, fmt_cpy, ap);
 
-	/* Output to stderr if requested. */
+	cnt = strlen(tbuf);
+
+	/* output to stderr if requested */
 	if (LogStat & LOG_PERROR) {
 		struct iovec iov[2];
+		register struct iovec *v = iov;
 
-		iov[0].iov_base = stdp;
-		iov[0].iov_len = cnt - (stdp - tbuf);
-		iov[1].iov_base = "\n";
-		iov[1].iov_len = 1;
+		v->iov_base = stdp;
+		v->iov_len = cnt - (stdp - tbuf);
+		++v;
+		v->iov_base = "\n";
+		v->iov_len = 1;
 		(void)writev(STDERR_FILENO, iov, 2);
 	}
 
-	/* Get connected, output the message to the local logger. */
+	/* get connected, output the message to the local logger */
 	if (!connected)
 		openlog(LogTag, LogStat | LOG_NDELAY, 0);
 	if (send(LogFile, tbuf, cnt, 0) >= 0)
+		return;
+
+	/* see if should attempt the console */
+	if (!(LogStat&LOG_CONS))
 		return;
 
 	/*
@@ -238,16 +175,11 @@ vsyslog(pri, fmt, ap)
 	 * if console blocks everything will.  Make sure the error reported
 	 * is the one from the syslogd failure.
 	 */
-	if (LogStat & LOG_CONS &&
-	    (fd = open(_PATH_CONSOLE, O_WRONLY, 0)) >= 0) {
-		struct iovec iov[2];
-		
-		p = strchr(tbuf, '>') + 1;
-		iov[0].iov_base = p;
-		iov[0].iov_len = cnt - (p - tbuf);
-		iov[1].iov_base = "\r\n";
-		iov[1].iov_len = 2;
-		(void)writev(fd, iov, 2);
+	if ((fd = open(_PATH_CONSOLE, O_WRONLY, 0)) >= 0) {
+		(void)strcat(tbuf, "\r\n");
+		cnt += 2;
+		p = index(tbuf, '>') + 1;
+		(void)write(fd, p, cnt - (p - tbuf));
 		(void)close(fd);
 	}
 }
@@ -292,7 +224,6 @@ closelog()
 }
 
 /* setlogmask -- set the log mask level */
-int
 setlogmask(pmask)
 	int pmask;
 {

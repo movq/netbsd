@@ -1,8 +1,6 @@
-/*	$NetBSD: uniq.c,v 1.8 1997/10/20 02:27:05 lukem Exp $	*/
-
 /*
- * Copyright (c) 1989, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1989 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Case Larsen.
@@ -36,52 +34,35 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1989, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+char copyright[] =
+"@(#) Copyright (c) 1989 The Regents of the University of California.\n\
+ All rights reserved.\n";
 #endif /* not lint */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)uniq.c	8.3 (Berkeley) 5/4/95";
-#endif
-__RCSID("$NetBSD: uniq.c,v 1.8 1997/10/20 02:27:05 lukem Exp $");
+static char sccsid[] = "@(#)uniq.c	5.2 (Berkeley) 6/1/90";
 #endif /* not lint */
 
-#include <err.h>
-#include <errno.h>
 #include <stdio.h>
 #include <ctype.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
-
-#define	MAXLINELEN	(8 * 1024)
 
 int cflag, dflag, uflag;
 int numchars, numfields, repeats;
 
-FILE	*file __P((char *, char *));
-int	 main __P((int, char **));
-void	 show __P((FILE *, char *));
-char	*skip __P((char *));
-void	 obsolete __P((char *[]));
-void	 usage __P((void));
+#define	MAXLINELEN	(2048 + 1)
 
-int
-main (argc, argv)
+main (argc,argv)
 	int argc;
-	char *argv[];
+	char **argv;
 {
-	char *t1, *t2;
-	FILE *ifp, *ofp;
+	extern int optind;
+	FILE *ifp, *ofp, *file();
 	int ch;
-	char *prevline, *thisline, *p;
+	register char *t1, *t2;
+	char *prevline, *thisline, *malloc(), *skip();
 
-	ifp = ofp = NULL;
-	obsolete(argv);
-	while ((ch = getopt(argc, argv, "-cdf:s:u")) != -1)
+	while ((ch = getopt(argc, argv, "-cdu123456789")) != EOF)
 		switch (ch) {
 		case '-':
 			--optind;
@@ -92,20 +73,18 @@ main (argc, argv)
 		case 'd':
 			dflag = 1;
 			break;
-		case 'f':
-			numfields = strtol(optarg, &p, 10);
-			if (numfields < 0 || *p)
-				errx(1, "illegal field skip value: %s", optarg);
-			break;
-		case 's':
-			numchars = strtol(optarg, &p, 10);
-			if (numchars < 0 || *p)
-				errx(1, "illegal character skip value: %s",
-				    optarg);
-			break;
 		case 'u':
 			uflag = 1;
 			break;
+		/*
+		 * since -n is a valid option that could be picked up by
+		 * getopt, but is better handled by the +n and -n code, we
+		 * break out.
+		 */
+		case '1': case '2': case '3': case '4':
+		case '5': case '6': case '7': case '8': case '9':
+			--optind;
+			goto done;
 		case '?':
 		default:
 			usage();
@@ -114,13 +93,29 @@ main (argc, argv)
 done:	argc -= optind;
 	argv +=optind;
 
-	/* If no flags are set, default is -d -u. */
+	/* if no flags are set, default is -d -u */
 	if (cflag) {
 		if (dflag || uflag)
 			usage();
 	} else if (!dflag && !uflag)
 		dflag = uflag = 1;
 
+	/* because of the +, getopt is messed up */
+	for (; **argv == '+' || **argv == '-'; ++argv, --argc)
+		switch (**argv) {
+		case '+':
+			if ((numchars = atoi(*argv + 1)) < 0)
+				goto negerr;
+			break;
+		case '-':
+			if ((numfields = atoi(*argv + 1)) < 0) {
+negerr:				(void)fprintf(stderr,
+				    "uniq: negative field/char skip value.\n");
+				usage();
+			}
+			break;
+		}
+    
 	switch(argc) {
 	case 0:
 		ifp = stdin;
@@ -140,14 +135,10 @@ done:	argc -= optind;
 
 	prevline = malloc(MAXLINELEN);
 	thisline = malloc(MAXLINELEN);
-	if (prevline == NULL || thisline == NULL)
-		err(1, "malloc");
-
-	if (fgets(prevline, MAXLINELEN, ifp) == NULL)
-		exit(0);
+	(void)fgets(prevline, MAXLINELEN, ifp);
 
 	while (fgets(thisline, MAXLINELEN, ifp)) {
-		/* If requested get the chosen fields + character offsets. */
+		/* if requested get the chosen fields + character offsets */
 		if (numfields || numchars) {
 			t1 = skip(thisline);
 			t2 = skip(prevline);
@@ -156,14 +147,15 @@ done:	argc -= optind;
 			t2 = prevline;
 		}
 
-		/* If different, print; set previous to new value. */
+		/* if different, print; set previous to new value */
 		if (strcmp(t1, t2)) {
 			show(ofp, prevline);
 			t1 = prevline;
 			prevline = thisline;
 			thisline = t1;
 			repeats = 0;
-		} else
+		}
+		else
 			++repeats;
 	}
 	show(ofp, prevline);
@@ -172,26 +164,24 @@ done:	argc -= optind;
 
 /*
  * show --
- *	Output a line depending on the flags and number of repetitions
+ *	output a line depending on the flags and number of repetitions
  *	of the line.
  */
-void
 show(ofp, str)
 	FILE *ofp;
 	char *str;
 {
-
-	if (cflag && *str)
+	if (cflag)
 		(void)fprintf(ofp, "%4d %s", repeats + 1, str);
-	if ((dflag && repeats) || (uflag && !repeats))
+	if (dflag && repeats || uflag && !repeats)
 		(void)fprintf(ofp, "%s", str);
 }
 
 char *
 skip(str)
-	char *str;
+	register char *str;
 {
-	int infield, nchars, nfields;
+	register int infield, nchars, nfields;
 
 	for (nfields = numfields, infield = 0; nfields && *str; ++str)
 		if (isspace(*str)) {
@@ -211,45 +201,16 @@ file(name, mode)
 {
 	FILE *fp;
 
-	if ((fp = fopen(name, mode)) == NULL)
-		err(1, "%s", name);
+	if (!(fp = fopen(name, mode))) {
+		(void)fprintf(stderr, "uniq: can't open %s.\n", name);
+		exit(1);
+	}
 	return(fp);
 }
 
-void
-obsolete(argv)
-	char *argv[];
-{
-	int len;
-	char *ap, *p, *start;
-
-	while ((ap = *++argv) != NULL) {
-		/* Return if "--" or not an option of any form. */
-		if (ap[0] != '-') {
-			if (ap[0] != '+')
-				return;
-		} else if (ap[1] == '-')
-			return;
-		if (!isdigit(ap[1]))
-			continue;
-		/*
-		 * Digit signifies an old-style option.  Malloc space for dash,
-		 * new option and argument.
-		 */
-		len = strlen(ap);
-		if ((start = p = malloc(len + 3)) == NULL)
-			err(1, "malloc");
-		*p++ = '-';
-		*p++ = ap[0] == '+' ? 's' : 'f';
-		(void)strcpy(p, ap + 1);
-		*argv = start;
-	}
-}
-
-void
 usage()
 {
 	(void)fprintf(stderr,
-	    "usage: uniq [-c | -du] [-f fields] [-s chars] [input [output]]\n");
+	    "usage: uniq [-c | -du] [- #fields] [+ #chars] [input [output]]\n");
 	exit(1);
 }

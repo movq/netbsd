@@ -1,8 +1,6 @@
-/*	$NetBSD: putchar.c,v 1.7 1997/07/22 07:36:57 mikel Exp $	*/
-
 /*
- * Copyright (c) 1981, 1993, 1994
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1981 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,24 +31,18 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)putchar.c	8.2 (Berkeley) 5/4/94";
-#else
-__RCSID("$NetBSD: putchar.c,v 1.7 1997/07/22 07:36:57 mikel Exp $");
-#endif
-#endif	/* not lint */
+static char sccsid[] = "@(#)putchar.c	5.4 (Berkeley) 6/1/90";
+#endif /* not lint */
 
-#include "curses.h"
+# include	"curses.ext"
 
-void
-__cputchar(ch)
-	int ch;
-{
+char
+_putchar(c)
+reg char	c; {
 
+	putchar(c);
 #ifdef DEBUG
-	__CTRACE("__cputchar: %s\n", unctrl(ch));
+	fprintf(outf, "_PUTCHAR(%s)\n", unctrl(c));
 #endif
-	(void)putchar(ch);
 }

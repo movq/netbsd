@@ -1,8 +1,6 @@
-/*	$NetBSD: schedule.c,v 1.4 1997/10/12 21:25:11 christos Exp $	*/
-
 /*
- * Copyright (c) 1980, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1980 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,19 +31,11 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)schedule.c	8.1 (Berkeley) 5/31/93";
-#else
-__RCSID("$NetBSD: schedule.c,v 1.4 1997/10/12 21:25:11 christos Exp $");
-#endif
+static char sccsid[] = "@(#)schedule.c	5.4 (Berkeley) 6/1/90";
 #endif /* not lint */
 
-#include <stdio.h>
-#include <math.h>
-#include <err.h>
-#include "trek.h"
+# include	"trek.h"
 
 /*
 **  SCHEDULE AN EVENT
@@ -63,8 +53,8 @@ double	offset;
 char	x, y;
 char	z;
 {
-	struct event	*e;
-	int		i;
+	register struct event	*e;
+	register int		i;
 	double			date;
 
 	date = Now.date + offset;
@@ -87,7 +77,7 @@ char	z;
 		Now.eventptr[type] = e;
 		return (e);
 	}
-	errx(1, "Cannot schedule event %d parm %d %d %d", type, x, y, z);
+	syserr("Cannot schedule event %d parm %d %d %d", type, x, y, z);
 }
 
 
@@ -98,13 +88,12 @@ char	z;
 **	time plus 'offset'.
 */
 
-void
 reschedule(e1, offset)
 struct event	*e1;
 double		offset;
 {
 	double			date;
-	struct event	*e;
+	register struct event	*e;
 
 	e = e1;
 
@@ -125,11 +114,10 @@ double		offset;
 **	The event at slot 'e' is deleted.
 */
 
-void
 unschedule(e1)
 struct event	*e1;
 {
-	struct event	*e;
+	register struct event	*e;
 
 	e = e1;
 
@@ -157,7 +145,7 @@ int	ev1;
 int	factor;
 int	x, y, z;
 {
-	int	ev;
+	register int	ev;
 
 	ev = ev1;
 	return (schedule(ev, -Param.eventdly[ev] * Param.time * log(franf()) / factor, x, y, z));
@@ -171,14 +159,13 @@ int	x, y, z;
 **	division factor.  Look at the code to see what really happens.
 */
 
-void
 xresched(e1, ev1, factor)
 struct event	*e1;
 int		ev1;
 int		factor;
 {
-	int		ev;
-	struct event	*e;
+	register int		ev;
+	register struct event	*e;
 
 	ev = ev1;
 	e = e1;

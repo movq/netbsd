@@ -1,8 +1,6 @@
-/*	$NetBSD: erase.c,v 1.9 1997/07/22 07:36:39 mikel Exp $	*/
-
 /*
- * Copyright (c) 1981, 1993, 1994
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1981 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,51 +31,39 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)erase.c	8.2 (Berkeley) 5/4/94";
-#else
-__RCSID("$NetBSD: erase.c,v 1.9 1997/07/22 07:36:39 mikel Exp $");
-#endif
-#endif	/* not lint */
+static char sccsid[] = "@(#)erase.c	5.4 (Berkeley) 6/1/90";
+#endif /* not lint */
 
-#include "curses.h"
+# include	"curses.ext"
 
 /*
- * werase --
- *	Erases everything on the window.
+ *	This routine erases everything on the window.
+ *
  */
-int
 werase(win)
-	register WINDOW *win;
-{
+reg WINDOW	*win; {
 
-	register int minx, y;
-	register __LDATA *sp, *end, *start, *maxx;
+	reg int		y;
+	reg char	*sp, *end, *start, *maxx;
+	reg int		minx;
 
-#ifdef DEBUG
-	__CTRACE("werase: (%0.2o)\n", win);
-#endif
-#ifdef __GNUC__
-	maxx = NULL;		/* XXX gcc -Wuninitialized */
-#endif
-	for (y = 0; y < win->maxy; y++) {
-		minx = -1;
-		start = win->lines[y]->line;
-		end = &start[win->maxx];
+# ifdef DEBUG
+	fprintf(outf, "WERASE(%0.2o)\n", win);
+# endif
+	for (y = 0; y < win->_maxy; y++) {
+		minx = _NOCHANGE;
+		start = win->_y[y];
+		end = &start[win->_maxx];
 		for (sp = start; sp < end; sp++)
-			if (sp->ch != ' ' || sp->attr != 0) {
-				maxx = sp; 
-				if (minx == -1)
+			if (*sp != ' ') {
+				maxx = sp;
+				if (minx == _NOCHANGE)
 					minx = sp - start;
-				sp->ch = ' ';
-				sp->attr = 0;
+				*sp = ' ';
 			}
-		if (minx != -1)
-			__touchline(win, y, minx, maxx - win->lines[y]->line,
-			   0);
+		if (minx != _NOCHANGE)
+			touchline(win, y, minx, maxx - win->_y[y]);
 	}
-	wmove(win, 0, 0);
-	return (OK);
+	win->_curx = win->_cury = 0;
 }

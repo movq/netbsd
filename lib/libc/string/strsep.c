@@ -1,5 +1,3 @@
-/*	$NetBSD: strsep.c,v 1.5 1997/07/13 20:24:32 christos Exp $	*/
-
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
  * All rights reserved.
@@ -34,15 +32,12 @@
  */
 
 #include <sys/cdefs.h>
-#if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static const char sccsid[] = "@(#)strsep.c	5.4 (Berkeley) 1/26/91";
-#else
-__RCSID("$NetBSD: strsep.c,v 1.5 1997/07/13 20:24:32 christos Exp $");
-#endif
-#endif /* LIBC_SCCS and not lint */
-
 #include <string.h>
+#include <stdio.h>
+
+#if defined(LIBC_SCCS) && !defined(lint)
+static const char sccsid[] = "@(#)strsep.c	5.4 (Berkeley) 1/26/91";
+#endif /* LIBC_SCCS and not lint */
 
 /*
  * Get next token from string *stringp, where tokens are nonempty

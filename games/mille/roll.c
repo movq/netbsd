@@ -1,8 +1,6 @@
-/*	$NetBSD: roll.c,v 1.6 1997/10/12 00:54:28 lukem Exp $	*/
-
 /*
- * Copyright (c) 1982, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1982 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,13 +31,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)roll.c	8.1 (Berkeley) 5/31/93";
-#else
-__RCSID("$NetBSD: roll.c,v 1.6 1997/10/12 00:54:28 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)roll.c	5.4 (Berkeley) 6/1/90";
 #endif /* not lint */
 
 # include	"mille.h"
@@ -51,12 +44,11 @@ __RCSID("$NetBSD: roll.c,v 1.6 1997/10/12 00:54:28 lukem Exp $");
  *
  */
 
-int
 roll(ndie, nsides)
-	int	ndie, nsides; 
-{
+reg int	ndie, nsides; {
 
-	int		tot;
+	reg int			tot;
+	extern unsigned int	random();
 
 	tot = 0;
 	while (ndie--)

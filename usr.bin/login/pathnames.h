@@ -1,8 +1,6 @@
-/*	$NetBSD: pathnames.h,v 1.5 1997/08/16 13:50:47 lukem Exp $	*/
-
 /*-
- * Copyright (c) 1989, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1989 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,11 +30,10 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)pathnames.h	8.1 (Berkeley) 6/9/93
+ *	@(#)pathnames.h	5.7 (Berkeley) 4/18/91
  */
 
 #include <paths.h>
 
 #define	_PATH_HUSHLOGIN	".hushlogin"
 #define	_PATH_MOTDFILE	"/etc/motd"
-#define	_PATH_BINPASSWD	"/usr/bin/passwd"

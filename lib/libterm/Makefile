@@ -1,24 +1,13 @@
-#	$NetBSD: Makefile,v 1.10 1997/10/13 16:11:41 lukem Exp $
-#	@(#)Makefile	8.1 (Berkeley) 6/4/93
+#	@(#)Makefile	5.10 (Berkeley) 6/1/90
 
 LIB=	termcap
 CFLAGS+=-DCM_N -DCM_GT -DCM_B -DCM_D
 SRCS=	termcap.c tgoto.c tputs.c
 
-MAN=	termcap.3
+MAN3=	termcap.0
 MLINKS=	termcap.3 tgetent.3 termcap.3 tgetflag.3 termcap.3 tgetnum.3 \
 	termcap.3 tgetstr.3 termcap.3 tgoto.3 termcap.3 tputs.3
-LINKS=	${LIBDIR}/libtermcap.a ${LIBDIR}/libtermlib.a
-INCS=	termcap.h
-INCSDIR=/usr/include
+LINKS=	${LIBDIR}/libtermcap.a ${LIBDIR}/libtermlib.a \
+	${LIBDIR}/libtermcap_p.a ${LIBDIR}/libtermlib_p.a
 
 .include <bsd.lib.mk>
-
-.if !defined(NOPROFILE)
-LINKS+=	${LIBDIR}/libtermcap_p.a ${LIBDIR}/libtermlib_p.a
-.endif
-
-.if !defined(NOPIC) && defined(SHLIB_MAJOR) && defined(SHLIB_MINOR)
-LINKS+=	${LIBDIR}/lib${LIB}.so.${SHLIB_MAJOR}.${SHLIB_MINOR} \
-	${LIBDIR}/libtermlib.so.${SHLIB_MAJOR}.${SHLIB_MINOR}
-.endif

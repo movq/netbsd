@@ -1,8 +1,6 @@
-/*	$NetBSD: tcp_timer.h,v 1.6 1995/03/26 20:32:37 jtc Exp $	*/
-
 /*
- * Copyright (c) 1982, 1986, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1982, 1986 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,7 +30,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)tcp_timer.h	8.1 (Berkeley) 6/10/93
+ *	@(#)tcp_timer.h	7.8 (Berkeley) 6/28/90
  */
 
 /*
@@ -82,6 +80,7 @@
  * amount of time probing, then we drop the connection.
  */
 
+#define	TCP_TTL		60		/* default time to live for TCP segs */
 /*
  * Time constants.
  */
@@ -121,7 +120,7 @@ char *tcptimers[] =
 		(tv) = (tvmax); \
 }
 
-#ifdef _KERNEL
+#ifdef KERNEL
 extern int tcp_keepidle;		/* time before keepalive probes begin */
 extern int tcp_keepintvl;		/* time between keepalive probes */
 extern int tcp_maxidle;			/* time to drop after starting probes */

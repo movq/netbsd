@@ -1,10 +1,7 @@
-/*	$NetBSD: README.hdlc,v 1.4 1994/06/29 06:36:58 cgd Exp $	*/
+/* Copyright (c) University of British Columbia, 1984 */
 
 /*
- * Copyright (c) University of British Columbia, 1984
  *                                                                          
- * @(#)README.hdlc	8.1 (Berkeley) 6/10/93
- *
  *  X.25 HDLC DATA LINK LEVEL:                                           
  *
  *                                                                            

@@ -1,5 +1,3 @@
-/*	$NetBSD: vmstat.c,v 1.10 1997/10/19 23:36:34 lukem Exp $	*/
-
 /*-
  * Copyright (c) 1983, 1989, 1992, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -33,12 +31,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
 static char sccsid[] = "@(#)vmstat.c	8.2 (Berkeley) 1/12/94";
-#endif
-__RCSID("$NetBSD: vmstat.c,v 1.10 1997/10/19 23:36:34 lukem Exp $");
 #endif /* not lint */
 
 /*
@@ -56,16 +50,14 @@ __RCSID("$NetBSD: vmstat.c,v 1.10 1997/10/19 23:36:34 lukem Exp $");
 #include <sys/sysctl.h>
 #include <vm/vm.h>
 
-#include <ctype.h>
-#include <err.h>
-#include <nlist.h>
-#include <paths.h>
 #include <signal.h>
-#include <stdlib.h>
-#include <string.h>
+#include <nlist.h>
+#include <ctype.h>
 #include <utmp.h>
+#include <paths.h>
+#include <string.h>
+#include <stdlib.h>
 #include <unistd.h>
-
 #include "systat.h"
 #include "extern.h"
 
@@ -73,14 +65,15 @@ static struct Info {
 	long	time[CPUSTATES];
 	struct	vmmeter Cnt;
 	struct	vmtotal Total;
+	long	*dk_time;
+	long	*dk_wds;
+	long	*dk_seek;
+	long	*dk_xfer;
+	int	dk_busy;
 	struct	nchstats nchstats;
 	long	nchcount;
 	long	*intrcnt;
 } s, s1, s2, z;
-
-#include "dkstats.h"
-extern struct _disk	cur;
-
 
 #define	cnt s.Cnt
 #define oldcnt s1.Cnt
@@ -142,15 +135,25 @@ static struct nlist namelist[] = {
 	{ "_cnt" },
 #define X_TOTAL		2
 	{ "_total" },
-#define	X_NCHSTATS	3
+#define	X_DK_BUSY	3
+	{ "_dk_busy" },
+#define	X_DK_TIME	4
+	{ "_dk_time" },
+#define	X_DK_XFER	5
+	{ "_dk_xfer" },
+#define	X_DK_WDS	6
+	{ "_dk_wds" },
+#define	X_DK_SEEK	7
+	{ "_dk_seek" },
+#define	X_NCHSTATS	8
 	{ "_nchstats" },
-#define	X_INTRNAMES	4
+#define	X_INTRNAMES	9
 	{ "_intrnames" },
-#define	X_EINTRNAMES	5
+#define	X_EINTRNAMES	10
 	{ "_eintrnames" },
-#define	X_INTRCNT	6
+#define	X_INTRCNT	11
 	{ "_intrcnt" },
-#define	X_EINTRCNT	7
+#define	X_EINTRCNT	12
 	{ "_eintrcnt" },
 	{ "" },
 };
@@ -205,14 +208,18 @@ initkre()
 		}
 	}
 	hertz = stathz ? stathz : hz;
-	if (! dkinit(1))
+	if (! dkinit())
 		return(0);
 	if (dk_ndrive && !once) {
 #define	allocate(e, t) \
-	s./**/e = (t *)calloc(dk_ndrive, sizeof (t)); \
-	s1./**/e = (t *)calloc(dk_ndrive, sizeof (t)); \
-	s2./**/e = (t *)calloc(dk_ndrive, sizeof (t)); \
-	z./**/e = (t *)calloc(dk_ndrive, sizeof (t));
+    s./**/e = (t *)calloc(dk_ndrive, sizeof (t)); \
+    s1./**/e = (t *)calloc(dk_ndrive, sizeof (t)); \
+    s2./**/e = (t *)calloc(dk_ndrive, sizeof (t)); \
+    z./**/e = (t *)calloc(dk_ndrive, sizeof (t));
+		allocate(dk_time, long);
+		allocate(dk_wds, long);
+		allocate(dk_seek, long);
+		allocate(dk_xfer, long);
 		once = 1;
 #undef allocate
 	}
@@ -265,7 +272,7 @@ fetchkre()
 void
 labelkre()
 {
-	int i, j;
+	register int i, j;
 
 	clear();
 	mvprintw(STATROW, STATCOL + 4, "users    Load");
@@ -317,8 +324,8 @@ labelkre()
 	mvprintw(DISKROW, DISKCOL, "Discs");
 	mvprintw(DISKROW + 1, DISKCOL, "seeks");
 	mvprintw(DISKROW + 2, DISKCOL, "xfers");
-	mvprintw(DISKROW + 3, DISKCOL, "Kbyte");
-	mvprintw(DISKROW + 4, DISKCOL, "  sec");
+	mvprintw(DISKROW + 3, DISKCOL, " blks");
+	mvprintw(DISKROW + 4, DISKCOL, " msps");
 	j = 0;
 	for (i = 0; i < dk_ndrive && j < MAXDRIVES; i++)
 		if (dk_select[i]) {
@@ -353,9 +360,9 @@ showkre()
 	int i, l, c;
 	static int failcnt = 0;
 
-	
-	if (state == TIME)
-		dkswap();
+	for (i = 0; i < dk_ndrive; i++) {
+		X(dk_xfer); X(dk_seek); X(dk_wds); X(dk_time);
+	}
 	etime = 0;
 	for(i = 0; i < CPUSTATES; i++) {
 		X(time);
@@ -524,7 +531,7 @@ cmdkre(cmd, args)
 static int
 ucount()
 {
-	int nusers = 0;
+	register int nusers = 0;
 
 	if (ut < 0)
 		return (0);
@@ -532,7 +539,7 @@ ucount()
 		if (utmp.ut_name[0] != '\0')
 			nusers++;
 
-	lseek(ut, (off_t)0, SEEK_SET);
+	lseek(ut, 0L, L_SET);
 	return (nusers);
 }
 
@@ -541,7 +548,7 @@ cputime(indx)
 	int indx;
 {
 	double t;
-	int i;
+	register int i;
 
 	t = 0;
 	for (i = 0; i < CPUSTATES; i++)
@@ -599,13 +606,16 @@ getinfo(s, st)
 	struct Info *s;
 	enum state st;
 {
-	int mib[2];
-	size_t size;
+	int mib[2], size;
 	extern int errno;
 
-	dkreadstats();
 	NREAD(X_CPTIME, s->time, sizeof s->time);
 	NREAD(X_CNT, &s->Cnt, sizeof s->Cnt);
+	NREAD(X_DK_BUSY, &s->dk_busy, LONG);
+	NREAD(X_DK_TIME, s->dk_time, dk_ndrive * LONG);
+	NREAD(X_DK_XFER, s->dk_xfer, dk_ndrive * LONG);
+	NREAD(X_DK_WDS, s->dk_wds, dk_ndrive * LONG);
+	NREAD(X_DK_SEEK, s->dk_seek, dk_ndrive * LONG);
 	NREAD(X_NCHSTATS, &s->nchstats, sizeof s->nchstats);
 	NREAD(X_INTRCNT, s->intrcnt, nintr * LONG);
 	size = sizeof(s->Total);
@@ -613,7 +623,7 @@ getinfo(s, st)
 	mib[1] = VM_METER;
 	if (sysctl(mib, 2, &s->Total, &size, NULL, 0) < 0) {
 		error("Can't get kernel info: %s\n", strerror(errno));
-		memset(&s->Total, 0, sizeof(s->Total));
+		bzero(&s->Total, sizeof(s->Total));
 	}
 }
 
@@ -623,37 +633,55 @@ allocinfo(s)
 {
 
 	s->intrcnt = (long *) malloc(nintr * sizeof(long));
-	if (s->intrcnt == NULL)
-		errx(2, "out of memory");
+	if (s->intrcnt == NULL) {
+		fprintf(stderr, "systat: out of memory\n");
+		exit(2);
+	}
 }
 
 static void
 copyinfo(from, to)
-	struct Info *from, *to;
+	register struct Info *from, *to;
 {
+	long *time, *wds, *seek, *xfer;
 	long *intrcnt;
 
-	intrcnt = to->intrcnt;
+	/*
+	 * time, wds, seek, and xfer are malloc'd so we have to
+	 * save the pointers before the structure copy and then 
+	 * copy by hand.
+	 */
+	time = to->dk_time; wds = to->dk_wds; seek = to->dk_seek;
+	xfer = to->dk_xfer; intrcnt = to->intrcnt;
 	*to = *from;
-	memmove(to->intrcnt = intrcnt, from->intrcnt, nintr * sizeof (int));
+	bcopy(from->dk_time, to->dk_time = time, dk_ndrive * sizeof (long));
+	bcopy(from->dk_wds, to->dk_wds = wds, dk_ndrive * sizeof (long));
+	bcopy(from->dk_seek, to->dk_seek = seek, dk_ndrive * sizeof (long));
+	bcopy(from->dk_xfer, to->dk_xfer = xfer, dk_ndrive * sizeof (long));
+	bcopy(from->intrcnt, to->intrcnt = intrcnt, nintr * sizeof (int));
 }
 
 static void
 dinfo(dn, c)
 	int dn, c;
 {
-	double words, atime;
+	double words, atime, itime, xtime;
 
 	c = DISKCOL + c * 5;
-
-	/* time busy in disk activity */
-	atime = (double)cur.dk_time[dn].tv_sec +
-		((double)cur.dk_time[dn].tv_usec / (double)1000000);
-
-	words = cur.dk_bytes[dn] / 1024.0;	/* # of K transferred */
-
-	putint((int)((float)cur.dk_seek[dn]/etime+0.5), DISKROW + 1, c, 5);
-	putint((int)((float)cur.dk_xfer[dn]/etime+0.5), DISKROW + 2, c, 5);
-	putint((int)(words/etime + 0.5), DISKROW + 3, c, 5);
-	putfloat(atime/etime, DISKROW + 4, c, 5, 1, 1);
+	atime = s.dk_time[dn];
+	atime /= hertz;
+	words = s.dk_wds[dn]*32.0;	/* number of words transferred */
+	xtime = dk_mspw[dn]*words;	/* transfer time */
+	itime = atime - xtime;		/* time not transferring */
+	if (xtime < 0)
+		itime += xtime, xtime = 0;
+	if (itime < 0)
+		xtime += itime, itime = 0;
+	putint((int)((float)s.dk_seek[dn]/etime+0.5), DISKROW + 1, c, 5);
+	putint((int)((float)s.dk_xfer[dn]/etime+0.5), DISKROW + 2, c, 5);
+	putint((int)(words/etime/512.0 + 0.5), DISKROW + 3, c, 5);
+	if (s.dk_seek[dn])
+		putfloat(itime*1000.0/s.dk_seek[dn], DISKROW + 4, c, 5, 1, 1);
+	else
+		putint(0, DISKROW + 4, c, 5);
 }

@@ -1,8 +1,6 @@
-/*	$NetBSD: cmd1.c,v 1.11 1997/10/19 14:12:27 mrg Exp $	*/
-
 /*-
- * Copyright (c) 1980, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1980 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,17 +31,11 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)cmd1.c	8.2 (Berkeley) 4/20/95";
-#else
-__RCSID("$NetBSD: cmd1.c,v 1.11 1997/10/19 14:12:27 mrg Exp $");
-#endif
+static char sccsid[] = "@(#)cmd1.c	5.22 (Berkeley) 4/1/91";
 #endif /* not lint */
 
 #include "rcv.h"
-#include "extern.h"
 
 /*
  * Mail -- a mail program
@@ -58,13 +50,11 @@ __RCSID("$NetBSD: cmd1.c,v 1.11 1997/10/19 14:12:27 mrg Exp $");
 
 static int screen;
 
-int
-headers(v)
-	void *v;
+headers(msgvec)
+	int *msgvec;
 {
-	int *msgvec = v;
-	int n, mesg, flag;
-	struct message *mp;
+	register int n, mesg, flag;
+	register struct message *mp;
 	int size;
 
 	size = screensize();
@@ -100,12 +90,10 @@ headers(v)
 /*
  * Scroll to the next/previous screen
  */
-int
-scroll(v)
-	void *v;
+scroll(arg)
+	char arg[];
 {
-	char *arg = v;
-	int s, size;
+	register int s, size;
 	int cur[1];
 
 	cur[0] = 0;
@@ -140,7 +128,6 @@ scroll(v)
 /*
  * Compute screen size.
  */
-int
 screensize()
 {
 	int s;
@@ -155,14 +142,13 @@ screensize()
  * Print out the headlines for each message
  * in the passed message list.
  */
-int
-from(v)
-	void *v;
-{
-	int *msgvec = v;
-	int *ip;
 
-	for (ip = msgvec; *ip != 0; ip++)
+from(msgvec)
+	int *msgvec;
+{
+	register int *ip;
+
+	for (ip = msgvec; *ip != NULL; ip++)
 		printhead(*ip);
 	if (--ip >= msgvec)
 		dot = &message[*ip - 1];
@@ -173,9 +159,8 @@ from(v)
  * Print out the header of a specific message.
  * This is a slight improvement to the standard one.
  */
-void
+
 printhead(mesg)
-	int mesg;
 {
 	struct message *mp;
 	char headline[LINESIZE], wcount[LINESIZE], *subjline, dispc, curind;
@@ -204,7 +189,7 @@ printhead(mesg)
 	if (mp->m_flag & MBOX)
 		dispc = 'M';
 	parse(headline, &hl, pbuf);
-	snprintf(wcount, LINESIZE, "%3ld/%-5ld", mp->m_lines, mp->m_size);
+	sprintf(wcount, "%3d/%-5ld", mp->m_lines, mp->m_size);
 	subjlen = screenwidth - 50 - strlen(wcount);
 	name = value("show-rcpt") != NOSTR ?
 		skin(hfield("to", mp)) : nameof(mp, 0);
@@ -220,24 +205,22 @@ printhead(mesg)
 /*
  * Print out the value of dot.
  */
-int
-pdot(v)
-	void *v;
+
+pdot()
 {
-	printf("%d\n", (int)(dot - &message[0] + 1));
+	printf("%d\n", dot - &message[0] + 1);
 	return(0);
 }
 
 /*
  * Print out all the possible commands.
  */
-int
-pcmdlist(v)
-	void *v;
+
+pcmdlist()
 {
-	extern const struct cmd cmdtab[];
-	const struct cmd *cp;
-	int cc;
+	register struct cmd *cp;
+	register int cc;
+	extern struct cmd cmdtab[];
 
 	printf("Commands are:\n");
 	for (cc = 0, cp = cmdtab; cp->c_name != NULL; cp++) {
@@ -257,22 +240,18 @@ pcmdlist(v)
 /*
  * Paginate messages, honor ignored fields.
  */
-int
-more(v)
-	void *v;
+more(msgvec)
+	int *msgvec;
 {
-	int *msgvec = v;
 	return (type1(msgvec, 1, 1));
 }
 
 /*
  * Paginate messages, even printing ignored fields.
  */
-int
-More(v)
-	void *v;
+More(msgvec)
+	int *msgvec;
 {
-	int *msgvec = v;
 
 	return (type1(msgvec, 0, 1));
 }
@@ -280,11 +259,9 @@ More(v)
 /*
  * Type out messages, honor ignored fields.
  */
-int
-type(v)
-	void *v;
+type(msgvec)
+	int *msgvec;
 {
-	int *msgvec = v;
 
 	return(type1(msgvec, 1, 0));
 }
@@ -292,11 +269,9 @@ type(v)
 /*
  * Type out messages, even printing ignored fields.
  */
-int
-Type(v)
-	void *v;
+Type(msgvec)
+	int *msgvec;
 {
-	int *msgvec = v;
 
 	return(type1(msgvec, 0, 0));
 }
@@ -305,21 +280,16 @@ Type(v)
  * Type out the messages requested.
  */
 jmp_buf	pipestop;
-int
+
 type1(msgvec, doign, page)
 	int *msgvec;
-	int doign, page;
 {
-	int *ip;
-	struct message *mp;
-	char *cp;
+	register *ip;
+	register struct message *mp;
+	register char *cp;
 	int nlines;
 	FILE *obuf;
-#if __GNUC__
-	/* Avoid longjmp clobbering */
-	(void) &cp;
-	(void) &obuf;
-#endif
+	void brokpipe();
 
 	obuf = stdout;
 	if (setjmp(pipestop))
@@ -367,9 +337,9 @@ close_pipe:
  * Respond to a broken pipe signal --
  * probably caused by quitting more.
  */
+
 void
-brokpipe(signo)
-	int signo;
+brokpipe()
 {
 	longjmp(pipestop, 1);
 }
@@ -379,13 +349,12 @@ brokpipe(signo)
  * The number of lines is taken from the variable "toplines"
  * and defaults to 5.
  */
-int
-top(v)
-	void *v;
+
+top(msgvec)
+	int *msgvec;
 {
-	int *msgvec = v;
-	int *ip;
-	struct message *mp;
+	register int *ip;
+	register struct message *mp;
 	int c, topl, lines, lineb;
 	char *valtop, linebuf[LINESIZE];
 	FILE *ibuf;
@@ -422,12 +391,10 @@ top(v)
  * Touch all the given messages so that they will
  * get mboxed.
  */
-int
-stouch(v)
-	void *v;
+stouch(msgvec)
+	int msgvec[];
 {
-	int *msgvec = v;
-	int *ip;
+	register int *ip;
 
 	for (ip = msgvec; *ip != 0; ip++) {
 		dot = &message[*ip-1];
@@ -440,12 +407,11 @@ stouch(v)
 /*
  * Make sure all passed messages get mboxed.
  */
-int
-mboxit(v)
-	void *v;
+
+mboxit(msgvec)
+	int msgvec[];
 {
-	int *msgvec = v;
-	int *ip;
+	register int *ip;
 
 	for (ip = msgvec; *ip != 0; ip++) {
 		dot = &message[*ip-1];
@@ -458,11 +424,9 @@ mboxit(v)
 /*
  * List the folders the user currently has.
  */
-int
-folders(v)
-	void *v;
+folders()
 {
-	char dirname[PATHSIZE];
+	char dirname[BUFSIZ];
 	char *cmd;
 
 	if (getfold(dirname) < 0) {
@@ -471,30 +435,6 @@ folders(v)
 	}
 	if ((cmd = value("LISTER")) == NOSTR)
 		cmd = "ls";
-	(void) run_command(cmd, 0, -1, -1, dirname, NOSTR, NOSTR);
-	return 0;
-}
-
-/*
- * Update the mail file with any new messages that have
- * come in since we started reading mail.
- */
-int
-inc(v)
-	void *v;
-{
-	int nmsg, mdot;
-
-	nmsg = incfile();
-
-	if (nmsg == 0) {
-	printf("No new mail.\n");
-	} else if (nmsg > 0) {
-		mdot = newfileinfo(msgCount - nmsg);
-		dot = &message[mdot - 1];
-	} else {
-	printf("\"inc\" command failed...\n");
-	}
-
+	(void) run_command(cmd, 0, -1, -1, dirname, NOSTR);
 	return 0;
 }

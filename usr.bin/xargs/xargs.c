@@ -1,8 +1,6 @@
-/*	$NetBSD: xargs.c,v 1.9 1997/10/20 03:30:16 lukem Exp $	*/
-
 /*-
- * Copyright (c) 1990, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1990 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * John B. Roll Jr.
@@ -36,17 +34,14 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1990, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+char copyright[] =
+"@(#) Copyright (c) 1990 The Regents of the University of California.\n\
+ All rights reserved.\n";
 #endif /* not lint */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)xargs.c	8.1 (Berkeley) 6/6/93";
-#endif
-__RCSID("$NetBSD: xargs.c,v 1.9 1997/10/20 03:30:16 lukem Exp $");
+static char sccsid[] = "@(#)xargs.c	5.11 (Berkeley) 6/19/91";
 #endif /* not lint */
 
 #include <sys/types.h>
@@ -57,27 +52,22 @@ __RCSID("$NetBSD: xargs.c,v 1.9 1997/10/20 03:30:16 lukem Exp $");
 #include <string.h>
 #include <unistd.h>
 #include <limits.h>
-#include <locale.h>
-#include <err.h>
 #include "pathnames.h"
 
-int tflag, zflag, rval;
+int fflag, tflag;
+void err __P((const char *, ...));
+void run(), usage();
 
-void	run __P((char **));
-int	main __P((int, char **));
-void	usage __P((void));
-
-int
 main(argc, argv)
 	int argc;
 	char **argv;
 {
-	int ch;
-	char *p, *bbp, *ebp, **bxp, **exp, **xp;
+	extern int optind;
+	extern char *optarg;
+	register int ch;
+	register char *p, *bbp, *ebp, **bxp, **exp, **xp;
 	int cnt, indouble, insingle, nargs, nflag, nline, xflag;
 	char **av, *argp;
-
-	setlocale(LC_ALL, "");
 
 	/*
 	 * POSIX.2 limits the exec line length to ARG_MAX - 2K.  Running that
@@ -95,15 +85,15 @@ main(argc, argv)
 	nargs = 5000;
 	nline = ARG_MAX - 4 * 1024;
 	nflag = xflag = 0;
-	while ((ch = getopt(argc, argv, "0n:s:tx")) != -1)
+	while ((ch = getopt(argc, argv, "fn:s:tx")) != EOF)
 		switch(ch) {
-		case '0':
-			zflag = 1;
+		case 'f':
+			fflag = 1;
 			break;
 		case 'n':
 			nflag = 1;
 			if ((nargs = atoi(optarg)) <= 0)
-				errx(1, "illegal argument count");
+				err("illegal argument count");
 			break;
 		case 's':
 			nline = atoi(optarg);
@@ -131,7 +121,7 @@ main(argc, argv)
 	 */
 	if (!(av = bxp =
 	    malloc((u_int)(1 + argc + nargs + 1) * sizeof(char **))))
-		err(1, "malloc");
+		err("%s", strerror(errno));
 
 	/*
 	 * Use the user's name for the utility as argv[0], just like the
@@ -164,10 +154,10 @@ main(argc, argv)
 	 */
 	nline -= cnt;
 	if (nline <= 0)
-		errx(1, "insufficient space for command");
+		err("insufficient space for command");
 
 	if (!(bbp = malloc((u_int)nline + 1)))
-		err(1, "malloc");
+		err("%s", strerror(errno));
 	ebp = (argp = p = bbp) + nline - 1;
 
 	for (insingle = indouble = 0;;)
@@ -175,35 +165,29 @@ main(argc, argv)
 		case EOF:
 			/* No arguments since last exec. */
 			if (p == bbp)
-				exit(rval);
+				exit(0);
 
 			/* Nothing since end of last argument. */
 			if (argp == p) {
 				*xp = NULL;
 				run(av);
-				exit(rval);
+				exit(0);
 			}
 			goto arg1;
 		case ' ':
 		case '\t':
 			/* Quotes escape tabs and spaces. */
-			if (insingle || indouble || zflag)
+			if (insingle || indouble)
 				goto addch;
 			goto arg2;
-		case '\0':
-			if (zflag)
-				goto arg2;
-			goto addch;
 		case '\n':
-			if (zflag)
-				goto addch;
 			/* Empty lines are skipped. */
 			if (argp == p)
 				continue;
 
 			/* Quotes do not escape newlines. */
 arg1:			if (insingle || indouble)
-				 errx(1, "unterminated quote");
+				 err("unterminated quote");
 
 arg2:			*p = '\0';
 			*xp++ = argp;
@@ -215,11 +199,11 @@ arg2:			*p = '\0';
 			 */
 			if (xp == exp || p == ebp || ch == EOF) {
 				if (xflag && xp != exp && p == ebp)
-					errx(1, "insufficient space for arguments");
+					err("insufficient space for arguments");
 				*xp = NULL;
 				run(av);
 				if (ch == EOF)
-					exit(rval);
+					exit(0);
 				p = bbp;
 				xp = bxp;
 			} else
@@ -227,21 +211,19 @@ arg2:			*p = '\0';
 			argp = p;
 			break;
 		case '\'':
-			if (indouble || zflag)
+			if (indouble)
 				goto addch;
 			insingle = !insingle;
 			break;
 		case '"':
-			if (insingle || zflag)
+			if (insingle)
 				goto addch;
 			indouble = !indouble;
 			break;
 		case '\\':
-			if (zflag)
-				goto addch;
 			/* Backslash escapes anything, is escaped by quotes. */
 			if (!insingle && !indouble && (ch = getchar()) == EOF)
-				errx(1, "backslash at EOF");
+				err("backslash at EOF");
 			/* FALLTHROUGH */
 		default:
 addch:			if (p < ebp) {
@@ -251,16 +233,16 @@ addch:			if (p < ebp) {
 
 			/* If only one argument, not enough buffer space. */
 			if (bxp == xp)
-				errx(1, "insufficient space for argument");
+				err("insufficient space for argument");
 			/* Didn't hit argument limit, so if xflag object. */
 			if (xflag)
-				errx(1, "insufficient space for arguments");
+				err("insufficient space for arguments");
 
 			*xp = NULL;
 			run(av);
 			xp = bxp;
 			cnt = ebp - argp;
-			memmove(bbp, argp, cnt);
+			bcopy(argp, bbp, cnt);
 			p = (argp = bbp) + cnt;
 			*p++ = ch;
 			break;
@@ -272,9 +254,9 @@ void
 run(argv)
 	char **argv;
 {
-	volatile int noinvoke;
-	char **p;
+	register char **p;
 	pid_t pid;
+	volatile int noinvoke;
 	int status;
 
 	if (tflag) {
@@ -287,47 +269,62 @@ run(argv)
 	noinvoke = 0;
 	switch(pid = vfork()) {
 	case -1:
-		err(1, "vfork");
+		err("vfork: %s", strerror(errno));
 	case 0:
 		execvp(argv[0], argv);
-		noinvoke = (errno == ENOENT) ? 127 : 126;
-		warn("%s", argv[0]);;
+		(void)fprintf(stderr,
+		    "xargs: %s: %s.\n", argv[0], strerror(errno));
+		noinvoke = 1;
 		_exit(1);
 	}
 	pid = waitpid(pid, &status, 0);
 	if (pid == -1)
-		err(1, "waitpid");
-
+		err("waitpid: %s", strerror(errno));
 	/*
 	 * If we couldn't invoke the utility or the utility didn't exit
-	 * properly, quit with 127 or 126 respectively.
+	 * properly, quit with 127.
+	 * Otherwise, if not specified otherwise, and the utility exits
+	 * non-zero, exit with that value.
 	 */
-	if (noinvoke)
-		exit(noinvoke);
-
-	/*
-	 * According to POSIX, we have to exit if the utility exits with
-	 * a 255 status, or is interrupted by a signal.   xargs is allowed
-	 * to return any exit status between 1 and 125 in these cases, but
-	 * we'll use 124 and 125, the same values used by GNU xargs.
-	 */
-	if (WIFEXITED(status)) {
-		if (WEXITSTATUS (status) == 255) {
-			warnx ("%s exited with status 255", argv[0]);
-			exit(124);
-		} else if (WEXITSTATUS (status) != 0) {
-			rval = 123;
-		}
-	} else if (WIFSIGNALED (status)) {
-		warnx ("%s terminated by signal %d", argv[0], WTERMSIG(status));
-		exit(125);
-	}
+	if (noinvoke || !WIFEXITED(status) || WIFSIGNALED(status))
+		exit(127);
+	if (!fflag && WEXITSTATUS(status))
+		exit(WEXITSTATUS(status));
 }
 
 void
 usage()
 {
 	(void)fprintf(stderr,
-"usage: xargs [-0t] [-n number [-x]] [-s size] [utility [argument ...]]\n");
+"usage: xargs [-ft] [[-x] -n number] [-s size] [utility [argument ...]]\n");
 	exit(1);
+}
+
+#if __STDC__
+#include <stdarg.h>
+#else
+#include <varargs.h>
+#endif
+
+void
+#if __STDC__
+err(const char *fmt, ...)
+#else
+err(fmt, va_alist)
+	char *fmt;
+        va_dcl
+#endif
+{
+	va_list ap;
+#if __STDC__
+	va_start(ap, fmt);
+#else
+	va_start(ap);
+#endif
+	(void)fprintf(stderr, "xargs: ");
+	(void)vfprintf(stderr, fmt, ap);
+	va_end(ap);
+	(void)fprintf(stderr, "\n");
+	exit(1);
+	/* NOTREACHED */
 }

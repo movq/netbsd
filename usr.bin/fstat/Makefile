@@ -1,9 +1,11 @@
-#	$NetBSD: Makefile,v 1.9 1997/01/09 20:19:28 tls Exp $
-#	from: @(#)Makefile	8.1 (Berkeley) 6/6/93
+#	@(#)Makefile	5.5 (Berkeley) 4/23/91
 
 PROG=	fstat
-DPADD=	${LIBKVM}
-LDADD=	-lkvm
+SRCS=	fstat.c devname.c
+CFLAGS+=-I/sys
+.PATH:	${.CURDIR}/../../bin/ps
+DPADD=	${LIBUTIL}
+LDADD=	-lutil
 BINGRP=	kmem
 BINMODE=2555
 

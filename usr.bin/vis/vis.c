@@ -1,8 +1,6 @@
-/*	$NetBSD: vis.c,v 1.5 1997/10/20 03:06:48 lukem Exp $	*/
-
 /*-
- * Copyright (c) 1989, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1989 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,41 +31,31 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1989, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+char copyright[] =
+"@(#) Copyright (c) 1989 The Regents of the University of California.\n\
+ All rights reserved.\n";
 #endif /* not lint */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)vis.c	8.1 (Berkeley) 6/6/93";
-#endif
-__RCSID("$NetBSD: vis.c,v 1.5 1997/10/20 03:06:48 lukem Exp $");
+static char sccsid[] = "@(#)vis.c	5.1 (Berkeley) 4/18/91";
 #endif /* not lint */
 
 #include <stdio.h>
-#include <string.h>
-#include <stdlib.h>
-#include <unistd.h>
-#include <err.h>
 #include <vis.h>
 
 int eflags, fold, foldwidth=80, none, markeol, debug;
 
-int foldit __P((char *, int, int));
-int main __P((int, char **));
-void process __P((FILE *, char *));
-
-int
 main(argc, argv) 
-	int argc;
 	char *argv[];
 {
+	extern char *optarg;
+	extern int optind;
+	extern int errno;
 	FILE *fp;
 	int ch;
 
-	while ((ch = getopt(argc, argv, "nwctsobfF:ld")) != -1)
+	while ((ch = getopt(argc, argv, "nwctsobfF:ld")) != EOF)
 		switch((char)ch) {
 		case 'n':
 			none++;
@@ -92,8 +80,9 @@ main(argc, argv)
 			break;
 		case 'F':
 			if ((foldwidth = atoi(optarg))<5) {
-				errx(1, "can't fold lines to less than 5 cols");
-				/* NOTREACHED */
+				fprintf(stderr, 
+				 "vis: can't fold lines to less than 5 cols\n");
+				exit(1);
 			}
 			/*FALLTHROUGH*/
 		case 'f':
@@ -121,7 +110,8 @@ main(argc, argv)
 			if ((fp=fopen(*argv, "r")) != NULL)
 				process(fp, *argv);
 			else
-				warn("%s", *argv);
+				fprintf(stderr, "vis: %s: %s\n", *argv,
+				    (char *)strerror(errno));
 			argv++;
 		}
 	else
@@ -129,14 +119,14 @@ main(argc, argv)
 	exit(0);
 }
 	
-void
 process(fp, filename)
 	FILE *fp;
 	char *filename;
 {
 	static int col = 0;
-	char *cp = "\0"+1;	/* so *(cp-1) starts out != '\n' */
-	int c, rachar; 
+	register char *cp = "\0"+1;	/* so *(cp-1) starts out != '\n' */
+	register int c, rachar; 
+	register char nc;
 	char buff[5];
 	
 	c = getc(fp);

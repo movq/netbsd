@@ -1,8 +1,6 @@
-/*	$NetBSD: dir.h,v 1.9 1996/10/27 19:27:54 gwr Exp $	*/
-
 /*
- * Copyright (c) 1982, 1986, 1989, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1982, 1986, 1989 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,7 +30,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)dir.h	8.2 (Berkeley) 1/4/94
+ *	@(#)dir.h	7.3 (Berkeley) 2/5/91
  */
 
 /*
@@ -40,13 +38,8 @@
  * and is provided solely (and temporarily) for backward compatibility.
  */
 
-#ifndef _SYS_DIR_H_
-#define	_SYS_DIR_H_
-
-#ifdef	_KERNEL
-/* This file should only be used by old user-level code. */
-#error "Please use <sys/dirent.h> instead"
-#endif
+#ifndef _DIR_H_
+#define	_DIR_H_
 
 #include <dirent.h>
 
@@ -65,4 +58,4 @@
 #define DIRSIZ(dp) \
     ((sizeof (struct direct) - (MAXNAMLEN+1)) + (((dp)->d_namlen+1 + 3) &~ 3))
 
-#endif /* !_SYS_DIR_H_ */
+#endif /* !_DIR_H_ */

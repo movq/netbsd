@@ -1,7 +1,5 @@
-.\"	$NetBSD: lo.4,v 1.4 1997/09/20 03:56:41 mikel Exp $
-.\"
-.\" Copyright (c) 1983, 1991, 1993
-.\"	The Regents of the University of California.  All rights reserved.
+.\" Copyright (c) 1983, 1991 The Regents of the University of California.
+.\" All rights reserved.
 .\"
 .\" Redistribution and use in source and binary forms, with or without
 .\" modification, are permitted provided that the following conditions
@@ -31,16 +29,17 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\"     @(#)lo.4	8.1 (Berkeley) 6/5/93
+.\"     @(#)lo.4	6.6 (Berkeley) 3/28/91
 .\"
-.Dd June 5, 1993
+.Dd March 28, 1991
 .Dt LO 4
 .Os BSD 4.2
 .Sh NAME
 .Nm lo
 .Nd software loopback network interface
 .Sh SYNOPSIS
-.Cd "pseudo-device loop" Op Ar count
+.Sy pseudo-device
+.Nm loop
 .Sh DESCRIPTION
 The
 .Nm loop

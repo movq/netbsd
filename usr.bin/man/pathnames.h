@@ -1,5 +1,3 @@
-/*	$NetBSD: pathnames.h,v 1.3 1995/09/28 06:05:40 tls Exp $	*/
-
 /*
  * Copyright (c) 1989, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -32,7 +30,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)pathnames.h	8.3 (Berkeley) 1/2/94
+ *	@(#)pathnames.h	8.3 (Berkeley) 10/13/93
  */
 
 #define	_PATH_MANCONF	"/etc/man.conf"

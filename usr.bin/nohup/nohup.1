@@ -1,7 +1,5 @@
-.\"	$NetBSD: nohup.1,v 1.6 1997/10/19 10:23:25 lukem Exp $
-.\"
-.\" Copyright (c) 1989, 1990, 1993
-.\"	The Regents of the University of California.  All rights reserved.
+.\" Copyright (c) 1989, 1990 The Regents of the University of California.
+.\" All rights reserved.
 .\"
 .\" This code is derived from software contributed to Berkeley by
 .\" the Institute of Electrical and Electronics Engineers, Inc.
@@ -34,72 +32,59 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\"	@(#)nohup.1	8.1 (Berkeley) 6/6/93
+.\"	@(#)nohup.1	6.8 (Berkeley) 7/27/91
 .\"
-.Dd June 6, 1993
+.Dd July 27, 1991
 .Dt NOHUP 1
 .Os
 .Sh NAME
 .Nm nohup
 .Nd invoke a command immune to hangups
 .Sh SYNOPSIS
-.Nm
-.Ar utility
+.Nm nohup
+.Ar command
 .Op Ar arg ...
 .Sh DESCRIPTION
 The
-.Nm
+.Nm nohup
 utility invokes
 .Ar command
 with
 its arguments
 and at this time sets the signal
 .Dv SIGHUP
-to be ignored. 
+to be ignored. The signal
+.Dv SIGQUIT
+may also be set
+to be ignored.
 If the standard output is a terminal, the standard output is
 appended to the file
 .Pa nohup.out
 in the current directory.
 If standard error is a terminal, it is directed to the same place
 as the standard output.
+.Pp
+.Nm Nohup
+exits 1 if an error occurs, otherwise the exit status is that of
+.Ar command  .
 .Sh ENVIRONMENT
 The following variable is utilized by
-.Nm "" .
+.Nm nohup .
 .Bl -tag -width flag
 .It Ev HOME
 If the output file
 .Pa nohup.out
 cannot be created in the current directory, the
-.Nm
+.Nm nohup
 utility uses the directory named by
 .Ev HOME
 to create the file.
 .El
-.Sh DIAGNOSTICS
-The
-.Nm
-utility shall exit with one of the following values:
-.Bl -tag -width Ds 
-.It 126
-The
-.Ar utility
-was found but could not be invoked.
-.It 127
-The
-.Ar utility
-could not be found or an error occurred in 
-.Nm "" .
-.El
-.Pp
-Otherwise, the exit status of 
-.Nm
-shall be that of 
-.Ar utility .
 .Sh SEE ALSO
 .Xr signal 3
 .Sh STANDARDS
 The
-.Nm
+.Nm nohup
 command is expected to be
 .St -p1003.2
 compatible.

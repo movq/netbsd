@@ -1,8 +1,6 @@
-/*	$NetBSD: specdev.h,v 1.16 1997/04/11 21:52:05 kleink Exp $	*/
-
 /*
- * Copyright (c) 1990, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1990 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,7 +30,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)specdev.h	8.3 (Berkeley) 8/10/94
+ *	@(#)specdev.h	7.4 (Berkeley) 4/19/91
  */
 
 /*
@@ -45,16 +43,14 @@ struct specinfo {
 	struct	vnode *si_specnext;
 	long	si_flags;
 	dev_t	si_rdev;
-	struct	lockf *si_lockf;
 };
 /*
  * Exported shorthand
  */
-#define v_rdev		v_specinfo->si_rdev
-#define v_hashchain	v_specinfo->si_hashchain
-#define v_specnext	v_specinfo->si_specnext
-#define v_specflags	v_specinfo->si_flags
-#define v_speclockf	v_specinfo->si_lockf
+#define v_rdev v_specinfo->si_rdev
+#define v_hashchain v_specinfo->si_hashchain
+#define v_specnext v_specinfo->si_specnext
+#define v_specflags v_specinfo->si_flags
 
 /*
  * Flags for specinfo
@@ -76,53 +72,149 @@ struct vnode *speclisth[SPECHSZ];
 /*
  * Prototypes for special file operations on vnodes.
  */
-extern	int (**spec_vnodeop_p) __P((void *));
 struct	nameidata;
-struct	componentname;
 struct	ucred;
 struct	flock;
 struct	buf;
 struct	uio;
 
-int	spec_lookup	__P((void *));
-#define	spec_create	genfs_badop
-#define	spec_mknod	genfs_badop
-int	spec_open	__P((void *));
-int	spec_close	__P((void *));
-#define	spec_access	genfs_ebadf
-#define	spec_getattr	genfs_ebadf
-#define	spec_setattr	genfs_ebadf
-int	spec_read	__P((void *));
-int	spec_write	__P((void *));
-#define	spec_lease_check genfs_nullop
-int	spec_ioctl	__P((void *));
-int	spec_poll	__P((void *));
-#define	spec_mmap	genfs_badop
-int	spec_fsync	__P((void *));
-#define	spec_seek	genfs_nullop		/* XXX should query device */
-#define	spec_remove	genfs_badop
-#define	spec_link	genfs_badop
-#define	spec_rename	genfs_badop
-#define	spec_mkdir	genfs_badop
-#define	spec_rmdir	genfs_badop
-#define	spec_symlink	genfs_badop
-#define	spec_readdir	genfs_badop
-#define	spec_readlink	genfs_badop
-#define	spec_abortop	genfs_badop
-#define	spec_inactive	genfs_nullop
-#define	spec_reclaim	genfs_nullop
-int	spec_lock	__P((void *));
-int	spec_unlock	__P((void *));
-int	spec_bmap	__P((void *));
-int	spec_strategy	__P((void *));
-int	spec_print	__P((void *));
-#define	spec_islocked	genfs_nullop
-int	spec_pathconf	__P((void *));
-int	spec_advlock	__P((void *));
-#define	spec_blkatoff	genfs_badop
-#define	spec_valloc	genfs_badop
-#define	spec_reallocblks genfs_badop
-#define	spec_vfree	genfs_badop
-#define	spec_truncate	genfs_nullop
-#define	spec_update	genfs_nullop
-#define	spec_bwrite	vn_bwrite
+int	spec_badop(),
+	spec_ebadf();
+
+int	spec_lookup __P((
+		struct vnode *vp,
+		struct nameidata *ndp,
+		struct proc *p));
+#define spec_create ((int (*) __P(( \
+		struct nameidata *ndp, \
+		struct vattr *vap, \
+		struct proc *p))) spec_badop)
+#define spec_mknod ((int (*) __P(( \
+		struct nameidata *ndp, \
+		struct vattr *vap, \
+		struct ucred *cred, \
+		struct proc *p))) spec_badop)
+int	spec_open __P((
+		struct vnode *vp,
+		int mode,
+		struct ucred *cred,
+		struct proc *p));
+int	spec_close __P((
+		struct vnode *vp,
+		int fflag,
+		struct ucred *cred,
+		struct proc *p));
+#define spec_access ((int (*) __P(( \
+		struct vnode *vp, \
+		int mode, \
+		struct ucred *cred, \
+		struct proc *p))) spec_ebadf)
+#define spec_getattr ((int (*) __P(( \
+		struct vnode *vp, \
+		struct vattr *vap, \
+		struct ucred *cred, \
+		struct proc *p))) spec_ebadf)
+#define spec_setattr ((int (*) __P(( \
+		struct vnode *vp, \
+		struct vattr *vap, \
+		struct ucred *cred, \
+		struct proc *p))) spec_ebadf)
+int	spec_read __P((
+		struct vnode *vp,
+		struct uio *uio,
+		int ioflag,
+		struct ucred *cred));
+int	spec_write __P((
+		struct vnode *vp,
+		struct uio *uio,
+		int ioflag,
+		struct ucred *cred));
+int	spec_ioctl __P((
+		struct vnode *vp,
+		int command,
+		caddr_t data,
+		int fflag,
+		struct ucred *cred,
+		struct proc *p));
+int	spec_select __P((
+		struct vnode *vp,
+		int which,
+		int fflags,
+		struct ucred *cred,
+		struct proc *p));
+#define spec_mmap ((int (*) __P(( \
+		struct vnode *vp, \
+		int fflags, \
+		struct ucred *cred, \
+		struct proc *p))) spec_badop)
+#define spec_fsync ((int (*) __P(( \
+		struct vnode *vp, \
+		int fflags, \
+		struct ucred *cred, \
+		int waitfor, \
+		struct proc *p))) nullop)
+#define spec_seek ((int (*) __P(( \
+		struct vnode *vp, \
+		off_t oldoff, \
+		off_t newoff, \
+		struct ucred *cred))) spec_badop)
+#define spec_remove ((int (*) __P(( \
+		struct nameidata *ndp, \
+		struct proc *p))) spec_badop)
+#define spec_link ((int (*) __P(( \
+		struct vnode *vp, \
+		struct nameidata *ndp, \
+		struct proc *p))) spec_badop)
+#define spec_rename ((int (*) __P(( \
+		struct nameidata *fndp, \
+		struct nameidata *tdnp, \
+		struct proc *p))) spec_badop)
+#define spec_mkdir ((int (*) __P(( \
+		struct nameidata *ndp, \
+		struct vattr *vap, \
+		struct proc *p))) spec_badop)
+#define spec_rmdir ((int (*) __P(( \
+		struct nameidata *ndp, \
+		struct proc *p))) spec_badop)
+#define spec_symlink ((int (*) __P(( \
+		struct nameidata *ndp, \
+		struct vattr *vap, \
+		char *target, \
+		struct proc *p))) spec_badop)
+#define spec_readdir ((int (*) __P(( \
+		struct vnode *vp, \
+		struct uio *uio, \
+		struct ucred *cred, \
+		int *eofflagp))) spec_badop)
+#define spec_readlink ((int (*) __P(( \
+		struct vnode *vp, \
+		struct uio *uio, \
+		struct ucred *cred))) spec_badop)
+#define spec_abortop ((int (*) __P(( \
+		struct nameidata *ndp))) spec_badop)
+#define spec_inactive ((int (*) __P(( \
+		struct vnode *vp, \
+		struct proc *p))) nullop)
+#define spec_reclaim ((int (*) __P(( \
+		struct vnode *vp))) nullop)
+int	spec_lock __P((
+		struct vnode *vp));
+int	spec_unlock __P((
+		struct vnode *vp));
+int	spec_bmap __P((
+		struct vnode *vp,
+		daddr_t bn,
+		struct vnode **vpp,
+		daddr_t *bnp));
+int	spec_strategy __P((
+		struct buf *bp));
+int	spec_print __P((
+		struct vnode *vp));
+#define spec_islocked ((int (*) __P(( \
+		struct vnode *vp))) nullop)
+int	spec_advlock __P((
+		struct vnode *vp,
+		caddr_t id,
+		int op,
+		struct flock *fl,
+		int flags));

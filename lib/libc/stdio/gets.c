@@ -1,8 +1,6 @@
-/*	$NetBSD: gets.c,v 1.8 1997/07/13 20:15:12 christos Exp $	*/
-
 /*-
- * Copyright (c) 1990, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1990 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Chris Torek.
@@ -36,18 +34,12 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char sccsid[] = "@(#)gets.c	8.1 (Berkeley) 6/4/93";
-#else
-__RCSID("$NetBSD: gets.c,v 1.8 1997/07/13 20:15:12 christos Exp $");
-#endif
+static char sccsid[] = "@(#)gets.c	5.3 (Berkeley) 1/20/91";
 #endif /* LIBC_SCCS and not lint */
 
+#include <unistd.h>
 #include <stdio.h>
-
-__warn_references(gets, "warning: this program uses gets(), which is unsafe.");
 
 char *
 gets(buf)
@@ -55,7 +47,14 @@ gets(buf)
 {
 	register int c;
 	register char *s;
+	static int warned;
+	static char w[] =
+	    "warning: this program uses gets(), which is unsafe.\r\n";
 
+	if (!warned) {
+		(void) write(STDERR_FILENO, w, sizeof(w) - 1);
+		warned = 1;
+	}
 	for (s = buf; (c = getchar()) != '\n';)
 		if (c == EOF)
 			if (s == buf)

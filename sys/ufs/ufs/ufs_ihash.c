@@ -1,5 +1,3 @@
-/*	$NetBSD: ufs_ihash.c,v 1.5 1997/07/15 19:08:18 fvdl Exp $	*/
-
 /*
  * Copyright (c) 1982, 1986, 1989, 1991, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -32,7 +30,8 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)ufs_ihash.c	8.4 (Berkeley) 12/30/93
+ *	from: @(#)ufs_ihash.c	8.4 (Berkeley) 12/30/93
+ *	$Id: ufs_ihash.c,v 1.1 1994/06/08 11:43:16 mycroft Exp $
  */
 
 #include <sys/param.h>
@@ -40,7 +39,6 @@
 #include <sys/vnode.h>
 #include <sys/malloc.h>
 #include <sys/proc.h>
-#include <sys/lock.h>
 
 #include <ufs/ufs/quota.h>
 #include <ufs/ufs/inode.h>
@@ -53,15 +51,13 @@ struct inode **ihashtbl;
 u_long	ihash;		/* size of hash table - 1 */
 #define	INOHASH(device, inum)	(((device) + (inum)) & ihash)
 
-struct lock ufs_hashlock;
-
 /*
  * Initialize inode hash table.
  */
 void
 ufs_ihashinit()
 {
-	lockinit(&ufs_hashlock, PINOD, "ufs_hashlock", 0, 0);
+
 	ihashtbl = hashinit(desiredvnodes, M_UFSMNT, &ihash);
 }
 
@@ -126,7 +122,7 @@ ufs_ihashins(ip)
 	struct inode **ipp, *iq;
 
 	ipp = &ihashtbl[INOHASH(ip->i_dev, ip->i_number)];
-	if ((iq = *ipp) != NULL)
+	if (iq = *ipp)
 		iq->i_prev = &ip->i_next;
 	ip->i_next = iq;
 	ip->i_prev = ipp;
@@ -149,7 +145,7 @@ ufs_ihashrem(ip)
 {
 	register struct inode *iq;
 
-	if ((iq = ip->i_next) != NULL)
+	if (iq = ip->i_next)
 		iq->i_prev = ip->i_prev;
 	*ip->i_prev = iq;
 #ifdef DIAGNOSTIC

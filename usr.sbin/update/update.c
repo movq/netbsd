@@ -1,6 +1,6 @@
 /*-
- * Copyright (c) 1987, 1990, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1987, 1990 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -31,95 +31,45 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1987, 1990, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+char copyright[] =
+"@(#) Copyright (c) 1987, 1990 The Regents of the University of California.\n\
+ All rights reserved.\n";
 #endif /* not lint */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)update.c	8.1 (Berkeley) 6/6/93";
-#else
-__RCSID("$NetBSD: update.c,v 1.6 1997/10/17 13:59:42 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)update.c	5.1 (Berkeley) 6/6/91";
 #endif /* not lint */
 
 #include <sys/time.h>
-
-#include <err.h>
 #include <signal.h>
-#include <stdio.h>
 #include <stdlib.h>
+#include <stdio.h>
 #include <unistd.h>
 
-int	main __P((int, char **));
-void	mysync __P((int));
-void	usage __P((void));
-
-int
-main(argc, argv)
-	int argc;
-	char *argv[];
+main()
 {
 	struct itimerval value;
-	int ch;
-	struct sigaction sa;
-	sigset_t set, oset;
-
-	value.it_interval.tv_sec = 30;
-	value.it_interval.tv_usec = 0;
-
-	while ((ch = getopt(argc, argv, "")) != -1) {
-		switch (ch) {
-		default:
-		case '?':
-			usage();
-		}
-	}
-	argc -= optind;
-	argv += optind;
-
-	if (argc) {
-		value.it_interval.tv_sec = atoi(argv[0]);
-		--argc;
-		++argv;
-	}
-
-	if (argc)
-		usage();
+	void mysync();
 
 	daemon(0, 0);
 
-	sa.sa_handler = mysync;
-	sigemptyset(&sa.sa_mask);
-	sa.sa_flags = 0;
-	if (sigaction(SIGALRM, &sa, (struct sigaction *)0) < 0)
-		err(1, "sigaction");
+	(void)signal(SIGALRM, mysync);
 
+	value.it_interval.tv_sec = 30;
+	value.it_interval.tv_usec = 0;
 	value.it_value = value.it_interval;
-	if (setitimer(ITIMER_REAL, &value, NULL) < 0)
-		err(1, "setitimer");
-
-	sigemptyset(&set);
-	sigprocmask(SIG_BLOCK, &set, &oset);
+	if (setitimer(ITIMER_REAL, &value, NULL)) {
+		perror("update: setitimer");
+		exit(1);
+	}
 	for (;;)
-		sigsuspend(&oset);
+		sigpause(sigblock(0L));
 	/* NOTREACHED */
 }
 
 void
-mysync(n)
-	int n;
+mysync()
 {
-
 	(void)sync();
-}
-
-void
-usage()
-{
-
-	(void)fprintf(stderr, "usage: update [interval]\n");
-	exit(1);
 }

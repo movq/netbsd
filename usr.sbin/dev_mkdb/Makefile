@@ -1,7 +1,6 @@
-#	from: @(#)Makefile	8.1 (Berkeley) 6/6/93
-#	$NetBSD: Makefile,v 1.5 1997/03/08 06:48:00 mikel Exp $
+#	@(#)Makefile	5.1 (Berkeley) 2/12/91
 
 PROG=	dev_mkdb
-MAN=	dev_mkdb.8
+MAN8=	dev_mkdb.0
 
 .include <bsd.prog.mk>

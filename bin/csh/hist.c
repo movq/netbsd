@@ -1,8 +1,6 @@
-/*	$NetBSD: hist.c,v 1.9 1997/07/04 21:24:03 christos Exp $	*/
-
 /*-
- * Copyright (c) 1980, 1991, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1980, 1991 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,13 +31,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)hist.c	8.1 (Berkeley) 5/31/93";
-#else
-__RCSID("$NetBSD: hist.c,v 1.9 1997/07/04 21:24:03 christos Exp $");
-#endif
+static char sccsid[] = "@(#)hist.c	5.9 (Berkeley) 6/8/91";
 #endif /* not lint */
 
 #include <sys/types.h>
@@ -54,15 +47,15 @@ __RCSID("$NetBSD: hist.c,v 1.9 1997/07/04 21:24:03 christos Exp $");
 #include "extern.h"
 
 static void	hfree __P((struct Hist *));
-static void	dohist1 __P((struct Hist *, int *, int, int));
-static void	phist __P((struct Hist *, int));
+static void	dohist1 __P((struct Hist *, int *, int, int, int));
+static void	phist __P((struct Hist *, int, int));
 
 void
 savehist(sp)
     struct wordent *sp;
 {
-    struct Hist *hp, *np;
-    int histlen = 0;
+    register struct Hist *hp, *np;
+    register int histlen = 0;
     Char   *cp;
 
     /* throw away null lines */
@@ -70,7 +63,7 @@ savehist(sp)
 	return;
     cp = value(STRhistory);
     if (*cp) {
-	Char *p = cp;
+	register Char *p = cp;
 
 	while (*p) {
 	    if (!Isdigit(*p)) {
@@ -80,7 +73,7 @@ savehist(sp)
 	    histlen = histlen * 10 + *p++ - '0';
 	}
     }
-    for (hp = &Histlist; (np = hp->Hnext) != NULL;)
+    for (hp = &Histlist; np = hp->Hnext;)
 	if (eventno - np->Href >= histlen || histlen == 0)
 	    hp->Hnext = np->Hnext, hfree(np);
 	else
@@ -91,12 +84,13 @@ savehist(sp)
 struct Hist *
 enthist(event, lp, docopy)
     int     event;
-    struct wordent *lp;
+    register struct wordent *lp;
     bool    docopy;
 {
-    struct Hist *np;
+    register struct Hist *np;
 
     np = (struct Hist *) xmalloc((size_t) sizeof(*np));
+    (void) time(&(np->Htime));
     np->Hnum = np->Href = event;
     if (docopy) {
 	copylex(&np->Hlex, lp);
@@ -114,7 +108,7 @@ enthist(event, lp, docopy)
 
 static void
 hfree(hp)
-    struct Hist *hp;
+    register struct Hist *hp;
 {
 
     freelex(&hp->Hlex);
@@ -122,31 +116,28 @@ hfree(hp)
 }
 
 void
-/*ARGSUSED*/
-dohist(v, t)
-    Char **v;
-    struct command *t;
+dohist(vp)
+    Char  **vp;
 {
-    int     n, rflg = 0, hflg = 0;
-    sigset_t sigset;
+    int     n, rflg = 0, hflg = 0, tflg = 0;
 
     if (getn(value(STRhistory)) == 0)
 	return;
-    if (setintr) {
-	sigemptyset(&sigset);
-	sigaddset(&sigset, SIGINT);
-	sigprocmask(SIG_UNBLOCK, &sigset, NULL);
-    }
-    while (*++v && **v == '-') {
-	Char   *vp = *v;
+    if (setintr)
+	(void) sigsetmask(sigblock((sigset_t) 0) & ~sigmask(SIGINT));
+    while (*++vp && **vp == '-') {
+	Char   *vp2 = *vp;
 
-	while (*++vp)
-	    switch (*vp) {
+	while (*++vp2)
+	    switch (*vp2) {
 	    case 'h':
 		hflg++;
 		break;
 	    case 'r':
 		rflg++;
+		break;
+	    case 't':
+		tflg++;
 		break;
 	    case '-':		/* ignore multiple '-'s */
 		break;
@@ -155,18 +146,18 @@ dohist(v, t)
 		break;
 	    }
     }
-    if (*v)
-	n = getn(*v);
+    if (*vp)
+	n = getn(*vp);
     else {
 	n = getn(value(STRhistory));
     }
-    dohist1(Histlist.Hnext, &n, rflg, hflg);
+    dohist1(Histlist.Hnext, &n, rflg, hflg, tflg);
 }
 
 static void
-dohist1(hp, np, rflg, hflg)
+dohist1(hp, np, rflg, hflg, tflg)
     struct Hist *hp;
-    int    *np, rflg, hflg;
+    int    *np, rflg, hflg, tflg;
 {
     bool    print = (*np) > 0;
 
@@ -174,22 +165,42 @@ dohist1(hp, np, rflg, hflg)
 	(*np)--;
 	hp->Href++;
 	if (rflg == 0) {
-	    dohist1(hp->Hnext, np, rflg, hflg);
+	    dohist1(hp->Hnext, np, rflg, hflg, tflg);
 	    if (print)
-		phist(hp, hflg);
+		phist(hp, hflg, tflg);
 	    return;
 	}
 	if (*np >= 0)
-	    phist(hp, hflg);
+	    phist(hp, hflg, tflg);
     }
 }
 
 static void
-phist(hp, hflg)
-    struct Hist *hp;
-    int     hflg;
+phist(hp, hflg, tflg)
+    register struct Hist *hp;
+    int     hflg, tflg;
 {
-    if (hflg == 0)
-	(void) fprintf(cshout, "%6d\t", hp->Hnum);
-    prlex(cshout, &hp->Hlex);
+    struct tm *t;
+    char    ampm = 'a';
+
+    if (hflg == 0) {
+	xprintf("%6d\t", hp->Hnum);
+	if (tflg == 0) {
+	    t = localtime(&hp->Htime);
+	    if (adrof(STRampm)) {	/* addition by Hans J. Albertsson */
+		if (t->tm_hour >= 12) {
+		    if (t->tm_hour > 12)
+			t->tm_hour -= 12;
+		    ampm = 'p';
+		}
+		else if (t->tm_hour == 0)
+		    t->tm_hour = 12;
+		xprintf("%2d:%02d%cm\t", t->tm_hour, t->tm_min, ampm);
+	    }
+	    else {
+		xprintf("%2d:%02d\t", t->tm_hour, t->tm_min);
+	    }
+	}
+    }
+    prlex(&hp->Hlex);
 }

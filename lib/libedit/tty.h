@@ -1,5 +1,3 @@
-/*	$NetBSD: tty.h,v 1.4 1997/04/11 21:38:02 christos Exp $	*/
-
 /*-
  * Copyright (c) 1992, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -147,12 +145,7 @@
 # endif /* IEXTEN != 0 */
 #endif /* convex || __convex__ */
 
-/*
- * So that we don't lose job control.
- */
-#ifdef __SVR4
-# undef CSWTCH
-#endif
+
 
 #ifndef _POSIX_VDISABLE
 # define _POSIX_VDISABLE ((unsigned char) -1)
@@ -453,8 +446,8 @@
 
 typedef struct { 
     char *t_name;
-    u_int t_setmask;
-    u_int t_clrmask;
+    int  t_setmask;
+    int  t_clrmask;
 } ttyperm_t[NN_IO][M_NN];
 
 typedef unsigned char ttychar_t[NN_IO][C_NCC];

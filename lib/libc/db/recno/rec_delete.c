@@ -1,7 +1,5 @@
-/*	$NetBSD: rec_delete.c,v 1.10 1997/07/21 14:06:43 jtc Exp $	*/
-
 /*-
- * Copyright (c) 1990, 1993, 1994
+ * Copyright (c) 1990, 1993
  *	The Regents of the University of California.  All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
@@ -36,16 +34,10 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char sccsid[] = "@(#)rec_delete.c	8.7 (Berkeley) 7/14/94";
-#else
-__RCSID("$NetBSD: rec_delete.c,v 1.10 1997/07/21 14:06:43 jtc Exp $");
-#endif
+static char sccsid[] = "@(#)rec_delete.c	8.1 (Berkeley) 6/4/93";
 #endif /* LIBC_SCCS and not lint */
 
-#include "namespace.h"
 #include <sys/types.h>
 
 #include <errno.h>
@@ -79,13 +71,6 @@ __rec_delete(dbp, key, flags)
 	int status;
 
 	t = dbp->internal;
-
-	/* Toss any page pinned across calls. */
-	if (t->bt_pinned != NULL) {
-		mpool_put(t->bt_mp, t->bt_pinned, 0);
-		t->bt_pinned = NULL;
-	}
-
 	switch(flags) {
 	case 0:
 		if ((nrec = *(recno_t *)key->data) == 0)
@@ -96,13 +81,13 @@ __rec_delete(dbp, key, flags)
 		status = rec_rdelete(t, nrec);
 		break;
 	case R_CURSOR:
-		if (!F_ISSET(&t->bt_cursor, CURS_INIT))
+		if (!ISSET(t, B_SEQINIT))
 			goto einval;
 		if (t->bt_nrecs == 0)
 			return (RET_SPECIAL);
-		status = rec_rdelete(t, t->bt_cursor.rcursor - 1);
+		status = rec_rdelete(t, t->bt_rcursor - 1);
 		if (status == RET_SUCCESS)
-			--t->bt_cursor.rcursor;
+			--t->bt_rcursor;
 		break;
 	default:
 einval:		errno = EINVAL;
@@ -110,7 +95,7 @@ einval:		errno = EINVAL;
 	}
 
 	if (status == RET_SUCCESS)
-		F_SET(t, B_MODIFIED | R_MODIFIED);
+		SET(t, B_MODIFIED | R_MODIFIED);
 	return (status);
 }
 
@@ -134,8 +119,10 @@ rec_rdelete(t, nrec)
 	int status;
 
 	/* Find the record; __rec_search pins the page. */
-	if ((e = __rec_search(t, nrec, SDELETE)) == NULL)
+	if ((e = __rec_search(t, nrec, SDELETE)) == NULL) {
+		mpool_put(t->bt_mp, e->page, 0);
 		return (RET_ERROR);
+	}
 
 	/* Delete the record. */
 	h = e->page;
@@ -162,11 +149,12 @@ int
 __rec_dleaf(t, h, index)
 	BTREE *t;
 	PAGE *h;
-	u_int32_t index;
+	int index;
 {
-	RLEAF *rl;
-	indx_t *ip, cnt, offset;
-	u_int32_t nbytes;
+	register RLEAF *rl;
+	register indx_t *ip, offset;
+	register size_t nbytes;
+	register int cnt;
 	char *from;
 	void *to;
 

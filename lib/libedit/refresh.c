@@ -1,5 +1,3 @@
-/*	$NetBSD: refresh.c,v 1.3 1997/07/06 18:25:33 christos Exp $	*/
-
 /*-
  * Copyright (c) 1992, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -36,13 +34,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #if !defined(lint) && !defined(SCCSID)
-#if 0
 static char sccsid[] = "@(#)refresh.c	8.1 (Berkeley) 6/4/93";
-#else
-__RCSID("$NetBSD: refresh.c,v 1.3 1997/07/06 18:25:33 christos Exp $");
-#endif
 #endif /* not lint && not SCCSID */
 
 /*

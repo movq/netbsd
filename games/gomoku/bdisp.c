@@ -1,5 +1,3 @@
-/*	$NetBSD: bdisp.c,v 1.5 1997/10/10 13:36:02 lukem Exp $	*/
-
 /*
  * Copyright (c) 1994
  *	The Regents of the University of California.  All rights reserved.
@@ -36,18 +34,13 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
 static char sccsid[] = "@(#)bdisp.c	8.2 (Berkeley) 5/3/95";
-#else
-__RCSID("$NetBSD: bdisp.c,v 1.5 1997/10/10 13:36:02 lukem Exp $");
-#endif
 #endif /* not lint */
 
-#include <curses.h>
-#include <string.h>
 #include "gomoku.h"
+#include <stdio.h>
+#include <curses.h>
 
 #define	SCRNH		24		/* assume 24 lines for the moment */
 #define	SCRNW		80		/* assume 80 chars for the moment */
@@ -58,7 +51,6 @@ static	char	pcolor[] = "*O.?";
 /*
  * Initialize screen display.
  */
-void
 cursinit()
 {
 
@@ -71,7 +63,6 @@ cursinit()
 /*
  * Restore screen display.
  */
-void
 cursfini()
 {
 
@@ -85,10 +76,9 @@ cursfini()
 /*
  * Initialize board display.
  */
-void
 bdisp_init()
 {
-	int i, j;
+	register int i, j;
 
 	/* top border */
 	for (i = 1; i < BSZ1; i++) {
@@ -117,7 +107,6 @@ bdisp_init()
 /*
  * Update who is playing whom.
  */
-void
 bdwho(update)
 	int update;
 {
@@ -141,11 +130,10 @@ bdwho(update)
 /*
  * Update the board display after a move.
  */
-void
 bdisp()
 {
-	int i, j, c;
-	struct spotstr *sp;
+	register int i, j, c;
+	register struct spotstr *sp;
 
 	for (j = BSZ1; --j > 0; ) {
 		for (i = 1; i < BSZ1; i++) {
@@ -170,12 +158,11 @@ bdisp()
 /*
  * Dump board display to a file.
  */
-void
 bdump(fp)
 	FILE *fp;
 {
-	int i, j, c;
-	struct spotstr *sp;
+	register int i, j, c;
+	register struct spotstr *sp;
 
 	/* top border */
 	fprintf(fp, "   A B C D E F G H J K L M N O P Q R S T\n");
@@ -209,7 +196,6 @@ bdump(fp)
 /*
  * Display a transcript entry
  */
-void
 dislog(str)
 	char *str;
 {
@@ -230,8 +216,6 @@ dislog(str)
 /*
  * Display a question.
  */
-
-void
 ask(str)
 	char *str;
 {
@@ -244,16 +228,14 @@ ask(str)
 	refresh();
 }
 
-int
 getline(buf, size)
 	char *buf;
 	int size;
 {
-	char *cp, *end;
-	int c;
+	register char *cp, *end;
+	register int c;
 	extern int interactive;
 
-	c = 0;
 	cp = buf;
 	end = buf + size - 1;	/* save room for the '\0' */
 	while (cp < end && (c = getchar()) != EOF && c != '\n' && c != '\r') {

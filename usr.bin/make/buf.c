@@ -1,5 +1,3 @@
-/*	$NetBSD: buf.c,v 1.11 1997/09/28 03:31:00 lukem Exp $	*/
-
 /*
  * Copyright (c) 1988, 1989, 1990 The Regents of the University of California.
  * Copyright (c) 1988, 1989 by Adam de Boor
@@ -38,18 +36,9 @@
  * SUCH DAMAGE.
  */
 
-#ifdef MAKE_BOOTSTRAP
-static char rcsid[] = "$NetBSD: buf.c,v 1.11 1997/09/28 03:31:00 lukem Exp $";
-#else
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)buf.c	8.1 (Berkeley) 6/6/93";
-#else
-__RCSID("$NetBSD: buf.c,v 1.11 1997/09/28 03:31:00 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)buf.c	5.5 (Berkeley) 12/28/90";
 #endif /* not lint */
-#endif
 
 /*-
  * buf.c --
@@ -57,7 +46,6 @@ __RCSID("$NetBSD: buf.c,v 1.11 1997/09/28 03:31:00 lukem Exp $");
  */
 
 #include    "sprite.h"
-#include    "make.h"
 #include    "buf.h"
 
 #ifndef max
@@ -74,7 +62,7 @@ __RCSID("$NetBSD: buf.c,v 1.11 1997/09/28 03:31:00 lukem Exp $");
 #define BufExpand(bp,nb) \
  	if (bp->left < (nb)+1) {\
 	    int newSize = (bp)->size + max((nb)+1,BUF_ADD_INC); \
-	    Byte  *newBuf = (Byte *) erealloc((bp)->buffer, newSize); \
+	    Byte  *newBuf = (Byte *) realloc((bp)->buffer, newSize); \
 	    \
 	    (bp)->inPtr = newBuf + ((bp)->inPtr - (bp)->buffer); \
 	    (bp)->outPtr = newBuf + ((bp)->outPtr - (bp)->buffer);\
@@ -103,11 +91,11 @@ __RCSID("$NetBSD: buf.c,v 1.11 1997/09/28 03:31:00 lukem Exp $");
 void
 Buf_OvAddByte (bp, byte)
     register Buffer bp;
-    int    byte;
+    Byte    byte;
 {
-    int nbytes = 1;
+
     bp->left = 0;
-    BufExpand (bp, nbytes);
+    BufExpand (bp, 1);
 
     *bp->inPtr++ = byte;
     bp->left--;
@@ -135,12 +123,12 @@ void
 Buf_AddBytes (bp, numBytes, bytesPtr)
     register Buffer bp;
     int	    numBytes;
-    const Byte *bytesPtr;
+    Byte    *bytesPtr;
 {
 
     BufExpand (bp, numBytes);
 
-    memcpy (bp->inPtr, bytesPtr, numBytes);
+    bcopy (bytesPtr, bp->inPtr, numBytes);
     bp->inPtr += numBytes;
     bp->left -= numBytes;
 
@@ -166,7 +154,7 @@ Buf_AddBytes (bp, numBytes, bytesPtr)
 void
 Buf_UngetByte (bp, byte)
     register Buffer bp;
-    int    byte;
+    Byte    byte;
 {
 
     if (bp->outPtr != bp->buffer) {
@@ -188,7 +176,8 @@ Buf_UngetByte (bp, byte)
 	Byte	  *newBuf;
 
 	newBuf = (Byte *)emalloc(bp->size + BUF_UNGET_INC);
-	memcpy ((char *)(newBuf+BUF_UNGET_INC), (char *)bp->outPtr, numBytes+1);
+	bcopy ((char *)bp->outPtr,
+			(char *)(newBuf+BUF_UNGET_INC), numBytes+1);
 	bp->outPtr = newBuf + BUF_UNGET_INC;
 	bp->inPtr = bp->outPtr + numBytes;
 	free ((char *)bp->buffer);
@@ -222,7 +211,7 @@ Buf_UngetBytes (bp, numBytes, bytesPtr)
 
     if (bp->outPtr - bp->buffer >= numBytes) {
 	bp->outPtr -= numBytes;
-	memcpy (bp->outPtr, bytesPtr, numBytes);
+	bcopy (bytesPtr, bp->outPtr, numBytes);
     } else if (bp->outPtr == bp->inPtr) {
 	Buf_AddBytes (bp, numBytes, bytesPtr);
     } else {
@@ -231,7 +220,7 @@ Buf_UngetBytes (bp, numBytes, bytesPtr)
 	int 	  newBytes = max(numBytes,BUF_UNGET_INC);
 
 	newBuf = (Byte *)emalloc (bp->size + newBytes);
-	memcpy((char *)(newBuf+newBytes), (char *)bp->outPtr, curNumBytes+1);
+	bcopy((char *)bp->outPtr, (char *)(newBuf+newBytes), curNumBytes+1);
 	bp->outPtr = newBuf + newBytes;
 	bp->inPtr = bp->outPtr + curNumBytes;
 	free ((char *)bp->buffer);
@@ -239,7 +228,7 @@ Buf_UngetBytes (bp, numBytes, bytesPtr)
 	bp->size += newBytes;
 	bp->left = bp->size - (bp->inPtr - bp->buffer);
 	bp->outPtr -= numBytes;
-	memcpy ((char *)bp->outPtr, (char *)bytesPtr, numBytes);
+	bcopy ((char *)bytesPtr, (char *)bp->outPtr, numBytes);
     }
 }
 
@@ -297,11 +286,11 @@ Buf_GetBytes (bp, numBytes, bytesPtr)
     int	    numBytes;
     Byte    *bytesPtr;
 {
-
+    
     if (bp->inPtr - bp->outPtr < numBytes) {
 	numBytes = bp->inPtr - bp->outPtr;
     }
-    memcpy (bytesPtr, bp->outPtr, numBytes);
+    bcopy (bp->outPtr, bytesPtr, numBytes);
     bp->outPtr += numBytes;
 
     if (bp->outPtr == bp->inPtr) {
@@ -334,7 +323,7 @@ Buf_GetAll (bp, numBytesPtr)
     if (numBytesPtr != (int *)NULL) {
 	*numBytesPtr = bp->inPtr - bp->outPtr;
     }
-
+    
     return (bp->outPtr);
 }
 
@@ -347,7 +336,7 @@ Buf_GetAll (bp, numBytesPtr)
  *	None.
  *
  * Side Effects:
- *	The bytes are discarded.
+ *	The bytes are discarded. 
  *
  *-----------------------------------------------------------------------
  */
@@ -439,34 +428,9 @@ Buf_Destroy (buf, freeData)
     Buffer  buf;  	/* Buffer to destroy */
     Boolean freeData;	/* TRUE if the data should be destroyed as well */
 {
-
+    
     if (freeData) {
 	free ((char *)buf->buffer);
     }
     free ((char *)buf);
-}
-
-/*-
- *-----------------------------------------------------------------------
- * Buf_ReplaceLastByte --
- *     Replace the last byte in a buffer.
- *
- * Results:
- *     None.
- *
- * Side Effects:
- *     If the buffer was empty intially, then a new byte will be added.
- *     Otherwise, the last byte is overwritten.
- *
- *-----------------------------------------------------------------------
- */
-void
-Buf_ReplaceLastByte (buf, byte)
-    Buffer buf;	/* buffer to augment */
-    int byte;	/* byte to be written */
-{
-    if (buf->inPtr == buf->outPtr)
-        Buf_AddByte(buf, byte);
-    else
-        *(buf->inPtr - 1) = byte;
 }

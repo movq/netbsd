@@ -1,8 +1,6 @@
-/*	$NetBSD: vacation.c,v 1.11 1997/10/20 02:53:03 lukem Exp $	*/
-
 /*
- * Copyright (c) 1983, 1987, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1983, 1987 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,18 +31,14 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
-
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1983, 1987, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+char copyright[] =
+"@(#) Copyright (c) 1983, 1987 Regents of the University of California.\n\
+ All rights reserved.\n";
 #endif /* not lint */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)vacation.c	8.2 (Berkeley) 1/26/94";
-#endif
-__RCSID("$NetBSD: vacation.c,v 1.11 1997/10/20 02:53:03 lukem Exp $");
+static char sccsid[] = "@(#)vacation.c	5.19 (Berkeley) 3/23/91";
 #endif /* not lint */
 
 /*
@@ -55,20 +49,19 @@ __RCSID("$NetBSD: vacation.c,v 1.11 1997/10/20 02:53:03 lukem Exp $");
 
 #include <sys/param.h>
 #include <sys/stat.h>
-
-#include <ctype.h>
-#include <db.h>
-#include <errno.h>
 #include <fcntl.h>
-#include <paths.h>
 #include <pwd.h>
+#include <db.h>
+#include <time.h>
+#include <syslog.h>
+#include <tzfile.h>
+#include <errno.h>
+#include <unistd.h>
 #include <stdio.h>
+#include <ctype.h>
 #include <stdlib.h>
 #include <string.h>
-#include <syslog.h>
-#include <time.h>
-#include <tzfile.h>
-#include <unistd.h>
+#include <paths.h>
 
 /*
  *  VACATION -- return a message to the sender when on vacation.
@@ -90,23 +83,15 @@ typedef struct alias {
 ALIAS *names;
 
 DB *db;
+
 char from[MAXLINE];
 
-int main __P((int, char **));
-int junkmail __P((void));
-int nsearch __P((const char *, const char *));
-void readheaders __P((void));
-int recent __P((void));
-void sendmessage __P((char *));
-void setinterval __P((time_t));
-void setreply __P((void));
-void usage __P((void));
-
-int
 main(argc, argv)
 	int argc;
 	char **argv;
 {
+	extern int optind, opterr;
+	extern char *optarg;
 	struct passwd *pw;
 	ALIAS *cur;
 	time_t interval;
@@ -114,7 +99,7 @@ main(argc, argv)
 
 	opterr = iflag = 0;
 	interval = -1;
-	while ((ch = getopt(argc, argv, "a:Iir:")) != -1)
+	while ((ch = getopt(argc, argv, "a:Iir:")) != EOF)
 		switch((char)ch) {
 		case 'a':			/* alias */
 			if (!(cur = (ALIAS *)malloc((u_int)sizeof(ALIAS))))
@@ -134,7 +119,7 @@ main(argc, argv)
 					usage();
 			}
 			else
-				interval = (time_t)LONG_MAX;	/* XXX */
+				interval = LONG_MAX;
 			break;
 		case '?':
 		default:
@@ -162,8 +147,8 @@ main(argc, argv)
 		exit(1);
 	}
 
-	db = dbopen(VDB, O_CREAT|O_RDWR | (iflag ? O_TRUNC : 0),
-	    S_IRUSR|S_IWUSR, DB_HASH, NULL);
+	db = hash_open(VDB, O_CREAT|O_RDWR | (iflag ? O_TRUNC : 0),
+	    S_IRUSR|S_IWUSR, (HASHINFO *)NULL);
 	if (!db) {
 		syslog(LOG_NOTICE, "vacation: %s: %s\n", VDB, strerror(errno));
 		exit(1);
@@ -189,8 +174,7 @@ main(argc, argv)
 		(void)(db->close)(db);
 		sendmessage(pw->pw_name);
 	}
-	else
-		(void)(db->close)(db);
+	(void)(db->close)(db);
 	exit(0);
 	/* NOTREACHED */
 }
@@ -199,11 +183,10 @@ main(argc, argv)
  * readheaders --
  *	read mail headers
  */
-void
 readheaders()
 {
-	ALIAS *cur;
-	char *p;
+	register ALIAS *cur;
+	register char *p;
 	int tome, cont;
 	char buf[MAXLINE];
 
@@ -216,7 +199,7 @@ readheaders()
 				for (p = buf + 5; *p && *p != ' '; ++p);
 				*p = '\0';
 				(void)strcpy(from, buf + 5);
-				if ((p = strchr(from, '\n')))
+				if (p = index(from, '\n'))
 					*p = '\0';
 				if (junkmail())
 					exit(0);
@@ -225,17 +208,15 @@ readheaders()
 		case 'P':		/* "Precedence:" */
 			cont = 0;
 			if (strncasecmp(buf, "Precedence", 10) ||
-			    (buf[10] != ':' && buf[10] != ' ' &&
-			    buf[10] != '\t'))
+			    buf[10] != ':' && buf[10] != ' ' && buf[10] != '\t')
 				break;
-			if (!(p = strchr(buf, ':')))
+			if (!(p = index(buf, ':')))
 				break;
 			while (*++p && isspace(*p));
 			if (!*p)
 				break;
 			if (!strncasecmp(p, "junk", 4) ||
-			    !strncasecmp(p, "bulk", 4) ||
-			    !strncasecmp(p, "list", 4))
+			    !strncasecmp(p, "bulk", 4))
 				exit(0);
 			break;
 		case 'C':		/* "Cc:" */
@@ -268,11 +249,10 @@ findme:			for (cur = names; !tome && cur; cur = cur->next)
  * nsearch --
  *	do a nice, slow, search of a string for a substring.
  */
-int
 nsearch(name, str)
-	const char *name, *str;
+	register char *name, *str;
 {
-	size_t len;
+	register int len;
 
 	for (len = strlen(name); *str; ++str)
 		if (*str == *name && !strncasecmp(name, str, len))
@@ -282,26 +262,21 @@ nsearch(name, str)
 
 /*
  * junkmail --
- *	read the header and return if automagic/junk/bulk/list mail
+ *	read the header and return if automagic/junk/bulk mail
  */
-int
 junkmail()
 {
 	static struct ignore {
 		char	*name;
 		int	len;
 	} ignore[] = {
-		{ "-request", 8 },
-		{ "postmaster", 10 },
-		{ "uucp", 4 },
-		{ "mailer-daemon", 13 },
-		{ "mailer", 6 },
-		{ "-relay", 6 },
-		{NULL, 0 }
+		"-request", 8,		"postmaster", 10,	"uucp", 4,
+		"mailer-daemon", 13,	"mailer", 6,		"-relay", 6,
+		NULL, NULL,
 	};
-	struct ignore *cur;
-	int len;
-	char *p;
+	register struct ignore *cur;
+	register int len;
+	register char *p;
 
 	/*
 	 * This is mildly amusing, and I'm not positive it's right; trying
@@ -310,9 +285,9 @@ junkmail()
 	 *
 	 * From site!site!SENDER%site.domain%site.domain@site.domain
 	 */
-	if (!(p = strchr(from, '%')))
-		if (!(p = strchr(from, '@'))) {
-			if ((p = strrchr(from, '!')))
+	if (!(p = index(from, '%')))
+		if (!(p = index(from, '@'))) {
+			if (p = rindex(from, '!'))
 				++p;
 			else
 				p = from;
@@ -331,9 +306,8 @@ junkmail()
 /*
  * recent --
  *	find out if user has gotten a vacation message recently.
- *	use memmove for machines with alignment restrictions
+ *	use bcopy for machines with alignment restrictions
  */
-int
 recent()
 {
 	DBT key, data;
@@ -345,15 +319,14 @@ recent()
 	if ((db->get)(db, &key, &data, 0))
 		next = SECSPERDAY * DAYSPERWEEK;
 	else
-		memmove(&next, data.data, sizeof(next));
+		bcopy(data.data, &next, sizeof(next));
 
 	/* get record for this address */
 	key.data = from;
 	key.size = strlen(from);
 	if (!(db->get)(db, &key, &data, 0)) {
-		memmove(&then, data.data, sizeof(then));
-		if (next == (time_t)LONG_MAX ||			/* XXX */
-		    then + next > time(NULL))
+		bcopy(data.data, &then, sizeof(then));
+		if (next == LONG_MAX || then + next > time(NULL))
 			return(1);
 	}
 	return(0);
@@ -363,7 +336,6 @@ recent()
  * setinterval --
  *	store the reply interval
  */
-void
 setinterval(interval)
 	time_t interval;
 {
@@ -373,14 +345,13 @@ setinterval(interval)
 	key.size = sizeof(VIT);
 	data.data = &interval;
 	data.size = sizeof(interval);
-	(void)(db->put)(db, &key, &data, 0);
+	(void)(db->put)(db, &key, &data, R_PUT);
 }
 
 /*
  * setreply --
  *	store that this user knows about the vacation.
  */
-void
 setreply()
 {
 	DBT key, data;
@@ -391,60 +362,27 @@ setreply()
 	(void)time(&now);
 	data.data = &now;
 	data.size = sizeof(now);
-	(void)(db->put)(db, &key, &data, 0);
+	(void)(db->put)(db, &key, &data, R_PUT);
 }
 
 /*
  * sendmessage --
  *	exec sendmail to send the vacation file to sender
  */
-void
 sendmessage(myname)
 	char *myname;
 {
-	FILE *mfp, *sfp;
-	int i;
-	int pvect[2];
-	char buf[MAXLINE];
-
-	mfp = fopen(VMSG, "r");
-	if (mfp == NULL) {
+	if (!freopen(VMSG, "r", stdin)) {
 		syslog(LOG_NOTICE, "vacation: no ~%s/%s file.\n", myname, VMSG);
 		exit(1);
 	}
-	if (pipe(pvect) < 0) {
-		syslog(LOG_ERR, "vacation: pipe: %s", strerror(errno));
-		exit(1);
-	}
-	i = vfork();
-	if (i < 0) {
-		syslog(LOG_ERR, "vacation: fork: %s", strerror(errno));
-		exit(1);
-	}
-	if (i == 0) {
-		dup2(pvect[0], 0);
-		close(pvect[0]);
-		close(pvect[1]);
-		fclose(mfp);
-		execl(_PATH_SENDMAIL, "sendmail", "-f", myname, "--", from,
-		    NULL);
-		syslog(LOG_ERR, "vacation: can't exec %s: %s",
-		    _PATH_SENDMAIL, strerror(errno));
-		exit(1);
-	}
-	close(pvect[0]);
-	sfp = fdopen(pvect[1], "w");
-	fprintf(sfp, "To: %s\n", from);
-	while (fgets(buf, sizeof buf, mfp))
-		fputs(buf, sfp);
-	fclose(mfp);
-	fclose(sfp);
+	execl(_PATH_SENDMAIL, "sendmail", "-f", myname, from, NULL);
+	syslog(LOG_ERR, "vacation: can't exec %s.\n", _PATH_SENDMAIL);
+	exit(1);
 }
 
-void
 usage()
 {
-
 	syslog(LOG_NOTICE, "uid %u: usage: vacation [-i] [-a alias] login\n",
 	    getuid());
 	exit(1);

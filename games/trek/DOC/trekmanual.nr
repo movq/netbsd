@@ -1,4 +1,3 @@
-.\"	$NetBSD: trekmanual.nr,v 1.2 1995/04/22 10:59:45 cgd Exp $
 .br
 .po 10
 .if n \!.

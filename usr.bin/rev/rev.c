@@ -1,8 +1,6 @@
-/*	$NetBSD: rev.c,v 1.6 1997/10/19 14:03:34 lukem Exp $	*/
-
 /*-
- * Copyright (c) 1987, 1992, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1987, 1992 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,43 +31,36 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1987, 1992, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+char copyright[] =
+"@(#) Copyright (c) 1987, 1992 The Regents of the University of California.\n\
+ All rights reserved.\n";
 #endif /* not lint */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)rev.c	8.3 (Berkeley) 5/4/95";
-#else
-__RCSID("$NetBSD: rev.c,v 1.6 1997/10/19 14:03:34 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)rev.c	5.2 (Berkeley) 3/21/92";
 #endif /* not lint */
 
 #include <sys/types.h>
-
-#include <err.h>
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
 
-int	main __P((int, char **));
-void	usage __P((void));
+void usage __P((void));
+void warn __P((const char *, ...));
 
 int
 main(argc, argv)
 	int argc;
 	char *argv[];
 {
-	char *filename, *p, *t;
+	register char *filename, *p, *t;
 	FILE *fp;
 	size_t len;
 	int ch, rval;
 
-	while ((ch = getopt(argc, argv, "")) != -1)
+	while ((ch = getopt(argc, argv, "")) != EOF)
 		switch(ch) {
 		case '?':
 		default:
@@ -85,28 +76,53 @@ main(argc, argv)
 	do {
 		if (*argv) {
 			if ((fp = fopen(*argv, "r")) == NULL) {
-				warn("%s", *argv);
+				warn("%s: %s", *argv, strerror(errno));
 				rval = 1;
 				++argv;
 				continue;
 			}
 			filename = *argv++;
 		}
-		while ((p = fgetln(fp, &len)) != NULL) {
-			if (p[len - 1] == '\n')
-				--len;
+		while (p = fgetline(fp, &len)) {
 			t = p + len - 1;
 			for (t = p + len - 1; t >= p; --t)
 				putchar(*t);
 			putchar('\n');
 		}
 		if (ferror(fp)) {
-			warn("%s", filename);
+			warn("%s: %s", filename, strerror(errno));
 			rval = 1;
 		}
 		(void)fclose(fp);
 	} while(*argv);
 	exit(rval);
+}
+
+#if __STDC__
+#include <stdarg.h>
+#else
+#include <varargs.h>
+#endif
+
+void
+#if __STDC__
+warn(const char *fmt, ...)
+#else
+warn(fmt, va_alist)
+	char *fmt;
+        va_dcl
+#endif
+{
+	va_list ap;
+#if __STDC__
+	va_start(ap, fmt);
+#else
+	va_start(ap);
+#endif
+	(void)fprintf(stderr, "rev: ");
+	(void)vfprintf(stderr, fmt, ap);
+	va_end(ap);
+	(void)fprintf(stderr, "\n");
 }
 
 void

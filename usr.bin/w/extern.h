@@ -1,5 +1,3 @@
-/*	$NetBSD: extern.h,v 1.3 1996/06/07 01:39:16 thorpej Exp $	*/
-
 /*-
  * Copyright (c) 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -36,8 +34,6 @@
  */
 
 struct proc;
-void	fmt_puts __P((char *, int *));
-void	fmt_putc __P((int, int *));
 void	pr_attime __P((time_t *, time_t *));
 void	pr_idle __P((time_t));
 int	proc_compare __P((struct proc *, struct proc *));

@@ -1,8 +1,6 @@
-/*	$NetBSD: showmount.c,v 1.8 1997/10/19 23:09:43 lukem Exp $	*/
-
 /*
- * Copyright (c) 1989, 1993, 1995
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1989 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Rick Macklem at The University of Guelph.
@@ -36,34 +34,27 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1989, 1993, 1995\n\
-	The Regents of the University of California.  All rights reserved.\n");
+char copyright[] =
+"@(#) Copyright (c) 1989 Regents of the University of California.\n\
+ All rights reserved.\n";
 #endif not lint
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)showmount.c	8.3 (Berkeley) 3/29/95";
-#endif
-__RCSID("$NetBSD: showmount.c,v 1.8 1997/10/19 23:09:43 lukem Exp $");
+static char sccsid[] = "@(#)showmount.c	6.5 (Berkeley) 3/1/91";
 #endif not lint
 
 #include <sys/types.h>
 #include <sys/file.h>
 #include <sys/socket.h>
 #include <sys/socketvar.h>
-
 #include <netdb.h>
 #include <rpc/rpc.h>
 #include <rpc/pmap_clnt.h>
 #include <rpc/pmap_prot.h>
 #include <nfs/rpcv2.h>
-
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
 
 /* Constant defs */
 #define	ALL	1
@@ -93,32 +84,29 @@ struct exportslist {
 static struct mountlist *mntdump;
 static struct exportslist *exports;
 static int type = 0;
-
-int	main __P((int, char **));
-void	print_dump __P((struct mountlist *));
-void	usage __P((void));
-int	xdr_mntdump __P((XDR *, struct mountlist **));
-int	xdr_exports __P((XDR *, struct exportslist **));
+int xdr_mntdump(), xdr_exports();
 
 /*
  * This command queries the NFS mount daemon for it's mount list and/or
  * it's exports list and prints them out.
  * See "NFS: Network File System Protocol Specification, RFC1094, Appendix A"
- * and the "Network File System Protocol XXX.."
  * for detailed information on the protocol.
  */
-int
 main(argc, argv)
 	int argc;
 	char **argv;
 {
-	struct exportslist *exp;
-	struct grouplist *grp;
-	int estat, rpcs = 0, mntvers = 1;
+	register struct mountlist *mntp;
+	register struct exportslist *exp;
+	register struct grouplist *grp;
+	extern char *optarg;
+	extern int optind;
+	register int rpcs = 0;
+	char ch;
 	char *host;
-	int ch;
+	int estat;
 
-	while ((ch = getopt(argc, argv, "ade3")) != -1)
+	while ((ch = getopt(argc, argv, "ade")) != EOF)
 		switch((char)ch) {
 		case 'a':
 			if (type == 0) {
@@ -137,9 +125,6 @@ main(argc, argv)
 		case 'e':
 			rpcs |= DOEXPORTS;
 			break;
-		case '3':
-			mntvers = 3;
-			break;
 		case '?':
 		default:
 			usage();
@@ -156,19 +141,19 @@ main(argc, argv)
 		rpcs = DODUMP;
 
 	if (rpcs & DODUMP)
-		if ((estat = callrpc(host, RPCPROG_MNT, mntvers,
+		if ((estat = callrpc(host, RPCPROG_MNT, RPCMNT_VER1,
 			RPCMNT_DUMP, xdr_void, (char *)0,
 			xdr_mntdump, (char *)&mntdump)) != 0) {
-			fprintf(stderr, "showmount: Can't do Mountdump rpc: ");
 			clnt_perrno(estat);
+			fprintf(stderr, "Can't do Mountdump rpc\n");
 			exit(1);
 		}
 	if (rpcs & DOEXPORTS)
-		if ((estat = callrpc(host, RPCPROG_MNT, mntvers,
+		if ((estat = callrpc(host, RPCPROG_MNT, RPCMNT_VER1,
 			RPCMNT_EXPORT, xdr_void, (char *)0,
 			xdr_exports, (char *)&exports)) != 0) {
-			fprintf(stderr, "showmount: Can't do Exports rpc: ");
 			clnt_perrno(estat);
+			fprintf(stderr, "Can't do Exports rpc\n");
 			exit(1);
 		}
 
@@ -205,23 +190,22 @@ main(argc, argv)
 			exp = exp->ex_next;
 		}
 	}
-
-	exit(0);
 }
 
 /*
  * Xdr routine for retrieving the mount dump list
  */
-int
 xdr_mntdump(xdrsp, mlp)
 	XDR *xdrsp;
 	struct mountlist **mlp;
 {
-	struct mountlist *mp, **otp, *tp;
-	int bool, val, val2;
+	register struct mountlist *mp;
+	register struct mountlist *tp;
+	register struct mountlist **otp;
+	int val, val2;
+	int bool;
 	char *strp;
 
-	otp = NULL;
 	*mlp = (struct mountlist *)0;
 	if (!xdr_bool(xdrsp, &bool))
 		return (0);
@@ -292,13 +276,12 @@ next:
 /*
  * Xdr routine to retrieve exports list
  */
-int
 xdr_exports(xdrsp, exp)
 	XDR *xdrsp;
 	struct exportslist **exp;
 {
-	struct exportslist *ep;
-	struct grouplist *gp;
+	register struct exportslist *ep;
+	register struct grouplist *gp;
 	int bool, grpbool;
 	char *strp;
 
@@ -335,18 +318,15 @@ xdr_exports(xdrsp, exp)
 	return (1);
 }
 
-void
 usage()
 {
-
-	fprintf(stderr, "usage: showmount [-ade3] host\n");
+	fprintf(stderr, "usage: showmount [-ade] host\n");
 	exit(1);
 }
 
 /*
  * Print the binary tree in inorder so that output is sorted.
  */
-void
 print_dump(mp)
 	struct mountlist *mp;
 {

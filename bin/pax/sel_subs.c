@@ -1,5 +1,3 @@
-/*	$NetBSD: sel_subs.c,v 1.7 1997/07/20 20:32:43 christos Exp $	*/
-
 /*-
  * Copyright (c) 1992 Keith Muller.
  * Copyright (c) 1992, 1993
@@ -37,13 +35,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
 static char sccsid[] = "@(#)sel_subs.c	8.1 (Berkeley) 5/31/93";
-#else
-__RCSID("$NetBSD: sel_subs.c,v 1.7 1997/07/20 20:32:43 christos Exp $");
-#endif
 #endif /* not lint */
 
 #include <sys/types.h>
@@ -62,10 +55,10 @@ __RCSID("$NetBSD: sel_subs.c,v 1.7 1997/07/20 20:32:43 christos Exp $");
 #include "sel_subs.h"
 #include "extern.h"
 
-static int str_sec __P((char *, time_t *));
-static int usr_match __P((ARCHD *));
-static int grp_match __P((ARCHD *));
-static int trng_match __P((ARCHD *));
+static int str_sec __P((register char *, time_t *));
+static int usr_match __P((register ARCHD *));
+static int grp_match __P((register ARCHD *));
+static int trng_match __P((register ARCHD *));
 
 static TIME_RNG *trhead = NULL;		/* time range list head */
 static TIME_RNG *trtail = NULL;		/* time range list tail */
@@ -85,11 +78,11 @@ static GRPT **grptb = NULL;		/* group selection table */
 
 #if __STDC__
 int
-sel_chk(ARCHD *arcn)
+sel_chk(register ARCHD *arcn)
 #else
 int
 sel_chk(arcn)
-	ARCHD *arcn;
+	register ARCHD *arcn;
 #endif
 {
 	if (((usrtb != NULL) && usr_match(arcn)) ||
@@ -116,17 +109,17 @@ sel_chk(arcn)
 
 #if __STDC__
 int
-usr_add(char *str)
+usr_add(register char *str)
 #else
 int
 usr_add(str)
-	char *str;
+	register char *str;
 #endif
 {
-	u_int indx;
-	USRT *pt;
-	struct passwd *pw;
-	uid_t uid;
+	register u_int indx;
+	register USRT *pt;
+	register struct passwd *pw;
+	register uid_t uid;
 
 	/*
 	 * create the table if it doesn't exist
@@ -135,8 +128,7 @@ usr_add(str)
 		return(-1);
 	if ((usrtb == NULL) &&
  	    ((usrtb = (USRT **)calloc(USR_TB_SZ, sizeof(USRT *))) == NULL)) {
-                tty_warn(1,
-		    "Unable to allocate memory for user selection table");
+                warn(1, "Unable to allocate memory for user selection table");
                 return(-1);
 	}
 
@@ -150,7 +142,7 @@ usr_add(str)
 		if ((str[0] == '\\') && (str[1] == '#'))
 			++str;
 		if ((pw = getpwnam(str)) == NULL) {
-                	tty_warn(1, "Unable to find uid for user: %s", str);
+                	warn(1, "Unable to find uid for user: %s", str);
                 	return(-1);
 		}
 		uid = (uid_t)pw->pw_uid;
@@ -183,7 +175,7 @@ usr_add(str)
 		usrtb[indx] = pt;
 		return(0);
 	}
-        tty_warn(1, "User selection table out of memory");
+        warn(1, "User selection table out of memory");
         return(-1);
 }
 
@@ -196,14 +188,14 @@ usr_add(str)
 
 #if __STDC__
 static int
-usr_match(ARCHD *arcn)
+usr_match(register ARCHD *arcn)
 #else
 static int
 usr_match(arcn)
-	ARCHD *arcn;
+	register ARCHD *arcn;
 #endif
 {
-	USRT *pt;
+	register USRT *pt;
 
 	/*
 	 * hash and look for it in the table
@@ -230,17 +222,17 @@ usr_match(arcn)
 
 #if __STDC__
 int
-grp_add(char *str)
+grp_add(register char *str)
 #else
 int
 grp_add(str)
-	char *str;
+	register char *str;
 #endif
 {
-	u_int indx;
-	GRPT *pt;
-	struct group *gr;
-	gid_t gid;
+	register u_int indx;
+	register GRPT *pt;
+	register struct group *gr;
+	register gid_t gid;
 
 	/*
 	 * create the table if it doesn't exist
@@ -249,8 +241,7 @@ grp_add(str)
 		return(-1);
 	if ((grptb == NULL) &&
  	    ((grptb = (GRPT **)calloc(GRP_TB_SZ, sizeof(GRPT *))) == NULL)) {
-                tty_warn(1,
-		    "Unable to allocate memory fo group selection table");
+                warn(1, "Unable to allocate memory fo group selection table");
                 return(-1);
 	}
 
@@ -264,8 +255,7 @@ grp_add(str)
 		if ((str[0] == '\\') && (str[1] == '#'))
 			++str;
 		if ((gr = getgrnam(str)) == NULL) {
-                	tty_warn(1,
-			    "Cannot determine gid for group name: %s", str);
+                	warn(1,"Cannot determine gid for group name: %s", str);
                 	return(-1);
 		}
 		gid = (gid_t)gr->gr_gid;
@@ -298,7 +288,7 @@ grp_add(str)
 		grptb[indx] = pt;
 		return(0);
 	}
-        tty_warn(1, "Group selection table out of memory");
+        warn(1, "Group selection table out of memory");
         return(-1);
 }
 
@@ -311,14 +301,14 @@ grp_add(str)
 
 #if __STDC__
 static int
-grp_match(ARCHD *arcn)
+grp_match(register ARCHD *arcn)
 #else
 static int
 grp_match(arcn)
-	ARCHD *arcn;
+	register ARCHD *arcn;
 #endif
 {
-	GRPT *pt;
+	register GRPT *pt;
 
 	/*
 	 * hash and look for it in the table
@@ -367,31 +357,31 @@ grp_match(arcn)
 
 #if __STDC__
 int
-trng_add(char *str)
+trng_add(register char *str)
 #else
 int
 trng_add(str)
-	char *str;
+	register char *str;
 #endif
 {
-	TIME_RNG *pt;
-	char *up_pt = NULL;
-	char *stpt;
-	char *flgpt;
-	int dot = 0;
+	register TIME_RNG *pt;
+	register char *up_pt = NULL;
+	register char *stpt;
+	register char *flgpt;
+	register int dot = 0;
 
 	/*
 	 * throw out the badly formed time ranges
 	 */
 	if ((str == NULL) || (*str == '\0')) {
-		tty_warn(1, "Empty time range string");
+		warn(1, "Empty time range string");
 		return(-1);
 	}
 
 	/*
 	 * locate optional flags suffix /{cm}.
 	 */
-	if ((flgpt = strrchr(str, '/')) != NULL)
+	if ((flgpt = rindex(str, '/')) != NULL)
 		*flgpt++ = '\0';
 
 	for (stpt = str; *stpt != '\0'; ++stpt) {
@@ -411,7 +401,7 @@ trng_add(str)
 			++dot;
 			continue;
 		}
-		tty_warn(1, "Improperly specified time range: %s", str);
+		warn(1, "Improperly specified time range: %s", str);
 		goto out;
 	}
 
@@ -419,7 +409,7 @@ trng_add(str)
 	 * allocate space for the time range and store the limits
 	 */
 	if ((pt = (TIME_RNG *)malloc(sizeof(TIME_RNG))) == NULL) {
-		tty_warn(1, "Unable to allocate memory for time range");
+		warn(1, "Unable to allocate memory for time range");
 		return(-1);
 	}
 
@@ -442,7 +432,7 @@ trng_add(str)
 				pt->flgs |= CMPCTME;
 				break;
 			default:
-				tty_warn(1, "Bad option %c with time range %s",
+				warn(1, "Bad option %c with time range %s",
 				    *flgpt, str);
 				goto out;
 			}
@@ -459,7 +449,7 @@ trng_add(str)
 		 * add lower limit
 		 */
 		if (str_sec(str, &(pt->low_time)) < 0) {
-			tty_warn(1, "Illegal lower time range %s", str);
+			warn(1, "Illegal lower time range %s", str);
 			(void)free((char *)pt);
 			goto out;
 		}
@@ -471,7 +461,7 @@ trng_add(str)
 		 * add upper limit
 		 */
 		if (str_sec(up_pt, &(pt->high_time)) < 0) {
-			tty_warn(1, "Illegal upper time range %s", up_pt);
+			warn(1, "Illegal upper time range %s", up_pt);
 			(void)free((char *)pt);
 			goto out;
 		}
@@ -482,9 +472,8 @@ trng_add(str)
 		 */
 		if (pt->flgs & HASLOW) {
 			if (pt->low_time > pt->high_time) {
-				tty_warn(1,
-				    "Upper %s and lower %s time overlap",
-				    up_pt, str);
+				warn(1, "Upper %s and lower %s time overlap",
+					up_pt, str);
 				(void)free((char *)pt);
 				return(-1);
 			}
@@ -501,7 +490,7 @@ trng_add(str)
 	return(0);
 
     out:
-	tty_warn(1, "Time range format is: [yy[mm[dd[hh]]]]mm[.ss][/[c][m]]");
+	warn(1, "Time range format is: [yy[mm[dd[hh]]]]mm[.ss][/[c][m]]");
 	return(-1);
 }
 
@@ -514,14 +503,14 @@ trng_add(str)
 
 #if __STDC__
 static int
-trng_match(ARCHD *arcn)
+trng_match(register ARCHD *arcn)
 #else
 static int
 trng_match(arcn)
-	ARCHD *arcn;
+	register ARCHD *arcn;
 #endif
 {
-	TIME_RNG *pt;
+	register TIME_RNG *pt;
 
 	/*
 	 * have to search down the list one at a time looking for a match.
@@ -589,19 +578,19 @@ trng_match(arcn)
 
 #if __STDC__
 static int
-str_sec(char *str, time_t *tval)
+str_sec(register char *str, time_t *tval)
 #else
 static int
 str_sec(str, tval)
-	char *str;
+	register char *str;
 	time_t *tval;
 #endif
 {
-	struct tm *lt;
-	char *dot = NULL;
+	register struct tm *lt;
+	register char *dot = NULL;
 
 	lt = localtime(tval);
-	if ((dot = strchr(str, '.')) != NULL) {
+	if ((dot = index(str, '.')) != NULL) {
 		/*
 		 * seconds (.ss)
 		 */

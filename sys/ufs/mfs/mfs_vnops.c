@@ -1,5 +1,3 @@
-/*	$NetBSD: mfs_vnops.c,v 1.12 1996/10/12 21:58:54 christos Exp $	*/
-
 /*
  * Copyright (c) 1989, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -32,7 +30,8 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)mfs_vnops.c	8.5 (Berkeley) 7/28/94
+ *	from: @(#)mfs_vnops.c	8.3 (Berkeley) 9/21/93
+ *	$Id: mfs_vnops.c,v 1.1 1994/06/08 11:42:57 mycroft Exp $
  */
 
 #include <sys/param.h>
@@ -45,7 +44,6 @@
 #include <sys/vnode.h>
 #include <sys/malloc.h>
 
-#include <miscfs/genfs/genfs.h>
 #include <miscfs/specfs/specdev.h>
 
 #include <machine/vmparam.h>
@@ -54,10 +52,16 @@
 #include <ufs/mfs/mfsiom.h>
 #include <ufs/mfs/mfs_extern.h>
 
+#if !defined(hp300) && !defined(i386) && !defined(mips) && !defined(sparc) && !defined(luna68k)
+static int mfsmap_want;		/* 1 => need kernel I/O resources */
+struct map mfsmap[MFS_MAPSIZE];
+extern char mfsiobuf[];
+#endif
+
 /*
  * mfs vnode operations.
  */
-int (**mfs_vnodeop_p) __P((void *));
+int (**mfs_vnodeop_p)();
 struct vnodeopv_entry_desc mfs_vnodeop_entries[] = {
 	{ &vop_default_desc, vn_default_error },
 	{ &vop_lookup_desc, mfs_lookup },		/* lookup */
@@ -71,7 +75,7 @@ struct vnodeopv_entry_desc mfs_vnodeop_entries[] = {
 	{ &vop_read_desc, mfs_read },			/* read */
 	{ &vop_write_desc, mfs_write },			/* write */
 	{ &vop_ioctl_desc, mfs_ioctl },			/* ioctl */
-	{ &vop_poll_desc, mfs_poll },			/* poll */
+	{ &vop_select_desc, mfs_select },		/* select */
 	{ &vop_mmap_desc, mfs_mmap },			/* mmap */
 	{ &vop_fsync_desc, spec_fsync },		/* fsync */
 	{ &vop_seek_desc, mfs_seek },			/* seek */
@@ -100,7 +104,7 @@ struct vnodeopv_entry_desc mfs_vnodeop_entries[] = {
 	{ &vop_truncate_desc, mfs_truncate },		/* truncate */
 	{ &vop_update_desc, mfs_update },		/* update */
 	{ &vop_bwrite_desc, mfs_bwrite },		/* bwrite */
-	{ (struct vnodeop_desc*)NULL, (int(*) __P((void *)))NULL }
+	{ (struct vnodeop_desc*)NULL, (int(*)())NULL }
 };
 struct vnodeopv_desc mfs_vnodeop_opv_desc =
 	{ &mfs_vnodeop_p, mfs_vnodeop_entries };
@@ -114,15 +118,14 @@ struct vnodeopv_desc mfs_vnodeop_opv_desc =
  */
 /* ARGSUSED */
 int
-mfs_open(v)
-	void *v;
-{
+mfs_open(ap)
 	struct vop_open_args /* {
 		struct vnode *a_vp;
 		int  a_mode;
 		struct ucred *a_cred;
 		struct proc *a_p;
-	} */ *ap = v;
+	} */ *ap;
+{
 
 	if (ap->a_vp->v_type != VBLK) {
 		panic("mfs_ioctl not VBLK");
@@ -136,19 +139,16 @@ mfs_open(v)
  */
 /* ARGSUSED */
 int
-mfs_ioctl(v)
-	void *v;
-{
-#if 0
+mfs_ioctl(ap)
 	struct vop_ioctl_args /* {
 		struct vnode *a_vp;
-		u_long a_command;
+		int  a_command;
 		caddr_t  a_data;
 		int  a_fflag;
 		struct ucred *a_cred;
 		struct proc *a_p;
-	} */ *ap = v;
-#endif
+	} */ *ap;
+{
 
 	return (ENOTTY);
 }
@@ -157,12 +157,11 @@ mfs_ioctl(v)
  * Pass I/O requests to the memory filesystem process.
  */
 int
-mfs_strategy(v)
-	void *v;
-{
+mfs_strategy(ap)
 	struct vop_strategy_args /* {
 		struct buf *a_bp;
-	} */ *ap = v;
+	} */ *ap;
+{
 	register struct buf *bp = ap->a_bp;
 	register struct mfsnode *mfsp;
 	struct vnode *vp;
@@ -191,6 +190,85 @@ mfs_strategy(v)
 	return (0);
 }
 
+#if defined(vax) || defined(tahoe)
+/*
+ * Memory file system I/O.
+ *
+ * Essentially play ubasetup() and disk interrupt service routine by
+ * doing the copies to or from the memfs process. If doing physio
+ * (i.e. pagein), we must map the I/O through the kernel virtual
+ * address space.
+ */
+void
+mfs_doio(bp, base)
+	register struct buf *bp;
+	caddr_t base;
+{
+	register struct pte *pte, *ppte;
+	register caddr_t vaddr;
+	int off, npf, npf2, reg;
+	caddr_t kernaddr, offset;
+
+	/*
+	 * For phys I/O, map the b_data into kernel virtual space using
+	 * the Mfsiomap pte's.
+	 */
+	if ((bp->b_flags & B_PHYS) == 0) {
+		kernaddr = bp->b_data;
+	} else {
+		if (bp->b_flags & (B_PAGET | B_UAREA | B_DIRTY))
+			panic("swap on memfs?");
+		off = (int)bp->b_data & PGOFSET;
+		npf = btoc(bp->b_bcount + off);
+		/*
+		 * Get some mapping page table entries
+		 */
+		while ((reg = rmalloc(mfsmap, (long)npf)) == 0) {
+			mfsmap_want++;
+			sleep((caddr_t)&mfsmap_want, PZERO-1);
+		}
+		reg--;
+		pte = vtopte(bp->b_proc, btop(bp->b_data));
+		/*
+		 * Do vmaccess() but with the Mfsiomap page table.
+		 */
+		ppte = &Mfsiomap[reg];
+		vaddr = &mfsiobuf[reg * NBPG];
+		kernaddr = vaddr + off;
+		for (npf2 = npf; npf2; npf2--) {
+			mapin(ppte, (u_int)vaddr, pte->pg_pfnum,
+				(int)(PG_V|PG_KW));
+#if defined(tahoe)
+			if ((bp->b_flags & B_READ) == 0)
+				mtpr(P1DC, vaddr);
+#endif
+			ppte++;
+			pte++;
+			vaddr += NBPG;
+		}
+	}
+	offset = base + (bp->b_blkno << DEV_BSHIFT);
+	if (bp->b_flags & B_READ)
+		bp->b_error = copyin(offset, kernaddr, bp->b_bcount);
+	else
+		bp->b_error = copyout(kernaddr, offset, bp->b_bcount);
+	if (bp->b_error)
+		bp->b_flags |= B_ERROR;
+	/*
+	 * Release pte's used by physical I/O.
+	 */
+	if (bp->b_flags & B_PHYS) {
+		rmfree(mfsmap, (long)npf, (long)++reg);
+		if (mfsmap_want) {
+			mfsmap_want = 0;
+			wakeup((caddr_t)&mfsmap_want);
+		}
+	}
+	biodone(bp);
+}
+#endif	/* vax || tahoe */
+
+#if defined(hp300) || defined(i386) || defined(mips) || defined(sparc) || defined(luna68k)
 /*
  * Memory file system I/O.
  *
@@ -211,21 +289,21 @@ mfs_doio(bp, base)
 		bp->b_flags |= B_ERROR;
 	biodone(bp);
 }
+#endif
 
 /*
  * This is a noop, simply returning what one has been given.
  */
 int
-mfs_bmap(v)
-	void *v;
-{
+mfs_bmap(ap)
 	struct vop_bmap_args /* {
 		struct vnode *a_vp;
 		daddr_t  a_bn;
 		struct vnode **a_vpp;
 		daddr_t *a_bnp;
 		int *a_runp;
-	} */ *ap = v;
+	} */ *ap;
+{
 
 	if (ap->a_vpp != NULL)
 		*ap->a_vpp = ap->a_vp;
@@ -239,15 +317,14 @@ mfs_bmap(v)
  */
 /* ARGSUSED */
 int
-mfs_close(v)
-	void *v;
-{
+mfs_close(ap)
 	struct vop_close_args /* {
 		struct vnode *a_vp;
 		int  a_fflag;
 		struct ucred *a_cred;
 		struct proc *a_p;
-	} */ *ap = v;
+	} */ *ap;
+{
 	register struct vnode *vp = ap->a_vp;
 	register struct mfsnode *mfsp = VTOMFS(vp);
 	register struct buf *bp;
@@ -256,7 +333,7 @@ mfs_close(v)
 	/*
 	 * Finish any pending I/O requests.
 	 */
-	while ((bp = mfsp->mfs_buflist) != NULL) {
+	while (bp = mfsp->mfs_buflist) {
 		mfsp->mfs_buflist = bp->b_actf;
 		mfs_doio(bp, mfsp->mfs_baseoff);
 		wakeup((caddr_t)bp);
@@ -266,7 +343,7 @@ mfs_close(v)
 	 * we must invalidate any in core blocks, so that
 	 * we can, free up its vnode.
 	 */
-	if ((error = vinvalbuf(vp, 1, ap->a_cred, ap->a_p, 0, 0)) != 0)
+	if (error = vinvalbuf(vp, 1, ap->a_cred, ap->a_p, 0, 0))
 		return (error);
 	/*
 	 * There should be no way to have any more uses of this
@@ -289,16 +366,15 @@ mfs_close(v)
  */
 /* ARGSUSED */
 int
-mfs_inactive(v)
-	void *v;
-{
+mfs_inactive(ap)
 	struct vop_inactive_args /* {
 		struct vnode *a_vp;
-	} */ *ap = v;
+	} */ *ap;
+{
 	register struct mfsnode *mfsp = VTOMFS(ap->a_vp);
 
 	if (mfsp->mfs_buflist && mfsp->mfs_buflist != (struct buf *)(-1))
-		panic("mfs_inactive: not inactive (mfs_buflist %p)",
+		panic("mfs_inactive: not inactive (mfs_buflist %x)",
 			mfsp->mfs_buflist);
 	return (0);
 }
@@ -307,14 +383,19 @@ mfs_inactive(v)
  * Reclaim a memory filesystem devvp so that it can be reused.
  */
 int
-mfs_reclaim(v)
-	void *v;
-{
+mfs_reclaim(ap)
 	struct vop_reclaim_args /* {
 		struct vnode *a_vp;
-	} */ *ap = v;
+	} */ *ap;
+{
 	register struct vnode *vp = ap->a_vp;
+#if 0 /* XXX */
+	int error;
 
+	error = ufs_reclaim(vp);
+	if (error)
+		return (error);
+#endif
 	FREE(vp->v_data, M_MFSNODE);
 	vp->v_data = NULL;
 	return (0);
@@ -324,24 +405,36 @@ mfs_reclaim(v)
  * Print out the contents of an mfsnode.
  */
 int
-mfs_print(v)
-	void *v;
-{
+mfs_print(ap)
 	struct vop_print_args /* {
 		struct vnode *a_vp;
-	} */ *ap = v;
+	} */ *ap;
+{
 	register struct mfsnode *mfsp = VTOMFS(ap->a_vp);
 
-	printf("tag VT_MFS, pid %d, base %p, size %ld\n", mfsp->mfs_pid,
-	    mfsp->mfs_baseoff, mfsp->mfs_size);
+	printf("tag VT_MFS, pid %d, base %d, size %d\n", mfsp->mfs_pid,
+		mfsp->mfs_baseoff, mfsp->mfs_size);
 	return (0);
+}
+
+/*
+ * Block device bad operation
+ */
+int
+mfs_badop()
+{
+
+	panic("mfs_badop called\n");
+	/* NOTREACHED */
 }
 
 /*
  * Memory based filesystem initialization.
  */
-void
 mfs_init()
 {
 
+#if !defined(hp300) && !defined(i386) && !defined(mips) && !defined(sparc) && !defined(luna68k)
+	rminit(mfsmap, (long)MFS_MAPREG, (long)1, "mfs mapreg", MFS_MAPSIZE);
+#endif
 }

@@ -1,8 +1,6 @@
-/*	$NetBSD: memalloc.c,v 1.20 1997/07/04 21:02:08 christos Exp $	*/
-
 /*-
- * Copyright (c) 1991, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1991 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Kenneth Almquist.
@@ -36,13 +34,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)memalloc.c	8.3 (Berkeley) 5/4/95";
-#else
-__RCSID("$NetBSD: memalloc.c,v 1.20 1997/07/04 21:02:08 christos Exp $");
-#endif
+static char sccsid[] = "@(#)memalloc.c	5.2 (Berkeley) 3/13/91";
 #endif /* not lint */
 
 #include "shell.h"
@@ -51,18 +44,15 @@ __RCSID("$NetBSD: memalloc.c,v 1.20 1997/07/04 21:02:08 christos Exp $");
 #include "error.h"
 #include "machdep.h"
 #include "mystring.h"
-#include <stdlib.h>
-#include <unistd.h>
 
 /*
  * Like malloc, but returns an error when out of space.
  */
 
 pointer
-ckmalloc(nbytes)
-	int nbytes;
-{
-	pointer p;
+ckmalloc(nbytes) {
+	register pointer p;
+	pointer malloc();
 
 	if ((p = malloc(nbytes)) == NULL)
 		error("Out of space");
@@ -76,9 +66,9 @@ ckmalloc(nbytes)
 
 pointer
 ckrealloc(p, nbytes)
-	pointer p;
-	int nbytes;
-{
+	register pointer p;
+	{
+	pointer realloc();
 
 	if ((p = realloc(p, nbytes)) == NULL)
 		error("Out of space");
@@ -94,7 +84,7 @@ char *
 savestr(s)
 	char *s;
 	{
-	char *p;
+	register char *p;
 
 	p = ckmalloc(strlen(s) + 1);
 	scopy(s, p);
@@ -129,10 +119,8 @@ int herefd = -1;
 
 
 pointer
-stalloc(nbytes)
-	int nbytes;
-{
-	char *p;
+stalloc(nbytes) {
+	register char *p;
 
 	nbytes = ALIGN(nbytes);
 	if (nbytes > stacknleft) {
@@ -212,7 +200,7 @@ popstackmark(mark)
 void
 growstackblock() {
 	char *p;
-	int newlen = ALIGN(stacknleft * 2 + 100);
+	int newlen = stacknleft * 2 + 100;
 	char *oldspace = stacknxt;
 	int oldlen = stacknleft;
 	struct stack_block *sp;
@@ -229,7 +217,7 @@ growstackblock() {
 		INTON;
 	} else {
 		p = stalloc(newlen);
-		memcpy(p, oldspace, oldlen);
+		bcopy(oldspace, p, oldlen);
 		stacknxt = p;			/* free the space */
 		stacknleft += newlen;		/* we just allocated */
 	}
@@ -238,9 +226,7 @@ growstackblock() {
 
 
 void
-grabstackblock(len)
-	int len;
-{
+grabstackblock(len) {
 	len = ALIGN(len);
 	stacknxt += len;
 	stacknleft -= len;

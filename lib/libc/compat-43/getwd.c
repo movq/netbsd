@@ -1,5 +1,3 @@
-/*	$NetBSD: getwd.c,v 1.6 1997/07/21 14:06:27 jtc Exp $	*/
-
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
  * All rights reserved.
@@ -33,16 +31,10 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char *sccsid = "@(#)getwd.c	5.1 (Berkeley) 2/20/91";
-#else
-__RCSID("$NetBSD: getwd.c,v 1.6 1997/07/21 14:06:27 jtc Exp $");
-#endif
+static char sccsid[] = "@(#)getwd.c	5.1 (Berkeley) 2/20/91";
 #endif /* LIBC_SCCS and not lint */
 
-#include "namespace.h"
 #include <sys/param.h>
 #include <unistd.h>
 #include <errno.h>
@@ -55,8 +47,8 @@ getwd(buf)
 {
 	char *p;
 
-	if ((p = getcwd(buf, MAXPATHLEN)) != NULL)
+	if (p = getcwd(buf, MAXPATHLEN))
 		return(p);
-	(void)strncpy(buf, strerror(errno), MAXPATHLEN); /* XXX strncpy may be unsafe */
+	(void)strcpy(buf, strerror(errno));
 	return((char *)NULL);
 }

@@ -1,5 +1,3 @@
-/*	$NetBSD: lfs_inode.c,v 1.10 1997/07/04 20:22:18 drochner Exp $	*/
-
 /*
  * Copyright (c) 1986, 1989, 1991, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -32,7 +30,8 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)lfs_inode.c	8.5 (Berkeley) 12/30/93
+ *	from: @(#)lfs_inode.c	8.5 (Berkeley) 12/30/93
+ *	$Id: lfs_inode.c,v 1.1 1994/06/08 11:42:35 mycroft Exp $
  */
 
 #include <sys/param.h>
@@ -55,10 +54,10 @@
 #include <ufs/lfs/lfs.h>
 #include <ufs/lfs/lfs_extern.h>
 
-void
+int
 lfs_init()
 {
-	ufs_init();
+	return (ufs_init());
 }
 
 /* Search a block for a specific dinode. */
@@ -80,32 +79,39 @@ lfs_ifind(fs, ino, dip)
 }
 
 int
-lfs_update(v)
-	void *v;
-{
+lfs_update(ap)
 	struct vop_update_args /* {
 		struct vnode *a_vp;
-		struct timespec *a_access;
-		struct timespec *a_modify;
+		struct timeval *a_access;
+		struct timeval *a_modify;
 		int a_waitfor;
-	} */ *ap = v;
+	} */ *ap;
+{
+	struct vnode *vp = ap->a_vp;
 	struct inode *ip;
-	int mod;
-	struct timespec ts;
 
-	if (ap->a_vp->v_mount->mnt_flag & MNT_RDONLY)
+	if (vp->v_mount->mnt_flag & MNT_RDONLY)
 		return (0);
-	ip = VTOI(ap->a_vp);
-	mod = ip->i_flag & IN_MODIFIED;
-	TIMEVAL_TO_TIMESPEC(&time, &ts);
-	FFS_ITIMES(ip, ap->a_access, ap->a_modify, &ts);
-	if (!mod && ip->i_flag & IN_MODIFIED)
-		ip->i_lfs->lfs_uinodes++;
-	if ((ip->i_flag & IN_MODIFIED) == 0)
+	ip = VTOI(vp);
+	if ((ip->i_flag &
+	    (IN_ACCESS | IN_CHANGE | IN_MODIFIED | IN_UPDATE)) == 0)
 		return (0);
+	if (ip->i_flag & IN_ACCESS)
+		ip->i_atime.ts_sec = ap->a_access->tv_sec;
+	if (ip->i_flag & IN_UPDATE) {
+		ip->i_mtime.ts_sec = ap->a_modify->tv_sec;
+		(ip)->i_modrev++;
+	}
+	if (ip->i_flag & IN_CHANGE)
+		ip->i_ctime.ts_sec = time.tv_sec;
+	ip->i_flag &= ~(IN_ACCESS | IN_CHANGE | IN_UPDATE);
+
+	if (!(ip->i_flag & IN_MODIFIED))
+		++(VFSTOUFS(vp->v_mount)->um_lfs->lfs_uinodes);
+	ip->i_flag |= IN_MODIFIED;
 
 	/* If sync, push back the vnode and any dirty blocks it may have. */
-	return (ap->a_waitfor & LFS_SYNC ? lfs_vflush(ap->a_vp) : 0);
+	return (ap->a_waitfor & LFS_SYNC ? lfs_vflush(vp) : 0);
 }
 
 /* Update segment usage information when removing a block. */
@@ -137,23 +143,22 @@ lfs_update(v)
  */
 /* ARGSUSED */
 int
-lfs_truncate(v)
-	void *v;
-{
+lfs_truncate(ap)
 	struct vop_truncate_args /* {
 		struct vnode *a_vp;
 		off_t a_length;
 		int a_flags;
 		struct ucred *a_cred;
 		struct proc *a_p;
-	} */ *ap = v;
+	} */ *ap;
+{
 	register struct indir *inp;
 	register int i;
 	register daddr_t *daddrp;
 	register struct vnode *vp = ap->a_vp;
 	off_t length = ap->a_length;
 	struct buf *bp, *sup_bp;
-	struct timespec ts;
+	struct timeval tv;
 	struct ifile *ifp;
 	struct inode *ip;
 	struct lfs *fs;
@@ -164,25 +169,25 @@ lfs_truncate(v)
 	int e1, e2, depth, lastseg, num, offset, seg, size;
 
 	ip = VTOI(vp);
-	TIMEVAL_TO_TIMESPEC(&time, &ts);
+	tv = time;
 	if (vp->v_type == VLNK && vp->v_mount->mnt_maxsymlinklen > 0) {
 #ifdef DIAGNOSTIC
 		if (length != 0)
 			panic("lfs_truncate: partial truncate of symlink");
 #endif
-		bzero((char *)&ip->i_ffs_shortlink, (u_int)ip->i_ffs_size);
-		ip->i_ffs_size = 0;
+		bzero((char *)&ip->i_shortlink, (u_int)ip->i_size);
+		ip->i_size = 0;
 		ip->i_flag |= IN_CHANGE | IN_UPDATE;
-		return (VOP_UPDATE(vp, &ts, &ts, 0));
+		return (VOP_UPDATE(vp, &tv, &tv, 0));
 	}
-	vnode_pager_setsize(vp, length);
+	vnode_pager_setsize(vp, (u_long)length);
 
 	fs = ip->i_lfs;
 
 	/* If length is larger than the file, just update the times. */
-	if (ip->i_ffs_size <= length) {
+	if (ip->i_size <= length) {
 		ip->i_flag |= IN_CHANGE | IN_UPDATE;
-		return (VOP_UPDATE(vp, &ts, &ts, 0));
+		return (VOP_UPDATE(vp, &tv, &tv, 0));
 	}
 
 	/*
@@ -191,7 +196,7 @@ lfs_truncate(v)
 	 * file is truncated to 0.
 	 */
 	lastblock = lblkno(fs, length + fs->lfs_bsize - 1);
-	olastblock = lblkno(fs, ip->i_ffs_size + fs->lfs_bsize - 1) - 1;
+	olastblock = lblkno(fs, ip->i_size + fs->lfs_bsize - 1) - 1;
 
 	/*
 	 * Update the size of the file. If the file is not being truncated to
@@ -201,26 +206,26 @@ lfs_truncate(v)
 	 */
 	offset = blkoff(fs, length);
 	if (offset == 0)
-		ip->i_ffs_size = length;
+		ip->i_size = length;
 	else {
 		lbn = lblkno(fs, length);
 #ifdef QUOTA
-		if ((e1 = getinoquota(ip)) != 0)
+		if (e1 = getinoquota(ip))
 			return (e1);
 #endif	
-		if ((e1 = bread(vp, lbn, fs->lfs_bsize, NOCRED, &bp)) != 0)
+		if (e1 = bread(vp, lbn, fs->lfs_bsize, NOCRED, &bp))
 			return (e1);
-		ip->i_ffs_size = length;
+		ip->i_size = length;
 		size = blksize(fs);
 		(void)vnode_pager_uncache(vp);
 		bzero((char *)bp->b_data + offset, (u_int)(size - offset));
 		allocbuf(bp, size);
-		if ((e1 = VOP_BWRITE(bp)) != 0)
+		if (e1 = VOP_BWRITE(bp))
 			return (e1);
 	}
 	/*
 	 * Modify sup->su_nbyte counters for each deleted block; keep track
-	 * of number of blocks removed for ip->i_ffs_blocks.
+	 * of number of blocks removed for ip->i_blocks.
 	 */
 	blocksreleased = 0;
 	num = 0;
@@ -234,9 +239,9 @@ lfs_truncate(v)
 				a_end[i] = a[i];
 		switch (depth) {
 		case 0:				/* Direct block. */
-			daddr = ip->i_ffs_db[lbn];
+			daddr = ip->i_db[lbn];
 			SEGDEC;
-			ip->i_ffs_db[lbn] = 0;
+			ip->i_db[lbn] = 0;
 			--lbn;
 			break;
 #ifdef DIAGNOSTIC
@@ -270,15 +275,15 @@ lfs_truncate(v)
 					bzero((daddr_t *)bp->b_data +
 					    inp->in_off, fs->lfs_bsize - 
 					    inp->in_off * sizeof(daddr_t));
-					if ((e1 = VOP_BWRITE(bp)) != 0)
+					if (e1 = VOP_BWRITE(bp)) 
 						return (e1);
 				}
 			}
 			if (depth == 0 && a[1].in_off == 0) {
 				off = a[0].in_off;
-				daddr = ip->i_ffs_ib[off];
+				daddr = ip->i_ib[off];
 				SEGDEC;
-				ip->i_ffs_ib[off] = 0;
+				ip->i_ib[off] = 0;
 			}
 			if (lbn == lastblock || lbn <= NDADDR)
 				--lbn;
@@ -299,12 +304,12 @@ lfs_truncate(v)
 	}
 
 #ifdef DIAGNOSTIC
-	if (ip->i_ffs_blocks < fsbtodb(fs, blocksreleased)) {
+	if (ip->i_blocks < fsbtodb(fs, blocksreleased)) {
 		printf("lfs_truncate: block count < 0\n");
-		blocksreleased = ip->i_ffs_blocks;
+		blocksreleased = ip->i_blocks;
 	}
 #endif
-	ip->i_ffs_blocks -= fsbtodb(fs, blocksreleased);
+	ip->i_blocks -= fsbtodb(fs, blocksreleased);
 	fs->lfs_bfree +=  fsbtodb(fs, blocksreleased);
 	ip->i_flag |= IN_CHANGE | IN_UPDATE;
 	/*
@@ -333,23 +338,23 @@ lfs_truncate(v)
 		}
 	blocksreleased = fsbtodb(fs, i_released);
 #ifdef DIAGNOSTIC
-	if (blocksreleased > ip->i_ffs_blocks) {
+	if (blocksreleased > ip->i_blocks) {
 		printf("lfs_inode: Warning! %s\n",
 		    "more blocks released from inode than are in inode");
-		blocksreleased = ip->i_ffs_blocks;
+		blocksreleased = ip->i_blocks;
 	}
 #endif
 	fs->lfs_bfree += blocksreleased;
-	ip->i_ffs_blocks -= blocksreleased;
+	ip->i_blocks -= blocksreleased;
 #ifdef DIAGNOSTIC
-	if (length == 0 && ip->i_ffs_blocks != 0)
+	if (length == 0 && ip->i_blocks != 0)
 		printf("lfs_inode: Warning! %s%d%s\n",
-		    "Truncation to zero, but ", ip->i_ffs_blocks,
+		    "Truncation to zero, but ", ip->i_blocks,
 		    " blocks left on inode");
 #endif
 	fs->lfs_avail += fsbtodb(fs, a_released);
 	e1 = vinvalbuf(vp, (length > 0) ? V_SAVE : 0, ap->a_cred, ap->a_p,
 	    0, 0); 
-	e2 = VOP_UPDATE(vp, &ts, &ts, 0);
+	e2 = VOP_UPDATE(vp, &tv, &tv, 0);
 	return (e1 ? e1 : e2 ? e2 : 0);
 }

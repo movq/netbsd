@@ -1,5 +1,3 @@
-/*	$NetBSD: error.c,v 1.5 1997/07/25 16:46:31 perry Exp $	*/
-
 /*
  * Copyright (c) 1989 The Regents of the University of California.
  * All rights reserved.
@@ -36,20 +34,15 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
 static char sccsid[] = "@(#)error.c	5.3 (Berkeley) 6/1/90";
-#else
-__RCSID("$NetBSD: error.c,v 1.5 1997/07/25 16:46:31 perry Exp $");
-#endif
 #endif /* not lint */
 
 /* routines for printing error messages  */
 
 #include "defs.h"
 
-void
+
 fatal(msg)
 char *msg;
 {
@@ -58,14 +51,13 @@ char *msg;
 }
 
 
-void
 no_space()
 {
     fprintf(stderr, "%s: f - out of space\n", myname);
     done(2);
 }
 
-void
+
 open_error(filename)
 char *filename;
 {
@@ -73,7 +65,7 @@ char *filename;
     done(2);
 }
 
-void
+
 unexpected_EOF()
 {
     fprintf(stderr, "%s: e - line %d of \"%s\", unexpected end-of-file\n",
@@ -81,12 +73,12 @@ unexpected_EOF()
     done(1);
 }
 
-void
+
 print_pos(st_line, st_cptr)
 char *st_line;
 char *st_cptr;
 {
-    char *s;
+    register char *s;
 
     if (st_line == 0) return;
     for (s = st_line; *s != '\n'; ++s)
@@ -108,7 +100,7 @@ char *st_cptr;
     putc('\n', stderr);
 }
 
-void
+
 syntax_error(st_lineno, st_line, st_cptr)
 int st_lineno;
 char *st_line;
@@ -120,7 +112,7 @@ char *st_cptr;
     done(1);
 }
 
-void
+
 unterminated_comment(c_lineno, c_line, c_cptr)
 int c_lineno;
 char *c_line;
@@ -132,7 +124,7 @@ char *c_cptr;
     done(1);
 }
 
-void
+
 unterminated_string(s_lineno, s_line, s_cptr)
 int s_lineno;
 char *s_line;
@@ -144,7 +136,7 @@ char *s_cptr;
     done(1);
 }
 
-void
+
 unterminated_text(t_lineno, t_line, t_cptr)
 int t_lineno;
 char *t_line;
@@ -156,7 +148,7 @@ char *t_cptr;
     done(1);
 }
 
-void
+
 unterminated_union(u_lineno, u_line, u_cptr)
 int u_lineno;
 char *u_line;
@@ -168,7 +160,7 @@ declaration\n", myname, u_lineno, input_file_name);
     done(1);
 }
 
-void
+
 over_unionized(u_cptr)
 char *u_cptr;
 {
@@ -178,7 +170,7 @@ declarations\n", myname, lineno, input_file_name);
     done(1);
 }
 
-void
+
 illegal_tag(t_lineno, t_line, t_cptr)
 int t_lineno;
 char *t_line;
@@ -190,7 +182,7 @@ char *t_cptr;
     done(1);
 }
 
-void
+
 illegal_character(c_cptr)
 char *c_cptr;
 {
@@ -200,7 +192,7 @@ char *c_cptr;
     done(1);
 }
 
-void
+
 used_reserved(s)
 char *s;
 {
@@ -209,7 +201,7 @@ char *s;
     done(1);
 }
 
-void
+
 tokenized_start(s)
 char *s;
 {
@@ -218,7 +210,7 @@ declared to be a token\n", myname, lineno, input_file_name, s);
      done(1);
 }
 
-void
+
 retyped_warning(s)
 char *s;
 {
@@ -226,7 +218,7 @@ char *s;
 redeclared\n", myname, lineno, input_file_name, s);
 }
 
-void
+
 reprec_warning(s)
 char *s;
 {
@@ -234,7 +226,7 @@ char *s;
 redeclared\n", myname, lineno, input_file_name, s);
 }
 
-void
+
 revalued_warning(s)
 char *s;
 {
@@ -242,7 +234,7 @@ char *s;
 redeclared\n", myname, lineno, input_file_name, s);
 }
 
-void
+
 terminal_start(s)
 char *s;
 {
@@ -251,14 +243,14 @@ token\n", myname, lineno, input_file_name, s);
     done(1);
 }
 
-void
+
 restarted_warning()
 {
     fprintf(stderr, "%s: w - line %d of \"%s\", the start symbol has been \
 redeclared\n", myname, lineno, input_file_name);
 }
 
-void
+
 no_grammar()
 {
     fprintf(stderr, "%s: e - line %d of \"%s\", no grammar has been \
@@ -266,7 +258,7 @@ specified\n", myname, lineno, input_file_name);
     done(1);
 }
 
-void
+
 terminal_lhs(s_lineno)
 int s_lineno;
 {
@@ -275,14 +267,14 @@ of a production\n", myname, s_lineno, input_file_name);
     done(1);
 }
 
-void
+
 prec_redeclared()
 {
     fprintf(stderr, "%s: w - line %d of  \"%s\", conflicting %%prec \
 specifiers\n", myname, lineno, input_file_name);
 }
 
-void
+
 unterminated_action(a_lineno, a_line, a_cptr)
 int a_lineno;
 char *a_line;
@@ -294,7 +286,7 @@ char *a_cptr;
     done(1);
 }
 
-void
+
 dollar_warning(a_lineno, i)
 int a_lineno;
 int i;
@@ -303,7 +295,7 @@ int i;
 end of the current rule\n", myname, a_lineno, input_file_name, i);
 }
 
-void
+
 dollar_error(a_lineno, a_line, a_cptr)
 int a_lineno;
 char *a_line;
@@ -315,7 +307,7 @@ char *a_cptr;
     done(1);
 }
 
-void
+
 untyped_lhs()
 {
     fprintf(stderr, "%s: e - line %d of \"%s\", $$ is untyped\n",
@@ -323,7 +315,7 @@ untyped_lhs()
     done(1);
 }
 
-void
+
 untyped_rhs(i, s)
 int i;
 char *s;
@@ -333,7 +325,7 @@ char *s;
     done(1);
 }
 
-void
+
 unknown_rhs(i)
 int i;
 {
@@ -342,14 +334,14 @@ int i;
     done(1);
 }
 
-void
+
 default_action_warning()
 {
     fprintf(stderr, "%s: w - line %d of \"%s\", the default action assigns an \
 undefined value to $$\n", myname, lineno, input_file_name);
 }
 
-void
+
 undefined_goal(s)
 char *s;
 {
@@ -357,7 +349,7 @@ char *s;
     done(1);
 }
 
-void
+
 undefined_symbol_warning(s)
 char *s;
 {

@@ -1,8 +1,6 @@
-/*	$NetBSD: fflush.c,v 1.8 1997/07/13 20:14:52 christos Exp $	*/
-
 /*-
- * Copyright (c) 1990, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1990 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Chris Torek.
@@ -36,35 +34,28 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char sccsid[] = "@(#)fflush.c	8.1 (Berkeley) 6/4/93";
-#else
-__RCSID("$NetBSD: fflush.c,v 1.8 1997/07/13 20:14:52 christos Exp $");
-#endif
+static char sccsid[] = "@(#)fflush.c	5.1 (Berkeley) 1/20/91";
 #endif /* LIBC_SCCS and not lint */
 
-#include <errno.h>
+#include <sys/errno.h>
 #include <stdio.h>
 #include "local.h"
 
 /* Flush a single file, or (if fp is NULL) all files.  */
-int
 fflush(fp)
 	register FILE *fp;
 {
-
 	if (fp == NULL)
 		return (_fwalk(__sflush));
-	if ((fp->_flags & (__SWR | __SRW)) == 0) {
+
+	if ((fp->_flags & __SWR) == 0) {
 		errno = EBADF;
 		return (EOF);
 	}
 	return (__sflush(fp));
 }
 
-int
 __sflush(fp)
 	register FILE *fp;
 {

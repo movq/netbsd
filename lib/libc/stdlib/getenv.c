@@ -1,5 +1,3 @@
-/*	$NetBSD: getenv.c,v 1.8 1997/07/13 20:16:41 christos Exp $	*/
-
 /*
  * Copyright (c) 1987 Regents of the University of California.
  * All rights reserved.
@@ -33,18 +31,13 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char *sccsid = "from: @(#)getenv.c	5.8 (Berkeley) 2/23/91";
-#else
-__RCSID("$NetBSD: getenv.c,v 1.8 1997/07/13 20:16:41 christos Exp $");
-#endif
+static char sccsid[] = "@(#)getenv.c	5.8 (Berkeley) 2/23/91";
 #endif /* LIBC_SCCS and not lint */
 
 #include <stdlib.h>
+#include <stddef.h>
 #include <string.h>
-#include "local.h"
 
 /*
  * getenv --
@@ -55,12 +48,13 @@ getenv(name)
 	const char *name;
 {
 	int offset;
+	char *_findenv();
 
-	return(__findenv(name, &offset));
+	return(_findenv(name, &offset));
 }
 
 /*
- * __findenv --
+ * _findenv --
  *	Returns pointer to value associated with name, if any, else NULL.
  *	Sets offset to be the offset of the name/value combination in the
  *	environmental array, for use by setenv(3) and unsetenv(3).
@@ -69,16 +63,15 @@ getenv(name)
  *	This routine *should* be a static; don't use it.
  */
 char *
-__findenv(name, offset)
-	register const char *name;
+_findenv(name, offset)
+	register char *name;
 	int *offset;
 {
 	extern char **environ;
 	register int len;
 	register char **P, *C;
-	register const char *tmp;
 
-	for (tmp = name, len = 0; *tmp && *tmp != '='; ++tmp, ++len);
+	for (C = name, len = 0; *C && *C != '='; ++C, ++len);
 	for (P = environ; *P; ++P)
 		if (!strncmp(*P, name, len))
 			if (*(C = *P + len) == '=') {

@@ -1,5 +1,3 @@
-/*	$NetBSD: tty.c,v 1.6 1997/10/20 08:07:56 scottr Exp $	*/
-
 /*-
  * Copyright (c) 1992, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -36,13 +34,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #if !defined(lint) && !defined(SCCSID)
-#if 0
 static char sccsid[] = "@(#)tty.c	8.1 (Berkeley) 6/4/93";
-#else
-__RCSID("$NetBSD: tty.c,v 1.6 1997/10/20 08:07:56 scottr Exp $");
-#endif
 #endif /* not lint && not SCCSID */
 
 /* 
@@ -54,7 +47,7 @@ __RCSID("$NetBSD: tty.c,v 1.6 1997/10/20 08:07:56 scottr Exp $");
 
 typedef struct ttymodes_t {
     char *m_name;
-    u_int m_value;
+    int   m_value;
     int   m_type;
 } ttymodes_t;
 
@@ -298,9 +291,6 @@ private ttymodes_t ttymodes[] = {
 # ifdef CRTS_IFLOW
     { "crts_iflow",CRTS_IFLOW,M_CTL },
 # endif /* CRTS_IFLOW */
-# ifdef CDTRCTS
-    { "cdtrcts",CDTRCTS,M_CTL },
-# endif /* CDTRCTS */
 # ifdef MDMBUF
     { "mdmbuf",	MDMBUF,	M_CTL },
 # endif /* MDMBUF */
@@ -512,7 +502,8 @@ tty_setup(el)
                     el->el_tty.t_c[ED_IO][rst] != el->el_tty.t_vdisable)
                     el->el_tty.t_c[ED_IO][rst]  = el->el_tty.t_c[TS_IO][rst];
             for (rst = 0; rst < C_NCC; rst++)
-                if (el->el_tty.t_c[TS_IO][rst] != el->el_tty.t_vdisable)
+                if (el->el_tty.t_c[TS_IO][rst] != el->el_tty.t_vdisable &&
+                    el->el_tty.t_c[EX_IO][rst] != el->el_tty.t_vdisable)
                     el->el_tty.t_c[EX_IO][rst]  = el->el_tty.t_c[TS_IO][rst];
         }
         tty__setchar(&el->el_tty.t_ex, el->el_tty.t_c[EX_IO]);
@@ -913,6 +904,7 @@ tty_rawmode(el)
 		}
 		tty__setchar(&el->el_tty.t_ex, el->el_tty.t_c[EX_IO]);
 	    }
+
 	}
     }
 

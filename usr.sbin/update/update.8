@@ -1,7 +1,5 @@
-.\"	$NetBSD: update.8,v 1.8 1997/10/17 13:59:34 lukem Exp $
-.\"
-.\" Copyright (c) 1991, 1993
-.\"	The Regents of the University of California.  All rights reserved.
+.\" Copyright (c) 1991 The Regents of the University of California.
+.\" All rights reserved.
 .\"
 .\" Redistribution and use in source and binary forms, with or without
 .\" modification, are permitted provided that the following conditions
@@ -31,32 +29,29 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\"	@(#)update.8	8.3 (Berkeley) 4/19/94
+.\"	@(#)update.8	6.5 (Berkeley) 8/5/91
 .\"
-.Dd April 19, 1994
+.Dd August 5, 1991
 .Dt UPDATE 8
 .Os
 .Sh NAME
 .Nm update
 .Nd flush internal filesystem caches to disk frequently
 .Sh SYNOPSIS
-.Nm
-.Op Ar interval
+.Nm update
 .Sh DESCRIPTION
 The
-.Nm
+.Nm update
 command helps protect the integrity of disk volumes
 by flushing
-volatile cached filesystem data
-to disk periodically, with the specified
-.Ar interval
-(by default 30 seconds).
-.Nm
+voliatile cached filesystem data
+to disk at thirty second intervals.
+.Nm Update
 uses the
 .Xr sync 2
 function call to do the task.
 .Pp
-.Nm
+.Nm Update
 is commonly invoked at startup time by
 .Xr rc 8
 when the system goes multi-user.
@@ -67,13 +62,13 @@ when the system goes multi-user.
 .Xr rc 8 ,
 .Xr sync 8
 .Sh BUGS
-It is possible on some systems that a
-.Xr sync
-occurring simultaneously with a crash may cause
+It is possible on some systems, that a
+.Xr syn
+occuring simultaneously with a crash may cause
 file system damage. See
 .Xr fsck 8 .
 .Sh HISTORY
 An
-.Nm
+.Nm update
 command appeared in
 .At v6 .

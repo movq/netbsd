@@ -1,8 +1,6 @@
-/*	$NetBSD: pack.c,v 1.4 1997/10/12 11:45:37 lukem Exp $	*/
-
 /*
- * Copyright (c) 1988, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1988 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Timothy C. Stoehr.
@@ -36,13 +34,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)pack.c	8.1 (Berkeley) 5/31/93";
-#else
-__RCSID("$NetBSD: pack.c,v 1.4 1997/10/12 11:45:37 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)pack.c	5.3 (Berkeley) 6/1/90";
 #endif /* not lint */
 
 /*
@@ -61,14 +54,16 @@ __RCSID("$NetBSD: pack.c,v 1.4 1997/10/12 11:45:37 lukem Exp $");
 
 char *curse_message = "you can't, it appears to be cursed";
 
+extern short levitate;
+
 object *
 add_to_pack(obj, pack, condense)
-	object *obj, *pack;
+object *obj, *pack;
 {
 	object *op;
 
 	if (condense) {
-		if ((op = check_duplicate(obj, pack)) != NULL) {
+		if (op = check_duplicate(obj, pack)) {
 			free_object(obj);
 			return(op);
 		} else {
@@ -89,9 +84,8 @@ add_to_pack(obj, pack, condense)
 	return(obj);
 }
 
-void
 take_from_pack(obj, pack)
-	object *obj, *pack;
+object *obj, *pack;
 {
 	while (pack->next_object != obj) {
 		pack = pack->next_object;
@@ -105,7 +99,7 @@ take_from_pack(obj, pack)
 
 object *
 pick_up(row, col, status)
-	short *status;
+short *status;
 {
 	object *obj;
 
@@ -150,7 +144,6 @@ pick_up(row, col, status)
 	return(obj);
 }
 
-void
 drop()
 {
 	object *obj, *new;
@@ -215,7 +208,7 @@ drop()
 
 object *
 check_duplicate(obj, pack)
-	object *obj, *pack;
+object *obj, *pack;
 {
 	object *op;
 
@@ -247,11 +240,10 @@ check_duplicate(obj, pack)
 	return(0);
 }
 
-short
 next_avail_ichar()
 {
-	object *obj;
-	int i;
+	register object *obj;
+	register i;
 	boolean ichars[26];
 
 	for (i = 0; i < 26; i++) {
@@ -270,16 +262,14 @@ next_avail_ichar()
 	return('?');
 }
 
-void
 wait_for_ack()
 {
 	while (rgetchar() != ' ') ;
 }
 
-short
 pack_letter(prompt, mask)
-	char *prompt;
-	unsigned short mask;
+char *prompt;
+unsigned short mask;
 {
 	short ch;
 	unsigned short tmask = mask;
@@ -303,7 +293,6 @@ pack_letter(prompt, mask)
 
 		if (ch == LIST) {
 			check_message();
-			mask = tmask;
 			inventory(&rogue.pack, mask);
 		} else {
 			break;
@@ -314,7 +303,6 @@ pack_letter(prompt, mask)
 	return(ch);
 }
 
-void
 take_off()
 {
 	char desc[DCOLS];
@@ -338,11 +326,10 @@ take_off()
 	}
 }
 
-void
 wear()
 {
 	short ch;
-	object *obj;
+	register object *obj;
 	char desc[DCOLS];
 
 	if (rogue.armor) {
@@ -371,9 +358,8 @@ wear()
 	(void) reg_move();
 }
 
-void
 unwear(obj)
-	object *obj;
+object *obj;
 {
 	if (obj) {
 		obj->in_use_flags &= (~BEING_WORN);
@@ -381,20 +367,18 @@ unwear(obj)
 	rogue.armor = (object *) 0;
 }
 
-void
 do_wear(obj)
-	object *obj;
+object *obj;
 {
 	rogue.armor = obj;
 	obj->in_use_flags |= BEING_WORN;
 	obj->identified = 1;
 }
 
-void
 wield()
 {
 	short ch;
-	object *obj;
+	register object *obj;
 	char desc[DCOLS];
 
 	if (rogue.weapon && rogue.weapon->is_cursed) {
@@ -428,17 +412,15 @@ wield()
 	}
 }
 
-void
 do_wield(obj)
-	object *obj;
+object *obj;
 {
 	rogue.weapon = obj;
 	obj->in_use_flags |= BEING_WIELDED;
 }
 
-void
 unwield(obj)
-	object *obj;
+object *obj;
 {
 	if (obj) {
 		obj->in_use_flags &= (~BEING_WIELDED);
@@ -446,11 +428,10 @@ unwield(obj)
 	rogue.weapon = (object *) 0;
 }
 
-void
 call_it()
 {
 	short ch;
-	object *obj;
+	register object *obj;
 	struct id *id_table;
 	char buf[MAX_TITLE_LENGTH+2];
 
@@ -475,9 +456,8 @@ call_it()
 	}
 }
 
-short
 pack_count(new_obj)
-	object *new_obj;
+object *new_obj;
 {
 	object *obj;
 	short count = 0;
@@ -505,8 +485,8 @@ pack_count(new_obj)
 
 boolean
 mask_pack(pack, mask)
-	object *pack;
-	unsigned short mask;
+object *pack;
+unsigned short mask;
 {
 	while (pack->next_object) {
 		pack = pack->next_object;
@@ -517,10 +497,9 @@ mask_pack(pack, mask)
 	return(0);
 }
 
-boolean
 is_pack_letter(c, mask)
-	short *c;
-	unsigned short *mask;
+short *c;
+unsigned short *mask;
 {
 	if (((*c == '?') || (*c == '!') || (*c == ':') || (*c == '=') ||
 		(*c == ')') || (*c == ']') || (*c == '/') || (*c == ','))) {
@@ -556,13 +535,11 @@ is_pack_letter(c, mask)
 	return(((*c >= 'a') && (*c <= 'z')) || (*c == CANCEL) || (*c == LIST));
 }
 
-boolean
 has_amulet()
 {
 	return(mask_pack(&rogue.pack, AMULET));
 }
 
-void
 kick_into_pack()
 {
 	object *obj;
@@ -572,7 +549,7 @@ kick_into_pack()
 	if (!(dungeon[rogue.row][rogue.col] & OBJECT)) {
 		message("nothing here", 0);
 	} else {
-		if ((obj = pick_up(rogue.row, rogue.col, &stat)) != NULL) {
+		if (obj = pick_up(rogue.row, rogue.col, &stat)) {
 			get_desc(obj, desc);
 			if (obj->what_is == GOLD) {
 				message(desc, 0);

@@ -1,5 +1,3 @@
-/*	$NetBSD: vfs_init.c,v 1.8 1996/10/13 02:32:50 christos Exp $	*/
-
 /*
  * Copyright (c) 1989, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -37,7 +35,8 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)vfs_init.c	8.3 (Berkeley) 1/4/94
+ *	from: @(#)vfs_init.c	8.3 (Berkeley) 1/4/94
+ *	$Id: vfs_init.c,v 1.1 1994/06/08 11:28:54 mycroft Exp $
  */
 
 
@@ -51,7 +50,6 @@
 #include <sys/buf.h>
 #include <sys/errno.h>
 #include <sys/malloc.h>
-#include <sys/systm.h>
 
 /*
  * Sigh, such primitive tools are these...
@@ -74,21 +72,14 @@ extern struct vnodeop_desc *vfs_op_descs[];
  */
 int vfs_opv_numops;
 
-typedef (*PFI) __P((void *));
-
-void vfs_opv_init __P((void));
-void vfs_opv_init_explicit __P((struct vnodeopv_desc *));
-void vfs_opv_init_default __P((struct vnodeopv_desc *));
-void vfs_op_init __P((void));
+typedef (*PFI)();   /* the standard Pointer to a Function returning an Int */
 
 /*
  * A miscellaneous routine.
  * A generic "default" routine that just returns an error.
  */
-/*ARGSUSED*/
 int
-vn_default_error(v)
-	void *v;
+vn_default_error()
 {
 
 	return (EOPNOTSUPP);
@@ -110,103 +101,85 @@ vn_default_error(v)
  * NFS code. (Of couse, the OTW NFS protocol still needs to be munged, but
  * that is a(whole)nother story.) This is a feature.
  */
-
-/*
- * Allocate and init the vector, if it needs it.
- * Also handle backwards compatibility.
- */
-void
-vfs_opv_init_explicit(vfs_opv_desc)
-	struct vnodeopv_desc *vfs_opv_desc;
-{
-	int (**opv_desc_vector) __P((void *));
-	struct vnodeopv_entry_desc *opve_descp;
-
-	opv_desc_vector = *(vfs_opv_desc->opv_desc_vector_p);
-
-	if (opv_desc_vector == NULL) {
-		/* XXX - shouldn't be M_VNODE */
-		MALLOC(opv_desc_vector, PFI *,
-		    vfs_opv_numops * sizeof(PFI), M_VNODE, M_WAITOK);
-		bzero(opv_desc_vector, vfs_opv_numops * sizeof(PFI));
-		*(vfs_opv_desc->opv_desc_vector_p) = opv_desc_vector;
-		DODEBUG(printf("vector at %p allocated\n",
-		    opv_desc_vector_p));
-	}
-
-	for (opve_descp = vfs_opv_desc->opv_desc_ops;
-	     opve_descp->opve_op;
-	     opve_descp++) {
-		/*
-		 * Sanity check:  is this operation listed
-		 * in the list of operations?  We check this
-		 * by seeing if its offest is zero.  Since
-		 * the default routine should always be listed
-		 * first, it should be the only one with a zero
-		 * offset.  Any other operation with a zero
-		 * offset is probably not listed in
-		 * vfs_op_descs, and so is probably an error.
-		 *
-		 * A panic here means the layer programmer
-		 * has committed the all-too common bug
-		 * of adding a new operation to the layer's
-		 * list of vnode operations but
-		 * not adding the operation to the system-wide
-		 * list of supported operations.
-		 */
-		if (opve_descp->opve_op->vdesc_offset == 0 &&
-		    opve_descp->opve_op->vdesc_offset != VOFFSET(vop_default)) {
-			printf("operation %s not listed in %s.\n",
-			    opve_descp->opve_op->vdesc_name, "vfs_op_descs");
-			panic ("vfs_opv_init: bad operation");
-		}
-
-		/*
-		 * Fill in this entry.
-		 */
-		opv_desc_vector[opve_descp->opve_op->vdesc_offset] =
-		    opve_descp->opve_impl;
-	}
-}
-
-void
-vfs_opv_init_default(vfs_opv_desc)
-	struct vnodeopv_desc *vfs_opv_desc;
-{
-	int j;
-	int (**opv_desc_vector) __P((void *));
-
-	opv_desc_vector = *(vfs_opv_desc->opv_desc_vector_p);
-
-	/*
-	 * Force every operations vector to have a default routine.
-	 */
-	if (opv_desc_vector[VOFFSET(vop_default)] == NULL)
-		panic("vfs_opv_init: operation vector without default routine.");
-
-	for (j = 0; j < vfs_opv_numops; j++)
-		if (opv_desc_vector[j] == NULL)
-			opv_desc_vector[j] = 
-			    opv_desc_vector[VOFFSET(vop_default)];
-}
-
 void
 vfs_opv_init()
 {
-	int i;
+	int i, j, k;
+	int (***opv_desc_vector_p)();
+	int (**opv_desc_vector)();
+	struct vnodeopv_entry_desc *opve_descp;
 
 	/*
 	 * Allocate the dynamic vectors and fill them in.
 	 */
-	for (i = 0; vfs_opv_descs[i]; i++)
-		vfs_opv_init_explicit(vfs_opv_descs[i]);
+	for (i=0; vfs_opv_descs[i]; i++) {
+		opv_desc_vector_p = vfs_opv_descs[i]->opv_desc_vector_p;
+		/*
+		 * Allocate and init the vector, if it needs it.
+		 * Also handle backwards compatibility.
+		 */
+		if (*opv_desc_vector_p == NULL) {
+			/* XXX - shouldn't be M_VNODE */
+			MALLOC(*opv_desc_vector_p, PFI*,
+			       vfs_opv_numops*sizeof(PFI), M_VNODE, M_WAITOK);
+			bzero (*opv_desc_vector_p, vfs_opv_numops*sizeof(PFI));
+			DODEBUG(printf("vector at %x allocated\n",
+			    opv_desc_vector_p));
+		}
+		opv_desc_vector = *opv_desc_vector_p;
+		for (j=0; vfs_opv_descs[i]->opv_desc_ops[j].opve_op; j++) {
+			opve_descp = &(vfs_opv_descs[i]->opv_desc_ops[j]);
 
+			/*
+			 * Sanity check:  is this operation listed
+			 * in the list of operations?  We check this
+			 * by seeing if its offest is zero.  Since
+			 * the default routine should always be listed
+			 * first, it should be the only one with a zero
+			 * offset.  Any other operation with a zero
+			 * offset is probably not listed in
+			 * vfs_op_descs, and so is probably an error.
+			 *
+			 * A panic here means the layer programmer
+			 * has committed the all-too common bug
+			 * of adding a new operation to the layer's
+			 * list of vnode operations but
+			 * not adding the operation to the system-wide
+			 * list of supported operations.
+			 */
+			if (opve_descp->opve_op->vdesc_offset == 0 &&
+				    opve_descp->opve_op->vdesc_offset !=
+				    	VOFFSET(vop_default)) {
+				printf("operation %s not listed in %s.\n",
+				    opve_descp->opve_op->vdesc_name,
+				    "vfs_op_descs");
+				panic ("vfs_opv_init: bad operation");
+			}
+			/*
+			 * Fill in this entry.
+			 */
+			opv_desc_vector[opve_descp->opve_op->vdesc_offset] =
+					opve_descp->opve_impl;
+		}
+	}
 	/*
 	 * Finally, go back and replace unfilled routines
-	 * with their default.
+	 * with their default.  (Sigh, an O(n^3) algorithm.  I
+	 * could make it better, but that'd be work, and n is small.)
 	 */
-	for (i = 0; vfs_opv_descs[i]; i++)
-		vfs_opv_init_default(vfs_opv_descs[i]);
+	for (i = 0; vfs_opv_descs[i]; i++) {
+		opv_desc_vector = *(vfs_opv_descs[i]->opv_desc_vector_p);
+		/*
+		 * Force every operations vector to have a default routine.
+		 */
+		if (opv_desc_vector[VOFFSET(vop_default)]==NULL) {
+			panic("vfs_opv_init: operation vector without default routine.");
+		}
+		for (k = 0; k<vfs_opv_numops; k++)
+			if (opv_desc_vector[k] == NULL)
+				opv_desc_vector[k] = 
+					opv_desc_vector[VOFFSET(vop_default)];
+	}
 }
 
 /*
@@ -239,12 +212,12 @@ vfs_op_init()
  */
 extern struct vnodeops dead_vnodeops;
 extern struct vnodeops spec_vnodeops;
+extern void vclean();
 struct vattr va_null;
 
 /*
  * Initialize the vnode structures and initialize each file system type.
  */
-void
 vfsinit()
 {
 	struct vfsops **vfsp;

@@ -1,8 +1,6 @@
-/*	$NetBSD: misc.c,v 1.9 1997/10/19 13:36:05 lukem Exp $	*/
-
 /*-
- * Copyright (c) 1990, 1993, 1994
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1990 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Hugh Smith at The University of Guelph.
@@ -36,33 +34,26 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)misc.c	8.4 (Berkeley) 4/27/95";
-#else
-__RCSID("$NetBSD: misc.c,v 1.9 1997/10/19 13:36:05 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)misc.c	5.7 (Berkeley) 5/27/91";
 #endif /* not lint */
 
 #include <sys/param.h>
-
-#include <dirent.h>
-#include <err.h>
-#include <errno.h>
+#include <sys/errno.h>
 #include <signal.h>
+#include <dirent.h>
+#include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
-
 #include "archive.h"
 #include "extern.h"
 #include "pathnames.h"
 
+extern CHDR chdr;			/* converted header */
+extern char *archive;			/* archive name */
 char *tname = "temporary file";		/* temporary file "name" */
 
-int
 tmp()
 {
 	extern char *envtmp;
@@ -79,15 +70,15 @@ tmp()
 	if (envtmp)
 		(void)sprintf(path, "%s/%s", envtmp, _NAME_ARTMP);
 	else
-		strcpy(path, _PATH_ARTMP);
+		bcopy(_PATH_ARTMP, path, sizeof(_PATH_ARTMP));
 	
 	sigfillset(&set);
 	(void)sigprocmask(SIG_BLOCK, &set, &oset);
 	if ((fd = mkstemp(path)) == -1)
-		err(1, "mkstemp %s", tname);
+		error(tname);
         (void)unlink(path);
 	(void)sigprocmask(SIG_SETMASK, &oset, NULL);
-	return (fd);
+	return(fd);
 }
 
 /*
@@ -99,49 +90,55 @@ char *
 files(argv)
 	char **argv;
 {
-	char **list, *p;
+	register char **list;
+	char *p;
 
 	for (list = argv; *list; ++list)
 		if (compare(*list)) {
 			p = *list;
-			for (; (list[0] = list[1]) != NULL; ++list)
-				continue;
-			return (p);
+			for (; list[0] = list[1]; ++list);
+			return(p);
 		}
-	return (NULL);
+	return(NULL);
 }
 
 void
 orphans(argv)
 	char **argv;
 {
-
 	for (; *argv; ++argv)
-		warnx("%s: not found in archive", *argv);
+		(void)fprintf(stderr,
+		    "ar: %s: not found in archive.\n", *argv);
 }
 
 char *
 rname(path)
 	char *path;
 {
-	char *ind;
+	register char *ind;
 
-	return ((ind = strrchr(path, '/')) ? ind + 1 : path);
+	return((ind = rindex(path, '/')) ? ind + 1 : path);
 }
 
-int
 compare(dest)
 	char *dest;
 {
-
 	if (options & AR_TR)
-		return (!strncmp(chdr.name, rname(dest), OLDARMAXNAME));
-	return (!strcmp(chdr.name, rname(dest)));
+		return(!strncmp(chdr.name, rname(dest), OLDARMAXNAME));
+	return(!strcmp(chdr.name, rname(dest)));
 }
 
 void
 badfmt()
 {
 	errno = EFTYPE;
-	err(1, "%s", archive);
+	error(archive);
+}
+
+void
+error(name)
+	char *name;
+{
+	(void)fprintf(stderr, "ar: %s: %s\n", name, strerror(errno));
+	exit(1);
 }

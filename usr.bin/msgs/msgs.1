@@ -1,7 +1,5 @@
-.\"	$NetBSD: msgs.1,v 1.6 1997/10/14 01:28:50 lukem Exp $
-.\"
-.\" Copyright (c) 1980, 1990, 1993
-.\"	The Regents of the University of California.  All rights reserved.
+.\" Copyright (c) 1980, 1990 The Regents of the University of California.
+.\" All rights reserved.
 .\"
 .\" Redistribution and use in source and binary forms, with or without
 .\" modification, are permitted provided that the following conditions
@@ -31,33 +29,33 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\"	@(#)msgs.1	8.2 (Berkeley) 4/28/95
+.\"	@(#)msgs.1	6.9 (Berkeley) 7/30/91
 .\"
-.Dd April 28, 1995
+.Dd July 30, 1991
 .Dt MSGS 1
 .Os BSD 4
 .Sh NAME
 .Nm msgs
 .Nd system messages and junk mail program
 .Sh SYNOPSIS
-.Nm
-.Op Fl fhlpqr
+.Nm msgs
+.Op Fl fhlpq
 .Op Ar number
 .Op Ar \-number
-.Nm ""
+.Nm msgs
 .Op Fl s
-.Nm ""
+.Nm msgs
 .Op Fl c
 .Op \-days
 .Sh DESCRIPTION
-.Nm
+.Nm Msgs
 is used to read system messages.
 These messages are
 sent by mailing to the login `msgs' and should be short
 pieces of information which are suitable to be read once by most users
 of the system.
 .Pp
-.Nm
+.Nm Msgs
 is normally invoked each time you login, by placing it in the file
 .Pa .login
 (or
@@ -82,9 +80,9 @@ and go on to the next message.
 Redisplay the last message.
 .It Fl q
 Drop out of
-.Nm "" ;
+.Nm msgs ;
 the next time
-.Nm
+.Nm msgs
 will pick up where it last left off.
 .It Fl s
 Append the current message to the file ``Messages'' in the current directory;
@@ -96,13 +94,10 @@ A copy of the specified message is placed in a temporary
 mailbox and
 .Xr mail  1
 is invoked on that mailbox.
-.It Fl p
-The specified message is piped through $PAGER, or, if $PAGER is not defined,
-.Xr more 1  .
-The commands `m', `p', and `s' all accept a numeric argument in place of the `\-'.
+Both `m' and `s' accept a numeric argument in place of the `\-'.
 .El
 .Pp
-.Nm
+.Nm Msgs
 keeps track of the next message you will see by a number in the file
 .Pa \&.msgsrc
 in your home directory.
@@ -114,12 +109,12 @@ The file
 .Pa /var/msgs/bounds
 shows the low and high number of the messages in the directory
 so that
-.Nm
+.Nm msgs
 can quickly determine if there are no messages for you.
 If the contents of
 .Pa bounds
 is incorrect it can be fixed by removing it;
-.Nm
+.Nm msgs
 will make a new
 .Pa bounds
 file the next time it is run.
@@ -128,7 +123,7 @@ The
 .Fl s
 option is used for setting up the posting of messages.  The line
 .Pp
-.Dl msgs: \&"\&| /usr/bin/msgs \-s\&"
+.Dl msgs: \&"\&| /usr/ucb/msgs \-s\&"
 .Pp
 should be included in
 .Pa /etc/aliases
@@ -161,15 +156,12 @@ Queries whether there are messages, printing
 The command ``msgs \-q'' is often used in login scripts.
 .It Fl h
 Print the first part of messages only.
-.It Fl r
-Disables the ability to save messages or enter the mailer.  It is
-assumed that $PAGER is set to something secure.
 .It Fl l
 Option causes only locally originated messages to be reported.
 .It Ar num
 A message number can be given
 on the command line, causing
-.Nm
+.Nm msgs
 to start at the specified message rather than at the next message
 indicated by your
 .Pa \&.msgsrc
@@ -186,17 +178,17 @@ messages back from the one indicated in the
 .Pa \&.msgsrc
 file, useful for reviews of recent messages.
 .It Fl p
-Pipe long messages through $PAGER, or, if $PAGER is not defined,
+Pipe long messages through
 .Xr more  1  .
 .El
 .Pp
 Within
-.Nm
+.Nm msgs
 you can also go to any specific message by typing its number when
-.Nm
+.Nm msgs
 requests input as to what to do.
 .Sh ENVIRONMENT
-.Nm
+.Nm Msgs
 uses the
 .Ev HOME
 and
@@ -217,6 +209,6 @@ number of next message to be presented
 .Xr more 1
 .Sh HISTORY
 The
-.Nm
+.Nm msgs
 command appeared in
 .Bx 3.0 .

@@ -1,8 +1,6 @@
-/*	$NetBSD: ns_addr.c,v 1.7 1997/07/18 04:55:57 thorpej Exp $	*/
-
 /*
- * Copyright (c) 1986, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1986 Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * J.Q. Johnson.
@@ -36,13 +34,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char sccsid[] = "@(#)ns_addr.c	8.1 (Berkeley) 6/7/93";
-#else
-__RCSID("$NetBSD: ns_addr.c,v 1.7 1997/07/18 04:55:57 thorpej Exp $");
-#endif
+static char sccsid[] = "@(#)ns_addr.c	6.7 (Berkeley) 2/24/91";
 #endif /* LIBC_SCCS and not lint */
 
 #include <sys/param.h>
@@ -51,8 +44,8 @@ __RCSID("$NetBSD: ns_addr.c,v 1.7 1997/07/18 04:55:57 thorpej Exp $");
 #include <string.h>
 
 static struct ns_addr addr, zero_addr;
-static void Field __P((char *, u_int8_t *, int));
-static void cvtbase __P((long, int, int[], int, u_int8_t[], int));
+
+static void Field(), cvtbase();
 
 struct ns_addr 
 ns_addr(name)
@@ -62,8 +55,8 @@ ns_addr(name)
 	char *hostname, *socketname, *cp;
 	char buf[50];
 
-	(void)strncpy(buf, name, sizeof(buf) - 1);
-	buf[sizeof(buf) - 1] = '\0';
+	(void)strncpy(buf, name, sizeof(buf - 1));
+	buf[sizeof(buf - 1)] = '\0';
 
 	/*
 	 * First, figure out what he intends as a field separtor.
@@ -71,11 +64,11 @@ ns_addr(name)
 	 * form  2-272.AA001234H.01777, i.e. XDE standard.
 	 * Great efforts are made to insure backward compatability.
 	 */
-	if ((hostname = strchr(buf, '#')) != NULL)
+	if (hostname = index(buf, '#'))
 		separator = '#';
 	else {
-		hostname = strchr(buf, '.');
-		if ((cp = strchr(buf, ':')) &&
+		hostname = index(buf, '.');
+		if ((cp = index(buf, ':')) &&
 		    ((hostname && cp < hostname) || (hostname == 0))) {
 			hostname = cp;
 			separator = ':';
@@ -90,10 +83,10 @@ ns_addr(name)
 	if (hostname == 0)
 		return (addr);  /* No separator means net only */
 
-	socketname = strchr(hostname, separator);
+	socketname = index(hostname, separator);
 	if (socketname) {
 		*socketname++ = 0;
-		Field(socketname, (u_int8_t *)&addr.x_port, 2);
+		Field(socketname, (u_char *)&addr.x_port, 2);
 	}
 
 	Field(hostname, addr.x_host.c_host, 6);
@@ -104,7 +97,7 @@ ns_addr(name)
 static void
 Field(buf, out, len)
 	char *buf;
-	u_int8_t *out;
+	u_char *out;
 	int len;
 {
 	register char *bp = buf;

@@ -1,5 +1,3 @@
-/*	$NetBSD: term.c,v 1.11 1997/10/13 16:09:01 lukem Exp $	*/
-
 /*-
  * Copyright (c) 1992, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -36,13 +34,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #if !defined(lint) && !defined(SCCSID)
-#if 0
 static char sccsid[] = "@(#)term.c	8.1 (Berkeley) 6/4/93";
-#else
-__RCSID("$NetBSD: term.c,v 1.11 1997/10/13 16:09:01 lukem Exp $");
-#endif
 #endif /* not lint && not SCCSID */
 
 /*
@@ -56,9 +49,8 @@ __RCSID("$NetBSD: term.c,v 1.11 1997/10/13 16:09:01 lukem Exp $");
 #include <string.h>
 #include <stdlib.h>
 #include <unistd.h>
-#include <termcap.h>
+#include "termcap.h"	/* XXX: should be <termcap.h> */
 #include <sys/types.h>
-#include <sys/ioctl.h>
 
 #include "el.h"
 
@@ -76,7 +68,6 @@ __RCSID("$NetBSD: term.c,v 1.11 1997/10/13 16:09:01 lukem Exp $");
 #define Str(a) el->el_term.t_str[a]
 #define Val(a) el->el_term.t_val[a]
 
-#ifdef notdef
 private struct {
     char   *b_name;
     int     b_rate;
@@ -146,7 +137,6 @@ private struct {
 #endif
     { NULL, 0 }
 };
-#endif
 
 private struct termcapstr {
     char   *name;
@@ -251,7 +241,6 @@ private struct termcapval {
 
 /* do two or more of the attributes use me */
 
-private void	term_setflags		__P((EditLine *));
 private	void	term_rebuffer_display	__P((EditLine *));
 private	void	term_free_display	__P((EditLine *));
 private	void	term_alloc_display	__P((EditLine *));
@@ -373,7 +362,7 @@ term_alloc(el, t, cap)
      * New string is shorter; no need to allocate space
      */
     if (clen <= tlen) {
-	(void)strcpy(*str, cap);	/* XXX strcpy is safe */
+	(void) strcpy(*str, cap);
 	return;
     }
 
@@ -381,8 +370,7 @@ term_alloc(el, t, cap)
      * New string is longer; see if we have enough space to append
      */
     if (el->el_term.t_loc + 3 < TC_BUFSIZE) {
-	/* XXX strcpy is safe */
-	(void)strcpy(*str = &el->el_term.t_buf[el->el_term.t_loc], cap);
+	(void) strcpy(*str = &el->el_term.t_buf[el->el_term.t_loc], cap);
 	el->el_term.t_loc += clen + 1;	/* one for \0 */
 	return;
     }
@@ -406,8 +394,7 @@ term_alloc(el, t, cap)
 	(void) fprintf(el->el_errfile, "Out of termcap string space.\n");
 	return;
     }
-    /* XXX strcpy is safe */
-    (void)strcpy(*str = &el->el_term.t_buf[el->el_term.t_loc], cap);
+    (void) strcpy(*str = &el->el_term.t_buf[el->el_term.t_loc], cap);
     el->el_term.t_loc += clen + 1;		/* one for \0 */
     return;
 } /* end term_alloc */
@@ -847,10 +834,10 @@ term_set(el, term)
 
     if (i <= 0) {
 	if (i == -1) 
-	    (void) fprintf(el->el_errfile, "Cannot read termcap database;\n");
+	    (void) fprintf(el->el_errfile, "Cannot open /etc/termcap.\n");
 	else if (i == 0) 
 	    (void) fprintf(el->el_errfile, 
-			   "No entry for terminal type \"%s\";\n", term);
+			   "No entry for terminal type \"%s\"\n", term);
 	(void) fprintf(el->el_errfile, "using dumb terminal settings.\n");
 	Val(T_co) = 80;		/* do a dumb terminal */
 	Val(T_pt) = Val(T_km) = Val(T_li) = 0;
@@ -886,7 +873,7 @@ term_set(el, term)
     term_change_size(el, lins, cols);
     (void) sigprocmask(SIG_SETMASK, &oset, NULL);
     term_bind_arrow(el);
-    return i <= 0 ? -1 : 0;
+    return 0;
 } /* end term_set */
 
 
@@ -958,22 +945,18 @@ term_init_arrow(el)
     fkey_t *arrow = el->el_term.t_fkey;
 
     arrow[A_K_DN].name    = "down";
-    arrow[A_K_DN].key	  = T_kd;
     arrow[A_K_DN].fun.cmd = ED_NEXT_HISTORY;
     arrow[A_K_DN].type    = XK_CMD;
 
     arrow[A_K_UP].name    = "up";
-    arrow[A_K_UP].key	  = T_ku;
     arrow[A_K_UP].fun.cmd = ED_PREV_HISTORY;
     arrow[A_K_UP].type    = XK_CMD;
 
     arrow[A_K_LT].name    = "left";
-    arrow[A_K_LT].key	  = T_kl;
     arrow[A_K_LT].fun.cmd = ED_PREV_CHAR;
     arrow[A_K_LT].type    = XK_CMD;
 
     arrow[A_K_RT].name    = "right";
-    arrow[A_K_RT].key	  = T_kr;
     arrow[A_K_RT].fun.cmd = ED_NEXT_CHAR;
     arrow[A_K_RT].type    = XK_CMD;
 
@@ -1327,7 +1310,6 @@ term_echotc(el, argc, argv)
     }
 #endif
     else if (strcmp(*argv, "baud") == 0) {
-#ifdef notdef
 	int     i;
 
 	for (i = 0; baud_rate[i].b_name != NULL; i++)
@@ -1336,9 +1318,6 @@ term_echotc(el, argc, argv)
 		return 0;
 	    }
 	(void) fprintf(el->el_outfile, fmtd, 0);
-#else
-	(void) fprintf(el->el_outfile, fmtd, el->el_tty.t_speed);
-#endif
 	return 0;
     }
     else if (strcmp(*argv, "rows") == 0 || strcmp(*argv, "lines") == 0) {

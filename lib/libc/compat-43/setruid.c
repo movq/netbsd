@@ -1,5 +1,3 @@
-/*	$NetBSD: setruid.c,v 1.8 1997/07/13 18:50:13 christos Exp $	*/
-
 /*
  * Copyright (c) 1983 Regents of the University of California.
  * All rights reserved.
@@ -33,19 +31,12 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char *sccsid = "@(#)setruid.c	5.5 (Berkeley) 2/23/91";
-#else
-__RCSID("$NetBSD: setruid.c,v 1.8 1997/07/13 18:50:13 christos Exp $");
-#endif
+/*static char *sccsid = "from: @(#)setruid.c	5.5 (Berkeley) 2/23/91";*/
+static char *rcsid = "$Id: setruid.c,v 1.1 1994/04/06 23:28:48 cgd Exp $";
 #endif /* LIBC_SCCS and not lint */
 
-#include <sys/types.h>
 #include <unistd.h>
-
-__warn_references(setruid, "warning: this program uses setruid(), which is deprecated.");
 
 int
 #ifdef __STDC__
@@ -55,5 +46,6 @@ setruid(ruid)
 	int ruid;
 #endif
 {
+
 	return (setreuid(ruid, -1));
 }

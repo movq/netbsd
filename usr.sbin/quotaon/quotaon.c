@@ -1,8 +1,6 @@
-/*	$NetBSD: quotaon.c,v 1.10 1997/10/17 12:40:10 lukem Exp $	*/
-
 /*
- * Copyright (c) 1980, 1990, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1980, 1990 Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Robert Elz at The University of Melbourne.
@@ -36,18 +34,14 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1980, 1990, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+char copyright[] =
+"@(#) Copyright (c) 1980, 1990 Regents of the University of California.\n\
+ All rights reserved.\n";
 #endif /* not lint */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)quotaon.c	8.1 (Berkeley) 6/6/93";
-#else
-__RCSID("$NetBSD: quotaon.c,v 1.10 1997/10/17 12:40:10 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)quotaon.c	5.12 (Berkeley) 9/27/90";
 #endif /* not lint */
 
 /*
@@ -56,12 +50,9 @@ __RCSID("$NetBSD: quotaon.c,v 1.10 1997/10/17 12:40:10 lukem Exp $");
 #include <sys/param.h>
 #include <sys/file.h>
 #include <sys/mount.h>
-#include <ufs/ufs/quota.h>
+#include <ufs/quota.h>
 #include <stdio.h>
-#include <string.h>
-#include <stdlib.h>
 #include <fstab.h>
-#include <err.h>
 
 char *qfname = QUOTAFILENAME;
 char *qfextension[] = INITQFNAMES;
@@ -71,33 +62,28 @@ int	gflag;		/* operate on group quotas */
 int	uflag;		/* operate on user quotas */
 int	vflag;		/* verbose */
 
-extern char *__progname;
-
-int main __P((int, char *[]));
-
-static void usage __P((void));
-static int quotaonoff __P((struct fstab *, int, int, char *));
-static int oneof __P((char *, char *[], int));
-static int hasquota __P((struct fstab *, int, char **));
-static int readonly __P((struct fstab *));
-
-int
 main(argc, argv)
 	int argc;
-	char *argv[];
+	char **argv;
 {
-	struct fstab *fs;
-	char *qfnp;
+	register struct fstab *fs;
+	char ch, *qfnp, *whoami, *rindex();
 	long argnum, done = 0;
 	int i, offmode = 0, errs = 0;
-	int ch;
+	extern char *optarg;
+	extern int optind;
 
-	if (strcmp(__progname, "quotaoff") == 0)
+	whoami = rindex(*argv, '/') + 1;
+	if (whoami == (char *)1)
+		whoami = *argv;
+	if (strcmp(whoami, "quotaoff") == 0)
 		offmode++;
-	else if (strcmp(__progname, "quotaon") != 0)
-		errx(1, "Name must be quotaon or quotaoff\n");
-
-	while ((ch = getopt(argc, argv, "avug")) != -1) {
+	else if (strcmp(whoami, "quotaon") != 0) {
+		fprintf(stderr, "Name must be quotaon or quotaoff not %s\n",
+			whoami);
+		exit(1);
+	}
+	while ((ch = getopt(argc, argv, "avug")) != EOF) {
 		switch(ch) {
 		case 'a':
 			aflag++;
@@ -112,23 +98,20 @@ main(argc, argv)
 			vflag++;
 			break;
 		default:
-			usage();
-			break;
+			usage(whoami);
 		}
 	}
 	argc -= optind;
 	argv += optind;
-
 	if (argc <= 0 && !aflag)
-		usage();
-
+		usage(whoami);
 	if (!gflag && !uflag) {
 		gflag++;
 		uflag++;
 	}
 	setfsent();
 	while ((fs = getfsent()) != NULL) {
-		if (strcmp(fs->fs_vfstype, "ffs") ||
+		if (strcmp(fs->fs_vfstype, "ufs") ||
 		    strcmp(fs->fs_type, FSTAB_RW))
 			continue;
 		if (aflag) {
@@ -150,22 +133,22 @@ main(argc, argv)
 	endfsent();
 	for (i = 0; i < argc; i++)
 		if ((done & (1 << i)) == 0)
-			warnx("%s not found in fstab", argv[i]);
+			fprintf(stderr, "%s not found in fstab\n",
+				argv[i]);
 	exit(errs);
 }
 
-static void
-usage()
+usage(whoami)
+	char *whoami;
 {
 
-	(void) fprintf(stderr, "Usage:\n\t%s [-g] [-u] [-v] -a\n", __progname);
-	(void) fprintf(stderr, "\t%s [-g] [-u] [-v] filesys ...\n", __progname);
+	fprintf(stderr, "Usage:\n\t%s [-g] [-u] [-v] -a\n", whoami);
+	fprintf(stderr, "\t%s [-g] [-u] [-v] filesys ...\n", whoami);
 	exit(1);
 }
 
-static int
 quotaonoff(fs, offmode, type, qfpathname)
-	struct fstab *fs;
+	register struct fstab *fs;
 	int offmode, type;
 	char *qfpathname;
 {
@@ -174,17 +157,17 @@ quotaonoff(fs, offmode, type, qfpathname)
 		return (1);
 	if (offmode) {
 		if (quotactl(fs->fs_file, QCMD(Q_QUOTAOFF, type), 0, 0) < 0) {
-			warn(fs->fs_file);
+			fprintf(stderr, "quotaoff: ");
+			perror(fs->fs_file);
 			return (1);
 		}
 		if (vflag)
-			printf("%s: %s quotas turned off\n",
-			    fs->fs_file, qfextension[type]);
+			printf("%s: quotas turned off\n", fs->fs_file);
 		return (0);
 	}
 	if (quotactl(fs->fs_file, QCMD(Q_QUOTAON, type), 0, qfpathname) < 0) {
-		warn("%s quotas using %s on %s",
-		    qfextension[type], qfpathname, fs->fs_file);
+		fprintf(stderr, "quotaon: using %s on", qfpathname);
+		perror(fs->fs_file);
 		return (1);
 	}
 	if (vflag)
@@ -196,12 +179,11 @@ quotaonoff(fs, offmode, type, qfpathname)
 /*
  * Check to see if target appears in list of size cnt.
  */
-static int
 oneof(target, list, cnt)
-	char *target, *list[];
+	register char *target, *list[];
 	int cnt;
 {
-	int i;
+	register int i;
 
 	for (i = 0; i < cnt; i++)
 		if (strcmp(target, list[i]) == 0)
@@ -212,27 +194,24 @@ oneof(target, list, cnt)
 /*
  * Check to see if a particular quota is to be enabled.
  */
-static int
 hasquota(fs, type, qfnamep)
-	struct fstab *fs;
+	register struct fstab *fs;
 	int type;
 	char **qfnamep;
 {
-	char *opt;
-	char *cp;
+	register char *opt;
+	char *cp, *index(), *strtok();
 	static char initname, usrname[100], grpname[100];
 	static char buf[BUFSIZ];
 
 	if (!initname) {
-		(void) snprintf(usrname, sizeof(usrname), "%s%s",
-		    qfextension[USRQUOTA], qfname);
-		(void) snprintf(grpname, sizeof(grpname), "%s%s",
-		    qfextension[GRPQUOTA], qfname);
+		sprintf(usrname, "%s%s", qfextension[USRQUOTA], qfname);
+		sprintf(grpname, "%s%s", qfextension[GRPQUOTA], qfname);
 		initname = 1;
 	}
 	strcpy(buf, fs->fs_mntops);
 	for (opt = strtok(buf, ","); opt; opt = strtok(NULL, ",")) {
-		if ((cp = strchr(opt, '=')) != NULL)
+		if (cp = index(opt, '='))
 			*cp++ = '\0';
 		if (type == USRQUOTA && strcmp(opt, usrname) == 0)
 			break;
@@ -245,8 +224,7 @@ hasquota(fs, type, qfnamep)
 		*qfnamep = cp;
 		return (1);
 	}
-	(void) snprintf(buf, sizeof(buf), "%s/%s.%s", fs->fs_file, qfname,
-	    qfextension[type]);
+	(void) sprintf(buf, "%s/%s.%s", fs->fs_file, qfname, qfextension[type]);
 	*qfnamep = buf;
 	return (1);
 }
@@ -254,9 +232,8 @@ hasquota(fs, type, qfnamep)
 /*
  * Verify file system is mounted and not readonly.
  */
-static int
 readonly(fs)
-	struct fstab *fs;
+	register struct fstab *fs;
 {
 	struct statfs fsbuf;
 

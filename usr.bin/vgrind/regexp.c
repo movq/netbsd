@@ -1,9 +1,6 @@
-/*	$NetBSD: regexp.c,v 1.4 1997/10/20 03:01:26 lukem Exp $	*/
-
 /*
- * Copyright (c) 1980, 1993
- *	The Regents of the University of California.  All rights reserved.
- *
+ * Copyright (c) 1980 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -34,33 +31,18 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1980, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
-#endif /* not lint */
-
-#ifndef lint
-#if 0
-static char sccsid[] = "@(#)regexp.c	8.1 (Berkeley) 6/6/93";
-#endif
-__RCSID("$NetBSD: regexp.c,v 1.4 1997/10/20 03:01:26 lukem Exp $");
+static char sccsid[] = "@(#)regexp.c	5.3 (Berkeley) 6/1/90";
 #endif /* not lint */
 
 #include <ctype.h>
-#include <stdlib.h>
-#include <string.h>
-#include "extern.h"
 
+typedef int	boolean;
+#define TRUE	1
 #define FALSE	0
-#define TRUE	!(FALSE)
 #define NIL	0
 
-static void	expconv __P((void));
-
-boolean	 _escaped;	/* true if we are currently _escaped */
-char	*_start;	/* start of string */
-boolean	 l_onecase;	/* true if upper and lower equivalent */
+boolean l_onecase;	/* true if upper and lower equivalent */
 
 #define makelower(c) (isupper((c)) ? tolower((c)) : (c))
 
@@ -69,10 +51,9 @@ boolean	 l_onecase;	/* true if upper and lower equivalent */
  *		if l_onecase is set.
  */
 
-int
 STRNCMP(s1, s2, len)
-	char *s1,*s2;
-	int len;
+	register char *s1,*s2;
+	register int len;
 {
 	if (l_onecase) {
 	    do
@@ -148,14 +129,15 @@ STRNCMP(s1, s2, len)
 #define ALT 8
 #define OPER 16
 
-static char *ccre;	/* pointer to current position in converted exp*/
-static char *ure;	/* pointer current position in unconverted exp */
+char *ure;		/* pointer current position in unconverted exp */
+char *ccre;		/* pointer to current position in converted exp*/
+char *malloc();
 
 char *
 convexp(re)
     char *re;		/* unconverted irregular expression */
 {
-    char *cre;		/* pointer to converted regular expression */
+    register char *cre;		/* pointer to converted regular expression */
 
     /* allocate room for the converted expression */
     if (re == NIL)
@@ -177,13 +159,12 @@ convexp(re)
     return (cre);
 }
 
-static void
 expconv()
 {
-    char *cs;		/* pointer to current symbol in converted exp */
-    char c;		/* character being processed */
-    char *acs;		/* pinter to last alternate */
-    int temp;
+    register char *cs;		/* pointer to current symbol in converted exp */
+    register char c;		/* character being processed */
+    register char *acs;		/* pinter to last alternate */
+    register int temp;
 
     /* let the conversion begin */
     acs = NIL;
@@ -268,7 +249,7 @@ expconv()
 	    OCNT(cs) = ccre - cs;		/* offset to next symbol */
 	    break;
 
-	/* reurn from a recursion */
+	/* return from a recursion */
 	case ')':
 	    if (acs != NIL) {
 		do {
@@ -348,15 +329,18 @@ expconv()
  *	character matched.
  */
 
+boolean _escaped;		/* true if we are currently _escaped */
+char *_start;			/* start of string */
+
 char *
 expmatch (s, re, mstring)
-    char *s;		/* string to check for a match in */
-    char *re;		/* a converted irregular expression */
-    char *mstring;	/* where to put whatever matches a \p */
+    register char *s;		/* string to check for a match in */
+    register char *re;		/* a converted irregular expression */
+    register char *mstring;	/* where to put whatever matches a \p */
 {
-    char *cs;		/* the current symbol */
-    char *ptr,*s1;	/* temporary pointer */
-    boolean matched;	/* a temporary boolean */
+    register char *cs;		/* the current symbol */
+    register char *ptr,*s1;	/* temporary pointer */
+    boolean matched;		/* a temporary boolean */
 
     /* initial conditions */
     if (re == NIL)

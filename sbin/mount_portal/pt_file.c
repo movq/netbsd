@@ -1,8 +1,7 @@
-/*	$NetBSD: pt_file.c,v 1.10 1997/09/21 02:35:43 enami Exp $	*/
-
 /*
  * Copyright (c) 1992, 1993
  *	The Regents of the University of California.  All rights reserved.
+ * All rights reserved.
  *
  * This code is derived from software donated to Berkeley by
  * Jan-Simon Pendry.
@@ -35,19 +34,14 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	from: Id: pt_file.c,v 1.1 1992/05/25 21:43:09 jsp Exp
- *	@(#)pt_file.c	8.3 (Berkeley) 7/3/94
+ *	from: Id: pt_file.c,v 1.1 1992/05/25 21:43:09 jsp Exp jsp
+ *	from: @(#)pt_file.c	8.1 (Berkeley) 6/5/93
+ *	$Id: pt_file.c,v 1.1 1994/01/12 20:02:24 cgd Exp $
  */
-
-#include <sys/cdefs.h>
-#ifndef lint
-__RCSID("$NetBSD: pt_file.c,v 1.10 1997/09/21 02:35:43 enami Exp $");
-#endif /* not lint */
 
 #include <stdio.h>
 #include <unistd.h>
 #include <stdlib.h>
-#include <string.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <sys/types.h>
@@ -56,28 +50,31 @@ __RCSID("$NetBSD: pt_file.c,v 1.10 1997/09/21 02:35:43 enami Exp $");
 
 #include "portald.h"
 
-int
-portal_file(pcr, key, v, so, fdp)
-	struct portal_cred *pcr;
-	char *key;
-	char **v;
-	int so;
-	int *fdp;
+int portal_file(pcr, key, v, so, fdp)
+struct portal_cred *pcr;
+char *key;
+char **v;
+int so;
+int *fdp;
 {
 	int fd;
+	int gid;
 	char pbuf[MAXPATHLEN];
 	int error;
+	int gidset[NGROUPS];
+	int i;
 
 	pbuf[0] = '/';
 	strcpy(pbuf+1, key + (v[1] ? strlen(v[1]) : 0));
 
 #ifdef DEBUG
-	printf("path = %s, uid = %d, gid = %d\n", pbuf, pcr->pcr_uid,
-	    pcr->pcr_gid);
+	printf("path = %s, uid = %d, gid = %d\n", pbuf, pcr->pcr_uid, pcr->pcr_groups[0]);
 #endif
 
-	if (setegid(pcr->pcr_gid) < 0 ||
-	    setgroups(pcr->pcr_ngroups, pcr->pcr_groups) < 0)
+	for (i = 0; i < pcr->pcr_ngroups; i++)
+		gidset[i] = pcr->pcr_groups[i];
+
+	if (setgroups(pcr->pcr_ngroups, gidset) < 0)
 		return (errno);
 
 	if (seteuid(pcr->pcr_uid) < 0)
@@ -91,7 +88,7 @@ portal_file(pcr, key, v, so, fdp)
 
 	if (seteuid((uid_t) 0) < 0) {	/* XXX - should reset gidset too */
 		error = errno;
-		syslog(LOG_ERR, "setcred: %m");
+		syslog(LOG_ERR, "setcred: %s", strerror(error));
 		if (fd >= 0) {
 			(void) close(fd);
 			fd = -1;
@@ -102,8 +99,7 @@ portal_file(pcr, key, v, so, fdp)
 		*fdp = fd;
 
 #ifdef DEBUG
-	fprintf(stderr, "pt_file returns *fdp = %d, error = %d\n", *fdp,
-	    error);
+	fprintf(stderr, "pt_file returns *fdp = %d, error = %d\n", *fdp, error);
 #endif
 
 	return (error);

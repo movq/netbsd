@@ -1,8 +1,6 @@
-/*	$NetBSD: cu.c,v 1.5 1997/02/11 09:24:05 mrg Exp $	*/
-
 /*
- * Copyright (c) 1983, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1983 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -34,10 +32,7 @@
  */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)cu.c	8.1 (Berkeley) 6/6/93";
-#endif
-static char rcsid[] = "$NetBSD: cu.c,v 1.5 1997/02/11 09:24:05 mrg Exp $";
+static char sccsid[] = "@(#)cu.c	5.9 (Berkeley) 6/1/90";
 #endif /* not lint */
 
 #include "tip.h"
@@ -108,7 +103,7 @@ cumain(argc, argv)
 	 * The "cu" host name is used to define the
 	 * attributes of the generic dialer.
 	 */
-	(void)snprintf(sbuf, sizeof sbuf, "cu%d", BR);
+	(void)sprintf(sbuf, "cu%d", BR);
 	if ((i = hunt(sbuf)) == 0) {
 		printf("all ports busy\n");
 		exit(3);
@@ -123,7 +118,7 @@ cumain(argc, argv)
 	user_uid();
 	vinit();
 	setparity("none");
-	setboolean(value(VERBOSE), 0);
+	boolean(value(VERBOSE)) = 0;
 	if (HW)
 		ttysetup(speed(BR));
 	if (connect()) {

@@ -1,5 +1,3 @@
-/*	$NetBSD: bcopy.c,v 1.6 1997/07/13 20:24:12 christos Exp $	*/
-
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
  * All rights reserved.
@@ -36,22 +34,18 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char *sccsid = "@(#)bcopy.c	5.11 (Berkeley) 6/21/91";
-#else
-__RCSID("$NetBSD: bcopy.c,v 1.6 1997/07/13 20:24:12 christos Exp $");
-#endif
+static char sccsid[] = "@(#)bcopy.c	5.11 (Berkeley) 6/21/91";
 #endif /* LIBC_SCCS and not lint */
 
+#include <sys/cdefs.h>
 #include <string.h>
 
 /*
  * sizeof(word) MUST BE A POWER OF TWO
  * SO THAT wmask BELOW IS ALL ONES
  */
-typedef	long word;		/* "word" used for optimal copy speed */
+typedef	int word;		/* "word" used for optimal copy speed */
 
 #define	wsize	sizeof(word)
 #define	wmask	(wsize - 1)
@@ -94,13 +88,13 @@ bcopy(src0, dst0, length)
 		/*
 		 * Copy forward.
 		 */
-		t = (long)src;	/* only need low bits */
-		if ((t | (long)dst) & wmask) {
+		t = (int)src;	/* only need low bits */
+		if ((t | (int)dst) & wmask) {
 			/*
 			 * Try to align operands.  This cannot be done
 			 * unless the low bits match.
 			 */
-			if ((t ^ (long)dst) & wmask || length < wsize)
+			if ((t ^ (int)dst) & wmask || length < wsize)
 				t = length;
 			else
 				t = wsize - (t & wmask);
@@ -122,9 +116,9 @@ bcopy(src0, dst0, length)
 		 */
 		src += length;
 		dst += length;
-		t = (long)src;
-		if ((t | (long)dst) & wmask) {
-			if ((t ^ (long)dst) & wmask || length <= wsize)
+		t = (int)src;
+		if ((t | (int)dst) & wmask) {
+			if ((t ^ (int)dst) & wmask || length <= wsize)
 				t = length;
 			else
 				t &= wmask;

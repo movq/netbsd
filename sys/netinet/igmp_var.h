@@ -1,9 +1,7 @@
-/*	$NetBSD: igmp_var.h,v 1.9 1996/02/13 23:41:31 christos Exp $	*/
-
 /*
  * Copyright (c) 1988 Stephen Deering.
- * Copyright (c) 1992, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1992 Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Stephen Deering of Stanford University.
@@ -36,7 +34,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)igmp_var.h	8.1 (Berkeley) 7/19/93
+ *	@(#)igmp_var.h	7.1 (Berkeley) 7/8/92
  */
 
 /*
@@ -44,25 +42,23 @@
  * implementation-specific definitions.
  *
  * Written by Steve Deering, Stanford, May 1988.
- * Modified by Rosen Sharma, Stanford, Aug 1994.
- * Modified by Bill Fenner, Xerox PARC, Feb 1995.
  *
- * MULTICAST 1.3
+ * MULTICAST 1.1
  */
 
 struct igmpstat {
-	u_long	igps_rcv_total;		/* total IGMP messages received */
-	u_long	igps_rcv_tooshort;	/* received with too few bytes */
-	u_long	igps_rcv_badsum;	/* received with bad checksum */
-	u_long	igps_rcv_queries;	/* received membership queries */
-	u_long	igps_rcv_badqueries;	/* received invalid queries */
-	u_long	igps_rcv_reports;	/* received membership reports */
-	u_long	igps_rcv_badreports;	/* received invalid reports */
-	u_long	igps_rcv_ourreports;	/* received reports for our groups */
-	u_long	igps_snd_reports;	/* sent membership reports */
+	u_int	igps_rcv_total;		/* total IGMP messages received */
+	u_int	igps_rcv_tooshort;	/* received with too few bytes */
+	u_int	igps_rcv_badsum;	/* received with bad checksum */
+	u_int	igps_rcv_queries;	/* received membership queries */
+	u_int	igps_rcv_badqueries;	/* received invalid queries */
+	u_int	igps_rcv_reports;	/* received membership reports */
+	u_int	igps_rcv_badreports;	/* received invalid reports */
+	u_int	igps_rcv_ourreports;	/* received reports for our groups */
+	u_int	igps_snd_reports;	/* sent membership reports */
 };
 
-#ifdef _KERNEL
+#ifdef KERNEL
 struct igmpstat igmpstat;
 
 /*
@@ -70,12 +66,15 @@ struct igmpstat igmpstat;
  * DELAY * countdown frequency).  We assume that the routine random()
  * is defined somewhere (and that it returns a positive number).
  */
-#define	IGMP_RANDOM_DELAY(X)	(random() % (X) + 1)
+#define IGMP_RANDOM_DELAY(multiaddr)					\
+	/* struct in_addr multiaddr; */					\
+	(random() % (IGMP_MAX_HOST_REPORT_DELAY * PR_FASTHZ) + 1)
 
-void	igmp_init __P((void));
-void	igmp_input __P((struct mbuf *, ...));
+
+void	igmp_init __P(());
+void	igmp_input __P((struct mbuf *, int));
 void	igmp_joingroup __P((struct in_multi *));
 void	igmp_leavegroup __P((struct in_multi *));
-void	igmp_fasttimo __P((void));
-void	igmp_slowtimo __P((void));
+void	igmp_fasttimo __P(());
 #endif
+

@@ -1,5 +1,3 @@
-/*	$NetBSD: null.h,v 1.9 1997/10/06 09:32:31 thorpej Exp $	*/
-
 /*
  * Copyright (c) 1992, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -36,7 +34,8 @@
  * SUCH DAMAGE.
  *
  *	from: Id: lofs.h,v 1.8 1992/05/30 10:05:43 jsp Exp
- *	@(#)null.h	8.2 (Berkeley) 1/21/94
+ *	from: @(#)null.h	8.2 (Berkeley) 1/21/94
+ *	$Id: null.h,v 1.1 1994/06/08 11:33:23 mycroft Exp $
  */
 
 struct null_args {
@@ -48,34 +47,18 @@ struct null_mount {
 	struct vnode	*nullm_rootvp;	/* Reference to root null_node */
 };
 
-#ifdef _KERNEL
+#ifdef KERNEL
 /*
  * A cache of vnode references
  */
 struct null_node {
-	LIST_ENTRY(null_node)	null_hash;	/* Hash list */
+	struct null_node	*null_forw;	/* Hash chain */
+	struct null_node	*null_back;
 	struct vnode	        *null_lowervp;	/* VREFed once */
 	struct vnode		*null_vnode;	/* Back pointer */
-	unsigned int		null_flags;	/* locking, etc. */
-#ifdef DIAGNOSTIC
-	pid_t			null_pid;	/* who's locking it? */
-	caddr_t			null_lockpc; /* their return addr */
-	caddr_t			null_lockpc2; /* their return addr^2 */
-#endif
 };
 
-#if defined(__alpha__) || !defined(__GNUC__) || __GNUC__ < 2 || \
-	(__GNUC__ == 2 && __GNUC_MINOR__ < 5)
-#define RETURN_PC(frameno) (void *)0
-#else
-#define RETURN_PC(frameno) __builtin_return_address(frameno)
-#endif
-
-#define NULL_WANTED	0x01
-#define NULL_LOCKED	0x02
-#define NULL_LLOCK	0x04
-
-extern int null_node_create __P((struct mount *mp, struct vnode *target, struct vnode **vpp, int lockit));
+extern int null_node_create __P((struct mount *mp, struct vnode *target, struct vnode **vpp));
 
 #define	MOUNTTONULLMOUNT(mp) ((struct null_mount *)((mp)->mnt_data))
 #define	VTONULL(vp) ((struct null_node *)(vp)->v_data)
@@ -87,9 +70,6 @@ extern struct vnode *null_checkvp __P((struct vnode *vp, char *fil, int lno));
 #define	NULLVPTOLOWERVP(vp) (VTONULL(vp)->null_lowervp)
 #endif
 
-extern int (**null_vnodeop_p) __P((void *));
-extern struct vfsops nullfs_vfsops;
-
-void nullfs_init __P((void));
-
-#endif /* _KERNEL */
+extern int (**null_vnodeop_p)();
+extern struct vfsops null_vfsops;
+#endif /* KERNEL */

@@ -1,5 +1,3 @@
-/*	$NetBSD: ttyent.h,v 1.6 1997/10/20 08:04:23 scottr Exp $	*/
-
 /*
  * Copyright (c) 1989 The Regents of the University of California.
  * All rights reserved.
@@ -44,11 +42,6 @@
 #define	_TTYS_ON	"on"
 #define	_TTYS_SECURE	"secure"
 #define	_TTYS_WINDOW	"window"
-#define	_TTYS_LOCAL	"local"
-#define	_TTYS_RTSCTS	"rtscts"
-#define        _TTYS_DTRCTS    "dtrcts"
-#define	_TTYS_SOFTCAR	"softcar"
-#define	_TTYS_MDMBUF	"mdmbuf"
 
 struct ttyent {
 	char	*ty_name;	/* terminal device name */
@@ -56,11 +49,6 @@ struct ttyent {
 	char	*ty_type;	/* terminal type for termcap */
 #define	TTY_ON		0x01	/* enable logins (start ty_getty program) */
 #define	TTY_SECURE	0x02	/* allow uid of 0 to login */
-#define	TTY_LOCAL	0x04	/* set 'CLOCAL' on open (dev. specific) */
-#define	TTY_RTSCTS	0x08	/* set 'CRTSCTS' on open (dev. specific) */
-#define	TTY_SOFTCAR	0x10	/* ignore hardware carrier (dev. spec.) */
-#define	TTY_MDMBUF	0x20	/* set 'MDMBUF' on open (dev. specific) */
-#define        TTY_DTRCTS      0x40    /* set 'CDTRCTS' on open (dev. specific) */
 	int	ty_status;	/* status flags */
 	char 	*ty_window;	/* command to start up window manager */
 	char	*ty_comment;	/* comment field */

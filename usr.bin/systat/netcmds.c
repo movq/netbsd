@@ -1,5 +1,3 @@
-/*	$NetBSD: netcmds.c,v 1.6 1997/10/19 23:36:28 lukem Exp $	*/
-
 /*-
  * Copyright (c) 1980, 1992, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -33,12 +31,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
 static char sccsid[] = "@(#)netcmds.c	8.1 (Berkeley) 6/6/93";
-#endif
-__RCSID("$NetBSD: netcmds.c,v 1.6 1997/10/19 23:36:28 lukem Exp $");
 #endif /* not lint */
 
 /*
@@ -55,8 +49,6 @@ __RCSID("$NetBSD: netcmds.c,v 1.6 1997/10/19 23:36:28 lukem Exp $");
 #include <netinet/in_systm.h>
 #include <netinet/ip.h>
 #include <netinet/in_pcb.h>
-
-#include <arpa/inet.h>
 
 #include <netdb.h>
 #include <stdlib.h>
@@ -75,7 +67,7 @@ static	struct hitem {
 int nports, nhosts, protos;
 
 static void changeitems __P((char *, int));
-static void selectproto __P((char *));
+static int selectproto __P((char *));
 static void showprotos __P((void));
 static int selectport __P((long, int));
 static void showports __P((void));
@@ -128,12 +120,13 @@ changeitems(args, onoff)
 	char *args;
 	int onoff;
 {
-	char *cp;
+	register char *cp;
 	struct servent *sp;
 	struct hostent *hp;
 	struct in_addr in;
+	char *index();
 
-	cp = strchr(args, '\n');
+	cp = index(args, '\n');
 	if (cp)
 		*cp = '\0';
 	for (;;args = cp) {
@@ -152,29 +145,32 @@ changeitems(args, onoff)
 			selectport(sp->s_port, onoff);
 			continue;
 		}
-		if (inet_aton(args, &in) == 0) {
-			hp = gethostbyname(args);
-			if (hp == 0) {
+		hp = gethostbyname(args);
+		if (hp == 0) {
+			in.s_addr = inet_addr(args);
+			if (in.s_addr == -1) {
 				error("%s: unknown host or port", args);
 				continue;
 			}
-			memcpy(&in, hp->h_addr, hp->h_length);
-		}
+		} else
+			in = *(struct in_addr *)hp->h_addr;
 		selecthost(&in, onoff);
 	}
 }
 
-static void
+static int
 selectproto(proto)
 	char *proto;
 {
+	int new = protos;
 
 	if (proto == 0 || streq(proto, "all"))
-		protos = TCP|UDP;
+		new = TCP|UDP;
 	else if (streq(proto, "tcp"))
-		protos = TCP;
+		new = TCP;
 	else if (streq(proto, "udp"))
-		protos = UDP;
+		new = UDP;
+	return (new != protos, protos = new);
 }
 
 static void
@@ -199,7 +195,7 @@ selectport(port, onoff)
 	long port;
 	int onoff;
 {
-	struct pitem *p;
+	register struct pitem *p;
 
 	if (port == -1) {
 		if (ports == 0)
@@ -225,9 +221,9 @@ selectport(port, onoff)
 
 int
 checkport(inp)
-	struct inpcb *inp;
+	register struct inpcb *inp;
 {
-	struct pitem *p;
+	register struct pitem *p;
 
 	if (ports)
 	for (p = ports; p < ports+nports; p++)
@@ -239,12 +235,12 @@ checkport(inp)
 static void
 showports()
 {
-	struct pitem *p;
+	register struct pitem *p;
 	struct servent *sp;
 
 	for (p = ports; p < ports+nports; p++) {
 		sp = getservbyport(p->port,
-		    protos == (TCP|UDP) ? 0 : protos == TCP ? "tcp" : "udp");
+		    protos == TCP|UDP ? 0 : protos == TCP ? "tcp" : "udp");
 		if (!p->onoff)
 			addch('!');
 		if (sp)
@@ -259,7 +255,7 @@ selecthost(in, onoff)
 	struct in_addr *in;
 	int onoff;
 {
-	struct hitem *p;
+	register struct hitem *p;
 
 	if (in == 0) {
 		if (hosts == 0)
@@ -285,9 +281,9 @@ selecthost(in, onoff)
 
 int
 checkhost(inp)
-	struct inpcb *inp;
+	register struct inpcb *inp;
 {
-	struct hitem *p;
+	register struct hitem *p;
 
 	if (hosts)
 	for (p = hosts; p < hosts+nhosts; p++)
@@ -300,13 +296,13 @@ checkhost(inp)
 static void
 showhosts()
 {
-	struct hitem *p;
+	register struct hitem *p;
 	struct hostent *hp;
 
 	for (p = hosts; p < hosts+nhosts; p++) {
 		hp = gethostbyaddr((char *)&p->addr, sizeof (p->addr), AF_INET);
 		if (!p->onoff)
 			addch('!');
-		printw("%s ", hp ? hp->h_name : inet_ntoa(p->addr));
+		printw("%s ", hp ? hp->h_name : (char *)inet_ntoa(p->addr));
 	}
 }

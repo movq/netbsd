@@ -1,8 +1,6 @@
-/*	$NetBSD: hangman.h,v 1.6 1997/10/11 01:16:34 lukem Exp $	*/
-
 /*
- * Copyright (c) 1983, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1983 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,63 +30,52 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)hangman.h	8.1 (Berkeley) 5/31/93
+ *	@(#)hangman.h	5.5 (Berkeley) 2/28/91
  */
 
-#include	<sys/types.h>
-#include	<sys/stat.h>
-#include	<ctype.h>
-#include	<curses.h>
-#include	<signal.h>
-#include	<stdlib.h>
-#include	<string.h>
-#include	<unistd.h>
-#include	"pathnames.h"
+# include	<curses.h>
+# include	<sys/types.h>
+# include	<sys/stat.h>
+# include	<ctype.h>
+# include	<signal.h>
+# include	"pathnames.h"
 
-#define	MINLEN	6
-#define	MAXERRS	7
+# define	MINLEN	6
+# define	MAXERRS	7
 
-#define	MESGY	12
-#define	MESGX	0
-#define	PROMPTY	11
-#define	PROMPTX	0
-#define	KNOWNY	10
-#define	KNOWNX	1
-#define	NUMBERY	4
-#define	NUMBERX	(COLS - 1 - 26)
-#define	AVGY	5
-#define	AVGX	(COLS - 1 - 26)
-#define	GUESSY	2
-#define	GUESSX	(COLS - 1 - 26)
+# define	MESGY	12
+# define	MESGX	0
+# define	PROMPTY	11
+# define	PROMPTX	0
+# define	KNOWNY	10
+# define	KNOWNX	1
+# define	NUMBERY	4
+# define	NUMBERX	(COLS - 1 - 26)
+# define	AVGY	5
+# define	AVGX	(COLS - 1 - 26)
+# define	GUESSY	2
+# define	GUESSX	(COLS - 1 - 26)
 
 
 typedef struct {
-	short   y, x;
-	char    ch;
-}       ERR_POS;
+	short	y, x;
+	char	ch;
+} ERR_POS;
 
-extern bool Guessed[];
+extern bool	Guessed[];
 
-extern char Word[], Known[], *Noose_pict[];
+extern char	Word[], Known[], *Noose_pict[];
 
-extern int Errors, Wordnum;
+extern int	Errors, Wordnum;
 
-extern double Average;
+extern double	Average;
 
-extern ERR_POS Err_pos[];
+extern ERR_POS	Err_pos[];
 
-extern FILE *Dict;
+extern FILE	*Dict;
 
-extern off_t Dict_size;
+extern off_t	Dict_size;
 
-void    die __P((int));
-void    endgame __P((void));
-int	main __P((int, char **));
-void	getguess __P((void));
-void	getword __P((void));
-void	playgame __P((void));
-void	prdata __P((void));
-void	prman __P((void));
-void	prword __P((void));
-int	readch __P((void));
-void	setup __P((void));
+void	die();
+
+off_t	abs();

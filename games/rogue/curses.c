@@ -1,8 +1,6 @@
-/*	$NetBSD: curses.c,v 1.4 1997/10/12 11:45:01 lukem Exp $	*/
-
 /*
- * Copyright (c) 1988, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1988 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Timothy C. Stoehr.
@@ -36,13 +34,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)curses.c	8.1 (Berkeley) 5/31/93";
-#else
-__RCSID("$NetBSD: curses.c,v 1.4 1997/10/12 11:45:01 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)curses.c	5.3 (Berkeley) 6/1/90";
 #endif /* not lint */
 
 /*
@@ -173,7 +166,7 @@ char *str;
 }
 
 addch(ch)
-	int ch;
+register int ch;
 {
 	short row, col;
 
@@ -198,7 +191,7 @@ int ch;
 
 refresh()
 {
-	int i, j, line;
+	register i, j, line;
 	short old_row, old_col, first_row;
 
 	if (screen_dirty) {
@@ -308,7 +301,7 @@ nonl()
 
 clear_buffers()
 {
-	int i, j;
+	register i, j;
 
 	screen_dirty = 0;
 
@@ -322,7 +315,7 @@ clear_buffers()
 }
 
 put_char_at(row, col, ch)
-	int row, col, ch;
+register row, col, ch;
 {
 	put_cursor(row, col);
 	put_st_char(ch);
@@ -331,9 +324,9 @@ put_char_at(row, col, ch)
 }
 
 put_cursor(row, col)
-	int  row, col;
+register row, col;
 {
-	int i, rdif, cdif;
+	register i, rdif, cdif;
 	short ch, t;
 
 	rdif = (row > cur_row) ? row - cur_row : cur_row - row;
@@ -385,7 +378,7 @@ put_cursor(row, col)
 }
 
 put_st_char(ch)
-	int ch;
+register ch;
 {
 	if ((ch & ST_MASK) && (!term_stand_out)) {
 		ch &= ~ST_MASK;
@@ -698,4 +691,4 @@ tc_cmget()
 	cm_end[j] = 0;
 }
 
-#endif	/* CURSES */
+#endif

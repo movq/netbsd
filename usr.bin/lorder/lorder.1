@@ -1,7 +1,5 @@
-.\"	$NetBSD: lorder.1,v 1.6 1997/10/19 04:21:49 lukem Exp $
-.\"
-.\" Copyright (c) 1990, 1993
-.\"	The Regents of the University of California.  All rights reserved.
+.\" Copyright (c) 1990 The Regents of the University of California.
+.\" All rights reserved.
 .\"
 .\" Redistribution and use in source and binary forms, with or without
 .\" modification, are permitted provided that the following conditions
@@ -31,25 +29,25 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\"     @(#)lorder.1	8.2 (Berkeley) 4/28/95
+.\"     @(#)lorder.1	6.7 (Berkeley) 6/2/91
 .\"
-.Dd April 28, 1995
+.Dd June 2, 1991
 .Dt LORDER 1
 .Os
 .Sh NAME
 .Nm lorder
 .Nd list dependencies for object files
 .Sh SYNOPSIS
-.Nm
+.Nm lorder
 .Ar
 .Sh DESCRIPTION
 The
-.Nm
+.Nm lorder
 utility uses
 .Xr nm 1
 to determine interdependencies in the list of object files
 specified on the command line.
-.Nm
+.Nm Lorder
 outputs a list of file names where the first file contains a symbol
 which is defined by the second file.
 .Pp
@@ -60,7 +58,7 @@ object modules so that all references may be resolved in a single
 pass of the loader.
 .Sh EXAMPLES
 .Bd -literal -offset indent
-ar cr library.a `lorder ${OBJS} | tsort`
+ar cr library.a `lorder ${OBJS}  tsort`
 .Ed
 .Sh SEE ALSO
 .Xr ar 1 ,
@@ -70,6 +68,6 @@ ar cr library.a `lorder ${OBJS} | tsort`
 .Xr tsort 1
 .Sh HISTORY
 An
-.Nm
+.Nm lorder
 utility appeared in
 .At v7 .

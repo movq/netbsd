@@ -1,7 +1,5 @@
-.\"	$NetBSD: tset.1,v 1.6 1997/10/14 02:08:02 lukem Exp $
-.\"
-.\" Copyright (c) 1985, 1990, 1993
-.\"	The Regents of the University of California.  All rights reserved.
+.\" Copyright (c) 1985, 1990 The Regents of the University of California.
+.\" All rights reserved.
 .\"
 .\" Redistribution and use in source and binary forms, with or without
 .\" modification, are permitted provided that the following conditions
@@ -31,17 +29,17 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\"	@(#)tset.1	8.1 (Berkeley) 6/9/93
+.\"	@(#)tset.1	6.10 (Berkeley) 12/24/91
 .\"
-.Dd June 9, 1993
+.Dd December 24, 1991
 .Dt TSET 1
 .Os BSD 4
 .Sh NAME
 .Nm tset
 .Nd terminal initialization
 .Sh SYNOPSIS
-.Nm
-.Op Fl IQrSs
+.Nm tset
+.Op Fl IQrs
 .Op Fl
 .Op Fl e Ar ch
 .Op Fl i Ar ch
@@ -50,7 +48,7 @@
 .Op Ar terminal
 .br
 .Nm reset
-.Op Fl IQrSs
+.Op Fl IQrs
 .Op Fl
 .Op Fl e Ar ch
 .Op Fl i Ar ch
@@ -58,9 +56,9 @@
 .Op Fl m Ar mapping
 .Op Ar terminal
 .Sh DESCRIPTION
-.Nm
+.Nm Tset
 initializes terminals.
-.Nm
+.Nm Tset
 first determines the type of terminal that you are using.
 This determination is done as follows, using the first terminal type found.
 .sp
@@ -78,8 +76,7 @@ The terminal type associated with the standard error output device in the
 .Pa /etc/ttys
 file.
 .It
-The default terminal type,
-.Dq unknown .
+The default terminal type, ``unknown''.
 .El
 .Pp
 If the terminal type was not specified on the command-line, the
@@ -103,7 +100,7 @@ standard error output.
 .Pp
 When invoked as
 .Nm reset ,
-.Nm
+.Nm tset
 sets cooked and echo modes, turns off cbreak and raw modes, turns on
 newline translation and resets any unset special characters to their
 default values before doing the terminal initialization described above.
@@ -133,20 +130,16 @@ Set the line kill character to
 .It Fl m
 Specify a mapping from a port type to a terminal.
 See below for more information.
-.It Fl Q
-Don't display any values for the erase, interrupt and line kill characters.
 .It Fl r
 Print the terminal type to the standard error output.
-.It Fl S
-Print the terminal type and the termcap entry to the standard output.
-See the section below on setting the environment for details.
 .It Fl s
 Print the sequence of shell commands to initialize the environment variables
 .Ev TERM
 and
 .Ev TERMCAP
 to the standard output.
-See the section below on setting the environment for details.
+.It Fl Q
+Don't display any values for the erase, interrupt and line kill characters.
 .El
 .Pp
 The arguments for the
@@ -161,46 +154,22 @@ notation, i.e. control-h may be specified as
 or
 .Dq Li ^h .
 .Sh SETTING THE ENVIRONMENT
-It is often desirable to enter the terminal type and information about
-the terminal's capabilities into the shell's environment.
-This is done using the
-.Fl S
-and
+It is often desirable to set the terminal type and information about the
+terminal's capabilities in the shell's environment.
+This is done with the
 .Fl s
-options.
-.Pp
-When the
-.Fl S
-option is specified, the terminal type and the termcap entry are written
-to the standard output, separated by a space and without a terminating
-newline.
-This can be assigned to an array by
-.Xr csh 1
-and
-.Xr ksh 1
-users and then used like any other shell array.
-.Pp
-When the
-.Fl s
-option is specified, the commands to enter the information into the
-shell's environment are written to the standard output.
+option; when this option is specified, the commands to enter the information
+into the shell's environment are output to the standard output.
 If the
 .Ev SHELL
-environmental variable ends in
-.Dq csh ,
-the commands are for the
+environmental variable ends in ``csh'', the output commands are for the
 .Xr csh 1 ,
 otherwise, they are for
 .Xr sh 1 .
-Note, the
-.Xr csh 1
-commands
-.Ic set
-and
-.Ic unset
-the shell variable
-.Dq noglob ,
-leaving it unset.
+Note, the output commands for the
+.Nm csh
+set and unset the shell variable
+.Dq noglob .
 The following line in the
 .Pa .login
 or
@@ -208,20 +177,6 @@ or
 files will initialize the environment correctly:
 .Bd -literal -offset indent
 eval \`tset -s options ... \`
-.Ed
-.Pp
-To demonstrate a simple use of the
-.Fl S
-option, the following lines in the
-.Pa .login
-file have an equivalent effect:
-.Bd -literal -offset indent
-set noglob
-set term=(`tset -S options ...`)
-setenv TERM $term[1]
-setenv TERMCAP "$term[2]"
-unset term
-unset noglob
 .Ed
 .Sh TERMINAL TYPE MAPPING
 When the terminal is not hardwired into the system (or the current system
@@ -235,7 +190,7 @@ environmental variable is often something generic like
 or
 .Dq unknown .
 When
-.Nm
+.Nm tset
 is used in a startup script
 .Pf ( Pa .profile
 for
@@ -252,7 +207,7 @@ option is to
 .Dq map
 from some set of conditions to a terminal type, that is, to
 tell
-.Nm
+.Nm tset
 ``If I'm on this port at a particular speed, guess that I'm on that
 kind of terminal''.
 .Pp
@@ -289,7 +244,7 @@ If the port type and baud rate match the mapping, the terminal type specified
 in the mapping replaces the current type.
 If more than one mapping is specified, the first applicable mapping is used.
 .Pp
-For example, consider the following mapping:
+For example, consider the following:
 .Dq Li dialup>9600:vt100 .
 The port type is
 .Dq Li dialup ,
@@ -324,12 +279,12 @@ option argument.
 Also, to avoid problems with metacharacters, it is suggested that the entire
 .Fl m
 option argument be placed within single quote characters, and that
-.Xr csh 1
+.Nm csh
 users insert a backslash character (``\e'') before any exclamation
 marks (``!'').
 .Sh ENVIRONMENT
 The
-.Nm
+.Nm tset
 command utilizes the
 .Ev SHELL
 and
@@ -352,7 +307,7 @@ terminal capability database
 .Xr environ 7
 .Sh HISTORY
 The
-.Nm
+.Nm tset
 command appeared in
 .Bx 3.0 .
 .Sh COMPATIBILITY
@@ -360,11 +315,12 @@ The
 .Fl A ,
 .Fl E ,
 .Fl h ,
+.Fl S ,
 .Fl u
 and
 .Fl v
 options have been deleted from the
-.Nm
+.Nm tset
 utility.
 None of them were documented in 4.3BSD and all are of limited utility at
 best.
@@ -391,7 +347,7 @@ options without arguments, although it is strongly recommended that such
 usage be fixed to explicitly specify the character.
 .Pp
 Executing
-.Nm
+.Nm tset
 as
 .Nm reset
 no longer implies the
@@ -402,11 +358,11 @@ Also, the interaction between the
 option and the
 .Ar terminal
 argument in some historic implementations of
-.Nm
+.Nm tset
 has been removed.
 .Pp
 Finally, the
-.Nm
+.Nm tset
 implementation has been completely redone (as part of the addition to the
 system of a
 .St -p1003.1-88

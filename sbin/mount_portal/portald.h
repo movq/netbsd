@@ -1,8 +1,7 @@
-/*	$NetBSD: portald.h,v 1.4 1995/04/23 10:33:23 cgd Exp $	*/
-
 /*
  * Copyright (c) 1992, 1993
  *	The Regents of the University of California.  All rights reserved.
+ * All rights reserved.
  *
  * This code is derived from software donated to Berkeley by
  * Jan-Simon Pendry.
@@ -35,8 +34,9 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	from: Id: portald.h,v 1.1 1992/05/25 21:43:09 jsp Exp
- *	@(#)portald.h	8.1 (Berkeley) 6/5/93
+ *	from: Id: portald.h,v 1.1 1992/05/25 21:43:09 jsp Exp jsp
+ *	from: @(#)portald.h	8.1 (Berkeley) 6/5/93
+ *	$Id: portald.h,v 1.1 1994/01/12 20:02:06 cgd Exp $
  */
 
 #include <sys/cdefs.h>

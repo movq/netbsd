@@ -1,8 +1,7 @@
 #!/bin/sh -
-#	$NetBSD: clear.sh,v 1.2 1994/12/07 08:49:09 jtc Exp $
 #
-# Copyright (c) 1989, 1993
-#	The Regents of the University of California.  All rights reserved.
+# Copyright (c) 1989 The Regents of the University of California.
+# All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions
@@ -32,7 +31,7 @@
 # OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 # SUCH DAMAGE.
 #
-#	@(#)clear.sh	8.1 (Berkeley) 6/6/93
+#	@(#)clear.sh	5.2 (Berkeley) 4/18/91
 #
 
 exec tput clear

@@ -1,7 +1,5 @@
-.\"	$NetBSD: quotacheck.8,v 1.6 1997/10/17 12:36:36 lukem Exp $
-.\"
-.\" Copyright (c) 1983, 1990, 1991, 1993
-.\"	The Regents of the University of California.  All rights reserved.
+.\" Copyright (c) 1983, 1990, 1991 Regents of the University of California.
+.\" All rights reserved.
 .\"
 .\" This code is derived from software contributed to Berkeley by
 .\" Robert Elz at The University of Melbourne.
@@ -34,27 +32,27 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\"     @(#)quotacheck.8	8.1 (Berkeley) 6/5/93
+.\"     @(#)quotacheck.8	6.7 (Berkeley) 3/16/91
 .\"
-.Dd June 5, 1993
+.Dd March 16, 1991
 .Dt QUOTACHECK 8
 .Os BSD 4.2
 .Sh NAME
 .Nm quotacheck
 .Nd filesystem quota consistency checker
 .Sh SYNOPSIS
-.Nm
+.Nm quotacheck
 .Op Fl g
 .Op Fl u
 .Op Fl v
 .Ar filesystem Ar ...
-.Nm ""
+.Nm quotacheck
 .Op Fl g
 .Op Fl u
 .Op Fl v
 .Fl a
 .Sh DESCRIPTION
-.Nm
+.Nm Quotacheck
 examines each filesystem,
 builds a table of current disk usage,
 and compares this table against that recorded
@@ -71,7 +69,7 @@ Available options:
 If the
 .Fl a
 flag is supplied in place of any filesystem names,
-.Nm
+.Nm quotacheck
 will check all the filesystems indicated in
 .Pa /etc/fstab
 to be read-write with disk quotas.
@@ -87,7 +85,7 @@ Only user quotas listed in
 .Pa /etc/fstab
 are to be checked.
 .It Fl v
-.Nm
+.Nm quotacheck
 reports discrepancies between the
 calculated and recorded disk quotas.
 .El
@@ -104,10 +102,10 @@ in an identical fashion to
 .Xr fsck 8 .
 .Pp
 Normally
-.Nm
+.Nm quotacheck
 operates silently.
 .Pp
-.Nm
+.Nm Quotacheck
 expects each filesystem to be checked to have a
 quota files named
 .Pa quota.user
@@ -117,10 +115,10 @@ which are located at the root of the associated file system.
 These defaults may be overridden in
 .Pa /etc/fstab .
 If a file is not present, 
-.Nm
+.Nm quotacheck
 will create it.
 .Pp
-.Nm
+.Nm Quotacheck
 is normally run at boot time from the
 .Pa /etc/rc.local
 file, see
@@ -128,12 +126,12 @@ file, see
 before enabling disk quotas with
 .Xr quotaon 8 .
 .Pp
-.Nm
+.Nm Quotacheck
 accesses the raw device in calculating the actual
 disk usage for each user.
 Thus, the filesystems
 checked should be quiescent while
-.Nm
+.Nm quotacheck
 is running.
 .Sh FILES
 .Bl -tag -width quota.group -compact

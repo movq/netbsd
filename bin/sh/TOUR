@@ -1,13 +1,4 @@
-#	$NetBSD: TOUR,v 1.8 1996/10/16 14:24:56 christos Exp $
-#	@(#)TOUR	8.1 (Berkeley) 5/31/93
-
-NOTE -- This is the original TOUR paper distributed with ash and
-does not represent the current state of the shell.  It is provided anyway
-since it provides helpful information for how the shell is structured,
-but be warned that things have changed -- the current shell is
-still under development.
-
-================================================================
+#	@(#)TOUR	5.1 (Berkeley) 3/7/91
 
                        A Tour through Ash
 
@@ -29,7 +20,7 @@ programs is:
         mknodes         nodetypes           nodes.h nodes.c
         mksignames          -               signames.h signames.c
         mksyntax            -               syntax.h syntax.c
-        mktokens            -               token.h
+        mktokens            -               token.def
         bltin/mkexpr    unary_op binary_op  operators.h operators.c
 
 There are undoubtedly too many of these.  Mkinit searches all the

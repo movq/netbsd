@@ -1,8 +1,6 @@
-/*	$NetBSD: extern.h,v 1.6 1997/09/15 08:04:30 lukem Exp $	*/
-
 /*-
- * Copyright (c) 1992, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1992 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,25 +30,25 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)extern.h	8.2 (Berkeley) 1/7/94
+ *	from: @(#)extern.h	5.2 (Berkeley) 12/2/92
+ *	$Id: extern.h,v 1.1 1993/12/22 10:31:45 cgd Exp $
  */
 
 struct entry	*addentry __P((char *, ino_t, int));
 long		 addfile __P((char *, ino_t, int));
-int		 addwhiteout __P((char *));
 void		 badentry __P((struct entry *, char *));
 void	 	 canon __P((char *, char *));
 void		 checkrestore __P((void));
-void 		 cleanup __P((void));
 void		 closemt __P((void));
 void		 createfiles __P((void));
 void		 createleaves __P((char *));
 void		 createlinks __P((void));
 long		 deletefile __P((char *, ino_t, int));
 void		 deleteino __P((ino_t));
-void		 delwhiteout __P((struct entry *));
-ino_t		 dirlookup __P((const char *));
-void		 dumpsymtable __P((char *, int32_t));
+ino_t		 dirlookup __P((char *));
+void	 	 done __P((int));
+void		 dumpsymtable __P((char *, long));
+void		 err __P((const char *, ...));
 void	 	 extractdirs __P((int));
 int		 extractfile __P((char *));
 void		 findunreflinks __P((void));
@@ -60,7 +58,7 @@ void		 freename __P((char *));
 int	 	 genliteraldir __P((char *, ino_t));
 char		*gentempname __P((struct entry *));
 void		 getfile __P((void (*)(char *, long), void (*)(char *, long)));
-void		 getvol __P((int));
+void		 getvol __P((long));
 void		 initsymtable __P((char *));
 int	 	 inodetype __P((ino_t));
 int		 linkit __P((char *, char *, int));
@@ -86,7 +84,7 @@ void		 removeoldleaves __P((void));
 void		 removeoldnodes __P((void));
 void		 renameit __P((char *, char *));
 int		 reply __P((char *));
-RST_DIR		*rst_opendir __P((const char *));
+RST_DIR		*rst_opendir __P((char *));
 struct direct	*rst_readdir __P((RST_DIR *));
 void		 rst_closedir __P((RST_DIR *dirp));
 void	 	 runcmdshell __P((void));
@@ -102,11 +100,3 @@ void	 	 treescan __P((char *, ino_t, long (*)(char *, ino_t, int)));
 ino_t		 upperbnd __P((ino_t));
 long		 verifyfile __P((char *, ino_t, int));
 void		 xtrnull __P((char *, long));
-
-/* From ../dump/dumprmt.c */
-void		rmtclose __P((void));
-int		rmthost __P((char *));
-int		rmtioctl __P((int, int));
-int		rmtopen __P((char *, int));
-int		rmtread __P((char *, int));
-int		rmtseek __P((int, int));

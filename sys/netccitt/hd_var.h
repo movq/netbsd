@@ -1,9 +1,7 @@
-/*	$NetBSD: hd_var.h,v 1.8 1997/06/24 02:26:02 thorpej Exp $	*/
-
 /*
  * Copyright (c) University of British Columbia, 1984
- * Copyright (c) 1990, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1990 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * the Laboratory for Computation Vision and the Computer Science Department
@@ -37,7 +35,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)hd_var.h	8.1 (Berkeley) 6/10/93
+ *	@(#)hd_var.h	7.4 (Berkeley) 5/29/91
  */
 
 /*
@@ -76,8 +74,7 @@ struct	hdcb {
 	struct	ifaddr *hd_ifa;	/* device's X.25 network address */
 	struct	x25config *hd_xcp;
 	caddr_t	hd_pkp;		/* Level III junk */
-	int	(*hd_output)	/* separate entry for HDLC direct output */
-			__P((struct mbuf *, ...));
+	int	(*hd_output)();	/* separate entry for HDLC direct output */
 
 	/* link statistics */
 
@@ -99,51 +96,12 @@ struct	hdcb {
 	short	hd_rnrs_out;
 };
 
-#ifdef _KERNEL
+#ifdef KERNEL
 struct	hdcb *hdcbhead;		/* head of linked list of hdcb's */
 struct	Frmr_frame hd_frmr;	/* rejected frame diagnostic info */
 struct	ifqueue hdintrq;	/* hdlc packet input queue */
-struct	Hdlc_frame;
-struct	Hdlc_iframe;
-struct	Hdlc_sframe;
 
 int	hd_t1;			/* timer T1 value */
 int	hd_t3;			/* RR send timer */
 int	hd_n2;			/* frame retransmission limit */
-
-
-/* hd_debug.c */
-void hd_trace __P((struct hdcb *, int , struct mbuf *));
-int hd_dumptrace __P((struct hdcb *));
-
-/* hd_input.c */
-void hdintr __P((void));
-int process_rxframe __P((struct hdcb *, struct mbuf *));
-int process_iframe __P((struct hdcb *, struct mbuf *, struct Hdlc_iframe *));
-bool range_check __P((int, int , int ));
-void process_sframe __P((struct hdcb *, struct Hdlc_sframe *, int));
-bool valid_nr __P((struct hdcb *, int , int));
-
-/* hd_output.c */
-int hd_output __P((struct mbuf *, ...));
-void hd_start __P((struct hdcb *));
-void hd_send_iframe __P((struct hdcb *, struct mbuf *, int));
-int hd_ifoutput __P((struct mbuf *, ...));
-void hd_resend_iframe __P((struct hdcb *));
-
-/* hd_subr.c */
-void hd_init __P((void));
-void *hd_ctlinput __P((int , struct sockaddr *, void *));
-void hd_initvars __P((struct hdcb *));
-int hd_decode __P((struct hdcb *, struct Hdlc_frame *));
-void hd_writeinternal __P((struct hdcb *, int, int ));
-void hd_append __P((struct hdtxq *, struct mbuf *));
-void hd_flush __P((struct ifnet *));
-void hd_message __P((struct hdcb *, char *));
-int hd_status __P((struct hdcb *));
-struct mbuf *hd_remove __P((struct hdtxq *));
-
-/* hd_timer.c */
-void hd_timer __P((void));
-
 #endif

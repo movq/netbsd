@@ -1,5 +1,3 @@
-/*	$NetBSD: cd9660_bmap.c,v 1.7 1997/01/24 00:27:29 cgd Exp $	*/
-
 /*-
  * Copyright (c) 1994
  *	The Regents of the University of California.  All rights reserved.
@@ -37,7 +35,8 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)cd9660_bmap.c	8.4 (Berkeley) 12/5/94
+ *	from: @(#)cd9660_bmap.c	8.3 (Berkeley) 1/23/94
+ *	$Id: cd9660_bmap.c,v 1.1 1994/06/08 11:22:48 mycroft Exp $
  */
 
 #include <sys/param.h>
@@ -48,7 +47,6 @@
 #include <sys/mount.h>
 
 #include <isofs/cd9660/iso.h>
-#include <isofs/cd9660/cd9660_extern.h>
 #include <isofs/cd9660/cd9660_node.h>
 
 /*
@@ -57,19 +55,18 @@
  * number to index into the data block (extent) for the file.
  */
 int
-cd9660_bmap(v)
-	void *v;
-{
+cd9660_bmap(ap)
 	struct vop_bmap_args /* {
 		struct vnode *a_vp;
 		daddr_t  a_bn;
 		struct vnode **a_vpp;
 		daddr_t *a_bnp;
 		int *a_runp;
-	} */ *ap = v;
+	} */ *ap;
+{
 	struct iso_node *ip = VTOI(ap->a_vp);
 	daddr_t lblkno = ap->a_bn;
-	int bshift;
+	long bsize;
 
 	/*
 	 * Check for underlying vnode requests and ensure that logical
@@ -83,8 +80,8 @@ cd9660_bmap(v)
 	/*
 	 * Compute the requested block number
 	 */
-	bshift = ip->i_mnt->im_bshift;
-	*ap->a_bnp = (ip->iso_start + lblkno) << (bshift - DEV_BSHIFT);
+	bsize = ip->i_mnt->logical_block_size;
+	*ap->a_bnp = (ip->iso_start + lblkno) * btodb(bsize);
 
 	/*
 	 * Determine maximum number of readahead blocks following the
@@ -93,14 +90,14 @@ cd9660_bmap(v)
 	if (ap->a_runp) {
 		int nblk;
 
-		nblk = (ip->i_size >> bshift) - (lblkno + 1);
+		nblk = (ip->i_size - (lblkno + 1) * bsize) / bsize;
 		if (nblk <= 0)
 			*ap->a_runp = 0;
-		else if (nblk >= (MAXBSIZE >> bshift))
-			*ap->a_runp = (MAXBSIZE >> bshift) - 1;
+		else if (nblk >= MAXBSIZE/bsize)
+			*ap->a_runp = MAXBSIZE/bsize - 1;
 		else
 			*ap->a_runp = nblk;
 	}
 
-	return (0);
+	return 0;
 }

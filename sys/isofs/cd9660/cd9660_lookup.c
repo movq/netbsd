@@ -1,5 +1,3 @@
-/*	$NetBSD: cd9660_lookup.c,v 1.18 1997/05/08 16:19:59 mycroft Exp $	*/
-
 /*-
  * Copyright (c) 1989, 1993, 1994
  *	The Regents of the University of California.  All rights reserved.
@@ -38,8 +36,8 @@
  * SUCH DAMAGE.
  *
  *	from: @(#)ufs_lookup.c	7.33 (Berkeley) 5/19/91
- *
- *	@(#)cd9660_lookup.c	8.5 (Berkeley) 12/5/94
+ *	from: @(#)cd9660_lookup.c	8.2 (Berkeley) 1/23/94
+ *	$Id: cd9660_lookup.c,v 1.1 1994/06/08 11:22:49 mycroft Exp $
  */
 
 #include <sys/param.h>
@@ -48,10 +46,8 @@
 #include <sys/file.h>
 #include <sys/vnode.h>
 #include <sys/mount.h>
-#include <sys/systm.h>
 
 #include <isofs/cd9660/iso.h>
-#include <isofs/cd9660/cd9660_extern.h>
 #include <isofs/cd9660/cd9660_node.h>
 #include <isofs/cd9660/iso_rrip.h>
 #include <isofs/cd9660/cd9660_rrip.h>
@@ -93,28 +89,24 @@ struct	nchstats iso_nchstats;
  *
  * NOTE: (LOOKUP | LOCKPARENT) currently returns the parent inode unlocked.
  */
-int
-cd9660_lookup(v)
-	void *v;
-{
+cd9660_lookup(ap)
 	struct vop_lookup_args /* {
 		struct vnode *a_dvp;
 		struct vnode **a_vpp;
 		struct componentname *a_cnp;
-	} */ *ap = v;
+	} */ *ap;
+{
 	register struct vnode *vdp;	/* vnode for directory being searched */
 	register struct iso_node *dp;	/* inode for directory being searched */
 	register struct iso_mnt *imp;	/* file system that directory is in */
 	struct buf *bp;			/* a buffer of directory entries */
-	struct iso_directory_record *ep = NULL;
-					/* the current directory entry */
+	struct iso_directory_record *ep;/* the current directory entry */
 	int entryoffsetinblock;		/* offset of ep in bp's buffer */
-	int saveoffset = -1;		/* offset of last directory entry in dir */
+	int saveoffset;			/* offset of last directory entry in dir */
 	int numdirpasses;		/* strategy for directory search */
 	doff_t endsearch;		/* offset to end directory search */
-	struct vnode *pdp;		/* saved dp during symlink work */
-	struct vnode *tdp;		/* returned by cd9660_vget_internal */
-	u_long bmask;			/* block offset mask */
+	struct iso_node *pdp;		/* saved dp during symlink work */
+	struct iso_node *tdp;		/* returned by iget */
 	int lockparent;			/* 1 => lockparent flag is set */
 	int wantparent;			/* 1 => wantparent or lockparent flag */
 	int error;
@@ -124,7 +116,7 @@ cd9660_lookup(v)
 	char altname[NAME_MAX];
 	int res;
 	int assoc, len;
-	const char *name;
+	char *name;
 	struct vnode **vpp = ap->a_vpp;
 	struct componentname *cnp = ap->a_cnp;
 	struct ucred *cred = cnp->cn_cred;
@@ -142,7 +134,9 @@ cd9660_lookup(v)
 	/*
 	 * Check accessiblity of directory.
 	 */
-	if ((error = VOP_ACCESS(vdp, VEXEC, cred, cnp->cn_proc)) != 0)
+	if (vdp->v_type != VDIR)
+		return (ENOTDIR);
+	if (error = VOP_ACCESS(vdp, VEXEC, cred, cnp->cn_proc))
 		return (error);
 	
 	/*
@@ -152,36 +146,36 @@ cd9660_lookup(v)
 	 * check the name cache to see if the directory/name pair
 	 * we are looking for is known already.
 	 */
-	if ((error = cache_lookup(vdp, vpp, cnp)) != 0) {
+	if (error = cache_lookup(vdp, vpp, cnp)) {
 		int vpid;	/* capability number of vnode */
 
 		if (error == ENOENT)
 			return (error);
 #ifdef PARANOID
 		if ((vdp->v_flag & VROOT) && (flags & ISDOTDOT))
-			panic("cd9660_lookup: .. through root");
+			panic("ufs_lookup: .. through root");
 #endif
 		/*
 		 * Get the next vnode in the path.
 		 * See comment below starting `Step through' for
 		 * an explaination of the locking protocol.
 		 */
-		pdp = vdp;
+		pdp = dp;
 		dp = VTOI(*vpp);
 		vdp = *vpp;
 		vpid = vdp->v_id;
-		if (pdp == vdp) {
+		if (pdp == dp) {
 			VREF(vdp);
 			error = 0;
 		} else if (flags & ISDOTDOT) {
-			VOP_UNLOCK(pdp);
+			ISO_IUNLOCK(pdp);
 			error = vget(vdp, 1);
 			if (!error && lockparent && (flags & ISLASTCN))
-				error = VOP_LOCK(pdp);
+				ISO_ILOCK(pdp);
 		} else {
 			error = vget(vdp, 1);
 			if (!lockparent || error || !(flags & ISLASTCN))
-				VOP_UNLOCK(pdp);
+				ISO_IUNLOCK(pdp);
 		}
 		/*
 		 * Check that the capability number did not change
@@ -190,14 +184,13 @@ cd9660_lookup(v)
 		if (!error) {
 			if (vpid == vdp->v_id)
 				return (0);
-			vput(vdp);
-			if (lockparent && pdp != vdp && (flags & ISLASTCN))
-				VOP_UNLOCK(pdp);
+			iso_iput(dp);
+			if (lockparent && pdp != dp && (flags & ISLASTCN))
+				ISO_IUNLOCK(pdp);
 		}
-		if ((error = VOP_LOCK(pdp)) != 0)
-			return (error);
-		vdp = pdp;
-		dp = VTOI(pdp);
+		ISO_ILOCK(pdp);
+		dp = pdp;
+		vdp = ITOV(dp);
 		*vpp = NULL;
 	}
 	
@@ -206,8 +199,7 @@ cd9660_lookup(v)
 	/*
 	 * A leading `=' means, we are looking for an associated file
 	 */
-	assoc = (imp->iso_ftype != ISO_FTYPE_RRIP && *name == ASSOCCHAR);
-	if (assoc) {
+	if (assoc = (imp->iso_ftype != ISO_FTYPE_RRIP && *name == ASSOCCHAR)) {
 		len--;
 		name++;
 	}
@@ -223,7 +215,6 @@ cd9660_lookup(v)
 	 * profiling time and hence has been removed in the interest
 	 * of simplicity.
 	 */
-	bmask = imp->im_bmask;
 	if (nameiop != LOOKUP || dp->i_diroff == 0 ||
 	    dp->i_diroff > dp->i_size) {
 		entryoffsetinblock = 0;
@@ -231,13 +222,15 @@ cd9660_lookup(v)
 		numdirpasses = 1;
 	} else {
 		dp->i_offset = dp->i_diroff;
-		if ((entryoffsetinblock = dp->i_offset & bmask) &&
-		    (error = VOP_BLKATOFF(vdp, (off_t)dp->i_offset, NULL, &bp)))
+		entryoffsetinblock = iso_blkoff(imp, dp->i_offset);
+		if (entryoffsetinblock != 0) {
+			if (error = iso_blkatoff(dp, dp->i_offset, &bp))
 				return (error);
+		}
 		numdirpasses = 2;
 		iso_nchstats.ncs_2passes++;
 	}
-	endsearch = dp->i_size;
+	endsearch = roundup(dp->i_size, imp->logical_block_size);
 	
 searchloop:
 	while (dp->i_offset < endsearch) {
@@ -246,12 +239,10 @@ searchloop:
 		 * read the next directory block.
 		 * Release previous if it exists.
 		 */
-		if ((dp->i_offset & bmask) == 0) {
+		if (iso_blkoff(imp, dp->i_offset) == 0) {
 			if (bp != NULL)
 				brelse(bp);
-			error = VOP_BLKATOFF(vdp, (off_t)dp->i_offset,
-					     NULL, &bp);
-			if (error)
+			if (error = iso_blkatoff(dp, dp->i_offset, &bp))
 				return (error);
 			entryoffsetinblock = 0;
 		}
@@ -259,13 +250,13 @@ searchloop:
 		 * Get pointer to next entry.
 		 */
 		ep = (struct iso_directory_record *)
-			((char *)bp->b_data + entryoffsetinblock);
+			(bp->b_un.b_addr + entryoffsetinblock);
 		
-		reclen = isonum_711(ep->length);
+		reclen = isonum_711 (ep->length);
 		if (reclen == 0) {
 			/* skip to next block, if any */
 			dp->i_offset =
-			    (dp->i_offset & ~bmask) + imp->logical_block_size;
+				roundup(dp->i_offset, imp->logical_block_size);
 			continue;
 		}
 		
@@ -277,15 +268,15 @@ searchloop:
 			/* entries are not allowed to cross boundaries */
 			break;
 		
+		/*
+		 * Check for a name match.
+		 */
 		namelen = isonum_711(ep->name_len);
 		
 		if (reclen < ISO_DIRECTORY_RECORD_SIZE + namelen)
 			/* illegal entry, stop */
 			break;
 		
-		/*
-		 * Check for a name match.
-		 */
 		switch (imp->iso_ftype) {
 		default:
 			if ((!(isonum_711(ep->flags)&4)) == !assoc) {
@@ -296,9 +287,10 @@ searchloop:
 					    && ep->name[0] == ((flags & ISDOTDOT) ? 1 : 0)) {
 						/*
 						 * Save directory entry's inode number and
-						 * release directory buffer.
+						 * reclen in ndp->ni_ufs area, and release
+						 * directory buffer.
 						 */
-						dp->i_ino = isodirino(ep, imp);
+						isodirino(&dp->i_ino,ep,imp);
 						goto found;
 					}
 					if (namelen != 1
@@ -307,7 +299,7 @@ searchloop:
 				} else if (!(res = isofncmp(name,len,
 							    ep->name,namelen))) {
 					if (isonum_711(ep->flags)&2)
-						ino = isodirino(ep, imp);
+						isodirino(&ino,ep,imp);
 					else
 						ino = dbtob(bp->b_blkno)
 							+ entryoffsetinblock;
@@ -324,7 +316,7 @@ searchloop:
 			break;
 		case ISO_FTYPE_RRIP:
 			if (isonum_711(ep->flags)&2)
-				ino = isodirino(ep, imp);
+				isodirino(&ino,ep,imp);
 			else
 				ino = dbtob(bp->b_blkno) + entryoffsetinblock;
 			dp->i_ino = ino;
@@ -342,17 +334,15 @@ searchloop:
 foundino:
 		dp->i_ino = ino;
 		if (saveoffset != dp->i_offset) {
-			if (lblkno(imp, dp->i_offset) !=
-			    lblkno(imp, saveoffset)) {
+			if (iso_lblkno(imp,dp->i_offset)
+			    != iso_lblkno(imp,saveoffset)) {
 				if (bp != NULL)
 					brelse(bp);
-				if ((error = VOP_BLKATOFF(vdp,
-					    (off_t)saveoffset, NULL, &bp)) != 0)
+				if (error = iso_blkatoff(dp, saveoffset, &bp))
 					return (error);
 			}
-			entryoffsetinblock = saveoffset & bmask;
-			ep = (struct iso_directory_record *)
-				((char *)bp->b_data + entryoffsetinblock);
+			ep = (struct iso_directory_record *)(bp->b_un.b_addr
+							     + iso_blkoff(imp,saveoffset));
 			dp->i_offset = saveoffset;
 		}
 		goto found;
@@ -370,7 +360,6 @@ notfound:
 	}
 	if (bp != NULL)
 		brelse(bp);
-
 	/*
 	 * Insert name into cache (as non-existent) if appropriate.
 	 */
@@ -383,6 +372,8 @@ notfound:
 found:
 	if (numdirpasses == 2)
 		iso_nchstats.ncs_pass2++;
+	if (bp != NULL)
+		brelse(bp);
 	
 	/*
 	 * Found component in pathname.
@@ -411,39 +402,31 @@ found:
 	 * work if the file system has any hard links other than ".."
 	 * that point backwards in the directory structure.
 	 */
-	pdp = vdp;
+	pdp = dp;
 	/*
 	 * If ino is different from dp->i_ino,
 	 * it's a relocated directory.
 	 */
 	if (flags & ISDOTDOT) {
-		VOP_UNLOCK(pdp);	/* race to get the inode */
-		error = cd9660_vget_internal(vdp->v_mount, dp->i_ino, &tdp,
-					     dp->i_ino != ino, ep);
-		brelse(bp);
-		if (error) {
-			VOP_LOCK(pdp);
+		ISO_IUNLOCK(pdp);	/* race to get the inode */
+		if (error = iso_iget(dp,dp->i_ino,
+				     dp->i_ino != ino,
+				     &tdp,ep)) {
+			ISO_ILOCK(pdp);
 			return (error);
 		}
-		if (lockparent && (flags & ISLASTCN) &&
-		    (error = VOP_LOCK(pdp))) {
-			vput(tdp);
-			return (error);
-		}
-		*vpp = tdp;
+		if (lockparent && (flags & ISLASTCN))
+			ISO_ILOCK(pdp);
+		*vpp = ITOV(tdp);
 	} else if (dp->i_number == dp->i_ino) {
-		brelse(bp);
 		VREF(vdp);	/* we want ourself, ie "." */
 		*vpp = vdp;
 	} else {
-		error = cd9660_vget_internal(vdp->v_mount, dp->i_ino, &tdp,
-					     dp->i_ino != ino, ep);
-		brelse(bp);
-		if (error)
+		if (error = iso_iget(dp,dp->i_ino,dp->i_ino!=ino,&tdp,ep))
 			return (error);
 		if (!lockparent || !(flags & ISLASTCN))
-			VOP_UNLOCK(pdp);
-		*vpp = tdp;
+			ISO_IUNLOCK(pdp);
+		*vpp = ITOV(tdp);
 	}
 	
 	/*
@@ -455,38 +438,28 @@ found:
 }
 
 /*
- * Return buffer with the contents of block "offset" from the beginning of
- * directory "ip".  If "res" is non-zero, fill it in with a pointer to the
+ * Return buffer with contents of block "offset"
+ * from the beginning of directory "ip".  If "res"
+ * is non-zero, fill it in with a pointer to the
  * remaining space in the directory.
  */
-int
-cd9660_blkatoff(v)
-	void *v;
-{
-	struct vop_blkatoff_args /* {
-		struct vnode *a_vp;
-		off_t a_offset;
-		char **a_res;
-		struct buf **a_bpp;
-	} */ *ap = v;
+iso_blkatoff(ip, offset, bpp)
 	struct iso_node *ip;
-	register struct iso_mnt *imp;
+	doff_t offset;
+	struct buf **bpp;
+{
+	register struct iso_mnt *imp = ip->i_mnt;
+	daddr_t lbn = iso_lblkno(imp,offset);
+	int bsize = iso_blksize(imp,ip,lbn);
 	struct buf *bp;
-	daddr_t lbn;
-	int bsize, error;
-
-	ip = VTOI(ap->a_vp);
-	imp = ip->i_mnt;
-	lbn = lblkno(imp, ap->a_offset);
-	bsize = blksize(imp, ip, lbn);
+	int error;
 	
-	if ((error = bread(ap->a_vp, lbn, bsize, NOCRED, &bp)) != 0) {
+	if (error = bread(ITOV(ip),lbn,bsize,NOCRED,&bp)) {
 		brelse(bp);
-		*ap->a_bpp = NULL;
+		*bpp = 0;
 		return (error);
 	}
-	if (ap->a_res)
-		*ap->a_res = (char *)bp->b_data + blkoff(imp, ap->a_offset);
-	*ap->a_bpp = bp;
+	*bpp = bp;
+	
 	return (0);
 }

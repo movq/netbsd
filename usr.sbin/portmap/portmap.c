@@ -1,8 +1,6 @@
-/*	$NetBSD: portmap.c,v 1.12 1997/10/18 11:06:08 lukem Exp $	*/
-
 /*-
- * Copyright (c) 1990, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1990 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,19 +31,14 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT(
-"@(#) Copyright (c) 1990, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+char copyright[] =
+"@(#) Copyright (c) 1990 The Regents of the University of California.\n\
+ All rights reserved.\n";
 #endif /* not lint */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)portmap.c	8.1 (Berkeley) 6/6/93";
-#else
-__RCSID("$NetBSD: portmap.c,v 1.12 1997/10/18 11:06:08 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)portmap.c	5.4 (Berkeley) 4/19/91";
 #endif /* not lint */
 
 /*
@@ -87,51 +80,27 @@ static char sccsid[] = "@(#)portmap.c 1.32 87/08/06 Copyr 1984 Sun Micro";
  * Mountain View, California  94043
  */
 
-#include <sys/types.h>
-#include <sys/time.h>
-#include <sys/errno.h>
-#include <sys/ioctl.h>
-#include <sys/resource.h>
 #include <rpc/rpc.h>
-#include <sys/socket.h>
-#include <sys/wait.h>
-#include <signal.h>
+#include <rpc/pmap_prot.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <syslog.h>
 #include <unistd.h>
 #include <netdb.h>
+#include <sys/socket.h>
+#include <sys/ioctl.h>
+#include <sys/wait.h>
+#include <sys/signal.h>
+#include <sys/resource.h>
 
-
-struct encap_parms {
-	u_int arglen;
-	char *args;
-};
-
-struct rmtcallargs {
-	u_long	rmt_prog;
-	u_long	rmt_vers;
-	u_long	rmt_port;
-	u_long	rmt_proc;
-	struct encap_parms rmt_args;
-};
-
-static void	callit __P((struct svc_req *, SVCXPRT *));
-static struct pmaplist *find_service __P((u_long, u_long, u_long));
-int		main __P((int, char *[]));
-void		reap __P((int));
-void		reg_service __P((struct svc_req *, SVCXPRT *));
-static bool_t	xdr_encap_parms __P((XDR *, struct encap_parms *));
-static bool_t	xdr_len_opaque_parms __P((XDR *, struct rmtcallargs *));
-static bool_t	xdr_opaque_parms __P((XDR *, struct rmtcallargs *));
-static bool_t	xdr_rmtcall_args __P((XDR *, struct rmtcallargs *));
-static bool_t	xdr_rmtcall_result __P((XDR *, struct rmtcallargs *));
-
+void reg_service();
+void reap();
+static void callit();
 struct pmaplist *pmaplist;
 int debugging = 0;
+extern int errno;
 
-int
 main(argc, argv)
 	int argc;
 	char **argv;
@@ -140,9 +109,9 @@ main(argc, argv)
 	int sock, c;
 	struct sockaddr_in addr;
 	int len = sizeof(struct sockaddr_in);
-	struct pmaplist *pml;
+	register struct pmaplist *pml;
 
-	while ((c = getopt(argc, argv, "d")) != -1) {
+	while ((c = getopt(argc, argv, "d")) != EOF) {
 		switch (c) {
 
 		case 'd':
@@ -168,7 +137,6 @@ main(argc, argv)
 		exit(1);
 	}
 
-	memset((char *)&addr, 0, sizeof addr);
 	addr.sin_addr.s_addr = 0;
 	addr.sin_family = AF_INET;
 	addr.sin_port = htons(PMAPPORT);
@@ -235,8 +203,8 @@ static struct pmaplist *
 find_service(prog, vers, prot)
 	u_long prog, vers, prot;
 {
-	struct pmaplist *hit = NULL;
-	struct pmaplist *pml;
+	register struct pmaplist *hit = NULL;
+	register struct pmaplist *pml;
 
 	for (pml = pmaplist; pml != NULL; pml = pml->pml_next) {
 		if ((pml->pml_map.pm_prog != prog) ||
@@ -259,11 +227,11 @@ reg_service(rqstp, xprt)
 {
 	struct pmap reg;
 	struct pmaplist *pml, *prevpml, *fnd;
-	long ans, port;
+	int ans, port;
 	caddr_t t;
 	
 	if (debugging)
-		(void) fprintf(stderr, "server: about to do a switch\n");
+		(void) fprintf(stderr, "server: about do a switch\n");
 	switch (rqstp->rq_proc) {
 
 	case PMAPPROC_NULL:
@@ -279,7 +247,7 @@ reg_service(rqstp, xprt)
 		/*
 		 * Set a program,version to port mapping
 		 */
-		if (!svc_getargs(xprt, xdr_pmap, (caddr_t)&reg))
+		if (!svc_getargs(xprt, xdr_pmap, &reg))
 			svcerr_decode(xprt);
 		else {
 			/*
@@ -327,7 +295,7 @@ reg_service(rqstp, xprt)
 		/*
 		 * Remove a program,version to port mapping.
 		 */
-		if (!svc_getargs(xprt, xdr_pmap, (caddr_t)&reg))
+		if (!svc_getargs(xprt, xdr_pmap, &reg))
 			svcerr_decode(xprt);
 		else {
 			ans = 0;
@@ -361,7 +329,7 @@ reg_service(rqstp, xprt)
 		/*
 		 * Lookup the mapping for a program,version and return its port
 		 */
-		if (!svc_getargs(xprt, xdr_pmap, (caddr_t)&reg))
+		if (!svc_getargs(xprt, xdr_pmap, &reg))
 			svcerr_decode(xprt);
 		else {
 			fnd = find_service(reg.pm_prog, reg.pm_vers, reg.pm_prot);
@@ -415,6 +383,11 @@ reg_service(rqstp, xprt)
  */
 #define ARGSIZE 9000
 
+struct encap_parms {
+	u_long arglen;
+	char *args;
+};
+
 static bool_t
 xdr_encap_parms(xdrs, epp)
 	XDR *xdrs;
@@ -424,10 +397,18 @@ xdr_encap_parms(xdrs, epp)
 	return (xdr_bytes(xdrs, &(epp->args), &(epp->arglen), ARGSIZE));
 }
 
+struct rmtcallargs {
+	u_long	rmt_prog;
+	u_long	rmt_vers;
+	u_long	rmt_port;
+	u_long	rmt_proc;
+	struct encap_parms rmt_args;
+};
+
 static bool_t
 xdr_rmtcall_args(xdrs, cap)
-	XDR *xdrs;
-	struct rmtcallargs *cap;
+	register XDR *xdrs;
+	register struct rmtcallargs *cap;
 {
 
 	/* does not get a port number */
@@ -441,8 +422,8 @@ xdr_rmtcall_args(xdrs, cap)
 
 static bool_t
 xdr_rmtcall_result(xdrs, cap)
-	XDR *xdrs;
-	struct rmtcallargs *cap;
+	register XDR *xdrs;
+	register struct rmtcallargs *cap;
 {
 	if (xdr_u_long(xdrs, &(cap->rmt_port)))
 		return (xdr_encap_parms(xdrs, &(cap->rmt_args)));
@@ -468,10 +449,10 @@ xdr_opaque_parms(xdrs, cap)
  */
 static bool_t
 xdr_len_opaque_parms(xdrs, cap)
-	XDR *xdrs;
+	register XDR *xdrs;
 	struct rmtcallargs *cap;
 {
-	u_int beginpos, lowpos, highpos, currpos, pos;
+	register u_int beginpos, lowpos, highpos, currpos, pos;
 
 	beginpos = lowpos = pos = xdr_getpos(xdrs);
 	highpos = lowpos + ARGSIZE;
@@ -508,7 +489,7 @@ callit(rqstp, xprt)
 	struct pmaplist *pml;
 	u_short port;
 	struct sockaddr_in me;
-	int pid, so = -1, dontblock = 1;
+	int pid, so = -1;
 	CLIENT *client;
 	struct authunix_parms *au = (struct authunix_parms *)rqstp->rq_clntcred;
 	struct timeval timeout;
@@ -517,7 +498,7 @@ callit(rqstp, xprt)
 	timeout.tv_sec = 5;
 	timeout.tv_usec = 0;
 	a.rmt_args.args = buf;
-	if (!svc_getargs(xprt, xdr_rmtcall_args, (caddr_t)&a))
+	if (!svc_getargs(xprt, xdr_rmtcall_args, &a))
 		return;
 	if ((pml = find_service(a.rmt_prog, a.rmt_vers,
 	    (u_long)IPPROTO_UDP)) == NULL)
@@ -527,7 +508,7 @@ callit(rqstp, xprt)
 	 * Child exits upon completion.
 	 */
 	if ((pid = fork()) != 0) {
-		if (pid == -1)
+		if (pid < 0)
 			syslog(LOG_ERR, "CALLIT (prog %lu): fork: %m",
 			    a.rmt_prog);
 		return;
@@ -535,19 +516,11 @@ callit(rqstp, xprt)
 	port = pml->pml_map.pm_port;
 	get_myaddress(&me);
 	me.sin_port = htons(port);
-
-	/* Avoid implicit binding to reserved port by clntudp_create() */
-	so = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
-	if (so == -1)
-		exit(1);
-	if (ioctl(so, FIONBIO, &dontblock) == -1)
-		exit(1);
-
 	client = clntudp_create(&me, a.rmt_prog, a.rmt_vers, timeout, &so);
 	if (client != (CLIENT *)NULL) {
 		if (rqstp->rq_cred.oa_flavor == AUTH_UNIX) {
 			client->cl_auth = authunix_create(au->aup_machname,
-			    au->aup_uid, au->aup_gid, au->aup_len, au->aup_gids);
+			   au->aup_uid, au->aup_gid, au->aup_len, au->aup_gids);
 		}
 		a.rmt_port = (u_long)port;
 		if (clnt_call(client, a.rmt_proc, xdr_opaque_parms, &a,
@@ -562,12 +535,7 @@ callit(rqstp, xprt)
 }
 
 void
-reap(dummy)
-	int dummy;
+reap()
 {
-	int save_errno = errno;
-
-	while (wait3(NULL, WNOHANG, NULL) > 0)
-		;
-	errno = save_errno;
+	while (wait3((int *)NULL, WNOHANG, (struct rusage *)NULL) > 0);
 }

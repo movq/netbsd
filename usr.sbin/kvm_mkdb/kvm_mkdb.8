@@ -1,7 +1,5 @@
-.\"	$NetBSD: kvm_mkdb.8,v 1.9 1997/10/17 10:15:04 lukem Exp $
-.\"
-.\" Copyright (c) 1989, 1991, 1993
-.\"	The Regents of the University of California.  All rights reserved.
+.\" Copyright (c) 1989, 1991 The Regents of the University of California.
+.\" All rights reserved.
 .\"
 .\" Redistribution and use in source and binary forms, with or without
 .\" modification, are permitted provided that the following conditions
@@ -31,42 +29,38 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\"     from: @(#)kvm_mkdb.8	8.1 (Berkeley) 6/9/93
+.\"     @(#)kvm_mkdb.8	5.2 (Berkeley) 3/16/91
 .\"
-.Dd June 9, 1993
+.Dd March 16, 1991
 .Dt KVM_MKDB 8
 .Os
 .Sh NAME
 .Nm kvm_mkdb
 .Nd create kernel database
 .Sh SYNOPSIS
-.Nm
-.Op file
+.Nm kvm_mkdb
 .Sh DESCRIPTION
-.Nm
-creates a database,
-.Pa /var/db/kvm.db ,
-containing information about the specified file.
-If no file is specified,
-.Pa /netbsd
-is used by default.
-The database will only be recreated if its contents
-do not already describe the running kernel.
-.Pp
+.Nm Kvm_mkdb
+creates a database in
+.Pa /var/run
+containing information about
+.Pa /vmunix
+and
+perhaps other fairly static information about the current system.
 Various library routines consult this database.
 The only information currently stored is the kernel namelist, which is
 used by the
 .Xr kvm_nlist 3
-function.  In the future, the database may contain other static
-information about the current system.
+function.
 .Sh FILES
-.Bl -tag -width /var/db/kvm.db -compact
-.It Pa /netbsd
-.It Pa /var/db/kvm.db
+.Bl -tag -width /var/run/kvm_vmunix.{dir,pag} -compact
+.It Pa /vmunix
+.It Pa /var/run/kvm_vmunix.{dir,pag}
 .El
 .Sh SEE ALSO
 .Xr kvm_nlist 3
 .Sh HISTORY
 The
 .Nm
-utility first appeared in 4.4BSD.
+command
+.Ud

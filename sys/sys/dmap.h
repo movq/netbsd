@@ -1,8 +1,6 @@
-/*	$NetBSD: dmap.h,v 1.7 1995/03/26 20:24:02 jtc Exp $	*/
-
 /*-
- * Copyright (c) 1982, 1986, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1982, 1986 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,11 +30,11 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)dmap.h	8.2 (Berkeley) 1/4/94
+ *	@(#)dmap.h	7.3 (Berkeley) 2/15/91
  */
 
-#ifndef _SYS_DMAP_H_
-#define	_SYS_DMAP_H_
+#ifndef _DMAP_H_
+#define	_DMAP_H_
 
 /*
  * Definitions for the mapping of vitual swap space to the physical swap
@@ -49,7 +47,7 @@ struct dmap {
 	swblk_t dm_alloc;	/* amount of physical swap space allocated */
 	swblk_t dm_map[NDMAP];	/* first disk block number in each chunk */
 };
-#ifdef _KERNEL
+#ifdef KERNEL
 struct dmap zdmap;
 int dmmin, dmmax, dmtext;
 #endif
@@ -59,4 +57,4 @@ struct dblock {
 	swblk_t db_base;	/* base of physical contig drum block */
 	swblk_t db_size;	/* size of block */
 };
-#endif	/* !_SYS_DMAP_H_ */
+#endif	/* !_DMAP_H_ */

@@ -1,8 +1,6 @@
-/*	$NetBSD: clrtobot.c,v 1.8 1997/07/22 07:36:27 mikel Exp $	*/
-
 /*
- * Copyright (c) 1981, 1993, 1994
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1981 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,53 +31,36 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)clrtobot.c	8.2 (Berkeley) 5/4/94";
-#else
-__RCSID("$NetBSD: clrtobot.c,v 1.8 1997/07/22 07:36:27 mikel Exp $");
-#endif
-#endif	/* not lint */
+static char sccsid[] = "@(#)clrtobot.c	5.5 (Berkeley) 6/1/90";
+#endif /* not lint */
 
-#include "curses.h"
+# include	"curses.ext"
 
 /*
- * wclrtobot --
- *	Erase everything on the window.
+ *	This routine erases everything on the window.
+ *
  */
-int
 wclrtobot(win)
-	register WINDOW *win;
-{
-	register int minx, startx, starty, y;
-	register __LDATA *sp, *end, *maxx;
+reg WINDOW	*win; {
 
-#ifdef __GNUC__
-	maxx = NULL;		/* XXX gcc -Wuninitialized */
-#endif
-	if (win->lines[win->cury]->flags & __ISPASTEOL) {
-		starty = win->cury + 1;
-		startx = 0;
-	} else {
-		starty = win->cury;
-		startx = win->curx;
-	}
-	for (y = starty; y < win->maxy; y++) {
-		minx = -1;
-		end = &win->lines[y]->line[win->maxx];
-		for (sp = &win->lines[y]->line[startx]; sp < end; sp++)
-			if (sp->ch != ' ' || sp->attr != 0) {
+	reg int		y;
+	reg char	*sp, *end, *maxx;
+	reg int		startx, minx;
+
+	startx = win->_curx;
+	for (y = win->_cury; y < win->_maxy; y++) {
+		minx = _NOCHANGE;
+		end = &win->_y[y][win->_maxx];
+		for (sp = &win->_y[y][startx]; sp < end; sp++)
+			if (*sp != ' ') {
 				maxx = sp;
-				if (minx == -1)
-					minx = sp - win->lines[y]->line;
-				sp->ch = ' ';
-				sp->attr = 0;
+				if (minx == _NOCHANGE)
+					minx = sp - win->_y[y];
+				*sp = ' ';
 			}
-		if (minx != -1)
-			__touchline(win, y, minx, maxx - win->lines[y]->line,
-		            0);
+		if (minx != _NOCHANGE)
+			touchline(win, y, minx, maxx - &win->_y[y][0]);
 		startx = 0;
 	}
-	return (OK);
 }

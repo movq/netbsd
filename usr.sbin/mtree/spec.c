@@ -1,8 +1,6 @@
-/*	$NetBSD: spec.c,v 1.11 1997/10/17 11:46:55 lukem Exp $	*/
-
 /*-
- * Copyright (c) 1989, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1989 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,125 +31,85 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)spec.c	8.2 (Berkeley) 4/28/95";
-#else
-__RCSID("$NetBSD: spec.c,v 1.11 1997/10/17 11:46:55 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)spec.c	5.14 (Berkeley) 3/2/91";
 #endif /* not lint */
 
 #include <sys/types.h>
-#include <sys/stat.h>
-#include <ctype.h>
-#include <errno.h>
-#include <fts.h>
-#include <grp.h>
 #include <pwd.h>
+#include <grp.h>
 #include <stdio.h>
-#include <string.h>
-#include <unistd.h>
-
+#include <errno.h>
+#include <ctype.h>
 #include "mtree.h"
-#include "extern.h"
 
-int lineno;				/* Current spec line number. */
+extern NODE *root;			/* root of the tree */
 
-static void	 set __P((char *, NODE *));
-static void	 unset __P((char *, NODE *));
+static int lineno;			/* current spec line number */
 
-NODE *
 spec()
 {
-	NODE *centry, *last;
-	char *p;
-	NODE ginfo, *root;
-	int c_cur, c_next;
+	register NODE *centry, *last;
+	register char *p;
+	NODE ginfo, *emalloc();
 	char buf[2048];
 
-	root = NULL;
-	centry = last = NULL;
-	memset(&ginfo, 0, sizeof(ginfo));
-	c_cur = c_next = 0;
-	for (lineno = 1; fgets(buf, sizeof(buf), stdin);
-	    ++lineno, c_cur = c_next, c_next = 0) {
-		/* Skip empty lines. */
-		if (buf[0] == '\n')
-			continue;
-
-		/* Find end of line. */
-		if ((p = strchr(buf, '\n')) == NULL)
-			err("line %d too long", lineno);
-
-		/* See if next line is continuation line. */
-		if (p[-1] == '\\') {
-			--p;
-			c_next = 1;
+	bzero((void *)&ginfo, sizeof(ginfo));
+	for (lineno = 1; fgets(buf, sizeof(buf), stdin); ++lineno) {
+		if (!(p = index(buf, '\n'))) {
+			(void)fprintf(stderr,
+			    "mtree: line %d too long.\n", lineno);
+			exit(1);
 		}
-
-		/* Null-terminate the line. */
 		*p = '\0';
-
-		/* Skip leading whitespace. */
 		for (p = buf; *p && isspace(*p); ++p);
-
-		/* If nothing but whitespace or comment char, continue. */
 		if (!*p || *p == '#')
 			continue;
 
-#ifdef DEBUG
-		(void)fprintf(stderr, "line %d: {%s}\n", lineno, p);
-#endif
-		if (c_cur) {
-			set(p, centry);
-			continue;
-		}
-			
-		/* Grab file name, "$", "set", or "unset". */
-		if ((p = strtok(p, "\n\t ")) == NULL)
-			err("missing field");
+		/* grab file name, "$", "set", or "unset" */
+		if (!(p = strtok(p, "\n\t ")))
+			specerr();
 
 		if (p[0] == '/')
 			switch(p[1]) {
 			case 's':
 				if (strcmp(p + 1, "set"))
 					break;
-				set(NULL, &ginfo);
+				set(&ginfo);
 				continue;
 			case 'u':
 				if (strcmp(p + 1, "unset"))
 					break;
-				unset(NULL, &ginfo);
+				unset(&ginfo);
 				continue;
 			}
 
-		if (strchr(p, '/'))
-			err("slash character in file name");
+		if (index(p, '/')) {
+			(void)fprintf(stderr,
+			    "mtree: file names may not contain slashes.\n");
+			specerr();
+		}
 
 		if (!strcmp(p, "..")) {
-			/* Don't go up, if haven't gone down. */
+			/* don't go up, if haven't gone down */
 			if (!root)
-				goto noparent;
+				noparent();
 			if (last->type != F_DIR || last->flags & F_DONE) {
 				if (last == root)
-					goto noparent;
+					noparent();
 				last = last->parent;
 			}
 			last->flags |= F_DONE;
 			continue;
-
-noparent:		err("no parent node");
 		}
 
-		if ((centry = calloc(1, sizeof(NODE) + strlen(p))) == NULL)
-			err("%s", strerror(errno));
+		centry = emalloc(sizeof(NODE) + strlen(p));
 		*centry = ginfo;
 		(void)strcpy(centry->name, p);
 #define	MAGIC	"?*["
 		if (strpbrk(p, MAGIC))
 			centry->flags |= F_MAGIC;
-		set(NULL, centry);
+		set(centry);
 
 		if (!root) {
 			last = root = centry;
@@ -165,74 +123,58 @@ noparent:		err("no parent node");
 			last = last->next = centry;
 		}
 	}
-	return (root);
 }
 
-static void
-set(t, ip)
-	char *t;
-	NODE *ip;
+set(ip)
+	register NODE *ip;
 {
-	int type;
-	char *kw, *val;
-	struct group *gr;
-	struct passwd *pw;
-	mode_t *m;
-	int value;
-	char *ep;
+	register int type;
+	register char *kw, *val;
+	gid_t getgroup();
+	uid_t getowner();
+	long atol(), strtol();
 
-	val = NULL;
-	for (; (kw = strtok(t, "= \t\n")) != NULL; t = NULL) {
-		ip->flags |= type = parsekey(kw, &value);
-		if (value && (val = strtok(NULL, " \t\n")) == NULL)
-			err("missing value");
+	while (kw = strtok((char *)NULL, "= \t\n")) {
+		ip->flags |= type = key(kw);
+		val = strtok((char *)NULL, " \t\n");
+		if (!val)
+			specerr();
 		switch(type) {
 		case F_CKSUM:
-			ip->cksum = strtoul(val, &ep, 10);
-			if (*ep)
-				err("invalid checksum %s", val);
+			ip->cksum = atol(val);
 			break;
-		case F_GID:
-			ip->st_gid = (gid_t)strtoul(val, &ep, 10);
-			if (*ep)
-				err("invalid gid %s", val);
-			break;
-		case F_GNAME:
-			if ((gr = getgrnam(val)) == NULL)
-			    err("unknown group %s", val);
-			ip->st_gid = gr->gr_gid;
+		case F_GROUP:
+			ip->st_gid = getgroup(val);
 			break;
 		case F_IGN:
 			/* just set flag bit */
 			break;
-		case F_MODE:
-			if ((m = setmode(val)) == NULL)
-				err("invalid file mode %s", val);
+		case F_MODE: {
+			mode_t *m, *setmode();
+
+			if (!(m = setmode(val))) {
+				(void)fprintf(stderr,
+				    "mtree: invalid file mode %s.\n", val);
+				specerr();
+			}
 			ip->st_mode = getmode(m, 0);
 			break;
+		}
 		case F_NLINK:
-			ip->st_nlink = (nlink_t)strtoul(val, &ep, 10);
-			if (*ep)
-				err("invalid link count %s", val);
+			ip->st_nlink = atoi(val);
+			break;
+		case F_OWNER:
+			ip->st_uid = getowner(val);
 			break;
 		case F_SIZE:
-			ip->st_size = (off_t)strtoq(val, &ep, 10);
-			if (*ep)
-				err("invalid size %s", val);
+			ip->st_size = atol(val);
 			break;
 		case F_SLINK:
-			if ((ip->slink = strdup(val)) == NULL)
-				err("%s", strerror(errno));
+			if (!(ip->slink = strdup(val)))
+				nomem();
 			break;
 		case F_TIME:
-			ip->st_mtimespec.tv_sec =
-			    (time_t)strtoul(val, &ep, 10);
-			if (*ep != '.')
-				err("invalid time %s", val);
-			val = ep + 1;
-			ip->st_mtimespec.tv_nsec = strtol(val, &ep, 10);
-			if (*ep)
-				err("invalid time %s", val);
+			ip->st_mtime = atol(val);
 			break;
 		case F_TYPE:
 			switch(*val) {
@@ -263,30 +205,139 @@ set(t, ip)
 					ip->type = F_SOCK;
 				break;
 			default:
-				err("unknown file type %s", val);
+				(void)fprintf(stderr,
+				    "mtree: unknown file type %s.\n", val);
+				specerr();
 			}
-			break;
-		case F_UID:
-			ip->st_uid = (uid_t)strtoul(val, &ep, 10);
-			if (*ep)
-				err("invalid uid %s", val);
-			break;
-		case F_UNAME:
-			if ((pw = getpwnam(val)) == NULL)
-			    err("unknown user %s", val);
-			ip->st_uid = pw->pw_uid;
 			break;
 		}
 	}
 }
 
-static void
-unset(t, ip)
-	char *t;
-	NODE *ip;
+unset(ip)
+	register NODE *ip;
 {
-	char *p;
+	register char *p;
 
-	while ((p = strtok(t, "\n\t ")) != NULL)
-		ip->flags &= ~parsekey(p, NULL);
+	while (p = strtok((char *)NULL, "\n\t "))
+		ip->flags &= ~key(p);
+}
+
+key(p)
+	char *p;
+{
+	switch(*p) {
+	case 'c':
+		if (!strcmp(p, "cksum"))
+			return(F_CKSUM);
+		break;
+	case 'g':
+		if (!strcmp(p, "group"))
+			return(F_GROUP);
+		break;
+	case 'i':
+		if (!strcmp(p, "ignore"))
+			return(F_IGN);
+		break;
+	case 'l':
+		if (!strcmp(p, "link"))
+			return(F_SLINK);
+		break;
+	case 'm':
+		if (!strcmp(p, "mode"))
+			return(F_MODE);
+		break;
+	case 'n':
+		if (!strcmp(p, "nlink"))
+			return(F_NLINK);
+		break;
+	case 'o':
+		if (!strcmp(p, "owner"))
+			return(F_OWNER);
+		break;
+	case 's':
+		if (!strcmp(p, "size"))
+			return(F_SIZE);
+		break;
+	case 't':
+		if (!strcmp(p, "type"))
+			return(F_TYPE);
+		if (!strcmp(p, "time"))
+			return(F_TIME);
+		break;
+	}
+	(void)fprintf(stderr, "mtree: unknown keyword %s.\n", p);
+	specerr();
+	/* NOTREACHED */
+}
+
+
+uid_t
+getowner(p)
+	register char *p;
+{
+	struct passwd *pw;
+	int val;
+
+	if (isdigit(*p)) {
+		if ((val = atoi(p)) >= 0)
+			return((uid_t)val);
+		(void)fprintf(stderr, "mtree: illegal uid value %s.\n", p);
+	} else if (pw = getpwnam(p))
+		return(pw->pw_uid);
+	else
+		(void)fprintf(stderr, "mtree: unknown user %s.\n", p);
+	specerr();
+	/* NOTREACHED */
+}
+
+gid_t
+getgroup(p)
+	register char *p;
+{
+	struct group *gr;
+	int val;
+
+	if (isdigit(*p)) {
+		if ((val = atoi(p)) >= 0)
+			return((gid_t)val);
+		(void)fprintf(stderr, "mtree: illegal gid value %s.\n", p);
+	} else if (gr = getgrnam(p))
+		return(gr->gr_gid);
+	else
+		(void)fprintf(stderr, "mtree: unknown group %s.\n", p);
+	specerr();
+	/* NOTREACHED */
+}
+
+noparent()
+{
+	(void)fprintf(stderr, "mtree: no parent node.\n");
+	specerr();
+}
+
+specerr()
+{
+	(void)fprintf(stderr,
+	    "mtree: line %d of the specification is incorrect.\n", lineno);
+	exit(1);
+}
+
+NODE *
+emalloc(size)
+	int size;
+{
+	void *p;
+
+	/* NOSTRICT */
+	if (!(p = malloc((u_int)size)))
+		nomem();
+	bzero(p, size);
+	return((NODE *)p);
+}
+
+nomem()
+{
+	(void)fprintf(stderr, "mtree: %s.\n", strerror(ENOMEM));
+	exit(1);
 }

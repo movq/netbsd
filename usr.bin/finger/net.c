@@ -1,8 +1,6 @@
-/*	$NetBSD: net.c,v 1.10 1997/10/19 08:13:42 mrg Exp $	*/
-
 /*
- * Copyright (c) 1989, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1989 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Tony Nardo of the Johns Hopkins University/Applied Physics Lab.
@@ -36,75 +34,63 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)net.c	8.4 (Berkeley) 4/28/95";
-#else
-__RCSID("$NetBSD: net.c,v 1.10 1997/10/19 08:13:42 mrg Exp $");
-#endif
+static char sccsid[] = "@(#)net.c	5.5 (Berkeley) 6/1/90";
 #endif /* not lint */
 
 #include <sys/types.h>
 #include <sys/socket.h>
-
 #include <netinet/in.h>
-
-#include <arpa/inet.h>
-
 #include <netdb.h>
-#include <db.h>
-#include <unistd.h>
-#include <pwd.h>
-#include <utmp.h>
 #include <stdio.h>
-#include <string.h>
 #include <ctype.h>
-#include <unistd.h>
 
-#include "finger.h"
-#include "extern.h"
-
-void
 netfinger(name)
 	char *name;
 {
-	FILE *fp;
-	int c, lastc;
-	struct hostent *hp;
+	extern int lflag;
+	register FILE *fp;
+	register int c, lastc;
+	struct in_addr defaddr;
+	struct hostent *hp, def;
 	struct servent *sp;
 	struct sockaddr_in sin;
 	int s;
-	char *host;
+	char *alist[1], *host, *rindex();
+	u_long inet_addr();
 
-	lastc = 0;
-	if (!(host = strrchr(name, '@')))
+	if (!(host = rindex(name, '@')))
 		return;
-	*host++ = '\0';
-	if (inet_aton(host, &sin.sin_addr) == 0) {
-		hp = gethostbyname(host);
-		if (hp == 0) {
+	*host++ = NULL;
+	if (!(hp = gethostbyname(host))) {
+		defaddr.s_addr = inet_addr(host);
+		if (defaddr.s_addr == -1) {
 			(void)fprintf(stderr,
 			    "finger: unknown host: %s\n", host);
 			return;
 		}
-		sin.sin_family = hp->h_addrtype;
-		bcopy(hp->h_addr, (char *)&sin.sin_addr, hp->h_length);
-		host = hp->h_name;
-	} else
-		sin.sin_family = AF_INET;
+		def.h_name = host;
+		def.h_addr_list = alist;
+		def.h_addr = (char *)&defaddr;
+		def.h_length = sizeof(struct in_addr);
+		def.h_addrtype = AF_INET;
+		def.h_aliases = 0;
+		hp = &def;
+	}
 	if (!(sp = getservbyname("finger", "tcp"))) {
 		(void)fprintf(stderr, "finger: tcp/finger: unknown service\n");
 		return;
 	}
+	sin.sin_family = hp->h_addrtype;
+	bcopy(hp->h_addr, (char *)&sin.sin_addr, hp->h_length);
 	sin.sin_port = sp->s_port;
-	if ((s = socket(sin.sin_family, SOCK_STREAM, 0)) < 0) {
+	if ((s = socket(hp->h_addrtype, SOCK_STREAM, 0)) < 0) {
 		perror("finger: socket");
 		return;
 	}
 
 	/* have network connection; identify the host connected with */
-	(void)printf("[%s]\n", host);
+	(void)printf("[%s]\n", hp->h_name);
 	if (connect(s, (struct sockaddr *)&sin, sizeof(sin)) < 0) {
 		perror("finger: connect");
 		(void)close(s);
@@ -129,13 +115,11 @@ netfinger(name)
 	 * Otherwise, all high bits are stripped; if it isn't printable and
 	 * it isn't a space, we can simply set the 7th bit.  Every ASCII
 	 * character with bit 7 set is printable.
-	 */
-	if ((fp = fdopen(s, "r")) != NULL)
+	 */ 
+	if (fp = fdopen(s, "r"))
 		while ((c = getc(fp)) != EOF) {
 			c &= 0x7f;
-			if (c == '\r') {
-				if (lastc == '\r')	/* ^M^M - skip dupes */
-					continue;
+			if (c == 0x0d) {
 				c = '\n';
 				lastc = '\r';
 			} else {
@@ -152,6 +136,5 @@ netfinger(name)
 		}
 	if (lastc != '\n')
 		putchar('\n');
-	putchar('\n');
 	(void)fclose(fp);
 }

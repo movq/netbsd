@@ -1,51 +1,10 @@
-/*	$NetBSD: regex2.h,v 1.6 1997/04/06 19:29:14 cgd Exp $	*/
-
-/*-
- * Copyright (c) 1992, 1993, 1994 Henry Spencer.
- * Copyright (c) 1992, 1993, 1994
- *	The Regents of the University of California.  All rights reserved.
- *
- * This code is derived from software contributed to Berkeley by
- * Henry Spencer.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
- *    may be used to endorse or promote products derived from this software
- *    without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
- * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
- * SUCH DAMAGE.
- *
- *	@(#)regex2.h	8.4 (Berkeley) 3/20/94
- */
-
 /*
  * First, the stuff that ends up in the outside-world include file
  = typedef off_t regoff_t;
  = typedef struct {
  = 	int re_magic;
  = 	size_t re_nsub;		// number of parenthesized subexpressions
- = 	const char *re_endp;	// end pointer for REG_PEND
+ =	const char *re_endp;	// end pointer for REG_PEND
  = 	struct re_guts *re_g;	// none of your business :-)
  = } regex_t;
  = typedef struct {
@@ -79,34 +38,34 @@
  */
 typedef unsigned long sop;	/* strip operator */
 typedef long sopno;
-#define	OPRMASK	0xf8000000L
-#define	OPDMASK	0x07ffffffL
+#define	OPRMASK	0xf8000000
+#define	OPDMASK	0x07ffffff
 #define	OPSHIFT	((unsigned)27)
 #define	OP(n)	((n)&OPRMASK)
 #define	OPND(n)	((n)&OPDMASK)
 #define	SOP(op, opnd)	((op)|(opnd))
 /* operators			   meaning	operand			*/
 /*						(back, fwd are offsets)	*/
-#define	OEND	(1L<<OPSHIFT)	/* endmarker	-			*/
-#define	OCHAR	(2L<<OPSHIFT)	/* character	unsigned char		*/
-#define	OBOL	(3L<<OPSHIFT)	/* left anchor	-			*/
-#define	OEOL	(4L<<OPSHIFT)	/* right anchor	-			*/
-#define	OANY	(5L<<OPSHIFT)	/* .		-			*/
-#define	OANYOF	(6L<<OPSHIFT)	/* [...]	set number		*/
-#define	OBACK_	(7L<<OPSHIFT)	/* begin \d	paren number		*/
-#define	O_BACK	(8L<<OPSHIFT)	/* end \d	paren number		*/
-#define	OPLUS_	(9L<<OPSHIFT)	/* + prefix	fwd to suffix		*/
-#define	O_PLUS	(10L<<OPSHIFT)	/* + suffix	back to prefix		*/
-#define	OQUEST_	(11L<<OPSHIFT)	/* ? prefix	fwd to suffix		*/
-#define	O_QUEST	(12L<<OPSHIFT)	/* ? suffix	back to prefix		*/
-#define	OLPAREN	(13L<<OPSHIFT)	/* (		fwd to )		*/
-#define	ORPAREN	(14L<<OPSHIFT)	/* )		back to (		*/
-#define	OCH_	(15L<<OPSHIFT)	/* begin choice	fwd to OOR2		*/
-#define	OOR1	(16L<<OPSHIFT)	/* | pt. 1	back to OOR1 or OCH_	*/
-#define	OOR2	(17L<<OPSHIFT)	/* | pt. 2	fwd to OOR2 or O_CH	*/
-#define	O_CH	(18L<<OPSHIFT)	/* end choice	back to OOR1		*/
-#define	OBOW	(19L<<OPSHIFT)	/* begin word	-			*/
-#define	OEOW	(20L<<OPSHIFT)	/* end word	-			*/
+#define	OEND	(1<<OPSHIFT)	/* endmarker	-			*/
+#define	OCHAR	(2<<OPSHIFT)	/* character	unsigned char		*/
+#define	OBOL	(3<<OPSHIFT)	/* left anchor	-			*/
+#define	OEOL	(4<<OPSHIFT)	/* right anchor	-			*/
+#define	OANY	(5<<OPSHIFT)	/* .		-			*/
+#define	OANYOF	(6<<OPSHIFT)	/* [...]	set number		*/
+#define	OBACK_	(7<<OPSHIFT)	/* begin \d	paren number		*/
+#define	O_BACK	(8<<OPSHIFT)	/* end \d	paren number		*/
+#define	OPLUS_	(9<<OPSHIFT)	/* + prefix	fwd to suffix		*/
+#define	O_PLUS	(10<<OPSHIFT)	/* + suffix	back to prefix		*/
+#define	OQUEST_	(11<<OPSHIFT)	/* ? prefix	fwd to suffix		*/
+#define	O_QUEST	(12<<OPSHIFT)	/* ? suffix	back to prefix		*/
+#define	OLPAREN	(13<<OPSHIFT)	/* (		fwd to )		*/
+#define	ORPAREN	(14<<OPSHIFT)	/* )		back to (		*/
+#define	OCH_	(15<<OPSHIFT)	/* begin choice	fwd to OOR2		*/
+#define	OOR1	(16<<OPSHIFT)	/* | pt. 1	back to OOR1 or OCH_	*/
+#define	OOR2	(17<<OPSHIFT)	/* | pt. 2	fwd to OOR2 or O_CH	*/
+#define	O_CH	(18<<OPSHIFT)	/* end choice	back to OOR1		*/
+#define	OBOW	(19<<OPSHIFT)	/* begin word	-			*/
+#define	OEOW	(20<<OPSHIFT)	/* end word	-			*/
 
 /*
  * Structure for [] character-set representation.  Character sets are
@@ -121,19 +80,19 @@ typedef long sopno;
  * vectors at run time.
  */
 typedef struct {
-	uch *ptr;		/* -> uch [csetsize] */
-	uch mask;		/* bit within array */
-	uch hash;		/* hash code */
+	uchar *ptr;		/* -> uchar [csetsize] */
+	uchar mask;		/* bit within array */
+	uchar hash;		/* hash code */
 	size_t smultis;
 	char *multis;		/* -> char[smulti]  ab\0cd\0ef\0\0 */
 } cset;
 /* note that CHadd and CHsub are unsafe, and CHIN doesn't yield 0/1 */
-#define	CHadd(cs, c)	((cs)->ptr[(uch)(c)] |= (cs)->mask, (cs)->hash += (c))
-#define	CHsub(cs, c)	((cs)->ptr[(uch)(c)] &= ~(cs)->mask, (cs)->hash -= (c))
-#define	CHIN(cs, c)	((cs)->ptr[(uch)(c)] & (cs)->mask)
-#define	MCadd(p, cs, cp)	mcadd(p, cs, cp)	/* regcomp() internal fns */
-#define	MCsub(p, cs, cp)	mcsub(p, cs, cp)
-#define	MCin(p, cs, cp)	mcin(p, cs, cp)
+#define	CHadd(cs, c)	((cs)->ptr[(uchar)(c)] |= (cs)->mask, (cs)->hash += (c))
+#define	CHsub(cs, c)	((cs)->ptr[(uchar)(c)] &= ~(cs)->mask, (cs)->hash -= (c))
+#define	CHIN(cs, c)	((cs)->ptr[(uchar)(c)] & (cs)->mask)
+#define	MCadd(cs, cp)	mcadd(p, cs, cp)	/* regcomp() internal fns */
+#define	MCsub(cs, cp)	mcsub(cs, cp)
+#define	MCin(cs, cp)	mcin(cs, cp)
 
 /* stuff for character categories */
 typedef unsigned char cat_t;
@@ -148,7 +107,7 @@ struct re_guts {
 	int csetsize;		/* number of bits in a cset vector */
 	int ncsets;		/* number of csets in use */
 	cset *sets;		/* -> cset [ncsets] */
-	uch *setbits;		/* -> uch[csetsize][ncsets/CHAR_BIT] */
+	uchar *setbits;		/* -> uchar[csetsize][ncsets/CHAR_BIT] */
 	int cflags;		/* copy of regcomp() cflags argument */
 	sopno nstates;		/* = number of sops */
 	sopno firststate;	/* the initial OEND (normally 0) */
@@ -172,4 +131,3 @@ struct re_guts {
 
 /* misc utilities */
 #define	OUT	(CHAR_MAX+1)	/* a non-character value */
-#define	ISWORD(c)	(isalnum(c) || (c) == '_')

@@ -1,7 +1,5 @@
-/*	$NetBSD: rec_seq.c,v 1.9 1997/07/21 14:06:47 jtc Exp $	*/
-
 /*-
- * Copyright (c) 1991, 1993, 1994
+ * Copyright (c) 1991, 1993
  *	The Regents of the University of California.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -33,16 +31,10 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)rec_seq.c	8.3 (Berkeley) 7/14/94";
-#else
-__RCSID("$NetBSD: rec_seq.c,v 1.9 1997/07/21 14:06:47 jtc Exp $");
-#endif
+static char sccsid[] = "@(#)rec_seq.c	8.1 (Berkeley) 6/4/93";
 #endif /* not lint */
 
-#include "namespace.h"
 #include <sys/types.h>
 
 #include <errno.h>
@@ -77,21 +69,14 @@ __rec_seq(dbp, key, data, flags)
 	int status;
 
 	t = dbp->internal;
-
-	/* Toss any page pinned across calls. */
-	if (t->bt_pinned != NULL) {
-		mpool_put(t->bt_mp, t->bt_pinned, 0);
-		t->bt_pinned = NULL;
-	}
-
 	switch(flags) {
 	case R_CURSOR:
 		if ((nrec = *(recno_t *)key->data) == 0)
 			goto einval;
 		break;
 	case R_NEXT:
-		if (F_ISSET(&t->bt_cursor, CURS_INIT)) {
-			nrec = t->bt_cursor.rcursor + 1;
+		if (ISSET(t, B_SEQINIT)) {
+			nrec = t->bt_rcursor + 1;
 			break;
 		}
 		/* FALLTHROUGH */
@@ -99,14 +84,14 @@ __rec_seq(dbp, key, data, flags)
 		nrec = 1;
 		break;
 	case R_PREV:
-		if (F_ISSET(&t->bt_cursor, CURS_INIT)) {
-			if ((nrec = t->bt_cursor.rcursor - 1) == 0)
+		if (ISSET(t, B_SEQINIT)) {
+			if ((nrec = t->bt_rcursor - 1) == 0)
 				return (RET_SPECIAL);
 			break;
 		}
 		/* FALLTHROUGH */
 	case R_LAST:
-		if (!F_ISSET(t, R_EOF | R_INMEM) &&
+		if (!ISSET(t, R_EOF | R_INMEM) &&
 		    t->bt_irec(t, MAX_REC_NUMBER) == RET_ERROR)
 			return (RET_ERROR);
 		nrec = t->bt_nrecs;
@@ -117,7 +102,7 @@ einval:		errno = EINVAL;
 	}
 	
 	if (t->bt_nrecs == 0 || nrec > t->bt_nrecs) {
-		if (!F_ISSET(t, R_EOF | R_INMEM) &&
+		if (!ISSET(t, R_EOF | R_INMEM) &&
 		    (status = t->bt_irec(t, nrec)) != RET_SUCCESS)
 			return (status);
 		if (t->bt_nrecs == 0 || nrec > t->bt_nrecs)
@@ -127,13 +112,11 @@ einval:		errno = EINVAL;
 	if ((e = __rec_search(t, nrec - 1, SEARCH)) == NULL)
 		return (RET_ERROR);
 
-	F_SET(&t->bt_cursor, CURS_INIT);
-	t->bt_cursor.rcursor = nrec;
+	SET(t, B_SEQINIT);
+	t->bt_rcursor = nrec;
 
 	status = __rec_ret(t, e, nrec, key, data);
-	if (F_ISSET(t, B_DB_LOCK))
-		mpool_put(t->bt_mp, e->page, 0);
-	else
-		t->bt_pinned = e->page;
+
+	mpool_put(t->bt_mp, e->page, 0);
 	return (status);
 }

@@ -1,8 +1,6 @@
-/*	$NetBSD: tmpnam.c,v 1.8 1997/07/13 20:15:32 christos Exp $	*/
-
 /*-
- * Copyright (c) 1990, 1993, 1994
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1990 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Chris Torek.
@@ -36,34 +34,21 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char sccsid[] = "@(#)tmpnam.c	8.3 (Berkeley) 3/28/94";
-#else
-__RCSID("$NetBSD: tmpnam.c,v 1.8 1997/07/13 20:15:32 christos Exp $");
-#endif
+static char sccsid[] = "@(#)tmpnam.c	5.3 (Berkeley) 2/24/91";
 #endif /* LIBC_SCCS and not lint */
 
-#include <sys/types.h>
-
-#include <stdio.h>
 #include <unistd.h>
-#include "local.h"
-
-__warn_references(tmpnam,
-    "warning: tmpnam() possibly used unsafely, consider using mkstemp()");
+#include <stdio.h>
 
 char *
 tmpnam(s)
 	char *s;
 {
-	static u_long tmpcount;
 	static char buf[L_tmpnam];
 
 	if (s == NULL)
 		s = buf;
-	(void)snprintf(s, L_tmpnam, "%stmp.%lu.XXXXXX", P_tmpdir, tmpcount);
-	++tmpcount;
-	return (_mktemp(s));
+	(void)snprintf(s, L_tmpnam, "%s/tmp.XXXXXX", P_tmpdir);
+	return(mktemp(s));
 }

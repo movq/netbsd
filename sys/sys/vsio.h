@@ -1,8 +1,6 @@
-/*	$NetBSD: vsio.h,v 1.8 1997/01/22 07:09:35 mikel Exp $	*/
-
 /*-
- * Copyright (c) 1987, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1987 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,11 +30,8 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)vsio.h	8.1 (Berkeley) 6/2/93
+ *	@(#)vsio.h	7.4 (Berkeley) 5/9/91
  */
-
-#ifndef _SYS_VSIO_H_
-#define _SYS_VSIO_H_
 
  /****************************************************************************
  *									    *
@@ -59,16 +54,16 @@
  * 									    *
  *									    *
  ****************************************************************************/
-/*
+/* 
  * vsio.h - VS100 I/O command definitions
- *
+ * 
  * Author:	Christopher A. Kent
  *		Digital Equipment Corporation
  *		Western Research Lab
  * Date:	Tue Jun 21 1983
  */
 
-/*
+/* 
  * Possible ioctl calls
  */
 
@@ -93,7 +88,7 @@
 #define	VS_FIB_FINITE	1		/* finite retries */
 #define	VS_FIB_INFINITE	2		/* infinite retries */
 
-/*
+/* 
  * Event queue entries
  */
 
@@ -156,5 +151,3 @@ typedef struct _vsIoAddr {
 	vsBox	 mbox;			/* atomic read/write */
 } vsIoAddr;
 typedef vsIoAddr *vsIoAddrAddr;
-
-#endif /* !_SYS_VSIO_H_ */

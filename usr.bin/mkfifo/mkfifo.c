@@ -1,8 +1,6 @@
-/*	$NetBSD: mkfifo.c,v 1.8 1997/10/19 05:11:54 lukem Exp $	*/
-
 /*
- * Copyright (c) 1990, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1990 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,81 +31,80 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1990, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+char copyright[] =
+"@(#) Copyright (c) 1990 Regents of the University of California.\n\
+ All rights reserved.\n";
 #endif /* not lint */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)mkfifo.c	8.2 (Berkeley) 1/5/94";
-#endif
-__RCSID("$NetBSD: mkfifo.c,v 1.8 1997/10/19 05:11:54 lukem Exp $");
+static char sccsid[] = "@(#)mkfifo.c	5.3 (Berkeley) 6/1/90";
 #endif /* not lint */
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <locale.h>
-#include <errno.h>
 #include <sys/types.h>
 #include <sys/stat.h>
-#include <unistd.h>
-#include <err.h>
+#include <errno.h>
+#include <stdio.h>
+#include <string.h>
 
-int	main __P((int, char **));
-static void usage __P((void));
-
-int
 main(argc, argv)
 	int argc;
-	char *argv[];
+	char **argv;
 {
-	int ch, exitval;
-	void * set;
-	mode_t mode;
+	extern int errno, optind;
+	int ch, exitval, pflag;
 
-	setlocale (LC_ALL, "");
-
-	/* The default mode is the value of the bitwise inclusive or of
-	   S_IRUSR, S_IWUSR, S_IRGRP, S_IWGRP, S_IROTH, and S_IWOTH
-	   modified by the file creation mask */
-	mode = 0666 & ~umask(0);
-
-	while ((ch = getopt(argc, argv, "m:")) != -1)
+	pflag = 0;
+	while ((ch = getopt(argc, argv, "p")) != EOF)
 		switch(ch) {
-		case 'm':
-			if (!(set = setmode(optarg))) {
-				errx(1, "invalid file mode.");
-				/* NOTREACHED */
-			}
-			/* In symbolic mode strings, the + and - operators are
-			   interpreted relative to an assumed initial mode of
-			   a=rw. */
-			mode = getmode (set, 0666);
+		case 'p':
+			pflag = 1;
 			break;
 		case '?':
 		default:
 			usage();
 		}
-	argc -= optind;
-	argv += optind;
-	if (argv[0] == NULL)
+
+	if (!*(argv += optind))
 		usage();
 
 	for (exitval = 0; *argv; ++argv) {
-		if (mkfifo(*argv, mode) < 0) {
-			warn("%s", *argv);
-			exitval = 1;
+		if (pflag && build(*argv)) {
+			exitval |= 1;
+			continue;
+		}
+		if (mkfifo(*argv, 0777) < 0) {
+			(void)fprintf(stderr, "mkfifo: %s: %s\n",
+			    *argv, strerror(errno));
+			exitval |= 1;
 		}
 	}
 	exit(exitval);
 }
 
-void
+build(path)
+	char *path;
+{
+	register char *p;
+	struct stat sb;
+
+	for (p = path; *p; p++) {
+		if (*p  != '/')
+			continue;
+		if (stat(path, &sb)) {
+			if (errno != ENOENT || mkdir(path, 0777) < 0) {
+				(void)fprintf(stderr, "mkdir: %s: %s\n",
+				    path, strerror(errno));
+				return(1);
+			}
+		}
+		*p = '/';
+	}
+	return(0);
+}
+
 usage()
 {
-	(void)fprintf(stderr, "usage: mkfifo [-m mode] fifoname ...\n");
+	(void)fprintf(stderr, "usage: mkfifo [-p] fifoname ...\n");
 	exit(1);
 }

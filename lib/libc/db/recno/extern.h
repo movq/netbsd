@@ -1,5 +1,3 @@
-/*	$NetBSD: extern.h,v 1.5 1996/05/03 21:38:44 cgd Exp $	*/
-
 /*-
  * Copyright (c) 1991, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -32,14 +30,14 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)extern.h	8.3 (Berkeley) 6/4/94
+ *	@(#)extern.h	8.1 (Berkeley) 6/4/93
  */
 
 #include "../btree/extern.h"
 
 int	 __rec_close __P((DB *));
 int	 __rec_delete __P((const DB *, const DBT *, u_int));
-int	 __rec_dleaf __P((BTREE *, PAGE *, u_int32_t));
+int	 __rec_dleaf __P((BTREE *, PAGE *, int));
 int	 __rec_fd __P((const DB *));
 int	 __rec_fmap __P((BTREE *, recno_t));
 int	 __rec_fout __P((BTREE *));

@@ -1,5 +1,3 @@
-/*	$NetBSD: misc.c,v 1.4 1997/09/15 11:40:29 lukem Exp $	*/
-
 /*-
  * Copyright (c) 1991, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -33,13 +31,9 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)misc.c	8.1 (Berkeley) 6/5/93";
-#else
-__RCSID("$NetBSD: misc.c,v 1.4 1997/09/15 11:40:29 lukem Exp $");
-#endif
+/*static char sccsid[] = "from: @(#)misc.c	8.1 (Berkeley) 6/5/93";*/
+static char *rcsid = "$Id: misc.c,v 1.1 1994/06/08 19:31:21 mycroft Exp $";
 #endif /* not lint */
 
 #include <sys/types.h>
@@ -53,7 +47,7 @@ u_int
 log2(num)
         u_int num;
 {
-        u_int i, limit;
+        register u_int i, limit;
 
         limit = 1;
         for (i = 0; limit < num; limit = limit << 1, i++);

@@ -1,5 +1,5 @@
-.\" Copyright (c) 1983, 1991, 1993
-.\"	The Regents of the University of California.  All rights reserved.
+.\" Copyright (c) 1983, 1991 Regents of the University of California.
+.\" All rights reserved.
 .\"
 .\" Redistribution and use in source and binary forms, with or without
 .\" modification, are permitted provided that the following conditions
@@ -29,37 +29,36 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\"     from: @(#)diskpart.8	8.1 (Berkeley) 6/6/93
-.\"	$NetBSD: diskpart.8,v 1.5 1997/06/21 09:07:07 lukem Exp $
+.\"     @(#)diskpart.8	6.6 (Berkeley) 3/16/91
 .\"
-.Dd June 6, 1993
+.Dd March 16, 1991
 .Dt DISKPART 8
 .Os BSD 4
 .Sh NAME
 .Nm diskpart
 .Nd calculate default disk partition sizes
 .Sh SYNOPSIS
-.Nm
-.Op Fl d
+.Nm diskpart
 .Op Fl p
+.Op Fl d
 .Op Fl s Ar size
 .Ar disk-type
 .Sh DESCRIPTION
-.Nm
+.Nm Diskpart
 is used to calculate the disk partition sizes based on the
 default rules used at Berkeley.
 .Pp
 Available options and operands:
 .Bl -tag -width Fl
+.It Fl p
+Tables suitable for inclusion in a device driver
+are produced.
 .It Fl d
 An entry suitable for inclusion in the disk
 description file
 .Pa /etc/disktab
 is generated; for example,
 .Xr disktab 5 .
-.It Fl p
-Tables suitable for inclusion in a device driver
-are produced.
 .It Fl s Ar size
 The size of the disk may be limited to
 .Ar size
@@ -111,7 +110,7 @@ partitions
 are variable-sized, occupying whatever space remains after allocation
 of the fixed sized partitions.
 If the disk is smaller than 20 Megabytes, then
-.Nm
+.Nm diskpart
 aborts with the message
 .Dq Li disk too small, calculate by hand .
 .Bl -column Partition 20-60\ MB 61-205\ MB 206-355\ MB 356+\ MB
@@ -124,7 +123,7 @@ h	unused	unused	291346	291346
 .El
 .Pp
 If an unknown disk type is specified, 
-.Nm
+.Nm diskpart
 will prompt for the required disk geometry information.
 .Sh SEE ALSO
 .Xr disktab 5 ,
@@ -135,7 +134,7 @@ Most default partition sizes are based on historical artifacts
 .Pp
 When using the
 .Fl d
-flag, alternative disk names are not included
+flag, alternate disk names are not included
 in the output.
 .Sh HISTORY
 The

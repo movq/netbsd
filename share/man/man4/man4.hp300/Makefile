@@ -1,9 +1,15 @@
-#	$NetBSD: Makefile,v 1.7 1997/10/19 12:56:03 mrg Exp $
-#	from: @(#)Makefile	8.1 (Berkeley) 6/18/93
+#	@(#)Makefile	5.1 (Berkeley) 6/29/90
 
-MAN=	autoconf.4 cons.4 ct.4 dca.4 dcl.4 dcm.4 dv.4 gb.4 grf.4 hil.4 \
-	intro.4 ite.4 le.4 mem.4 ppi.4 rb.4 rd.4 rmp.4 tc.4
+MAN4=	autoconf.0 cons.0 ct.0 dca.0 dcl.0 dcm.0 dv.0 gb.0 grf.0 hil.0 \
+	intro.0 ite.0 le.0 mem.0 ppi.0 rb.0 rd.0 rmp.0 tc.0
 MLINKS=	mem.4 kmem.4
 MANSUBDIR=/hp300
 
-.include <bsd.man.mk>
+all: ${MAN4}
+
+clean depend lint tags:
+
+cleandir:
+	rm -f ${MAN4}
+
+.include <bsd.prog.mk>

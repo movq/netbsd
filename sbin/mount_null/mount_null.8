@@ -1,10 +1,10 @@
-.\"	$NetBSD: mount_null.8,v 1.7 1997/10/20 09:11:30 enami Exp $
 .\"
 .\" Copyright (c) 1992, 1993, 1994
 .\"	The Regents of the University of California.  All rights reserved.
 .\"
 .\" This code is derived from software donated to Berkeley by
 .\" John Heidemann of the UCLA Ficus project.
+.\"
 .\"
 .\" Redistribution and use in source and binary forms, with or without
 .\" modification, are permitted provided that the following conditions
@@ -34,49 +34,37 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\"     @(#)mount_null.8	8.6 (Berkeley) 5/1/95
+.\"     from: @(#)mount_null.8	8.4 (Berkeley) 4/19/94
+.\"	$Id: mount_null.8,v 1.1 1994/06/08 19:23:43 mycroft Exp $
 .\"
-.\"
-.Dd May 1, 1995
+.Dd April 19, 1994
 .Dt MOUNT_NULL 8
 .Os BSD 4.4
 .Sh NAME
 .Nm mount_null
-.Nd mount a loopback filesystem sub-tree;
-demonstrate the use of a null file system layer
+.Nd demonstrate the use of a null file system layer
 .Sh SYNOPSIS
-.Nm
+.Nm mount_null
 .Op Fl o Ar options
 .Ar target
 .Ar mount-point
 .Sh DESCRIPTION
 The
-.Nm
+.Nm mount_null
 command creates a
 null layer, duplicating a sub-tree of the file system
 name space under another part of the global file system namespace.
-This allows existing files and directories to be accessed
-using a different pathname.
-.Pp
-The primary differences between a virtual copy of the filesystem
-and a symbolic link are that
-.Xr getcwd 3
-functions correctly in the virtual copy, and that other filesystems
-may be mounted on the virtual copy without affecting the original.
-A different device number for the virtual copy is returned by
-.Xr stat 2 ,
-but in other respects it is indistinguishable from the original.
-.Pp
-The
-.Nm
-filesystem differs from a traditional
-loopback file system in two respects: it is implemented using
+In this respect, it is
+similar to the loopback file system (see
+.Xr mount_lofs 8 ) .
+It differs from
+the loopback file system in two respects: it is implemented using
 a stackable layers techniques, and it's 
 .Do
-null-nodes
-.Dc
+null-node
+.Dc s
 stack above
-all lower-layer vnodes (not just above directory vnodes).
+all lower-layer vnodes, not just over directory vnodes.
 .Pp
 The options are as follows:
 .Bl -tag -width indent
@@ -92,6 +80,8 @@ man page for possible options and their meanings.
 The null layer has two purposes.
 First, it serves as a demonstration of layering by proving a layer
 which does nothing.
+(It actually does everything the loopback file system does,
+which is slightly more than nothing.)
 Second, the null layer can serve as a prototype layer.
 Since it provides all necessary layer framework,
 new file system layers can be created very easily be starting
@@ -103,8 +93,8 @@ for constructing new layers.
 .\"
 .Sh INSTANTIATING NEW NULL LAYERS
 New null layers are created with 
-.Nm "" .
-.Nm
+.Xr mount_null 8 .
+.Xr Mount_null 8
 takes two arguments, the pathname
 of the lower vfs (target-pn) and the pathname where the null
 layer will appear in the namespace (mount-point-pn).  After
@@ -205,7 +195,7 @@ by mapping an vnode arguments to the lower layer.
 The first approach is to call the aliasing layer's bypass routine.
 This method is most suitable when you wish to invoke the operation
 currently being handled on the lower layer.  It has the advantage
-the bypass routine already must do argument mapping.
+the the bypass routine already must do argument mapping.
 An example of this is 
 .Em null_getattrs
 in the null layer.
@@ -226,5 +216,5 @@ UCLA Technical Report CSD-910056,
 .Em "Stackable Layers: an Architecture for File System Development" .
 .Sh HISTORY
 The
-.Nm
+.Nm mount_null
 utility first appeared in 4.4BSD.

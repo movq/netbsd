@@ -1,18 +1,18 @@
-#	$NetBSD: Makefile,v 1.22 1997/10/11 08:22:31 mycroft Exp $
-#	@(#)Makefile	8.1 (Berkeley) 6/5/93
+#	@(#)Makefile	5.7.1.1 (Berkeley) 5/7/91
 
-# missing: dump.5 plot.5 
+MAN5=	a.out.0 acct.0 core.0 dir.0 disktab.0 fs.0 fstab.0 \
+	group.0 hosts.0 networks.0 passwd.0 phones.0 printcap.0 \
+	protocols.0 remote.0 resolver.0 services.0 shells.0 stab.0 types.0 \
+	utmp.0
+MLINKS=	fs.5 inode.5 utmp.5 wtmp.5
 
-MAN=	a.out.5 acct.5 core.5 daily.conf.5 dir.5 disktab.5 ethers.5 fs.5 \
-	fstab.5 genassym.cf.5 group.5 hosts.5 ifaliases.5 ld.so.conf.5 link.5 \
-	lkm.conf.5 monthly.conf.5 motd.5 netgroup.5 networks.5 passwd.5 \
-	phones.5 printcap.5 protocols.5 rc.conf.5 remote.5 resolv.conf.5 \
-	rpc.5 security.conf.5 services.5 shells.5 stab.5 ttyaction.5 types.5 \
-	utmp.5 weekly.conf.5
-MLINKS=	dir.5 dirent.5 fs.5 inode.5 utmp.5 wtmp.5 utmp.5 lastlog.5
-MLINKS+=passwd.5 master.passwd.5
+all: ${MAN5}
 
-SUBDIR=	man5.i386
+clean depend lint tags:
 
-.include <bsd.man.mk>
-.include <bsd.subdir.mk>
+cleandir:
+	rm -f ${MAN5}
+
+install: maninstall
+
+.include <bsd.prog.mk>

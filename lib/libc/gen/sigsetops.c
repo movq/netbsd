@@ -1,8 +1,6 @@
-/*	$NetBSD: sigsetops.c,v 1.11 1997/07/13 19:46:19 christos Exp $	*/
-
 /*-
- * Copyright (c) 1989, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1989 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,20 +30,14 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)sigsetops.c	8.1 (Berkeley) 6/4/93
+ *	@(#)sigsetops.c	5.3 (Berkeley) 2/23/91
  */
 
-#include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char sccsid[] = "@(#)sigsetops.c	8.1 (Berkeley) 6/4/93";
-#else
-__RCSID("$NetBSD: sigsetops.c,v 1.11 1997/07/13 19:46:19 christos Exp $");
-#endif
+static char sccsid[] = "@(#)sigsetops.c	5.3 (Berkeley) 2/23/91";
 #endif /* LIBC_SCCS and not lint */
 
-#include <errno.h>
-#include <signal.h>
+#include <sys/signal.h>
 
 #undef sigemptyset
 #undef sigfillset
@@ -53,7 +45,6 @@ __RCSID("$NetBSD: sigsetops.c,v 1.11 1997/07/13 19:46:19 christos Exp $");
 #undef sigdelset
 #undef sigismember
 
-int
 sigemptyset(set)
 	sigset_t *set;
 {
@@ -61,7 +52,6 @@ sigemptyset(set)
 	return (0);
 }
 
-int
 sigfillset(set)
 	sigset_t *set;
 {
@@ -69,40 +59,25 @@ sigfillset(set)
 	return (0);
 }
 
-int
 sigaddset(set, signo)
 	sigset_t *set;
 	int signo;
 {
-	if (signo <= 0 || signo >= NSIG) {
-		errno = EINVAL;
-		return -1;
-	}
 	*set |= sigmask(signo);
 	return (0);
 }
 
-int
 sigdelset(set, signo)
 	sigset_t *set;
 	int signo;
 {
-	if (signo <= 0 || signo >= NSIG) {
-		errno = EINVAL;
-		return -1;
-	}
 	*set &= ~sigmask(signo);
 	return (0);
 }
 
-int
 sigismember(set, signo)
 	const sigset_t *set;
 	int signo;
 {
-	if (signo <= 0 || signo >= NSIG) {
-		errno = EINVAL;
-		return -1;
-	}
-	return ((*set & sigmask(signo)) != 0);
+	return ((*set & ~sigmask(signo)) != 0);
 }

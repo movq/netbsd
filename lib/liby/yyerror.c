@@ -31,22 +31,14 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
 static char sccsid[] = "@(#)yyerror.c	5.2 (Berkeley) 5/15/90";
-#else
-__RCSID("$NetBSD: yyerror.c,v 1.4 1997/10/09 12:08:20 lukem Exp $");
-#endif
 #endif /* not lint */
 
 #include <stdio.h>
 
-int yyerror __P((char *));
-
-int
 yyerror(msg)
-	char *msg;
+char *msg;
 {
 	(void)fprintf(stderr, "%s\n", msg);
 	return(0);

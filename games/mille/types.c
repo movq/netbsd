@@ -1,8 +1,6 @@
-/*	$NetBSD: types.c,v 1.6 1997/10/12 00:54:40 lukem Exp $	*/
-
 /*
- * Copyright (c) 1982, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1982 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,13 +31,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)types.c	8.1 (Berkeley) 5/31/93";
-#else
-__RCSID("$NetBSD: types.c,v 1.6 1997/10/12 00:54:40 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)types.c	5.4 (Berkeley) 6/1/90";
 #endif /* not lint */
 
 # include	"mille.h"
@@ -48,19 +41,15 @@ __RCSID("$NetBSD: types.c,v 1.6 1997/10/12 00:54:40 lukem Exp $");
  * @(#)types.c	1.1 (Berkeley) 4/1/82
  */
 
-int
 isrepair(card)
-	CARD	card; 
-{
+reg CARD	card; {
 
-	return card == C_GAS || card == C_SPARE ||
-	    card == C_REPAIRS || card == C_INIT;
+	return card == C_GAS || card == C_SPARE || card == C_REPAIRS || card == C_INIT;
 }
 
-int
 safety(card)
-	CARD	card;
-{
+reg CARD	card; {
+
 	switch (card) {
 	  case C_EMPTY:
 	  case C_GAS:
@@ -82,5 +71,5 @@ safety(card)
 		return C_RIGHT_WAY;
 	}
 	/* NOTREACHED */
-	return(0);
 }
+

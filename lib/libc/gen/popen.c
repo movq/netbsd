@@ -1,8 +1,6 @@
-/*	$NetBSD: popen.c,v 1.15 1997/09/16 00:35:47 thorpej Exp $	*/
-
 /*
- * Copyright (c) 1988, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1988 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software written by Ken Arnold and
  * published in UNIX Review, Vol. 6, No. 8.
@@ -36,146 +34,100 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char sccsid[] = "@(#)popen.c	8.1 (Berkeley) 6/4/93";
-#else
-__RCSID("$NetBSD: popen.c,v 1.15 1997/09/16 00:35:47 thorpej Exp $");
-#endif
+static char sccsid[] = "@(#)popen.c	5.15 (Berkeley) 2/23/91";
 #endif /* LIBC_SCCS and not lint */
 
-#include "namespace.h"
 #include <sys/param.h>
+#include <sys/signal.h>
 #include <sys/wait.h>
-
-#include <signal.h>
 #include <errno.h>
-#include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 #include <paths.h>
 
-#ifdef __weak_alias
-__weak_alias(popen,_popen);
-__weak_alias(pclose,_pclose);
-#endif
+static pid_t *pids;
 
-static struct pid {
-	struct pid *next;
-	FILE *fp;
-	pid_t pid;
-} *pidlist; 
-	
 FILE *
 popen(program, type)
 	const char *program;
 	const char *type;
 {
-	struct pid *cur, *old;
 	FILE *iop;
-	int pdes[2], pid;
-#ifdef __GNUC__
-	(void) &cur;
-#endif
+	int pdes[2], fds, pid;
 
-	if ((*type != 'r' && *type != 'w') || type[1]) {
-		errno = EINVAL;
+	if (*type != 'r' && *type != 'w' || type[1])
 		return (NULL);
+
+	if (pids == NULL) {
+		if ((fds = getdtablesize()) <= 0)
+			return (NULL);
+		if ((pids = (pid_t *)malloc((u_int)(fds * sizeof(int)))) == NULL)
+			return (NULL);
+		bzero((char *)pids, fds * sizeof(pid_t));
 	}
-
-	if ((cur = malloc(sizeof(struct pid))) == NULL)
+	if (pipe(pdes) < 0)
 		return (NULL);
-
-	if (pipe(pdes) < 0) {
-		free(cur);
-		return (NULL);
-	}
-
 	switch (pid = vfork()) {
-	case -1:			/* Error. */
-		(void)close(pdes[0]);
-		(void)close(pdes[1]);
-		free(cur);
+	case -1:			/* error */
+		(void) close(pdes[0]);
+		(void) close(pdes[1]);
 		return (NULL);
 		/* NOTREACHED */
-	case 0:				/* Child. */
+	case 0:				/* child */
 		if (*type == 'r') {
 			if (pdes[1] != STDOUT_FILENO) {
-				(void)dup2(pdes[1], STDOUT_FILENO);
-				(void)close(pdes[1]);
+				(void) dup2(pdes[1], STDOUT_FILENO);
+				(void) close(pdes[1]);
 			}
 			(void) close(pdes[0]);
 		} else {
 			if (pdes[0] != STDIN_FILENO) {
-				(void)dup2(pdes[0], STDIN_FILENO);
-				(void)close(pdes[0]);
+				(void) dup2(pdes[0], STDIN_FILENO);
+				(void) close(pdes[0]);
 			}
-			(void)close(pdes[1]);
+			(void) close(pdes[1]);
 		}
-
-		/* POSIX.2 B.3.2.2 "popen() shall ensure that any streams
-		   from previous popen() calls that remain open in the 
-		   parent process are closed in the new child process. */
-		for (old = pidlist; old; old = old->next)
-			close(fileno(old->fp));
-		
 		execl(_PATH_BSHELL, "sh", "-c", program, NULL);
 		_exit(127);
 		/* NOTREACHED */
 	}
-
-	/* Parent; assume fdopen can't fail. */
+	/* parent; assume fdopen can't fail...  */
 	if (*type == 'r') {
 		iop = fdopen(pdes[0], type);
-		(void)close(pdes[1]);
+		(void) close(pdes[1]);
 	} else {
 		iop = fdopen(pdes[1], type);
-		(void)close(pdes[0]);
+		(void) close(pdes[0]);
 	}
-
-	/* Link into list of file descriptors. */
-	cur->fp = iop;
-	cur->pid =  pid;
-	cur->next = pidlist;
-	pidlist = cur;
-
+	pids[fileno(iop)] = pid;
 	return (iop);
 }
 
-/*
- * pclose --
- *	Pclose returns -1 if stream is not associated with a `popened' command,
- *	if already `pclosed', or waitpid returns an error.
- */
 int
 pclose(iop)
 	FILE *iop;
 {
-	register struct pid *cur, *last;
-	int pstat;
+	register int fdes;
+	int omask;
+	union wait pstat;
 	pid_t pid;
 
-	(void)fclose(iop);
-
-	/* Find the appropriate file pointer. */
-	for (last = NULL, cur = pidlist; cur; last = cur, cur = cur->next)
-		if (cur->fp == iop)
-			break;
-	if (cur == NULL)
+	/*
+	 * pclose returns -1 if stream is not associated with a
+	 * `popened' command, if already `pclosed', or waitpid
+	 * returns an error.
+	 */
+	if (pids == NULL || pids[fdes = fileno(iop)] == 0)
 		return (-1);
-
+	(void) fclose(iop);
+	omask = sigblock(sigmask(SIGINT)|sigmask(SIGQUIT)|sigmask(SIGHUP));
 	do {
-		pid = waitpid(cur->pid, &pstat, 0);
+		pid = waitpid(pids[fdes], (int *) &pstat, 0);
 	} while (pid == -1 && errno == EINTR);
-
-	/* Remove the entry from the linked list. */
-	if (last == NULL)
-		pidlist = cur->next;
-	else
-		last->next = cur->next;
-	free(cur);
-		
-	return (pid == -1 ? -1 : pstat);
+	(void) sigsetmask(omask);
+	pids[fdes] = 0;
+	return (pid == -1 ? -1 : pstat.w_status);
 }

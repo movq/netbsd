@@ -1,8 +1,6 @@
-/*	$NetBSD: dr_4.c,v 1.6 1997/10/13 21:03:37 christos Exp $	*/
-
 /*
- * Copyright (c) 1983, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1983 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,23 +31,16 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)dr_4.c	8.2 (Berkeley) 4/28/95";
-#else
-__RCSID("$NetBSD: dr_4.c,v 1.6 1997/10/13 21:03:37 christos Exp $");
-#endif
+static char sccsid[] = "@(#)dr_4.c	5.4 (Berkeley) 6/1/90";
 #endif /* not lint */
 
-#include "extern.h"
-#include <stdlib.h>
+#include "externs.h"
 
-void
 ungrap(from, to)
-struct ship *from, *to;
+register struct ship *from, *to;
 {
-	int k;
+	register k;
 	char friend;
 
 	if ((k = grappled2(from, to)) == 0)
@@ -58,18 +49,17 @@ struct ship *from, *to;
 	while (--k >= 0) {
 		if (friend || die() < 3) {
 			cleangrapple(from, to, 0);
-			makesignal(from, "ungrappling $$", to);
+			makesignal(from, "ungrappling %s (%c%c)", to);
 		}
 	}
 }
 
-void
 grap(from, to)
-struct ship *from, *to;
+register struct ship *from, *to;
 {
 	if (capship(from)->nationality != capship(to)->nationality && die() > 2)
 		return;
 	Write(W_GRAP, from, 0, to->file->index, 0, 0, 0);
 	Write(W_GRAP, to, 0, from->file->index, 0, 0, 0);
-	makesignal(from, "grappled with $$", to);
+	makesignal(from, "grappled with %s (%c%c)", to);
 }

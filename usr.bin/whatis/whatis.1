@@ -1,5 +1,3 @@
-.\"	$NetBSD: whatis.1,v 1.4 1997/10/20 03:17:44 lukem Exp $
-.\"
 .\" Copyright (c) 1989, 1990, 1993
 .\"	The Regents of the University of California.  All rights reserved.
 .\"
@@ -40,12 +38,12 @@
 .Nm whatis
 .Nd describe what a command is
 .Sh SYNOPSIS
-.Nm
+.Nm whatis
 .Op Fl M Ar path
 .Op Fl m Ar path
 .Ar command Ar ...
 .Sh DESCRIPTION
-.Nm
+.Nm Whatis
 looks up a given command and gives the header line from the manual page.
 You can then use the
 .Xr man 1
@@ -55,7 +53,7 @@ The options are as follows:
 .Bl -tag -width Fl
 .It Fl M Ar path
 Override the list of standard directories
-.Nm
+.Nm whatis
 searches for its database named
 .Dq Pa whatis.db .
 The supplied
@@ -67,7 +65,7 @@ This search path may also be set using the environment variable
 .Ev MANPATH .
 .It Fl m Ar path
 Augment the list of standard directories
-.Nm
+.Nm whatis
 searches for its database named
 .Dq Pa whatis.db .
 The supplied

@@ -1,7 +1,5 @@
-.\"	$NetBSD: remote.5,v 1.4 1997/04/20 00:05:27 mellon Exp $
-.\"
-.\" Copyright (c) 1983, 1991, 1993
-.\"	The Regents of the University of California.  All rights reserved.
+.\" Copyright (c) 1983, 1991 Regents of the University of California.
+.\" All rights reserved.
 .\"
 .\" Redistribution and use in source and binary forms, with or without
 .\" modification, are permitted provided that the following conditions
@@ -31,9 +29,9 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\"     @(#)remote.5	8.1 (Berkeley) 6/5/93
+.\"     @(#)remote.5	6.3 (Berkeley) 5/10/91
 .\"
-.Dd June 5, 1993
+.Dd May 10, 1991
 .Dt REMOTE 5
 .Os BSD 4.2
 .Sh NAME
@@ -102,10 +100,6 @@ required to switch to the host.
 (str)
 Call unit if making a phone call.
 Default is the same as the `dv' field.
-.It Cm \&dc
-(bool)
-This host is directly connected, and tip should not expect carrier detect
-to be high, nor should it exit if carrier detect drops.
 .It Cm \&di
 (str)
 Disconnect message sent to the host when a

@@ -1,5 +1,3 @@
-/*	$NetBSD: rindex.c,v 1.5 1997/07/13 20:24:19 christos Exp $	*/
-
 /*
  * Copyright (c) 1988 Regents of the University of California.
  * All rights reserved.
@@ -33,15 +31,11 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char *sccsid = "@(#)rindex.c	5.9 (Berkeley) 2/24/91";
-#else
-__RCSID("$NetBSD: rindex.c,v 1.5 1997/07/13 20:24:19 christos Exp $");
-#endif
+static char sccsid[] = "@(#)rindex.c	5.9 (Berkeley) 2/24/91";
 #endif /* LIBC_SCCS and not lint */
 
+#include <stddef.h>
 #include <string.h>
 
 char *

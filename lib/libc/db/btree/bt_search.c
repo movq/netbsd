@@ -1,7 +1,5 @@
-/*	$NetBSD: bt_search.c,v 1.10 1997/07/21 14:06:36 jtc Exp $	*/
-
 /*-
- * Copyright (c) 1990, 1993, 1994
+ * Copyright (c) 1990, 1993
  *	The Regents of the University of California.  All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
@@ -36,16 +34,10 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char sccsid[] = "@(#)bt_search.c	8.8 (Berkeley) 7/31/94";
-#else
-__RCSID("$NetBSD: bt_search.c,v 1.10 1997/07/21 14:06:36 jtc Exp $");
-#endif
+static char sccsid[] = "@(#)bt_search.c	8.1 (Berkeley) 6/4/93";
 #endif /* LIBC_SCCS and not lint */
 
-#include "namespace.h"
 #include <sys/types.h>
 
 #include <stdio.h>
@@ -53,12 +45,8 @@ __RCSID("$NetBSD: bt_search.c,v 1.10 1997/07/21 14:06:36 jtc Exp $");
 #include <db.h>
 #include "btree.h"
 
-static int __bt_snext __P((BTREE *, PAGE *, const DBT *, int *));
-static int __bt_sprev __P((BTREE *, PAGE *, const DBT *, int *));
-
 /*
- * __bt_search --
- *	Search a btree for a key.
+ * __BT_SEARCH -- Search a btree for a key.
  *
  * Parameters:
  *	t:	tree to search
@@ -66,9 +54,12 @@ static int __bt_sprev __P((BTREE *, PAGE *, const DBT *, int *));
  *	exactp:	pointer to exact match flag
  *
  * Returns:
- *	The EPG for matching record, if any, or the EPG for the location
- *	of the key, if it were inserted into the tree, is entered into
- *	the bt_cur field of the tree.  A pointer to the field is returned.
+ *	EPG for matching record, if any, or the EPG for the location of the
+ *	key, if it were inserted into the tree.
+ *
+ * Warnings:
+ *	The EPG returned is in static memory, and will be overwritten by the
+ *	next search of any kind in any tree.
  */
 EPG *
 __bt_search(t, key, exactp)
@@ -76,10 +67,11 @@ __bt_search(t, key, exactp)
 	const DBT *key;
 	int *exactp;
 {
-	PAGE *h;
-	indx_t base, index, lim;
+	register indx_t index;
+	register int base, cmp, lim;
+	register PAGE *h;
 	pgno_t pg;
-	int cmp;
+	static EPG e;
 
 	BT_CLR(t);
 	for (pg = P_ROOT;;) {
@@ -87,13 +79,13 @@ __bt_search(t, key, exactp)
 			return (NULL);
 
 		/* Do a binary search on the current page. */
-		t->bt_cur.page = h;
+		e.page = h;
 		for (base = 0, lim = NEXTINDEX(h); lim; lim >>= 1) {
-			t->bt_cur.index = index = base + (lim >> 1);
-			if ((cmp = __bt_cmp(t, key, &t->bt_cur)) == 0) {
+			e.index = index = base + (lim >> 1);
+			if ((cmp = __bt_cmp(t, key, &e)) == 0) {
 				if (h->flags & P_BLEAF) {
 					*exactp = 1;
-					return (&t->bt_cur);
+					return (&e);
 				}
 				goto next;
 			}
@@ -103,28 +95,11 @@ __bt_search(t, key, exactp)
 			}
 		}
 
-		/*
-		 * If it's a leaf page, we're almost done.  If no duplicates
-		 * are allowed, or we have an exact match, we're done.  Else,
-		 * it's possible that there were matching keys on this page,
-		 * which later deleted, and we're on a page with no matches
-		 * while there are matches on other pages.  If at the start or
-		 * end of a page, check the adjacent page.
-		 */
+		/* If it's a leaf page, we're done. */
 		if (h->flags & P_BLEAF) {
-			if (!F_ISSET(t, B_NODUPS)) {
-				if (base == 0 &&
-				    h->prevpg != P_INVALID &&
-				    __bt_sprev(t, h, key, exactp))
-					return (&t->bt_cur);
-				if (base == NEXTINDEX(h) &&
-				    h->nextpg != P_INVALID &&
-				    __bt_snext(t, h, key, exactp))
-					return (&t->bt_cur);
-			}
+			e.index = base;
 			*exactp = 0;
-			t->bt_cur.index = base;
-			return (&t->bt_cur);
+			return (&e);
 		}
 
 		/*
@@ -136,86 +111,9 @@ __bt_search(t, key, exactp)
 		 */
 		index = base ? base - 1 : base;
 
-next:		BT_PUSH(t, h->pgno, index);
+next:		if (__bt_push(t, h->pgno, index) == RET_ERROR)
+			return (NULL);
 		pg = GETBINTERNAL(h, index)->pgno;
 		mpool_put(t->bt_mp, h, 0);
 	}
-}
-
-/*
- * __bt_snext --
- *	Check for an exact match after the key.
- *
- * Parameters:
- *	t:	tree
- *	h:	current page
- *	key:	key
- *	exactp:	pointer to exact match flag
- *
- * Returns:
- *	If an exact match found.
- */
-static int
-__bt_snext(t, h, key, exactp)
-	BTREE *t;
-	PAGE *h;
-	const DBT *key;
-	int *exactp;
-{
-	EPG e;
-
-	/*
-	 * Get the next page.  The key is either an exact
-	 * match, or not as good as the one we already have.
-	 */
-	if ((e.page = mpool_get(t->bt_mp, h->nextpg, 0)) == NULL)
-		return (0);
-	e.index = 0;
-	if (__bt_cmp(t, key, &e) == 0) {
-		mpool_put(t->bt_mp, h, 0);
-		t->bt_cur = e;
-		*exactp = 1;
-		return (1);
-	}
-	mpool_put(t->bt_mp, e.page, 0);
-	return (0);
-}
-
-/*
- * __bt_sprev --
- *	Check for an exact match before the key.
- *
- * Parameters:
- *	t:	tree
- *	h:	current page
- *	key:	key
- *	exactp:	pointer to exact match flag
- *
- * Returns:
- *	If an exact match found.
- */
-static int
-__bt_sprev(t, h, key, exactp)
-	BTREE *t;
-	PAGE *h;
-	const DBT *key;
-	int *exactp;
-{
-	EPG e;
-
-	/*
-	 * Get the previous page.  The key is either an exact
-	 * match, or not as good as the one we already have.
-	 */
-	if ((e.page = mpool_get(t->bt_mp, h->prevpg, 0)) == NULL)
-		return (0);
-	e.index = NEXTINDEX(e.page) - 1;
-	if (__bt_cmp(t, key, &e) == 0) {
-		mpool_put(t->bt_mp, h, 0);
-		t->bt_cur = e;
-		*exactp = 1;
-		return (1);
-	}
-	mpool_put(t->bt_mp, e.page, 0);
-	return (0);
 }

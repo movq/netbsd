@@ -1,11 +1,10 @@
-#	$NetBSD: Makefile,v 1.11 1997/10/19 23:46:07 cjs Exp $
-#	from: @(#)Makefile	8.1 (Berkeley) 6/4/93
+#	@(#)Makefile	5.12 (Berkeley) 1/21/91
 
 PROG=	getty
-LINKS=	${BINDIR}/getty ${BINDIR}/uugetty
-SRCS=	main.c init.c subr.c
-DPADD+=	${LIBUTIL}
-LDADD+=	-lutil
-MAN=	getty.8 gettytab.5 ttys.5
+SRCS=	main.c init.c subr.c gettytab.c ttydefaults.c
+DPADD=	${LIBUTIL}
+LDADD=	-lutil
+MAN5=	gettytab.0 ttys.0
+MAN8=	getty.0
 
 .include <bsd.prog.mk>

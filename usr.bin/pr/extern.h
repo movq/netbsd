@@ -1,5 +1,3 @@
-/*	$NetBSD: extern.h,v 1.2 1997/01/09 15:01:35 tls Exp $	*/
-
 /*-
  * Copyright (c) 1991 Keith Muller.
  * Copyright (c) 1993
@@ -37,7 +35,7 @@
  * SUCH DAMAGE.
  *
  *      from: @(#)extern.h	8.1 (Berkeley) 6/6/93
- *	$NetBSD: extern.h,v 1.2 1997/01/09 15:01:35 tls Exp $
+ *	$Id: extern.h,v 1.1 1994/01/06 15:57:19 cgd Exp $
  */
 
 extern int eoptind;

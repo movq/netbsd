@@ -1,8 +1,7 @@
-/*	$NetBSD: conf.c,v 1.7 1997/09/21 02:35:41 enami Exp $	*/
-
 /*
  * Copyright (c) 1992, 1993
  *	The Regents of the University of California.  All rights reserved.
+ * All rights reserved.
  *
  * This code is derived from software donated to Berkeley by
  * Jan-Simon Pendry.
@@ -35,14 +34,10 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	from: Id: conf.c,v 1.2 1992/05/27 07:09:27 jsp Exp
- *	@(#)conf.c	8.2 (Berkeley) 3/27/94
+ *	from: Id: conf.c,v 1.2 1992/05/27 07:09:27 jsp Exp jsp
+ *	from: @(#)conf.c	8.1 (Berkeley) 6/5/93
+ *	$Id: conf.c,v 1.1 1994/01/12 20:01:33 cgd Exp $
  */
-
-#include <sys/cdefs.h>
-#ifndef lint
-__RCSID("$NetBSD: conf.c,v 1.7 1997/09/21 02:35:41 enami Exp $");
-#endif /* not lint */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -70,16 +65,6 @@ struct path {
 	char **p_argv;		/* argv[] pointers into arg string (malloc) */
 };
 
-static	void	ins_que __P((qelem *, qelem *));
-static	path   *palloc __P((char *, int));
-static	void	pfree __P((path *));
-static	int	pinsert __P((path *, qelem *));
-static	void	preplace __P((qelem *, qelem *));
-static	void	readfp __P((qelem *, FILE *));
-	void	regerror __P((const char *));
-static	void	rem_que __P((qelem *));
-static	void   *xmalloc __P((size_t));
-
 static char *conf_file;		/* XXX for regerror */
 static path *curp;		/* XXX for regerror */
 
@@ -87,9 +72,8 @@ static path *curp;		/* XXX for regerror */
  * Add an element to a 2-way list,
  * just after (pred)
  */
-static void
-ins_que(elem, pred)
-	qelem *elem, *pred;
+static void ins_que(elem, pred)
+qelem *elem, *pred;
 {
 	qelem *p = pred->q_forw;
 	elem->q_back = pred;
@@ -101,9 +85,8 @@ ins_que(elem, pred)
 /*
  * Remove an element from a 2-way list
  */
-static void
-rem_que(elem)
-	qelem *elem;
+static void rem_que(elem)
+qelem *elem;
 {
 	qelem *p = elem->q_forw;
 	qelem *p2 = elem->q_back;
@@ -114,14 +97,13 @@ rem_que(elem)
 /*
  * Error checking malloc
  */
-static void *
-xmalloc(siz)
-	size_t siz;
+static void *xmalloc(siz)
+unsigned siz;
 {
 	void *p = malloc(siz);
 	if (p)
 		return (p);
-	syslog(LOG_ALERT, "malloc: failed to get %lu bytes", (u_long)siz);
+	syslog(LOG_ALERT, "malloc: failed to get %d bytes", siz);
 	exit(1);
 }
 
@@ -132,10 +114,9 @@ xmalloc(siz)
  * not found then the path is added to the end of the list
  * and 1 is returned.
  */
-static int
-pinsert(p0, q0)
-	path *p0;
-	qelem *q0;
+static int pinsert(p0, q0)
+path *p0;
+qelem *q0;
 {
 	qelem *q;
 
@@ -152,18 +133,16 @@ pinsert(p0, q0)
 	
 }
 
-void
-regerror(s)
-	const char *s;
+void regerror(s)
+const char *s;
 {
-	syslog(LOG_ERR, "%s:%d: regcomp %s: %s",
-	    conf_file, curp->p_lno, curp->p_key, s);
+	syslog(LOG_ERR, "%s:%s: regcomp %s: %s",
+			conf_file, curp->p_lno, curp->p_key, s);
 }
 
-static path *
-palloc(cline, lno)
-	char *cline;
-	int lno;
+static path *palloc(cline, lno)
+char *cline;
+int lno;
 {
 	int c;
 	char *s;
@@ -226,8 +205,9 @@ palloc(cline, lno)
 		curp = p;			/* XXX */
 		p->p_re = regcomp(p->p_key);
 		curp = 0;			/* XXX */
-	} else
+	} else {
 		p->p_re = 0;
+	}
 	p->p_lno = lno;
 
 	return (p);
@@ -236,9 +216,8 @@ palloc(cline, lno)
 /*
  * Free a path structure
  */
-static void
-pfree(p)
-	path *p;
+static void pfree(p)
+path *p;
 {
 	free(p->p_args);
 	if (p->p_re)
@@ -251,10 +230,9 @@ pfree(p)
  * Discard all currently held path structures on q0.
  * and add all the ones on xq.
  */
-static void
-preplace(q0, xq)
-	qelem *q0;
-	qelem *xq;
+static void preplace(q0, xq)
+qelem *q0;
+qelem *xq;
 {
 	/*
 	 * While the list is not empty,
@@ -262,7 +240,7 @@ preplace(q0, xq)
 	 * and free it.
 	 */
 	while (q0->q_forw != q0) {
-		qelem *q = q0->q_forw;
+		qelem *q = q->q_forw;
 		rem_que(q);
 		pfree((path *) q);
 	}
@@ -277,10 +255,9 @@ preplace(q0, xq)
  * Read the lines from the configuration file and
  * add them to the list of paths.
  */
-static void
-readfp(q0, fp)
-	qelem *q0;
-	FILE *fp;
+static void readfp(q0, fp)
+qelem *q0;
+FILE *fp;
 {
 	char cline[LINE_MAX];
 	int nread = 0;
@@ -315,10 +292,9 @@ readfp(q0, fp)
  * the existing path list with the new version.
  * If the file is not readable, then no changes take place
  */
-void
-conf_read(q, conf)
-	qelem *q;
-	char *conf;
+void conf_read(q, conf)
+qelem *q;
+char *conf;
 {
 	FILE *fp = fopen(conf, "r");
 	if (fp) {
@@ -326,15 +302,15 @@ conf_read(q, conf)
 		readfp(q, fp);
 		conf_file = 0;		/* XXX */
 		(void) fclose(fp);
-	} else
-		syslog(LOG_ERR, "open config file \"%s\": %m", conf);
+	} else {
+		syslog(LOG_ERR, "open config file \"%s\": %s", conf, strerror(errno));
+	}
 }
 
 
-char **
-conf_match(q0, key)
-	qelem *q0;
-	char *key;
+char **conf_match(q0, key)
+qelem *q0;
+char *key;
 {
 	qelem *q;
 

@@ -1,5 +1,3 @@
-/*	$NetBSD: system.c,v 1.13 1997/07/21 14:09:06 jtc Exp $	*/
-
 /*
  * Copyright (c) 1988 The Regents of the University of California.
  * All rights reserved.
@@ -33,34 +31,25 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char *sccsid = "from: @(#)system.c	5.10 (Berkeley) 2/23/91";
-#else
-__RCSID("$NetBSD: system.c,v 1.13 1997/07/21 14:09:06 jtc Exp $");
-#endif
+static char sccsid[] = "@(#)system.c	5.10 (Berkeley) 2/23/91";
 #endif /* LIBC_SCCS and not lint */
 
-#include "namespace.h"
 #include <sys/types.h>
+#include <sys/signal.h>
 #include <sys/wait.h>
-#include <signal.h>
 #include <stdlib.h>
+#include <stddef.h>
 #include <unistd.h>
 #include <paths.h>
 
-extern char **environ;
-
-int
 system(command)
 	const char *command;
 {
+	union wait pstat;
 	pid_t pid;
-	sig_t intsave, quitsave;
 	int omask;
-	int pstat;
-	char *argp[] = {"sh", "-c", (char *) command, NULL};
+	sig_t intsave, quitsave;
 
 	if (!command)		/* just checking... */
 		return(1);
@@ -69,18 +58,19 @@ system(command)
 	switch(pid = vfork()) {
 	case -1:			/* error */
 		(void)sigsetmask(omask);
-		return(-1);
+		pstat.w_status = 0;
+		pstat.w_retcode = 127;
+		return(pstat.w_status);
 	case 0:				/* child */
 		(void)sigsetmask(omask);
-		execve(_PATH_BSHELL, argp, environ);
+		execl(_PATH_BSHELL, "sh", "-c", command, (char *)NULL);
 		_exit(127);
 	}
-
 	intsave = signal(SIGINT, SIG_IGN);
 	quitsave = signal(SIGQUIT, SIG_IGN);
 	pid = waitpid(pid, (int *)&pstat, 0);
 	(void)sigsetmask(omask);
 	(void)signal(SIGINT, intsave);
 	(void)signal(SIGQUIT, quitsave);
-	return(pid == -1 ? -1 : pstat);
+	return(pid == -1 ? -1 : pstat.w_status);
 }

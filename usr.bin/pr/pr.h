@@ -1,5 +1,3 @@
-/*	$NetBSD: pr.h,v 1.2 1997/01/09 15:01:37 tls Exp $	*/
-
 /*-
  * Copyright (c) 1991 Keith Muller.
  * Copyright (c) 1993
@@ -37,7 +35,7 @@
  * SUCH DAMAGE.
  *
  *      from: @(#)pr.h	8.1 (Berkeley) 6/6/93
- *	$NetBSD: pr.h,v 1.2 1997/01/09 15:01:37 tls Exp $
+ *	$Id: pr.h,v 1.1 1994/01/06 15:57:29 cgd Exp $
  */
 
 /*

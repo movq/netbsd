@@ -1,5 +1,3 @@
-/*	$NetBSD: merge.c,v 1.5 1997/07/21 14:08:56 jtc Exp $	*/
-
 /*-
  * Copyright (c) 1992, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -36,13 +34,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char sccsid[] = "from: @(#)merge.c	8.2 (Berkeley) 2/14/94";
-#else
-__RCSID("$NetBSD: merge.c,v 1.5 1997/07/21 14:08:56 jtc Exp $");
-#endif
+static char sccsid[] = "@(#)merge.c	8.2 (Berkeley) 2/14/94";
 #endif /* LIBC_SCCS and not lint */
 
 /*
@@ -59,21 +52,14 @@ __RCSID("$NetBSD: merge.c,v 1.5 1997/07/21 14:08:56 jtc Exp $");
  * (The default is pairwise merging.)
  */
 
-#include "namespace.h"
 #include <sys/types.h>
 
 #include <errno.h>
 #include <stdlib.h>
 #include <string.h>
 
-#ifdef __weak_alias
-__weak_alias(mergesort,_mergesort);
-#endif
-
-static void setup __P((u_char *, u_char *, size_t, size_t,
-    int (*)(const void *, const void *)));
-static void insertionsort __P((u_char *, size_t, size_t,
-    int (*)(const void *, const void *)));
+static void setup __P((u_char *, u_char *, size_t, size_t, int (*)()));
+static void insertionsort __P((u_char *, size_t, size_t, int (*)()));
 
 #define ISIZE sizeof(int)
 #define PSIZE sizeof(u_char *)
@@ -161,10 +147,7 @@ mergesort(base, nmemb, size, cmp)
 	    			sense = 0;
 	    		}
 	    		if (!big) {	/* here i = 0 */
-#if 0
-LINEAR:
-#endif
-				while ((b += size) < t && cmp(q, b) >sense)
+LINEAR:	    			while ((b += size) < t && cmp(q, b) >sense)
 	    				if (++i == 6) {
 	    					big = 1;
 	    					goto EXPONENTIAL;
@@ -185,10 +168,7 @@ EXPONENTIAL:	    		for (i = size; ; i <<= 1)
 	    					goto FASTCASE;
 	    				} else
 	    					b = p;
-#if 0
-SLOWCASE:
-#endif
-				while (t > b+size) {
+SLOWCASE:	    		while (t > b+size) {
 	    				i = (((t - b) / size) >> 1) * size;
 	    				if ((*cmp)(q, p = b + i) <= sense)
 	    					t = p;

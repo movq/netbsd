@@ -1,8 +1,6 @@
-/*	$NetBSD: paste.c,v 1.4 1997/10/19 12:36:29 lukem Exp $	*/
-
 /*
- * Copyright (c) 1989, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1989 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Adam S. Moskowitz of Menlo Consulting.
@@ -36,43 +34,35 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1989, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+char copyright[] =
+"@(#) Copyright (c) 1989 The Regents of the University of California.\n\
+ All rights reserved.\n";
 #endif /* not lint */
 
 #ifndef lint
-/*static char sccsid[] = "from: @(#)paste.c	8.1 (Berkeley) 6/6/93";*/
-__RCSID("$NetBSD: paste.c,v 1.4 1997/10/19 12:36:29 lukem Exp $");
+static char sccsid[] = "@(#)paste.c	5.7 (Berkeley) 10/30/90";
 #endif /* not lint */
 
 #include <sys/types.h>
-#include <err.h>
 #include <errno.h>
 #include <limits.h>
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
-
-int	main __P((int, char **));
-void	parallel __P((char **));
-void	sequential __P((char **));
-int	tr __P((char *));
-void	usage __P((void));
 
 char *delim;
 int delimcnt;
 
-int
 main(argc, argv)
 	int argc;
 	char **argv;
 {
+	extern char *optarg;
+	extern int optind;
 	int ch, seq;
 
 	seq = 0;
-	while ((ch = getopt(argc, argv, "d:s")) != -1)
+	while ((ch = getopt(argc, argv, "d:s")) != EOF)
 		switch(ch) {
 		case 'd':
 			delimcnt = tr(delim = optarg);
@@ -106,25 +96,28 @@ typedef struct _list {
 	char *name;
 } LIST;
 
-void
 parallel(argv)
 	char **argv;
 {
-	LIST *lp;
-	int cnt;
-	char ch, *p;
+	register LIST *lp;
+	register int cnt;
+	register char ch, *p;
 	LIST *head, *tmp;
 	int opencnt, output;
-	char buf[_POSIX2_LINE_MAX + 1];
+	char buf[_POSIX2_LINE_MAX + 1], *malloc();
 
-	tmp = NULL;
-	for (cnt = 0, head = NULL; (p = *argv) != NULL; ++argv, ++cnt) {
-		if (!(lp = (LIST *)malloc((u_int)sizeof(LIST))))
-			err(1, "malloc");
+	for (cnt = 0, head = NULL; p = *argv; ++argv, ++cnt) {
+		if (!(lp = (LIST *)malloc((u_int)sizeof(LIST)))) {
+			(void)fprintf(stderr, "paste: %s.\n", strerror(ENOMEM));
+			exit(1);
+		}
 		if (p[0] == '-' && !p[1])
 			lp->fp = stdin;
-		else if (!(lp->fp = fopen(p, "r")))
-			err(1, "%s", p);
+		else if (!(lp->fp = fopen(p, "r"))) {
+			(void)fprintf(stderr, "paste: %s: %s.\n", p,
+			    strerror(errno));
+			exit(1);
+		}
 		lp->next = NULL;
 		lp->cnt = cnt;
 		lp->name = p;
@@ -153,8 +146,12 @@ parallel(argv)
 					putchar(ch);
 				continue;
 			}
-			if (!(p = strchr(buf, '\n')))
-				err(1, "%s: input line too long.", lp->name);
+			if (!(p = index(buf, '\n'))) {
+				(void)fprintf(stderr,
+				    "paste: %s: input line too long.\n",
+				    lp->name);
+				exit(1);
+			}
 			*p = '\0';
 			/*
 			 * make sure that we don't print any delimiters
@@ -163,9 +160,9 @@ parallel(argv)
 			if (!output) {
 				output = 1;
 				for (cnt = 0; cnt < lp->cnt; ++cnt)
-					if ((ch = delim[cnt % delimcnt]) != 0)
+					if (ch = delim[cnt % delimcnt])
 						putchar(ch);
-			} else if ((ch = delim[(lp->cnt - 1) % delimcnt]) != 0)
+			} else if (ch = delim[(lp->cnt - 1) % delimcnt])
 				putchar(ch);
 			(void)printf("%s", buf);
 		}
@@ -174,32 +171,35 @@ parallel(argv)
 	}
 }
 
-void
 sequential(argv)
 	char **argv;
 {
-	FILE *fp;
-	int cnt;
-	char ch, *p, *dp;
+	register FILE *fp;
+	register int cnt;
+	register char ch, *p, *dp;
 	char buf[_POSIX2_LINE_MAX + 1];
 
-	for (; (p = *argv) != NULL; ++argv) {
+	for (; p = *argv; ++argv) {
 		if (p[0] == '-' && !p[1])
 			fp = stdin;
 		else if (!(fp = fopen(p, "r"))) {
-			warn("%s", p);
+			(void)fprintf(stderr, "paste: %s: %s.\n", p,
+			    strerror(errno));
 			continue;
 		}
 		if (fgets(buf, sizeof(buf), fp)) {
 			for (cnt = 0, dp = delim;;) {
-				if (!(p = strchr(buf, '\n')))
-					err(1, "%s: input line too long.",
+				if (!(p = index(buf, '\n'))) {
+					(void)fprintf(stderr,
+					    "paste: %s: input line too long.\n",
 					    *argv);
+					exit(1);
+				}
 				*p = '\0';
 				(void)printf("%s", buf);
 				if (!fgets(buf, sizeof(buf), fp))
 					break;
-				if ((ch = *dp++) != 0)
+				if (ch = *dp++)
 					putchar(ch);
 				if (++cnt == delimcnt) {
 					dp = delim;
@@ -213,12 +213,11 @@ sequential(argv)
 	}
 }
 
-int
 tr(arg)
 	char *arg;
 {
-	int cnt;
-	char ch, *p;
+	register int cnt;
+	register char ch, *p;
 
 	for (p = arg, cnt = 0; (ch = *p++); ++arg, ++cnt)
 		if (ch == '\\')
@@ -238,12 +237,13 @@ tr(arg)
 		} else
 			*arg = ch;
 
-	if (!cnt)
-		errx(1, "no delimiters specified.");
+	if (!cnt) {
+		(void)fprintf(stderr, "paste: no delimiters specified.\n");
+		exit(1);
+	}
 	return(cnt);
 }
 
-void
 usage()
 {
 	(void)fprintf(stderr, "paste: [-s] [-d delimiters] file ...\n");

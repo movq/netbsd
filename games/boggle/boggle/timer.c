@@ -1,5 +1,3 @@
-/*	$NetBSD: timer.c,v 1.4 1997/10/10 12:04:36 lukem Exp $	*/
-
 /*-
  * Copyright (c) 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -36,13 +34,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
 static char sccsid[] = "@(#)timer.c	8.2 (Berkeley) 2/22/94";
-#else
-__RCSID("$NetBSD: timer.c,v 1.4 1997/10/10 12:04:36 lukem Exp $");
-#endif
 #endif /* not lint */
 
 #include <sys/param.h>
@@ -50,7 +43,6 @@ __RCSID("$NetBSD: timer.c,v 1.4 1997/10/10 12:04:36 lukem Exp $");
 
 #include <curses.h>
 #include <setjmp.h>
-#include <string.h>
 #include <stdio.h>
 #include <unistd.h>
 
@@ -69,9 +61,9 @@ int
 timerch()
 {
 	extern int tlimit;
-	extern time_t start_t;
+	extern long start_t;
 	extern jmp_buf env;
-	time_t prevt, t;
+	long prevt, t;
 	int col, remaining, row;
 
 	getyx(stdscr, row, col);

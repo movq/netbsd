@@ -1,8 +1,6 @@
-/*	$NetBSD: msgs.c,v 1.4 1997/10/20 00:23:27 lukem Exp $	*/
-
 /*
- * Copyright (c) 1983, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1983 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,12 +31,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)msgs.c	8.1 (Berkeley) 6/6/93";
-#endif
-__RCSID("$NetBSD: msgs.c,v 1.4 1997/10/20 00:23:27 lukem Exp $");
+static char sccsid[] = "@(#)msgs.c	5.6 (Berkeley) 3/1/91";
 #endif /* not lint */
 
 /* 
@@ -57,13 +51,11 @@ char	*current_state;
 int	current_line = 0;
 
 void
-disp_msg(dummy)
-	int dummy;
+disp_msg()
 {
 	message(current_state);
 }
 
-void
 start_msgs()
 {
 	struct itimerval itimer;
@@ -75,7 +67,6 @@ start_msgs()
 	setitimer(ITIMER_REAL, &itimer, (struct itimerval *)0);
 }
 
-void
 end_msgs()
 {
 	struct itimerval itimer;

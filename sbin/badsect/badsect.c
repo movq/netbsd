@@ -1,8 +1,6 @@
-/*	$NetBSD: badsect.c,v 1.14 1997/09/16 02:13:23 lukem Exp $	*/
-
 /*
- * Copyright (c) 1981, 1983, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1981, 1983 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,18 +31,14 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1981, 1983, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+char copyright[] =
+"@(#) Copyright (c) 1981, 1983 The Regents of the University of California.\n\
+ All rights reserved.\n";
 #endif /* not lint */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)badsect.c	8.2 (Berkeley) 5/4/95";
-#else
-__RCSID("$NetBSD: badsect.c,v 1.14 1997/09/16 02:13:23 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)badsect.c	5.9 (Berkeley) 6/1/90";
 #endif /* not lint */
 
 /*
@@ -60,17 +54,10 @@ __RCSID("$NetBSD: badsect.c,v 1.14 1997/09/16 02:13:23 lukem Exp $");
 #include <sys/param.h>
 #include <sys/dir.h>
 #include <sys/stat.h>
-
-#include <ufs/ufs/dinode.h>
-#include <ufs/ffs/fs.h>
-
-#include <fcntl.h>
-#include <paths.h>
+#include <ufs/fs.h>
+#include <ufs/dinode.h>
 #include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
-#include <err.h>
+#include <paths.h>
 
 union {
 	struct	fs fs;
@@ -89,60 +76,51 @@ long	dev_bsize = 1;
 
 char buf[MAXBSIZE];
 
-void	rdfs __P((daddr_t, int, char *));
-int	chkuse __P((daddr_t, int));
-int	main __P((int, char *[]));
 
-int
 main(argc, argv)
 	int argc;
 	char *argv[];
 {
 	daddr_t number;
 	struct stat stbuf, devstat;
-	struct direct *dp;
+	register struct direct *dp;
 	DIR *dirp;
-	char name[MAXPATHLEN];
-	extern char *__progname;
+	int fd;
+	char name[BUFSIZ];
 
 	if (argc < 3) {
-		(void) fprintf(stderr, "Usage: %s bbdir blkno [ blkno ]\n",
-		    __progname);
+		fprintf(stderr, "usage: badsect bbdir blkno [ blkno ]\n");
 		exit(1);
 	}
-	if (chdir(argv[1]) == -1)
-		err(1, "Cannot change directory to `%s'", argv[1]);
-
-	if (stat(".", &stbuf) == -1)
-		err(1, "Cannot stat `%s'", argv[1]);
-
-	(void) strcpy(name, _PATH_DEV);
-	if ((dirp = opendir(name)) == NULL)
-		err(1, "Cannot opendir `%s'", argv[1]);
-
+	if (chdir(argv[1]) < 0 || stat(".", &stbuf) < 0) {
+		perror(argv[1]);
+		exit(2);
+	}
+	strcpy(name, _PATH_DEV);
+	if ((dirp = opendir(name)) == NULL) {
+		perror(name);
+		exit(3);
+	}
 	while ((dp = readdir(dirp)) != NULL) {
-		(void) snprintf(name, sizeof(name), "%s%s", _PATH_DEV,
-		    dp->d_name);
-		if (stat(name, &devstat) == -1)
-			err(1, "Cannot stat `%s'", name);
+		strcpy(&name[5], dp->d_name);
+		if (stat(name, &devstat) < 0) {
+			perror(name);
+			exit(4);
+		}
 		if (stbuf.st_dev == devstat.st_rdev &&
-		    S_ISBLK(devstat.st_mode))
+		    (devstat.st_mode & IFMT) == IFBLK)
 			break;
 	}
 	closedir(dirp);
-	if (dp == NULL)
-		errx(1, "Cannot find dev 0%o corresponding to %s", 
-		    stbuf.st_rdev, argv[1]);
-
-	/*
-	 * The filesystem is mounted; use the character device instead.
-	 * XXX - Assume that prepending an `r' will give us the name of
-	 * the character device.
-	 */
-	(void) snprintf(name, sizeof(name), "%sr%s", _PATH_DEV, dp->d_name);
-	if ((fsi = open(name, O_RDONLY)) == -1)
-		err(1, "Cannot open `%s'", argv[1]);
-
+	if (dp == NULL) {
+		printf("Cannot find dev 0%o corresponding to %s\n",
+			stbuf.st_rdev, argv[1]);
+		exit(5);
+	}
+	if ((fsi = open(name, 0)) < 0) {
+		perror(name);
+		exit(6);
+	}
 	fs = &sblock;
 	rdfs(SBOFF, SBSIZE, (char *)fs);
 	dev_bsize = fs->fs_fsize / fsbtodb(fs, 1);
@@ -150,18 +128,15 @@ main(argc, argv)
 		number = atoi(*argv);
 		if (chkuse(number, 1))
 			continue;
-		if (mknod(*argv, S_IFMT|S_IRUSR|S_IWUSR,
-		    dbtofsb(fs, number)) == -1) {
-			warn("Cannot mknod `%s'", *argv);
+		if (mknod(*argv, IFMT|0600, dbtofsb(fs, number)) < 0) {
+			perror(*argv);
 			errs++;
 		}
 	}
-
-	warnx("Don't forget to run ``fsck %s''", name);
-	return errs;
+	printf("Don't forget to run ``fsck %s''\n", name);
+	exit(errs);
 }
 
-int
 chkuse(blkno, cnt)
 	daddr_t blkno;
 	int cnt;
@@ -171,63 +146,54 @@ chkuse(blkno, cnt)
 
 	fsbn = dbtofsb(fs, blkno);
 	if ((unsigned)(fsbn+cnt) > fs->fs_size) {
-		warnx("block %d out of range of file system", blkno);
+		printf("block %d out of range of file system\n", blkno);
 		return (1);
 	}
-
 	cg = dtog(fs, fsbn);
 	if (fsbn < cgdmin(fs, cg)) {
 		if (cg == 0 || (fsbn+cnt) > cgsblock(fs, cg)) {
-			warnx("block %d in non-data area: cannot attach",
-			    blkno);
+			printf("block %d in non-data area: cannot attach\n",
+				blkno);
 			return (1);
 		}
 	} else {
 		if ((fsbn+cnt) > cgbase(fs, cg+1)) {
-			warnx("block %d in non-data area: cannot attach",
-			    blkno);
+			printf("block %d in non-data area: cannot attach\n",
+				blkno);
 			return (1);
 		}
 	}
-
 	rdfs(fsbtodb(fs, cgtod(fs, cg)), (int)sblock.fs_cgsize,
 	    (char *)&acg);
-
 	if (!cg_chkmagic(&acg)) {
-		warnx("cg %d: bad magic number", cg);
+		fprintf(stderr, "cg %d: bad magic number\n", cg);
 		errs++;
 		return (1);
 	}
-
 	bn = dtogd(fs, fsbn);
 	if (isclr(cg_blksfree(&acg), bn))
-		warnx("Warning: sector %d is in use", blkno);
-
+		printf("Warning: sector %d is in use\n", blkno);
 	return (0);
 }
 
 /*
  * read a block from the file system
  */
-void
 rdfs(bno, size, bf)
-	daddr_t bno;
-	int size;
+	int bno, size;
 	char *bf;
 {
 	int n;
 
-	if (lseek(fsi, (off_t)bno * dev_bsize, SEEK_SET) == -1)
-		err(1, "seek error at block %d", bno);
-
-	switch (n = read(fsi, bf, size)) {
-	case -1:
-		err(1, "read error at block %d", bno);
-		break;
-
-	default:
-		if (n == size)
-			return;
-		errx(1, "incomplete read at block %d", bno);
+	if (lseek(fsi, bno * dev_bsize, 0) < 0) {
+		printf("seek error: %ld\n", bno);
+		perror("rdfs");
+		exit(1);
+	}
+	n = read(fsi, bf, size);
+	if(n != size) {
+		printf("read error: %ld\n", bno);
+		perror("rdfs");
+		exit(1);
 	}
 }

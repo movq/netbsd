@@ -1,8 +1,6 @@
-/*	$NetBSD: idp.h,v 1.6 1997/07/18 19:30:33 thorpej Exp $	*/
-
 /*
- * Copyright (c) 1984, 1985, 1986, 1987, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1984, 1985, 1986, 1987 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,17 +30,17 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)idp.h	8.1 (Berkeley) 6/10/93
+ *	@(#)idp.h	7.4 (Berkeley) 6/28/90
  */
 
 /*
  * Definitions for NS(tm) Internet Datagram Protocol
  */
 struct idp {
-	u_int16_t idp_sum;	/* Checksum */
-	u_int16_t idp_len;	/* Length, in bytes, including header */
-	u_int8_t idp_tc;	/* Transport Crontrol (i.e. hop count) */
-	u_int8_t idp_pt;	/* Packet Type (i.e. level 2 protocol) */
+	u_short	idp_sum;	/* Checksum */
+	u_short	idp_len;	/* Length, in bytes, including header */
+	u_char	idp_tc;		/* Transport Crontrol (i.e. hop count) */
+	u_char	idp_pt;		/* Packet Type (i.e. level 2 protocol) */
 	struct ns_addr	idp_dna;	/* Destination Network Address */
 	struct ns_addr	idp_sna;	/* Source Network Address */
 };

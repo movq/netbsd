@@ -1,7 +1,5 @@
-.\"	$NetBSD: setmode.3,v 1.7 1995/10/12 15:39:28 jtc Exp $
-.\"
-.\" Copyright (c) 1989, 1991, 1993
-.\"	The Regents of the University of California.  All rights reserved.
+.\" Copyright (c) 1989, 1991 The Regents of the University of California.
+.\" All rights reserved.
 .\"
 .\" Redistribution and use in source and binary forms, with or without
 .\" modification, are permitted provided that the following conditions
@@ -31,9 +29,9 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\"     @(#)setmode.3	8.1 (Berkeley) 6/9/93
+.\"     @(#)setmode.3	5.4 (Berkeley) 4/19/91
 .\"
-.Dd June 9, 1993
+.Dd April 19, 1991
 .Dt SETMODE 3
 .Os
 .Sh NAME
@@ -43,7 +41,7 @@
 .Sh SYNOPSIS
 .Ft mode_t
 .Fn getmode "const void *set" "mode_t mode"
-.Ft void *
+.Ft void
 .Fn setmode "const char *mode_str"
 .Sh DESCRIPTION
 The
@@ -103,4 +101,5 @@ The
 .Fn getmode
 and
 .Fn setmode
-functions first appeared in 4.4BSD.
+functions are
+.Ud .

@@ -1,8 +1,6 @@
-/*	$NetBSD: echo.c,v 1.7 1997/07/20 06:07:03 thorpej Exp $	*/
-
 /*
- * Copyright (c) 1989, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1989 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,31 +31,24 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT(
-"@(#) Copyright (c) 1989, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+char copyright[] =
+"@(#) Copyright (c) 1989 The Regents of the University of California.\n\
+ All rights reserved.\n";
 #endif /* not lint */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)echo.c	8.1 (Berkeley) 5/31/93";
-#else
-__RCSID("$NetBSD: echo.c,v 1.7 1997/07/20 06:07:03 thorpej Exp $");
-#endif
+static char sccsid[] = "@(#)echo.c	5.4 (Berkeley) 4/3/91";
 #endif /* not lint */
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-int	main __P((int, char *[]));
-
-int
+/* ARGSUSED */
 main(argc, argv)
 	int argc;
-	char *argv[];
+	char **argv;
 {
 	int nflag;
 

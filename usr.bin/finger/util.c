@@ -1,9 +1,6 @@
-/*	$NetBSD: util.c,v 1.11 1997/10/19 08:13:50 mrg Exp $	*/
-
 /*
- * Copyright (c) 1989, 1993
- *	The Regents of the University of California.  All rights reserved.
- * Portions Copyright (c) 1983, 1995, 1996 Eric P. Allman
+ * Copyright (c) 1989 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Tony Nardo of the Johns Hopkins University/Applied Physics Lab.
@@ -37,105 +34,115 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)util.c	8.3 (Berkeley) 4/28/95";
-#else
-__RCSID("$NetBSD: util.c,v 1.11 1997/10/19 08:13:50 mrg Exp $");
-#endif
+static char sccsid[] = "@(#)util.c	5.14 (Berkeley) 1/17/91";
 #endif /* not lint */
 
 #include <sys/param.h>
 #include <sys/stat.h>
-
-#include <db.h>
-#include <ctype.h>
-#include <err.h>
-#include <errno.h>
-#include <fcntl.h>
-#include <paths.h>
-#include <pwd.h>
+#include <sys/file.h>
 #include <stdio.h>
-#include <stdlib.h>
+#include <ctype.h>
 #include <string.h>
-#include <unistd.h>
-#include <utmp.h>
-
+#include <paths.h>
 #include "finger.h"
-#include "extern.h"
 
-static void	 find_idle_and_ttywrite __P((WHERE *));
-static void	 userinfo __P((PERSON *, struct passwd *));
-static WHERE	*walloc __P((PERSON *));
+find_idle_and_ttywrite(w)
+	register WHERE *w;
+{
+	extern time_t now;
+	extern int errno;
+	struct stat sb;
+	char *strerror();
 
-int
+	(void)sprintf(tbuf, "%s/%s", _PATH_DEV, w->tty);
+	if (stat(tbuf, &sb) < 0) {
+		(void)fprintf(stderr,
+		    "finger: %s: %s\n", tbuf, strerror(errno));
+		return;
+	}
+	w->idletime = now < sb.st_atime ? 0 : now - sb.st_atime;
+
+#define	TALKABLE	0220		/* tty is writable if 220 mode */
+	w->writable = ((sb.st_mode & TALKABLE) == TALKABLE);
+}
+
+userinfo(pn, pw)
+	register PERSON *pn;
+	register struct passwd *pw;
+{
+	register char *p, *t;
+	char *bp, name[1024];
+
+	pn->realname = pn->office = pn->officephone = pn->homephone = NULL;
+
+	pn->uid = pw->pw_uid;
+	pn->name = strdup(pw->pw_name);
+	pn->dir = strdup(pw->pw_dir);
+	pn->shell = strdup(pw->pw_shell);
+
+	/* why do we skip asterisks!?!? */
+	(void)strcpy(bp = tbuf, pw->pw_gecos);
+	if (*bp == '*')
+		++bp;
+
+	/* ampersands get replaced by the login name */
+	if (!(p = strsep(&bp, ",")))
+		return;
+	for (t = name; *t = *p; ++p)
+		if (*t == '&') {
+			(void)strcpy(t, pw->pw_name);
+			if (islower(*t))
+				*t = toupper(*t);
+			while (*++t);
+		}
+		else
+			++t;
+	pn->realname = strdup(name);
+	pn->office = ((p = strsep(&bp, ",")) && *p) ?
+	    strdup(p) : NULL;
+	pn->officephone = ((p = strsep(&bp, ",")) && *p) ?
+	    strdup(p) : NULL;
+	pn->homephone = ((p = strsep(&bp, ",")) && *p) ?
+	    strdup(p) : NULL;
+}
+
 match(pw, user)
 	struct passwd *pw;
 	char *user;
 {
-	char *p, *t;
+	register char *p, *t;
 	char name[1024];
 
-	if (!strcasecmp(pw->pw_name, user))
-		return(1);
+	/* why do we skip asterisks!?!? */
+	(void)strcpy(p = tbuf, pw->pw_gecos);
+	if (*p == '*')
+		++p;
 
-	(void)strncpy(p = tbuf, pw->pw_gecos, sizeof(tbuf));
-
-	/* Ampersands get replaced by the login name. */
-	if ((p = strtok(p, ",")) == NULL)
+	/* ampersands get replaced by the login name */
+	if (!(p = strtok(p, ",")))
 		return(0);
-
-	expandusername(p, pw->pw_name, name, sizeof(name));
-	for (t = name; (p = strtok(t, "\t ")) != NULL; t = NULL)
+	for (t = name; *t = *p; ++p)
+		if (*t == '&') {
+			(void)strcpy(t, pw->pw_name);
+			while (*++t);
+		}
+		else
+			++t;
+	for (t = name; p = strtok(t, "\t "); t = (char *)NULL)
 		if (!strcasecmp(p, user))
 			return(1);
 	return(0);
 }
 
-/* inspired by usr.sbin/sendmail/util.c::buildfname */
-void
-expandusername(gecos, login, buf, buflen)
-	char *gecos;
-	char *login;
-	char *buf;
-	int buflen;
-{
-	char *p, *bp;
-
-	/* why do we skip asterisks!?!? */
-	if (*gecos == '*')
-		gecos++;
-	bp = buf;
-
-	/* copy gecos, interpolating & to be full name */
-	for (p = gecos; *p != '\0'; p++) {
-		if (bp >= &buf[buflen - 1]) {
-			/* buffer overflow - just use login name */
-			snprintf(buf, buflen, "%s", login);
-			buf[buflen - 1] = '\0';
-			return;
-		}
-		if (*p == '&') {
-			/* interpolate full name */
-			snprintf(bp, buflen - (bp - buf), "%s", login);
-			*bp = toupper(*bp);
-			bp += strlen(bp);
-		}
-		else
-			*bp++ = *p;
-	}
-	*bp = '\0';
-}
-
-void
 enter_lastlog(pn)
-	PERSON *pn;
+	register PERSON *pn;
 {
-	WHERE *w;
+	register WHERE *w;
 	static int opened, fd;
 	struct lastlog ll;
 	char doit = 0;
+	off_t lseek();
 
 	/* some systems may not maintain lastlog, don't report errors. */
 	if (!opened) {
@@ -143,11 +150,11 @@ enter_lastlog(pn)
 		opened = 1;
 	}
 	if (fd == -1 ||
-	    lseek(fd, (off_t)pn->uid * sizeof(ll), SEEK_SET) !=
+	    lseek(fd, (long)pn->uid * sizeof(ll), L_SET) !=
 	    (long)pn->uid * sizeof(ll) ||
 	    read(fd, (char *)&ll, sizeof(ll)) != sizeof(ll)) {
 			/* as if never logged in */
-			ll.ll_line[0] = ll.ll_host[0] = '\0';
+			ll.ll_line[0] = ll.ll_host[0] = NULL;
 			ll.ll_time = 0;
 		}
 	if ((w = pn->whead) == NULL)
@@ -178,14 +185,12 @@ enter_lastlog(pn)
 	}
 }
 
-void
 enter_where(ut, pn)
 	struct utmp *ut;
 	PERSON *pn;
 {
-	WHERE *w;
+	register WHERE *w = walloc(pn);
 
-	w = walloc(pn);
 	w->info = LOGGEDIN;
 	bcopy(ut->ut_line, w->tty, UT_LINESIZE);
 	w->tty[UT_LINESIZE] = 0;
@@ -197,67 +202,56 @@ enter_where(ut, pn)
 
 PERSON *
 enter_person(pw)
-	struct passwd *pw;
+	register struct passwd *pw;
 {
-	DBT data, key;
-	PERSON *pn;
+	register PERSON *pn, **pp;
 
-	if (db == NULL &&
-	    (db = dbopen(NULL, O_RDWR, 0, DB_BTREE, NULL)) == NULL)
-#ifdef __GNUC__
-		err(1, "%s", "");
-#else
-		err(1, NULL);
-#endif
-
-	key.data = pw->pw_name;
-	key.size = strlen(pw->pw_name);
-
-	switch ((*db->get)(db, &key, &data, 0)) {
-	case 0:
-		memmove(&pn, data.data, sizeof pn);
-		return (pn);
-	default:
-	case -1:
-		err(1, "db get");
-		/* NOTREACHED */
-	case 1:
-		++entries;
+	for (pp = htab + hash(pw->pw_name);
+	     *pp != NULL && strcmp((*pp)->name, pw->pw_name) != 0;
+	     pp = &(*pp)->hlink)
+		;
+	if ((pn = *pp) == NULL) {
 		pn = palloc();
+		entries++;
+		if (phead == NULL)
+			phead = ptail = pn;
+		else {
+			ptail->next = pn;
+			ptail = pn;
+		}
+		pn->next = NULL;
+		pn->hlink = NULL;
+		*pp = pn;
 		userinfo(pn, pw);
 		pn->whead = NULL;
-
-		data.size = sizeof(PERSON *);
-		data.data = &pn;
-		if ((*db->put)(db, &key, &data, 0))
-			err(1, "db put");
-		return (pn);
 	}
+	return(pn);
 }
 
 PERSON *
 find_person(name)
 	char *name;
 {
-	int cnt;
-	DBT data, key;
-	PERSON *p;
-	char buf[UT_NAMESIZE + 1];
+	register PERSON *pn;
 
-	if (!db)
-		return(NULL);
+	/* name may be only UT_NAMESIZE long and not terminated */
+	for (pn = htab[hash(name)];
+	     pn != NULL && strncmp(pn->name, name, UT_NAMESIZE) != 0;
+	     pn = pn->hlink)
+		;
+	return(pn);
+}
 
-	/* Name may be only UT_NAMESIZE long and not NUL terminated. */
-	for (cnt = 0; cnt < UT_NAMESIZE && *name; ++name, ++cnt)
-		buf[cnt] = *name;
-	buf[cnt] = '\0';
-	key.data = buf;
-	key.size = cnt;
+hash(name)
+	register char *name;
+{
+	register int h, i;
 
-	if ((*db->get)(db, &key, &data, 0))
-		return (NULL);
-	memmove(&p, data.data, sizeof p);
-	return (p);
+	h = 0;
+	/* name may be only UT_NAMESIZE long and not terminated */
+	for (i = UT_NAMESIZE; --i >= 0 && *name;)
+		h = ((h << 2 | h >> HBITS - 2) ^ *name++) & HMASK;
+	return(h);
 }
 
 PERSON *
@@ -265,27 +259,23 @@ palloc()
 {
 	PERSON *p;
 
-	if ((p = malloc((u_int) sizeof(PERSON))) == NULL)
-#ifdef __GNUC__
-		err(1, "%s", "");
-#else
-		err(1, NULL);
-#endif
+	if ((p = (PERSON *)malloc((u_int) sizeof(PERSON))) == NULL) {
+		(void)fprintf(stderr, "finger: out of space.\n");
+		exit(1);
+	}
 	return(p);
 }
 
-static WHERE *
+WHERE *
 walloc(pn)
-	PERSON *pn;
+	register PERSON *pn;
 {
-	WHERE *w;
+	register WHERE *w;
 
-	if ((w = malloc((u_int) sizeof(WHERE))) == NULL)
-#ifdef __GNUC__
-		err(1, "%s", "");
-#else
-		err(1, NULL);
-#endif
+	if ((w = (WHERE *)malloc((u_int) sizeof(WHERE))) == NULL) {
+		(void)fprintf(stderr, "finger: out of space.\n");
+		exit(1);
+	}
 	if (pn->whead == NULL)
 		pn->whead = pn->wtail = w;
 	else {
@@ -300,7 +290,7 @@ char *
 prphone(num)
 	char *num;
 {
-	char *p;
+	register char *p;
 	int len;
 	static char pbuf[15];
 
@@ -328,83 +318,17 @@ prphone(num)
 		*p++ = *num++;
 		break;
 	case 5:				/* x0-1234 */
-	case 4:				/* x1234 */
 		*p++ = 'x';
 		*p++ = *num++;
 		break;
 	default:
 		return(num);
 	}
-	if (len != 4) {
-		*p++ = '-';
-		*p++ = *num++;
-	}
+	*p++ = '-';
+	*p++ = *num++;
 	*p++ = *num++;
 	*p++ = *num++;
 	*p++ = *num++;
 	*p = '\0';
 	return(pbuf);
-}
-
-static void
-find_idle_and_ttywrite(w)
-	WHERE *w;
-{
-	extern time_t now;
-	struct stat sb;
-
-	(void)snprintf(tbuf, sizeof(tbuf), "%s/%s", _PATH_DEV, w->tty);
-	if (stat(tbuf, &sb) < 0) {
-		warn(tbuf);
-		return;
-	}
-	w->idletime = now < sb.st_atime ? 0 : now - sb.st_atime;
-
-#define	TALKABLE	0220		/* tty is writable if 220 mode */
-	w->writable = ((sb.st_mode & TALKABLE) == TALKABLE);
-}
-
-static void
-userinfo(pn, pw)
-	PERSON *pn;
-	struct passwd *pw;
-{
-	char *p;
-	char *bp, name[1024];
-	struct stat sb;
-
-	pn->realname = pn->office = pn->officephone = pn->homephone = NULL;
-
-	pn->uid = pw->pw_uid;
-	pn->name = strdup(pw->pw_name);
-	pn->dir = strdup(pw->pw_dir);
-	pn->shell = strdup(pw->pw_shell);
-
-	(void)strncpy(bp = tbuf, pw->pw_gecos, sizeof(tbuf));
-	tbuf[sizeof(tbuf) - 1] = '\0';
-
-	/* ampersands get replaced by the login name */
-	if (!(p = strsep(&bp, ",")))
-		return;
-	expandusername(p, pw->pw_name, name, sizeof(name));
-	pn->realname = strdup(name);
-	pn->office = ((p = strsep(&bp, ",")) && *p) ?
-	    strdup(p) : NULL;
-	pn->officephone = ((p = strsep(&bp, ",")) && *p) ?
-	    strdup(p) : NULL;
-	pn->homephone = ((p = strsep(&bp, ",")) && *p) ?
-	    strdup(p) : NULL;
-	(void)snprintf(tbuf, sizeof(tbuf), "%s/%s", _PATH_MAILSPOOL,
-	    pw->pw_name);
-	pn->mailrecv = -1;		/* -1 == not_valid */
-	if (stat(tbuf, &sb) < 0) {
-		if (errno != ENOENT) {
-			(void)fprintf(stderr,
-			    "finger: %s: %s\n", tbuf, strerror(errno));
-			return;
-		}
-	} else if (sb.st_size != 0) {
-		pn->mailrecv = sb.st_mtime;
-		pn->mailread = sb.st_atime;
-	}
 }

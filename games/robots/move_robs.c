@@ -1,8 +1,6 @@
-/*	$NetBSD: move_robs.c,v 1.4 1997/10/12 14:10:00 lukem Exp $	*/
-
 /*
- * Copyright (c) 1980, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1980 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,16 +31,12 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)move_robs.c	8.1 (Berkeley) 5/31/93";
-#else
-__RCSID("$NetBSD: move_robs.c,v 1.4 1997/10/12 14:10:00 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)move_robs.c	5.5 (Berkeley) 2/28/91";
 #endif /* not lint */
 
 # include	"robots.h"
+# include	<signal.h>
 
 /*
  * move_robots:
@@ -50,9 +44,12 @@ __RCSID("$NetBSD: move_robs.c,v 1.4 1997/10/12 14:10:00 lukem Exp $");
  */
 void
 move_robots(was_sig)
-	int	was_sig;
+bool	was_sig;
 {
-	COORD		*rp;
+	register COORD	*rp;
+	register int	y, x;
+	register int	mindist, d;
+	static COORD	newpos;
 
 	if (Real_time)
 		signal(SIGALRM, move_robots);
@@ -131,9 +128,8 @@ move_robots(was_sig)
  * add_score:
  *	Add a score to the overall point total
  */
-void
 add_score(add)
-	int	add;
+int	add;
 {
 	Score += add;
 	move(Y_SCORE, X_SCORE);
@@ -144,9 +140,8 @@ add_score(add)
  * sign:
  *	Return the sign of the number
  */
-int
 sign(n)
-	int	n;
+int	n;
 {
 	if (n < 0)
 		return -1;

@@ -1,7 +1,5 @@
-.\"	$NetBSD: rlogin.1,v 1.7 1997/10/19 14:10:34 lukem Exp $
-.\"
-.\" Copyright (c) 1983, 1990, 1993
-.\"	The Regents of the University of California.  All rights reserved.
+.\" Copyright (c) 1983, 1990 The Regents of the University of California.
+.\" All rights reserved.
 .\"
 .\" Redistribution and use in source and binary forms, with or without
 .\" modification, are permitted provided that the following conditions
@@ -31,32 +29,27 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\"	@(#)rlogin.1	8.2 (Berkeley) 4/29/95
+.\"	@(#)rlogin.1	6.19 (Berkeley) 7/27/91
 .\"
-.Dd April 29, 1995
+.Dd July 27, 1991
 .Dt RLOGIN 1
 .Os BSD 4.2
 .Sh NAME
 .Nm rlogin
 .Nd remote login
 .Sh SYNOPSIS
-.Nm
+.Ar rlogin
 .Op Fl 8EKLdx
 .Op Fl e Ar char
 .Op Fl k Ar realm
 .Op Fl l Ar username
 .Ar host
-.Nm ""
-.Op Fl 8EKLdx
-.Op Fl e Ar char
-.Op Fl k Ar realm
-.Ar username@host
 .Sh DESCRIPTION
-.Nm
+.Nm Rlogin
 starts a terminal session on a remote host
 .Ar host  .
 .Pp
-.Nm
+.Nm Rlogin
 first attempts to use the Kerberos authorization mechanism, described below.
 If the remote host does not supporting Kerberos the standard Berkeley
 .Pa rhosts
@@ -102,19 +95,12 @@ This specification may be as a literal character, or as an octal
 value in the form \ennn.
 .It Fl k
 The
-.Fl k
+.FL k
 option requests rlogin to obtain tickets for the remote host
 in realm
 .Ar realm
 instead of the remote host's realm as determined by
 .Xr krb_realmofhost  3  .
-.It Fl l
-the
-.Fl l
-option specifies an alternate
-.Ar username
-for the remote login.
-If this option is not specified, your local username will be used.
 .It Fl x
 The
 .Fl x
@@ -130,7 +116,7 @@ increased security.
 .Pp
 A line of the form ``<escape char>.'' disconnects from the remote host.
 Similarly, the line ``<escape char>^Z'' will suspend the
-.Nm
+.Nm rlogin
 session, and ``<escape char><delayed-suspend char>'' suspends the
 send portion of the rlogin, but allows output from the remote system.
 By default, the tilde (``~'') character is the escape character, and
@@ -138,7 +124,7 @@ normally control-Y (``^Y'') is the delayed-suspend character.
 .Pp
 All echoing takes place at the remote site, so that (except for delays)
 the
-.Nm
+.Nm rlogin
 is transparent.
 Flow control via ^S/^Q and flushing of input and output on interrupts
 are handled properly.
@@ -169,11 +155,11 @@ the remote user.
 .Pp
 If Kerberos authentication fails, a warning message is printed and the
 standard Berkeley
-.Nm
+.Nm rlogin
 is used instead.
 .Sh ENVIRONMENT
 The following environment variable is utilized by
-.Nm "" :
+.Nm rlogin :
 .Bl -tag -width TERM
 .It Ev TERM
 Determines the user's terminal type.
@@ -185,11 +171,11 @@ Determines the user's terminal type.
 .Xr krb_realmofhost 3
 .Sh HISTORY
 The
-.Nm
+.Nm rlogin
 command appeared in
 .Bx 4.2 .
 .Sh BUGS
-.Nm
+.Nm Rlogin
 will be replaced by
 .Xr telnet  1
 in the near future.

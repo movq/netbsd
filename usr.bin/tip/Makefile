@@ -1,5 +1,4 @@
-#	$NetBSD: Makefile,v 1.9 1997/10/20 03:35:06 mrg Exp $
-#	@(#)Makefile	8.1 (Berkeley) 6/6/93
+#	@(#)Makefile	5.9 (Berkeley) 5/11/90
 #
 # Files are:
 #	/etc/remote		remote host description file
@@ -16,11 +15,10 @@
 #	VENTEL 212+
 #	VADIC 831 RS232 adaptor
 #	VADIC 3451
-#	TELEBIT T3000
 #
 # Configuration defines:
 #	DF02, DF03, DN11	ACU's supported
-#	  BIZ1031, BIZ1022, VENTEL, V831, V3451, HAYES, COURIER, T3000
+#	  BIZ1031, BIZ1022, VENTEL, V831, V3451, HAYES, COURIER
 #	ACULOG			turn on tip logging of ACU use
 #	PRISTINE		no phone #'s put in ACU log file
 #	CONNECT			worthless command
@@ -29,20 +27,19 @@
 #				writes on local side
 #	BUFSIZ			buffer sizing from stdio, must be fed
 #				explicitly to remcap.c if not 1024
-#	CONNECT			enable ~C command (connect pgm to remote)
 
-WARNS=	0
 PROG=	tip
-CFLAGS+=-I${.CURDIR} -ansi -pedantic \
-	-DDEFBR=1200 -DDEFFS=BUFSIZ -DACULOG -DPRISTINE -DCONNECT \
-	-DV831 -DVENTEL -DHAYES -DCOURIER -DT3000
+CFLAGS+=-I${.CURDIR} -DV831 -DVENTEL -DHAYES -DCOURIER -DDEFBR=2400 \
+	-DDEFFS=BUFSIZ -DACULOG -DPRISTINE -DCONNECT
 .PATH:	${.CURDIR}/aculib
 BINOWN=	uucp
 BINGRP=	dialer
-BINMODE=4554
-SRCS=	acu.c acutab.c cmds.c cmdtab.c cu.c hunt.c log.c partab.c \
-	remote.c tip.c tipout.c uucplock.c value.c vars.c \
-	biz22.c courier.c df.c dn11.c hayes.c t3000.c v3451.c v831.c ventel.c
+BINMODE=4510
+LINKS=	${BINDIR}/tip ${BINDIR}/cu
+MLINKS=	tip.1 cu.1
+SRCS=	acu.c acutab.c cmds.c cmdtab.c cu.c hunt.c log.c partab.c remcap.c \
+	remote.c tip.c tipout.c uucplock.c value.c vars.c biz22.c courier.c \
+	df.c dn11.c hayes.c v3451.c v831.c ventel.c
 
 # -- acutab is configuration dependent, and so depends on the Makefile
 # -- remote.o depends on the Makefile because of DEFBR and DEFFS

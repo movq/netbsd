@@ -33,26 +33,17 @@
  *	@(#)extern.h	8.2 (Berkeley) 4/28/95
  */
 
-extern time_t now;			/* Current time. */
 extern char tbuf[1024];			/* Temp buffer for anybody. */
 extern int entries;			/* Number of people. */
 extern DB *db;				/* Database. */
-extern int lflag;
-extern int oflag;
-extern int gflag;
-extern int pplan;
 
 void	 enter_lastlog __P((PERSON *));
 PERSON	*enter_person __P((struct passwd *));
 void	 enter_where __P((struct utmp *, PERSON *));
-void	 expandusername __P((char *, char *, char *, int));
 PERSON	*find_person __P((char *));
-int	 hash __P((char *));
 void	 lflag_print __P((void));
 int	 match __P((struct passwd *, char *));
 void	 netfinger __P((char *));
 PERSON	*palloc __P((void));
 char	*prphone __P((char *));
-int	 psort __P((const void *, const void *));
 void	 sflag_print __P((void));
-PERSON **sort __P((void));

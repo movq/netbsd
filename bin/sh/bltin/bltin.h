@@ -1,8 +1,6 @@
-/*	$NetBSD: bltin.h,v 1.9 1997/07/04 21:02:29 christos Exp $	*/
-
 /*-
- * Copyright (c) 1991, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1991 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Kenneth Almquist.
@@ -35,7 +33,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)bltin.h	8.1 (Berkeley) 5/31/93
+ *	@(#)bltin.h	5.1 (Berkeley) 3/7/91
  */
 
 /*
@@ -57,12 +55,6 @@
 #define fputs outstr
 #define fflush flushout
 #define INITARGS(argv)
-#define warnx(a, b, c) {				\
-	char buf[64];					\
-	(void)snprintf(buf, sizeof(buf), a, b, c);	\
-	error("%s", buf);				\
-}
-
 #else
 #undef NULL
 #include <stdio.h>
@@ -70,9 +62,13 @@
 #define INITARGS(argv)	if ((commandname = argv[0]) == NULL) {fputs("Argc is zero\n", stderr); exit(2);} else
 #endif
 
-pointer stalloc __P((int));
-void error __P((char *, ...));
-int	echocmd __P((int, char **));
+#ifdef __STDC__
+pointer stalloc(int);
+void error(char *, ...);
+#else
+pointer stalloc();
+void error();
+#endif
 
 
 extern char *commandname;

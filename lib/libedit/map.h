@@ -1,5 +1,3 @@
-/*	$NetBSD: map.h,v 1.2 1997/01/11 06:48:01 lukem Exp $	*/
-
 /*-
  * Copyright (c) 1992, 1993
  *	The Regents of the University of California.  All rights reserved.

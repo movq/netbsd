@@ -1,8 +1,6 @@
-/*	$NetBSD: mail.local.c,v 1.14 1997/10/08 01:03:00 enami Exp $	*/
-
 /*-
- * Copyright (c) 1990, 1993, 1994
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1990 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,74 +31,64 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1990, 1993, 1994\n\
-	The Regents of the University of California.  All rights reserved.\n");
-#if 0
-static char sccsid[] = "@(#)mail.local.c	8.22 (Berkeley) 6/21/95";
-#else
-__RCSID("$NetBSD: mail.local.c,v 1.14 1997/10/08 01:03:00 enami Exp $");
-#endif
+char copyright[] =
+"@(#) Copyright (c) 1990 The Regents of the University of California.\n\
+ All rights reserved.\n";
+#endif /* not lint */
+
+#ifndef lint
+static char sccsid[] = "@(#)mail.local.c	5.6 (Berkeley) 6/19/91";
 #endif /* not lint */
 
 #include <sys/param.h>
 #include <sys/stat.h>
 #include <sys/socket.h>
-
 #include <netinet/in.h>
-
-#include <errno.h>
+#include <syslog.h>
 #include <fcntl.h>
-#include <pwd.h>
 #include <netdb.h>
+#include <pwd.h>
+#include <time.h>
+#include <unistd.h>
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <syslog.h>
-#include <time.h>
-#include <unistd.h>
-
 #include "pathnames.h"
 
 #define	FATAL		1
 #define	NOTFATAL	0
 
-int	deliver __P((int, char *, int));
+int	deliver __P((int, char *));
 void	err __P((int, const char *, ...));
 void	notifybiff __P((char *));
 int	store __P((char *));
 void	usage __P((void));
-int	main __P((int, char **));
 
-int
 main(argc, argv)
 	int argc;
 	char **argv;
 {
+	extern int optind;
+	extern char *optarg;
 	struct passwd *pw;
-	int ch, fd, eval, lockfile = 0;
+	int ch, fd, eval;
 	uid_t uid;
 	char *from;
-
-	/* use a reasonable umask */
-	(void) umask(0077);
 
 	openlog("mail.local", LOG_PERROR, LOG_MAIL);
 
 	from = NULL;
-	while ((ch = getopt(argc, argv, "ldf:r:")) != -1)
-		switch (ch) {
+	while ((ch = getopt(argc, argv, "df:r:")) != EOF)
+		switch(ch) {
 		case 'd':		/* backward compatible */
 			break;
 		case 'f':
 		case 'r':		/* backward compatible */
 			if (from)
-				err(FATAL, "multiple -f options");
+			    err(FATAL, "multiple -f options");
 			from = optarg;
-			break;
-		case 'l':
-			lockfile++;
 			break;
 		case '?':
 		default:
@@ -124,15 +112,14 @@ main(argc, argv)
 
 	fd = store(from);
 	for (eval = 0; *argv; ++argv)
-		eval |= deliver(fd, *argv, lockfile);
-	exit (eval);
+		eval |= deliver(fd, *argv);
+	exit(eval);
 }
 
-int
 store(from)
 	char *from;
 {
-	FILE *fp = NULL;	/* XXX gcc */
+	FILE *fp;
 	time_t tval;
 	int fd, eline;
 	char *tn, line[2048];
@@ -172,17 +159,15 @@ store(from)
 	return(fd);
 }
 
-int
-deliver(fd, name, lockfile)
+deliver(fd, name)
 	int fd;
 	char *name;
-	int lockfile;
 {
 	struct stat sb;
 	struct passwd *pw;
-	int created, mbfd, nr, nw, off, rval=0, lfd=-1;
-	char biffmsg[100], buf[8*1024], path[MAXPATHLEN], lpath[MAXPATHLEN];
-	off_t curoff;
+	int created, mbfd, nr, nw, off, rval;
+	char biffmsg[100], buf[8*1024], path[MAXPATHLEN];
+	off_t curoff, lseek();
 
 	/*
 	 * Disallow delivery to unknown names -- special mailboxes can be
@@ -193,45 +178,43 @@ deliver(fd, name, lockfile)
 		return(1);
 	}
 
-	(void)snprintf(path, sizeof path, "%s/%s", _PATH_MAILDIR, name);
-
-	if (lockfile) {
-		(void)snprintf(lpath, sizeof lpath, "%s/%s.lock",
-		    _PATH_MAILDIR, name);
-
-		if((lfd = open(lpath, O_CREAT|O_WRONLY|O_EXCL,
-		    S_IRUSR|S_IWUSR)) < 0) {
-			err(NOTFATAL, "%s: %s", lpath, strerror(errno));
-			return(1);
-		}
-	}
+	(void)sprintf(path, "%s/%s", _PATH_MAILDIR, name);
 
 	if (!(created = lstat(path, &sb)) &&
 	    (sb.st_nlink != 1 || S_ISLNK(sb.st_mode))) {
 		err(NOTFATAL, "%s: linked file", path);
 		return(1);
 	}
-	if ((mbfd = open(path, O_APPEND|O_WRONLY|O_EXLOCK,
-	    S_IRUSR|S_IWUSR)) < 0) {
-		if ((mbfd = open(path, O_APPEND|O_CREAT|O_WRONLY|O_EXLOCK,
-		    S_IRUSR|S_IWUSR)) < 0) {
-			err(NOTFATAL, "%s: %s", path, strerror(errno));
-			return(1);
-		}
+
+	/*
+	 * There's a race here -- two processes think they both created
+	 * the file.  This means the file cannot be unlinked.
+	 */
+	if ((mbfd =
+	    open(path, O_APPEND|O_CREAT|O_WRONLY, S_IRUSR|S_IWUSR)) < 0) {
+		err(NOTFATAL, "%s: %s", path, strerror(errno));
+		return(1);
 	}
 
-	curoff = lseek(mbfd, 0, SEEK_END);
-	(void)snprintf(biffmsg, sizeof biffmsg, "%s@%qd\n", name,
-	    (long long)curoff);
-	if (lseek(fd, 0, SEEK_SET) == (off_t)-1) {
+	rval = 0;
+	/* XXX: Open should allow flock'ing the file; see 4.4BSD. */
+	if (flock(mbfd, LOCK_EX)) {
+		err(NOTFATAL, "%s: %s", path, strerror(errno));
+		rval = 1;
+		goto bad;
+	}
+
+	curoff = lseek(mbfd, 0L, SEEK_END);
+	(void)sprintf(biffmsg, "%s@%ld\n", name, curoff);
+	if (lseek(fd, 0L, SEEK_SET) == (off_t)-1) {
 		err(FATAL, "temporary file: %s", strerror(errno));
 		rval = 1;
 		goto bad;
 	}
 
 	while ((nr = read(fd, buf, sizeof(buf))) > 0)
-		for (off = 0; off < nr;  off += nw)
-			if ((nw = write(mbfd, buf + off, nr - off)) < 0) {
+		for (off = 0; off < nr; nr -= nw, off += nw)
+			if ((nw = write(mbfd, buf + off, nr)) < 0) {
 				err(NOTFATAL, "%s: %s", path, strerror(errno));
 				goto trunc;
 			}
@@ -247,14 +230,7 @@ trunc:		(void)ftruncate(mbfd, curoff);
 	 * ownership or permissions were changed there was a reason for doing
 	 * so.
 	 */
-bad:
-	if (lockfile) {
-		if (lfd >= 0) {
-			unlink(lpath);
-			close(lfd);
-		}
-	}
-	if (created) 
+bad:	if (created) 
 		(void)fchown(mbfd, pw->pw_uid, pw->pw_gid);
 
 	(void)fsync(mbfd);		/* Don't wait for update. */
@@ -283,10 +259,9 @@ notifybiff(msg)
 			err(NOTFATAL, "localhost: %s", strerror(errno));
 			return;
 		}
-		addr.sin_len = sizeof(struct sockaddr_in);
 		addr.sin_family = hp->h_addrtype;
-		addr.sin_port = sp->s_port;
 		bcopy(hp->h_addr, &addr.sin_addr, hp->h_length);
+		addr.sin_port = sp->s_port;
 	}
 	if (f < 0 && (f = socket(AF_INET, SOCK_DGRAM, 0)) == -1) {
 		err(NOTFATAL, "socket: %s", strerror(errno));

@@ -1,7 +1,5 @@
-.\"	$NetBSD: fopen.3,v 1.6 1997/10/14 07:27:57 mycroft Exp $
-.\"
-.\" Copyright (c) 1990, 1991, 1993
-.\"	The Regents of the University of California.  All rights reserved.
+.\" Copyright (c) 1990, 1991 The Regents of the University of California.
+.\" All rights reserved.
 .\"
 .\" This code is derived from software contributed to Berkeley by
 .\" Chris Torek and the American National Standards Committee X3,
@@ -35,9 +33,9 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\"     @(#)fopen.3	8.1 (Berkeley) 6/4/93
+.\"     @(#)fopen.3	6.8 (Berkeley) 6/29/91
 .\"
-.Dd June 4, 1993
+.Dd June 29, 1991
 .Dt FOPEN 3
 .Os
 .Sh NAME
@@ -75,7 +73,7 @@ The stream is positioned at the beginning of the file.
 .It Dq Li w
 Truncate file to zero length or create text file for writing.
 The stream is positioned at the beginning of the file.
-.It Dq Li w+
+.No It Dq Li w+
 Open for reading and writing.
 The file is created if it does not exist, otherwise it is truncated.
 The stream is positioned at the beginning of the file.
@@ -170,7 +168,7 @@ is returned and the global variable
 .Va errno
 is set to indicate the error.
 .Sh ERRORS
-.Bl -tag -width Er
+.Bl -tag -width [EINVAL]
 .It Bq Er EINVAL
 The
 .Fa mode
@@ -234,5 +232,6 @@ conform to
 .St -ansiC .
 The
 .Fn fdopen
-function conforms to
-.St -p1003.1-90 .
+function
+conforms to
+.St -p1003.1-88 .

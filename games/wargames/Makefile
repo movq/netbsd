@@ -1,7 +1,10 @@
-#	$NetBSD: Makefile,v 1.7 1997/05/09 07:50:06 mycroft Exp $
-#	@(#)Makefile	8.1 (Berkeley) 5/31/93
+#	@(#)Makefile	5.3 (Berkeley) 6/8/90
 
 NOOBJ=	noobj
-SCRIPTS=wargames.sh
+all wargames clean cleandir depend lint tags:
+
+install:
+	install -c -o ${BINOWN} -g ${BINGRP} -m ${BINMODE} wargames.sh \
+	    ${DESTDIR}/usr/games/wargames
 
 .include <bsd.prog.mk>

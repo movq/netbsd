@@ -1,8 +1,6 @@
-/*	$NetBSD: initgroups.c,v 1.14 1997/07/21 14:07:18 jtc Exp $	*/
-
 /*
- * Copyright (c) 1983, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1983 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,39 +31,56 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char sccsid[] = "@(#)initgroups.c	8.1 (Berkeley) 6/4/93";
-#else
-__RCSID("$NetBSD: initgroups.c,v 1.14 1997/07/21 14:07:18 jtc Exp $");
-#endif
+static char sccsid[] = "@(#)initgroups.c	5.7 (Berkeley) 2/23/91";
 #endif /* LIBC_SCCS and not lint */
 
-#include "namespace.h"
+/*
+ * initgroups
+ */
 #include <sys/param.h>
-
 #include <stdio.h>
+#include <string.h>
 #include <unistd.h>
-#include <err.h>
+#include <grp.h>
 
-#ifdef __weak_alias
-__weak_alias(initgroups,_initgroups);
-#endif
+struct group *getgrent();
 
 int
 initgroups(uname, agroup)
 	const char *uname;
-	gid_t agroup;
+	int agroup;
 {
-	int groups[NGROUPS], ngroups;
+	int groups[NGROUPS], ngroups = 0;
+	register struct group *grp;
+	register int i;
 
-	ngroups = NGROUPS;
-	if (getgrouplist(uname, agroup, groups, &ngroups) < 0)
-		warnx("%s is in too many groups, using first %d",
-		    uname, ngroups);
+	/*
+	 * If installing primary group, duplicate it;
+	 * the first element of groups is the effective gid
+	 * and will be overwritten when a setgid file is executed.
+	 */
+	if (agroup >= 0) {
+		groups[ngroups++] = agroup;
+		groups[ngroups++] = agroup;
+	}
+	setgrent();
+	while (grp = getgrent()) {
+		if (grp->gr_gid == agroup)
+			continue;
+		for (i = 0; grp->gr_mem[i]; i++)
+			if (!strcmp(grp->gr_mem[i], uname)) {
+				if (ngroups == NGROUPS) {
+fprintf(stderr, "initgroups: %s is in too many groups\n", uname);
+					goto toomany;
+				}
+				groups[ngroups++] = grp->gr_gid;
+			}
+	}
+toomany:
+	endgrent();
 	if (setgroups(ngroups, groups) < 0) {
-		warn("setgroups");
+		perror("setgroups");
 		return (-1);
 	}
 	return (0);

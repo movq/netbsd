@@ -1,7 +1,5 @@
-.\"	$NetBSD: pagesize.1,v 1.6 1997/10/19 11:52:55 lukem Exp $
-.\"
-.\" Copyright (c) 1983, 1990, 1993
-.\"	The Regents of the University of California.  All rights reserved.
+.\" Copyright (c) 1983, 1990 The Regents of the University of California.
+.\" All rights reserved.
 .\"
 .\" Redistribution and use in source and binary forms, with or without
 .\" modification, are permitted provided that the following conditions
@@ -31,28 +29,27 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\"	@(#)pagesize.1	8.1 (Berkeley) 6/6/93
+.\"     @(#)pagesize.1	6.5 (Berkeley) 3/14/91
 .\"
-.Dd June 6, 1993
+.Vx
+.Vx
+.Dd March 14, 1991
 .Dt PAGESIZE 1
 .Os BSD 4.2
 .Sh NAME
 .Nm pagesize
 .Nd print system page size
 .Sh SYNOPSIS
-.Nm
+.Nm pagesize
 .Sh DESCRIPTION
-.Nm
+.Nm Pagesize
 prints the size of a page of memory in bytes, as
 returned by
-.Xr getpagesize 3 .
+.Xr getpagesize  2  .
 This program is useful in constructing portable
 shell scripts.
 .Sh SEE ALSO
-.Xr getpagesize 3
+.Xr getpagesize 2
 .Sh HISTORY
-The
-.Nm
-command
-appeared in
-.Bx 4.2 .
+.Nm Pagesize
+appeared in 4.2 BSD.

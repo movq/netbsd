@@ -1,7 +1,5 @@
-.\"	$NetBSD: mkdir.2,v 1.10 1997/07/14 23:20:06 kleink Exp $
-.\"
-.\" Copyright (c) 1983, 1991, 1993
-.\"	The Regents of the University of California.  All rights reserved.
+.\" Copyright (c) 1983, 1991 The Regents of the University of California.
+.\" All rights reserved.
 .\"
 .\" Redistribution and use in source and binary forms, with or without
 .\" modification, are permitted provided that the following conditions
@@ -31,16 +29,15 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\"     @(#)mkdir.2	8.2 (Berkeley) 12/11/93
+.\"     @(#)mkdir.2	6.7 (Berkeley) 3/10/91
 .\"
-.Dd December 11, 1993
+.Dd March 10, 1991
 .Dt MKDIR 2
 .Os BSD 4.2
 .Sh NAME
 .Nm mkdir
 .Nd make a directory file
 .Sh SYNOPSIS
-.Fd #include <sys/types.h>
 .Fd #include <sys/stat.h>
 .Ft int
 .Fn mkdir "const char *path" "mode_t mode"
@@ -49,7 +46,7 @@ The directory
 .Fa path
 is created with the access permissions specified by
 .Fa mode
-and restricted by the
+and restricted by the the
 .Xr umask 2
 of the calling process.
 .Pp
@@ -63,31 +60,44 @@ indicates an error, and an error code is stored in
 .Sh ERRORS
 .Fn Mkdir
 will fail and no directory will be created if:
-.Bl -tag -width Er
+.Bl -tag -width ENAMETOOLO
 .It Bq Er ENOTDIR
 A component of the path prefix is not a directory.
+.It Bq Er EINVAL
+The pathname contains a character with the high-order bit set.
 .It Bq Er ENAMETOOLONG
-A component of a pathname exceeded 
-.Dv {NAME_MAX}
-characters, or an entire path name exceeded 
-.Dv {PATH_MAX}
-characters.
+A component of a pathname exceeded 255 characters,
+or an entire path name exceeded 1023 characters.
 .It Bq Er ENOENT
 A component of the path prefix does not exist.
 .It Bq Er EACCES
 Search permission is denied for a component of the path prefix.
 .It Bq Er ELOOP
 Too many symbolic links were encountered in translating the pathname.
+.It Bq Er EPERM
+The
+.Fa path
+argument contains a byte with the high-order bit set.
 .It Bq Er EROFS
 The named file resides on a read-only file system.
 .It Bq Er EEXIST
 The named file exists.
 .It Bq Er ENOSPC
-The new directory cannot be created because there is no space left
-on the file system that will contain the directory.
+The directory in which the entry for the new directory is being placed
+cannot be extended because there is no space left on the file
+system containing the directory.
+.It Bq Er ENOSPC
+The new directory cannot be created because there
+there is no space left on the file
+system that will contain the directory.
 .It Bq Er ENOSPC
 There are no free inodes on the file system on which the
 directory is being created.
+.It Bq Er EDQUOT
+The directory in which the entry for the new directory
+is being placed cannot be extended because the
+user's quota of disk blocks on the file system
+containing the directory has been exhausted.
 .It Bq Er EDQUOT
 The new directory cannot be created because the user's
 quota of disk blocks on the file system that will
@@ -108,7 +118,6 @@ points outside the process's allocated address space.
 .Xr stat 2 ,
 .Xr umask 2
 .Sh STANDARDS
-The 
-.Fn mkdir
-function conforms to 
-.St -p1003.1-90 .
+.Fn Mkdir
+conforms to IEEE Std 1003.1-1988
+.Pq Dq Tn POSIX .

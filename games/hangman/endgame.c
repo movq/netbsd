@@ -1,8 +1,6 @@
-/*	$NetBSD: endgame.c,v 1.4 1997/10/11 01:16:26 lukem Exp $	*/
-
 /*
- * Copyright (c) 1983, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1983 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,25 +31,19 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)endgame.c	8.1 (Berkeley) 5/31/93";
-#else
-__RCSID("$NetBSD: endgame.c,v 1.4 1997/10/11 01:16:26 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)endgame.c	5.3 (Berkeley) 6/1/90";
 #endif /* not lint */
 
-#include	"hangman.h"
+# include	"hangman.h"
 
 /*
  * endgame:
  *	Do what's necessary at the end of the game
  */
-void
 endgame()
 {
-	char ch;
+	register char	ch;
 
 	prman();
 	if (Errors >= MAXERRS)
@@ -69,16 +61,13 @@ endgame()
 		leaveok(stdscr, FALSE);
 		refresh();
 		if ((ch = readch()) == 'n')
-			die(0);
-		else
-			if (ch == 'y')
-				break;
+			die();
+		else if (ch == 'y')
+			break;
 		mvaddstr(MESGY + 2, MESGX, "Please type 'y' or 'n'");
 	}
 
 	leaveok(stdscr, TRUE);
 	move(MESGY, MESGX);
-	deleteln();
-	deleteln();
-	deleteln();
+	addstr("\n\n\n");
 }

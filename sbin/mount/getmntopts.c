@@ -1,5 +1,3 @@
-/*	$NetBSD: getmntopts.c,v 1.5 1997/09/16 12:22:42 lukem Exp $	*/
-
 /*-
  * Copyright (c) 1994
  *	The Regents of the University of California.  All rights reserved.
@@ -33,13 +31,9 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)getmntopts.c	8.3 (Berkeley) 3/29/95";
-#else
-__RCSID("$NetBSD: getmntopts.c,v 1.5 1997/09/16 12:22:42 lukem Exp $");
-#endif
+/*static char sccsid[] = "from: @(#)getmntopts.c	8.1 (Berkeley) 3/27/94";*/
+static char *rcsid = "$Id: getmntopts.c,v 1.1 1994/06/08 19:02:38 mycroft Exp $";
 #endif /* not lint */
 
 #include <sys/param.h>
@@ -53,23 +47,19 @@ __RCSID("$NetBSD: getmntopts.c,v 1.5 1997/09/16 12:22:42 lukem Exp $");
 
 #include "mntopts.h"
 
-int getmnt_silent = 0;
-
 void
-getmntopts(options, m0, flagp, altflagp)
+getmntopts(options, m0, flagp)
 	const char *options;
 	const struct mntopt *m0;
 	int *flagp;
-	int *altflagp;
 {
 	const struct mntopt *m;
 	int negative;
-	char *opt, *optbuf, *p;
-	int *thisflagp;
+	char *opt, *optbuf;
 
 	/* Copy option string, since it is about to be torn asunder... */
 	if ((optbuf = strdup(options)) == NULL)
-		err(1, "%s", "");
+		err(1, NULL);
 
 	for (opt = optbuf; (opt = strtok(opt, ",")) != NULL; opt = NULL) {
 		/* Check for "no" prefix. */
@@ -79,14 +69,6 @@ getmntopts(options, m0, flagp, altflagp)
 		} else
 			negative = 0;
 
-		/*
-		 * for options with assignments in them (ie. quotas)
-		 * ignore the assignment as it's handled elsewhere
-		 */
-		p = strchr(opt, '=');
-		if (p)
-			 *p = '\0';
-
 		/* Scan option table. */
 		for (m = m0; m->m_option != NULL; ++m)
 			if (strcasecmp(opt, m->m_option) == 0)
@@ -94,14 +76,12 @@ getmntopts(options, m0, flagp, altflagp)
 
 		/* Save flag, or fail if option is not recognised. */
 		if (m->m_option) {
-			thisflagp = m->m_altloc ? altflagp : flagp;
 			if (negative == m->m_inverse)
-				*thisflagp |= m->m_flag;
+				*flagp |= m->m_flag;
 			else
-				*thisflagp &= ~m->m_flag;
-		} else if (!getmnt_silent) {
+				*flagp &= ~m->m_flag;
+		} else
 			errx(1, "-o %s: option not supported", opt);
-		}
 	}
 
 	free(optbuf);

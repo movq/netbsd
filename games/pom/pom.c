@@ -1,8 +1,6 @@
-/*	$NetBSD: pom.c,v 1.8 1997/10/12 01:01:39 lukem Exp $	*/
-
 /*
- * Copyright (c) 1989, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1989 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software posted to USENET.
  *
@@ -35,18 +33,14 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1989, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+char copyright[] =
+"@(#) Copyright (c) 1989 The Regents of the University of California.\n\
+ All rights reserved.\n";
 #endif /* not lint */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)pom.c	8.1 (Berkeley) 5/31/93";
-#else
-__RCSID("$NetBSD: pom.c,v 1.8 1997/10/12 01:01:39 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)pom.c	5.3 (Berkeley) 2/28/91";
 #endif /* not lint */
 
 /*
@@ -60,12 +54,9 @@ __RCSID("$NetBSD: pom.c,v 1.8 1997/10/12 01:01:39 lukem Exp $");
  */
 
 #include <sys/time.h>
-#include <err.h>
-#include <errno.h>
-#include <math.h>
 #include <stdio.h>
-#include <string.h>
 #include <tzfile.h>
+#include <math.h>
 
 #define	PI	  3.141592654
 #define	EPOCH	  85
@@ -76,27 +67,23 @@ __RCSID("$NetBSD: pom.c,v 1.8 1997/10/12 01:01:39 lukem Exp $");
 #define	Pzero	  192.917585	/* lunar mean long of perigee at EPOCH */
 #define	Nzero	  55.204723	/* lunar mean long of node at EPOCH */
 
-void	adj360 __P((double *));
-double	dtor __P((double));
-int	main __P((int, char *[]));
-double	potm __P((double));
+double dtor(), potm(), adj360();
 
-int
-main(argc, argv)
-	int argc;
-	char *argv[];
+main()
 {
+	extern int errno;
 	struct timeval tp;
 	struct timezone tzp;
-	struct tm *GMT;
-	time_t tmpt;
+	struct tm *GMT, *gmtime();
 	double days, today, tomorrow;
 	int cnt;
+	char *strerror();
 
-	if (gettimeofday(&tp,&tzp))
-		err(1, "gettimeofday");
-	tmpt = tp.tv_sec;
-	GMT = gmtime(&tmpt);
+	if (gettimeofday(&tp,&tzp)) {
+		(void)fprintf(stderr, "pom: %s\n", strerror(errno));
+		exit(1);
+	}
+	GMT = gmtime(&tp.tv_sec);
 	days = (GMT->tm_yday + 1) + ((GMT->tm_hour +
 	    (GMT->tm_min / 60.0) + (GMT->tm_sec / 3600.0)) / 24.0);
 	for (cnt = EPOCH; cnt < GMT->tm_year; ++cnt)
@@ -123,7 +110,6 @@ main(argc, argv)
 				    today);
 		}
 	}
-	exit(0);
 }
 
 /*
@@ -178,7 +164,7 @@ dtor(deg)
  * adj360 --
  *	adjust value so 0 <= deg <= 360
  */
-void
+double
 adj360(deg)
 	double *deg;
 {

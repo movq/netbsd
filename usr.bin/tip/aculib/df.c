@@ -1,8 +1,6 @@
-/*	$NetBSD: df.c,v 1.4 1995/10/29 00:49:51 pk Exp $	*/
-
 /*
- * Copyright (c) 1983, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1983 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -34,10 +32,7 @@
  */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)df.c	8.1 (Berkeley) 6/6/93";
-#endif
-static char rcsid[] = "$NetBSD: df.c,v 1.4 1995/10/29 00:49:51 pk Exp $";
+static char sccsid[] = "@(#)df.c	5.4 (Berkeley) 3/2/91";
 #endif /* not lint */
 
 /*
@@ -68,13 +63,11 @@ df_dialer(num, acu, df03)
 	int df03;
 {
 	register int f = FD;
-	struct termios cntrl;
+	struct sgttyb buf;
 	int speed = 0, rw = 2;
 	char c = '\0';
 
-	tcgetattr(f, &cntrl);
-	cntrl.c_cflag |= HUPCL;
-	tcsetattr(f, TCSANOW, &cntrl);
+	ioctl(f, TIOCHPCL, 0);		/* make sure it hangs up when done */
 	if (setjmp(Sjbuf)) {
 		printf("connection timed out\r\n");
 		df_disconnect();
@@ -87,12 +80,11 @@ df_dialer(num, acu, df03)
 	if (df03) {
 		int st = TIOCM_ST;	/* secondary Transmit flag */
 
-		tcgetattr(f, &cntrl);
-		speed = cfgetospeed(&cntrl);
-		if (speed != B1200) {	/* must dial at 1200 baud */
-			cfsetospeed(&cntrl, B1200);
-			cfsetispeed(&cntrl, B1200);
-			tcsetattr(f, TCSAFLUSH, &cntrl);
+		ioctl(f, TIOCGETP, &buf);
+		if (buf.sg_ospeed != B1200) {	/* must dial at 1200 baud */
+			speed = buf.sg_ospeed;
+			buf.sg_ospeed = buf.sg_ispeed = B1200;
+			ioctl(f, TIOCSETP, &buf);
 			ioctl(f, TIOCMBIC, &st); /* clear ST for 300 baud */
 		} else
 			ioctl(f, TIOCMBIS, &st); /* set ST for 1200 baud */
@@ -100,17 +92,16 @@ df_dialer(num, acu, df03)
 #endif
 	signal(SIGALRM, timeout);
 	alarm(5 * strlen(num) + 10);
-	tcflush(f, TCIOFLUSH);
+	ioctl(f, TIOCFLUSH, &rw);
 	write(f, "\001", 1);
 	sleep(1);
 	write(f, "\002", 1);
 	write(f, num, strlen(num));
 	read(f, &c, 1);
 #ifdef TIOCMSET
-	if (df03 && speed != B1200) {
-		cfsetospeed(&cntrl, speed);
-		cfsetispeed(&cntrl, speed);
-		tcsetattr(f, TCSAFLUSH, &cntrl);
+	if (df03 && speed) {
+		buf.sg_ispeed = buf.sg_ospeed = speed;
+		ioctl(f, TIOCSETP, &buf);
 	}
 #endif
 	return (c == 'A');
@@ -122,7 +113,7 @@ df_disconnect()
 
 	write(FD, "\001", 1);
 	sleep(1);
-	tcflush(FD, TCIOFLUSH);
+	ioctl(FD, TIOCFLUSH, &rw);
 }
 
 

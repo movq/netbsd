@@ -1,7 +1,5 @@
-.\"	$NetBSD: restore.8,v 1.18 1997/10/20 09:11:40 enami Exp $
-.\"
-.\" Copyright (c) 1985, 1991, 1993
-.\"	The Regents of the University of California.  All rights reserved.
+.\" Copyright (c) 1985, 1991 The Regents of the University of California.
+.\" All rights reserved.
 .\"
 .\" Redistribution and use in source and binary forms, with or without
 .\" modification, are permitted provided that the following conditions
@@ -31,56 +29,21 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\"     @(#)restore.8	8.4 (Berkeley) 5/1/95
+.\"     @(#)restore.8	6.10 (Berkeley) 7/23/91
 .\"
-.Dd July 1, 1997
+.Dd July 23, 1991
 .Dt RESTORE 8
 .Os BSD 4
 .Sh NAME
 .Nm restore
 .Nd "restore files or file systems from backups made with dump"
 .Sh SYNOPSIS
-.Nm
-.Fl i
-.Op Fl chmvy
-.Op Fl b Ar blocksize
-.Op Fl f Ar file
-.Op Fl s Ar fileno
-.Nm ""
-.Fl R
-.Op Fl cvy
-.Op Fl b Ar blocksize
-.Op Fl f Ar file
-.Op Fl s Ar fileno
-.Nm ""
-.Fl r
-.Op Fl cvy
-.Op Fl b Ar blocksize
-.Op Fl f Ar file
-.Op Fl s Ar fileno
-.Nm ""
-.Fl t
-.Op Fl chvy
-.Op Fl b Ar blocksize
-.Op Fl f Ar file
-.Op Fl s Ar fileno
-.Op file ...
-.Nm ""
-.Fl x
-.Op Fl chmvy
-.Op Fl b Ar blocksize
-.Op Fl f Ar file
-.Op Fl s Ar fileno
-.Op file ...
-.Pp
-.in -\\n(iSu
-(The
-.Bx 4.3
-option syntax is implemented for backward compatibility, but
-is not documented here.)
+.Nm restore
+.Ar key
+.Op Ar name Ar ...
 .Sh DESCRIPTION
 The
-.Nm
+.Nm restore
 command performs the inverse function of
 .Xr dump 8 .
 A full backup of a file system may be restored and
@@ -88,25 +51,116 @@ subsequent incremental backups layered on top of it.
 Single files and
 directory subtrees may be restored from full or partial
 backups.
-.Nm
-works across a network;
-to do this see the
-.Fl f
-flag described below.
+.Nm Restore
+cannot work across a network, to do this, see the companion
+command
+.Xr rrestore .
+The actions
+of
+.Nm restore
+are controlled by the given
+.Cm key ,
+which
+is a string of characters containing
+at most one function letter and possibly
+one or more function modifiers.
 Other arguments to the command are file or directory
 names specifying the files that are to be restored.
 Unless the
-.Fl h
-flag is specified (see below),
+.Cm h
+key is specified (see below),
 the appearance of a directory name refers to
 the files and (recursively) subdirectories of that directory.
 .Pp
-Exactly one of the following flags is required:
+The function portion of
+the key is specified by one of the following letters:
 .Bl -tag -width Ds
-.It Fl i
+.It Cm r
+Restore (rebuild a file system).
+The target file system should be made pristine with
+.Xr newfs 8 ,
+mounted and the
+user
+.Xr cd Ns 'd
+into the pristine file system
+before starting the restoration of the initial level 0 backup. If the
+level 0 restores successfully, the
+.Cm r
+key may be used to restore
+any necessary incremental backups on top of the level 0.
+The
+.Cm r
+key precludes an interactive file extraction and can be
+detrimental to ones health if not used carefully (not to mention
+the disk). An example:
+.Bd -literal -offset indent
+newfs /dev/rrp0g eagle
+mount /dev/rp0g /mnt
+cd /mnt
+
+restore rf /dev/rst8
+.Ed
+.Pp
+Note that 
+.Nm restore
+leaves a file 
+.Pa restoresymtable
+in the root directory to pass information between incremental
+restore passes.
+This file should be removed when the last incremental has been
+restored.
+.Pp
+.Nm Restore ,
+in conjunction with
+.Xr newfs 8
+and
+.Xr dump 8 ,
+may be used to modify file system parameters
+such as size or block size.
+.It Cm R
+.Nm Restore
+requests a particular tape of a multi volume set on which to restart
+a full restore
+(see the
+.Cm r
+key above).
+This is useful if the restore has been interrupted.
+.It Cm x
+The named files are read from the given media.
+If a named file matches a directory whose contents 
+are on the backup
+and the
+.Cm h
+key is not specified,
+the directory is recursively extracted.
+The owner, modification time,
+and mode are restored (if possible).
+If no file argument is given,
+then the root directory is extracted,
+which results in the entire content of the
+backup being extracted,
+unless the
+.Cm h
+key has been specified.
+.It Cm t
+The names of the specified files are listed if they occur
+on the backup.
+If no file argument is given,
+then the root directory is listed,
+which results in the entire content of the
+backup being listed,
+unless the
+.Cm h
+key has been specified.
+Note that the
+.Cm t
+key replaces the function of the old
+.Xr dumpdir 8
+program.
+.It Cm i
 This mode allows interactive restoration of files from a dump.
 After reading in the directory information from the dump,
-.Nm
+.Nm restore
 provides a shell like interface that allows the user to move
 around the directory tree selecting files to be extracted.
 The available commands are given below;
@@ -119,8 +173,8 @@ files to be extracted.
 If a directory is specified, then it and all its descendents are
 added to the extraction list
 (unless the
-.Fl h
-flag is specified on the command line).
+.Cm h
+key is specified on the command line).
 Files that are on the extraction list are prepended with a ``*''
 when they are listed by 
 .Ic ls .
@@ -132,15 +186,15 @@ files to be extracted.
 If a directory is specified, then it and all its descendents are
 deleted from the extraction list
 (unless the
-.Fl h
-flag is specified on the command line).
+.Cm h
+key is specified on the command line).
 The most expedient way to extract most of the files from a directory 
 is to add the directory to the extraction list and then delete
 those files that are not needed.
 .It Ic extract
 All the files that are on the extraction list are extracted
 from the dump.
-.Nm
+.Nm Restore
 will ask which volume the user wishes to mount.
 The fastest way to extract a few files is to
 start with the last volume, and work towards the first volume.
@@ -150,8 +204,7 @@ List a summary of the available commands.
 List the current or specified directory.
 Entries that are directories are appended with a ``/''.
 Entries that have been marked for extraction are prepended with a ``*''.
-If the verbose
-flag is set the inode number of each entry is also listed.
+If the verbose key is set the inode number of each entry is also listed.
 .It Ic pwd
 Print the full pathname of the current working directory.
 .It Ic quit
@@ -164,203 +217,108 @@ nothing is extracted from the dump.
 This is useful for cleaning up after a restore has been prematurely aborted.
 .It Ic verbose
 The sense of the 
-.Fl v
-flag is toggled.
-When set, the verbose flag causes the 
+.Cm v
+key is toggled.
+When set, the verbose key causes the 
 .Ic ls
 command to list the inode numbers of all entries.
 It also causes
-.Nm
+.Nm restore
 to print out information about each file as it is extracted.
 .El
-.It Fl R
-.Nm
-requests a particular tape of a multi volume set on which to restart
-a full restore
-(see the
-.Fl r
-flag below).
-This is useful if the restore has been interrupted.
-.It Fl r
-Restore (rebuild a file system).
-The target file system should be made pristine with
-.Xr newfs 8 ,
-mounted and the user
-.Xr cd Ns 'd
-into the pristine file system
-before starting the restoration of the initial level 0 backup. If the
-level 0 restores successfully, the
-.Fl r
-flag may be used to restore
-any necessary incremental backups on top of the level 0.
-The
-.Fl r
-flag precludes an interactive file extraction and can be
-detrimental to one's health if not used carefully (not to mention
-the disk). An example:
-.Bd -literal -offset indent
-newfs /dev/rrp0g eagle
-mount /dev/rp0g /mnt
-cd /mnt
-
-restore rf /dev/rst8
-.Ed
-.Pp
-Note that 
-.Nm
-leaves a file 
-.Pa restoresymtable
-in the root directory to pass information between incremental
-restore passes.
-This file should be removed when the last incremental has been
-restored.
-.Pp
-.Nm "" ,
-in conjunction with
-.Xr newfs 8
-and
-.Xr dump 8 ,
-may be used to modify file system parameters
-such as size or block size.
-.It Fl t
-The names of the specified files are listed if they occur
-on the backup.
-If no file argument is given,
-then the root directory is listed,
-which results in the entire content of the
-backup being listed,
-unless the
-.Fl h
-flag has been specified.
-Note that the
-.Fl t
-flag replaces the function of the old
-.Xr dumpdir 8
-program.
-.ne 1i
-.It Fl x
-The named files are read from the given media.
-If a named file matches a directory whose contents 
-are on the backup
-and the
-.Fl h
-flag is not specified,
-the directory is recursively extracted.
-The owner, modification time,
-and mode are restored (if possible).
-If no file argument is given,
-then the root directory is extracted,
-which results in the entire content of the
-backup being extracted,
-unless the
-.Fl h
-flag has been specified.
 .El
 .Pp
-The following additional options may be specified:
+The following characters may be used in addition to the letter
+that selects the function desired.
 .Bl -tag -width Ds
-.It Fl b Ar blocksize
-The number of kilobytes per dump record.
+.It Cm b
+The next argument to 
+.Nm restore
+is used as the block size of the media (in kilobytes).
 If the
 .Fl b
 option is not specified,
-.Nm
-tries to determine the block size dynamically.
-.It Fl c
-Normally,
-.Nm
-will try to determine dynamically whether the dump was made from an
-old (pre-4.4) or new format file sytem.  The
-.Fl c
-flag disables this check, and only allows reading a dump in the old
-format.
-.It Fl f Ar file
-Read the backup from
-.Ar file ;
-.Ar file
-may be a special device file
-like
-.Pa /dev/rst0
-(a tape drive),
-.Pa /dev/rsd1c
-(a disk drive),
-an ordinary file,
-or
-.Ql Fl
-(the standard input).
-If the name of the file is of the form
-.Dq host:file ,
-or
-.Dq user@host:file ,
-.Nm
-reads from the named file on the remote host using
-.Xr rmt 8 .
+.Nm restore
+tries to determine the media block size dynamically.
+.It Cm f
+The next argument to 
+.Nm restore
+is used as the name of the archive instead
+of
+.Pa /dev/rmt? . 
 If the name of the file is
 .Ql Fl ,
-.Nm
+.Nm restore
 reads from standard input.
 Thus,
 .Xr dump 8
 and
-.Nm
+.Nm restore
 can be used in a pipeline to dump and restore a file system
 with the command
 .Bd -literal -offset indent
 dump 0f - /usr | (cd /mnt; restore xf -)
 .Ed
 .Pp
-.It Fl h
-Extract the actual directory, 
+.It Cm h
+.Nm Restore
+extracts the actual directory, 
 rather than the files that it references.
 This prevents hierarchical restoration of complete subtrees
 from the dump.
-.It Fl m
-Extract by inode numbers rather than by file name.
+.It Cm m
+.Nm Restore
+will extract by inode numbers rather than by file name.
 This is useful if only a few files are being extracted,
 and one wants to avoid regenerating the complete pathname
 to the file.
-.It Fl s Ar fileno
-Read from the specified
-.Ar fileno
-on a multi-file tape.
-File numbering starts at 1.
-.It Fl v
+.It Cm s
+The next argument to
+.Nm restore
+is a number which
+selects the file on a multi-file dump tape.  File numbering
+starts at 1.
+.It Cm v
 Normally
-.Nm
+.Nm restore
 does its work silently.
 The
-.Fl v
+.Cm v
 (verbose)
-flag causes it to type the name of each file it treats
+key causes it to type the name of each file it treats
 preceded by its file type.
-.It Fl y
-Do not ask the user whether to abort the restore in the event of an error.
-Always try to skip over the bad block(s) and continue.
+.It Cm y
+.Nm Restore
+will not ask whether it should abort the restore if gets an error.
+It will always try to skip over the bad block(s) and continue as
+best it can.
 .El
 .Sh DIAGNOSTICS
+Complaints about bad key characters.
+.Pp
 Complaints if it gets a read error.
 If 
-.Fl y
+.Cm y
 has been specified, or the user responds
 .Ql y ,
-.Nm
+.Nm restore
 will attempt to continue the restore.
 .Pp
 If a backup was made using more than one tape volume,
-.Nm
+.Nm restore
 will notify the user when it is time to mount the next volume.
 If the
-.Fl x
+.Cm x
 or
-.Fl i
-flag has been specified,
-.Nm
+.Cm i
+key has been specified,
+.Nm restore
 will also ask which volume the user wishes to mount.
 The fastest way to extract a few files is to
 start with the last volume, and work towards the first volume.
 .Pp
 There are numerous consistency checks that can be listed by
-.Nm "" .
+.Nm restore .
 Most checks are self-explanatory or can ``never happen''.
 Common errors are given below.
 .Pp
@@ -402,29 +360,14 @@ though files may not be found on the tape.
 .Pp
 .It resync restore, skipped <num> blocks
 After a dump read error, 
-.Nm
+.Nm restore
 may have to resynchronize itself.
 This message lists the number of blocks that were skipped over.
 .El
-.Sh ENVIRONMENT
-If the following environment variable exists it will be utilized by
-.Nm "" :
-.Bl -tag -width "TMPDIR" -compact
-.It TMPDIR
-The directory given in TMPDIR will be used
-instead of
-.Pa /tmp
-to store temporary files.
-Refer to
-.Xr environ 7
-for more information.
-.El
 .Sh FILES
 .Bl -tag -width "./restoresymtable" -compact
-.It Pa /dev/rst0
+.It Pa /dev/rmt?
 the default tape drive
-.It Pa /dev/rst*
-Raw SCSI tape interface
 .It Pa /tmp/rstdir*
 file containing directories on the tape.
 .It Pa /tmp/rstmode*
@@ -433,48 +376,24 @@ owner, mode, and time stamps for directories.
 information passed between incremental restores.
 .El
 .Sh SEE ALSO
-.Xr environ 7 ,
+.Xr rrestore 8
 .Xr dump 8 ,
 .Xr newfs 8 ,
 .Xr mount 8 ,
-.Xr rmt 8
+.Xr mkfs 8
 .Sh BUGS
-.Nm
+.Nm Restore
 can get confused when doing incremental restores from
-dumps that were made on active file systems.
+dump that were made on active file systems.
 .Pp
 A level zero dump must be done after a full restore.
-Because
-.Nm
-runs in user code,
+Because restore runs in user code,
 it has no control over inode allocation;
-thus a full dump must be done to get a new set of directories
+thus a full restore must be done to get a new set of directories
 reflecting the new inode numbering,
-even though the content of the files is unchanged.
-.Pp
-The temporary files
-.Pa /tmp/rstdir*
-and
-.Pa /tmp/rstmode*
-are generated with a unique name based on the date of the dump
-and the process ID (see
-.Xr mktemp 3 ),
-except for when 
-.Fl r
-or
-.Fl R
-is used.
-Because
-.Fl R
-allows you to restart a
-.Fl r
-operation that may have been interrupted, the temporary files should
-be the same across different processes.
-In all other cases, the files are unique because it is possible to
-have two different dumps started at the same time, and separate
-operations shouldn't conflict with each other.
+even though the contents of the files is unchanged.
 .Sh HISTORY
 The
-.Nm
+.Nm restore
 command appeared in
 .Bx 4.2 .

@@ -1,8 +1,6 @@
-/*	$NetBSD: str.c,v 1.8 1997/10/20 00:56:05 lukem Exp $	*/
-
 /*-
- * Copyright (c) 1991, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1991 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,24 +31,18 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)str.c	8.2 (Berkeley) 4/28/95";
-#endif
-__RCSID("$NetBSD: str.c,v 1.8 1997/10/20 00:56:05 lukem Exp $");
+static char sccsid[] = "@(#)str.c	5.9 (Berkeley) 3/4/93";
 #endif /* not lint */
 
 #include <sys/cdefs.h>
 #include <sys/types.h>
 
-#include <err.h>
 #include <errno.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <ctype.h>
 
 #include "extern.h"
 
@@ -64,9 +56,9 @@ static void	genseq __P((STR *));
 
 int
 next(s)
-	STR *s;
+	register STR *s;
 {
-	int ch;
+	register int ch;
 
 	switch (s->state) {
 	case EOS:
@@ -116,14 +108,13 @@ next(s)
 		return (1);
 	}
 	/* NOTREACHED */
-	return (0);
 }
 
 static int
 bracket(s)
-	STR *s;
+	register STR *s;
 {
-	char *p;
+	register char *p;
 
 	switch (s->str[1]) {
 	case ':':				/* "[:class:]" */
@@ -143,7 +134,7 @@ bracket(s)
 	default:				/* "[\###*n]" or "[#*n]" */
 		if ((p = strpbrk(s->str + 2, "*]")) == NULL)
 			return (0);
-		if (p[0] != '*' || strchr(p, ']') == NULL)
+		if (p[0] != '*' || index(p, ']') == NULL)
 			return (0);
 		s->str += 1;
 		genseq(s);
@@ -151,6 +142,28 @@ bracket(s)
 	}
 	/* NOTREACHED */
 }
+
+int isalnum __P((int)),
+    isalpha __P((int)),
+    isblank __P((int)),
+    isspace __P((int)),
+    iscntrl __P((int)),
+    isdigit __P((int)),
+    isgraph __P((int)),
+    islower __P((int)),
+    isprint __P((int)),
+    ispunct __P((int)),
+    isupper __P((int)),
+    isxdigit __P((int));
+
+
+static int isblank(x) /* until 4.4 */
+     int x;
+{
+    if ((x == ' ') || (x== '\t')) return 1;
+    return 0;
+}
+
 
 typedef struct {
 	char *name;
@@ -177,18 +190,18 @@ static void
 genclass(s)
 	STR *s;
 {
-	int cnt, (*func) __P((int));
+	register int cnt, (*func) __P((int));
 	CLASS *cp, tmp;
 	int *p;
 
 	tmp.name = s->str;
 	if ((cp = (CLASS *)bsearch(&tmp, classes, sizeof(classes) /
 	    sizeof(CLASS), sizeof(CLASS), c_class)) == NULL)
-		errx(1, "unknown class %s", s->str);
+		err("unknown class %s", s->str);
 
 	if ((cp->set = p = malloc((NCHARS + 1) * sizeof(int))) == NULL)
-		err(1, "malloc");
-	memset(p, 0, (NCHARS + 1) * sizeof(int));
+		err("%s", strerror(errno));
+	bzero(p, (NCHARS + 1) * sizeof(int));
 	for (cnt = 0, func = cp->func; cnt < NCHARS; ++cnt)
 		if ((func)(cnt))
 			*p++ = cnt;
@@ -217,11 +230,11 @@ genequiv(s)
 	if (*s->str == '\\') {
 		s->equiv[0] = backslash(s);
 		if (*s->str != '=')
-			errx(1, "misplaced equivalence equals sign");
+			err("misplaced equivalence equals sign");
 	} else {
 		s->equiv[0] = s->str[0];
 		if (s->str[1] != '=')
-			errx(1, "misplaced equivalence equals sign");
+			err("misplaced equivalence equals sign");
 	}
 	s->str += 2;
 	s->cnt = 0;
@@ -237,8 +250,8 @@ genrange(s)
 	char *savestart;
 
 	savestart = s->str;
-	stopval = *++s->str == '\\' ? backslash(s) : *s->str++;
-	if (stopval < (u_char)s->lastch) {
+	stopval = *++s->str == '\\' ? backslash(s) : *s->str;
+	if (stopval < s->lastch) {
 		s->str = savestart;
 		return (0);
 	}
@@ -255,14 +268,14 @@ genseq(s)
 	char *ep;
 
 	if (s->which == STRING1)
-		errx(1, "sequences only valid in string2");
+		err("sequences only valid in string2");
 
 	if (*s->str == '\\')
 		s->lastch = backslash(s);
 	else
 		s->lastch = *s->str++;
 	if (*s->str != '*')
-		errx(1, "misplaced sequence asterisk");
+		err("misplaced sequence asterisk");
 
 	switch (*++s->str) {
 	case '\\':
@@ -280,12 +293,15 @@ genseq(s)
 				break;
 			}
 		}
-		errx(1, "illegal sequence count");
+		err("illegal sequence count");
 		/* NOTREACHED */
 	}
 
 	s->state = s->cnt ? SEQUENCE : INFINITE;
 }
+
+/* Use the #defines isXXX() here, DON'T use them above. */
+#include <ctype.h>
 
 /*
  * Translate \??? into a character.  Up to 3 octal digits, if no digits either
@@ -293,9 +309,9 @@ genseq(s)
  */
 static int
 backslash(s)
-	STR *s;
+	register STR *s;
 {
-	int ch, cnt, val;
+	register int ch, cnt, val;
 
 	for (cnt = val = 0;;) {
 		ch = *++s->str;

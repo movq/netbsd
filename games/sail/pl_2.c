@@ -1,8 +1,6 @@
-/*	$NetBSD: pl_2.c,v 1.4 1997/10/13 19:45:01 christos Exp $	*/
-
 /*
- * Copyright (c) 1983, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1983 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,21 +31,15 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)pl_2.c	8.1 (Berkeley) 5/31/93";
-#else
-__RCSID("$NetBSD: pl_2.c,v 1.4 1997/10/13 19:45:01 christos Exp $");
-#endif
+static char sccsid[] = "@(#)pl_2.c	5.4 (Berkeley) 6/1/90";
 #endif /* not lint */
 
 #include "player.h"
 
-void
 play()
 {
-	struct ship *sp;
+	register struct ship *sp;
 
 	for (;;) {
 		switch (sgetch("~\b", (struct ship *)0, 0)) {
@@ -64,7 +56,7 @@ play()
 			unfoulplayer();
 			break;
 		case 'v':
-			Msg("%s", version);
+			Signal("%s", (struct ship *)0, version);
 			break;
 		case 'b':
 			acceptboard();
@@ -82,7 +74,7 @@ play()
 			repair();
 			break;
 		case 'B':
-			Msg("'Hands to stations!'");
+			Signal("'Hands to stations!'", (struct ship *)0);
 			unboard(ms, ms, 1);	/* cancel DBP's */
 			unboard(ms, ms, 0);	/* cancel offense */
 			break;
@@ -98,10 +90,10 @@ play()
 			mf->loadR = L_EMPTY;
 			mf->readyL = R_EMPTY;
 			mf->readyR = R_EMPTY;
-			Msg("Broadsides unloaded");
+			Signal("Broadsides unloaded", (struct ship *)0);
 			break;
 		case 'q':
-			Msg("Type 'Q' to quit");
+			Signal("Type 'Q' to quit", (struct ship *)0);
 			break;
 		case 'Q':
 			leave(LEAVE_QUIT);
@@ -113,7 +105,7 @@ play()
 			break;
 		case 'i':
 			if ((sp = closestenemy(ms, 0, 1)) == 0)
-				Msg("No more ships left.");
+				Signal("No more ships left.");
 			else
 				eyeball(sp);
 			break;

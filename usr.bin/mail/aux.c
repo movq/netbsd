@@ -1,8 +1,6 @@
-/*	$NetBSD: aux.c,v 1.8 1997/10/19 19:27:40 mycroft Exp $	*/
-
 /*
- * Copyright (c) 1980, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1980 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,24 +31,19 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)aux.c	8.1 (Berkeley) 6/6/93";
-#else
-__RCSID("$NetBSD: aux.c,v 1.8 1997/10/19 19:27:40 mycroft Exp $");
-#endif
+static char sccsid[] = "@(#)aux.c	5.20 (Berkeley) 6/25/90";
 #endif /* not lint */
 
 #include "rcv.h"
-#include "extern.h"
+#include <sys/stat.h>
+#include <sys/time.h>
 
 /*
  * Mail -- a mail program
  *
  * Auxiliary functions.
  */
-static char *save2str __P((char *, char *));
 
 /*
  * Return a pointer to a dynamic copy of the argument.
@@ -63,29 +56,23 @@ savestr(str)
 	int size = strlen(str) + 1;
 
 	if ((new = salloc(size)) != NOSTR)
-		memmove(new, str, size);
+		bcopy(str, new, size);
 	return new;
 }
 
 /*
- * Make a copy of new argument incorporating old one.
+ * Announce a fatal error and die.
  */
-static char *
-save2str(str, old)
-	char *str, *old;
-{
-	char *new;
-	int newsize = strlen(str) + 1;
-	int oldsize = old ? strlen(old) + 1 : 0;
 
-	if ((new = salloc(newsize + oldsize)) != NOSTR) {
-		if (oldsize) {
-			memmove(new, old, oldsize);
-			new[oldsize - 1] = ' ';
-		}
-		memmove(new + oldsize, str, newsize);
-	}
-	return new;
+/*VARARGS1*/
+panic(fmt, a, b)
+	char *fmt;
+{
+	fprintf(stderr, "panic: ");
+	fprintf(stderr, fmt, a, b);
+	putc('\n', stderr);
+	fflush(stdout);
+	abort();
 }
 
 /*
@@ -93,9 +80,8 @@ save2str(str, old)
  * Touched messages have the effect of not being sent
  * back to the system mailbox on exit.
  */
-void
 touch(mp)
-	struct message *mp;
+	register struct message *mp;
 {
 
 	mp->m_flag |= MTOUCH;
@@ -107,7 +93,6 @@ touch(mp)
  * Test to see if the passed file name is a directory.
  * Return true if it is.
  */
-int
 isdir(name)
 	char name[];
 {
@@ -115,17 +100,16 @@ isdir(name)
 
 	if (stat(name, &sbuf) < 0)
 		return(0);
-	return (S_ISDIR(sbuf.st_mode));
+	return((sbuf.st_mode & S_IFMT) == S_IFDIR);
 }
 
 /*
  * Count the number of arguments in the given string raw list.
  */
-int
 argcount(argv)
 	char **argv;
 {
-	char **ap;
+	register char **ap;
 
 	for (ap = argv; *ap++ != NOSTR;)
 		;	
@@ -141,11 +125,11 @@ hfield(field, mp)
 	char field[];
 	struct message *mp;
 {
-	FILE *ibuf;
+	register FILE *ibuf;
 	char linebuf[LINESIZE];
-	int lc;
-	char *hfield;
-	char *colon, *oldhfield = NOSTR;
+	register int lc;
+	register char *hfield;
+	char *colon;
 
 	ibuf = setinput(mp);
 	if ((lc = mp->m_lines - 1) < 0)
@@ -154,11 +138,11 @@ hfield(field, mp)
 		return NOSTR;
 	while (lc > 0) {
 		if ((lc = gethfield(ibuf, linebuf, lc, &colon)) < 0)
-			return oldhfield;
-		if ((hfield = ishfield(linebuf, colon, field)) != NULL)
-			oldhfield = save2str(hfield, oldhfield);
+			return NOSTR;
+		if (hfield = ishfield(linebuf, colon, field))
+			return savestr(hfield);
 	}
-	return oldhfield;
+	return NOSTR;
 }
 
 /*
@@ -167,16 +151,15 @@ hfield(field, mp)
  * "colon" is set to point to the colon in the header.
  * Must deal with \ continuations & other such fraud.
  */
-int
 gethfield(f, linebuf, rem, colon)
-	FILE *f;
+	register FILE *f;
 	char linebuf[];
-	int rem;
+	register int rem;
 	char **colon;
 {
 	char line2[LINESIZE];
-	char *cp, *cp2;
-	int c;
+	register char *cp, *cp2;
+	register int c;
 
 	for (;;) {
 		if (--rem < 0)
@@ -212,7 +195,7 @@ gethfield(f, linebuf, rem, colon)
 			if (cp + c >= linebuf + LINESIZE - 2)
 				break;
 			*cp++ = ' ';
-			memmove(cp, cp2, c);
+			bcopy(cp2, cp, c);
 			cp += c;
 		}
 		*cp = 0;
@@ -231,7 +214,7 @@ ishfield(linebuf, colon, field)
 	char linebuf[], field[];
 	char *colon;
 {
-	char *cp = colon;
+	register char *cp = colon;
 
 	*cp = 0;
 	if (strcasecmp(linebuf, field) != 0) {
@@ -247,9 +230,8 @@ ishfield(linebuf, colon, field)
 /*
  * Copy a string, lowercasing it as we go.
  */
-void
 istrcpy(dest, src)
-	char *dest, *src;
+	register char *dest, *src;
 {
 
 	do {
@@ -278,11 +260,9 @@ struct sstack {
  * Set the global flag "sourcing" so that others will realize
  * that they are no longer reading from a tty (in all probability).
  */
-int
-source(v)
-	void *v;
+source(arglist)
+	char **arglist;
 {
-	char **arglist = v;
 	FILE *fi;
 	char *cp;
 
@@ -312,7 +292,6 @@ source(v)
  * Pop the current input back to the previous level.
  * Update the "sourcing" flag as appropriate.
  */
-int
 unstack()
 {
 	if (ssp <= 0) {
@@ -336,30 +315,29 @@ unstack()
  * Touch the indicated file.
  * This is nifty for the shell.
  */
-void
 alter(name)
 	char *name;
 {
 	struct stat sb;
 	struct timeval tv[2];
+	time_t time();
 
 	if (stat(name, &sb))
 		return;
-	(void) gettimeofday(&tv[0], (struct timezone *)0);
-	tv[0].tv_sec++;
-	TIMESPEC_TO_TIMEVAL(&tv[1], &sb.st_mtimespec);
-	(void) utimes(name, tv);
+	tv[0].tv_sec = time((time_t *)0) + 1;
+	tv[1].tv_sec = sb.st_mtime;
+	tv[0].tv_usec = tv[1].tv_usec = 0;
+	(void)utimes(name, tv);
 }
 
 /*
  * Examine the passed line buffer and
  * return true if it is all blanks and tabs.
  */
-int
 blankline(linebuf)
 	char linebuf[];
 {
-	char *cp;
+	register char *cp;
 
 	for (cp = linebuf; *cp; cp++)
 		if (*cp != ' ' && *cp != '\t')
@@ -374,10 +352,9 @@ blankline(linebuf)
  */
 char *
 nameof(mp, reptype)
-	struct message *mp;
-	int reptype;
+	register struct message *mp;
 {
-	char *cp, *cp2;
+	register char *cp, *cp2;
 
 	cp = skin(name1(mp, reptype));
 	if (reptype != 0 || charcount(cp, '!') < 2)
@@ -397,9 +374,9 @@ nameof(mp, reptype)
  */
 char *
 skip_comment(cp)
-	char *cp;
+	register char *cp;
 {
-	int nesting = 1;
+	register nesting = 1;
 
 	for (; nesting > 0 && *cp; cp++) {
 		switch (*cp) {
@@ -426,8 +403,8 @@ char *
 skin(name)
 	char *name;
 {
-	int c;
-	char *cp, *cp2;
+	register int c;
+	register char *cp, *cp2;
 	char *bufend;
 	int gotlt, lastsp;
 	char nbuf[BUFSIZ];
@@ -440,7 +417,7 @@ skin(name)
 	gotlt = 0;
 	lastsp = 0;
 	bufend = nbuf;
-	for (cp = name, cp2 = bufend; (c = *cp++) != '\0'; ) {
+	for (cp = name, cp2 = bufend; c = *cp++; ) {
 		switch (c) {
 		case '(':
 			cp = skip_comment(cp);
@@ -452,13 +429,13 @@ skin(name)
 			 * Start of a "quoted-string".
 			 * Copy it in its entirety.
 			 */
-			while ((c = *cp) != '\0') {
+			while (c = *cp) {
 				cp++;
 				if (c == '"')
 					break;
 				if (c != '\\')
 					*cp2++ = c;
-				else if ((c = *cp) != '\0') {
+				else if (c = *cp) {
 					*cp2++ = c;
 					cp++;
 				}
@@ -490,7 +467,7 @@ skin(name)
 					if (c == '(')
 						cp = skip_comment(cp);
 					else if (c == '"')
-						while ((c = *cp) != '\0') {
+						while (c = *cp) {
 							cp++;
 							if (c == '"')
 								break;
@@ -532,13 +509,12 @@ skin(name)
  */
 char *
 name1(mp, reptype)
-	struct message *mp;
-	int reptype;
+	register struct message *mp;
 {
 	char namebuf[LINESIZE];
 	char linebuf[LINESIZE];
-	char *cp, *cp2;
-	FILE *ibuf;
+	register char *cp, *cp2;
+	register FILE *ibuf;
 	int first = 1;
 
 	if ((cp = hfield("from", mp)) != NOSTR)
@@ -546,7 +522,7 @@ name1(mp, reptype)
 	if (reptype == 0 && (cp = hfield("sender", mp)) != NOSTR)
 		return cp;
 	ibuf = setinput(mp);
-	namebuf[0] = '\0';
+	namebuf[0] = 0;
 	if (readline(ibuf, linebuf, LINESIZE) < 0)
 		return(savestr(namebuf));
 newname:
@@ -574,19 +550,12 @@ newname:
 				break;
 			cp++;
 			if (first) {
-				cp2 = namebuf;
+				strcpy(namebuf, cp);
 				first = 0;
 			} else
-				cp2 = rindex(namebuf, '!') + 1;
-			while (*cp && cp2 < namebuf + LINESIZE - 1)
-				*cp2++ = *cp++;
-			if (cp2 < namebuf + LINESIZE - 1)
-				*cp2++ = '!';
-			*cp2 = '\0';
-			if (cp2 < namebuf + LINESIZE - 1)
-				goto newname;
-			else
-				break;
+				strcpy(rindex(namebuf, '!')+1, cp);
+			strcat(namebuf, "!");
+			goto newname;
 		}
 		cp++;
 	}
@@ -596,13 +565,11 @@ newname:
 /*
  * Count the occurances of c in str
  */
-int
 charcount(str, c)
 	char *str;
-	int c;
 {
-	char *cp;
-	int i;
+	register char *cp;
+	register int i;
 
 	for (i = 0, cp = str; *cp; cp++)
 		if (*cp == c)
@@ -613,9 +580,8 @@ charcount(str, c)
 /*
  * Are any of the characters in the two strings the same?
  */
-int
 anyof(s1, s2)
-	char *s1, *s2;
+	register char *s1, *s2;
 {
 
 	while (*s1)
@@ -627,9 +593,8 @@ anyof(s1, s2)
 /*
  * Convert c to upper case
  */
-int
 raise(c)
-	int c;
+	register c;
 {
 
 	if (islower(c))
@@ -642,10 +607,10 @@ raise(c)
  */
 char *
 copy(s1, s2)
-	char *s1, *s2;
+	register char *s1, *s2;
 {
 
-	while ((*s2++ = *s1++) != '\0')
+	while (*s2++ = *s1++)
 		;
 	return s2 - 1;
 }
@@ -653,12 +618,11 @@ copy(s1, s2)
 /*
  * See if the given header field is supposed to be ignored.
  */
-int
 isign(field, ignore)
 	char *field;
 	struct ignoretab ignore[2];
 {
-	char realfld[LINESIZE];
+	char realfld[BUFSIZ];
 
 	if (ignore == ignoreall)
 		return 1;
@@ -673,12 +637,11 @@ isign(field, ignore)
 		return (member(realfld, ignore));
 }
 
-int
 member(realfield, table)
-	char *realfield;
+	register char *realfield;
 	struct ignoretab *table;
 {
-	struct ignore *igp;
+	register struct ignore *igp;
 
 	for (igp = table->i_head[hash(realfield)]; igp != 0; igp = igp->i_link)
 		if (*igp->i_field == *realfield &&

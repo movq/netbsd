@@ -1,5 +1,3 @@
-/*	$NetBSD: histedit.h,v 1.6 1997/10/14 15:05:53 christos Exp $	*/
-
 /*-
  * Copyright (c) 1992, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -56,9 +54,9 @@ typedef struct editline EditLine;
  * For user-defined function interface
  */
 typedef struct lineinfo {
-    const char *buffer;
-    const char *cursor;
-    const char *lastchar;
+    __const char *buffer;
+    __const char *cursor;
+    __const char *lastchar;
 } LineInfo;
 
 
@@ -74,7 +72,6 @@ typedef struct lineinfo {
 #define	CC_CURSOR	5
 #define	CC_ERROR	6
 #define CC_FATAL	7
-#define CC_REDISPLAY	8
 
 /*
  * Initialization, cleanup, and resetting
@@ -87,7 +84,7 @@ void		 el_end		__P((EditLine *));
 /*
  * Get a line, a character or push a string back in the input queue
  */
-const char    *el_gets	__P((EditLine *, int *));
+__const char    *el_gets	__P((EditLine *, int *));
 int		 el_getc	__P((EditLine *, char *));
 void		 el_push	__P((EditLine *, const char *));
 
@@ -134,7 +131,7 @@ void		 el_resize	__P((EditLine *));
 /*
  * User-defined function interface.
  */
-const LineInfo *el_line	__P((EditLine *));
+__const LineInfo *el_line	__P((EditLine *));
 int   		  el_insertstr	__P((EditLine *, char *));
 void		  el_deletestr	__P((EditLine *, int));
 
@@ -145,20 +142,20 @@ void		  el_deletestr	__P((EditLine *, int));
 typedef struct history History;
 
 typedef struct HistEvent {
-    int 	 num;
-    const char	*str;
+    int 	  num;
+    __const char *str;
 } HistEvent;
 
 /*
  * History access functions.
  */
-History *	history_init	__P((void));
-void 		history_end	__P((History *));
+History *		history_init	__P((void));
+void 			history_end	__P((History *));
 
-int 		history		__P((History *, HistEvent *, int, ...));
+__const HistEvent *	history		__P((History *, int, ...));
 
 #define H_FUNC		 0	/* , UTSL		*/
-#define H_SETMAXSIZE	 1	/* , const int);	*/
+#define H_EVENT		 1	/* , const int);	*/
 #define H_FIRST		 2	/* , void);		*/
 #define H_LAST		 3	/* , void);		*/
 #define H_PREV		 4	/* , void);		*/
@@ -171,9 +168,5 @@ int 		history		__P((History *, HistEvent *, int, ...));
 #define H_PREV_STR	11	/* , const char*);	*/
 #define H_NEXT_EVENT	12	/* , const int);	*/
 #define H_PREV_EVENT	13	/* , const int);	*/
-#define H_LOAD		14	/* , const char *);	*/
-#define H_SAVE		15	/* , const char *);	*/
-#define H_CLEAR		16	/* , void);		*/
-#define H_GETSIZE	17	/* , void);		*/
 
 #endif /* _h_editline */

@@ -1,8 +1,6 @@
-/*	$NetBSD: logwtmp.c,v 1.5 1997/06/18 19:05:51 christos Exp $	*/
-
 /*
- * Copyright (c) 1988, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1988 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -34,26 +32,17 @@
  *
  */
 
-
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)logwtmp.c	8.1 (Berkeley) 6/4/93";
-#else
-__RCSID("$NetBSD: logwtmp.c,v 1.5 1997/06/18 19:05:51 christos Exp $");
-#endif
+static char sccsid[] = "@(#)logwtmp.c	5.7 (Berkeley) 2/25/91";
 #endif /* not lint */
 
 #include <sys/types.h>
 #include <sys/time.h>
 #include <sys/stat.h>
-
 #include <fcntl.h>
 #include <utmp.h>
 #include <unistd.h>
-#include <stdio.h>
 #include <string.h>
-#include "extern.h"
 
 static int fd = -1;
 
@@ -62,12 +51,13 @@ static int fd = -1;
  * after first call, for use with ftp (which may chroot
  * after login, but before logout).
  */
-void
 logwtmp(line, name, host)
 	char *line, *name, *host;
 {
 	struct utmp ut;
 	struct stat buf;
+	time_t time();
+	char *strncpy();
 
 	if (fd < 0 && (fd = open(_PATH_WTMP, O_WRONLY|O_APPEND, 0)) < 0)
 		return;

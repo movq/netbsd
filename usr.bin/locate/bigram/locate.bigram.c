@@ -1,8 +1,6 @@
-/*	$NetBSD: locate.bigram.c,v 1.6 1997/10/19 04:11:52 lukem Exp $	*/
-
 /*
- * Copyright (c) 1989, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1989 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * James A. Woods.
@@ -36,17 +34,14 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1989, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+char copyright[] =
+"@(#) Copyright (c) 1989 The Regents of the University of California.\n\
+ All rights reserved.\n";
 #endif /* not lint */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)locate.bigram.c	8.2 (Berkeley) 4/28/95";
-#endif
-__RCSID("$NetBSD: locate.bigram.c,v 1.6 1997/10/19 04:11:52 lukem Exp $");
+static char sccsid[] = "@(#)locate.bigram.c	4.7 (Berkeley) 6/1/90";
 #endif /* not lint */
 
 /*
@@ -62,26 +57,21 @@ __RCSID("$NetBSD: locate.bigram.c,v 1.6 1997/10/19 04:11:52 lukem Exp $");
 char buf1[MAXPATHLEN] = " ";	
 char buf2[MAXPATHLEN];
 
-int	main __P((int, char **));
-
-int
-main(argc, argv)
-	int argc;
-	char *argv[];
+main ( )
 {
-  	char *cp;
-	char *oldpath = buf1, *path = buf2;
+  	register char *cp;
+	register char *oldpath = buf1, *path = buf2;
 
      	while ( fgets ( path, sizeof(buf2), stdin ) != NULL ) {
 
 		/* skip longest common prefix */
 		for ( cp = path; *cp == *oldpath; cp++, oldpath++ )
-			if ( *oldpath == '\0' )
+			if ( *oldpath == NULL )
 				break;
 		/*
 		 * output post-residue bigrams only
 		 */
-		while ( *cp != '\0' && *(cp + 1) != '\0' ) {
+		while ( *cp != NULL && *(cp + 1) != NULL ) {
 			putchar ( *cp++ );
 			putchar ( *cp++ );
 			putchar ( '\n' );
@@ -91,5 +81,4 @@ main(argc, argv)
 		else
 			path = buf1, oldpath = buf2;
    	}
-	return (0);
 }

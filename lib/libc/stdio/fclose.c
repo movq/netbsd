@@ -1,8 +1,6 @@
-/*	$NetBSD: fclose.c,v 1.6 1997/07/13 20:14:49 christos Exp $	*/
-
 /*-
- * Copyright (c) 1990, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1990 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Chris Torek.
@@ -36,12 +34,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char sccsid[] = "@(#)fclose.c	8.1 (Berkeley) 6/4/93";
-#endif
-__RCSID("$NetBSD: fclose.c,v 1.6 1997/07/13 20:14:49 christos Exp $");
+static char sccsid[] = "@(#)fclose.c	5.2 (Berkeley) 2/1/91";
 #endif /* LIBC_SCCS and not lint */
 
 #include <errno.h>
@@ -49,7 +43,6 @@ __RCSID("$NetBSD: fclose.c,v 1.6 1997/07/13 20:14:49 christos Exp $");
 #include <stdlib.h>
 #include "local.h"
 
-int
 fclose(fp)
 	register FILE *fp;
 {
@@ -68,7 +61,6 @@ fclose(fp)
 		FREEUB(fp);
 	if (HASLB(fp))
 		FREELB(fp);
-	fp->_flags = 0;		/* Release this FILE for reuse. */
-	fp->_r = fp->_w = 0;	/* Mess up if reaccessed. */
+	fp->_flags = 0;		/* release this FILE for reuse */
 	return (r);
 }

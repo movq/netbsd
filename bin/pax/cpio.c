@@ -1,5 +1,3 @@
-/*	$NetBSD: cpio.c,v 1.7 1997/07/20 20:32:24 christos Exp $	*/
-
 /*-
  * Copyright (c) 1992 Keith Muller.
  * Copyright (c) 1992, 1993
@@ -37,13 +35,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
 static char sccsid[] = "@(#)cpio.c	8.1 (Berkeley) 5/31/93";
-#else
-__RCSID("$NetBSD: cpio.c,v 1.7 1997/07/20 20:32:24 christos Exp $");
-#endif
 #endif /* not lint */
 
 #include <sys/types.h>
@@ -59,9 +52,9 @@ __RCSID("$NetBSD: cpio.c,v 1.7 1997/07/20 20:32:24 christos Exp $");
 #include "cpio.h"
 #include "extern.h"
 
-static int rd_nm __P((ARCHD *, int));
-static int rd_ln_nm __P((ARCHD *));
-static int com_rd __P((ARCHD *));
+static int rd_nm __P((register ARCHD *, int));
+static int rd_ln_nm __P((register ARCHD *));
+static int com_rd __P((register ARCHD *));
 
 /*
  * Routines which support the different cpio versions
@@ -92,7 +85,7 @@ cpio_strd()
 }
 
 /*
- * cpio_subtrail()
+ * cpio_trail()
  *	Called to determine if a header block is a valid trailer. We are
  *	passed the block, the in_sync flag (which tells us we are in resync
  *	mode; looking for a valid header), and cnt (which starts at zero)
@@ -103,11 +96,11 @@ cpio_strd()
 
 #if __STDC__
 int
-cpio_subtrail(ARCHD *arcn)
+cpio_trail(register ARCHD *arcn)
 #else
 int
-cpio_subtrail(arcn)
-	ARCHD *arcn;
+cpio_trail(arcn)
+	register ARCHD *arcn;
 #endif
 {
 	/*
@@ -127,11 +120,11 @@ cpio_subtrail(arcn)
 
 #if __STDC__
 static int
-com_rd(ARCHD *arcn)
+com_rd(register ARCHD *arcn)
 #else
 static int
 com_rd(arcn)
-	ARCHD *arcn;
+	register ARCHD *arcn;
 #endif
 {
 	arcn->skip = 0;
@@ -193,7 +186,7 @@ cpio_endwr()
 	/*
 	 * create a trailer request and call the proper format write function
 	 */
-	memset(&last, 0, sizeof(last));
+	bzero((char *)&last, sizeof(last));
 	last.nlen = sizeof(TRAILER) - 1;
 	last.type = PAX_REG;
 	last.sb.st_nlink = 1;
@@ -210,11 +203,11 @@ cpio_endwr()
 
 #if __STDC__
 static int
-rd_nm(ARCHD *arcn, int nsz)
+rd_nm(register ARCHD *arcn, int nsz)
 #else
 static int
 rd_nm(arcn, nsz)
-	ARCHD *arcn;
+	register ARCHD *arcn;
 	int nsz;
 #endif
 {
@@ -222,7 +215,7 @@ rd_nm(arcn, nsz)
 	 * do not even try bogus values
 	 */
 	if ((nsz == 0) || (nsz > sizeof(arcn->name))) {
-		tty_warn(1, "Cpio file name length %d is out of range", nsz);
+		warn(1, "Cpio file name length %d is out of range", nsz);
 		return(-1);
 	}
 
@@ -231,7 +224,7 @@ rd_nm(arcn, nsz)
 	 */
 	if ((rd_wrbuf(arcn->name,nsz) != nsz) || (arcn->name[nsz-1] != '\0') ||
 	    (arcn->name[0] == '\0')) {
-		tty_warn(1, "Cpio file name in header is corrupted");
+		warn(1, "Cpio file name in header is corrupted");
 		return(-1);
 	}
 	return(0);
@@ -247,11 +240,11 @@ rd_nm(arcn, nsz)
 
 #if __STDC__
 static int
-rd_ln_nm(ARCHD *arcn)
+rd_ln_nm(register ARCHD *arcn)
 #else
 static int
 rd_ln_nm(arcn)
-	ARCHD *arcn;
+	register ARCHD *arcn;
 #endif
 {
 	/*
@@ -260,11 +253,11 @@ rd_ln_nm(arcn)
 	if ((arcn->sb.st_size == 0) ||
 	    (arcn->sb.st_size >= sizeof(arcn->ln_name))) {
 #		ifdef NET2_STAT
-		tty_warn(1, "Cpio link name length is invalid: %lu",
+		warn(1, "Cpio link name length is invalid: %lu",
 		    arcn->sb.st_size);
 #		else
-		tty_warn(1, "Cpio link name length is invalid: %qu",
-		    (unsigned long long) arcn->sb.st_size);
+		warn(1, "Cpio link name length is invalid: %qu",
+		    arcn->sb.st_size);
 #		endif
 		return(-1);
 	}
@@ -274,7 +267,7 @@ rd_ln_nm(arcn)
 	 */
 	if (rd_wrbuf(arcn->ln_name, (int)arcn->sb.st_size) !=
 	    (int)arcn->sb.st_size) {
-		tty_warn(1, "Cpio link name read error");
+		warn(1, "Cpio link name read error");
 		return(-1);
 	}
 	arcn->ln_nlen = arcn->sb.st_size;
@@ -284,7 +277,7 @@ rd_ln_nm(arcn)
 	 * watch out for those empty link names
 	 */
 	if (arcn->ln_name[0] == '\0') {
-		tty_warn(1, "Cpio link name is corrupt");
+		warn(1, "Cpio link name is corrupt");
 		return(-1);
 	}
 	return(0);
@@ -328,16 +321,16 @@ cpio_id(blk, size)
 
 #if __STDC__
 int
-cpio_rd(ARCHD *arcn, char *buf)
+cpio_rd(register ARCHD *arcn, register char *buf)
 #else
 int
 cpio_rd(arcn, buf)
-	ARCHD *arcn;
-	char *buf;
+	register ARCHD *arcn;
+	register char *buf;
 #endif
 {
-	int nsz;
-	HD_CPIO *hd;
+	register int nsz;
+	register HD_CPIO *hd;
 
 	/*
 	 * check that this is a valid header, if not return -1
@@ -449,15 +442,15 @@ cpio_stwr()
 
 #if __STDC__
 int
-cpio_wr(ARCHD *arcn)
+cpio_wr(register ARCHD *arcn)
 #else
 int
 cpio_wr(arcn)
-	ARCHD *arcn;
+	register ARCHD *arcn;
 #endif
 {
-	HD_CPIO *hd;
-	int nsz;
+	register HD_CPIO *hd;
+	register int nsz;
 	char hdblk[sizeof(HD_CPIO)];
 
 	/*
@@ -486,7 +479,7 @@ cpio_wr(arcn)
 		if (uqd_asc((u_quad_t)arcn->sb.st_size, hd->c_filesize,
 		    sizeof(hd->c_filesize), OCT)) {
 #		endif
-			tty_warn(1,"File is too large for cpio format %s",
+			warn(1,"File is too large for cpio format %s",
 			    arcn->org_name);
 			return(1);
 		}
@@ -537,8 +530,7 @@ cpio_wr(arcn)
 	 */
 	if ((wr_rdbuf(hdblk, (int)sizeof(HD_CPIO)) < 0) ||
 	    (wr_rdbuf(arcn->name, nsz) < 0)) {
-		tty_warn(1, "Unable to write cpio header for %s",
-		    arcn->org_name);
+		warn(1, "Unable to write cpio header for %s", arcn->org_name);
 		return(-1);
 	}
 
@@ -557,8 +549,7 @@ cpio_wr(arcn)
 	 * next file as we are done.
 	 */
 	if (wr_rdbuf(arcn->ln_name, arcn->ln_nlen) < 0) {
-		tty_warn(1,"Unable to write cpio link name for %s",
-		    arcn->org_name);
+		warn(1,"Unable to write cpio link name for %s",arcn->org_name);
 		return(-1);
 	}
 	return(1);
@@ -567,7 +558,7 @@ cpio_wr(arcn)
 	/*
 	 * header field is out of range
 	 */
-	tty_warn(1, "Cpio header field is too small to store file %s",
+	warn(1, "Cpio header field is too small to store file %s",
 	    arcn->org_name);
 	return(1);
 }
@@ -654,18 +645,18 @@ crc_strd()
 
 #if __STDC__
 int
-vcpio_rd(ARCHD *arcn, char *buf)
+vcpio_rd(register ARCHD *arcn, register char *buf)
 #else
 int
 vcpio_rd(arcn, buf)
-	ARCHD *arcn;
-	char *buf;
+	register ARCHD *arcn;
+	register char *buf;
 #endif
 {
-	HD_VCPIO *hd;
+	register HD_VCPIO *hd;
 	dev_t devminor;
 	dev_t devmajor;
-	int nsz;
+	register int nsz;
 
 	/*
 	 * during the id phase it was determined if we were using CRC, use the
@@ -800,14 +791,14 @@ crc_stwr()
 
 #if __STDC__
 int
-vcpio_wr(ARCHD *arcn)
+vcpio_wr(register ARCHD *arcn)
 #else
 int
 vcpio_wr(arcn)
-	ARCHD *arcn;
+	register ARCHD *arcn;
 #endif
 {
-	HD_VCPIO *hd;
+	register HD_VCPIO *hd;
 	unsigned int nsz;
 	char hdblk[sizeof(HD_VCPIO)];
 
@@ -855,7 +846,7 @@ vcpio_wr(arcn)
 		if (uqd_asc((u_quad_t)arcn->sb.st_size, hd->c_filesize,
 		    sizeof(hd->c_filesize), HEX)) {
 #		endif
-			tty_warn(1,"File is too large for sv4cpio format %s",
+			warn(1,"File is too large for sv4cpio format %s",
 			    arcn->org_name);
 			return(1);
 		}
@@ -913,8 +904,7 @@ vcpio_wr(arcn)
 	if ((wr_rdbuf(hdblk, (int)sizeof(HD_VCPIO)) < 0) ||
 	    (wr_rdbuf(arcn->name, (int)nsz) < 0)  ||
 	    (wr_skip((off_t)(VCPIO_PAD(sizeof(HD_VCPIO) + nsz))) < 0)) {
-		tty_warn(1,"Could not write sv4cpio header for %s",
-		    arcn->org_name);
+		warn(1,"Could not write sv4cpio header for %s",arcn->org_name);
 		return(-1);
 	}
 
@@ -936,7 +926,7 @@ vcpio_wr(arcn)
 	 */
 	if ((wr_rdbuf(arcn->ln_name, arcn->ln_nlen) < 0) ||
 	    (wr_skip((off_t)(VCPIO_PAD(arcn->ln_nlen))) < 0)) {
-		tty_warn(1,"Could not write sv4cpio link name for %s",
+		warn(1,"Could not write sv4cpio link name for %s",
 		    arcn->org_name);
 		return(-1);
 	}
@@ -946,8 +936,7 @@ vcpio_wr(arcn)
 	/*
 	 * header field is out of range
 	 */
-	tty_warn(1,"Sv4cpio header field is too small for file %s",
-	    arcn->org_name);
+	warn(1,"Sv4cpio header field is too small for file %s",arcn->org_name);
 	return(1);
 }
 
@@ -1000,16 +989,16 @@ bcpio_id(blk, size)
 
 #if __STDC__
 int
-bcpio_rd(ARCHD *arcn, char *buf)
+bcpio_rd(register ARCHD *arcn, register char *buf)
 #else
 int
 bcpio_rd(arcn, buf)
-	ARCHD *arcn;
-	char *buf;
+	register ARCHD *arcn;
+	register char *buf;
 #endif
 {
-	HD_BCPIO *hd;
-	int nsz;
+	register HD_BCPIO *hd;
+	register int nsz;
 
 	/*
 	 * check the header
@@ -1127,15 +1116,15 @@ bcpio_endrd()
 
 #if __STDC__
 int
-bcpio_wr(ARCHD *arcn)
+bcpio_wr(register ARCHD *arcn)
 #else
 int
 bcpio_wr(arcn)
-	ARCHD *arcn;
+	register ARCHD *arcn;
 #endif
 {
-	HD_BCPIO *hd;
-	int nsz;
+	register HD_BCPIO *hd;
+	register int nsz;
 	char hdblk[sizeof(HD_BCPIO)];
 	off_t t_offt;
 	int t_int;
@@ -1168,7 +1157,7 @@ bcpio_wr(arcn)
 		t_offt = (off_t)(SHRT_EXT(hd->h_filesize_1));
 		t_offt = (t_offt<<16) | ((off_t)(SHRT_EXT(hd->h_filesize_2)));
 		if (arcn->sb.st_size != t_offt) {
-			tty_warn(1,"File is too large for bcpio format %s",
+			warn(1,"File is too large for bcpio format %s",
 			    arcn->org_name);
 			return(1);
 		}
@@ -1253,8 +1242,7 @@ bcpio_wr(arcn)
 	if ((wr_rdbuf(hdblk, (int)sizeof(HD_BCPIO)) < 0) ||
 	    (wr_rdbuf(arcn->name, nsz) < 0) ||
 	    (wr_skip((off_t)(BCPIO_PAD(sizeof(HD_BCPIO) + nsz))) < 0)) {
-		tty_warn(1, "Could not write bcpio header for %s",
-		    arcn->org_name);
+		warn(1, "Could not write bcpio header for %s", arcn->org_name);
 		return(-1);
 	}
 
@@ -1276,8 +1264,7 @@ bcpio_wr(arcn)
 	 */
 	if ((wr_rdbuf(arcn->ln_name, arcn->ln_nlen) < 0) ||
 	    (wr_skip((off_t)(BCPIO_PAD(arcn->ln_nlen))) < 0)) {
-		tty_warn(1,"Could not write bcpio link name for %s",
-		    arcn->org_name);
+		warn(1,"Could not write bcpio link name for %s",arcn->org_name);
 		return(-1);
 	}
 	return(1);
@@ -1286,7 +1273,6 @@ bcpio_wr(arcn)
 	/*
 	 * header field is out of range
 	 */
-	tty_warn(1,"Bcpio header field is too small for file %s",
-	    arcn->org_name);
+	warn(1,"Bcpio header field is too small for file %s", arcn->org_name);
 	return(1);
 }

@@ -1,8 +1,6 @@
-/*	$NetBSD: daemon.c,v 1.7 1997/07/21 14:06:51 jtc Exp $	*/
-
 /*-
- * Copyright (c) 1990, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1990 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,52 +31,35 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char sccsid[] = "@(#)daemon.c	8.1 (Berkeley) 6/4/93";
-#else
-__RCSID("$NetBSD: daemon.c,v 1.7 1997/07/21 14:06:51 jtc Exp $");
-#endif
+static char sccsid[] = "@(#)daemon.c	5.3 (Berkeley) 12/28/90";
 #endif /* LIBC_SCCS and not lint */
 
-#include "namespace.h"
-#include <fcntl.h>
-#include <paths.h>
-#include <stdlib.h>
+#include <sys/fcntl.h>
 #include <unistd.h>
+#include <paths.h>
 
-#ifdef __weak_alias
-__weak_alias(daemon,_daemon);
-#endif
-
-int
 daemon(nochdir, noclose)
 	int nochdir, noclose;
 {
-	int fd;
+	int cpid;
 
-	switch (fork()) {
-	case -1:
+	if ((cpid = fork()) == -1)
 		return (-1);
-	case 0:
-		break;
-	default:
-		_exit(0);
-	}
-
-	if (setsid() == -1)
-		return (-1);
-
+	if (cpid)
+		exit(0);
+	(void) setsid();
 	if (!nochdir)
-		(void)chdir("/");
+		(void) chdir("/");
+	if (!noclose) {
+		int devnull = open(_PATH_DEVNULL, O_RDWR, 0);
 
-	if (!noclose && (fd = open(_PATH_DEVNULL, O_RDWR, 0)) != -1) {
-		(void)dup2(fd, STDIN_FILENO);
-		(void)dup2(fd, STDOUT_FILENO);
-		(void)dup2(fd, STDERR_FILENO);
-		if (fd > STDERR_FILENO)
-			(void)close(fd);
+		if (devnull != -1) {
+			(void) dup2(devnull, STDIN_FILENO);
+			(void) dup2(devnull, STDOUT_FILENO);
+			(void) dup2(devnull, STDERR_FILENO);
+			if (devnull > 2)
+				(void) close(devnull);
+		}
 	}
-	return (0);
 }

@@ -1,7 +1,5 @@
-.\"	$NetBSD: vmstat.8,v 1.12 1996/05/10 23:19:30 thorpej Exp $
-.\"
-.\" Copyright (c) 1986, 1993
-.\"	The Regents of the University of California.  All rights reserved.
+.\" Copyright (c) 1986 The Regents of the University of California.
+.\" All rights reserved.
 .\"
 .\" Redistribution and use in source and binary forms, with or without
 .\" modification, are permitted provided that the following conditions
@@ -31,9 +29,9 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\"	@(#)vmstat.8	8.1 (Berkeley) 6/6/93
+.\"	@(#)vmstat.8	6.8 (Berkeley) 6/20/91
 .\"
-.TH VMSTAT 8 "June 6, 1993"
+.TH VMSTAT 1 "June 20, 1991"
 .UC 4
 .SH NAME
 vmstat \- report virtual memory statistics
@@ -76,11 +74,11 @@ startup.
 .TP
 \-M
 Extract values associated with the name list from the specified core 
-instead of the default ``/dev/mem''.
+instead of the default ``/dev/kmem''.
 .TP
 \-N
 Extract the name list from the specified system instead of the default
-``/netbsd''.
+``/vmunix''.
 .TP
 \-m
 Report on the usage of kernel dynamic memory listed first by size of
@@ -150,7 +148,7 @@ sr	pages scanned by clock algorithm, per-second
 .RE
 .TP
 disks
-Disk transfers per second.
+Disk operations per second (this field is system dependent).
 Typically paging will be split across the available drives.
 The header of the field is the first character of the disk name and
 the unit number.
@@ -189,10 +187,10 @@ some of the statistics are sampled in the system.
 Others vary every second and running the output for a while will make it
 apparent which are recomputed every second.
 .SH FILES
-.ta \w'/dev/mem  'u
-/netbsd	default kernel namelist
+.ta \w'/dev/kmem  'u
+/vmunix	default kernel namelist
 .br
-/dev/mem	default memory file
+/dev/kmem	default memory file
 .SH SEE ALSO
 .IR fstat (1),
 .IR netstat (1),

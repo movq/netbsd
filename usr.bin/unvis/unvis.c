@@ -1,8 +1,6 @@
-/*	$NetBSD: unvis.c,v 1.6 1997/10/20 02:38:00 lukem Exp $	*/
-
 /*-
- * Copyright (c) 1989, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1989 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,40 +31,37 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1989, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+char copyright[] =
+"@(#) Copyright (c) 1989 The Regents of the University of California.\n\
+ All rights reserved.\n";
 #endif /* not lint */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)unvis.c	8.1 (Berkeley) 6/6/93";
-#endif
-__RCSID("$NetBSD: unvis.c,v 1.6 1997/10/20 02:38:00 lukem Exp $");
+static char sccsid[] = "@(#)unvis.c	5.1 (Berkeley) 6/1/90";
 #endif /* not lint */
 
 #include <stdio.h>
-#include <stdlib.h>
-#include <err.h>
 #include <vis.h>
 
-int	main __P((int, char **));
-void process __P((FILE *fp, const char *filename));
+char	*Program;
+#define usage()	fprintf(stderr, "usage: %s %s\n", Program, USAGE)
+#define USAGE "[file...]"
 
-int
 main(argc, argv)
-	int argc;
 	char *argv[];
 {
 	FILE *fp;
+	extern char *optarg;
+	extern int optind;
 	int ch;
 
-	while ((ch = getopt(argc, argv, "")) != -1)
+	Program = argv[0];
+	while ((ch = getopt(argc, argv, "")) != EOF)
 		switch((char)ch) {
 		case '?':
 		default:
-			(void) fprintf(stderr, "usage: unvis [file...]\n");
+			usage();
 			exit(1);
 		}
 	argc -= optind;
@@ -77,7 +72,7 @@ main(argc, argv)
 			if ((fp=fopen(*argv, "r")) != NULL)
 				process(fp, *argv);
 			else
-				warn("%s", *argv);
+				syserror("%s", *argv);
 			argv++;
 		}
 	else
@@ -85,12 +80,11 @@ main(argc, argv)
 	exit(0);
 }
 
-void
 process(fp, filename)
 	FILE *fp;
-	const char *filename;
+	char *filename;
 {
-	int offset = 0, c, ret;
+	register int offset = 0, c, ret;
 	int state = 0;
 	char outc;
 
@@ -105,17 +99,49 @@ process(fp, filename)
 			putchar(outc);
 			goto again;
 		case UNVIS_SYNBAD:
-			warnx("%s: offset: %d: can't decode", filename, offset);
+			error("%s: offset: %d: can't decode", filename, offset);
 			state = 0;
 			break;
 		case 0:
 		case UNVIS_NOCHAR:
 			break;
 		default:
-			errx(1, "bad return value (%d), can't happen", ret);
-			/* NOTREACHED */
+			error("bad return value (%d), can't happen", ret);
+			exit(1);
 		}
 	}
 	if (unvis(&outc, (char)0, &state, UNVIS_END) == UNVIS_VALID)
 		putchar(outc);
+}
+
+#include <varargs.h>
+
+error(va_alist)
+	va_dcl
+{
+	char *fmt;
+	va_list ap;
+	extern errno;
+
+	fprintf(stderr, "%s: ", Program);
+	va_start(ap);
+	fmt = va_arg(ap, char *);
+	(void) vfprintf(stderr, fmt, ap);
+	va_end(ap);
+	fprintf(stderr, "\n");
+}
+
+syserror(va_alist)
+	va_dcl
+{
+	char *fmt;
+	va_list ap;
+	extern errno;
+
+	fprintf(stderr, "%s: ", Program);
+	va_start(ap);
+	fmt = va_arg(ap, char *);
+	(void) vfprintf(stderr, fmt, ap);
+	va_end(ap);
+	fprintf(stderr, ": %s\n", strerror(errno));
 }

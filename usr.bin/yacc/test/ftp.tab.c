@@ -1,63 +1,6 @@
 #ifndef lint
-/*static char yysccsid[] = "from: @(#)yaccpar	1.9 (Berkeley) 02/21/93";*/
-static char rcsid[] = "$NetBSD: ftp.tab.c,v 1.6 1997/01/09 20:23:31 tls Exp $";
+char yysccsid[] = "@(#)yaccpar	1.3 (Berkeley) 01/21/90";
 #endif
-#define YYBYACC 1
-#define YYMAJOR 1
-#define YYMINOR 9
-#define yyclearin (yychar=(-1))
-#define yyerrok (yyerrflag=0)
-#define YYRECOVERING (yyerrflag!=0)
-#define YYPREFIX "yy"
-#line 26 "ftp.y"
-
-#ifndef lint
-static char sccsid[] = "@(#)ftpcmd.y	5.20.1.1 (Berkeley) 3/2/89";
-#endif /* not lint */
-
-#include <sys/param.h>
-#include <sys/socket.h>
-
-#include <netinet/in.h>
-
-#include <arpa/ftp.h>
-
-#include <stdio.h>
-#include <signal.h>
-#include <ctype.h>
-#include <pwd.h>
-#include <setjmp.h>
-#include <syslog.h>
-#include <sys/stat.h>
-#include <time.h>
-
-extern	struct sockaddr_in data_dest;
-extern	int logged_in;
-extern	struct passwd *pw;
-extern	int guest;
-extern	int logging;
-extern	int type;
-extern	int form;
-extern	int debug;
-extern	int timeout;
-extern	int maxtimeout;
-extern  int pdata;
-extern	char hostname[], remotehost[];
-extern	char proctitle[];
-extern	char *globerr;
-extern	int usedefault;
-extern  int transflag;
-extern  char tmpline[];
-char	**glob();
-
-static	int cmd_type;
-static	int cmd_form;
-static	int cmd_bytesz;
-char	cbuf[512];
-char	*fromname;
-
-char	*index();
-#line 60 "ftp.tab.c"
 #define A 257
 #define B 258
 #define C 259
@@ -122,6 +65,55 @@ char	*index();
 #define CHMOD 318
 #define LEXERR 319
 #define YYERRCODE 256
+#line 26 "ftp.y"
+
+#ifndef lint
+static char sccsid[] = "@(#)ftpcmd.y	5.20.1.1 (Berkeley) 3/2/89";
+#endif /* not lint */
+
+#include <sys//param.h>
+#include <sys//socket.h>
+
+#include <netinet//in.h>
+
+#include <arpa//ftp.h>
+
+#include <stdio.h>
+#include <signal.h>
+#include <ctype.h>
+#include <pwd.h>
+#include <setjmp.h>
+#include <syslog.h>
+#include <sys//stat.h>
+#include <time.h>
+
+extern	struct sockaddr_in data_dest;
+extern	int logged_in;
+extern	struct passwd *pw;
+extern	int guest;
+extern	int logging;
+extern	int type;
+extern	int form;
+extern	int debug;
+extern	int timeout;
+extern	int maxtimeout;
+extern  int pdata;
+extern	char hostname[], remotehost[];
+extern	char proctitle[];
+extern	char *globerr;
+extern	int usedefault;
+extern  int transflag;
+extern  char tmpline[];
+char	**glob();
+
+static	int cmd_type;
+static	int cmd_form;
+static	int cmd_bytesz;
+char	cbuf[512];
+char	*fromname;
+
+char	*index();
+#line 116 "ftp.tab.c"
 short yylhs[] = {                                        -1,
     0,    0,    0,    1,    1,    1,    1,    1,    1,    1,
     1,    1,    1,    1,    1,    1,    1,    1,    1,    1,
@@ -359,15 +351,13 @@ char *yyrule[] = {
 #ifndef YYSTYPE
 typedef int YYSTYPE;
 #endif
-#ifdef YYSTACKSIZE
-#undef YYMAXDEPTH
-#define YYMAXDEPTH YYSTACKSIZE
-#else
+#define yyclearin (yychar=(-1))
+#define yyerrok (yyerrflag=0)
+#ifndef YYSTACKSIZE
 #ifdef YYMAXDEPTH
 #define YYSTACKSIZE YYMAXDEPTH
 #else
-#define YYSTACKSIZE 500
-#define YYMAXDEPTH 500
+#define YYSTACKSIZE 300
 #endif
 #endif
 int yydebug;
@@ -378,9 +368,9 @@ short *yyssp;
 YYSTYPE *yyvsp;
 YYSTYPE yyval;
 YYSTYPE yylval;
+#define yystacksize YYSTACKSIZE
 short yyss[YYSTACKSIZE];
 YYSTYPE yyvs[YYSTACKSIZE];
-#define yystacksize YYSTACKSIZE
 #line 658 "ftp.y"
 
 extern jmp_buf errcatch;
@@ -873,7 +863,7 @@ char *filename;
 		    (stbuf.st_mode&S_IFMT) != S_IFREG)
 			reply(550, "%s: not a plain file.", filename);
 		else
-			reply(213, "%qu", stbuf.st_size);
+			reply(213, "%lu", stbuf.st_size);
 		break;}
 	case TYPE_A: {
 		FILE *fin;
@@ -905,9 +895,8 @@ char *filename;
 		reply(504, "SIZE not implemented for Type %c.", "?AEIL"[type]);
 	}
 }
-#line 908 "ftp.tab.c"
+#line 898 "ftp.tab.c"
 #define YYABORT goto yyabort
-#define YYREJECT goto yyabort
 #define YYACCEPT goto yyaccept
 #define YYERROR goto yyerrlab
 int
@@ -921,7 +910,9 @@ yyparse()
     if (yys = getenv("YYDEBUG"))
     {
         yyn = *yys;
-        if (yyn >= '0' && yyn <= '9')
+        if (yyn == '0')
+            yydebug = 0;
+        else if (yyn >= '1' && yyn <= '9')
             yydebug = yyn - '0';
     }
 #endif
@@ -945,8 +936,8 @@ yyloop:
             yys = 0;
             if (yychar <= YYMAXTOKEN) yys = yyname[yychar];
             if (!yys) yys = "illegal-symbol";
-            printf("%sdebug: state %d, reading %d (%s)\n",
-                    YYPREFIX, yystate, yychar, yys);
+            printf("yydebug: state %d, reading %d (%s)\n", yystate,
+                    yychar, yys);
         }
 #endif
     }
@@ -955,8 +946,8 @@ yyloop:
     {
 #if YYDEBUG
         if (yydebug)
-            printf("%sdebug: state %d, shifting to state %d\n",
-                    YYPREFIX, yystate, yytable[yyn]);
+            printf("yydebug: state %d, shifting to state %d\n",
+                    yystate, yytable[yyn]);
 #endif
         if (yyssp >= yyss + yystacksize - 1)
         {
@@ -996,8 +987,8 @@ yyinrecovery:
             {
 #if YYDEBUG
                 if (yydebug)
-                    printf("%sdebug: state %d, error recovery shifting\
- to state %d\n", YYPREFIX, *yyssp, yytable[yyn]);
+                    printf("yydebug: state %d, error recovery shifting\
+ to state %d\n", *yyssp, yytable[yyn]);
 #endif
                 if (yyssp >= yyss + yystacksize - 1)
                 {
@@ -1011,8 +1002,8 @@ yyinrecovery:
             {
 #if YYDEBUG
                 if (yydebug)
-                    printf("%sdebug: error recovery discarding state %d\n",
-                            YYPREFIX, *yyssp);
+                    printf("yydebug: error recovery discarding state %d\n",
+                            *yyssp);
 #endif
                 if (yyssp <= yyss) goto yyabort;
                 --yyssp;
@@ -1029,8 +1020,8 @@ yyinrecovery:
             yys = 0;
             if (yychar <= YYMAXTOKEN) yys = yyname[yychar];
             if (!yys) yys = "illegal-symbol";
-            printf("%sdebug: state %d, error recovery discards token %d (%s)\n",
-                    YYPREFIX, yystate, yychar, yys);
+            printf("yydebug: state %d, error recovery discards token %d (%s)\n",
+                    yystate, yychar, yys);
         }
 #endif
         yychar = (-1);
@@ -1039,8 +1030,8 @@ yyinrecovery:
 yyreduce:
 #if YYDEBUG
     if (yydebug)
-        printf("%sdebug: state %d, reducing by rule %d (%s)\n",
-                YYPREFIX, yystate, yyn, yyrule[yyn]);
+        printf("yydebug: state %d, reducing by rule %d (%s)\n",
+                yystate, yyn, yyrule[yyn]);
 #endif
     yym = yylen[yyn];
     yyval = yyvsp[1-yym];
@@ -1468,9 +1459,8 @@ case 44:
 					struct tm *gmtime();
 					t = gmtime(&stbuf.st_mtime);
 					reply(213,
-					    "%04d%02d%02d%02d%02d%02d",
-					    1900 + t->tm_year,
-					    t->tm_mon+1, t->tm_mday,
+					    "19%02d%02d%02d%02d%02d%02d",
+					    t->tm_year, t->tm_mon+1, t->tm_mday,
 					    t->tm_hour, t->tm_min, t->tm_sec);
 				}
 			}
@@ -1507,7 +1497,7 @@ break;
 case 49:
 #line 493 "ftp.y"
  {
-			*(char **)&(yyval) = "";
+			*(char **)&(yyval ) = "";
 		}
 break;
 case 52:
@@ -1525,19 +1515,19 @@ break;
 case 53:
 #line 516 "ftp.y"
  {
-		yyval = FORM_N;
+		yyval  = FORM_N;
 	}
 break;
 case 54:
 #line 520 "ftp.y"
  {
-		yyval = FORM_T;
+		yyval  = FORM_T;
 	}
 break;
 case 55:
 #line 524 "ftp.y"
  {
-		yyval = FORM_C;
+		yyval  = FORM_C;
 	}
 break;
 case 56:
@@ -1598,37 +1588,37 @@ break;
 case 64:
 #line 572 "ftp.y"
  {
-		yyval = STRU_F;
+		yyval  = STRU_F;
 	}
 break;
 case 65:
 #line 576 "ftp.y"
  {
-		yyval = STRU_R;
+		yyval  = STRU_R;
 	}
 break;
 case 66:
 #line 580 "ftp.y"
  {
-		yyval = STRU_P;
+		yyval  = STRU_P;
 	}
 break;
 case 67:
 #line 586 "ftp.y"
  {
-		yyval = MODE_S;
+		yyval  = MODE_S;
 	}
 break;
 case 68:
 #line 590 "ftp.y"
  {
-		yyval = MODE_B;
+		yyval  = MODE_B;
 	}
 break;
 case 69:
 #line 594 "ftp.y"
  {
-		yyval = MODE_C;
+		yyval  = MODE_C;
 	}
 break;
 case 70:
@@ -1640,14 +1630,14 @@ case 70:
 		 * This is a valid reply in some cases but not in others.
 		 */
 		if (logged_in && yyvsp[0] && strncmp((char *) yyvsp[0], "~", 1) == 0) {
-			*(char **)&(yyval) = *glob((char *) yyvsp[0]);
+			*(char **)&(yyval ) = *glob((char *) yyvsp[0]);
 			if (globerr != NULL) {
 				reply(550, globerr);
-				yyval = NULL;
+				yyval  = NULL;
 			}
 			free((char *) yyvsp[0]);
 		} else
-			yyval = yyvsp[0];
+			yyval  = yyvsp[0];
 	}
 break;
 case 72:
@@ -1672,21 +1662,21 @@ case 72:
 			multby *= 8;
 			dec /= 10;
 		}
-		yyval = ret;
+		yyval  = ret;
 	}
 break;
 case 73:
 #line 647 "ftp.y"
  {
 		if (logged_in)
-			yyval = 1;
+			yyval  = 1;
 		else {
 			reply(530, "Please login with USER and PASS.");
-			yyval = 0;
+			yyval  = 0;
 		}
 	}
 break;
-#line 1688 "ftp.tab.c"
+#line 1679 "ftp.tab.c"
     }
     yyssp -= yym;
     yystate = *yyssp;
@@ -1694,10 +1684,10 @@ break;
     yym = yylhs[yyn];
     if (yystate == 0 && yym == 0)
     {
-#if YYDEBUG
+#ifdef YYDEBUG
         if (yydebug)
-            printf("%sdebug: after reduction, shifting from state 0 to\
- state %d\n", YYPREFIX, YYFINAL);
+            printf("yydebug: after reduction, shifting from state 0 to\
+ state %d\n", YYFINAL);
 #endif
         yystate = YYFINAL;
         *++yyssp = YYFINAL;
@@ -1711,8 +1701,8 @@ break;
                 yys = 0;
                 if (yychar <= YYMAXTOKEN) yys = yyname[yychar];
                 if (!yys) yys = "illegal-symbol";
-                printf("%sdebug: state %d, reading %d (%s)\n",
-                        YYPREFIX, YYFINAL, yychar, yys);
+                printf("yydebug: state %d, reading %d (%s)\n",
+                        YYFINAL, yychar, yys);
             }
 #endif
         }
@@ -1724,10 +1714,10 @@ break;
         yystate = yytable[yyn];
     else
         yystate = yydgoto[yym];
-#if YYDEBUG
+#ifdef YYDEBUG
     if (yydebug)
-        printf("%sdebug: after reduction, shifting from state %d \
-to state %d\n", YYPREFIX, *yyssp, yystate);
+        printf("yydebug: after reduction, shifting from state %d \
+to state %d\n", *yyssp, yystate);
 #endif
     if (yyssp >= yyss + yystacksize - 1)
     {

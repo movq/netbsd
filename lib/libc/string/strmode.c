@@ -1,5 +1,3 @@
-/*	$NetBSD: strmode.c,v 1.6 1997/10/16 23:09:09 christos Exp $	*/
-
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
  * All rights reserved.
@@ -33,18 +31,13 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char *sccsid = "@(#)strmode.c	5.3 (Berkeley) 5/18/90";
-#else
-__RCSID("$NetBSD: strmode.c,v 1.6 1997/10/16 23:09:09 christos Exp $");
-#endif
+static char sccsid[] = "@(#)strmode.c	5.3 (Berkeley) 5/18/90";
 #endif /* LIBC_SCCS and not lint */
 
 #include <sys/types.h>
 #include <sys/stat.h>
-#include <unistd.h>
+#include <string.h>
 
 void
 strmode(mode, p)
@@ -74,11 +67,6 @@ strmode(mode, p)
 #ifdef S_IFIFO
 	case S_IFIFO:			/* fifo */
 		*p++ = 'p';
-		break;
-#endif
-#ifdef S_IFWHT
-	case S_IFWHT:			/* whiteout */
-		*p++ = 'w';
 		break;
 #endif
 	default:			/* unknown */

@@ -1,8 +1,6 @@
-/*	$NetBSD: wwspawn.c,v 1.4 1995/12/21 08:39:57 mycroft Exp $	*/
-
 /*
- * Copyright (c) 1983, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1983 Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Edward Wang at The University of California, Berkeley.
@@ -37,11 +35,7 @@
  */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)wwspawn.c	8.1 (Berkeley) 6/6/93";
-#else
-static char rcsid[] = "$NetBSD: wwspawn.c,v 1.4 1995/12/21 08:39:57 mycroft Exp $";
-#endif
+static char sccsid[] = "@(#)wwspawn.c	3.15 (Berkeley) 6/6/90";
 #endif /* not lint */
 
 #include "ww.h"
@@ -59,12 +53,9 @@ char **argv;
 	int pid;
 	int ret;
 	char erred = 0;
-	sigset_t sigset, osigset;
+	int s;
 
-	sigemptyset(&sigset);
-	sigaddset(&sigset, SIGCHLD);
-	sigprocmask(SIG_BLOCK, &sigset, &osigset);
-
+	s = sigblock(sigmask(SIGCHLD));
 	switch (pid = vfork()) {
 	case -1:
 		wwerrno = WWE_SYS;
@@ -85,9 +76,7 @@ char **argv;
 			ret = pid;
 		}
 	}
-
-	sigprocmask(SIG_SETMASK, &osigset, (sigset_t *)0);
-
+	(void) sigsetmask(s);
 	if (wp->ww_socket >= 0) {
 		(void) close(wp->ww_socket);
 		wp->ww_socket = -1;

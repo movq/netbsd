@@ -1,8 +1,6 @@
-/*	$NetBSD: slc.c,v 1.7 1997/10/16 06:45:45 mikel Exp $	*/
-
 /*
- * Copyright (c) 1989, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1989 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,13 +31,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)slc.c	8.1 (Berkeley) 6/4/93";
-#else
-__RCSID("$NetBSD: slc.c,v 1.7 1997/10/16 06:45:45 mikel Exp $");
-#endif
+static char sccsid[] = "@(#)slc.c	5.7 (Berkeley) 3/1/91";
 #endif /* not lint */
 
 #include "telnetd.h"
@@ -53,10 +46,6 @@ static int		def_slclen = 0;
 static int		slcchange;	/* change to slc is requested */
 static unsigned char	*slcptr;	/* pointer into slc buffer */
 static unsigned char	slcbuf[NSLC*6];	/* buffer for slc negotiation */
-
-void default_slc __P((void));
-int end_slc __P((unsigned char **));
-void process_slc __P((u_int, u_int, cc_t));
 
 /*
  * send_slc
@@ -120,10 +109,10 @@ get_slc_defaults()
 	init_termbuf();
 
 	for (i = 1; i <= NSLC; i++) {
-		slctab[i].defset.flag =
+		slctab[i].defset.flag = 
 			spcset(i, &slctab[i].defset.val, &slctab[i].sptr);
-		slctab[i].current.flag = SLC_NOSUPPORT;
-		slctab[i].current.val = 0;
+		slctab[i].current.flag = SLC_NOSUPPORT; 
+		slctab[i].current.val = 0; 
 	}
 
 }  /* end of get_slc_defaults */
@@ -167,7 +156,7 @@ start_slc(getit)
 	slcchange = 0;
 	if (getit)
 		init_termbuf();
-	(void)snprintf((char *)slcbuf, sizeof slcbuf, "%c%c%c%c",
+	(void) sprintf((char *)slcbuf, "%c%c%c%c",
 					IAC, SB, TELOPT_LINEMODE, LM_SLC);
 	slcptr = slcbuf + 4;
 
@@ -183,6 +172,7 @@ end_slc(bufp)
 	register unsigned char **bufp;
 {
 	register int len;
+	void netflush();
 
 	/*
 	 * If a change has occured, store the new terminal control
@@ -212,7 +202,6 @@ end_slc(bufp)
 			len = slcptr - slcbuf;
 			writenet(slcbuf, len);
 			netflush();  /* force it out immediately */
-			DIAG(TD_OPTIONS, printsub('>', slcbuf+2, len-2););
 		}
 	}
 	return (0);
@@ -226,10 +215,10 @@ end_slc(bufp)
  */
 	void
 process_slc(func, flag, val)
-	u_int func, flag;
-	cc_t val;
+	register unsigned char func, flag;
+	register cc_t val;
 {
-	int hislevel, mylevel, ack;
+	register int hislevel, mylevel, ack;
 
 	/*
 	 * Ensure that we know something about this function
@@ -292,11 +281,11 @@ process_slc(func, flag, val)
  */
 	void
 change_slc(func, flag, val)
-	int func, flag;
-	cc_t val;
+	register char func, flag;
+	register cc_t val;
 {
-	int hislevel, mylevel;
-
+	register int hislevel, mylevel;
+	
 	hislevel = flag & SLC_LEVELBITS;
 	mylevel = slctab[func].defset.flag & SLC_LEVELBITS;
 	/*
@@ -355,7 +344,7 @@ change_slc(func, flag, val)
 		* request as he asks.
 		*
 		* If our level is DEFAULT, then just ack whatever was
-		* sent.
+		* sent. 
 		*
 		* If he can't change and we can't change,
 		* then degenerate to NOSUPPORT.
@@ -382,6 +371,7 @@ change_slc(func, flag, val)
 					slctab[func].defset.val;
 				val = slctab[func].current.val;
 			}
+			
 		}
 		add_slc(func, flag, val);
 	}
@@ -432,6 +422,7 @@ check_slc()
 						slctab[i].current.val);
 		}
 	}
+			
 }  /* check_slc */
 
 /*
@@ -460,7 +451,7 @@ do_opt_slc(ptr, len)
 			if (ptr >= end) break;
 			val = (cc_t)*ptr++;
 
-			process_slc((u_int)func, (u_int)flag, val);
+			process_slc(func, flag, val);
 
 		}
 	} else {

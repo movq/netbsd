@@ -1,8 +1,7 @@
-/*	$NetBSD: pt_exec.c,v 1.6 1997/09/21 02:35:42 enami Exp $	*/
-
 /*
  * Copyright (c) 1992, 1993
  *	The Regents of the University of California.  All rights reserved.
+ * All rights reserved.
  *
  * This code is derived from software donated to Berkeley by
  * Jan-Simon Pendry.
@@ -35,14 +34,10 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	from: Id: pt_exec.c,v 1.1 1992/05/25 21:43:09 jsp Exp
- *	@(#)pt_exec.c	8.1 (Berkeley) 6/5/93
+ *	from: Id: pt_exec.c,v 1.1 1992/05/25 21:43:09 jsp Exp jsp
+ *	from: @(#)pt_exec.c	8.1 (Berkeley) 6/5/93
+ *	$Id: pt_exec.c,v 1.1 1994/01/12 20:02:18 cgd Exp $
  */
-
-#include <sys/cdefs.h>
-#ifndef lint
-__RCSID("$NetBSD: pt_exec.c,v 1.6 1997/09/21 02:35:42 enami Exp $");
-#endif /* not lint */
 
 #include <stdio.h>
 #include <unistd.h>
@@ -54,14 +49,13 @@ __RCSID("$NetBSD: pt_exec.c,v 1.6 1997/09/21 02:35:42 enami Exp $");
 
 #include "portald.h"
 
-int
-portal_exec(pcr, key, v, so, fdp)
-	struct portal_cred *pcr;
-	char *key;
-	char **v;
-	int so;
-	int *fdp;
+int portal_exec(pcr, key, v, so, fdp)
+struct portal_cred *pcr;
+char *key;
+char **v;
+int so;
+int *fdp;
 {
-
 	return (ENOEXEC);
 }
+

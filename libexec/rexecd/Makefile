@@ -1,9 +1,6 @@
-#	$NetBSD: Makefile,v 1.7 1997/10/08 09:07:24 mrg Exp $
-#	from @(#)Makefile	8.1 (Berkeley) 6/4/93
+#	@(#)Makefile	5.3 (Berkeley) 5/11/90
 
 PROG=	rexecd
-MAN=	rexecd.8
-LDADD+= -lcrypt
-DPADD+= ${LIBCRYPT}
+MAN8=	rexecd.0
 
 .include <bsd.prog.mk>

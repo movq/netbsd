@@ -1,5 +1,3 @@
-/*	$NetBSD: sys.h,v 1.3 1997/01/11 06:48:12 lukem Exp $	*/
-
 /*-
  * Copyright (c) 1992, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -78,12 +76,9 @@ typedef char* ioctl_t;
 #endif
 
 #include <stdio.h>
-
-#define	REGEX		/* Use POSIX.2 regular expression functions */
-#undef	REGEXP		/* Use UNIX V8 regular expression functions */
+#define REGEXP
 
 #ifdef SUNOS
-# undef REGEX
 # undef REGEXP
 # include <malloc.h>
 typedef void (*sig_t)__P((int));

@@ -1,8 +1,6 @@
-/*	$NetBSD: show.c,v 1.15 1997/07/04 21:02:22 christos Exp $	*/
-
 /*-
- * Copyright (c) 1991, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1991 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Kenneth Almquist.
@@ -36,58 +34,37 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)show.c	8.3 (Berkeley) 5/4/95";
-#else
-__RCSID("$NetBSD: show.c,v 1.15 1997/07/04 21:02:22 christos Exp $");
-#endif
+static char sccsid[] = "@(#)show.c	5.2 (Berkeley) 4/12/91";
 #endif /* not lint */
 
 #include <stdio.h>
-#ifdef __STDC__
-#include <stdarg.h>
-#else
-#include <varargs.h>
-#endif
-
 #include "shell.h"
 #include "parser.h"
 #include "nodes.h"
 #include "mystring.h"
-#include "show.h"
 
 
 #ifdef DEBUG
-static void shtree __P((union node *, int, char *, FILE*));
-static void shcmd __P((union node *, FILE *));
-static void sharg __P((union node *, FILE *));
-static void indent __P((int, char *, FILE *));
-static void trstring __P((char *));
+static shtree(), shcmd(), sharg(), indent();
 
 
-void
 showtree(n)
 	union node *n;
-{
+	{
 	trputs("showtree called\n");
 	shtree(n, 1, NULL, stdout);
 }
 
 
-static void
+static
 shtree(n, ind, pfx, fp)
 	union node *n;
-	int ind;
 	char *pfx;
 	FILE *fp;
-{
+	{
 	struct nodelist *lp;
 	char *s;
-
-	if (n == NULL)
-		return;
 
 	indent(ind, pfx, fp);
 	switch(n->type) {
@@ -131,11 +108,11 @@ binop:
 
 
 
-static void
+static
 shcmd(cmd, fp)
 	union node *cmd;
 	FILE *fp;
-{
+	{
 	union node *np;
 	int first;
 	char *s;
@@ -157,7 +134,6 @@ shcmd(cmd, fp)
 			case NTOFD:	s = ">&"; dftfd = 1; break;
 			case NFROM:	s = "<";  dftfd = 0; break;
 			case NFROMFD:	s = "<&"; dftfd = 0; break;
-			default:  	s = "*error*"; dftfd = 0; break;
 		}
 		if (np->nfile.fd != dftfd)
 			fprintf(fp, "%d", np->nfile.fd);
@@ -173,7 +149,7 @@ shcmd(cmd, fp)
 
 
 
-static void
+static
 sharg(arg, fp)
 	union node *arg;
 	FILE *fp;
@@ -197,15 +173,10 @@ sharg(arg, fp)
 			putc('$', fp);
 			putc('{', fp);
 			subtype = *++p;
-			if (subtype == VSLENGTH)
-				putc('#', fp);
-
 			while (*p != '=')
 				putc(*p++, fp);
-
 			if (subtype & VSNUL)
 				putc(':', fp);
-
 			switch (subtype & VSTYPE) {
 			case VSNORMAL:
 				putc('}', fp);
@@ -221,22 +192,6 @@ sharg(arg, fp)
 				break;
 			case VSASSIGN:
 				putc('=', fp);
-				break;
-			case VSTRIMLEFT:
-				putc('#', fp);
-				break;
-			case VSTRIMLEFTMAX:
-				putc('#', fp);
-				putc('#', fp);
-				break;
-			case VSTRIMRIGHT:
-				putc('%', fp);
-				break;
-			case VSTRIMRIGHTMAX:
-				putc('%', fp);
-				putc('%', fp);
-				break;
-			case VSLENGTH:
 				break;
 			default:
 				printf("<subtype %d>", subtype);
@@ -260,12 +215,11 @@ sharg(arg, fp)
 }
 
 
-static void
+static
 indent(amount, pfx, fp)
-	int amount;
 	char *pfx;
 	FILE *fp;
-{
+	{
 	int i;
 
 	for (i = 0 ; i < amount ; i++) {
@@ -292,66 +246,50 @@ int debug = 0;
 #endif
 
 
+trputc(c) {
 #ifdef DEBUG
-void
-trputc(c)
-	int c;
-{
 	if (tracefile == NULL)
 		return;
 	putc(c, tracefile);
 	if (c == '\n')
 		fflush(tracefile);
+#endif
 }
-#endif
 
-void
-#ifdef __STDC__
-trace(const char *fmt, ...)
-#else
-trace(va_alist)
-	va_dcl
-#endif
-{
-#ifdef DEBUG
-	va_list va;
-#ifdef __STDC__
-	va_start(va, fmt);
-#else
+
+trace(fmt, a1, a2, a3, a4, a5, a6, a7, a8)
 	char *fmt;
-	va_start(va);
-	fmt = va_arg(va, char *);
-#endif
-	if (tracefile != NULL) {
-		(void) vfprintf(tracefile, fmt, va);
-		if (strchr(fmt, '\n'))
-			(void) fflush(tracefile);
-	}
-	va_end(va);
+	{
+#ifdef DEBUG
+	if (tracefile == NULL)
+		return;
+	fprintf(tracefile, fmt, a1, a2, a3, a4, a5, a6, a7, a8);
+	if (strchr(fmt, '\n'))
+		fflush(tracefile);
 #endif
 }
 
 
-#ifdef DEBUG
-void
 trputs(s)
 	char *s;
-{
+	{
+#ifdef DEBUG
 	if (tracefile == NULL)
 		return;
 	fputs(s, tracefile);
 	if (strchr(s, '\n'))
 		fflush(tracefile);
+#endif
 }
 
 
-static void
 trstring(s)
 	char *s;
-{
-	char *p;
+	{
+	register char *p;
 	char c;
 
+#ifdef DEBUG
 	if (tracefile == NULL)
 		return;
 	putc('"', tracefile);
@@ -383,14 +321,13 @@ backslash:	  putc('\\', tracefile);
 		}
 	}
 	putc('"', tracefile);
-}
 #endif
+}
 
 
-void
 trargs(ap)
 	char **ap;
-{
+	{
 #ifdef DEBUG
 	if (tracefile == NULL)
 		return;
@@ -406,32 +343,23 @@ trargs(ap)
 }
 
 
-#ifdef DEBUG
-void
 opentrace() {
 	char s[100];
+	char *p;
 	char *getenv();
-#ifdef O_APPEND
 	int flags;
-#endif
 
+#ifdef DEBUG
 	if (!debug)
 		return;
-#ifdef not_this_way
-	{
-		char *p;
-		if ((p = getenv("HOME")) == NULL) {
-			if (geteuid() == 0)
-				p = "/";
-			else
-				p = "/tmp";
-		}
-		scopy(p, s);
-		strcat(s, "/trace");
+	if ((p = getenv("HOME")) == NULL) {
+		if (getuid() == 0)
+			p = "/";
+		else
+			p = "/tmp";
 	}
-#else
-	scopy("./trace", s);
-#endif /* not_this_way */
+	scopy(p, s);
+	strcat(s, "/trace");
 	if ((tracefile = fopen(s, "a")) == NULL) {
 		fprintf(stderr, "Can't open %s\n", s);
 		return;
@@ -442,5 +370,5 @@ opentrace() {
 #endif
 	fputs("\nTracing started.\n", tracefile);
 	fflush(tracefile);
+#endif
 }
-#endif /* DEBUG */

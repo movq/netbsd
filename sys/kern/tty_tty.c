@@ -1,8 +1,6 @@
-/*	$NetBSD: tty_tty.c,v 1.14 1996/09/07 12:41:04 mycroft Exp $	*/
-
 /*-
- * Copyright (c) 1982, 1986, 1991, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1982, 1986, 1991 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,26 +30,24 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)tty_tty.c	8.2 (Berkeley) 9/23/93
+ *	@(#)tty_tty.c	7.15 (Berkeley) 5/28/91
  */
 
 /*
  * Indirect driver for controlling tty.
  */
-#include <sys/param.h>
-#include <sys/systm.h>
-#include <sys/ioctl.h>
-#include <sys/proc.h>
-#include <sys/tty.h>
-#include <sys/vnode.h>
-#include <sys/file.h>
-#include <sys/conf.h>
+#include "param.h"
+#include "systm.h"
+#include "conf.h"
+#include "ioctl.h"
+#include "tty.h"
+#include "proc.h"
+#include "vnode.h"
+#include "file.h"
 
-
-#define cttyvp(p) ((p)->p_flag & P_CONTROLT ? (p)->p_session->s_ttyvp : NULL)
+#define cttyvp(p) ((p)->p_flag&SCTTY ? (p)->p_session->s_ttyvp : NULL)
 
 /*ARGSUSED*/
-int
 cttyopen(dev, flag, mode, p)
 	dev_t dev;
 	int flag, mode;
@@ -63,30 +59,18 @@ cttyopen(dev, flag, mode, p)
 	if (ttyvp == NULL)
 		return (ENXIO);
 	VOP_LOCK(ttyvp);
-#ifdef PARANOID
-	/*
-	 * Since group is tty and mode is 620 on most terminal lines
-	 * and since sessions protect terminals from processes outside
-	 * your session, this check is probably no longer necessary.
-	 * Since it inhibits setuid root programs that later switch 
-	 * to another user from accessing /dev/tty, we have decided
-	 * to delete this test. (mckusick 5/93)
-	 */
 	error = VOP_ACCESS(ttyvp,
 	  (flag&FREAD ? VREAD : 0) | (flag&FWRITE ? VWRITE : 0), p->p_ucred, p);
 	if (!error)
-#endif /* PARANOID */
 		error = VOP_OPEN(ttyvp, flag, NOCRED, p);
 	VOP_UNLOCK(ttyvp);
 	return (error);
 }
 
 /*ARGSUSED*/
-int
 cttyread(dev, uio, flag)
 	dev_t dev;
 	struct uio *uio;
-	int flag;
 {
 	register struct vnode *ttyvp = cttyvp(uio->uio_procp);
 	int error;
@@ -100,11 +84,9 @@ cttyread(dev, uio, flag)
 }
 
 /*ARGSUSED*/
-int
 cttywrite(dev, uio, flag)
 	dev_t dev;
 	struct uio *uio;
-	int flag;
 {
 	register struct vnode *ttyvp = cttyvp(uio->uio_procp);
 	int error;
@@ -118,10 +100,9 @@ cttywrite(dev, uio, flag)
 }
 
 /*ARGSUSED*/
-int
 cttyioctl(dev, cmd, addr, flag, p)
 	dev_t dev;
-	u_long cmd;
+	int cmd;
 	caddr_t addr;
 	int flag;
 	struct proc *p;
@@ -130,11 +111,9 @@ cttyioctl(dev, cmd, addr, flag, p)
 
 	if (ttyvp == NULL)
 		return (EIO);
-	if (cmd == TIOCSCTTY)		/* XXX */
-		return (EINVAL);
 	if (cmd == TIOCNOTTY) {
 		if (!SESS_LEADER(p)) {
-			p->p_flag &= ~P_CONTROLT;
+			p->p_flag &= ~SCTTY;
 			return (0);
 		} else
 			return (EINVAL);
@@ -143,15 +122,14 @@ cttyioctl(dev, cmd, addr, flag, p)
 }
 
 /*ARGSUSED*/
-int
-cttypoll(dev, events, p)
+cttyselect(dev, flag, p)
 	dev_t dev;
-	int events;
+	int flag;
 	struct proc *p;
 {
 	struct vnode *ttyvp = cttyvp(p);
 
 	if (ttyvp == NULL)
-		return (seltrue(dev, events, p));
-	return (VOP_POLL(ttyvp, events, p));
+		return (1);	/* try operation to get EOF/failure */
+	return (VOP_SELECT(ttyvp, flag, FREAD|FWRITE, NOCRED, p));
 }

@@ -1,7 +1,5 @@
-.\"	$NetBSD: mtree.8,v 1.7 1997/10/17 11:46:46 lukem Exp $
-.\"
-.\" Copyright (c) 1989, 1990, 1993
-.\"	The Regents of the University of California.  All rights reserved.
+.\" Copyright (c) 1989, 1990 The Regents of the University of California.
+.\" All rights reserved.
 .\"
 .\" Redistribution and use in source and binary forms, with or without
 .\" modification, are permitted provided that the following conditions
@@ -31,16 +29,17 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\"     @(#)mtree.8	8.2 (Berkeley) 12/11/93
+.\"     from: @(#)mtree.8	5.11 (Berkeley) 12/11/91
+.\"	$Id: mtree.8,v 1.1 1993/11/02 07:51:11 cgd Exp $
 .\"
-.Dd December 11, 1993
+.Dd December 11, 1991
 .Dt MTREE 8
 .Os
 .Sh NAME
 .Nm mtree
 .Nd map a directory hierarchy
 .Sh SYNOPSIS
-.Nm
+.Nm mtree
 .Op Fl cderux
 .Op Fl f Ar spec
 .Op Fl K Ar keywords
@@ -49,11 +48,11 @@
 .Op Fl s Ar seed
 .Sh DESCRIPTION
 The utility
-.Nm
+.Nm mtree
 compares the file hierarchy rooted in the current directory against a
 specification read from the standard input.
 Messages are written to the standard output for any files whose
-characteristics do not match the specification, or which are
+characteristics do not match the specification's, or which are
 missing from either the file hierarchy or the specification.
 .Pp
 The options are as follows:
@@ -88,18 +87,11 @@ of the files for which the keyword
 .Cm cksum
 was specified.
 The checksum is seeded with the specified value.
-.It Fl U
+.It Fl u
 Modify the owner, group, and permissions of existing files to match
 the specification and create any missing directories.
 User, group, and permissions must all be specified for missing directories
 to be created.
-Exit with a status of 0 on success, 1 if any error occurred;
-a mismatch is not considered to be an error if it was corrected.
-.It Fl u
-Same as
-.Fl U
-except a status of 2 is returned if the file hierarchy did not match 
-the specification.
 .It Fl x
 Don't descend below mount points in the file hierarchy.
 .El
@@ -122,22 +114,19 @@ Ignore any file hierarchy below this file.
 The file group as a numeric value.
 .It Cm gname
 The file group as a symbolic name.
-.It Cm link
-The file the symbolic link is expected to reference.
 .It Cm mode
 The current file's permissions as a numeric (octal) or symbolic
 value.
 .It Cm nlink
 The number of hard links the file is expected to have.
-.It Cm optional
-The file is optional; don't complain about the file if it's
-not in the file hierarchy.
 .It Cm uid
 The file owner as a numeric value.
 .It Cm uname
-The file owner as a symbolic name.
+The file group as a symbolic name.
 .It Cm size
 The size, in bytes, of the file.
+.It Cm link
+The file the symbolic link is expected to reference.
 .It Cm time
 The last modification time of the file.
 .It Cm type
@@ -163,10 +152,10 @@ socket
 .Pp
 The default set of keywords are
 .Cm gid ,
-.Cm link ,
 .Cm mode ,
 .Cm nlink ,
 .Cm size ,
+.Cm slink ,
 .Cm time ,
 and
 .Cm uid .
@@ -213,13 +202,13 @@ Empty lines and lines whose first non-whitespace character is a hash
 mark (``#'') are ignored.
 .Pp
 The
-.Nm
+.Nm mtree
 utility exits with a status of 0 on success, 1 if any error occurred,
 and 2 if the file hierarchy did not match the specification.
 .Sh EXAMPLES
 To detect system binaries that have been ``trojan horsed'', it is recommended
 that
-.Nm
+.Nm mtree
 be run on the file systems, and a copy of the results stored on a different
 machine, or, at least, in encrypted form.
 The seed for the
@@ -227,7 +216,7 @@ The seed for the
 option should not be an obvious value and the final checksum should not be
 stored on-line under any circumstances!
 Then, periodically,
-.Nm
+.Nm mtree
 should be run against the on-line specifications and the final checksum
 compared with the previous value.
 While it is possible for the bad guys to change the on-line specifications
@@ -249,13 +238,13 @@ system specification directory
 .El
 .Sh SEE ALSO
 .Xr chmod 1 ,
+.Xr chown 1 ,
 .Xr chgrp 1 ,
 .Xr cksum 1 ,
 .Xr stat 2 ,
 .Xr fts 3 ,
-.Xr chown 8
 .Sh HISTORY
 The
-.Nm
+.Nm mtree
 utility appeared in
 .Bx 4.3 Reno .

@@ -1,5 +1,3 @@
-/*	$NetBSD: myhistedit.h,v 1.6 1997/04/11 22:45:40 christos Exp $	*/
-
 /*-
  * Copyright (c) 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -32,7 +30,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)myhistedit.h	8.2 (Berkeley) 5/4/95
+ *	@(#)myhistedit.h	8.1 (Berkeley) 5/31/93
  */
 
 #include <histedit.h>
@@ -40,11 +38,3 @@
 extern History *hist;
 extern EditLine *el;
 extern int displayhist;
-
-void histedit __P((void));
-void sethistsize __P((const char *));
-void setterm __P((const char *));
-int histcmd __P((int, char **));
-int not_fcnumber __P((char *));
-int str_to_event __P((char *, int));
-

@@ -1,7 +1,6 @@
-#	from: #	@(#)Makefile	8.1 (Berkeley) 6/6/93
-#	$NetBSD: Makefile,v 1.9 1997/10/17 04:53:19 lukem Exp $
+#	@(#)Makefile	5.3 (Berkeley) 5/11/90
 
 PROG=	accton
-MAN=	accton.8
+NOMAN=	noman
 
 .include <bsd.prog.mk>

@@ -1,8 +1,6 @@
-/*	$NetBSD: mystring.c,v 1.13 1997/07/04 21:02:15 christos Exp $	*/
-
 /*-
- * Copyright (c) 1991, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1991 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Kenneth Almquist.
@@ -36,13 +34,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)mystring.c	8.2 (Berkeley) 5/4/95";
-#else
-__RCSID("$NetBSD: mystring.c,v 1.13 1997/07/04 21:02:15 christos Exp $");
-#endif
+static char sccsid[] = "@(#)mystring.c	5.1 (Berkeley) 3/7/91";
 #endif /* not lint */
 
 /*
@@ -51,11 +44,12 @@ __RCSID("$NetBSD: mystring.c,v 1.13 1997/07/04 21:02:15 christos Exp $");
  *	equal(s1, s2)		Return true if strings are equal.
  *	scopy(from, to)		Copy a string.
  *	scopyn(from, to, n)	Like scopy, but checks for overflow.
+ *	strchr(s, c)		Find first occurance of c in s.
+ *	bcopy(from, to, n)	Copy a block of memory.
  *	number(s)		Convert a string of digits to an integer.
  *	is_number(s)		Return true if s is a string of digits.
  */
 
-#include <stdlib.h>
 #include "shell.h"
 #include "syntax.h"
 #include "error.h"
@@ -63,14 +57,6 @@ __RCSID("$NetBSD: mystring.c,v 1.13 1997/07/04 21:02:15 christos Exp $");
 
 
 char nullstr[1];		/* zero length string */
-
-/*
- * equal - #defined in mystring.h
- */
-
-/*
- * scopy - #defined in mystring.h
- */
 
 
 /*
@@ -81,9 +67,9 @@ char nullstr[1];		/* zero length string */
 
 void
 scopyn(from, to, size)
-	char const *from;
-	char *to;
-	int size;
+	register char const *from;
+	register char *to;
+	register int size;
 	{
 
 	while (--size > 0) {
@@ -95,13 +81,57 @@ scopyn(from, to, size)
 
 
 /*
+ * strchr - find first occurrence of a character in a string.
+ */
+
+#ifndef SYS5
+char *
+mystrchr(s, charwanted)
+	char const *s;
+	register char charwanted;
+	{
+	register char const *scan;
+
+	/*
+	 * The odd placement of the two tests is so NUL is findable.
+	 */
+	for (scan = s ; *scan != charwanted ; )	/* ++ moved down for opt. */
+		if (*scan++ == '\0')
+			return NULL;
+	return (char *)scan;
+}
+#endif
+
+
+
+/*
+ * bcopy - copy bytes
+ *
+ * This routine was derived from code by Henry Spencer.
+ */
+
+void
+mybcopy(src, dst, length)
+	pointer dst;
+	const pointer src;
+	register int length;
+	{
+	register char *d = dst;
+	register char *s = src;
+
+	while (--length >= 0)
+		*d++ = *s++;
+}
+
+
+/*
  * prefix -- see if pfx is a prefix of string.
  */
 
 int
 prefix(pfx, string)
-	char const *pfx;
-	char const *string;
+	register char const *pfx;
+	register char const *string;
 	{
 	while (*pfx) {
 		if (*pfx++ != *string++)
@@ -122,7 +152,7 @@ number(s)
 	{
 
 	if (! is_number(s))
-		error("Illegal number: %s", (char *)s);
+		error2("Illegal number", (char *)s);
 	return atoi(s);
 }
 
@@ -134,7 +164,7 @@ number(s)
 
 int
 is_number(p)
-	const char *p;
+	register const char *p;
 	{
 	do {
 		if (! is_digit(*p))

@@ -1,8 +1,6 @@
-/*	$NetBSD: setbuffer.c,v 1.5 1997/07/13 20:15:26 christos Exp $	*/
-
 /*-
- * Copyright (c) 1990, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1990 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Chris Torek.
@@ -36,13 +34,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char sccsid[] = "@(#)setbuffer.c	8.1 (Berkeley) 6/4/93";
-#else
-__RCSID("$NetBSD: setbuffer.c,v 1.5 1997/07/13 20:15:26 christos Exp $");
-#endif
+static char sccsid[] = "@(#)setbuffer.c	5.5 (Berkeley) 3/18/91";
 #endif /* LIBC_SCCS and not lint */
 
 #include <stdio.h>
@@ -54,16 +47,16 @@ setbuffer(fp, buf, size)
 	int size;
 {
 
-	(void)setvbuf(fp, buf, buf ? _IOFBF : _IONBF, size);
+	(void) setvbuf(fp, buf, buf ? _IOFBF : _IONBF, size);
 }
 
 /*
  * set line buffering
  */
-int
 setlinebuf(fp)
 	FILE *fp;
 {
 
-	return (setvbuf(fp, (char *)NULL, _IOLBF, (size_t)0));
+	(void) setvbuf(fp, (char *)NULL, _IOLBF, (size_t)0);
+	return (0);	/* ??? */
 }

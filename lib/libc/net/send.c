@@ -1,8 +1,6 @@
-/*	$NetBSD: send.c,v 1.7 1997/07/13 19:58:06 christos Exp $	*/
-
 /*
- * Copyright (c) 1988, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1988 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,25 +31,17 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char sccsid[] = "@(#)send.c	8.2 (Berkeley) 2/21/94";
-#else
-__RCSID("$NetBSD: send.c,v 1.7 1997/07/13 19:58:06 christos Exp $");
-#endif
+static char sccsid[] = "@(#)send.c	5.3 (Berkeley) 2/24/91";
 #endif /* LIBC_SCCS and not lint */
 
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <stdio.h>
 
-#include <stddef.h>
-
-ssize_t
 send(s, msg, len, flags)
-	int s, flags;
-	size_t len;
+	int s, len, flags;
 	const void *msg;
 {
-	return (sendto(s, msg, len, flags, NULL, 0));
+	return(sendto(s, msg, len, flags, (struct sockaddr *)NULL, 0));
 }

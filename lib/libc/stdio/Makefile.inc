@@ -1,25 +1,22 @@
-#	from: @(#)Makefile.inc	5.7 (Berkeley) 6/27/91
-#	$NetBSD: Makefile.inc,v 1.11 1997/04/02 12:50:23 kleink Exp $
+#	@(#)Makefile.inc	5.7 (Berkeley) 6/27/91
 
 # stdio sources
 .PATH: ${.CURDIR}/stdio
 
-CFLAGS+=-DFLOATING_POINT
-
 SRCS+=	clrerr.c fclose.c fdopen.c feof.c ferror.c fflush.c fgetc.c \
-	fgetln.c fgetpos.c fgets.c fileno.c findfp.c flags.c fopen.c \
+	fgetline.c fgetpos.c fgets.c fileno.c findfp.c flags.c fopen.c \
 	fprintf.c fpurge.c fputc.c fputs.c fread.c freopen.c fscanf.c \
 	fseek.c fsetpos.c ftell.c funopen.c fvwrite.c fwalk.c fwrite.c \
-	getc.c getchar.c gets.c getw.c makebuf.c mktemp.c perror.c printf.c \
-	putc.c putchar.c puts.c putw.c refill.c remove.c rewind.c rget.c \
-	scanf.c setbuf.c setbuffer.c setvbuf.c snprintf.c sprintf.c sscanf.c \
-	stdio.c tempnam.c tmpfile.c tmpnam.c ungetc.c vfprintf.c \
+	getc.c getchar.c gets.c getw.c makebuf.c perror.c printf.c putc.c \
+	putchar.c puts.c putw.c refill.c remove.c rewind.c rget.c scanf.c \
+	setbuf.c setbuffer.c setvbuf.c snprintf.c sprintf.c sscanf.c \
+	stdio.c strerror.c tempnam.c tmpfile.c tmpnam.c ungetc.c vfprintf.c \
 	vfscanf.c vprintf.c vscanf.c vsnprintf.c vsprintf.c vsscanf.c \
 	wbuf.c wsetup.c
 
-MAN+=	fclose.3 ferror.3 fflush.3 fgetln.3 fgets.3 fopen.3 fputs.3 \
-	fread.3 fseek.3 funopen.3 getc.3 mktemp.3 perror.3 printf.3 putc.3 \
-	remove.3 scanf.3 setbuf.3 stdio.3 tmpnam.3 ungetc.3
+MAN3+=	fclose.0 ferror.0 fflush.0 fgetline.0 fgets.0 fopen.0 fputs.0 \
+	fread.0 fseek.0 funopen.0 getc.0 mktemp.0 printf.0 putc.0 remove.0 \
+	scanf.0 setbuf.0 stdio.0 strerror.0 tmpnam.0 ungetc.0
 
 MLINKS+=ferror.3 clearerr.3 ferror.3 feof.3 ferror.3 fileno.3
 MLINKS+=fflush.3 fpurge.3
@@ -38,4 +35,5 @@ MLINKS+=putc.3 fputc.3 putc.3 putchar.3 putc.3 putw.3
 MLINKS+=scanf.3 fscanf.3 scanf.3 sscanf.3 scanf.3 vfscanf.3 scanf.3 vscanf.3 \
 	scanf.3 vsscanf.3
 MLINKS+=setbuf.3 setbuffer.3 setbuf.3 setlinebuf.3 setbuf.3 setvbuf.3
+MLINKS+=strerror.3 perror.3
 MLINKS+=tmpnam.3 tempnam.3 tmpnam.3 tmpfile.3

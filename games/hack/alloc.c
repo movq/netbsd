@@ -1,13 +1,4 @@
-/*	$NetBSD: alloc.c,v 1.4 1997/10/19 16:56:47 christos Exp $	*/
-#include <sys/cdefs.h>
-#ifndef lint
-__RCSID("$NetBSD: alloc.c,v 1.4 1997/10/19 16:56:47 christos Exp $");
-#endif				/* not lint */
-
-#include <stdlib.h>
-#include "hack.h"
-#include "extern.h"
-
+/* alloc.c - version 1.0.2 */
 #ifdef LINT
 
 /*
@@ -17,39 +8,40 @@ __RCSID("$NetBSD: alloc.c,v 1.4 1997/10/19 16:56:47 christos Exp $");
 	"ftell defined (in <stdio.h>) but never used"
    from lint
 */
+#include <stdio.h>
 long *
-alloc(n)
-	unsigned        n;
-{
-	long            dummy = ftell(stderr);
-	if (n)
-		dummy = 0;	/* make sure arg is used */
-	return (&dummy);
+alloc(n) unsigned n; {
+long dummy = ftell(stderr);
+	if(n) dummy = 0;	/* make sure arg is used */
+	return(&dummy);
 }
 
 #else
 
+extern char *malloc();
+extern char *realloc();
+
 long *
 alloc(lth)
-	unsigned lth;
+register unsigned lth;
 {
-	char  *ptr;
+	register char *ptr;
 
-	if (!(ptr = malloc(lth)))
+	if(!(ptr = malloc(lth)))
 		panic("Cannot get %d bytes", lth);
-	return ((long *) ptr);
+	return((long *) ptr);
 }
 
 long *
-enlarge(ptr, lth)
-	char  *ptr;
-	unsigned lth;
+enlarge(ptr,lth)
+register char *ptr;
+register unsigned lth;
 {
-	char  *nptr;
+	register char *nptr;
 
-	if (!(nptr = realloc(ptr, lth)))
+	if(!(nptr = realloc(ptr,lth)))
 		panic("Cannot reallocate %d bytes", lth);
-	return ((long *) nptr);
+	return((long *) nptr);
 }
 
-#endif	/* LINT */
+#endif LINT

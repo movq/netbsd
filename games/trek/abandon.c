@@ -1,8 +1,6 @@
-/*	$NetBSD: abandon.c,v 1.4 1997/10/12 21:24:25 christos Exp $	*/
-
 /*
- * Copyright (c) 1980, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1980 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,17 +31,11 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)abandon.c	8.1 (Berkeley) 5/31/93";
-#else
-__RCSID("$NetBSD: abandon.c,v 1.4 1997/10/12 21:24:25 christos Exp $");
-#endif
+static char sccsid[] = "@(#)abandon.c	5.4 (Berkeley) 6/1/90";
 #endif /* not lint */
 
-#include <stdio.h>
-#include "trek.h"
+# include	"trek.h"
 
 /*
 **  Abandon Ship
@@ -70,26 +62,19 @@ __RCSID("$NetBSD: abandon.c,v 1.4 1997/10/12 21:24:25 christos Exp $");
 **	Uses trace flag 40
 */
 
-/*ARGSUSED*/
-void
-abandon(v)
-	int v;
+abandon()
 {
-	struct quad	*q;
-	int		i;
-	int		j;
-	struct event	*e;
+	register struct quad	*q;
+	register int		i;
+	int			j;
+	register struct event	*e;
 
-	if (Ship.ship == QUEENE) {
-		printf("You may not abandon ye Faire Queene\n");
-		return;
-	}
+	if (Ship.ship == QUEENE)
+		return (printf("You may not abandon ye Faire Queene\n"));
 	if (Ship.cond != DOCKED)
 	{
-		if (damaged(SHUTTLE)) {
-			out(SHUTTLE);
-			return;
-		}
+		if (damaged(SHUTTLE))
+			return (out(SHUTTLE));
 		printf("Officers escape in shuttlecraft\n");
 		/* decide on fate of crew */
 		q = &Quad[Ship.quadx][Ship.quady];
@@ -163,7 +148,7 @@ abandon(v)
 			if (Sect[Ship.sectx][Ship.secty] == EMPTY)
 			{
 				Sect[Ship.sectx][Ship.secty] = QUEENE;
-				dock(0);
+				dock();
 				compkldist(0);
 				return;
 			}

@@ -1,8 +1,6 @@
-/*	$NetBSD: courier.c,v 1.7 1997/02/11 09:24:16 mrg Exp $	*/
-
 /*
- * Copyright (c) 1986, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1986 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -34,10 +32,7 @@
  */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)courier.c	8.1 (Berkeley) 6/6/93";
-#endif
-static char rcsid[] = "$NetBSD: courier.c,v 1.7 1997/02/11 09:24:16 mrg Exp $";
+static char sccsid[] = "@(#)courier.c	5.7 (Berkeley) 3/2/91";
 #endif /* not lint */
 
 /*
@@ -45,7 +40,6 @@ static char rcsid[] = "$NetBSD: courier.c,v 1.7 1997/02/11 09:24:16 mrg Exp $";
  * Derived from Hayes driver.
  */
 #include "tip.h"
-#include <sys/ioctl.h>
 #include <stdio.h>
 
 #define	MAXRETRY	5
@@ -54,8 +48,7 @@ static	void sigALRM();
 static	int timeout = 0;
 static	int connected = 0;
 static	jmp_buf timeoutbuf, intbuf;
-static	int coursync(), cour_connect(), cour_swallow();
-static	void cour_napx();
+static	int coursync();
 
 cour_dialer(num, acu)
 	register char *num;
@@ -65,14 +58,12 @@ cour_dialer(num, acu)
 #ifdef ACULOG
 	char line[80];
 #endif
-	struct termios cntrl;
+	static int cour_connect(), cour_swallow();
 
 	if (boolean(value(VERBOSE)))
 		printf("Using \"%s\"\n", acu);
 
-	tcgetattr(FD, &cntrl);
-	cntrl.c_cflag |= HUPCL;
-	tcsetattr(FD, TCSAFLUSH, &cntrl);
+	ioctl(FD, TIOCHPCL, 0);
 	/*
 	 * Get in synch.
 	 */
@@ -88,9 +79,9 @@ badsynch:
 	sleep(1);
 #ifdef DEBUG
 	if (boolean(value(VERBOSE)))
-		cour_verbose_read();
+		verbose_read();
 #endif
-	tcflush(FD, TCIOFLUSH);
+	ioctl(FD, TIOCFLUSH, 0);	/* flush any clutter */
 	cour_write(FD, "AT C1 E0 H0 Q0 X6 V1\r", 21);
 	if (!cour_swallow("\r\nOK\r\n"))
 		goto badsynch;
@@ -104,7 +95,7 @@ badsynch:
 	connected = cour_connect();
 #ifdef ACULOG
 	if (timeout) {
-		(void)snprintf(line, sizeof line, "%d second dial timeout",
+		sprintf(line, "%d second dial timeout",
 			number(value(DIALTIMEOUT)));
 		logent(value(HOST), num, "cour", line);
 	}
@@ -180,8 +171,6 @@ struct baud_msg {
 	"",		B300,
 	" 1200",	B1200,
 	" 2400",	B2400,
-	" 9600",	B9600,
-	" 9600/ARQ",	B9600,
 	0,		0,
 };
 
@@ -190,6 +179,7 @@ cour_connect()
 {
 	char c;
 	int nc, nl, n;
+	struct sgttyb sb;
 	char dialer_buf[64];
 	struct baud_msg *bm;
 	sig_t f;
@@ -225,15 +215,18 @@ again:
 			if (strncmp(dialer_buf, "CONNECT",
 				    sizeof("CONNECT")-1) != 0)
 				break;
-			for (bm = baud_msg ; bm->msg ; bm++)
+			for (bm = baud_msg ; bm ; bm++)
 				if (strcmp(bm->msg,
 				    dialer_buf+sizeof("CONNECT")-1) == 0) {
-					struct termios	cntrl;
-
-					tcgetattr(FD, &cntrl);
-					cfsetospeed(&cntrl, bm->baud);
-					cfsetispeed(&cntrl, bm->baud);
-					tcsetattr(FD, TCSAFLUSH, &cntrl);
+					if (ioctl(FD, TIOCGETP, &sb) < 0) {
+						perror("TIOCGETP");
+						goto error;
+					}
+					sb.sg_ispeed = sb.sg_ospeed = bm->baud;
+					if (ioctl(FD, TIOCSETP, &sb) < 0) {
+						perror("TIOCSETP");
+						goto error;
+					}
 					signal(SIGALRM, f);
 #ifdef DEBUG
 					if (boolean(value(VERBOSE)))
@@ -268,7 +261,7 @@ coursync()
 	char buf[40];
 
 	while (already++ < MAXRETRY) {
-		tcflush(FD, TCIOFLUSH);
+		ioctl(FD, TIOCFLUSH, 0);	/* flush any clutter */
 		cour_write(FD, "\rAT Z\r", 6);	/* reset modem */
 		bzero(buf, sizeof(buf));
 		sleep(1);
@@ -307,21 +300,24 @@ int fd;
 char *cp;
 int n;
 {
+	struct sgttyb sb;
 #ifdef notdef
 	if (boolean(value(VERBOSE)))
 		write(1, cp, n);
 #endif
-	tcdrain(fd);
+	ioctl(fd, TIOCGETP, &sb);
+	ioctl(fd, TIOCSETP, &sb);
 	cour_nap();
 	for ( ; n-- ; cp++) {
 		write(fd, cp, 1);
-		tcdrain(fd);
+		ioctl(fd, TIOCGETP, &sb);
+		ioctl(fd, TIOCSETP, &sb);
 		cour_nap();
 	}
 }
 
 #ifdef DEBUG
-cour_verbose_read()
+verbose_read()
 {
 	int n = 0;
 	char buf[BUFSIZ];
@@ -350,6 +346,7 @@ static int ringring;
 cour_nap()
 {
 	
+        static void cour_napx();
 	int omask;
         struct itimerval itv, oitv;
         register struct itimerval *itp = &itv;

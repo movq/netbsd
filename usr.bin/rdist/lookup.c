@@ -1,8 +1,6 @@
-/*	$NetBSD: lookup.c,v 1.6 1997/10/19 13:59:04 lukem Exp $	*/
-
 /*
- * Copyright (c) 1983, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1983 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,13 +31,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)lookup.c	8.1 (Berkeley) 6/9/93";
-#else
-__RCSID("$NetBSD: lookup.c,v 1.6 1997/10/19 13:59:04 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)lookup.c	5.5 (Berkeley) 6/1/90";
 #endif /* not lint */
 
 #include "defs.h"
@@ -60,20 +53,17 @@ static struct syment *hashtab[HASHSIZE];
 /*
  * Define a variable from a command line argument.
  */
-void
 define(name)
 	char *name;
 {
-	char *cp, *s;
-	struct namelist *nl;
+	register char *cp, *s;
+	register struct namelist *nl;
 	struct namelist *value;
-
-	value = NULL;
 
 	if (debug)
 		printf("define(%s)\n", name);
 
-	cp = strchr(name, '=');
+	cp = index(name, '=');
 	if (cp == NULL)
 		value = NULL;
 	else if (cp[1] == '\0') {
@@ -132,13 +122,13 @@ lookup(name, action, value)
 	int action;
 	struct namelist *value;
 {
-	unsigned n;
-	char *cp;
-	struct syment *s;
+	register unsigned n;
+	register char *cp;
+	register struct syment *s;
 	char buf[256];
 
 	if (debug)
-		printf("lookup(%s, %d, %lx)\n", name, action, (long)value);
+		printf("lookup(%s, %d, %x)\n", name, action, value);
 
 	n = 0;
 	for (cp = name; *cp; )
@@ -150,8 +140,7 @@ lookup(name, action, value)
 			continue;
 		if (action != LOOKUP) {
 			if (action != INSERT || s->s_type != CONST) {
-				(void)snprintf(buf, sizeof(buf),
-				    "%s redefined", name);
+				(void)sprintf(buf, "%s redefined", name);
 				yyerror(buf);
 			}
 		}
@@ -159,7 +148,7 @@ lookup(name, action, value)
 	}
 
 	if (action == LOOKUP) {
-		(void)snprintf(buf, sizeof(buf), "%s undefined", name);
+		(void)sprintf(buf, "%s undefined", name);
 		yyerror(buf);
 		return(NULL);
 	}

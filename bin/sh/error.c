@@ -1,8 +1,6 @@
-/*	$NetBSD: error.c,v 1.17 1997/07/04 21:01:54 christos Exp $	*/
-
 /*-
- * Copyright (c) 1991, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1991 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Kenneth Almquist.
@@ -36,13 +34,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)error.c	8.2 (Berkeley) 5/4/95";
-#else
-__RCSID("$NetBSD: error.c,v 1.17 1997/07/04 21:01:54 christos Exp $");
-#endif
+static char sccsid[] = "@(#)error.c	5.1 (Berkeley) 3/7/91";
 #endif /* not lint */
 
 /*
@@ -54,9 +47,12 @@ __RCSID("$NetBSD: error.c,v 1.17 1997/07/04 21:01:54 christos Exp $");
 #include "options.h"
 #include "output.h"
 #include "error.h"
-#include "show.h"
 #include <signal.h>
-#include <unistd.h>
+#ifdef __STDC__
+#include "stdarg.h"
+#else
+#include <varargs.h>	
+#endif
 #include <errno.h>
 
 
@@ -71,8 +67,6 @@ volatile int intpending;
 char *commandname;
 
 
-static void exverror __P((int, char *, va_list)) __attribute__((__noreturn__));
-
 /*
  * Called to raise an exception.  Since C doesn't include exceptions, we
  * just do a longjmp to the exception handler.  The type of exception is
@@ -80,9 +74,7 @@ static void exverror __P((int, char *, va_list)) __attribute__((__noreturn__));
  */
 
 void
-exraise(e)
-	int e;
-{
+exraise(e) {
 	if (handler == NULL)
 		abort();
 	exception = e;
@@ -102,15 +94,14 @@ exraise(e)
 
 void
 onint() {
-	sigset_t sigset;
-
 	if (suppressint) {
 		intpending++;
 		return;
 	}
 	intpending = 0;
-	sigemptyset(&sigset);
-	sigprocmask(SIG_SETMASK, &sigset, NULL);
+#ifdef BSD
+	sigsetmask(0);
+#endif
 	if (rootshell && iflag)
 		exraise(EXINT);
 	else
@@ -118,25 +109,46 @@ onint() {
 }
 
 
+
+void
+error2(a, b)
+	char *a, *b;
+	{
+	error("%s: %s", a, b);
+}
+
+
 /*
- * Exverror is called to raise the error exception.  If the first argument
+ * Error is called to raise the error exception.  If the first argument
  * is not NULL then error prints an error message using printf style
  * formatting.  It then raises the error exception.
  */
-static void
-exverror(cond, msg, ap)
-	int cond;
+
+#ifdef __STDC__
+void
+error(char *msg, ...) {
+#else
+void
+error(va_alist)
+	va_dcl
+	{
 	char *msg;
+#endif
 	va_list ap;
-{
+
 	CLEAR_PENDING_INT;
 	INTOFF;
-
+#ifdef __STDC__
+	va_start(ap, msg);
+#else
+	va_start(ap);
+	msg = va_arg(ap, char *);
+#endif
 #ifdef DEBUG
 	if (msg)
-		TRACE(("exverror(%d, \"%s\") pid=%d\n", cond, msg, getpid()));
+		TRACE(("error(\"%s\") pid=%d\n", msg, getpid()));
 	else
-		TRACE(("exverror(%d, NULL) pid=%d\n", cond, getpid()));
+		TRACE(("error(NULL) pid=%d\n", getpid()));
 #endif
 	if (msg) {
 		if (commandname)
@@ -144,58 +156,9 @@ exverror(cond, msg, ap)
 		doformat(&errout, msg, ap);
 		out2c('\n');
 	}
+	va_end(ap);
 	flushall();
-	exraise(cond);
-}
-
-
-#ifdef __STDC__
-void
-error(char *msg, ...)
-#else
-void
-error(va_alist)
-	va_dcl
-#endif
-{
-#ifndef __STDC__
-	char *msg;
-#endif
-	va_list ap;
-#ifdef __STDC__
-	va_start(ap, msg);
-#else
-	va_start(ap);
-	msg = va_arg(ap, char *);
-#endif
-	exverror(EXERROR, msg, ap);
-	va_end(ap);
-}
-
-
-#ifdef __STDC__
-void
-exerror(int cond, char *msg, ...)
-#else
-void
-exerror(va_alist)
-	va_dcl
-#endif
-{
-#ifndef __STDC__
-	int cond;
-	char *msg;
-#endif
-	va_list ap;
-#ifdef __STDC__
-	va_start(ap, msg);
-#else
-	va_start(ap);
-	cond = va_arg(ap, int);
-	msg = va_arg(ap, char *);
-#endif
-	exverror(cond, msg, ap);
-	va_end(ap);
+	exraise(EXERROR);
 }
 
 
@@ -214,57 +177,55 @@ struct errname {
 #define ALL (E_OPEN|E_CREAT|E_EXEC)
 
 STATIC const struct errname errormsg[] = {
-	{ EINTR,	ALL,	"interrupted" },
-	{ EACCES,	ALL,	"permission denied" },
-	{ EIO,		ALL,	"I/O error" },
-	{ ENOENT,	E_OPEN,	"no such file" },
-	{ ENOENT,	E_CREAT,"directory nonexistent" },
-	{ ENOENT,	E_EXEC,	"not found" },
-	{ ENOTDIR,	E_OPEN,	"no such file" },
-	{ ENOTDIR,	E_CREAT,"directory nonexistent" },
-	{ ENOTDIR,	E_EXEC,	"not found" },
-	{ EISDIR,	ALL,	"is a directory" },
-#ifdef notdef
-	{ EMFILE,	ALL,	"too many open files" },
-#endif
-	{ ENFILE,	ALL,	"file table overflow" },
-	{ ENOSPC,	ALL,	"file system full" },
+	EINTR, ALL,	"interrupted",
+	EACCES, ALL,	"permission denied",
+	EIO, ALL,		"I/O error",
+	ENOENT, E_OPEN,	"no such file",
+	ENOENT, E_CREAT,	"directory nonexistent",
+	ENOENT, E_EXEC,	"not found",
+	ENOTDIR, E_OPEN,	"no such file",
+	ENOTDIR, E_CREAT,	"directory nonexistent",
+	ENOTDIR, E_EXEC,	"not found",
+	EISDIR, ALL,	"is a directory",
+/*    EMFILE, ALL,	"too many open files", */
+	ENFILE, ALL,	"file table overflow",
+	ENOSPC, ALL,	"file system full",
 #ifdef EDQUOT
-	{ EDQUOT,	ALL,	"disk quota exceeded" },
+	EDQUOT, ALL,	"disk quota exceeded",
 #endif
 #ifdef ENOSR
-	{ ENOSR,	ALL,	"no streams resources" },
+	ENOSR, ALL,	"no streams resources",
 #endif
-	{ ENXIO,	ALL,	"no such device or address" },
-	{ EROFS,	ALL,	"read-only file system" },
-	{ ETXTBSY,	ALL,	"text busy" },
+	ENXIO, ALL,	"no such device or address",
+	EROFS, ALL,	"read-only file system",
+	ETXTBSY, ALL,	"text busy",
 #ifdef SYSV
-	{ EAGAIN,	E_EXEC,	"not enough memory" },
+	EAGAIN, E_EXEC,	"not enough memory",
 #endif
-	{ ENOMEM,	ALL,	"not enough memory" },
+	ENOMEM, ALL,	"not enough memory",
 #ifdef ENOLINK
-	{ ENOLINK,	ALL,	"remote access failed" },
+	ENOLINK, ALL,	"remote access failed"
 #endif
 #ifdef EMULTIHOP
-	{ EMULTIHOP,	ALL,	"remote access failed" },
+	EMULTIHOP, ALL,	"remote access failed",
 #endif
 #ifdef ECOMM
-	{ ECOMM,	ALL,	"remote access failed" },
+	ECOMM, ALL,	"remote access failed",
 #endif
 #ifdef ESTALE
-	{ ESTALE,	ALL,	"remote access failed" },
+	ESTALE, ALL,	"remote access failed",
 #endif
 #ifdef ETIMEDOUT
-	{ ETIMEDOUT,	ALL,	"remote access failed" },
+	ETIMEDOUT, ALL,	"remote access failed",
 #endif
 #ifdef ELOOP
-	{ ELOOP,	ALL,	"symbolic link loop" },
+	ELOOP, ALL,	"symbolic link loop",
 #endif
-	{ E2BIG,	E_EXEC,	"argument list too long" },
+	E2BIG, E_EXEC,	"argument list too long",
 #ifdef ELIBACC
-	{ ELIBACC,	E_EXEC,	"shared library missing" },
+	ELIBACC, E_EXEC,	"shared library missing",
 #endif
-	{ 0,		0,	NULL },
+	0, 0,		NULL
 };
 
 
@@ -275,10 +236,7 @@ STATIC const struct errname errormsg[] = {
  */
 
 char *
-errmsg(e, action)
-	int e;
-	int action;
-{
+errmsg(e, action) {
 	struct errname const *ep;
 	static char buf[12];
 

@@ -1,9 +1,15 @@
-#	$NetBSD: Makefile,v 1.9 1997/03/27 08:57:26 mycroft Exp $
-#	@(#)Makefile	8.1 (Berkeley) 6/6/93
+#	@(#)Makefile	5.4 (Berkeley) 2/19/91
 
-MAN=	mkdep.1
+MAN1=	mkdep.0
 
-SCRIPTS=mkdep.gcc.sh
-SCRIPTSNAME_mkdep.gcc.sh=mkdep
+.if (${MACHINE} == "hp300" || ${MACHINE} == "i386")
+beforeinstall:
+	install -c -o ${BINOWN} -g ${BINGRP} -m ${BINMODE} \
+	    ${.CURDIR}/mkdep.gcc.sh ${DESTDIR}/usr/bin/mkdep
+.else
+beforeinstall:
+	install -c -o ${BINOWN} -g ${BINGRP} -m ${BINMODE} \
+	    ${.CURDIR}/mkdep.sh ${DESTDIR}/usr/bin/mkdep
+.endif
 
 .include <bsd.prog.mk>

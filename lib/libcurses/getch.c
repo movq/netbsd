@@ -1,8 +1,6 @@
-/*	$NetBSD: getch.c,v 1.8 1997/07/22 07:36:42 mikel Exp $	*/
-
 /*
- * Copyright (c) 1981, 1993, 1994
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1981 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,50 +31,42 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)getch.c	8.2 (Berkeley) 5/4/94";
-#else
-__RCSID("$NetBSD: getch.c,v 1.8 1997/07/22 07:36:42 mikel Exp $");
-#endif
-#endif	/* not lint */
+static char sccsid[] = "@(#)getch.c	5.6 (Berkeley) 6/1/90";
+#endif /* not lint */
 
-#include "curses.h"
+# include	"curses.ext"
 
 /*
- * wgetch --
- *	Read in a character from the window.
+ *	This routine reads in a character from the window.
+ *
  */
-int
 wgetch(win)
-	register WINDOW *win;
-{
-	register int inp, weset;
+reg WINDOW	*win; {
 
-	if (!(win->flags & __SCROLLOK) && (win->flags & __FULLWIN)
-	    && win->curx == win->maxx - 1 && win->cury == win->maxy - 1)
-		return (ERR);
-#ifdef DEBUG
-	__CTRACE("wgetch: __echoit = %d, __rawmode = %d\n",
-	    __echoit, __rawmode);
-#endif
-	if (__echoit && !__rawmode) {
+	reg bool	weset = FALSE;
+	reg char	inp;
+
+	if (!win->_scroll && (win->_flags&_FULLWIN)
+	    && win->_curx == win->_maxx - 1 && win->_cury == win->_maxy - 1)
+		return ERR;
+# ifdef DEBUG
+	fprintf(outf, "WGETCH: _echoit = %c, _rawmode = %c\n", _echoit ? 'T' : 'F', _rawmode ? 'T' : 'F');
+# endif
+	if (_echoit && !_rawmode) {
 		cbreak();
-		weset = 1;
-	} else
-		weset = 0;
-
+		weset++;
+	}
 	inp = getchar();
-#ifdef DEBUG
-	__CTRACE("wgetch got '%s'\n", unctrl(inp));
-#endif
-	if (__echoit) {
-		mvwaddch(curscr,
-		    win->cury + win->begy, win->curx + win->begx, inp);
+# ifdef DEBUG
+	fprintf(outf,"WGETCH got '%s'\n",unctrl(inp));
+# endif
+	if (_echoit) {
+		mvwaddch(curscr, win->_cury + win->_begy,
+			win->_curx + win->_begx, inp);
 		waddch(win, inp);
 	}
 	if (weset)
 		nocbreak();
-	return (inp);
+	return inp;
 }

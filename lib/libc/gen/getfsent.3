@@ -1,7 +1,5 @@
-.\"	$NetBSD: getfsent.3,v 1.4 1995/02/27 04:12:33 cgd Exp $
-.\"
-.\" Copyright (c) 1983, 1991, 1993
-.\"	The Regents of the University of California.  All rights reserved.
+.\" Copyright (c) 1983, 1991 The Regents of the University of California.
+.\" All rights reserved.
 .\"
 .\" Redistribution and use in source and binary forms, with or without
 .\" modification, are permitted provided that the following conditions
@@ -31,9 +29,9 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\"     @(#)getfsent.3	8.1 (Berkeley) 6/4/93
+.\"     @(#)getfsent.3	6.9 (Berkeley) 4/19/91
 .\"
-.Dd June 4, 1993
+.Dd April 19, 1991
 .Dt GETFSENT 3
 .Os BSD 4
 .Sh NAME
@@ -45,7 +43,7 @@
 .Nd get file system descriptor file entry
 .Sh SYNOPSIS
 .Fd #include <fstab.h>
-.Ft struct fstab *
+.Ft fstab *
 .Fn getfsent void
 .Ft struct fstab *
 .Fn getfsspec "const char *spec"

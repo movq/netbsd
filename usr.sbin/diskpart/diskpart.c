@@ -1,6 +1,6 @@
 /*
- * Copyright (c) 1983, 1988, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1983, 1988 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -31,18 +31,14 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1983, 1988, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+char copyright[] =
+"@(#) Copyright (c) 1983, 1988 Regents of the University of California.\n\
+ All rights reserved.\n";
 #endif /* not lint */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "from: @(#)diskpart.c	8.3 (Berkeley) 11/30/94";
-#else
-__RCSID("$NetBSD: diskpart.c,v 1.9 1997/10/17 00:16:55 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)diskpart.c	5.11 (Berkeley) 6/1/90";
 #endif /* not lint */
 
 /*
@@ -52,12 +48,8 @@ __RCSID("$NetBSD: diskpart.c,v 1.9 1997/10/17 00:16:55 lukem Exp $");
 #define DKTYPENAMES
 #include <sys/disklabel.h>
 
-#include <ctype.h>
-#include <limits.h>
 #include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
+#include <ctype.h>
 
 #define	for_now			/* show all of `c' partition for disklabel */
 #define	NPARTITIONS	8
@@ -93,14 +85,14 @@ char	layouts[NLAYOUTS][NPARTITIONS] = {
  * (e.g. swap areas or for access to the entire device).
  */
 struct	partition defparam[NPARTITIONS] = {
-	{ 0, 0, 1024, FS_UNUSED, 8, { 0 }, },		/* a */
-	{ 0, 0, 1024, FS_SWAP,   8, { 0 }, },		/* b */
-	{ 0, 0, 1024, FS_UNUSED, 8, { 0 }, },		/* c */
-	{ 0, 0,  512, FS_UNUSED, 8, { 0 }, },		/* d */
-	{ 0, 0, 1024, FS_UNUSED, 8, { 0 }, },		/* e */
-	{ 0, 0, 1024, FS_UNUSED, 8, { 0 }, },		/* f */
-	{ 0, 0, 1024, FS_UNUSED, 8, { 0 }, },		/* g */
-	{ 0, 0, 1024, FS_UNUSED, 8, { 0 }, }		/* h */
+	{ 0, 0, 1024, FS_UNUSED, 8, 0 },		/* a */
+	{ 0, 0, 1024, FS_SWAP,   8, 0 },		/* b */
+	{ 0, 0, 1024, FS_UNUSED, 8, 0 },		/* c */
+	{ 0, 0,  512, FS_UNUSED, 8, 0 },		/* d */
+	{ 0, 0, 1024, FS_UNUSED, 8, 0 },		/* e */
+	{ 0, 0, 1024, FS_UNUSED, 8, 0 },		/* f */
+	{ 0, 0, 1024, FS_UNUSED, 8, 0 },		/* g */
+	{ 0, 0, 1024, FS_UNUSED, 8, 0 }			/* h */
 };
 
 /*
@@ -116,68 +108,52 @@ int	badsecttable = 126;	/* # sectors */
 int	pflag;			/* print device driver partition tables */
 int	dflag;			/* print disktab entry */
 
-int	gettype __P((const char *, char **));
-int	main __P((int, char **));
-struct disklabel *promptfordisk __P((const char *));
-void	usage __P((void));
+struct	disklabel *promptfordisk();
 
-int
 main(argc, argv)
 	int argc;
 	char *argv[];
 {
-
 	struct disklabel *dp;
-	int curcyl, spc, def, part, layout, j, ch;
+	register int curcyl, spc, def, part, layout, j;
 	int threshhold, numcyls[NPARTITIONS], startcyl[NPARTITIONS];
-	off_t totsize = 0;
+	int totsize = 0;
 	char *lp, *tyname;
 
-	while ((ch = getopt(argc, argv, "pds:")) != -1) {
-		switch (ch) {
-		case 'd':
-			dflag++;
-			break;
-
-		case 'p':
-			pflag++;
-			break;
-
-		case 's':
-			totsize = strtoul(optarg, &lp, 10);
-			if (*lp != '\0')
-				usage();
-			break;
-
-		case '?':
-		default:
-			usage();
-			/* NOTREACHED */
-		}
+	argc--, argv++;
+	if (argc < 1) {
+		fprintf(stderr,
+		    "usage: disktab [ -p ] [ -d ] [ -s size ] disk-type\n");
+		exit(1);
 	}
-	argc -= optind;
-	argv += optind;
-
-	if (argc != 1) {
-		usage();
-		/* NOTREACHED */
+	if (argc > 0 && strcmp(*argv, "-p") == 0) {
+		pflag++;
+		argc--, argv++;
 	}
-
+	if (argc > 0 && strcmp(*argv, "-d") == 0) {
+		dflag++;
+		argc--, argv++;
+	}
+	if (argc > 1 && strcmp(*argv, "-s") == 0) {
+		totsize = atoi(argv[1]);
+		argc += 2, argv += 2;
+	}
 	dp = getdiskbyname(*argv);
 	if (dp == NULL) {
 		if (isatty(0))
 			dp = promptfordisk(*argv);
 		if (dp == NULL) {
 			fprintf(stderr, "%s: unknown disk type\n", *argv);
-			exit(1);
+			exit(2);
 		}
+	} else {
+		if (dp->d_flags & D_REMOVABLE)
+			tyname = "removable";
+		else if (dp->d_flags & D_RAMDISK)
+			tyname = "simulated";
+		else
+			tyname = "winchester";
 	}
-	if (dp->d_flags & D_REMOVABLE)
-		tyname = "removable";
-	else if (dp->d_flags & D_RAMDISK)
-		tyname = "simulated";
-	else
-		tyname = "winchester";
 	spc = dp->d_secpercyl;
 	/*
 	 * Bad sector table contains one track for the replicated
@@ -221,7 +197,7 @@ main(argc, argv)
 	if (def >= NDEFAULTS) {
 		fprintf(stderr, "%s: disk too small, calculate by hand\n",
 			*argv);
-		exit(1);
+		exit(3);
 	}
 
 	/*
@@ -362,15 +338,14 @@ main(argc, argv)
 			startcyl[part], startcyl[part] + numcyls[part] - 1,
 			defpart[def][part] % spc ? "*" : "");
 	}
-	exit(0);
 }
 
 struct disklabel disk;
 
 struct	field {
-	char		*f_name;
-	char		*f_defaults;
-	u_int32_t	*f_location;
+	char	*f_name;
+	char	*f_defaults;
+	u_long	*f_location;
 } fields[] = {
 	{ "sector size",		"512",	&disk.d_secsize },
 	{ "#sectors/track",		0,	&disk.d_nsectors },
@@ -381,84 +356,62 @@ struct	field {
 
 struct disklabel *
 promptfordisk(name)
-	const char *name;
+	char *name;
 {
-	struct disklabel *dp = &disk;
-	struct field *fp;
-	int i;
-	char buf[BUFSIZ], **tp, *cp;
+	register struct disklabel *dp = &disk;
+	register struct field *fp;
+	register i;
+	char buf[BUFSIZ], **tp, *cp, *gets();
 
 	strncpy(dp->d_typename, name, sizeof(dp->d_typename));
 	fprintf(stderr,
 		"%s: unknown disk type, want to supply parameters (y/n)? ",
 		name);
-	if ((fgets(buf, BUFSIZ, stdin) == NULL) || buf[0] != 'y')
+	(void) gets(buf);
+	if (*buf != 'y')
 		return ((struct disklabel *)0);
 	for (;;) {
 		fprintf(stderr, "Disk/controller type (%s)? ", dktypenames[1]);
-		if (fgets(buf, BUFSIZ, stdin) == NULL)
-			return ((struct disklabel *)0);
-		if ((cp = strchr(buf, '\n')) != NULL)
-			*cp = '\0';
-		if (buf[0] == '\0') {
+		(void) gets(buf);
+		if (buf[0] == 0)
 			dp->d_type = 1;
+		else
+			dp->d_type = gettype(buf, dktypenames);
+		if (dp->d_type >= 0)
 			break;
-		}
-		if ((i = gettype(buf, dktypenames)) >= 0) {
-			dp->d_type = i;
-			break;
-		}
 		fprintf(stderr, "%s: unrecognized controller type\n", buf);
-		fprintf(stderr, "use one of:\n");
+		fprintf(stderr, "use one of:\n", buf);
 		for (tp = dktypenames; *tp; tp++)
-			if (strchr(*tp, ' ') == 0)
+			if (index(*tp, ' ') == 0)
 				fprintf(stderr, "\t%s\n", *tp);
 	}
 gettype:
 	dp->d_flags = 0;
 	fprintf(stderr, "type (winchester|removable|simulated)? ");
-	if (fgets(buf, BUFSIZ, stdin) == NULL)
-		return ((struct disklabel *)0);
-	if ((cp = strchr(buf, '\n')) != NULL)
-		*cp = '\0';
-	if (buf[0] == '\0')
-		goto gettype;
-	switch (buf[0]) {
-	case 'r':
+	(void) gets(buf);
+	if (strcmp(buf, "removable") == 0)
 		dp->d_flags = D_REMOVABLE;
-		break;
-	case 's':
+	else if (strcmp(buf, "simulated") == 0)
 		dp->d_flags = D_RAMDISK;
-		break;
-	case 'w':
-		break;
-	default:
+	else if (strcmp(buf, "winchester")) {
 		fprintf(stderr, "%s: bad disk type\n", buf);
-		/* FALLTHROUGH */
-	case '\0':
 		goto gettype;
 	}
+	strncpy(dp->d_typename, buf, sizeof(dp->d_typename));
 	fprintf(stderr, "(type <cr> to get default value, if only one)\n");
-	if (dp->d_type == DTYPE_SMD) {
-		fprintf(stderr,
-		    "Do '%s' disks support bad144 bad block forwarding (yes)? ",
-		    dp->d_typename);
-		if (fgets(buf, BUFSIZ, stdin) == NULL)
-			return ((struct disklabel *)0);
-		if (buf[0] != 'n')
-			dp->d_flags |= D_BADSECT;
-	}
+	if (dp->d_type == DTYPE_SMD)
+	   fprintf(stderr, "Do %ss support bad144 bad block forwarding (yes)? ",
+		dp->d_typename);
+	(void) gets(buf);
+	if (*buf != 'n')
+		dp->d_flags |= D_BADSECT;
 	for (fp = fields; fp->f_name != NULL; fp++) {
 again:
 		fprintf(stderr, "%s ", fp->f_name);
 		if (fp->f_defaults != NULL)
 			fprintf(stderr, "(%s)", fp->f_defaults);
 		fprintf(stderr, "? ");
-		if (fgets(buf, BUFSIZ, stdin) == NULL)
-			return ((struct disklabel *)0);
-		if ((cp = strchr(buf, '\n')) != NULL)
-			*cp = '\0';
-		cp = buf;
+		cp = gets(buf);
 		if (*cp == '\0') {
 			if (fp->f_defaults == NULL) {
 				fprintf(stderr, "no default value\n");
@@ -474,10 +427,7 @@ again:
 	}
 	fprintf(stderr, "sectors/cylinder (%d)? ",
 	    dp->d_nsectors * dp->d_ntracks);
-	if (fgets(buf, BUFSIZ, stdin) == NULL)
-		return ((struct disklabel *)0);
-	if ((cp = strchr(buf, '\n')) != NULL)
-		*cp = '\0';
+	(void) gets(buf);
 	if (buf[0] == 0)
 		dp->d_secpercyl = dp->d_nsectors * dp->d_ntracks;
 	else
@@ -485,10 +435,7 @@ again:
 	fprintf(stderr, "Drive-type-specific parameters, <cr> to terminate:\n");
 	for (i = 0; i < NDDATA; i++) {
 		fprintf(stderr, "d%d? ", i);
-		if (fgets(buf, BUFSIZ, stdin) == NULL)
-			return ((struct disklabel *)0);
-		if ((cp = strchr(buf, '\n')) != NULL)
-			*cp = '\0';
+		(void) gets(buf);
 		if (buf[0] == 0)
 			break;
 		dp->d_drivedata[i] = atol(buf);
@@ -496,24 +443,32 @@ again:
 	return (dp);
 }
 
-int
 gettype(t, names)
-	const char *t;
+	char *t;
 	char **names;
 {
-	char **nm;
+	register char **nm;
 
 	for (nm = names; *nm; nm++)
-		if (strcasecmp(t, *nm) == 0)
+		if (ustrcmp(t, *nm) == 0)
 			return (nm - names);
 	if (isdigit(*t))
 		return (atoi(t));
 	return (-1);
 }
 
-void
-usage(void)
+ustrcmp(s1, s2)
+	register char *s1, *s2;
 {
-	(void)fprintf(stderr, "Usage: diskpart [-dp] [-s size] disk-type\n");
-	exit(1);
+#define	lower(c)	(islower(c) ? (c) : tolower(c))
+
+	for (; *s1; s1++, s2++) {
+		if (*s1 == *s2)
+			continue;
+		if (isalpha(*s1) && isalpha(*s2) &&
+		    lower(*s1) == lower(*s2))
+			continue;
+		return (*s2 - *s1);
+	}
+	return (0);
 }

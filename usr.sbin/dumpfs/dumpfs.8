@@ -1,7 +1,5 @@
-.\"	$NetBSD: dumpfs.8,v 1.8 1997/05/07 23:19:03 lukem Exp $
-.\"
-.\" Copyright (c) 1983, 1991, 1993
-.\"	The Regents of the University of California.  All rights reserved.
+.\" Copyright (c) 1983, 1991 Regents of the University of California.
+.\" All rights reserved.
 .\"
 .\" Redistribution and use in source and binary forms, with or without
 .\" modification, are permitted provided that the following conditions
@@ -31,41 +29,32 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\"     @(#)dumpfs.8	8.1 (Berkeley) 6/5/93
+.\"     @(#)dumpfs.8	6.2 (Berkeley) 3/16/91
 .\"
-.Dd June 5, 1993
+.Dd March 16, 1991
 .Dt DUMPFS 8
 .Os BSD 4.2
 .Sh NAME
 .Nm dumpfs
 .Nd dump file system information
 .Sh SYNOPSIS
-.Nm
+.Nm dumpfs
 .Op Ar filesys No \&| Ar device
 .Sh DESCRIPTION
-.Nm
+.Nm Dumpfs
 prints out the super block and cylinder group information
 for the file system or special device specified.
-The listing is very long and detailed.
-.Pp
-.Nm
-is useful mostly for finding out certain file system
-information such as the file system block size, minimum
-free space percentage, and the file system level that
-can be upgraded with the
-.Fl c
-option of 
-.Xr fsck_ffs 8 .
-All of this information can be found within the first twenty
-lines of the output.
+The listing is very long and detailed.  This
+command is useful mostly for finding out certain file system
+information such as the file system block size and minimum
+free space percentage.
 .Sh SEE ALSO
-.Xr disktab 5 ,
 .Xr fs 5 ,
+.Xr disktab 5 ,
 .Xr disklabel 8 ,
-.Xr fsck 8 ,
-.Xr fsck_ffs 8 ,
+.Xr tunefs 8 ,
 .Xr newfs 8 ,
-.Xr tunefs 8
+.Xr fsck 8
 .Sh HISTORY
 The
 .Nm

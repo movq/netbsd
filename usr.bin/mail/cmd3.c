@@ -1,8 +1,6 @@
-/*	$NetBSD: cmd3.c,v 1.9 1997/10/19 05:03:05 lukem Exp $	*/
-
 /*
- * Copyright (c) 1980, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1980 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,34 +31,25 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)cmd3.c	8.2 (Berkeley) 4/20/95";
-#else
-__RCSID("$NetBSD: cmd3.c,v 1.9 1997/10/19 05:03:05 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)cmd3.c	5.24 (Berkeley) 6/25/90";
 #endif /* not lint */
 
 #include "rcv.h"
-#include "extern.h"
 
 /*
  * Mail -- a mail program
  *
  * Still more user commands.
  */
-static int diction __P((const void *, const void *));
 
 /*
  * Process a shell escape by saving signals, ignoring signals,
  * and forking a sh -c
  */
-int
-shell(v)
-	void *v;
+shell(str)
+	char *str;
 {
-	char *str = v;
 	sig_t sigint = signal(SIGINT, SIG_IGN);
 	char *shell;
 	char cmd[BUFSIZ];
@@ -80,16 +69,15 @@ shell(v)
  * Fork an interactive shell.
  */
 /*ARGSUSED*/
-int
-dosh(v)
-	void *v;
+dosh(str)
+	char *str;
 {
 	sig_t sigint = signal(SIGINT, SIG_IGN);
 	char *shell;
 
 	if ((shell = value("SHELL")) == NOSTR)
 		shell = _PATH_CSHELL;
-	(void) run_command(shell, 0, -1, -1, NOSTR, NOSTR, NOSTR);
+	(void) run_command(shell, 0, -1, -1, NOSTR);
 	(void) signal(SIGINT, sigint);
 	putchar('\n');
 	return 0;
@@ -102,13 +90,12 @@ dosh(v)
 
 char	lastbang[128];
 
-int
 bangexp(str)
 	char *str;
 {
 	char bangbuf[BUFSIZ];
-	char *cp, *cp2;
-	int n;
+	register char *cp, *cp2;
+	register int n;
 	int changed = 0;
 
 	cp = str;
@@ -154,12 +141,10 @@ overf:
  * Print out a nice help message from some file or another.
  */
 
-int
-help(v)
-	void *v;
+help()
 {
-	int c;
-	FILE *f;
+	register c;
+	register FILE *f;
 
 	if ((f = Fopen(_PATH_HELP, "r")) == NULL) {
 		perror(_PATH_HELP);
@@ -174,11 +159,9 @@ help(v)
 /*
  * Change user's working directory.
  */
-int
-schdir(v)
-	void *v;
+schdir(arglist)
+	char **arglist;
 {
-	char **arglist = v;
 	char *cp;
 
 	if (*arglist == NOSTR)
@@ -193,11 +176,9 @@ schdir(v)
 	return 0;
 }
 
-int
-respond(v)
-	void *v;
+respond(msgvec)
+	int *msgvec;
 {
-	int *msgvec = v;
 	if (value("Replyall") == NOSTR)
 		return (_respond(msgvec));
 	else
@@ -208,7 +189,6 @@ respond(v)
  * Reply to a list of messages.  Extract each name from the
  * message header and send them off to mail1()
  */
-int
 _respond(msgvec)
 	int *msgvec;
 {
@@ -274,7 +254,7 @@ _respond(msgvec)
  */
 char *
 reedit(subj)
-	char *subj;
+	register char *subj;
 {
 	char *newsubj;
 
@@ -294,19 +274,18 @@ reedit(subj)
  * Preserve the named messages, so that they will be sent
  * back to the system mailbox.
  */
-int
-preserve(v)
-	void *v;
+
+preserve(msgvec)
+	int *msgvec;
 {
-	int *msgvec = v;
-	struct message *mp;
-	int *ip, mesg;
+	register struct message *mp;
+	register int *ip, mesg;
 
 	if (edit) {
 		printf("Cannot \"preserve\" in edit mode\n");
 		return(1);
 	}
-	for (ip = msgvec; *ip != 0; ip++) {
+	for (ip = msgvec; *ip != NULL; ip++) {
 		mesg = *ip;
 		mp = &message[mesg-1];
 		mp->m_flag |= MPRESERVE;
@@ -319,14 +298,12 @@ preserve(v)
 /*
  * Mark all given messages as unread.
  */
-int
-unread(v)
-	void *v;
+unread(msgvec)
+	int	msgvec[];
 {
-	int *msgvec = v;
-	int *ip;
+	register int *ip;
 
-	for (ip = msgvec; *ip != 0; ip++) {
+	for (ip = msgvec; *ip != NULL; ip++) {
 		dot = &message[*ip-1];
 		dot->m_flag &= ~(MREAD|MTOUCH);
 		dot->m_flag |= MSTATUS;
@@ -337,18 +314,17 @@ unread(v)
 /*
  * Print the size of each message.
  */
-int
-messize(v)
-	void *v;
-{
-	int *msgvec = v;
-	struct message *mp;
-	int *ip, mesg;
 
-	for (ip = msgvec; *ip != 0; ip++) {
+messize(msgvec)
+	int *msgvec;
+{
+	register struct message *mp;
+	register int *ip, mesg;
+
+	for (ip = msgvec; *ip != NULL; ip++) {
 		mesg = *ip;
 		mp = &message[mesg-1];
-		printf("%d: %ld/%ld\n", mesg, mp->m_lines, mp->m_size);
+		printf("%d: %d/%ld\n", mesg, mp->m_lines, mp->m_size);
 	}
 	return(0);
 }
@@ -357,13 +333,12 @@ messize(v)
  * Quit quickly.  If we are sourcing, just pop the input level
  * by returning an error.
  */
-int
-rexit(v)
-	void *v;
+
+rexit(e)
 {
 	if (sourcing)
 		return(1);
-	exit(0);
+	exit(e);
 	/*NOTREACHED*/
 }
 
@@ -371,13 +346,12 @@ rexit(v)
  * Set or display a variable value.  Syntax is similar to that
  * of csh.
  */
-int
-set(v)
-	void *v;
+
+set(arglist)
+	char **arglist;
 {
-	char **arglist = v;
-	struct var *vp;
-	char *cp, *cp2;
+	register struct var *vp;
+	register char *cp, *cp2;
 	char varbuf[BUFSIZ], **ap, **p;
 	int errs, h, s;
 
@@ -419,12 +393,11 @@ set(v)
 /*
  * Unset a bunch of variable values.
  */
-int
-unset(v)
-	void *v;
+
+unset(arglist)
+	char **arglist;
 {
-	char **arglist = v;
-	struct var *vp, *vp2;
+	register struct var *vp, *vp2;
 	int errs, h;
 	char **ap;
 
@@ -442,7 +415,7 @@ unset(v)
 			variables[h] = variables[h]->v_link;
 			vfree(vp2->v_name);
 			vfree(vp2->v_value);
-			free((char *)vp2);
+			cfree((char *)vp2);
 			continue;
 		}
 		for (vp = variables[h]; vp->v_link != vp2; vp = vp->v_link)
@@ -450,7 +423,7 @@ unset(v)
 		vp->v_link = vp2->v_link;
 		vfree(vp2->v_name);
 		vfree(vp2->v_value);
-		free((char *) vp2);
+		cfree((char *) vp2);
 	}
 	return(errs);
 }
@@ -458,14 +431,13 @@ unset(v)
 /*
  * Put add users to a group.
  */
-int
-group(v)
-	void *v;
+
+group(argv)
+	char **argv;
 {
-	char **argv = v;
-	struct grouphead *gh;
-	struct group *gp;
-	int h;
+	register struct grouphead *gh;
+	register struct group *gp;
+	register int h;
 	int s;
 	char **ap, *gname, **p;
 
@@ -516,28 +488,29 @@ group(v)
  * Sort the passed string vecotor into ascending dictionary
  * order.
  */
-void
+
 sort(list)
 	char **list;
 {
-	char **ap;
+	register char **ap;
+	int diction();
 
 	for (ap = list; *ap != NOSTR; ap++)
 		;
 	if (ap-list < 2)
 		return;
-	qsort(list, ap-list, sizeof(*list), diction);
+	qsort((char *)list, ap-list, sizeof *list, diction);
 }
 
 /*
  * Do a dictionary order comparison of the arguments from
  * qsort.
  */
-static int
+
 diction(a, b)
-	const void *a, *b;
+	register char **a, **b;
 {
-	return(strcmp(*(char **)a, *(char **)b));
+	return(strcmp(*a, *b));
 }
 
 /*
@@ -545,9 +518,7 @@ diction(a, b)
  */
 
 /*ARGSUSED*/
-int
-null(v)
-	void *v;
+null(e)
 {
 	return 0;
 }
@@ -556,14 +527,12 @@ null(v)
  * Change to another file.  With no argument, print information about
  * the current file.
  */
-int
-file(v)
-	void *v;
+file(argv)
+	register char **argv;
 {
-	char **argv = v;
 
 	if (argv[0] == NOSTR) {
-		newfileinfo(0);
+		newfileinfo();
 		return 0;
 	}
 	if (setfile(*argv) < 0)
@@ -575,13 +544,11 @@ file(v)
 /*
  * Expand file names like echo
  */
-int
-echo(v)
-	void *v;
+echo(argv)
+	char **argv;
 {
-	char **argv = v;
-	char **ap;
-	char *cp;
+	register char **ap;
+	register char *cp;
 
 	for (ap = argv; *ap != NOSTR; ap++) {
 		cp = *ap;
@@ -595,11 +562,9 @@ echo(v)
 	return 0;
 }
 
-int
-Respond(v)
-	void *v;
+Respond(msgvec)
+	int *msgvec;
 {
-	int *msgvec = v;
 	if (value("Replyall") == NOSTR)
 		return (_Respond(msgvec));
 	else
@@ -611,14 +576,13 @@ Respond(v)
  * and not messing around with the To: and Cc: lists as in normal
  * reply.
  */
-int
 _Respond(msgvec)
 	int msgvec[];
 {
 	struct header head;
 	struct message *mp;
-	int *ap;
-	char *cp;
+	register int *ap;
+	register char *cp;
 
 	head.h_to = NIL;
 	for (ap = msgvec; *ap != 0; ap++) {
@@ -646,12 +610,11 @@ _Respond(msgvec)
  * Conditional commands.  These allow one to parameterize one's
  * .mailrc and do some things if sending, others if receiving.
  */
-int
-ifcmd(v)
-	void *v;
+
+ifcmd(argv)
+	char **argv;
 {
-	char **argv = v;
-	char *cp;
+	register char *cp;
 
 	if (cond != CANY) {
 		printf("Illegal nested \"if\"\n");
@@ -679,9 +642,8 @@ ifcmd(v)
  * Implement 'else'.  This is pretty simple -- we just
  * flip over the conditional flag.
  */
-int
-elsecmd(v)
-	void *v;
+
+elsecmd()
 {
 
 	switch (cond) {
@@ -708,9 +670,8 @@ elsecmd(v)
 /*
  * End of if statement.  Just set cond back to anything.
  */
-int
-endifcmd(v)
-	void *v;
+
+endifcmd()
 {
 
 	if (cond == CANY) {
@@ -724,13 +685,11 @@ endifcmd(v)
 /*
  * Set the list of alternate names.
  */
-int
-alternates(v)
-	void *v;
+alternates(namelist)
+	char **namelist;
 {
-	char **namelist = v;
-	int c;
-	char **ap, **ap2, *cp;
+	register int c;
+	register char **ap, **ap2, *cp;
 
 	c = argcount(namelist) + 1;
 	if (c == 1) {
@@ -742,7 +701,7 @@ alternates(v)
 		return(0);
 	}
 	if (altnames != 0)
-		free((char *) altnames);
+		cfree((char *) altnames);
 	altnames = (char **) calloc((unsigned) c, sizeof (char *));
 	for (ap = namelist, ap2 = altnames; *ap; ap++, ap2++) {
 		cp = (char *) calloc((unsigned) strlen(*ap) + 1, sizeof (char));

@@ -1,8 +1,6 @@
-/*	$NetBSD: rewinddir.c,v 1.6 1997/07/21 14:07:26 jtc Exp $	*/
-
 /*-
- * Copyright (c) 1990, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1990 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,28 +31,19 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char sccsid[] = "@(#)rewinddir.c	8.1 (Berkeley) 6/8/93";
-#else
-__RCSID("$NetBSD: rewinddir.c,v 1.6 1997/07/21 14:07:26 jtc Exp $");
-#endif
+static char sccsid[] = "@(#)rewinddir.c	5.1 (Berkeley) 5/25/90";
 #endif /* LIBC_SCCS and not lint */
 
-#include "namespace.h"
 #include <sys/types.h>
 #include <dirent.h>
-
-#ifdef __weak_alias
-__weak_alias(rewinddir,_rewinddir);
-#endif
 
 void
 rewinddir(dirp)
 	DIR *dirp;
 {
+	extern long _rewinddir;
 
-	__seekdir(dirp, dirp->dd_rewind);
-	dirp->dd_rewind = telldir(dirp);
+	_seekdir((dirp), _rewinddir);
+	_rewinddir = telldir(dirp);
 }

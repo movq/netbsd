@@ -1,10 +1,6 @@
-/*	$NetBSD: def.objclass.h,v 1.4 1997/10/19 16:57:12 christos Exp $	*/
+/* Copyright (c) Stichting Mathematisch Centrum, Amsterdam, 1985. */
+/* def.objclass.h - version 1.0.3 */
 
-/*
- * Copyright (c) Stichting Mathematisch Centrum, Amsterdam, 1985.
- */
-#ifndef _DEF_OBJCLASS_H_
-#define _DEF_OBJCLASS_H_
 /* definition of a class of objects */
 
 struct objclass {
@@ -62,4 +58,3 @@ extern struct objclass objects[];
  * hack.invent.c:          if(index("!%?[)=*(0/\"", sym)){
  * hack.invent.c:    || index("%?!*",otmp->olet))){
  */
-#endif /* _DEF_OBJCLASS_H_ */

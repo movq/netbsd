@@ -1,8 +1,6 @@
-/*	$NetBSD: v3451.c,v 1.6 1997/02/11 09:24:20 mrg Exp $	*/
-
 /*
- * Copyright (c) 1983, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1983 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -34,10 +32,7 @@
  */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)v3451.c	8.1 (Berkeley) 6/6/93";
-#endif
-static char rcsid[] = "$NetBSD: v3451.c,v 1.6 1997/02/11 09:24:20 mrg Exp $";
+static char sccsid[] = "@(#)v3451.c	5.5 (Berkeley) 3/2/91";
 #endif /* not lint */
 
 /*
@@ -47,9 +42,6 @@ static char rcsid[] = "$NetBSD: v3451.c,v 1.6 1997/02/11 09:24:20 mrg Exp $";
 
 static	jmp_buf Sjbuf;
 
-static	int expect(), notin(), prefix();
-static	void vawrite(), alarmtr();
-
 v3451_dialer(num, acu)
 	register char *num;
 	char *acu;
@@ -58,10 +50,11 @@ v3451_dialer(num, acu)
 	int ok;
 	int slow = number(value(BAUDRATE)) < 1200, rw = 2;
 	char phone[50];
-	struct termios cntrl;
 #ifdef ACULOG
 	char line[80];
 #endif
+	static int expect();
+	static void vawrite();
 
 	/*
 	 * Get in synch
@@ -77,9 +70,7 @@ v3451_dialer(num, acu)
 #endif
 		return (0);
 	}
-	tcgetattr(FD, &cntrl);
-	term.c_cflag |= HUPCL;
-	tcsetattr(FD, TCSANOW, &cntrl);
+	ioctl(FD, TIOCHPCL, 0);
 	sleep(1);
 	vawrite("D\r", 2 + slow);
 	if (!expect("NUMBER?")) {
@@ -89,7 +80,8 @@ v3451_dialer(num, acu)
 #endif
 		return (0);
 	}
-	snprintf(phone, sizeof phone, "%s\r", num);
+	strcpy(phone, num);
+	strcat(phone, "\r");
 	vawrite(phone, 1 + slow);
 	if (!expect(phone)) {
 		printf("Vadic will not accept phone number\n");
@@ -124,7 +116,7 @@ v3451_dialer(num, acu)
 #endif
 		return (0);
 	}
-	tcflush(FD, TCIOFLUSH);
+	ioctl(FD, TIOCFLUSH, &rw);
 	return (1);
 }
 
@@ -157,6 +149,8 @@ expect(cp)
 	char buf[300];
 	register char *rp = buf;
 	int timeout = 30, online = 0;
+	static int notin();
+	static void alarmtr();
 
 	if (strcmp(cp, "\"\"") == 0)
 		return (1);
@@ -199,6 +193,7 @@ static int
 notin(sh, lg)
 	char *sh, *lg;
 {
+	static int prefix();
 
 	for (; *lg; lg++)
 		if (prefix(sh, lg))

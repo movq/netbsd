@@ -1,5 +1,3 @@
-/*	$NetBSD: dumplfs.c,v 1.7 1995/12/14 22:36:34 thorpej Exp $	*/
-
 /*-
  * Copyright (c) 1991, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -40,11 +38,8 @@ static char copyright[] =
 #endif /* not lint */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)dumplfs.c	8.1 (Berkeley) 6/5/93";
-#else
-static char rcsid[] = "$NetBSD: dumplfs.c,v 1.7 1995/12/14 22:36:34 thorpej Exp $";
-#endif
+/*static char sccsid[] = "from: @(#)dumplfs.c	8.1 (Berkeley) 6/5/93";*/
+static char *rcsid = "$Id: dumplfs.c,v 1.1 1994/06/08 18:58:50 mycroft Exp $";
 #endif /* not lint */
 
 #include <sys/param.h>
@@ -55,14 +50,13 @@ static char rcsid[] = "$NetBSD: dumplfs.c,v 1.7 1995/12/14 22:36:34 thorpej Exp 
 #include <ufs/ufs/dinode.h>
 #include <ufs/lfs/lfs.h>
 
-#include <err.h>
-#include <errno.h>
 #include <fcntl.h>
 #include <fstab.h>
+#include <errno.h>
+#include <unistd.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
-#include <unistd.h>
 #include "extern.h"
 
 static void	addseg __P((char *));
@@ -119,7 +113,7 @@ main(argc, argv)
 
 	do_allsb = 0;
 	do_ientries = 0;
-	while ((ch = getopt(argc, argv, "ais:")) != -1)
+	while ((ch = getopt(argc, argv, "ais:")) != EOF)
 		switch(ch) {
 		case 'a':		/* Dump all superblocks */
 			do_allsb = 1;
@@ -141,7 +135,7 @@ main(argc, argv)
 
 	special = argv[0];
 	if ((fd = open(special, O_RDONLY, 0)) < 0)
-		err(1, "%s", special);
+		err("%s: %s", special, strerror(errno));
 
 	/* Read the first superblock */
 	get(fd, LFS_LABELPAD, &lfs_sb1, sizeof(struct lfs));
@@ -195,13 +189,13 @@ dump_ifile(fd, lfsp, do_ientries)
 	IFILE *ipage;
 	struct dinode *dip, *dpage;
 	daddr_t addr, *addrp, *dindir, *iaddrp, *indir;
-	int block_limit, i, inum, j, nblocks, psize;
+	int block_limit, i, inum, j, nblocks, nsupb, psize;
 
 	psize = lfsp->lfs_bsize;
 	addr = lfsp->lfs_idaddr;
 
 	if (!(dpage = malloc(psize)))
-		err(1, "malloc");
+		err("%s", strerror(errno));
 	get(fd, addr << daddr_shift, dpage, psize);
 
 	for (dip = dpage + INOPB(lfsp) - 1; dip >= dpage; --dip)
@@ -209,7 +203,7 @@ dump_ifile(fd, lfsp, do_ientries)
 			break;
 
 	if (dip < dpage)
-		errx(1, "unable to locate ifile inode");
+		err("unable to locate ifile inode");
 
 	(void)printf("\nIFILE inode\n");
 	dump_dinode(dip);
@@ -220,7 +214,7 @@ dump_ifile(fd, lfsp, do_ientries)
 
 	/* Get the direct block */
 	if ((ipage = malloc(psize)) == NULL)
-		err(1, "malloc");
+		err("%s", strerror(errno));
 	for (inum = 0, addrp = dip->di_db, i = 0; i < block_limit;
 	    i++, addrp++) {
 		get(fd, *addrp << daddr_shift, ipage, psize);
@@ -248,7 +242,7 @@ dump_ifile(fd, lfsp, do_ientries)
 
 	/* Dump out blocks off of single indirect block */
 	if (!(indir = malloc(psize)))
-		err(1, "malloc");
+		err("%s", strerror(errno));
 	get(fd, dip->di_ib[0] << daddr_shift, indir, psize);
 	block_limit = MIN(i + lfsp->lfs_nindir, nblocks);
 	for (addrp = indir; i < block_limit; i++, addrp++) {
@@ -278,7 +272,7 @@ dump_ifile(fd, lfsp, do_ientries)
 
 	/* Get the double indirect block */
 	if (!(dindir = malloc(psize)))
-		err(1, "malloc");
+		err("%s", strerror(errno));
 	get(fd, dip->di_ib[1] << daddr_shift, dindir, psize);
 	for (iaddrp = dindir, j = 0; j < lfsp->lfs_nindir; j++, iaddrp++) {
 		if (*iaddrp == LFS_UNUSED_DADDR)
@@ -355,11 +349,6 @@ dump_dinode(dip)
 	struct dinode *dip;
 {
 	int i;
-	time_t at, mt, ct;
-
-	at = dip->di_atime;
-	mt = dip->di_mtime;
-	ct = dip->di_ctime;
 
 	(void)printf("%s%d\t%s%d\t%s%d\t%s%d\t%s%d\n",
 		"mode  ", dip->di_mode,
@@ -368,9 +357,9 @@ dump_dinode(dip)
 		"gid   ", dip->di_gid,
 		"size  ", dip->di_size);
 	(void)printf("%s%s%s%s%s%s",
-		"atime ", ctime(&at),
-		"mtime ", ctime(&mt),
-		"ctime ", ctime(&ct));
+		"atime ", ctime(&dip->di_atime.ts_sec),
+		"mtime ", ctime(&dip->di_mtime.ts_sec),
+		"ctime ", ctime(&dip->di_ctime.ts_sec));
 	(void)printf("inum  %d\n", dip->di_inumber);
 	(void)printf("Direct Addresses\n");
 	for (i = 0; i < NDADDR; i++) {
@@ -391,7 +380,7 @@ dump_sum(fd, lfsp, sp, segnum, addr)
 	daddr_t addr;
 {
 	FINFO *fp;
-	u_int32_t *dp;
+	long *dp;
 	int i, j;
 	int ck;
 	int numblocks;
@@ -598,7 +587,7 @@ addseg(arg)
 	SEGLIST *p;
 
 	if ((p = malloc(sizeof(SEGLIST))) == NULL)
-		err(1, "malloc");
+		err("%s", strerror(errno));
 	p->next = seglist;
 	p->num = atoi(arg);
 	seglist = p;

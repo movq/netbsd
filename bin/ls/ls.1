@@ -1,7 +1,5 @@
-.\"	$NetBSD: ls.1,v 1.16 1997/10/20 08:52:26 enami Exp $
-.\"
-.\" Copyright (c) 1980, 1990, 1991, 1993, 1994
-.\"	The Regents of the University of California.  All rights reserved.
+.\" Copyright 1980, 1990, 1991 The Regents of the University of California.
+.\" All rights reserved.
 .\"
 .\" This code is derived from software contributed to Berkeley by
 .\" the Institute of Electrical and Electronics Engineers, Inc.
@@ -34,30 +32,30 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\"     @(#)ls.1	8.7 (Berkeley) 7/29/94
+.\"     @(#)ls.1	6.18 (Berkeley) 6/27/91
 .\"
-.Dd July 29, 1994
+.Dd June 27, 1991
 .Dt LS 1
 .Os
 .Sh NAME
 .Nm ls
-.Nd list directory contents
+.Nd list directory contents.
 .Sh SYNOPSIS
-.Nm
-.Op Fl ACFLRSTWacdfikloqrstu1
+.Nm ls
+.Op Fl CFRacdilqrstu1
 .Op Ar file ...
 .Sh DESCRIPTION
 For each operand that names a
 .Ar file
 of a type other than
 directory,
-.Nm
+.Nm ls
 displays its name as well as any requested,
 associated information.
 For each operand that names a
 .Ar file
 of type directory,
-.Nm
+.Nm ls
 displays the names of files contained
 within that directory, as well as any requested, associated
 information.
@@ -80,34 +78,37 @@ Always set for the super-user.
 .It Fl C
 Force multi-column output; this is the default when output is to a terminal.
 .It Fl F
-Display a slash (/) immediately after each pathname that is a directory,
-an asterisk (*) after each that is executable,
-an at sign (@) after each symbolic link,
-a percent sign (%) after each whiteout,
-and a vertical bar (|) after each that is a
-.Tn FIFO . 
+Display a slash (/) immediately after each pathname
+that is a directory, an asterisk (*) after each that is
+executable,
+and an at sign (@) after each symbolic link.
+.\"and a vertical bar (|) after
+.\"each that is a
+.\".Tn FIFO . 
 .It Fl L
 If argument is a symbolic link, list the file or directory the link references
 rather than the link itself.
 .It Fl R
 Recursively list subdirectories encountered.
-.It Fl S
-Sort by size, largest file first.
 .It Fl T
 Display complete time information for the file, including
 month, day, hour, minute, second, and year.
-.It Fl W
-Display whiteouts when scanning directories.
 .It Fl a
 Include directory entries whose names begin with a
 dot (.).
 .It Fl c
 Use time when file status was last changed for sorting or printing.
 .It Fl d
-Directories are listed as plain files (not searched recursively) and
-symbolic links in the argument list are not indirected through.
+Directories are listed as plain files (not searched recursively).
 .It Fl f
 Output is not sorted.
+.It Fl g
+Include the group ownership of the file in a long
+.Pq Fl l
+output
+.Pq Fl lg .
+If the group is not a known group name, the numeric ID
+is printed.
 .It Fl i
 For each file, print the file's file serial number (inode number).
 .It Fl k
@@ -118,19 +119,16 @@ option, causing the sizes to be reported in kilobytes.
 (The lowercase letter ``ell.'')  List in long format. (See below.)
 If the output is to a terminal, a total sum for all the file
 sizes is output on a line before the long listing.
-.It Fl o
-Include the file flags in a long
-.Pq Fl l
-output
 .It Fl q
 Force printing of non-graphic characters in file names as
 the character `?'; this is the default when output is to a terminal.
 .It Fl r
 Reverse the order of the sort to get reverse
-lexicographical order or the smallest or oldest entries first.
+lexicographical order or the oldest entries first.
 .It Fl s
-Display the number of file system blocks actually used by each file, in units
-of 512 bytes, where partial units are rounded up to the next integer value.
+Display the number of file system bytes actually
+used by each file, in units of 512, where partial
+units are rounded up to the next integer value.
 If the output is to a terminal, a total sum for all the file
 sizes is output on a line before the listing.
 .It Fl t
@@ -167,7 +165,7 @@ options override each other; the last one specified determines
 the file time used.
 .Pp
 By default,
-.Nm
+.Nm ls
 lists one entry per line to standard
 output; the exceptions are to terminals or when the
 .Fl C
@@ -184,20 +182,17 @@ options.
 If the
 .Fl l
 option is given, the following information
-is displayed for each file:
+is be displayed:
 file mode,
-number of links, owner name, group name,
+number of links, owner name,
+.\" group name,
 number of bytes in the file, abbreviated
 month, day-of-month file was last modified,
 hour file last modified, minute file last
 modified, and the pathname.
-In addition, for each directory whose contents are displayed, the total
-number of 512-byte blocks used by the files in the directory is displayed
-on a line by itself immediately before the information for the files in the
-directory.
 .Pp
-If the owner or group names are not a known user or group name
-the numeric ID's are displayed.
+If the owner name is not a known user name
+the numeric ID is displayed.
 .Pp
 If the file is a character special or block special file,
 the major and minor device numbers for the file are displayed
@@ -206,7 +201,7 @@ linked-to file is preceded by
 .Dq \-> .
 .Pp
 The file mode printed under the -l option consists of the
-entry type, owner permissions, and group permissions.
+the entry type, owner permissions, and group permissions.
 The entry type character describes the type of file, as
 follows:
 .Pp
@@ -223,8 +218,6 @@ Symbolic link.
 Socket link.
 .\" .It Sy p
 .\" .Tn FIFO .
-.It Sy w
-Whiteout.
 .It Sy \-
 Regular file.
 .El
@@ -265,8 +258,8 @@ and setgroup-ID mode is set.
 The file is executable or the directory is
 searchable.
 .It Sy \-
-The file is neither readable, writable, executable,
-nor set-user-ID nor set-group-ID mode, nor sticky. (See below.)
+The file is neither readable, writeable, exectutable,
+or set-user-ID or set-group-ID mode nor sticky. (See below.)
 .El
 .Pp
 These next two apply only to the third character in the last group
@@ -283,7 +276,7 @@ or
 .It Sy t
 The sticky bit is set (mode
 .Li 1000 ) ,
-and is searchable or executable.
+and is searcheable or executable.
 (See
 .Xr chmod 1
 or
@@ -292,56 +285,36 @@ or
 .El
 .Pp
 The
-.Nm
+.Nm ls
 utility exits 0 on success, and >0 if an error occurs.
-.Sh ENVIRONMENT VARIABLES
+.Sh ENVIRONMENT
 The following environment variables affect the execution of
-.Nm "" :
-.Bl -tag -width BLOCKSIZE
-.It Ev BLOCKSIZE
-If the environment variable
-.Ev BLOCKSIZE
-is set, and the
-.Fl k
-option is not specified, the block counts
-(see
-.Fl s )
-will be displayed in units of that size block.
+.Nm ls :
+.Bl -tag -width COLUMNS
 .It COLUMNS
 If this variable contains a string representing a
 decimal integer, it is used as the
 column position width for displaying
 multiple-text-column output.
 The
-.Nm
+.Nm ls
 utility calculates how
 many pathname text columns to display
 based on the width provided.
 (See
 .Fl C . )
-.It Ev TZ
-The timezone to use when displaying dates.
-See
-.Xr environ 7
-for more information.
 .El
-.Sh COMPATIBILITY
-The group field is now automatically included in the long listing for
-files in order to be compatible with the
-.St -p1003.2
-specification.
 .Sh SEE ALSO
 .Xr chmod 1 ,
-.Xr symlink 7 ,
 .Xr sticky 8
-.Sh STANDARDS
-The
-.Nm
-utility is expected to be a superset of the
-.St -p1003.2
-specification.
 .Sh HISTORY
-An
-.Nm
-utility appeared in
+A
+.Nm ls
+command appeared in
 .At v6 .
+.\" .Sh STANDARDS
+.\" .The
+.\" .Nm ls
+.\" function is expected to be
+.\" .Tn POSIX
+.\" 1003.2 compatible.

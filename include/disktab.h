@@ -1,5 +1,3 @@
-/*	$NetBSD: disktab.h,v 1.3 1994/10/26 00:55:51 cgd Exp $	*/
-
 /*
  * Copyright (c) 1983 The Regents of the University of California.
  * All rights reserved.

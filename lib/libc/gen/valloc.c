@@ -1,8 +1,6 @@
-/*	$NetBSD: valloc.c,v 1.7 1997/07/21 14:07:47 jtc Exp $	*/
-
 /*
- * Copyright (c) 1980, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1980 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,30 +31,20 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char sccsid[] = "@(#)valloc.c	8.1 (Berkeley) 6/4/93";
-#else
-__RCSID("$NetBSD: valloc.c,v 1.7 1997/07/21 14:07:47 jtc Exp $");
-#endif
+static char sccsid[] = "@(#)valloc.c	5.5 (Berkeley) 2/23/91";
 #endif /* LIBC_SCCS and not lint */
 
-#include "namespace.h"
 #include <stdlib.h>
 #include <unistd.h>
-
-#ifdef __weak_alias
-__weak_alias(valloc,_valloc);
-#endif
 
 void *
 valloc(i)
 	size_t i;
 {
-	long valsiz = getpagesize(), j;
+	int valsiz = getpagesize(), j;
 	void *cp = malloc(i + (valsiz-1));
 
-	j = ((long)cp + (valsiz-1)) &~ (valsiz-1);
+	j = ((int)cp + (valsiz-1)) &~ (valsiz-1);
 	return ((void *)j);
 }

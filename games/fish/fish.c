@@ -1,8 +1,6 @@
-/*	$NetBSD: fish.c,v 1.4 1997/10/10 12:58:32 lukem Exp $	*/
-
 /*-
- * Copyright (c) 1990, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1990 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Muffy Barkocy.
@@ -36,18 +34,14 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1990, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+char copyright[] =
+"@(#) Copyright (c) 1990 The Regents of the University of California.\n\
+ All rights reserved.\n";
 #endif /* not lint */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)fish.c	8.1 (Berkeley) 5/31/93";
-#else
-__RCSID("$NetBSD: fish.c,v 1.4 1997/10/10 12:58:32 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)fish.c	5.4 (Berkeley) 1/18/91";
 #endif /* not lint */
 
 #include <sys/types.h>
@@ -56,7 +50,6 @@ __RCSID("$NetBSD: fish.c,v 1.4 1997/10/10 12:58:32 lukem Exp $");
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <time.h>
 #include "pathnames.h"
 
 #define	RANKS		13
@@ -77,31 +70,13 @@ int promode;
 int asked[RANKS], comphand[RANKS], deck[RANKS];
 int userasked[RANKS], userhand[RANKS];
 
-void	chkwinner __P((int, int *));
-int	compmove __P((void));
-int	countbooks __P((int *));
-int	countcards __P((int *));
-int	drawcard __P((int, int *));
-int	gofish __P((int, int, int *));
-void	goodmove __P((int, int, int *, int *));
-void	init __P((void));
-void	instructions __P((void));
-int	main __P((int, char *[]));
-int	nrandom __P((int));
-void	printhand __P((int *));
-void	printplayer __P((int));
-int	promove __P((void));
-void	usage __P((void));
-int	usermove __P((void));
-
-int
 main(argc, argv)
 	int argc;
 	char **argv;
 {
 	int ch, move;
 
-	while ((ch = getopt(argc, argv, "p")) != -1)
+	while ((ch = getopt(argc, argv, "p")) != EOF)
 		switch(ch) {
 		case 'p':
 			promode = 1;
@@ -146,11 +121,10 @@ istart:		for (;;) {
 	/* NOTREACHED */
 }
 
-int
 usermove()
 {
-	int n;
-	char **p;
+	register int n;
+	register char **p;
 	char buf[256];
 
 	(void)printf("\nYour hand is:");
@@ -201,7 +175,6 @@ usermove()
 	/* NOTREACHED */
 }
 
-int
 compmove()
 {
 	static int lmove;
@@ -219,10 +192,9 @@ compmove()
 	return(lmove);
 }
 
-int
 promove()
 {
-	int i, max;
+	register int i, max;
 
 	for (i = 0; i < RANKS; ++i)
 		if (userasked[i] &&
@@ -258,7 +230,6 @@ promove()
 	/* NOTREACHED */
 }
 
-int
 drawcard(player, hand)
 	int player;
 	int *hand;
@@ -281,7 +252,6 @@ drawcard(player, hand)
 	return(card);
 }
 
-int
 gofish(askedfor, player, hand)
 	int askedfor, player;
 	int *hand;
@@ -298,7 +268,6 @@ gofish(askedfor, player, hand)
 	return(0);
 }
 
-void
 goodmove(player, move, hand, opphand)
 	int player, move;
 	int *hand, *opphand;
@@ -322,12 +291,11 @@ goodmove(player, move, hand, opphand)
 	(void)printf("get another guess!\n");
 }
 
-void
 chkwinner(player, hand)
 	int player;
-	int *hand;
+	register int *hand;
 {
-	int cb, i, ub;
+	register int cb, i, ub;
 
 	for (i = 0; i < RANKS; ++i)
 		if (hand[i] > 0 && hand[i] < CARDS)
@@ -352,7 +320,6 @@ chkwinner(player, hand)
 	exit(0);
 }
 
-void
 printplayer(player)
 	int player;
 {
@@ -366,11 +333,10 @@ printplayer(player)
 	}
 }
 
-void
 printhand(hand)
 	int *hand;
 {
-	int book, i, j;
+	register int book, i, j;
 
 	for (book = i = 0; i < RANKS; i++)
 		if (hand[i] < CARDS)
@@ -387,18 +353,16 @@ printhand(hand)
 	(void)putchar('\n');
 }
 
-int
 countcards(hand)
-	int *hand;
+	register int *hand;
 {
-	int i, count;
+	register int i, count;
 
 	for (count = i = 0; i < RANKS; i++)
 		count += *hand++;
 	return(count);
 }
 
-int
 countbooks(hand)
 	int *hand;
 {
@@ -415,10 +379,9 @@ countbooks(hand)
 	return(count);
 }
 
-void
 init()
 {
-	int i, rank;
+	register int i, rank;
 
 	for (i = 0; i < RANKS; ++i)
 		deck[i] = CARDS;
@@ -434,15 +397,14 @@ init()
 	}
 }
 
-int
 nrandom(n)
 	int n;
 {
+	long random();
 
 	return((int)random() % n);
 }
 
-void
 instructions()
 {
 	int input;
@@ -460,7 +422,6 @@ instructions()
 	while ((input = getchar()) != EOF && input != '\n');
 }
 
-void
 usage()
 {
 	(void)fprintf(stderr, "usage: fish [-p]\n");

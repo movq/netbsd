@@ -1,4 +1,3 @@
-.\" $NetBSD: 7.t,v 1.3 1997/07/09 02:34:44 jtc Exp $
 .\" Copyright (c) 1983, 1993
 .\"	The Regents of the University of California.  All rights reserved.
 .\"
@@ -65,7 +64,7 @@ The connection to
 on the local machine failed. 
 This usually means the printer server started at
 boot time has died or is hung.  Check the local socket
-/var/run/printer to be sure it still exists (if it does not exist,
+/dev/printer to be sure it still exists (if it does not exist,
 there is no 
 .I lpd
 process running). 
@@ -77,7 +76,7 @@ restart
 .DE
 You can also check the state of the master printer daemon with the following.
 .DS
-% ps l`cat /var/spool/output/lpd.lock`
+% ps l`cat /usr/spool/lpd.lock`
 .DE
 .IP
 Another possibility is that the
@@ -85,7 +84,7 @@ Another possibility is that the
 program is not set-user-id to \fIroot\fP, set-group-id to group \fIdaemon\fP.
 This can be checked with
 .DS
-% ls \-lg /usr/bin/lpr
+% ls \-lg /usr/ucb/lpr
 .DE
 .SH
 lpr: \fIprinter\fP\|: printer queue is disabled

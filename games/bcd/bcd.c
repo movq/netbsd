@@ -1,11 +1,9 @@
-/*	$NetBSD: bcd.c,v 1.7 1997/10/10 09:54:18 lukem Exp $	*/
-
 /*
- * Copyright (c) 1989, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1989 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
- * Steve Hayman of the Indiana University Computer Science Dept.
+ * Steve Hayman of the Indiana University Computer Science Dept..
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -36,18 +34,14 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1989, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+char copyright[] =
+"@(#) Copyright (c) 1989 The Regents of the University of California.\n\
+ All rights reserved.\n";
 #endif /* not lint */
 
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#)bcd.c	8.2 (Berkeley) 3/20/94";
-#else
-__RCSID("$NetBSD: bcd.c,v 1.7 1997/10/10 09:54:18 lukem Exp $");
-#endif
+static char sccsid[] = "@(#)bcd.c	4.4 (Berkeley) 6/1/90";
 #endif /* not lint */
 
 /*
@@ -66,24 +60,10 @@ __RCSID("$NetBSD: bcd.c,v 1.7 1997/10/10 09:54:18 lukem Exp $");
  * Steve Hayman
  * sahayman@iuvax.cs.indiana.edu
  * 1989 11 30
- *
- *
- * I found an error in the table. The same error is found in the SunOS 4.1.1
- * version of bcd. It has apparently been around a long time. The error caused
- * 'Q' and 'R' to have the same punch code. I only noticed the error due to
- * someone pointing it out to me when the program was used to print a cover
- * for an APA!  The table was wrong in 4 places. The other error was masked
- * by the fact that the input is converted to upper case before lookup.
- *
- * Dyane Bruce
- * db@diana.ocunix.on.ca
- * Nov 5, 1993
  */
 
 #include <sys/types.h>
-
 #include <stdio.h>
-#include <string.h>
 #include <ctype.h>
 
 u_short holes[256] = {
@@ -97,11 +77,11 @@ u_short holes[256] = {
     0x002,	 0x001,	  0x012,   0x40a,   0x80a,   0x212,   0x00a,   0x006,
     0x022,	 0x900,	  0x880,   0x840,   0x820,   0x810,   0x808,   0x804,
     0x802,	 0x801,	  0x500,   0x480,   0x440,   0x420,   0x410,   0x408,
-    0x404,	 0x402,	  0x401,   0x280,   0x240,   0x220,   0x210,   0x208,
+    0x404,	 0x402,	  0x402,   0x280,   0x240,   0x220,   0x210,   0x208,
     0x204,	 0x202,	  0x201,   0x082,   0x822,   0x600,   0x282,   0x30f,
     0x900,	 0x880,	  0x840,   0x820,   0x810,   0x808,   0x804,   0x802,
     0x801,	 0x500,	  0x480,   0x440,   0x420,   0x410,   0x408,   0x404,
-    0x402,	 0x401,	  0x280,   0x240,   0x220,   0x210,   0x208,   0x204,
+    0x402,	 0x402,	  0x280,   0x240,   0x220,   0x210,   0x208,   0x204,
     0x202,	 0x201,	  0x082,   0x806,   0x822,   0x600,   0x282,   0x0,
     0x0,	 0x0,	  0x0,	   0x0,	    0x0,     0x0,     0x0,     0x0,
     0x0,	 0x0,	  0x0,	   0x0,	    0x0,     0x0,     0x0,     0x0,
@@ -113,11 +93,11 @@ u_short holes[256] = {
     0x001,	 0x012,	  0x40a,   0x80a,   0x212,   0x00a,   0x006,   0x022,
     0x900,	 0x880,	  0x840,   0x820,   0x810,   0x808,   0x804,   0x802,
     0x801,	 0x500,	  0x480,   0x440,   0x420,   0x410,   0x408,   0x404,
-    0x402,	 0x401,	  0x280,   0x240,   0x220,   0x210,   0x208,   0x204,
+    0x402,	 0x402,	  0x280,   0x240,   0x220,   0x210,   0x208,   0x204,
     0x202,	 0x201,	  0x082,   0x806,   0x822,   0x600,   0x282,   0x30f,
     0x900,	 0x880,	  0x840,   0x820,   0x810,   0x808,   0x804,   0x802,
     0x801,	 0x500,	  0x480,   0x440,   0x420,   0x410,   0x408,   0x404,
-    0x402,	 0x401,	  0x280,   0x240,   0x220,   0x210,   0x208,   0x204,
+    0x402,	 0x402,	  0x280,   0x240,   0x220,   0x210,   0x208,   0x204,
     0x202,	 0x201,	  0x082,   0x806,   0x822,   0x600,   0x282,   0x0
 };
 
@@ -126,10 +106,6 @@ u_short holes[256] = {
  */
 #define	bit(w,i)	((w)&(1<<(i)))
 
-int	main __P((int, char *[]));
-void	printcard __P((char *));
-
-int
 main(argc, argv)
 	int argc;
 	char **argv;
@@ -152,16 +128,16 @@ main(argc, argv)
 
 #define	COLUMNS	48
 
-void
 printcard(str)
-	char *str;
+	register char *str;
 {
 	static char rowchars[] = "   123456789";
-	int i, row;
-	char *p;
+	register int i, row;
+	register char *p;
+	char *index();
 
 	/* ruthlessly remove newlines and truncate at 48 characters. */
-	if ((p = strchr(str, '\n')))
+	if ((p = index(str, '\n')))
 		*p = '\0';
 
 	if (strlen(str) > COLUMNS)
@@ -185,7 +161,7 @@ printcard(str)
 	p = str;
 	putchar('/');
 	for (i = 1; *p; i++, p++)
-		if (holes[(int)*p])
+		if (holes[*p])
 			putchar(*p);
 		else
 			putchar(' ');
@@ -203,7 +179,7 @@ printcard(str)
 	for (row = 0; row <= 11; ++row) {
 		putchar('|');
 		for (i = 0, p = str; *p; i++, p++) {
-			if (bit(holes[(int)*p], 11 - row))
+			if (bit(holes[*p], 11 - row))
 				putchar(']');
 			else
 				putchar(rowchars[row]);

@@ -1,7 +1,6 @@
-/*	$NetBSD: def.h,v 1.10 1997/10/19 05:03:12 lukem Exp $	*/
 /*
- * Copyright (c) 1980, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1980 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -31,37 +30,22 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)def.h	8.4 (Berkeley) 4/20/95
- *	$NetBSD: def.h,v 1.10 1997/10/19 05:03:12 lukem Exp $
+ *	@(#)def.h	5.22 (Berkeley) 6/25/90
  */
+
+#include <sys/param.h>		/* includes <sys/types.h> */
+#include <sys/signal.h>
+#include <stdio.h>
+#include <sgtty.h>
+#include <ctype.h>
+#include <string.h>
+#include "pathnames.h"
 
 /*
  * Mail -- a mail program
  *
  * Author: Kurt Shoens (UCB) March 25, 1978
  */
-
-#include <sys/types.h>
-#include <sys/file.h>
-#include <sys/ioctl.h>
-#include <sys/stat.h>
-#include <sys/param.h>
-#include <sys/time.h>
-#include <sys/wait.h>
-
-#include <ctype.h>
-#include <err.h>
-#include <errno.h>
-#include <fcntl.h>
-#include <paths.h>
-#include <pwd.h>
-#include <signal.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <termios.h>
-#include <unistd.h>
-#include "pathnames.h"
 
 #define	APPEND				/* New mail goes to end of mailbox */
 
@@ -79,10 +63,10 @@
 
 struct message {
 	short	m_flag;			/* flags, see below */
-	long	m_block;		/* block number of this message */
+	short	m_block;		/* block number of this message */
 	short	m_offset;		/* offset in block of message */
 	long	m_size;			/* Bytes in the message */
-	long	m_lines;		/* Lines in the message */
+	short	m_lines;		/* Lines in the message */
 };
 
 /*
@@ -113,9 +97,10 @@ struct message {
  * The actual table is declared and initialized
  * in lex.c
  */
+
 struct cmd {
 	char	*c_name;		/* Name of command */
-	int	(*c_func) __P((void *));/* Implementor of the command */
+	int	(*c_func)();		/* Implementor of the command */
 	short	c_argtype;		/* Type of arglist (see below) */
 	short	c_msgflag;		/* Required flags of messages */
 	short	c_msgmask;		/* Relevant flags of messages */
@@ -281,7 +266,58 @@ struct ignoretab {
  * useful just before closing an old file that was opened
  * for read/write.
  */
-#define trunc(stream) {							\
-	(void)fflush(stream); 						\
-	(void)ftruncate(fileno(stream), (off_t)ftell(stream));		\
-}
+#define trunc(stream)	ftruncate(fileno(stream), (long) ftell(stream))
+
+/*
+ * Forward declarations of routine types to keep lint and cc happy.
+ */
+
+FILE	*Fopen();
+FILE	*Fdopen();
+FILE	*Popen();
+FILE	*collect();
+FILE	*infix();
+FILE	*run_editor();
+FILE	*setinput();
+char	**unpack();
+char	*calloc();
+char	*copy();
+char	*copyin();
+char	*detract();
+char	*expand();
+char	*getdeadletter();
+char	*gets();
+char	*hfield();
+char	*name1();
+char	*nameof();
+char	*nextword();
+char	*getenv();
+char	*getname();
+char	*fgets();
+char	*ishfield();
+char	*malloc();
+char	*mktemp();
+char	*readtty();
+char	*reedit();
+char	*salloc();
+char	*savestr();
+char	*skin();
+char	*snarf();
+char	*username();
+char	*value();
+char	*vcopy();
+char	*yankword();
+off_t	fsize();
+uid_t	getuid();
+struct	cmd	*lex();
+struct	grouphead	*findgroup();
+struct	name	*nalloc();
+struct	name	*cat();
+struct	name	*delname();
+struct	name	*elide();
+struct	name	*extract();
+struct	name	*gexpand();
+struct	name	*outof();
+struct	name	*put();
+struct	name	*usermap();
+struct	var	*lookup();
