@@ -21,7 +21,7 @@
 
 #if !defined(lint) && defined(LIBC_SCCS)
 static  char    sccsid[] = "@(#)kmem.c	1.4 1/12/96 (C) 1992 Darren Reed";
-static	char	rcsid[] = "$Id: kmem.c,v 1.1 1997/01/05 13:09:04 mrg Exp $";
+static	char	rcsid[] = "$Id: kmem.c,v 1.1.1.1 1997/01/05 13:09:04 mrg Exp $";
 #endif
 
 static	int	kmemfd = -1;

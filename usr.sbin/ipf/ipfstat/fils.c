@@ -42,7 +42,7 @@
 
 #if !defined(lint) && defined(LIBC_SCCS)
 static	char	sccsid[] = "@(#)fils.c	1.21 4/20/96 (C) 1993-1996 Darren Reed";
-static	char	rcsid[] = "$Id: fils.c,v 1.1 1997/01/05 13:09:04 mrg Exp $";
+static	char	rcsid[] = "$Id: fils.c,v 1.1.1.1 1997/01/05 13:09:04 mrg Exp $";
 #endif
 #ifdef	_PATH_UNIX
 #define	VMUNIX	_PATH_UNIX
