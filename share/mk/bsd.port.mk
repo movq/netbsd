@@ -2,7 +2,7 @@
 # ex:ts=4
 #
 #	Id: bsd.port.mk,v 1.263 1997/07/17 17:47:36 markm Exp 
-#	$NetBSD: bsd.port.mk,v 1.1 1997/08/20 10:21:06 agc Exp $
+#	$NetBSD: bsd.port.mk,v 1.1.1.1 1997/08/20 10:21:06 agc Exp $
 #
 #	bsd.port.mk - 940820 Jordan K. Hubbard.
 #	This file is in the public domain.
