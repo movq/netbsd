@@ -1,4 +1,4 @@
-/*	$NetBSD: map.h,v 1.12 1997/04/16 23:45:00 thorpej Exp $	*/
+/*	$NetBSD: map.h,v 1.12.2.1 1997/05/04 15:20:12 mrg Exp $	*/
 
 /*-
  * Copyright (c) 1982, 1986, 1993
@@ -77,7 +77,6 @@ struct mapent {
 };
 
 #ifdef _KERNEL
-extern struct	map *swapmap;
 extern int	nswapmap;
 
 long	rmalloc __P((struct map *, long));

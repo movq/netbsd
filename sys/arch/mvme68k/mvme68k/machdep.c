@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.19 1997/04/25 01:44:09 thorpej Exp $	*/
+/*	$NetBSD: machdep.c,v 1.19.2.1 1997/05/04 15:19:16 mrg Exp $	*/
 
 /*
  * Copyright (c) 1988 University of Utah.
@@ -466,7 +466,6 @@ allocsys(v)
 	valloc(cfree, struct cblock, nclist);
 #endif
 	valloc(callout, struct callout, ncallout);
-	valloc(swapmap, struct map, nswapmap = maxproc * 2);
 #ifdef SYSVSHM
 	valloc(shmsegs, struct shmid_ds, shminfo.shmmni);
 #endif
