@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 1995/06/09 22:26:18 gwr Exp $
+#	$NetBSD: Makefile,v 1.1.1.1 1995/06/09 22:26:18 gwr Exp $
 
 LIB=net
 
