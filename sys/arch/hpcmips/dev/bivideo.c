@@ -1,4 +1,4 @@
-/*	$NetBSD: bivideo.c,v 1.9 2000/07/02 10:01:31 takemura Exp $	*/
+/*	$NetBSD: bivideo.c,v 1.10 2000/07/22 08:53:35 takemura Exp $	*/
 
 /*-
  * Copyright (c) 1999
@@ -37,7 +37,7 @@
 static const char _copyright[] __attribute__ ((unused)) =
     "Copyright (c) 1999 Shin Takemura.  All rights reserved.";
 static const char _rcsid[] __attribute__ ((unused)) =
-    "$Id: bivideo.c,v 1.9 2000/07/02 10:01:31 takemura Exp $";
+    "$Id: bivideo.c,v 1.10 2000/07/22 08:53:35 takemura Exp $";
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -66,6 +66,11 @@ static const char _rcsid[] __attribute__ ((unused)) =
 #include <arch/hpcmips/dev/hpcfbio.h>
 #include <arch/hpcmips/dev/bivideovar.h>
 #include <arch/hpcmips/dev/hpccmapvar.h>
+
+/*
+ *  global variables
+ */
+int bivideo_dont_attach = 0;
 
 /*
  *  function prototypes
@@ -109,7 +114,8 @@ bivideomatch(parent, match, aux)
 {
 	struct mainbus_attach_args *ma = aux;
     
-	if (strcmp(ma->ma_name, match->cf_driver->cd_name))
+	if (bivideo_dont_attach ||
+	    strcmp(ma->ma_name, match->cf_driver->cd_name))
 		return 0;
 
 	return (1);
