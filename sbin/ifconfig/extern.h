@@ -1,4 +1,4 @@
-/*	$NetBSD: extern.h,v 1.1 2005/03/19 03:56:06 thorpej Exp $	*/
+/*	$NetBSD: extern.h,v 1.2 2005/03/19 17:32:26 thorpej Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -29,5 +29,20 @@
  * SUCH DAMAGE.
  */
 
+struct afswtch {
+	const char *af_name;
+	short af_af;
+	void (*af_status)(int);
+	void (*af_getaddr)(const char *, int);
+	void (*af_getprefix)(const char *, int);
+	u_long af_difaddr;
+	u_long af_aifaddr;
+	u_long af_gifaddr;
+	void *af_ridreq;
+	void *af_addreq;
+};
+
+extern struct afswtch *afp;
 extern struct ifreq ifr;
 extern int s;
+extern char name[30];
