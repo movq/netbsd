@@ -1,4 +1,4 @@
-/*	$NetBSD: file2swp.c,v 1.1 2002/02/27 20:14:39 leo Exp $	*/
+/*	$NetBSD: file2swp.c,v 1.1.1.1 2002/02/27 20:14:39 leo Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -44,7 +44,7 @@
 #include "cread.h"
 
 char		*Infile = "minifs.gz";
-const char	version[] = "$Revision: 1.1 $";
+const char	version[] = "$Revision: 1.1.1.1 $";
 
 extern const char	*program_name;
 

@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 2002/02/27 20:14:39 leo Exp $
+#	$NetBSD: Makefile,v 1.1.1.1 2002/02/27 20:14:39 leo Exp $
 
 PROG	= file2swp.ttp
 
