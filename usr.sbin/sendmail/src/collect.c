@@ -1,7 +1,7 @@
 /*
- * Copyright (c) 1983, 1995 Eric P. Allman
- * Copyright (c) 1988, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1983 Eric P. Allman
+ * Copyright (c) 1988 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,7 +33,7 @@
  */
 
 #ifndef lint
-static char sccsid[] = "@(#)collect.c	8.49 (Berkeley) 10/29/95";
+static char sccsid[] = "@(#)collect.c	5.9 (Berkeley) 6/1/90";
 #endif /* not lint */
 
 # include <errno.h>
@@ -47,15 +47,8 @@ static char sccsid[] = "@(#)collect.c	8.49 (Berkeley) 10/29/95";
 **	stripped off (after important information is extracted).
 **
 **	Parameters:
-**		fp -- file to read.
-**		smtpmode -- if set, we are running SMTP: give an RFC821
-**			style message to say we are ready to collect
-**			input, and never ignore a single dot to mean
-**			end of message.
-**		requeueflag -- this message will be requeued later, so
-**			don't do final processing on it.
-**		hdrp -- the location to stash the header.
-**		e -- the current envelope.
+**		sayok -- if set, give an ARPANET style message
+**			to say we are ready to collect input.
 **
 **	Returns:
 **		none.
@@ -65,414 +58,206 @@ static char sccsid[] = "@(#)collect.c	8.49 (Berkeley) 10/29/95";
 **		The from person may be set.
 */
 
-static jmp_buf	CtxCollectTimeout;
-static void	collecttimeout();
-static bool	CollectProgress;
-static EVENT	*CollectTimeout;
-
-/* values for input state machine */
-#define IS_NORM		0	/* middle of line */
-#define IS_BOL		1	/* beginning of line */
-#define IS_DOT		2	/* read a dot at beginning of line */
-#define IS_DOTCR	3	/* read ".\r" at beginning of line */
-#define IS_CR		4	/* read a carriage return */
-
-/* values for message state machine */
-#define MS_UFROM	0	/* reading Unix from line */
-#define MS_HEADER	1	/* reading message header */
-#define MS_BODY		2	/* reading message body */
-
-void
-collect(fp, smtpmode, requeueflag, hdrp, e)
-	FILE *fp;
-	bool smtpmode;
-	bool requeueflag;
-	HDR **hdrp;
-	register ENVELOPE *e;
+collect(sayok)
+	bool sayok;
 {
 	register FILE *tf;
-	bool ignrdot = smtpmode ? FALSE : IgnrDot;
-	time_t dbto = smtpmode ? TimeOuts.to_datablock : 0;
-	register char *bp;
-	int c = '\0';
-	bool inputerr = FALSE;
-	bool headeronly;
-	char *buf;
-	int buflen;
-	int istate;
-	int mstate;
-	char *pbp;
-	char peekbuf[8];
-	char dfname[20];
-	char bufbuf[MAXLINE];
-	extern bool isheader();
-	extern void eatheader();
-	extern void tferror();
-
-	headeronly = hdrp != NULL;
+	char buf[MAXFIELD], buf2[MAXFIELD];
+	register char *workbuf, *freebuf;
+	register int workbuflen;
+	extern char *hvalue();
+	extern bool isheader(), flusheol();
 
 	/*
 	**  Create the temp file name and create the file.
 	*/
 
-	if (!headeronly)
+	CurEnv->e_df = newstr(queuename(CurEnv, 'd'));
+	if ((tf = dfopen(CurEnv->e_df, "w")) == NULL)
 	{
-		struct stat stbuf;
-
-		strcpy(dfname, queuename(e, 'd'));
-		if ((tf = dfopen(dfname, O_WRONLY|O_CREAT|O_TRUNC, FileMode)) == NULL)
-		{
-			syserr("Cannot create %s", dfname);
-			e->e_flags |= EF_NO_BODY_RETN;
-			finis();
-		}
-		if (fstat(fileno(tf), &stbuf) < 0)
-			e->e_dfino = -1;
-		else
-		{
-			e->e_dfdev = stbuf.st_dev;
-			e->e_dfino = stbuf.st_ino;
-		}
-		HasEightBits = FALSE;
-		e->e_msgsize = 0;
-		e->e_flags |= EF_HAS_DF;
+		syserr("Cannot create %s", CurEnv->e_df);
+		NoReturn = TRUE;
+		finis();
 	}
+	(void) chmod(CurEnv->e_df, FileMode);
 
 	/*
 	**  Tell ARPANET to go ahead.
 	*/
 
-	if (smtpmode)
-		message("354 Enter mail, end with \".\" on a line by itself");
-
-	if (tTd(30, 2))
-		printf("collect\n");
+	if (sayok)
+		message("354", "Enter mail, end with \".\" on a line by itself");
 
 	/*
-	**  Read the message.
-	**
-	**	This is done using two interleaved state machines.
-	**	The input state machine is looking for things like
-	**	hidden dots; the message state machine is handling
-	**	the larger picture (e.g., header versus body).
+	**  Try to read a UNIX-style From line
 	*/
 
-	buf = bp = bufbuf;
-	buflen = sizeof bufbuf;
-	pbp = peekbuf;
-	istate = IS_BOL;
-	mstate = SaveFrom ? MS_HEADER : MS_UFROM;
-	CollectProgress = FALSE;
-
-	if (dbto != 0)
+	if (sfgets(buf, MAXFIELD, InChannel) == NULL)
+		goto readerr;
+	fixcrlf(buf, FALSE);
+# ifndef NOTUNIX
+	if (!SaveFrom && strncmp(buf, "From ", 5) == 0)
 	{
-		/* handle possible input timeout */
-		if (setjmp(CtxCollectTimeout) != 0)
-		{
-#ifdef LOG
-			syslog(LOG_NOTICE,
-			    "timeout waiting for input from %s during message collect",
-			    CurHostName ? CurHostName : "<local machine>");
-#endif
-			errno = 0;
-			usrerr("451 timeout waiting for input during message collect");
+		if (!flusheol(buf, InChannel))
 			goto readerr;
-		}
-		CollectTimeout = setevent(dbto, collecttimeout, dbto);
+		eatfrom(buf);
+		if (sfgets(buf, MAXFIELD, InChannel) == NULL)
+			goto readerr;
+		fixcrlf(buf, FALSE);
 	}
+# endif NOTUNIX
 
+	/*
+	**  Copy InChannel to temp file & do message editing.
+	**	To keep certain mailers from getting confused,
+	**	and to keep the output clean, lines that look
+	**	like UNIX "From" lines are deleted in the header.
+	*/
+
+	workbuf = buf;		/* `workbuf' contains a header field */
+	freebuf = buf2;		/* `freebuf' can be used for read-ahead */
 	for (;;)
 	{
-		if (tTd(30, 35))
-			printf("top, istate=%d, mstate=%d\n", istate, mstate);
+		/* first, see if the header is over */
+		if (!isheader(workbuf))
+		{
+			fixcrlf(workbuf, TRUE);
+			break;
+		}
+
+		/* if the line is too long, throw the rest away */
+		if (!flusheol(workbuf, InChannel))
+			goto readerr;
+
+		/* it's okay to toss '\n' now (flusheol() needed it) */
+		fixcrlf(workbuf, TRUE);
+
+		workbuflen = strlen(workbuf);
+
+		/* get the rest of this field */
 		for (;;)
 		{
-			if (pbp > peekbuf)
-				c = *--pbp;
-			else
-			{
-				while (!feof(fp) && !ferror(fp))
-				{
-					errno = 0;
-					c = getc(fp);
-					if (errno != EINTR)
-						break;
-					clearerr(fp);
-				}
-				CollectProgress = TRUE;
-				if (TrafficLogFile != NULL && !headeronly)
-				{
-					if (istate == IS_BOL)
-						fprintf(TrafficLogFile, "%05d <<< ",
-							getpid());
-					if (c == EOF)
-						fprintf(TrafficLogFile, "[EOF]\n");
-					else
-						putc(c, TrafficLogFile);
-				}
-				if (c == EOF)
-					goto readerr;
-				if (SevenBitInput)
-					c &= 0x7f;
-				else
-					HasEightBits |= bitset(0x80, c);
-				if (!headeronly)
-					e->e_msgsize++;
-			}
-			if (tTd(30, 94))
-				printf("istate=%d, c=%c (0x%x)\n",
-					istate, c, c);
-			switch (istate)
-			{
-			  case IS_BOL:
-				if (c == '.')
-				{
-					istate = IS_DOT;
-					continue;
-				}
-				break;
-
-			  case IS_DOT:
-				if (c == '\n' && !ignrdot &&
-				    !bitset(EF_NL_NOT_EOL, e->e_flags))
-					goto readerr;
-				else if (c == '\r' &&
-					 !bitset(EF_CRLF_NOT_EOL, e->e_flags))
-				{
-					istate = IS_DOTCR;
-					continue;
-				}
-				else if (c != '.' ||
-					 (OpMode != MD_SMTP &&
-					  OpMode != MD_DAEMON &&
-					  OpMode != MD_ARPAFTP))
-				{
-					*pbp++ = c;
-					c = '.';
-				}
-				break;
-
-			  case IS_DOTCR:
-				if (c == '\n')
-					goto readerr;
-				else
-				{
-					/* push back the ".\rx" */
-					*pbp++ = c;
-					*pbp++ = '\r';
-					c = '.';
-				}
-				break;
-
-			  case IS_CR:
-				if (c == '\n')
-					istate = IS_BOL;
-				else
-				{
-					ungetc(c, fp);
-					c = '\r';
-					istate = IS_NORM;
-				}
-				goto bufferchar;
-			}
-
-			if (c == '\r' && !bitset(EF_CRLF_NOT_EOL, e->e_flags))
-			{
-				istate = IS_CR;
-				continue;
-			}
-			else if (c == '\n' && !bitset(EF_NL_NOT_EOL, e->e_flags))
-				istate = IS_BOL;
-			else
-				istate = IS_NORM;
-
-bufferchar:
-			if (mstate == MS_BODY)
-			{
-				/* just put the character out */
-				if (MaxMessageSize <= 0 ||
-				    e->e_msgsize <= MaxMessageSize)
-					putc(c, tf);
-				continue;
-			}
-
-			/* header -- buffer up */
-			if (bp >= &buf[buflen - 2])
-			{
-				char *obuf;
-
-				if (mstate != MS_HEADER)
-					break;
-
-				/* out of space for header */
-				obuf = buf;
-				if (buflen < MEMCHUNKSIZE)
-					buflen *= 2;
-				else
-					buflen += MEMCHUNKSIZE;
-				buf = xalloc(buflen);
-				bcopy(obuf, buf, bp - obuf);
-				bp = &buf[bp - obuf];
-				if (obuf != bufbuf)
-					free(obuf);
-			}
-			if (c != '\0')
-				*bp++ = c;
-			if (istate == IS_BOL)
-				break;
-		}
-		*bp = '\0';
-
-nextstate:
-		if (tTd(30, 35))
-			printf("nextstate, istate=%d, mstate=%d, line = \"%s\"\n",
-				istate, mstate, buf);
-		switch (mstate)
-		{
-			extern int chompheader();
-
-		  case MS_UFROM:
-			mstate = MS_HEADER;
-#ifndef NOTUNIX
-			if (strncmp(buf, "From ", 5) == 0)
-			{
-				extern void eatfrom();
-
-				bp = buf;
-				eatfrom(buf, e);
-				continue;
-			}
-#endif
-			/* fall through */
-
-		  case MS_HEADER:
-			if (!isheader(buf))
-			{
-				mstate = MS_BODY;
-				goto nextstate;
-			}
-
-			/* check for possible continuation line */
-			do
-			{
-				clearerr(fp);
-				errno = 0;
-				c = getc(fp);
-			} while (errno == EINTR);
-			if (c != EOF)
-				ungetc(c, fp);
-			if (c == ' ' || c == '\t')
-			{
-				/* yep -- defer this */
-				continue;
-			}
-
-			/* trim off trailing CRLF or NL */
-			if (*--bp != '\n' || *--bp != '\r')
-				bp++;
-			*bp = '\0';
-			if (bitset(H_EOH, chompheader(buf, FALSE, hdrp, e)))
-				mstate = MS_BODY;
-			break;
-
-		  case MS_BODY:
-			if (tTd(30, 1))
-				printf("EOH\n");
-			if (headeronly)
+			if (sfgets(freebuf, MAXFIELD, InChannel) == NULL)
 				goto readerr;
-			bp = buf;
 
-			/* toss blank line */
-			if ((!bitset(EF_CRLF_NOT_EOL, e->e_flags) &&
-				bp[0] == '\r' && bp[1] == '\n') ||
-			    (!bitset(EF_NL_NOT_EOL, e->e_flags) &&
-				bp[0] == '\n'))
-			{
+			/* is this a continuation line? */
+			if (*freebuf != ' ' && *freebuf != '\t')
 				break;
-			}
 
-			/* if not a blank separator, write it out */
-			if (MaxMessageSize <= 0 ||
-			    e->e_msgsize <= MaxMessageSize)
+			if (!flusheol(freebuf, InChannel))
+				goto readerr;
+
+			/* yes; append line to `workbuf' if there's room */
+			if (workbuflen < MAXFIELD-3)
 			{
-				while (*bp != '\0')
-					putc(*bp++, tf);
+				register char *p = workbuf + workbuflen;
+				register char *q = freebuf;
+
+				/* we have room for more of this field */
+				fixcrlf(freebuf, TRUE);
+				*p++ = '\n'; workbuflen++;
+				while(*q != '\0' && workbuflen < MAXFIELD-1)
+				{
+					*p++ = *q++;
+					workbuflen++;
+				}
+				*p = '\0';
 			}
-			break;
 		}
-		bp = buf;
+
+		CurEnv->e_msgsize += workbuflen;
+
+		/*
+		**  The working buffer now becomes the free buffer, since
+		**  the free buffer contains a new header field.
+		**
+		**  This is premature, since we still havent called
+		**  chompheader() to process the field we just created
+		**  (so the call to chompheader() will use `freebuf').
+		**  This convolution is necessary so that if we break out
+		**  of the loop due to H_EOH, `workbuf' will always be
+		**  the next unprocessed buffer.
+		*/
+
+		{
+			register char *tmp = workbuf;
+			workbuf = freebuf;
+			freebuf = tmp;
+		}
+
+		/*
+		**  Snarf header away.
+		*/
+
+		if (bitset(H_EOH, chompheader(freebuf, FALSE)))
+			break;
 	}
+
+	if (tTd(30, 1))
+		printf("EOH\n");
+
+	if (*workbuf == '\0')
+	{
+		/* throw away a blank line */
+		if (sfgets(buf, MAXFIELD, InChannel) == NULL)
+			goto readerr;
+	}
+	else if (workbuf == buf2)	/* guarantee `buf' contains data */
+		(void) strcpy(buf, buf2);
+
+	/*
+	**  Collect the body of the message.
+	*/
+
+	do
+	{
+		register char *bp = buf;
+
+		fixcrlf(buf, TRUE);
+
+		/* check for end-of-message */
+		if (!IgnrDot && buf[0] == '.' && (buf[1] == '\n' || buf[1] == '\0'))
+			break;
+
+		/* check for transparent dot */
+		if (OpMode == MD_SMTP && !IgnrDot && bp[0] == '.' && bp[1] == '.')
+			bp++;
+
+		/*
+		**  Figure message length, output the line to the temp
+		**  file, and insert a newline if missing.
+		*/
+
+		CurEnv->e_msgsize += strlen(bp) + 1;
+		fputs(bp, tf);
+		fputs("\n", tf);
+		if (ferror(tf))
+			tferror(tf);
+	} while (sfgets(buf, MAXFIELD, InChannel) != NULL);
 
 readerr:
-	if ((feof(fp) && smtpmode) || ferror(fp))
-	{
-		const char *errmsg = errstring(errno);
-
-		if (tTd(30, 1))
-			printf("collect: premature EOM: %s\n", errmsg);
-#ifdef LOG
-		if (LogLevel >= 2)
-			syslog(LOG_WARNING, "collect: premature EOM: %s", errmsg);
-#endif
-		inputerr = TRUE;
-	}
-
-	/* reset global timer */
-	clrevent(CollectTimeout);
-
-	if (headeronly)
-		return;
-
-	if (tf != NULL &&
-	    (fflush(tf) != 0 || ferror(tf) || fsync(fileno(tf)) < 0 ||
-	     fclose(tf) < 0))
-	{
-		tferror(tf, e);
-		flush_errors(TRUE);
-		finis();
-	}
+	if (fflush(tf) != 0)
+		tferror(tf);
+	(void) fclose(tf);
 
 	/* An EOF when running SMTP is an error */
-	if (inputerr && (OpMode == MD_SMTP || OpMode == MD_DAEMON))
+	if ((feof(InChannel) || ferror(InChannel)) && OpMode == MD_SMTP)
 	{
-		char *host;
-		char *problem;
-
-		host = RealHostName;
-		if (host == NULL)
-			host = "localhost";
-
-		if (feof(fp))
-			problem = "unexpected close";
-		else if (ferror(fp))
-			problem = "I/O error";
-		else
-			problem = "read timeout";
+		int usrerr(), syserr();
 # ifdef LOG
-		if (LogLevel > 0 && feof(fp))
+		if (RealHostName != NULL && LogLevel > 0)
 			syslog(LOG_NOTICE,
-			    "collect: %s on connection from %.100s, sender=%s: %s",
-			    problem, host,
-			    shortenstring(e->e_from.q_paddr, 203),
-			    errstring(errno));
+			    "collect: unexpected close on connection from %s: %m\n",
+			    CurEnv->e_from.q_paddr, RealHostName);
 # endif
-		if (feof(fp))
-			usrerr("451 collect: %s on connection from %s, from=%s",
-				problem, host,
-				shortenstring(e->e_from.q_paddr, 203));
-		else
-			syserr("451 collect: %s on connection from %s, from=%s",
-				problem, host,
-				shortenstring(e->e_from.q_paddr, 203));
+		(feof(InChannel) ? usrerr: syserr)
+			("collect: unexpected close, from=%s", CurEnv->e_from.q_paddr);
 
 		/* don't return an error indication */
-		e->e_to = NULL;
-		e->e_flags &= ~EF_FATALERRS;
-		e->e_flags |= EF_CLRQUEUE;
+		CurEnv->e_to = NULL;
+		CurEnv->e_flags &= ~EF_FATALERRS;
 
 		/* and don't try to deliver the partial message either */
-		if (InChild)
-			ExitStat = EX_QUIT;
 		finis();
 	}
 
@@ -481,130 +266,67 @@ readerr:
 	**	Examples are who is the from person & the date.
 	*/
 
-	eatheader(e, !requeueflag);
-
-	if (GrabTo && e->e_sendqueue == NULL)
-		usrerr("No recipient addresses found in header");
-
-	/* collect statistics */
-	if (OpMode != MD_VERIFY)
-	{
-		extern void markstats();
-
-		markstats(e, (ADDRESS *) NULL);
-	}
+	eatheader(CurEnv);
 
 	/*
 	**  Add an Apparently-To: line if we have no recipient lines.
 	*/
 
-	if (hvalue("to", e->e_header) != NULL ||
-	    hvalue("cc", e->e_header) != NULL ||
-	    hvalue("apparently-to", e->e_header) != NULL)
+	if (hvalue("to") == NULL && hvalue("cc") == NULL &&
+	    hvalue("bcc") == NULL && hvalue("apparently-to") == NULL)
 	{
-		/* have a valid recipient header -- delete Bcc: headers */
-		e->e_flags |= EF_DELETE_BCC;
-	}
-	else if (hvalue("bcc", e->e_header) == NULL)
-	{
-		/* no valid recipient headers */
 		register ADDRESS *q;
-		char *hdr = NULL;
-		extern void addheader();
 
 		/* create an Apparently-To: field */
 		/*    that or reject the message.... */
-		switch (NoRecipientAction)
+		for (q = CurEnv->e_sendqueue; q != NULL; q = q->q_next)
 		{
-		  case NRA_ADD_APPARENTLY_TO:
-			hdr = "Apparently-To";
-			break;
-
-		  case NRA_ADD_TO:
-			hdr = "To";
-			break;
-
-		  case NRA_ADD_BCC:
-			addheader("Bcc", "", &e->e_header);
-			break;
-
-		  case NRA_ADD_TO_UNDISCLOSED:
-			addheader("To", "undisclosed-recipients:;", &e->e_header);
-			break;
-		}
-
-		if (hdr != NULL)
-		{
-			for (q = e->e_sendqueue; q != NULL; q = q->q_next)
-			{
-				if (q->q_alias != NULL)
-					continue;
-				if (tTd(30, 3))
-					printf("Adding %s: %s\n",
-						hdr, q->q_paddr);
-				addheader(hdr, q->q_paddr, &e->e_header);
-			}
+			if (q->q_alias != NULL)
+				continue;
+			if (tTd(30, 3))
+				printf("Adding Apparently-To: %s\n", q->q_paddr);
+			addheader("apparently-to", q->q_paddr, CurEnv);
 		}
 	}
 
-	/* check for message too large */
-	if (MaxMessageSize > 0 && e->e_msgsize > MaxMessageSize)
-	{
-		e->e_status = "5.2.3";
-		usrerr("552 Message exceeds maximum fixed size (%ld)",
-			MaxMessageSize);
-# ifdef LOG
-		if (LogLevel > 6)
-			syslog(LOG_NOTICE, "%s: message size (%ld) exceeds maximum (%ld)",
-				e->e_id, e->e_msgsize, MaxMessageSize);
-# endif
-	}
-
-	/* check for illegal 8-bit data */
-	if (HasEightBits)
-	{
-		e->e_flags |= EF_HAS8BIT;
-		if (!bitset(MM_PASS8BIT|MM_MIME8BIT, MimeMode))
-		{
-			e->e_status = "5.6.1";
-			usrerr("554 Eight bit data not allowed");
-		}
-	}
-	else
-	{
-		/* if it claimed to be 8 bits, well, it lied.... */
-		if (e->e_bodytype != NULL &&
-		    strcasecmp(e->e_bodytype, "8BITMIME") == 0)
-			e->e_bodytype = "7BIT";
-	}
-
-	if ((e->e_dfp = fopen(dfname, "r")) == NULL)
-	{
-		/* we haven't acked receipt yet, so just chuck this */
-		syserr("Cannot reopen %s", dfname);
-		finis();
-	}
+	if ((CurEnv->e_dfp = fopen(CurEnv->e_df, "r")) == NULL)
+		syserr("Cannot reopen %s", CurEnv->e_df);
 }
+/*
+**  FLUSHEOL -- if not at EOL, throw away rest of input line.
+**
+**	Parameters:
+**		buf -- last line read in (checked for '\n'),
+**		fp -- file to be read from.
+**
+**	Returns:
+**		FALSE on error from sfgets(), TRUE otherwise.
+**
+**	Side Effects:
+**		none.
+*/
 
-
-static void
-collecttimeout(timeout)
-	time_t timeout;
+bool
+flusheol(buf, fp)
+	char *buf;
+	FILE *fp;
 {
-	/* if no progress was made, die now */
-	if (!CollectProgress)
-		longjmp(CtxCollectTimeout, 1);
+	char junkbuf[MAXLINE], *sfgets();
+	register char *p = buf;
 
-	/* otherwise reset the timeout */
-	CollectTimeout = setevent(timeout, collecttimeout, timeout);
-	CollectProgress = FALSE;
+	while (index(p, '\n') == NULL) {
+		if (sfgets(junkbuf,MAXLINE,fp) == NULL)
+			return(FALSE);
+		p = junkbuf;
+	}
+
+	return(TRUE);
 }
 /*
 **  TFERROR -- signal error on writing the temporary file.
 **
 **	Parameters:
 **		tf -- the file pointer for the temporary file.
-**		e -- the current envelope.
 **
 **	Returns:
 **		none.
@@ -614,47 +336,17 @@ collecttimeout(timeout)
 **		Arranges for following output to go elsewhere.
 */
 
-void
-tferror(tf, e)
+tferror(tf)
 	FILE *tf;
-	register ENVELOPE *e;
 {
-	setstat(EX_IOERR);
 	if (errno == ENOSPC)
 	{
-		struct stat st;
-		long avail;
-		long bsize;
-
-		e->e_flags |= EF_NO_BODY_RETN;
-		if (fstat(fileno(tf), &st) < 0)
-			st.st_size = 0;
-		(void) freopen(queuename(e, 'd'), "w", tf);
-		if (st.st_size <= 0)
-			fprintf(tf, "\n*** Mail could not be accepted");
-		else if (sizeof st.st_size > sizeof (long))
-			fprintf(tf, "\n*** Mail of at least %qd bytes could not be accepted\n",
-				st.st_size);
-		else
-			fprintf(tf, "\n*** Mail of at least %ld bytes could not be accepted\n",
-				st.st_size);
-		fprintf(tf, "*** at %s due to lack of disk space for temp file.\n",
-			MyHostName);
-		avail = freediskspace(QueueDir, &bsize);
-		if (avail > 0)
-		{
-			if (bsize > 1024)
-				avail *= bsize / 1024;
-			else if (bsize < 1024)
-				avail /= 1024 / bsize;
-			fprintf(tf, "*** Currently, %ld kilobytes are available for mail temp files.\n",
-				avail);
-		}
-		e->e_status = "4.3.1";
+		(void) freopen(CurEnv->e_df, "w", tf);
+		fputs("\nMAIL DELETED BECAUSE OF LACK OF DISK SPACE\n\n", tf);
 		usrerr("452 Out of disk space for temp file");
 	}
 	else
-		syserr("collect: Cannot write tf%s", e->e_id);
+		syserr("collect: Cannot write %s", CurEnv->e_df);
 	(void) freopen("/dev/null", "w", tf);
 }
 /*
@@ -688,10 +380,8 @@ char	*MonthList[] =
 	NULL
 };
 
-void
-eatfrom(fm, e)
+eatfrom(fm)
 	char *fm;
-	register ENVELOPE *e;
 {
 	register char *p;
 	register char **dt;
@@ -708,8 +398,7 @@ eatfrom(fm, e)
 			p++;
 		while (*p == ' ')
 			p++;
-		if (!(isascii(*p) && isupper(*p)) ||
-		    p[3] != ' ' || p[13] != ':' || p[16] != ':')
+		if (!isupper(*p) || p[3] != ' ' || p[13] != ':' || p[16] != ':')
 			continue;
 
 		/* we have a possible date */
@@ -726,7 +415,7 @@ eatfrom(fm, e)
 			break;
 	}
 
-	if (*p != '\0')
+	if (*p != NULL)
 	{
 		char *q;
 		extern char *arpadate();
@@ -735,9 +424,10 @@ eatfrom(fm, e)
 		q = xalloc(25);
 		(void) strncpy(q, p, 25);
 		q[24] = '\0';
+		define('d', q, CurEnv);
 		q = arpadate(q);
-		define('a', newstr(q), e);
+		define('a', newstr(q), CurEnv);
 	}
 }
 
-# endif /* NOTUNIX */
+# endif NOTUNIX

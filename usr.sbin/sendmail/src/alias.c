@@ -1,7 +1,7 @@
 /*
- * Copyright (c) 1983, 1995 Eric P. Allman
- * Copyright (c) 1988, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1983 Eric P. Allman
+ * Copyright (c) 1988 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,16 +32,27 @@
  * SUCH DAMAGE.
  */
 
-# include "sendmail.h"
-
 #ifndef lint
-static char sccsid[] = "@(#)alias.c	8.52 (Berkeley) 10/28/95";
+#ifdef DBM
+static char sccsid[] = "@(#)alias.c	5.22 (Berkeley) 3/2/91 (with DBM)";
+#else
+#ifdef USE_DB
+static char sccsid[] = "@(#)alias.c	5.22 (Berkeley) 3/2/91 (with DB)";
+#else
+static char sccsid[] = "@(#)alias.c	5.22 (Berkeley) 3/2/91 (without DBM)";
+#endif
+#endif
 #endif /* not lint */
 
+# include <sys/types.h>
+# include <sys/stat.h>
+# include <signal.h>
+# include <errno.h>
+# include "sendmail.h"
+# include <sys/file.h>
+# include <pwd.h>
 
-MAP	*AliasFileMap = NULL;	/* the actual aliases.files map */
-int	NAliasFileMaps;		/* the number of entries in AliasFileMap */
-/*
+/*
 **  ALIAS -- Compute aliases.
 **
 **	Scans the alias file for an alias for the given address.
@@ -52,8 +63,6 @@ int	NAliasFileMaps;		/* the number of entries in AliasFileMap */
 **		a -- address to alias.
 **		sendq -- a pointer to the head of the send queue
 **			to put the aliases in.
-**		aliaslevel -- the current alias nesting depth.
-**		e -- the current envelope.
 **
 **	Returns:
 **		none
@@ -61,53 +70,56 @@ int	NAliasFileMaps;		/* the number of entries in AliasFileMap */
 **	Side Effects:
 **		Aliases found are expanded.
 **
+**	Notes:
+**		If NoAlias (the "-n" flag) is set, no aliasing is
+**			done.
+**
 **	Deficiencies:
 **		It should complain about names that are aliased to
 **			nothing.
 */
 
-void
-alias(a, sendq, aliaslevel, e)
+
+#ifdef DBM
+typedef struct
+{
+	char	*dptr;
+	int	dsize;
+} DATUM;
+extern DATUM fetch();
+#endif DBM
+# ifdef USE_DB
+# include <db.h>
+/*
+** DB is a database structure containing pointers to access methods.
+*/
+static DB *aliasdb;
+# endif USE_DB
+
+alias(a, sendq)
 	register ADDRESS *a;
 	ADDRESS **sendq;
-	int aliaslevel;
-	register ENVELOPE *e;
 {
 	register char *p;
-	int naliases;
-	char *owner;
-	auto int stat = EX_OK;
-	char obuf[MAXNAME + 6];
 	extern char *aliaslookup();
 
 	if (tTd(27, 1))
-		printf("alias(%s)\n", a->q_user);
+		printf("alias(%s)\n", a->q_paddr);
 
 	/* don't realias already aliased names */
-	if (bitset(QDONTSEND|QBADADDR|QVERIFIED, a->q_flags))
+	if (bitset(QDONTSEND, a->q_flags))
 		return;
 
-	if (NoAlias)
-		return;
-
-	e->e_to = a->q_paddr;
+	CurEnv->e_to = a->q_paddr;
 
 	/*
-	**  Look up this name.
-	**
-	**	If the map was unavailable, we will queue this message
-	**	until the map becomes available; otherwise, we could
-	**	bounce messages inappropriately.
+	**  Look up this name
 	*/
 
-	p = aliaslookup(a->q_user, &stat, e);
-	if (stat == EX_TEMPFAIL || stat == EX_UNAVAILABLE)
-	{
-		a->q_flags |= QQUEUEUP;
-		if (e->e_message == NULL)
-			e->e_message = "alias database unavailable";
-		return;
-	}
+	if (NoAlias)
+		p = NULL;
+	else
+		p = aliaslookup(a->q_user);
 	if (p == NULL)
 		return;
 
@@ -119,63 +131,16 @@ alias(a, sendq, aliaslevel, e)
 	if (tTd(27, 1))
 		printf("%s (%s, %s) aliased to %s\n",
 		    a->q_paddr, a->q_host, a->q_user, p);
-	if (bitset(EF_VRFYONLY, e->e_flags))
-	{
-		a->q_flags |= QVERIFIED;
-		return;
-	}
-	message("aliased to %s", shortenstring(p, 203));
-#ifdef LOG
-	if (LogLevel > 9)
-		syslog(LOG_INFO, "%s: alias %.100s => %s",
-			e->e_id == NULL ? "NOQUEUE" : e->e_id,
-			a->q_paddr, shortenstring(p, 203));
-#endif
-	a->q_flags &= ~QSELFREF;
-	if (tTd(27, 5))
-	{
-		printf("alias: QDONTSEND ");
-		printaddr(a, FALSE);
-	}
-	a->q_flags |= QDONTSEND;
-	naliases = sendtolist(p, a, sendq, aliaslevel + 1, e);
-	if (bitset(QSELFREF, a->q_flags))
-		a->q_flags &= ~QDONTSEND;
-
-	/*
-	**  Look for owner of alias
-	*/
-
-	(void) strcpy(obuf, "owner-");
-	if (strncmp(a->q_user, "owner-", 6) == 0)
-		(void) strcat(obuf, "owner");
-	else
-		(void) strcat(obuf, a->q_user);
-	if (!bitnset(M_USR_UPPER, a->q_mailer->m_flags))
-		makelower(obuf);
-	owner = aliaslookup(obuf, &stat, e);
-	if (owner == NULL)
-		return;
-
-	/* reflect owner into envelope sender */
-	if (strpbrk(owner, ",:/|\"") != NULL)
-		owner = obuf;
-	a->q_owner = newstr(owner);
-
-	/* announce delivery to this alias; NORECEIPT bit set later */
-	if (e->e_xfp != NULL)
-		fprintf(e->e_xfp, "Message delivered to mailing list %s\n",
-			a->q_paddr);
-	e->e_flags |= EF_SENDRECEIPT;
-	a->q_flags |= QDELIVERED|QEXPANDED;
+	message(Arpa_Info, "aliased to %s", p);
+	AliasLevel++;
+	sendtolist(p, a, sendq);
+	AliasLevel--;
 }
 /*
 **  ALIASLOOKUP -- look up a name in the alias file.
 **
 **	Parameters:
 **		name -- the name to look up.
-**		pstat -- a pointer to a place to put the status.
-**		e -- the current envelope.
 **
 **	Returns:
 **		the value of name.
@@ -189,371 +154,210 @@ alias(a, sendq, aliaslevel, e)
 */
 
 char *
-aliaslookup(name, pstat, e)
+aliaslookup(name)
 	char *name;
-	int *pstat;
-	ENVELOPE *e;
 {
-	static MAP *map = NULL;
+# ifdef DBM
+	DATUM rhs, lhs;
 
-	if (map == NULL)
-	{
-		STAB *s = stab("aliases", ST_MAP, ST_FIND);
+	/* create a key for fetch */
+	lhs.dptr = name;
+	lhs.dsize = strlen(name) + 1;
+	rhs = fetch(lhs);
+	return (rhs.dptr);
+# else DBM
+# ifdef USE_DB
+	DBT rhs, lhs;
 
-		if (s == NULL)
-			return NULL;
-		map = &s->s_map;
-	}
-	if (!bitset(MF_OPEN, map->map_mflags))
-		return NULL;
-	return (*map->map_class->map_lookup)(map, name, NULL, pstat);
+	/* create a key for fetch */
+	lhs.data = name;
+	lhs.size = strlen(name) + 1;
+	aliasdb->get(aliasdb, &lhs, &rhs, 0);
+	return (rhs.data);
+# else USE_DB
+	register STAB *s;
+
+	s = stab(name, ST_ALIAS, ST_FIND);
+	if (s == NULL)
+		return (NULL);
+	return (s->s_alias);
+# endif USE_DB
+# endif DBM
 }
 /*
-**  SETALIAS -- set up an alias map
+**  INITALIASES -- initialize for aliasing
 **
-**	Called when reading configuration file.
-**
-**	Parameters:
-**		spec -- the alias specification
-**
-**	Returns:
-**		none.
-*/
-
-void
-setalias(spec)
-	char *spec;
-{
-	register char *p;
-	register MAP *map;
-	char *class;
-	STAB *s;
-
-	if (tTd(27, 8))
-		printf("setalias(%s)\n", spec);
-
-	for (p = spec; p != NULL; )
-	{
-		char buf[50];
-
-		while (isspace(*p))
-			p++;
-		if (*p == '\0')
-			break;
-		spec = p;
-
-		if (NAliasFileMaps >= MAXMAPSTACK)
-		{
-			syserr("Too many alias databases defined, %d max",
-				MAXMAPSTACK);
-			return;
-		}
-		if (AliasFileMap == NULL)
-		{
-			strcpy(buf, "aliases.files sequence");
-			AliasFileMap = makemapentry(buf);
-			if (AliasFileMap == NULL)
-			{
-				syserr("setalias: cannot create aliases.files map");
-				return;
-			}
-		}
-		(void) sprintf(buf, "Alias%d", NAliasFileMaps);
-		s = stab(buf, ST_MAP, ST_ENTER);
-		map = &s->s_map;
-		bzero(map, sizeof *map);
-		map->map_mname = s->s_name;
-
-		p = strpbrk(p, " ,/:");
-		if (p != NULL && *p == ':')
-		{
-			/* map name */
-			*p++ = '\0';
-			class = spec;
-			spec = p;
-		}
-		else
-		{
-			class = "implicit";
-			map->map_mflags = MF_OPTIONAL|MF_INCLNULL;
-		}
-
-		/* find end of spec */
-		if (p != NULL)
-			p = strchr(p, ',');
-		if (p != NULL)
-			*p++ = '\0';
-
-		if (tTd(27, 20))
-			printf("  map %s:%s %s\n", class, s->s_name, spec);
-
-		/* look up class */
-		s = stab(class, ST_MAPCLASS, ST_FIND);
-		if (s == NULL)
-		{
-			if (tTd(27, 1))
-				printf("Unknown alias class %s\n", class);
-		}
-		else if (!bitset(MCF_ALIASOK, s->s_mapclass.map_cflags))
-		{
-			syserr("setalias: map class %s can't handle aliases",
-				class);
-		}
-		else
-		{
-			map->map_class = &s->s_mapclass;
-			if (map->map_class->map_parse(map, spec))
-			{
-				map->map_mflags |= MF_VALID|MF_ALIAS;
-				AliasFileMap->map_stack[NAliasFileMaps++] = map;
-			}
-		}
-	}
-}
-/*
-**  ALIASWAIT -- wait for distinguished @:@ token to appear.
-**
-**	This can decide to reopen or rebuild the alias file
+**	Very different depending on whether we are running DBM or not.
 **
 **	Parameters:
-**		map -- a pointer to the map descriptor for this alias file.
-**		ext -- the filename extension (e.g., ".db") for the
-**			database file.
-**		isopen -- if set, the database is already open, and we
-**			should check for validity; otherwise, we are
-**			just checking to see if it should be created.
-**
-**	Returns:
-**		TRUE -- if the database is open when we return.
-**		FALSE -- if the database is closed when we return.
-*/
-
-bool
-aliaswait(map, ext, isopen)
-	MAP *map;
-	char *ext;
-	int isopen;
-{
-	bool attimeout = FALSE;
-	time_t mtime;
-	struct stat stb;
-	char buf[MAXNAME + 1];
-
-	if (tTd(27, 3))
-		printf("aliaswait(%s:%s)\n",
-			map->map_class->map_cname, map->map_file);
-	if (bitset(MF_ALIASWAIT, map->map_mflags))
-		return isopen;
-	map->map_mflags |= MF_ALIASWAIT;
-
-	if (SafeAlias > 0)
-	{
-		auto int st;
-		time_t toolong = curtime() + SafeAlias;
-		unsigned int sleeptime = 2;
-
-		while (isopen &&
-		       map->map_class->map_lookup(map, "@", NULL, &st) == NULL)
-		{
-			if (curtime() > toolong)
-			{
-				/* we timed out */
-				attimeout = TRUE;
-				break;
-			}
-
-			/*
-			**  Close and re-open the alias database in case
-			**  the one is mv'ed instead of cp'ed in.
-			*/
-
-			if (tTd(27, 2))
-				printf("aliaswait: sleeping for %d seconds\n",
-					sleeptime);
-
-			map->map_class->map_close(map);
-			map->map_mflags &= ~(MF_OPEN|MF_WRITABLE);
-			sleep(sleeptime);
-			sleeptime *= 2;
-			if (sleeptime > 60)
-				sleeptime = 60;
-			isopen = map->map_class->map_open(map, O_RDONLY);
-		}
-	}
-
-	/* see if we need to go into auto-rebuild mode */
-	if (!bitset(MCF_REBUILDABLE, map->map_class->map_cflags))
-	{
-		if (tTd(27, 3))
-			printf("aliaswait: not rebuildable\n");
-		map->map_mflags &= ~MF_ALIASWAIT;
-		return isopen;
-	}
-	if (stat(map->map_file, &stb) < 0)
-	{
-		if (tTd(27, 3))
-			printf("aliaswait: no source file\n");
-		map->map_mflags &= ~MF_ALIASWAIT;
-		return isopen;
-	}
-	mtime = stb.st_mtime;
-	(void) strcpy(buf, map->map_file);
-	if (ext != NULL)
-		(void) strcat(buf, ext);
-	if (stat(buf, &stb) < 0 || stb.st_mtime < mtime || attimeout)
-	{
-		/* database is out of date */
-		if (AutoRebuild && stb.st_ino != 0 && stb.st_uid == geteuid())
-		{
-			bool oldSuprErrs;
-
-			message("auto-rebuilding alias database %s", buf);
-			oldSuprErrs = SuprErrs;
-			SuprErrs = TRUE;
-			if (isopen)
-			{
-				map->map_class->map_close(map);
-				map->map_mflags &= ~(MF_OPEN|MF_WRITABLE);
-			}
-			rebuildaliases(map, TRUE);
-			isopen = map->map_class->map_open(map, O_RDONLY);
-			SuprErrs = oldSuprErrs;
-		}
-		else
-		{
-#ifdef LOG
-			if (LogLevel > 3)
-				syslog(LOG_INFO, "alias database %s out of date",
-					buf);
-#endif /* LOG */
-			message("Warning: alias database %s out of date", buf);
-		}
-	}
-	map->map_mflags &= ~MF_ALIASWAIT;
-	return isopen;
-}
-/*
-**  REBUILDALIASES -- rebuild the alias database.
-**
-**	Parameters:
-**		map -- the database to rebuild.
-**		automatic -- set if this was automatically generated.
+**		aliasfile -- location of aliases.
+**		init -- if set and if DBM, initialize the DBM files.
 **
 **	Returns:
 **		none.
 **
 **	Side Effects:
-**		Reads the text version of the database, builds the
-**		DBM or DB version.
+**		initializes aliases:
+**		if DBM:  opens the database.
+**		if ~DBM: reads the aliases into the symbol table.
 */
 
-void
-rebuildaliases(map, automatic)
-	register MAP *map;
-	bool automatic;
+# define DBMMODE	0644
+# define DBEXTENSION	".db"	/* extension for the database filename */
+
+initaliases(aliasfile, init)
+	char *aliasfile;
+	bool init;
 {
-	FILE *af;
-	bool nolock = FALSE;
-	sigfunc_t oldsigint, oldsigquit;
-#ifdef SIGTSTP
-	sigfunc_t oldsigtstp;
+#if defined (DBM) || defined (USE_DB)
+	int atcnt;
+	time_t modtime;
+	bool automatic = FALSE;
+	char buf[MAXNAME];
 #endif
+	struct stat stb;
+	static bool initialized = FALSE;
+	static int readaliases();
 
-	if (!bitset(MCF_REBUILDABLE, map->map_class->map_cflags))
+	if (initialized)
 		return;
+	initialized = TRUE;
 
-	/* try to lock the source file */
-	if ((af = fopen(map->map_file, "r+")) == NULL)
+	if (aliasfile == NULL || stat(aliasfile, &stb) < 0)
 	{
-		struct stat stb;
-
-		if ((errno != EACCES && errno != EROFS) || automatic ||
-		    (af = fopen(map->map_file, "r")) == NULL)
-		{
-			int saveerr = errno;
-
-			if (tTd(27, 1))
-				printf("Can't open %s: %s\n",
-					map->map_file, errstring(saveerr));
-			if (!automatic && !bitset(MF_OPTIONAL, map->map_mflags))
-				message("newaliases: cannot open %s: %s",
-					map->map_file, errstring(saveerr));
-			errno = 0;
-			return;
-		}
-		nolock = TRUE;
-		if (tTd(27, 1) ||
-		    fstat(fileno(af), &stb) < 0 ||
-		    bitset(S_IWUSR|S_IWGRP|S_IWOTH, stb.st_mode))
-			message("warning: cannot lock %s: %s",
-				map->map_file, errstring(errno));
-	}
-
-	/* see if someone else is rebuilding the alias file */
-	if (!nolock &&
-	    !lockfile(fileno(af), map->map_file, NULL, LOCK_EX|LOCK_NB))
-	{
-		/* yes, they are -- wait until done */
-		message("Alias file %s is already being rebuilt",
-			map->map_file);
-		if (OpMode != MD_INITALIAS)
-		{
-			/* wait for other rebuild to complete */
-			(void) lockfile(fileno(af), map->map_file, NULL,
-					LOCK_EX);
-		}
-		(void) xfclose(af, "rebuildaliases1", map->map_file);
+		if (aliasfile != NULL && init)
+			syserr("Cannot open %s", aliasfile);
+		NoAlias = TRUE;
 		errno = 0;
 		return;
 	}
 
-	/* avoid denial-of-service attacks */
-	resetlimits();
-	oldsigint = setsignal(SIGINT, SIG_IGN);
-	oldsigquit = setsignal(SIGQUIT, SIG_IGN);
-#ifdef SIGTSTP
-	oldsigtstp = setsignal(SIGTSTP, SIG_IGN);
-#endif
+#if defined (DBM) || defined (USE_DB)
+	/*
+	**  Check to see that the alias file is complete.
+	**	If not, we will assume that someone died, and it is up
+	**	to us to rebuild it.
+	*/
 
-	if (map->map_class->map_open(map, O_RDWR))
+	if (!init)
+# ifdef DBM
+		dbminit(aliasfile);
+# endif
+# ifdef USE_DB
+	  {
+	    (void) strcpy(buf, aliasfile);
+	    (void) strcat(buf, DBEXTENSION);
+	    if (aliasdb) aliasdb->close (aliasdb);
+	    aliasdb = btree_open (buf, O_RDWR, DBMMODE, 0);
+	    if (aliasdb == NULL)
+	      {
+		syserr("Cannot open database %s", buf);
+		NoAlias = TRUE;
+		return;
+	      }
+	  }
+# endif USE_DB
+	atcnt = SafeAlias * 2;
+	if (atcnt > 0)
 	{
-#ifdef LOG
-		if (LogLevel > 7)
+		while (!init && atcnt-- >= 0 && aliaslookup("@") == NULL)
 		{
-			syslog(LOG_NOTICE, "alias database %s %srebuilt by %s",
-				map->map_file, automatic ? "auto" : "",
-				username());
+			/*
+			**  Reinitialize alias file in case the new
+			**  one is mv'ed in instead of cp'ed in.
+			**
+			**	Only works with new DBM -- old one will
+			**	just consume file descriptors forever.
+			**	If you have a dbmclose() it can be
+			**	added before the sleep(30).
+			*/
+
+# ifdef USE_DB
+		        if(aliasdb)
+				aliasdb->close (aliasdb); 
+# endif USE_DB
+			sleep(30);
+# ifdef NDBM
+			dbminit(aliasfile);
+# endif NDBM
+# ifdef USE_DB
+			aliasdb = btree_open (buf, O_RDWR, DBMMODE, 0);
+			if (aliasdb == NULL)
+			  {
+			    syserr("Cannot open database %s", buf);
+			    NoAlias = TRUE;
+			    return;
+			  }
+# endif USE_DB
 		}
-#endif /* LOG */
-		map->map_mflags |= MF_OPEN|MF_WRITABLE;
-		readaliases(map, af, !automatic, TRUE);
 	}
 	else
+		atcnt = 1;
+
+	/*
+	**  See if the DBM version of the file is out of date with
+	**  the text version.  If so, go into 'init' mode automatically.
+	**	This only happens if our effective userid owns the DBM.
+	**	Note the unpalatable hack to see if the stat succeeded.
+	*/
+
+	modtime = stb.st_mtime;
+	(void) strcpy(buf, aliasfile);
+# ifdef DBM
+	(void) strcat(buf, ".pag");
+# endif DBM
+# ifdef USE_DB
+	(void) strcat(buf, DBEXTENSION);
+# endif USE_DB
+	stb.st_ino = 0;
+	if (!init && (stat(buf, &stb) < 0 || stb.st_mtime < modtime || atcnt < 0))
 	{
-		if (tTd(27, 1))
-			printf("Can't create database for %s: %s\n",
-				map->map_file, errstring(errno));
-		if (!automatic)
-			syserr("Cannot create database for alias file %s",
-				map->map_file);
+		errno = 0;
+		if (AutoRebuild && stb.st_ino != 0 && stb.st_uid == geteuid())
+		{
+			init = TRUE;
+			automatic = TRUE;
+			message(Arpa_Info, "rebuilding alias database");
+#ifdef LOG
+			if (LogLevel >= 7)
+				syslog(LOG_INFO, "rebuilding alias database");
+#endif LOG
+		}
+		else
+		{
+#ifdef LOG
+			if (LogLevel >= 7)
+				syslog(LOG_INFO, "alias database out of date");
+#endif LOG
+			message(Arpa_Info, "Warning: alias database out of date");
+		}
 	}
 
-	/* close the file, thus releasing locks */
-	xfclose(af, "rebuildaliases2", map->map_file);
 
-	/* add distinguished entries and close the database */
-	if (bitset(MF_OPEN, map->map_mflags))
+	/*
+	**  If necessary, load the DBM file.
+	**	If running without DBM, load the symbol table.
+	*/
+
+	if (init)
 	{
-		map->map_class->map_close(map);
-		map->map_mflags &= ~(MF_OPEN|MF_WRITABLE);
-	}
+#ifdef LOG
+		if (LogLevel >= 6)
+		{
+			extern char *username();
 
-	/* restore the old signals */
-	(void) setsignal(SIGINT, oldsigint);
-	(void) setsignal(SIGQUIT, oldsigquit);
-#ifdef SIGTSTP
-	(void) setsignal(SIGTSTP, oldsigtstp);
-#endif
+			syslog(LOG_NOTICE, "alias database %srebuilt by %s",
+				automatic ? "auto" : "", username());
+		}
+#endif LOG
+		readaliases(aliasfile, TRUE);
+# ifdef USE_DB
+		aliasdb->sync (aliasdb);
+# endif USE_DB
+	}
+#else /* defined (DBM) || defined (USE_DB) */
+	readaliases(aliasfile, init);
+#endif /* defined (DBM) || defined (USE_DB) */
 }
 /*
 **  READALIASES -- read and process the alias file.
@@ -562,11 +366,8 @@ rebuildaliases(map, automatic)
 **	when we are not going to use the DBM stuff.
 **
 **	Parameters:
-**		map -- the alias database descriptor.
-**		af -- file to read the aliases from.
-**		announcestats -- anounce statistics regarding number of
-**			aliases, longest alias, etc.
-**		logstats -- lot the same info.
+**		aliasfile -- the pathname of the alias file master.
+**		init -- if set, initialize the DBM stuff.
 **
 **	Returns:
 **		none.
@@ -576,25 +377,96 @@ rebuildaliases(map, automatic)
 **		Optionally, builds the .dir & .pag files.
 */
 
-void
-readaliases(map, af, announcestats, logstats)
-	register MAP *map;
-	FILE *af;
-	bool announcestats;
-	bool logstats;
+static
+readaliases(aliasfile, init)
+	char *aliasfile;
+	bool init;
 {
 	register char *p;
 	char *rhs;
 	bool skipping;
-	long naliases, bytes, longest;
+	int naliases, bytes, longest;
+	FILE *af;
+	void (*oldsigint)();
 	ADDRESS al, bl;
+	register STAB *s;
 	char line[BUFSIZ];
+
+	if ((af = fopen(aliasfile, "r")) == NULL)
+	{
+		if (tTd(27, 1))
+			printf("Can't open %s\n", aliasfile);
+		errno = 0;
+		NoAlias++;
+		return;
+	}
+
+#if defined (DBM) || defined (USE_DB)
+	/* see if someone else is rebuilding the alias file already */
+	if (flock(fileno(af), LOCK_EX | LOCK_NB) < 0 && errno == EWOULDBLOCK)
+	{
+		/* yes, they are -- wait until done and then return */
+		message(Arpa_Info, "Alias file is already being rebuilt");
+		if (OpMode != MD_INITALIAS)
+		{
+			/* wait for other rebuild to complete */
+			(void) flock(fileno(af), LOCK_EX);
+		}
+		(void) fclose(af);
+		errno = 0;
+		return;
+	}
+
+	/*
+	**  If initializing, create the new DBM files.
+	*/
+
+	if (init)
+	{
+		oldsigint = signal(SIGINT, SIG_IGN);
+# ifdef USE_DB
+		if (aliasdb) aliasdb->close (aliasdb);
+# endif USE_DB
+		(void) strcpy(line, aliasfile);
+# ifdef DBM
+		(void) strcat(line, ".dir");
+		if (close(creat(line, DBMMODE)) < 0)
+		{
+			syserr("cannot make %s", line);
+			(void) signal(SIGINT, oldsigint);
+			return;
+		}
+		(void) strcpy(line, aliasfile);
+		(void) strcat(line, ".pag");
+		if (close(creat(line, DBMMODE)) < 0)
+		{
+			syserr("cannot make %s", line);
+			(void) signal(SIGINT, oldsigint);
+			return;
+		}
+		dbminit(aliasfile);
+# endif DBM
+# ifdef USE_DB
+		(void) strcat(line, DBEXTENSION);
+		/* unconditionally remove the database file so that a
+		   corrupt file cannot cause the following open to fail */
+		unlink (line);
+		aliasdb = btree_open (line, O_RDWR|O_CREAT, DBMMODE, 0);
+		if (aliasdb == NULL)
+		{
+			syserr("Cannot open database file %s", line);
+			(void) signal(SIGINT, oldsigint);
+			return;
+		}
+# endif USE_DB
+	}
+#endif /* defined (DBM) || defined (USE_DB) */
 
 	/*
 	**  Read and interpret lines
 	*/
 
-	FileName = map->map_file;
+	FileName = aliasfile;
 	LineNumber = 0;
 	naliases = bytes = longest = 0;
 	skipping = FALSE;
@@ -603,7 +475,7 @@ readaliases(map, af, announcestats, logstats)
 		int lhssize, rhssize;
 
 		LineNumber++;
-		p = strchr(line, '\n');
+		p = index(line, '\n');
 		if (p != NULL)
 			*p = '\0';
 		switch (line[0])
@@ -616,7 +488,7 @@ readaliases(map, af, announcestats, logstats)
 		  case ' ':
 		  case '\t':
 			if (!skipping)
-				syserr("554 Non-continuation line starts with space");
+				syserr("Non-continuation line starts with space");
 			skipping = TRUE;
 			continue;
 		}
@@ -624,7 +496,7 @@ readaliases(map, af, announcestats, logstats)
 
 		/*
 		**  Process the LHS
-		**	Find the colon separator, and parse the address.
+		**	Find the final colon, and parse the address.
 		**	It should resolve to a local name -- this will
 		**	be checked later (we want to optionally do
 		**	parsing of the RHS first to maximize error
@@ -635,14 +507,15 @@ readaliases(map, af, announcestats, logstats)
 			continue;
 		if (*p++ != ':')
 		{
-			syserr("554 missing colon");
+			syserr("missing colon");
 			continue;
 		}
-		if (parseaddr(line, &al, RF_COPYALL, ':', NULL, CurEnv) == NULL)
+		if (parseaddr(line, &al, 1, ':') == NULL)
 		{
-			syserr("554 %.40s... illegal alias name", line);
+			syserr("illegal alias name");
 			continue;
 		}
+		loweraddr(&al);
 
 		/*
 		**  Process the RHS.
@@ -650,43 +523,36 @@ readaliases(map, af, announcestats, logstats)
 		**	'p' points to the text of the RHS.
 		*/
 
-		while (isascii(*p) && isspace(*p))
-			p++;
 		rhs = p;
 		for (;;)
 		{
 			register char c;
-			register char *nlp;
 
-			nlp = &p[strlen(p)];
-			if (nlp[-1] == '\n')
-				*--nlp = '\0';
-
-			if (CheckAliases)
+			if (init && CheckAliases)
 			{
 				/* do parsing & compression of addresses */
 				while (*p != '\0')
 				{
-					auto char *delimptr;
+					extern char *DelimChar;
 
-					while ((isascii(*p) && isspace(*p)) ||
-								*p == ',')
+					while (isspace(*p) || *p == ',')
 						p++;
 					if (*p == '\0')
 						break;
-					if (parseaddr(p, &bl, RF_COPYNONE, ',',
-						      &delimptr, CurEnv) == NULL)
-						usrerr("553 %s... bad address", p);
-					p = delimptr;
+					if (parseaddr(p, &bl, -1, ',') == NULL)
+						usrerr("%s... bad address", p);
+					p = DelimChar;
 				}
 			}
 			else
 			{
-				p = nlp;
+				p = &p[strlen(p)];
+				if (p[-1] == '\n')
+					*--p = '\0';
 			}
 
 			/* see if there should be a continuation line */
-			c = getc(af);
+			c = fgetc(af);
 			if (!feof(af))
 				(void) ungetc(c, af);
 			if (c != ' ' && c != '\t')
@@ -696,18 +562,10 @@ readaliases(map, af, announcestats, logstats)
 			if (fgets(p, sizeof line - (p - line), af) == NULL)
 				break;
 			LineNumber++;
-
-			/* check for line overflow */
-			if (strchr(p, '\n') == NULL)
-			{
-				usrerr("554 alias too long");
-				break;
-			}
 		}
-		if (!bitnset(M_ALIASABLE, al.q_mailer->m_flags))
+		if (al.q_mailer != LocalMailer)
 		{
-			syserr("554 %s... cannot alias non-local names",
-				al.q_paddr);
+			syserr("cannot alias non-local names");
 			continue;
 		}
 
@@ -715,19 +573,40 @@ readaliases(map, af, announcestats, logstats)
 		**  Insert alias into symbol table or DBM file
 		*/
 
-		if (!bitnset(M_USR_UPPER, al.q_mailer->m_flags))
-			makelower(al.q_user);
+		lhssize = strlen(al.q_user) + 1;
+		rhssize = strlen(rhs) + 1;
 
-		lhssize = strlen(al.q_user);
-		rhssize = strlen(rhs);
-		map->map_class->map_store(map, al.q_user, rhs);
+# ifdef DBM
+		if (init)
+		{
+			DATUM key, content;
 
-		if (al.q_paddr != NULL)
-			free(al.q_paddr);
-		if (al.q_host != NULL)
-			free(al.q_host);
-		if (al.q_user != NULL)
-			free(al.q_user);
+			key.dsize = lhssize;
+			key.dptr = al.q_user;
+			content.dsize = rhssize;
+			content.dptr = rhs;
+			store(key, content);
+		}
+		else
+# endif DBM
+# ifdef USE_DB
+		if (init)
+		{
+			DBT key, content;
+
+			key.size = lhssize;
+			key.data = al.q_user;
+			content.size = rhssize;
+			content.data = rhs;
+
+			aliasdb->put (aliasdb, &key, &content, R_PUT);
+		}
+		else
+# endif USE_DB
+		{
+			s = stab(al.q_user, ST_ALIAS, ST_ENTER);
+			s->s_alias = newstr(rhs);
+		}
 
 		/* statistics */
 		naliases++;
@@ -736,16 +615,46 @@ readaliases(map, af, announcestats, logstats)
 			longest = rhssize;
 	}
 
+# ifdef DBM
+	if (init)
+	{
+		/* add the distinquished alias "@" */
+		DATUM key;
+
+		key.dsize = 2;
+		key.dptr = "@";
+		store(key, key);
+
+		/* restore the old signal */
+		(void) signal(SIGINT, oldsigint);
+	}
+# endif DBM
+# ifdef USE_DB
+	if (init)
+	{
+		/* add the distinquished alias "@" */
+		DBT key;
+
+		key.size = 2;
+		key.data = "@";
+		aliasdb->put (aliasdb, &key, &key, R_PUT);
+
+		/* restore the old signal */
+		(void) signal(SIGINT, oldsigint);
+	}
+# endif USE_DB
+
+	/* closing the alias file drops the lock */
+	(void) fclose(af);
 	CurEnv->e_to = NULL;
 	FileName = NULL;
-	if (Verbose || announcestats)
-		message("%s: %d aliases, longest %d bytes, %d bytes total",
-			map->map_file, naliases, longest, bytes);
+	message(Arpa_Info, "%d aliases, longest %d bytes, %d bytes total",
+			naliases, longest, bytes);
 # ifdef LOG
-	if (LogLevel > 7 && logstats)
-		syslog(LOG_INFO, "%s: %d aliases, longest %d bytes, %d bytes total",
-			map->map_file, naliases, longest, bytes);
-# endif /* LOG */
+	if (LogLevel >= 8)
+		syslog(LOG_INFO, "%d aliases, longest %d bytes, %d bytes total",
+			naliases, longest, bytes);
+# endif LOG
 }
 /*
 **  FORWARD -- Try to forward mail
@@ -759,8 +668,6 @@ readaliases(map, af, announcestats, logstats)
 **			in.
 **		sendq -- a pointer to the head of the send queue to
 **			put this user's aliases in.
-**		aliaslevel -- the current alias nesting depth.
-**		e -- the current envelope.
 **
 **	Returns:
 **		none.
@@ -769,67 +676,27 @@ readaliases(map, af, announcestats, logstats)
 **		New names are added to send queues.
 */
 
-void
-forward(user, sendq, aliaslevel, e)
+forward(user, sendq)
 	ADDRESS *user;
 	ADDRESS **sendq;
-	int aliaslevel;
-	register ENVELOPE *e;
 {
-	char *pp;
-	char *ep;
+	char buf[60];
+	extern bool safefile();
 
 	if (tTd(27, 1))
 		printf("forward(%s)\n", user->q_paddr);
 
-	if (!bitnset(M_HASPWENT, user->q_mailer->m_flags) ||
-	    bitset(QBADADDR, user->q_flags))
+	if (user->q_mailer != LocalMailer || bitset(QBADADDR, user->q_flags))
 		return;
 	if (user->q_home == NULL)
-	{
-		syserr("554 forward: no home");
-		user->q_home = "/nosuchdirectory";
-	}
+		syserr("forward: no home");
 
 	/* good address -- look for .forward file in home */
-	define('z', user->q_home, e);
-	define('u', user->q_user, e);
-	define('h', user->q_host, e);
-	if (ForwardPath == NULL)
-		ForwardPath = newstr("\201z/.forward");
+	define('z', user->q_home, CurEnv);
+	expand("\001z/.forward", buf, &buf[sizeof buf - 1], CurEnv);
+	if (!safefile(buf, user->q_uid, S_IREAD))
+		return;
 
-	for (pp = ForwardPath; pp != NULL; pp = ep)
-	{
-		int err;
-		char buf[MAXPATHLEN+1];
-		extern int include();
-
-		ep = strchr(pp, ':');
-		if (ep != NULL)
-			*ep = '\0';
-		expand(pp, buf, sizeof buf, e);
-		if (ep != NULL)
-			*ep++ = ':';
-		if (tTd(27, 3))
-			printf("forward: trying %s\n", buf);
-
-		err = include(buf, TRUE, user, sendq, aliaslevel, e);
-		if (err == 0)
-			break;
-		else if (transienterror(err))
-		{
-			/* we have to suspend this message */
-			if (tTd(27, 2))
-				printf("forward: transient error on %s\n", buf);
-#ifdef LOG
-			if (LogLevel > 2)
-				syslog(LOG_ERR, "%s: forward %s: transient error: %s",
-					e->e_id == NULL ? "NOQUEUE" : e->e_id,
-					buf, errstring(err));
-#endif
-			message("%s: %s: message queued", buf, errstring(err));
-			user->q_flags |= QQUEUEUP;
-			return;
-		}
-	}
+	/* we do have an address to forward to -- do it */
+	include(buf, "forwarding", user, sendq);
 }

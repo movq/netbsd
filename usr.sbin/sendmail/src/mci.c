@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1995 Eric P. Allman
+ * Copyright (c) 1983 Eric P. Allman
  * Copyright (c) 1988, 1993
  *	The Regents of the University of California.  All rights reserved.
  *
@@ -33,7 +33,7 @@
  */
 
 #ifndef lint
-static char sccsid[] = "@(#)mci.c	8.22 (Berkeley) 11/18/95";
+static char sccsid[] = "@(#)mci.c	8.1 (Berkeley) 6/7/93";
 #endif /* not lint */
 
 #include "sendmail.h"
@@ -65,8 +65,6 @@ static char sccsid[] = "@(#)mci.c	8.22 (Berkeley) 11/18/95";
 */
 
 MCI	**MciCache;		/* the open connection cache */
-
-extern void	mci_uncache __P((MCI **, bool));
 /*
 **  MCI_CACHE -- enter a connection structure into the open connection cache
 **
@@ -79,12 +77,17 @@ extern void	mci_uncache __P((MCI **, bool));
 **		none.
 */
 
-void
 mci_cache(mci)
 	register MCI *mci;
 {
 	register MCI **mcislot;
 	extern MCI **mci_scan();
+
+	if (MaxMciCache <= 0)
+	{
+		/* we don't support caching */
+		return;
+	}
 
 	/*
 	**  Find the best slot.  This may cause expired connections
@@ -92,11 +95,6 @@ mci_cache(mci)
 	*/
 
 	mcislot = mci_scan(mci);
-	if (mcislot == NULL)
-	{
-		/* we don't support caching */
-		return;
-	}
 
 	/* if this is already cached, we are done */
 	if (bitset(MCIF_CACHED, mci->mci_flags))
@@ -105,16 +103,6 @@ mci_cache(mci)
 	/* otherwise we may have to clear the slot */
 	if (*mcislot != NULL)
 		mci_uncache(mcislot, TRUE);
-
-	if (tTd(42, 5))
-		printf("mci_cache: caching %x (%s) in slot %d\n",
-			mci, mci->mci_host, mcislot - MciCache);
-#ifdef LOG
-	if (tTd(91, 100))
-		syslog(LOG_DEBUG, "%s: mci_cache: caching %x (%.100s) in slot %d",
-			CurEnv->e_id ? CurEnv->e_id : "NOQUEUE",
-			mci, mci->mci_host, mcislot - MciCache);
-#endif
 
 	*mcislot = mci;
 	mci->mci_flags |= MCIF_CACHED;
@@ -137,12 +125,6 @@ mci_scan(savemci)
 	register MCI **bestmci;
 	register MCI *mci;
 	register int i;
-
-	if (MaxMciCache <= 0)
-	{
-		/* we don't support caching */
-		return NULL;
-	}
 
 	if (MciCache == NULL)
 	{
@@ -191,7 +173,6 @@ mci_scan(savemci)
 **		none.
 */
 
-void
 mci_uncache(mcislot, doquit)
 	register MCI **mcislot;
 	bool doquit;
@@ -204,17 +185,6 @@ mci_uncache(mcislot, doquit)
 		return;
 	*mcislot = NULL;
 
-	if (tTd(42, 5))
-		printf("mci_uncache: uncaching %x (%s) from slot %d (%d)\n",
-			mci, mci->mci_host, mcislot - MciCache, doquit);
-#ifdef LOG
-	if (tTd(91, 100))
-		syslog(LOG_DEBUG, "%s: mci_uncache: uncaching %x (%.100s) from slot %d (%d)",
-			CurEnv->e_id ? CurEnv->e_id : "NOQUEUE",
-			mci, mci->mci_host, mcislot - MciCache, doquit);
-#endif
-
-#ifdef SMTP
 	if (doquit)
 	{
 		message("Closing connection to %s", mci->mci_host);
@@ -229,7 +199,6 @@ mci_uncache(mcislot, doquit)
 #endif
 	}
 	else
-#endif
 	{
 		if (mci->mci_in != NULL)
 			xfclose(mci->mci_in, "mci_uncache", "mci_in");
@@ -254,7 +223,6 @@ mci_uncache(mcislot, doquit)
 **		none.
 */
 
-void
 mci_flush(doquit, allbut)
 	bool doquit;
 	MCI *allbut;
@@ -279,20 +247,14 @@ mci_get(host, m)
 {
 	register MCI *mci;
 	register STAB *s;
-	extern MCI **mci_scan();
 
 #ifdef DAEMON
 	extern SOCKADDR CurHostAddr;
 
 	/* clear CurHostAddr so we don't get a bogus address with this name */
 	bzero(&CurHostAddr, sizeof CurHostAddr);
-#endif
+#endif DAEMON
 
-	/* clear out any expired connections */
-	(void) mci_scan(NULL);
-
-	if (m->m_mno < 0)
-		syserr("negative mno %d (%s)", m->m_mno, m->m_name);
 	s = stab(host, ST_MCI + m->m_mno, ST_ENTER);
 	mci = &s->s_mci;
 	mci->mci_host = s->s_name;
@@ -304,7 +266,6 @@ mci_get(host, m)
 			mci->mci_exitstat, mci->mci_errno);
 	}
 
-#ifdef SMTP
 	if (mci->mci_state == MCIS_OPEN)
 	{
 		/* poke the connection to see if it's still alive */
@@ -317,33 +278,7 @@ mci_get(host, m)
 			mci->mci_exitstat = EX_OK;
 			mci->mci_state = MCIS_CLOSED;
 		}
-# ifdef DAEMON
-		else
-		{
-			/* get peer host address for logging reasons only */
-			/* (this should really be in the mci struct) */
-			int socksize = sizeof CurHostAddr;
-
-			(void) getpeername(fileno(mci->mci_in),
-				(struct sockaddr *) &CurHostAddr, &socksize);
-		}
-# endif
 	}
-#endif
-#ifdef MAYBE_NEXT_RELEASE
-	if (mci->mci_state == MCIS_CLOSED)
-	{
-		time_t now = curtime();
-
-		/* if this info is stale, ignore it */
-		if (now > mci->mci_lastuse + MciInfoTimeout)
-		{
-			mci->mci_lastuse = now;
-			mci->mci_errno = 0;
-			mci->mci_exitstat = EX_OK;
-		}
-	}
-#endif
 
 	return mci;
 }
@@ -360,66 +295,24 @@ mci_get(host, m)
 **		none.
 */
 
-void
-mci_dump(mci, logit)
+mci_dump(mci)
 	register MCI *mci;
-	bool logit;
 {
-	register char *p;
-	char *sep;
-	char buf[4000];
 	extern char *ctime();
 
-	sep = logit ? " " : "\n\t";
-	p = buf;
-	sprintf(p, "MCI@%x: ", mci);
-	p += strlen(p);
+	printf("MCI@%x: ", mci);
 	if (mci == NULL)
 	{
-		sprintf(p, "NULL");
-		goto printit;
+		printf("NULL\n");
+		return;
 	}
-	sprintf(p, "flags=%x, errno=%d, herrno=%d, exitstat=%d, state=%d, pid=%d,%s",
-		mci->mci_flags, mci->mci_errno, mci->mci_herrno,
-		mci->mci_exitstat, mci->mci_state, mci->mci_pid, sep);
-	p += strlen(p);
-	sprintf(p, "maxsize=%ld, phase=%s, mailer=%s,%s",
-		mci->mci_maxsize,
+	printf("flags=%o, errno=%d, exitstat=%d, state=%d, pid=%d, maxsize=%ld\n",
+		mci->mci_flags, mci->mci_errno, mci->mci_exitstat,
+		mci->mci_state, mci->mci_pid, mci->mci_maxsize);
+	printf("\tphase=%s, mailer=%s,\n",
 		mci->mci_phase == NULL ? "NULL" : mci->mci_phase,
-		mci->mci_mailer == NULL ? "NULL" : mci->mci_mailer->m_name,
-		sep);
-	p += strlen(p);
-	sprintf(p, "host=%s, lastuse=%s",
+		mci->mci_mailer == NULL ? "NULL" : mci->mci_mailer->m_name);
+	printf("\thost=%s, lastuse=%s\n",
 		mci->mci_host == NULL ? "NULL" : mci->mci_host,
 		ctime(&mci->mci_lastuse));
-printit:
-#ifdef LOG
-	if (logit)
-		syslog(LOG_DEBUG, "%.1000s", buf);
-	else
-#endif
-		printf("%s\n", buf);
-}
-/*
-**  MCI_DUMP_ALL -- print the entire MCI cache
-**
-**	Parameters:
-**		logit -- if set, log the result instead of printing
-**			to stdout.
-**
-**	Returns:
-**		none.
-*/
-
-void
-mci_dump_all(logit)
-	bool logit;
-{
-	register int i;
-
-	if (MciCache == NULL)
-		return;
-
-	for (i = 0; i < MaxMciCache; i++)
-		mci_dump(MciCache[i], logit);
 }

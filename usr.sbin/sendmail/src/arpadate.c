@@ -1,7 +1,7 @@
 /*
- * Copyright (c) 1983, 1995 Eric P. Allman
- * Copyright (c) 1988, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1983 Eric P. Allman
+ * Copyright (c) 1988 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,10 +33,13 @@
  */
 
 #ifndef lint
-static char sccsid[] = "@(#)arpadate.c	8.4 (Berkeley) 4/21/95";
+static char sccsid[] = "@(#)arpadate.c	5.11 (Berkeley) 6/1/90";
 #endif /* not lint */
 
-# include "sendmail.h"
+# include "conf.h"
+# include <time.h>
+# include <sys/types.h>
+# include "useful.h"
 
 /*
 **  ARPADATE -- Create date in ARPANET format
@@ -64,17 +67,6 @@ static char sccsid[] = "@(#)arpadate.c	8.4 (Berkeley) 4/21/95";
 **		the format is and work appropriately.
 */
 
-#ifndef TZNAME_MAX
-# define TZNAME_MAX	50	/* max size of timezone */
-#endif
-
-/* values for TZ_TYPE */
-#define TZ_NONE		0	/* no character timezone support */
-#define TZ_TM_NAME	1	/* use tm->tm_name */
-#define TZ_TM_ZONE	2	/* use tm->tm_zone */
-#define TZ_TZNAME	3	/* use tzname[] */
-#define TZ_TIMEZONE	4	/* use timezone() */
-
 char *
 arpadate(ud)
 	register char *ud;
@@ -86,8 +78,10 @@ arpadate(ud)
 	register struct tm *lt;
 	time_t t;
 	struct tm gmt;
-	char *tz;
-	static char b[43 + TZNAME_MAX];
+	static char b[40];
+	extern struct tm *localtime(), *gmtime();
+	extern char *ctime();
+	extern time_t time();
 
 	/*
 	**  Get current time.
@@ -126,9 +120,7 @@ arpadate(ud)
 	*q++ = *p++;
 	*q++ = ' ';
 
-	p = &ud[20];		/* 1979 */
-	*q++ = *p++;
-	*q++ = *p++;
+	p = &ud[22];		/* 79 */
 	*q++ = *p++;
 	*q++ = *p++;
 	*q++ = ' ';
@@ -159,41 +151,15 @@ arpadate(ud)
 		off += 24 * 60;
 
 	*q++ = ' ';
-	if (off == 0)
-	{
+	if (off == 0) {
 		*q++ = 'G';
 		*q++ = 'M';
 		*q++ = 'T';
-	}
-	else
-	{
-		tz = NULL;
-#if TZ_TYPE == TZ_TM_NAME
-		tz = lt->tm_name;
-#endif
-#if TZ_TYPE == TZ_TM_ZONE
-		tz = lt->tm_zone;
-#endif
-#if TZ_TYPE == TZ_TZNAME
-		{
-			extern char *tzname[];
-
-			tz = tzname[lt->tm_isdst];
-		}
-#endif
-#if TZ_TYPE == TZ_TIMEZONE
-		{
-			extern char *timezone();
-
-			tz = timezone(off, lt->tm_isdst);
-		}
-#endif
-		if (off < 0)
-		{
+	} else {
+		if (off < 0) {
 			off = -off;
 			*q++ = '-';
-		}
-		else
+		} else
 			*q++ = '+';
 
 		if (off >= 24*60)		/* should be impossible */
@@ -204,14 +170,6 @@ arpadate(ud)
 		off %= 60;
 		*q++ = (off / 10) + '0';
 		*q++ = (off % 10) + '0';
-		if (tz != NULL && *tz != '\0')
-		{
-			*q++ = ' ';
-			*q++ = '(';
-			while (*tz != '\0')
-				*q++ = *tz++;
-			*q++ = ')';
-		}
 	}
 	*q = '\0';
 

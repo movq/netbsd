@@ -1,7 +1,7 @@
 /*
- * Copyright (c) 1983, 1995 Eric P. Allman
- * Copyright (c) 1988, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1983 Eric P. Allman
+ * Copyright (c) 1988 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,12 +33,17 @@
  */
 
 #ifndef lint
-static char sccsid[] = "@(#)util.c	8.84.1.2 (Berkeley) 3/4/96";
+static char sccsid[] = "@(#)util.c	5.20 (Berkeley) 3/8/91";
 #endif /* not lint */
 
-# include "sendmail.h"
+# include <stdio.h>
+# include <sys/types.h>
+# include <sys/stat.h>
 # include <sysexits.h>
-/*
+# include <errno.h>
+# include "sendmail.h"
+
+/*
 **  STRIPQUOTES -- Strip quotes & quote bits from a string.
 **
 **	Runs through a string and strips off unquoted quote
@@ -46,6 +51,8 @@ static char sccsid[] = "@(#)util.c	8.84.1.2 (Berkeley) 3/4/96";
 **
 **	Parameters:
 **		s -- the string to strip.
+**		qf -- if set, remove actual `` " '' characters
+**			as well as the quote bits.
 **
 **	Returns:
 **		none.
@@ -57,9 +64,9 @@ static char sccsid[] = "@(#)util.c	8.84.1.2 (Berkeley) 3/4/96";
 **		deliver
 */
 
-void
-stripquotes(s)
+stripquotes(s, qf)
 	char *s;
+	bool qf;
 {
 	register char *p;
 	register char *q;
@@ -68,16 +75,76 @@ stripquotes(s)
 	if (s == NULL)
 		return;
 
-	p = q = s;
-	do
+	for (p = q = s; (c = *p++) != '\0'; )
 	{
-		c = *p++;
-		if (c == '\\')
-			c = *p++;
-		else if (c == '"')
-			continue;
-		*q++ = c;
-	} while (c != '\0');
+		if (c != '"' || !qf)
+			*q++ = c & 0177;
+	}
+	*q = '\0';
+}
+/*
+**  QSTRLEN -- give me the string length assuming 0200 bits add a char
+**
+**	Parameters:
+**		s -- the string to measure.
+**
+**	Reurns:
+**		The length of s, including space for backslash escapes.
+**
+**	Side Effects:
+**		none.
+*/
+
+qstrlen(s)
+	register char *s;
+{
+	register int l = 0;
+	register char c;
+
+	while ((c = *s++) != '\0')
+	{
+		if (bitset(0200, c))
+			l++;
+		l++;
+	}
+	return (l);
+}
+/*
+**  CAPITALIZE -- return a copy of a string, properly capitalized.
+**
+**	Parameters:
+**		s -- the string to capitalize.
+**
+**	Returns:
+**		a pointer to a properly capitalized string.
+**
+**	Side Effects:
+**		none.
+*/
+
+char *
+capitalize(s)
+	register char *s;
+{
+	static char buf[50];
+	register char *p;
+
+	p = buf;
+
+	for (;;)
+	{
+		while (!isalpha(*s) && *s != '\0')
+			*p++ = *s++;
+		if (*s == '\0')
+			break;
+		*p++ = toupper(*s);
+		s++;
+		while (isalpha(*s))
+			*p++ = *s++;
+	}
+
+	*p = '\0';
+	return (buf);
 }
 /*
 **  XALLOC -- Allocate memory and bitch wildly on failure.
@@ -100,15 +167,13 @@ xalloc(sz)
 	register int sz;
 {
 	register char *p;
-
-	/* some systems can't handle size zero mallocs */
-	if (sz <= 0)
-		sz = 1;
+	extern char *malloc();
 
 	p = malloc((unsigned) sz);
 	if (p == NULL)
 	{
-		syserr("!Out of memory!!");
+		syserr("Out of memory!!");
+		abort();
 		/* exit(EX_UNAVAILABLE); */
 	}
 	return (p);
@@ -157,45 +222,6 @@ copyplist(list, copycont)
 	return (newvp);
 }
 /*
-**  COPYQUEUE -- copy address queue.
-**
-**	This routine is the equivalent of newstr for address queues
-**	addresses marked with QDONTSEND aren't copied
-**
-**	Parameters:
-**		addr -- list of address structures to copy.
-**
-**	Returns:
-**		a copy of 'addr'.
-**
-**	Side Effects:
-**		none.
-*/
-
-ADDRESS *
-copyqueue(addr)
-	ADDRESS *addr;
-{
-	register ADDRESS *newaddr;
-	ADDRESS *ret;
-	register ADDRESS **tail = &ret;
-
-	while (addr != NULL)
-	{
-		if (!bitset(QDONTSEND, addr->q_flags))
-		{
-			newaddr = (ADDRESS *) xalloc(sizeof(ADDRESS));
-			STRUCTCOPY(*addr, *newaddr);
-			*tail = newaddr;
-			tail = &newaddr->q_next;
-		}
-		addr = addr->q_next;
-	}
-	*tail = NULL;
-	
-	return ret;
-}
-/*
 **  PRINTAV -- print argument vector.
 **
 **	Parameters:
@@ -208,7 +234,6 @@ copyqueue(addr)
 **		prints av.
 */
 
-void
 printav(av)
 	register char **av;
 {
@@ -239,7 +264,7 @@ char
 lower(c)
 	register char c;
 {
-	return((isascii(c) && isupper(c)) ? tolower(c) : c);
+	return(isascii(c) && isupper(c) ? tolower(c) : c);
 }
 /*
 **  XPUTS -- put string doing control escapes.
@@ -254,85 +279,32 @@ lower(c)
 **		output to stdout
 */
 
-void
 xputs(s)
-	register const char *s;
+	register char *s;
 {
-	register int c;
-	register struct metamac *mp;
-	extern struct metamac MetaMacros[];
+	register char c;
 
 	if (s == NULL)
 	{
 		printf("<null>");
 		return;
 	}
-	while ((c = (*s++ & 0377)) != '\0')
+	(void) putchar('"');
+	while ((c = *s++) != '\0')
 	{
 		if (!isascii(c))
 		{
-			if (c == MATCHREPL)
-			{
-				putchar('$');
-				continue;
-			}
-			if (c == MACROEXPAND)
-			{
-				putchar('$');
-				if (strchr("=~&?", *s) != NULL)
-					putchar(*s++);
-				if (bitset(0200, *s))
-					printf("{%s}", macname(*s++ & 0377));
-				continue;
-			}
-			for (mp = MetaMacros; mp->metaname != '\0'; mp++)
-			{
-				if ((mp->metaval & 0377) == c)
-				{
-					printf("$%c", mp->metaname);
-					break;
-				}
-			}
-			if (c == MATCHCLASS || c == MATCHNCLASS)
-			{
-				if (!bitset(0200, *s))
-					continue;
-				printf("{%s}", macname(*s++ & 0377));
-			}
-			if (mp->metaname != '\0')
-				continue;
 			(void) putchar('\\');
 			c &= 0177;
 		}
-		if (isprint(c))
+		if (c < 040 || c >= 0177)
 		{
-			putchar(c);
-			continue;
-		}
-
-		/* wasn't a meta-macro -- find another way to print it */
-		switch (c)
-		{
-		  case '\n':
-			c = 'n';
-			break;
-
-		  case '\r':
-			c = 'r';
-			break;
-
-		  case '\t':
-			c = 't';
-			break;
-
-		  default:
 			(void) putchar('^');
-			(void) putchar(c ^ 0100);
-			continue;
+			c ^= 0100;
 		}
-		(void) putchar('\\');
 		(void) putchar(c);
 	}
+	(void) putchar('"');
 	(void) fflush(stdout);
 }
 /*
@@ -352,7 +324,6 @@ xputs(s)
 **		parse
 */
 
-void
 makelower(p)
 	register char *p;
 {
@@ -382,31 +353,16 @@ makelower(p)
 **		none.
 */
 
-void
-buildfname(gecos, login, buf)
-	register char *gecos;
+buildfname(p, login, buf)
+	register char *p;
 	char *login;
 	char *buf;
 {
-	register char *p;
 	register char *bp = buf;
-	int l;
 
-	if (*gecos == '*')
-		gecos++;
-
-	/* find length of final string */
-	l = 0;
-	for (p = gecos; *p != '\0' && *p != ',' && *p != ';' && *p != '%'; p++)
-	{
-		if (*p == '&')
-			l += strlen(login);
-		else
-			l++;
-	}
-
-	/* now fill in buf */
-	for (p = gecos; *p != '\0' && *p != ',' && *p != ';' && *p != '%'; p++)
+	if (*p == '*')
+		p++;
+	while (*p != '\0' && *p != ',' && *p != ';' && *p != '%')
 	{
 		if (*p == '&')
 		{
@@ -414,9 +370,10 @@ buildfname(gecos, login, buf)
 			*bp = toupper(*bp);
 			while (*bp != '\0')
 				bp++;
+			p++;
 		}
 		else
-			*bp++ = *p;
+			*bp++ = *p++;
 	}
 	*bp = '\0';
 }
@@ -425,337 +382,30 @@ buildfname(gecos, login, buf)
 **
 **	Parameters:
 **		fn -- filename to check.
-**		uid -- user id to compare against.
-**		gid -- group id to compare against.
-**		uname -- user name to compare against (used for group
-**			sets).
-**		flags -- modifiers:
-**			SFF_MUSTOWN -- "uid" must own this file.
-**			SFF_NOSLINK -- file cannot be a symbolic link.
+**		uid -- uid to compare against.
 **		mode -- mode bits that must match.
-**		st -- if set, points to a stat structure that will
-**			get the stat info for the file.
 **
 **	Returns:
-**		0 if fn exists, is owned by uid, and matches mode.
-**		An errno otherwise.  The actual errno is cleared.
+**		TRUE if fn exists, is owned by uid, and matches mode.
+**		FALSE otherwise.
 **
 **	Side Effects:
 **		none.
 */
 
-#include <grp.h>
-
-#ifndef S_IXOTH
-# define S_IXOTH	(S_IEXEC >> 6)
-#endif
-
-#ifndef S_IXGRP
-# define S_IXGRP	(S_IEXEC >> 3)
-#endif
-
-#ifndef S_IXUSR
-# define S_IXUSR	(S_IEXEC)
-#endif
-
-#define ST_MODE_NOFILE	0171147		/* unlikely to occur */
-
-int
-safefile(fn, uid, gid, uname, flags, mode, st)
+bool
+safefile(fn, uid, mode)
 	char *fn;
-	uid_t uid;
-	gid_t gid;
-	char *uname;
-	int flags;
+	int uid;
 	int mode;
-	struct stat *st;
 {
-	register char *p;
-	register struct group *gr = NULL;
-	int file_errno = 0;
 	struct stat stbuf;
-	struct stat fstbuf;
 
-	if (tTd(44, 4))
-		printf("safefile(%s, uid=%d, gid=%d, flags=%x, mode=%o):\n",
-			fn, uid, gid, flags, mode);
+	if (stat(fn, &stbuf) >= 0 && stbuf.st_uid == uid &&
+	    (stbuf.st_mode & mode) == mode)
+		return (TRUE);
 	errno = 0;
-	if (st == NULL)
-		st = &fstbuf;
-
-	/* first check to see if the file exists at all */
-#ifdef HASLSTAT
-	if ((bitset(SFF_NOSLINK, flags) ? lstat(fn, st)
-					: stat(fn, st)) < 0)
-#else
-	if (stat(fn, st) < 0)
-#endif
-	{
-		file_errno = errno;
-	}
-	else if (bitset(SFF_SETUIDOK, flags) &&
-		 !bitset(S_IXUSR|S_IXGRP|S_IXOTH, st->st_mode) &&
-		 S_ISREG(st->st_mode))
-	{
-		/*
-		**  If final file is setuid, run as the owner of that
-		**  file.  Gotta be careful not to reveal anything too
-		**  soon here!
-		*/
-
-#ifdef SUID_ROOT_FILES_OK
-		if (bitset(S_ISUID, st->st_mode))
-#else
-		if (bitset(S_ISUID, st->st_mode) && st->st_uid != 0)
-#endif
-		{
-			uid = st->st_uid;
-			uname = NULL;
-		}
-#ifdef SUID_ROOT_FILES_OK
-		if (bitset(S_ISGID, st->st_mode))
-#else
-		if (bitset(S_ISGID, st->st_mode) && st->st_gid != 0)
-#endif
-			gid = st->st_gid;
-	}
-
-	if (!bitset(SFF_NOPATHCHECK, flags) ||
-	    (uid == 0 && !bitset(SFF_ROOTOK, flags)))
-	{
-		/* check the path to the file for acceptability */
-		for (p = fn; (p = strchr(++p, '/')) != NULL; *p = '/')
-		{
-			*p = '\0';
-			if (stat(fn, &stbuf) < 0)
-				break;
-			if (uid == 0 && bitset(S_IWGRP|S_IWOTH, stbuf.st_mode))
-				message("051 WARNING: writable directory %s",
-					fn);
-			if (uid == 0 && !bitset(SFF_ROOTOK, flags))
-			{
-				if (bitset(S_IXOTH, stbuf.st_mode))
-					continue;
-				break;
-			}
-			if (stbuf.st_uid == uid &&
-			    bitset(S_IXUSR, stbuf.st_mode))
-				continue;
-			if (stbuf.st_gid == gid &&
-			    bitset(S_IXGRP, stbuf.st_mode))
-				continue;
-#ifndef NO_GROUP_SET
-			if (uname != NULL &&
-			    ((gr != NULL && gr->gr_gid == stbuf.st_gid) ||
-			     (gr = getgrgid(stbuf.st_gid)) != NULL))
-			{
-				register char **gp;
-
-				for (gp = gr->gr_mem; gp != NULL && *gp != NULL; gp++)
-					if (strcmp(*gp, uname) == 0)
-						break;
-				if (gp != NULL && *gp != NULL &&
-				    bitset(S_IXGRP, stbuf.st_mode))
-					continue;
-			}
-#endif
-			if (!bitset(S_IXOTH, stbuf.st_mode))
-				break;
-		}
-		if (p != NULL)
-		{
-			int ret = errno;
-
-			if (ret == 0)
-				ret = EACCES;
-			if (tTd(44, 4))
-				printf("\t[dir %s] %s\n", fn, errstring(ret));
-			*p = '/';
-			return ret;
-		}
-	}
-
-	/*
-	**  If the target file doesn't exist, check the directory to
-	**  ensure that it is writable by this user.
-	*/
-
-	if (file_errno != 0)
-	{
-		int ret = file_errno;
-
-		if (tTd(44, 4))
-			printf("\t%s\n", errstring(ret));
-
-		errno = 0;
-		if (!bitset(SFF_CREAT, flags))
-			return ret;
-
-		/* check to see if legal to create the file */
-		p = strrchr(fn, '/');
-		if (p == NULL)
-			return ENOTDIR;
-		*p = '\0';
-		if (stat(fn, &stbuf) >= 0)
-		{
-			int md = S_IWRITE|S_IEXEC;
-			if (stbuf.st_uid != uid)
-				md >>= 6;
-			if ((stbuf.st_mode & md) != md)
-				errno = EACCES;
-		}
-		ret = errno;
-		if (tTd(44, 4))
-			printf("\t[final dir %s uid %d mode %o] %s\n",
-				fn, stbuf.st_uid, stbuf.st_mode,
-				errstring(ret));
-		*p = '/';
-		st->st_mode = ST_MODE_NOFILE;
-		return ret;
-	}
-
-#ifdef S_ISLNK
-	if (bitset(SFF_NOSLINK, flags) && S_ISLNK(st->st_mode))
-	{
-		if (tTd(44, 4))
-			printf("\t[slink mode %o]\tEPERM\n", st->st_mode);
-		return EPERM;
-	}
-#endif
-	if (bitset(SFF_REGONLY, flags) && !S_ISREG(st->st_mode))
-	{
-		if (tTd(44, 4))
-			printf("\t[non-reg mode %o]\tEPERM\n", st->st_mode);
-		return EPERM;
-	}
-	if (bitset(S_IWUSR|S_IWGRP|S_IWOTH, mode) &&
-	    bitset(S_IXUSR|S_IXGRP|S_IXOTH, st->st_mode))
-	{
-		if (tTd(44, 4))
-			printf("\t[exec bits %o]\tEPERM]\n", st->st_mode);
-		return EPERM;
-	}
-
-	if (uid == 0 && !bitset(SFF_ROOTOK, flags))
-		mode >>= 6;
-	else if (st->st_uid != uid)
-	{
-		mode >>= 3;
-		if (st->st_gid == gid)
-			;
-#ifndef NO_GROUP_SET
-		else if (uname != NULL &&
-			 ((gr != NULL && gr->gr_gid == st->st_gid) ||
-			  (gr = getgrgid(st->st_gid)) != NULL))
-		{
-			register char **gp;
-
-			for (gp = gr->gr_mem; *gp != NULL; gp++)
-				if (strcmp(*gp, uname) == 0)
-					break;
-			if (*gp == NULL)
-				mode >>= 3;
-		}
-#endif
-		else
-			mode >>= 3;
-	}
-	if (tTd(44, 4))
-		printf("\t[uid %d, stat %o, mode %o] ",
-			st->st_uid, st->st_mode, mode);
-	if ((st->st_uid == uid || st->st_uid == 0 ||
-	     !bitset(SFF_MUSTOWN, flags)) &&
-	    (st->st_mode & mode) == mode)
-	{
-		if (tTd(44, 4))
-			printf("\tOK\n");
-		return 0;
-	}
-	if (tTd(44, 4))
-		printf("\tEACCES\n");
-	return EACCES;
-}
-/*
-**  SAFEFOPEN -- do a file open with extra checking
-**
-**	Parameters:
-**		fn -- the file name to open.
-**		omode -- the open-style mode flags.
-**		cmode -- the create-style mode flags.
-**		sff -- safefile flags.
-**
-**	Returns:
-**		Same as fopen.
-*/
-
-#ifndef O_ACCMODE
-# define O_ACCMODE	(O_RDONLY|O_WRONLY|O_RDWR)
-#endif
-
-FILE *
-safefopen(fn, omode, cmode, sff)
-	char *fn;
-	int omode;
-	int cmode;
-	int sff;
-{
-	int rval;
-	FILE *fp;
-	int smode;
-	struct stat stb, sta;
-
-	if (bitset(O_CREAT, omode))
-		sff |= SFF_CREAT;
-	smode = 0;
-	switch (omode & O_ACCMODE)
-	{
-	  case O_RDONLY:
-		smode = S_IREAD;
-		break;
-
-	  case O_WRONLY:
-		smode = S_IWRITE;
-		break;
-
-	  case O_RDWR:
-		smode = S_IREAD|S_IWRITE;
-		break;
-
-	  default:
-		smode = 0;
-		break;
-	}
-	if (bitset(SFF_OPENASROOT, sff))
-		rval = safefile(fn, 0, 0, NULL, sff, smode, &stb);
-	else
-		rval = safefile(fn, RealUid, RealGid, RealUserName,
-				sff, smode, &stb);
-	if (rval != 0)
-	{
-		errno = rval;
-		return NULL;
-	}
-	if (stb.st_mode == ST_MODE_NOFILE)
-		omode |= O_EXCL;
-
-	fp = dfopen(fn, omode, cmode);
-	if (fp == NULL)
-		return NULL;
-	if (bitset(O_EXCL, omode))
-		return fp;
-	if (fstat(fileno(fp), &sta) < 0 ||
-	    sta.st_nlink != stb.st_nlink ||
-	    sta.st_dev != stb.st_dev ||
-	    sta.st_ino != stb.st_ino ||
-	    sta.st_uid != stb.st_uid ||
-	    sta.st_gid != stb.st_gid)
-	{
-		syserr("554 cannot open: file %s changed after open", fn);
-		fclose(fp);
-		errno = EPERM;
-		return NULL;
-	}
-	return fp;
+	return (FALSE);
 }
 /*
 **  FIXCRLF -- fix <CR><LF> in line.
@@ -776,14 +426,13 @@ safefopen(fn, omode, cmode, sff)
 **		line is changed in place.
 */
 
-void
 fixcrlf(line, stripnl)
 	char *line;
 	bool stripnl;
 {
 	register char *p;
 
-	p = strchr(line, '\n');
+	p = index(line, '\n');
 	if (p == NULL)
 		return;
 	if (p > line && p[-1] == '\r')
@@ -801,70 +450,26 @@ fixcrlf(line, stripnl)
 **	whatever), so this tries to get around it.
 */
 
-struct omodes
-{
-	int	mask;
-	int	mode;
-	char	*farg;
-} OpenModes[] =
-{
-	O_ACCMODE,		O_RDONLY,		"r",
-	O_ACCMODE|O_APPEND,	O_WRONLY,		"w",
-	O_ACCMODE|O_APPEND,	O_WRONLY|O_APPEND,	"a",
-	O_TRUNC,		0,			"w+",
-	O_APPEND,		O_APPEND,		"a+",
-	0,			0,			"r+",
-};
-
 FILE *
-dfopen(filename, omode, cmode)
+dfopen(filename, mode)
 	char *filename;
-	int omode;
-	int cmode;
+	char *mode;
 {
 	register int tries;
-	int fd;
-	register struct omodes *om;
-	struct stat st;
-
-	for (om = OpenModes; om->mask != 0; om++)
-		if ((omode & om->mask) == om->mode)
-			break;
+	register FILE *fp;
 
 	for (tries = 0; tries < 10; tries++)
 	{
 		sleep((unsigned) (10 * tries));
 		errno = 0;
-		fd = open(filename, omode, cmode);
-		if (fd >= 0)
+		fp = fopen(filename, mode);
+		if (fp != NULL)
 			break;
-		switch (errno)
-		{
-		  case ENFILE:		/* system file table full */
-		  case EINTR:		/* interrupted syscall */
-#ifdef ETXTBSY
-		  case ETXTBSY:		/* Apollo: net file locked */
-#endif
-			continue;
-		}
-		break;
+		if (errno != ENFILE && errno != EINTR)
+			break;
 	}
-	if (fd >= 0 && fstat(fd, &st) >= 0 && S_ISREG(st.st_mode))
-	{
-		int locktype;
-
-		/* lock the file to avoid accidental conflicts */
-		if ((omode & O_ACCMODE) != O_RDONLY)
-			locktype = LOCK_EX;
-		else
-			locktype = LOCK_SH;
-		(void) lockfile(fd, filename, NULL, locktype);
-		errno = 0;
-	}
-	if (fd < 0)
-		return NULL;
-	else
-		return fdopen(fd, om->farg);
+	errno = 0;
+	return (fp);
 }
 /*
 **  PUTLINE -- put a line like fputs obeying SMTP conventions
@@ -874,7 +479,8 @@ dfopen(filename, omode, cmode)
 **
 **	Parameters:
 **		l -- line to put.
-**		mci -- the mailer connection information.
+**		fp -- file to put it onto.
+**		m -- the mailer used to control output.
 **
 **	Returns:
 **		none
@@ -883,120 +489,55 @@ dfopen(filename, omode, cmode)
 **		output of l to fp.
 */
 
-void
-putline(l, mci)
-	register char *l;
-	register MCI *mci;
-{
-	putxline(l, mci, PXLF_MAPFROM);
-}
-/*
-**  PUTXLINE -- putline with flags bits.
-**
-**	This routine always guarantees outputing a newline (or CRLF,
-**	as appropriate) at the end of the string.
-**
-**	Parameters:
-**		l -- line to put.
-**		mci -- the mailer connection information.
-**		pxflags -- flag bits:
-**		    PXLF_MAPFROM -- map From_ to >From_.
-**		    PXLF_STRIP8BIT -- strip 8th bit.
-**
-**	Returns:
-**		none
-**
-**	Side Effects:
-**		output of l to fp.
-*/
+# define SMTPLINELIM	990	/* maximum line length */
 
-void
-putxline(l, mci, pxflags)
+putline(l, fp, m)
 	register char *l;
-	register MCI *mci;
-	int pxflags;
+	FILE *fp;
+	MAILER *m;
 {
 	register char *p;
 	register char svchar;
-	int slop = 0;
 
 	/* strip out 0200 bits -- these can look like TELNET protocol */
-	if (bitset(MCIF_7BIT, mci->mci_flags) ||
-	    bitset(PXLF_STRIP8BIT, pxflags))
+	if (bitnset(M_LIMITS, m->m_flags))
 	{
-		for (p = l; (svchar = *p) != '\0'; ++p)
-			if (bitset(0200, svchar))
+		for (p = l; svchar = *p; ++p)
+			if (svchar & 0200)
 				*p = svchar &~ 0200;
 	}
 
 	do
 	{
 		/* find the end of the line */
-		p = strchr(l, '\n');
+		p = index(l, '\n');
 		if (p == NULL)
 			p = &l[strlen(l)];
 
-		if (TrafficLogFile != NULL)
-			fprintf(TrafficLogFile, "%05d >>> ", getpid());
-
 		/* check for line overflow */
-		while (mci->mci_mailer->m_linelimit > 0 &&
-		       (p - l + slop) > mci->mci_mailer->m_linelimit)
+		while ((p - l) > SMTPLINELIM && bitnset(M_LIMITS, m->m_flags))
 		{
-			register char *q = &l[mci->mci_mailer->m_linelimit - slop - 1];
+			register char *q = &l[SMTPLINELIM - 1];
 
 			svchar = *q;
 			*q = '\0';
-			if (l[0] == '.' && slop == 0 &&
-			    bitnset(M_XDOT, mci->mci_mailer->m_flags))
-			{
-				(void) putc('.', mci->mci_out);
-				if (TrafficLogFile != NULL)
-					(void) putc('.', TrafficLogFile);
-			}
-			else if (l[0] == 'F' && slop == 0 &&
-				 bitset(PXLF_MAPFROM, pxflags) &&
-				 strncmp(l, "From ", 5) == 0 &&
-				 bitnset(M_ESCFROM, mci->mci_mailer->m_flags))
-			{
-				(void) putc('>', mci->mci_out);
-				if (TrafficLogFile != NULL)
-					(void) putc('>', TrafficLogFile);
-			}
-			fputs(l, mci->mci_out);
-			(void) putc('!', mci->mci_out);
-			fputs(mci->mci_mailer->m_eol, mci->mci_out);
-			(void) putc(' ', mci->mci_out);
-			if (TrafficLogFile != NULL)
-				fprintf(TrafficLogFile, "%s!\n%05d >>>  ",
-					l, getpid());
+			if (l[0] == '.' && bitnset(M_XDOT, m->m_flags))
+				(void) putc('.', fp);
+			fputs(l, fp);
+			(void) putc('!', fp);
+			fputs(m->m_eol, fp);
 			*q = svchar;
 			l = q;
-			slop = 1;
 		}
 
 		/* output last part */
-		if (l[0] == '.' && slop == 0 &&
-		    bitnset(M_XDOT, mci->mci_mailer->m_flags))
-		{
-			(void) putc('.', mci->mci_out);
-			if (TrafficLogFile != NULL)
-				(void) putc('.', TrafficLogFile);
-		}
-		if (TrafficLogFile != NULL)
-			fprintf(TrafficLogFile, "%.*s\n", p - l, l);
+		if (l[0] == '.' && bitnset(M_XDOT, m->m_flags))
+			(void) putc('.', fp);
 		for ( ; l < p; ++l)
-			(void) putc(*l, mci->mci_out);
-		fputs(mci->mci_mailer->m_eol, mci->mci_out);
+			(void) putc(*l, fp);
+		fputs(m->m_eol, fp);
 		if (*l == '\n')
-		{
-			if (*++l != ' ' && *l != '\t' && *l != '\0')
-			{
-				(void) putc(' ', mci->mci_out);
-				if (TrafficLogFile != NULL)
-					(void) putc(' ', TrafficLogFile);
-			}
-		}
+			++l;
 	} while (l[0] != '\0');
 }
 /*
@@ -1012,50 +553,21 @@ putxline(l, mci, pxflags)
 **		f is unlinked.
 */
 
-void
 xunlink(f)
 	char *f;
 {
 	register int i;
 
 # ifdef LOG
-	if (LogLevel > 98)
-		syslog(LOG_DEBUG, "%s: unlink %s", CurEnv->e_id, f);
-# endif /* LOG */
+	if (LogLevel > 20)
+		syslog(LOG_DEBUG, "%s: unlink %s\n", CurEnv->e_id, f);
+# endif LOG
 
 	i = unlink(f);
 # ifdef LOG
-	if (i < 0 && LogLevel > 97)
+	if (i < 0 && LogLevel > 21)
 		syslog(LOG_DEBUG, "%s: unlink-fail %d", f, errno);
-# endif /* LOG */
-}
-/*
-**  XFCLOSE -- close a file, doing logging as appropriate.
-**
-**	Parameters:
-**		fp -- file pointer for the file to close
-**		a, b -- miscellaneous crud to print for debugging
-**
-**	Returns:
-**		none.
-**
-**	Side Effects:
-**		fp is closed.
-*/
-
-void
-xfclose(fp, a, b)
-	FILE *fp;
-	char *a, *b;
-{
-	if (tTd(53, 99))
-		printf("xfclose(%x) %s %s\n", fp, a, b);
-#if XDEBUG
-	if (fileno(fp) == 1)
-		syserr("xfclose(%s %s): fd = 1", a, b);
-#endif
-	if (fclose(fp) < 0 && tTd(53, 99))
-		printf("xfclose FAILURE: %s\n", errstring(errno));
+# endif LOG
 }
 /*
 **  SFGETS -- "safe" fgets -- times out and ignores random interrupts.
@@ -1064,8 +576,6 @@ xfclose(fp, a, b)
 **		buf -- place to put the input line.
 **		siz -- size of buf.
 **		fp -- file to read from.
-**		timeout -- the timeout before error occurs.
-**		during -- what we are trying to read (for error messages).
 **
 **	Returns:
 **		NULL on error (including timeout).  This will also leave
@@ -1077,56 +587,43 @@ xfclose(fp, a, b)
 */
 
 static jmp_buf	CtxReadTimeout;
-static void	readtimeout();
 
 char *
-sfgets(buf, siz, fp, timeout, during)
+sfgets(buf, siz, fp)
 	char *buf;
 	int siz;
 	FILE *fp;
-	time_t timeout;
-	char *during;
 {
 	register EVENT *ev = NULL;
 	register char *p;
-
-	if (fp == NULL)
-	{
-		buf[0] = '\0';
-		return NULL;
-	}
+	static int readtimeout();
 
 	/* set the timeout */
-	if (timeout != 0)
+	if (ReadTimeout != 0)
 	{
 		if (setjmp(CtxReadTimeout) != 0)
 		{
 # ifdef LOG
 			syslog(LOG_NOTICE,
-			    "timeout waiting for input from %.100s during %s",
-			    CurHostName? CurHostName: "local", during);
+			    "timeout waiting for input from %s\n",
+			    RealHostName? RealHostName: "local");
 # endif
 			errno = 0;
-			usrerr("451 timeout waiting for input during %s",
-				during);
+			usrerr("451 timeout waiting for input");
 			buf[0] = '\0';
-#if XDEBUG
-			checkfd012(during);
-#endif
 			return (NULL);
 		}
-		ev = setevent(timeout, readtimeout, 0);
+		ev = setevent((time_t) ReadTimeout, readtimeout, 0);
 	}
 
 	/* try to read */
 	p = NULL;
-	while (!feof(fp) && !ferror(fp))
+	while (p == NULL && !feof(fp) && !ferror(fp))
 	{
 		errno = 0;
 		p = fgets(buf, siz, fp);
-		if (p != NULL || errno != EINTR)
-			break;
-		clearerr(fp);
+		if (errno == EINTR)
+			clearerr(fp);
 	}
 
 	/* clear the event if it has not sprung */
@@ -1137,34 +634,15 @@ sfgets(buf, siz, fp, timeout, during)
 	if (p == NULL)
 	{
 		buf[0] = '\0';
-		if (TrafficLogFile != NULL)
-			fprintf(TrafficLogFile, "%05d <<< [EOF]\n", getpid());
 		return (NULL);
 	}
-	if (TrafficLogFile != NULL)
-		fprintf(TrafficLogFile, "%05d <<< %s", getpid(), buf);
-	if (SevenBitInput)
-	{
-		for (p = buf; *p != '\0'; p++)
-			*p &= ~0200;
-	}
-	else if (!HasEightBits)
-	{
-		for (p = buf; *p != '\0'; p++)
-		{
-			if (bitset(0200, *p))
-			{
-				HasEightBits = TRUE;
-				break;
-			}
-		}
-	}
+	for (p = buf; *p != '\0'; p++)
+		*p &= ~0200;
 	return (buf);
 }
 
-static void
-readtimeout(timeout)
-	time_t timeout;
+static
+readtimeout()
 {
 	longjmp(CtxReadTimeout, 1);
 }
@@ -1177,9 +655,7 @@ readtimeout(timeout)
 **		f -- file to read from.
 **
 **	Returns:
-**		input line(s) on success, NULL on error or EOF.
-**		This will normally be buf -- unless the line is too
-**			long, when it will be xalloc()ed.
+**		buf on success, NULL on error or EOF.
 **
 **	Side Effects:
 **		buf gets lines from f, with continuation lines (lines
@@ -1194,7 +670,6 @@ fgetfolded(buf, n, f)
 	FILE *f;
 {
 	register char *p = buf;
-	char *bp = buf;
 	register int i;
 
 	n--;
@@ -1210,26 +685,8 @@ fgetfolded(buf, n, f)
 				i = '\r';
 			}
 		}
-		if (--n <= 0)
-		{
-			/* allocate new space */
-			char *nbp;
-			int nn;
-
-			nn = (p - bp);
-			if (nn < MEMCHUNKSIZE)
-				nn *= 2;
-			else
-				nn += MEMCHUNKSIZE;
-			nbp = xalloc(nn);
-			bcopy(bp, nbp, p - bp);
-			p = &nbp[p - bp];
-			if (bp != buf)
-				free(bp);
-			bp = nbp;
-			n = nn - (p - bp);
-		}
-		*p++ = i;
+		if (--n > 0)
+			*p++ = i;
 		if (i == '\n')
 		{
 			LineNumber++;
@@ -1237,15 +694,13 @@ fgetfolded(buf, n, f)
 			if (i != EOF)
 				(void) ungetc(i, f);
 			if (i != ' ' && i != '\t')
-				break;
+			{
+				*--p = '\0';
+				return (buf);
+			}
 		}
 	}
-	if (p == bp)
-		return (NULL);
-	if (p[-1] == '\n')
-		p--;
-	*p = '\0';
-	return (bp);
+	return (NULL);
 }
 /*
 **  CURTIME -- return current time.
@@ -1288,7 +743,7 @@ bool
 atobool(s)
 	register char *s;
 {
-	if (s == NULL || *s == '\0' || strchr("tTyY", *s) != NULL)
+	if (*s == '\0' || index("tTyY", *s) != NULL)
 		return (TRUE);
 	return (FALSE);
 }
@@ -1306,7 +761,6 @@ atobool(s)
 **		none.
 */
 
-int
 atooct(s)
 	register char *s;
 {
@@ -1330,15 +784,10 @@ atooct(s)
 **		none.
 */
 
-int
 waitfor(pid)
 	int pid;
 {
-#ifdef WAITUNION
-	union wait st;
-#else
 	auto int st;
-#endif
 	int i;
 
 	do
@@ -1347,12 +796,8 @@ waitfor(pid)
 		i = wait(&st);
 	} while ((i >= 0 || errno == EINTR) && i != pid);
 	if (i < 0)
-		return -1;
-#ifdef WAITUNION
-	return st.w_status;
-#else
-	return st;
-#endif
+		st = -1;
+	return (st);
 }
 /*
 **  BITINTERSECT -- tell if two bitmaps intersect
@@ -1404,610 +849,4 @@ bitzerop(map)
 		if (map[i] != 0)
 			return (FALSE);
 	return (TRUE);
-}
-/*
-**  STRCONTAINEDIN -- tell if one string is contained in another
-**
-**	Parameters:
-**		a -- possible substring.
-**		b -- possible superstring.
-**
-**	Returns:
-**		TRUE if a is contained in b.
-**		FALSE otherwise.
-*/
-
-bool
-strcontainedin(a, b)
-	register char *a;
-	register char *b;
-{
-	int la;
-	int lb;
-	int c;
-
-	la = strlen(a);
-	lb = strlen(b);
-	c = *a;
-	if (isascii(c) && isupper(c))
-		c = tolower(c);
-	for (; lb-- >= la; b++)
-	{
-		if (*b != c && isascii(*b) && isupper(*b) && tolower(*b) != c)
-			continue;
-		if (strncasecmp(a, b, la) == 0)
-			return TRUE;
-	}
-	return FALSE;
-}
-/*
-**  CHECKFD012 -- check low numbered file descriptors
-**
-**	File descriptors 0, 1, and 2 should be open at all times.
-**	This routine verifies that, and fixes it if not true.
-**
-**	Parameters:
-**		where -- a tag printed if the assertion failed
-**
-**	Returns:
-**		none
-*/
-
-void
-checkfd012(where)
-	char *where;
-{
-#if XDEBUG
-	register int i;
-	struct stat stbuf;
-
-	for (i = 0; i < 3; i++)
-	{
-		if (fstat(i, &stbuf) < 0 && errno != EOPNOTSUPP)
-		{
-			/* oops.... */
-			int fd;
-
-			syserr("%s: fd %d not open", where, i);
-			fd = open("/dev/null", i == 0 ? O_RDONLY : O_WRONLY, 0666);
-			if (fd != i)
-			{
-				(void) dup2(fd, i);
-				(void) close(fd);
-			}
-		}
-	}
-#endif /* XDEBUG */
-}
-/*
-**  PRINTOPENFDS -- print the open file descriptors (for debugging)
-**
-**	Parameters:
-**		logit -- if set, send output to syslog; otherwise
-**			print for debugging.
-**
-**	Returns:
-**		none.
-*/
-
-#include <arpa/inet.h>
-
-void
-printopenfds(logit)
-	bool logit;
-{
-	register int fd;
-	extern int DtableSize;
-
-	for (fd = 0; fd < DtableSize; fd++)
-		dumpfd(fd, FALSE, logit);
-}
-/*
-**  DUMPFD -- dump a file descriptor
-**
-**	Parameters:
-**		fd -- the file descriptor to dump.
-**		printclosed -- if set, print a notification even if
-**			it is closed; otherwise print nothing.
-**		logit -- if set, send output to syslog instead of stdout.
-*/
-
-void
-dumpfd(fd, printclosed, logit)
-	int fd;
-	bool printclosed;
-	bool logit;
-{
-	register char *p;
-	char *hp;
-	char *fmtstr;
-#ifdef S_IFSOCK
-	SOCKADDR sa;
-#endif
-	auto int slen;
-	struct stat st;
-	char buf[200];
-	extern char *hostnamebyanyaddr();
-
-	p = buf;
-	sprintf(p, "%3d: ", fd);
-	p += strlen(p);
-
-	if (fstat(fd, &st) < 0)
-	{
-		if (printclosed || errno != EBADF)
-		{
-			sprintf(p, "CANNOT STAT (%s)", errstring(errno));
-			goto printit;
-		}
-		return;
-	}
-
-	slen = fcntl(fd, F_GETFL, NULL);
-	if (slen != -1)
-	{
-		sprintf(p, "fl=0x%x, ", slen);
-		p += strlen(p);
-	}
-
-	sprintf(p, "mode=%o: ", st.st_mode);
-	p += strlen(p);
-	switch (st.st_mode & S_IFMT)
-	{
-#ifdef S_IFSOCK
-	  case S_IFSOCK:
-		sprintf(p, "SOCK ");
-		p += strlen(p);
-		slen = sizeof sa;
-		if (getsockname(fd, &sa.sa, &slen) < 0)
-			sprintf(p, "(%s)", errstring(errno));
-		else
-		{
-			hp = hostnamebyanyaddr(&sa);
-			if (sa.sa.sa_family == AF_INET)
-				sprintf(p, "%s/%d", hp, ntohs(sa.sin.sin_port));
-			else
-				sprintf(p, "%s", hp);
-		}
-		p += strlen(p);
-		sprintf(p, "->");
-		p += strlen(p);
-		slen = sizeof sa;
-		if (getpeername(fd, &sa.sa, &slen) < 0)
-			sprintf(p, "(%s)", errstring(errno));
-		else
-		{
-			hp = hostnamebyanyaddr(&sa);
-			if (sa.sa.sa_family == AF_INET)
-				sprintf(p, "%s/%d", hp, ntohs(sa.sin.sin_port));
-			else
-				sprintf(p, "%s", hp);
-		}
-		break;
-#endif
-
-	  case S_IFCHR:
-		sprintf(p, "CHR: ");
-		p += strlen(p);
-		goto defprint;
-
-	  case S_IFBLK:
-		sprintf(p, "BLK: ");
-		p += strlen(p);
-		goto defprint;
-
-#if defined(S_IFIFO) && (!defined(S_IFSOCK) || S_IFIFO != S_IFSOCK)
-	  case S_IFIFO:
-		sprintf(p, "FIFO: ");
-		p += strlen(p);
-		goto defprint;
-#endif
-
-#ifdef S_IFDIR
-	  case S_IFDIR:
-		sprintf(p, "DIR: ");
-		p += strlen(p);
-		goto defprint;
-#endif
-
-#ifdef S_IFLNK
-	  case S_IFLNK:
-		sprintf(p, "LNK: ");
-		p += strlen(p);
-		goto defprint;
-#endif
-
-	  default:
-defprint:
-		if (sizeof st.st_size > sizeof (long))
-			fmtstr = "dev=%d/%d, ino=%d, nlink=%d, u/gid=%d/%d, size=%qd";
-		else
-			fmtstr = "dev=%d/%d, ino=%d, nlink=%d, u/gid=%d/%d, size=%ld";
-		sprintf(p, fmtstr,
-			major(st.st_dev), minor(st.st_dev), st.st_ino,
-			st.st_nlink, st.st_uid, st.st_gid, st.st_size);
-		break;
-	}
-
-printit:
-#ifdef LOG
-	if (logit)
-		syslog(LOG_DEBUG, "%.800s", buf);
-	else
-#endif
-		printf("%s\n", buf);
-}
-/*
-**  SHORTENSTRING -- return short version of a string
-**
-**	If the string is already short, just return it.  If it is too
-**	long, return the head and tail of the string.
-**
-**	Parameters:
-**		s -- the string to shorten.
-**		m -- the max length of the string.
-**
-**	Returns:
-**		Either s or a short version of s.
-*/
-
-#ifndef MAXSHORTSTR
-# define MAXSHORTSTR	203
-#endif
-
-char *
-shortenstring(s, m)
-	register const char *s;
-	int m;
-{
-	int l;
-	static char buf[MAXSHORTSTR + 1];
-
-	l = strlen(s);
-	if (l < m)
-		return (char *) s;
-	if (m > MAXSHORTSTR)
-		m = MAXSHORTSTR;
-	else if (m < 10)
-	{
-		if (m < 5)
-		{
-			strncpy(buf, s, m);
-			buf[m] = '\0';
-			return buf;
-		}
-		strncpy(buf, s, m - 3);
-		strcpy(buf + m - 3, "...");
-		return buf;
-	}
-	m = (m - 3) / 2;
-	strncpy(buf, s, m);
-	strcpy(buf + m, "...");
-	strcpy(buf + m + 3, s + l - m);
-	return buf;
-}
-/*
-**  SHORTEN_HOSTNAME -- strip local domain information off of hostname.
-**
-**	Parameters:
-**		host -- the host to shorten (stripped in place).
-**
-**	Returns:
-**		none.
-*/
-
-void
-shorten_hostname(host)
-	char host[];
-{
-	register char *p;
-	char *mydom;
-	int i;
-	bool canon = FALSE;
-
-	/* strip off final dot */
-	p = &host[strlen(host) - 1];
-	if (*p == '.')
-	{
-		*p = '\0';
-		canon = TRUE;
-	}
-
-	/* see if there is any domain at all -- if not, we are done */
-	p = strchr(host, '.');
-	if (p == NULL)
-		return;
-
-	/* yes, we have a domain -- see if it looks like us */
-	mydom = macvalue('m', CurEnv);
-	if (mydom == NULL)
-		mydom = "";
-	i = strlen(++p);
-	if ((canon ? strcasecmp(p, mydom) : strncasecmp(p, mydom, i)) == 0 &&
-	    (mydom[i] == '.' || mydom[i] == '\0'))
-		*--p = '\0';
-}
-/*
-**  PROG_OPEN -- open a program for reading
-**
-**	Parameters:
-**		argv -- the argument list.
-**		pfd -- pointer to a place to store the file descriptor.
-**		e -- the current envelope.
-**
-**	Returns:
-**		pid of the process -- -1 if it failed.
-*/
-
-int
-prog_open(argv, pfd, e)
-	char **argv;
-	int *pfd;
-	ENVELOPE *e;
-{
-	int pid;
-	int i;
-	int saveerrno;
-	int fdv[2];
-	char *p, *q;
-	char buf[MAXLINE + 1];
-	extern int DtableSize;
-
-	if (pipe(fdv) < 0)
-	{
-		syserr("%s: cannot create pipe for stdout", argv[0]);
-		return -1;
-	}
-	pid = fork();
-	if (pid < 0)
-	{
-		syserr("%s: cannot fork", argv[0]);
-		close(fdv[0]);
-		close(fdv[1]);
-		return -1;
-	}
-	if (pid > 0)
-	{
-		/* parent */
-		close(fdv[1]);
-		*pfd = fdv[0];
-		return pid;
-	}
-
-	/* child -- close stdin */
-	close(0);
-
-	/* stdout goes back to parent */
-	close(fdv[0]);
-	if (dup2(fdv[1], 1) < 0)
-	{
-		syserr("%s: cannot dup2 for stdout", argv[0]);
-		_exit(EX_OSERR);
-	}
-	close(fdv[1]);
-
-	/* stderr goes to transcript if available */
-	if (e->e_xfp != NULL)
-	{
-		if (dup2(fileno(e->e_xfp), 2) < 0)
-		{
-			syserr("%s: cannot dup2 for stderr", argv[0]);
-			_exit(EX_OSERR);
-		}
-	}
-
-	/* this process has no right to the queue file */
-	if (e->e_lockfp != NULL)
-		close(fileno(e->e_lockfp));
-
-	/* run as default user */
-	endpwent();
-	setgid(DefGid);
-	setuid(DefUid);
-
-	/* run in some directory */
-	if (ProgMailer != NULL)
-		p = ProgMailer->m_execdir;
-	else
-		p = NULL;
-	for (; p != NULL; p = q)
-	{
-		q = strchr(p, ':');
-		if (q != NULL)
-			*q = '\0';
-		expand(p, buf, sizeof buf, e);
-		if (q != NULL)
-			*q++ = ':';
-		if (buf[0] != '\0' && chdir(buf) >= 0)
-			break;
-	}
-	if (p == NULL)
-	{
-		/* backup directories */
-		if (chdir("/tmp") < 0)
-			(void) chdir("/");
-	}
-
-	/* arrange for all the files to be closed */
-	for (i = 3; i < DtableSize; i++)
-	{
-		register int j;
-
-		if ((j = fcntl(i, F_GETFD, 0)) != -1)
-			(void) fcntl(i, F_SETFD, j | 1);
-	}
-
-	/* now exec the process */
-	execve(argv[0], (ARGV_T) argv, (ARGV_T) UserEnviron);
-
-	/* woops!  failed */
-	saveerrno = errno;
-	syserr("%s: cannot exec", argv[0]);
-	if (transienterror(saveerrno))
-		_exit(EX_OSERR);
-	_exit(EX_CONFIG);
-}
-/*
-**  GET_COLUMN  -- look up a Column in a line buffer
-**
-**	Parameters:
-**		line -- the raw text line to search.
-**		col -- the column number to fetch.
-**		delim -- the delimiter between columns.  If null,
-**			use white space.
-**		buf -- the output buffer.
-**
-**	Returns:
-**		buf if successful.
-**		NULL otherwise.
-*/
-
-char *
-get_column(line, col, delim, buf)
-	char line[];
-	int col;
-	char delim;
-	char buf[];
-{
-	char *p;
-	char *begin, *end;
-	int i;
-	char delimbuf[3];
-	
-	if (delim == '\0')
-		strcpy(delimbuf, "\n\t ");
-	else
-	{
-		delimbuf[0] = delim;
-		delimbuf[1] = '\0';
-	}
-
-	p = line;
-	if (*p == '\0')
-		return NULL;			/* line empty */
-	if (*p == delim && col == 0)
-		return NULL;			/* first column empty */
-
-	begin = line;
-
-	if (col == 0 && delim == '\0')
-	{
-		while (*begin && isspace(*begin))
-			begin++;
-	}
-
-	for (i = 0; i < col; i++)
-	{
-		if ((begin = strpbrk(begin, delimbuf)) == NULL)
-			return NULL;		/* no such column */
-		begin++;
-		if (delim == '\0')
-		{
-			while (*begin && isspace(*begin))
-				begin++;
-		}
-	}
-	
-	end = strpbrk(begin, delimbuf);
-	if (end == NULL)
-	{
-		strcpy(buf, begin);
-	}
-	else
-	{
-		strncpy(buf, begin, end - begin);
-		buf[end - begin] = '\0';
-	}
-	return buf;
-}
-/*
-**  CLEANSTRCPY -- copy string keeping out bogus characters
-**
-**	Parameters:
-**		t -- "to" string.
-**		f -- "from" string.
-**		l -- length of space available in "to" string.
-**
-**	Returns:
-**		none.
-*/
-
-void
-cleanstrcpy(t, f, l)
-	register char *t;
-	register char *f;
-	int l;
-{
-#ifdef LOG
-	/* check for newlines and log if necessary */
-	(void) denlstring(f, TRUE, TRUE);
-#endif
-
-	l--;
-	while (l > 0 && *f != '\0')
-	{
-		if (isascii(*f) &&
-		    (isalnum(*f) || strchr("!#$%&'*+-./^_`{|}~", *f) != NULL))
-		{
-			l--;
-			*t++ = *f;
-		}
-		f++;
-	}
-	*t = '\0';
-}
-/*
-**  DENLSTRING -- convert newlines in a string to spaces
-**
-**	Parameters:
-**		s -- the input string
-**		strict -- if set, don't permit continuation lines.
-**		logattacks -- if set, log attempted attacks.
-**
-**	Returns:
-**		A pointer to a version of the string with newlines
-**		mapped to spaces.  This should be copied.
-*/
-
-char *
-denlstring(s, strict, logattacks)
-	char *s;
-	bool strict;
-	bool logattacks;
-{
-	register char *p;
-	int l;
-	static char *bp = NULL;
-	static int bl = 0;
-
-	p = s;
-	while ((p = strchr(p, '\n')) != NULL)
-		if (strict || (*++p != ' ' && *p != '\t'))
-			break;
-	if (p == NULL)
-		return s;
-
-	l = strlen(s) + 1;
-	if (bl < l)
-	{
-		/* allocate more space */
-		if (bp != NULL)
-			free(bp);
-		bp = xalloc(l);
-		bl = l;
-	}
-	strcpy(bp, s);
-	for (p = bp; (p = strchr(p, '\n')) != NULL; )
-		*p++ = ' ';
-
-#ifdef LOG
-	if (logattacks)
-	{
-		syslog(LOG_NOTICE, "POSSIBLE ATTACK from %.100s: newline in string \"%s\"",
-			RealHostName == NULL ? "[UNKNOWN]" : RealHostName,
-			shortenstring(bp, 203));
-	}
-#endif
-
-	return bp;
 }

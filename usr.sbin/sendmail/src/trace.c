@@ -1,7 +1,7 @@
 /*
- * Copyright (c) 1983, 1995 Eric P. Allman
- * Copyright (c) 1988, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1983 Eric P. Allman
+ * Copyright (c) 1988 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,7 +33,7 @@
  */
 
 #ifndef lint
-static char sccsid[] = "@(#)trace.c	8.4 (Berkeley) 5/28/95";
+static char sccsid[] = "@(#)trace.c	5.6 (Berkeley) 6/1/90";
 #endif /* not lint */
 
 # include "sendmail.h"
@@ -57,7 +57,6 @@ u_char		*tTvect;
 int		tTsize;
 static char	*DefFlags;
 
-void
 tTsetup(vect, size, defflags)
 	u_char *vect;
 	int size;
@@ -80,12 +79,11 @@ tTsetup(vect, size, defflags)
 **		sets/clears trace flags.
 */
 
-void
 tTflag(s)
 	register char *s;
 {
-	unsigned int first, last;
-	register unsigned int i;
+	int first, last;
+	register int i;
 
 	if (*s == '\0')
 		s = DefFlags;

@@ -1,29 +1,30 @@
-#!/usr/bin/perl
-'di ';
-'ds 00 \\"';
-'ig 00 ';
-#
+#!/usr/local/bin/perl
+'di';
+'ig00';
 #       THIS PROGRAM IS ITS OWN MANUAL PAGE.  INSTALL IN man & bin.
-#
+#	groff cannot handle the wrapman constructs, so if you use 
+#	groff, you must cut the manual part out and install it
+#	separately.
 
 # hardcoded constants, should work fine for BSD-based systems
-require 'sys/socket.ph';
+$AF_INET = 2;
+$SOCK_STREAM = 1;
 $sockaddr = 'S n a4 x8';
 
 # system requirements:
 # 	must have 'nslookup' and 'hostname' programs.
 
-# Header: /home/muir/bin/RCS/expn,v 3.6 1994/02/23 22:26:19 muir Exp muir 
+# version 3.2, 5/5/93
 
 # TODO:
+#	CERNVM.CERN.CH needs simple logins for the expn command.
+#	format with groff.
 #	less magic should apply to command-line addresses
 #	less magic should apply to local addresses
-#	add magic to deal with cross-domain cnames
 
 # Checklist: (hard addresses)
-#	250 Kimmo Suominen <"|/usr/local/mh/lib/slocal -user kim"@grendel.tac.nyc.ny.us>
-#	harry@hofmann.cs.Berkeley.EDU -> harry@tenet (.berkeley.edu)  [dead]
-#	bks@cs.berkeley.edu -> shiva.CS (.berkeley.edu)		      [dead]
+#	harry@hofmann.cs.Berkeley.EDU -> harry@tenet (.berkeley.edu)
+#	bks@cs.berkeley.edu -> shiva.CS (.berkeley.edu)
 #	dan@tc.cornell.edu -> brown@tiberius (.tc.cornell.edu)
 
 #############################################################################
@@ -69,7 +70,7 @@ $sockaddr = 'S n a4 x8';
 #	ask each server in turn a whole bunch of questions, addresses to
 #	be expanded are queued up.
 #
-#	This means that all accounting w.r.t. an address must be stored in
+#	This means that all account w.r.t. an address must be stored in
 #	various arrays.  Generally these arrays are indexed by the
 #	string "$addr *** $server" where $addr is the address to be
 #	expanded "foo" or maybe "foo@bar" and $server is the hostname
@@ -101,18 +102,13 @@ $sockaddr = 'S n a4 x8';
 $have_nslookup = 1;	# we have the nslookup program
 $port = 'smtp';
 $av0 = $0;
+$0 = "$av0 - running hostname";
 $ENV{'PATH'} .= ":/usr/etc" unless $ENV{'PATH'} =~ m,/usr/etc,;
-$ENV{'PATH'} .= ":/usr/ucb" unless $ENV{'PATH'} =~ m,/usr/ucb,;
+chop($hostname = `hostname`);
 select(STDERR);
 
-$0 = "$av0 - running hostname";
-chop($name = `hostname || uname -n`);
-
-$0 = "$av0 - lookup host FQDN and IP addr";
-($hostname,$aliases,$type,$len,$thisaddr) = gethostbyname($name);
-
+$usage = "Usage: $av0 [-1avwd] user[@host] [user2[host2] ...]";
 $0 = "$av0 - parsing args";
-$usage = "Usage: $av0 [-1avwd] user[\@host] [user2[host2] ...]";
 for $a (@ARGV) {
 	die $usage if $a eq "-";
 	while ($a =~ s/^(-.*)([1avwd])/$1/) {
@@ -120,7 +116,7 @@ for $a (@ARGV) {
 	}
 	next if $a eq "-";
 	die $usage if $a =~ /^-/;
-	&expn(&parse($a,$hostname,undef,1));
+	&expn(&parse($a,$hostname,undef,1,1));
 }
 $verbose = $flag_v;
 $watch = $flag_w;
@@ -147,7 +143,8 @@ $0 = "$av0 - building local socket";
 ($name,$aliases,$proto) = getprotobyname('tcp');
 ($name,$aliases,$port) = getservbyname($port,'tcp')
 	unless $port =~ /^\d+/;
-$this = pack($sockaddr, &AF_INET, 0, $thisaddr);
+($name,$aliases,$type,$len,$thisaddr) = gethostbyname($hostname);
+$this = pack($sockaddr, $AF_INET, 0, $thisaddr);
 
 HOST:
 while (@hosts) {
@@ -168,6 +165,7 @@ while (@hosts) {
 	# look it up, or try for an mx.
 	$0 = "$av0 - gethostbyname($server)";
 
+
 	($name,$aliases,$type,$len,$thataddr) = gethostbyname($server);
 	# if we can't get an A record, try for an MX record.
 	unless($thataddr) {
@@ -177,8 +175,8 @@ while (@hosts) {
 				
 	# get a connection, or look for an mx
 	$0 = "$av0 - socket to $server";
-	$that = pack($sockaddr, &AF_INET, $port, $thataddr);
-	socket(S, &AF_INET, &SOCK_STREAM, $proto)
+	$that = pack($sockaddr, $AF_INET, $port, $thataddr);
+	socket(S, $AF_INET, $SOCK_STREAM, $proto)
 		|| die "socket: $!";
 	$0 = "$av0 - bind to $server";
 	bind(S, $this) 
@@ -197,16 +195,12 @@ while (@hosts) {
 
 	# read the greeting
 	$0 = "$av0 - talking to $server";
-	&alarm("greeting with $server",'');
 	while(<S>) {
-		alarm(0);
 		print if $watch;
 		if (/^(\d+)([- ])/) {
 			if ($1 != 220) {
-				$0 = "$av0 - bad numeric response from $server";
-				&alarm("giving up after bad response from $server",'');
-				&read_response($2,$watch);
-				alarm(0);
+				$0 = "$av0 - bad numeric responce from $server";
+				&toss($2);
 				print STDERR "$server: NOT 220 greeting: $_"
 					if ($debug || $vw);
 				if (&mxlookup(0,$server,"$server: did not respond with a 220 greeting",*users)) {
@@ -216,7 +210,7 @@ while (@hosts) {
 			}
 			last if ($2 eq " ");
 		} else {
-			$0 = "$av0 - bad response from $server";
+			$0 = "$av0 - bad responce from $server";
 			print STDERR "$server: NOT 220 greeting: $_"
 				if ($debug || $vw);
 			unless (&mxlookup(0,$server,"$server: did not respond with SMTP codes",*users)) {
@@ -225,19 +219,15 @@ while (@hosts) {
 			close(S);
 			next HOST;
 		}
-		&alarm("greeting with $server",'');
 	}
-	alarm(0);
 	
 	# if this causes problems, remove it
 	$0 = "$av0 - sending helo to $server";
-	&alarm("sending helo to $server","");
 	&ps("helo $hostname");
 	while(<S>) {
 		print if $watch;
 		last if /^\d+ /;
 	}
-	alarm(0);
 
 	# try the users, one by one
 	USER:
@@ -263,33 +253,33 @@ while (@hosts) {
 			@toFinal = ();
 			@toExpn = ();
 		}
+		&ps("expn $u");
+		$said_something = 0;
+		while($s = <S>) {
+			$said_something = 1;
 
-#		($ecode,@expansion) = &expn_vrfy($u,$server);
-		(@foo) = &expn_vrfy($u,$server);
-		($ecode,@expansion) = @foo;
-		if ($ecode) {
-			&giveup('',$ecode,$u);
-			last USER;
-		}
-
-		for $s (@expansion) {
-			$s =~ s/[\n\r]//g;
-			$0 = "$av0 - parsing $server: $s";
-
-			$skipwatch = $watch;
-
-			if ($s =~ /^[25]51([- ]).*<(.+)>/) {
-				print "$s" if $watch;
-				print "(pretending 250$1<$2>)" if ($debug && $watch);
-				print "\n" if $watch;
-				$s = "250$1<$2>";
-				$skipwatch = 0;
+			# make sure the server is talking the right language
+			if ($s =~ /^(\d+)([- ])/) {
+				if ($1 != 250 && $1 != 550) {
+					&toss($2);
+					&ps("vrfy $u");
+					$s = <S>;
+					if ($s =~ /^(\d+)/) {
+						if ($1 != 250 && $1 != 550) {
+							&toss($2);
+							&giveup('',"$server: expn/vrfy not implemented",$u);
+							last USER;
+						}
+					}
+				}
 			}
 
+			$s =~ s/[\n\r]//g;
+			$0 = "$av0 - parsing $server: $s";
+			print "$s\n" if $watch;
 			if ($s =~ /^250([- ])(.+)/) {
-				print "$s\n" if $skipwatch;
 				($done,$addr) = ($1,$2);
-				($newhost, $newaddr, $newname) =  &parse($addr,$server,$oldname, $#expansion == 0);
+				($newhost, $newaddr, $newname) =  &parse($addr,$server,$oldname);
 				print "($newhost, $newaddr, $newname) = &parse($addr, $server, $oldname)\n" if $debug;
 				if (! $newhost) {
 					# no expansion is possible w/o a new server to call
@@ -334,7 +324,7 @@ while (@hosts) {
 			# 550 is a known code...  Should the be
 			# included in -a output?  Might be a bug
 			# here.  Does it matter?  Can assume that
-			# there won't be UNKNOWN USER responses 
+			# there won't be UNKNOWN USER responces 
 			# mixed with valid users?
 			if ($s =~ /^(550)([- ])/) {
 				if ($valid) {
@@ -345,30 +335,13 @@ while (@hosts) {
 				last if ($2 eq " ");
 				next;
 			} 
-			# 553 is a known code...  
-			if ($s =~ /^(553)([- ])/) {
-				if ($valid) {
-					print STDERR "\@$server:$u ($oldname) USER AMBIGUOUS\n";
-				} else {
-					&verbose(&final($u,$server,$oldname,"USER AMBIGUOUS"));
-				}
-				last if ($2 eq " ");
-				next;
-			} 
-			# 252 is a known code...  
-			if ($s =~ /^(252)([- ])/) {
-				if ($valid) {
-					print STDERR "\@$server:$u ($oldname) REFUSED TO VRFY\n";
-				} else {
-					&verbose(&final($u,$server,$oldname,"REFUSED TO VRFY"));
-				}
-				last if ($2 eq " ");
-				next;
-			} 
 			&giveup('',"$server: did not grok '$s'",$u);
 			last USER;
 		}
-
+		if (! $said_something) {
+			&giveup('',"$server: lost connection",$u);
+			last USER;
+		}
 		if ($valid) {
 			#
 			# now we decide if we are going to take these
@@ -392,7 +365,6 @@ while (@hosts) {
 		}
 	}
 
-	&alarm("sending 'quit' to $server",'');
 	$0 = "$av0 - sending 'quit' to $server";
 	&ps("quit");
 	while(<S>) {
@@ -400,7 +372,6 @@ while (@hosts) {
 		last if /^\d+ /;
 	}
 	close(S);
-	alarm(0);
 }
 
 $0 = "$av0 - printing final results";
@@ -419,8 +390,6 @@ sub giveup
 {
 	local($redirect_okay,$reason,$user) = @_;
 	local($us,@so,$nh,@remaining_users);
-	local($pk,$file,$line);
-	($pk, $file, $line) = caller;
 
 	$0 = "$av0 - giving up on $server: $reason";
 	#
@@ -434,7 +403,7 @@ sub giveup
 		$giveup{$server} = $reason;
 		print STDERR "$reason\n";
 	}
-	print "Giveup at $file:$line!!! redirect okay = $redirect_okay; $reason\n" if $debug;
+	print "Giveup!!! redirect okay = $redirect_okay; $reason\n" if $debug;
 	#
 	# Wait!
 	# Before giving up, see if there is a chance that
@@ -493,7 +462,7 @@ sub try_fallback
 	if (defined $fellback{$us}) {
 		#
 		# Undo a previous fallback so that we can try again
-		# Nested fallbacks are avoided because they could
+		# Nest fallbacks are avoided because they could
 		# lead to infinite loops
 		#
 		$fallhost = $fellback{$us};
@@ -504,7 +473,7 @@ sub try_fallback
 		print "Fallback an MX expansion $us -> \n" if $debug;
 		$oldhost = $mxbacktrace{$us};
 	} else {
-		print "Oldhost($host, $us) = " if $debug;
+		print "Oldhost(host, $us) = " if $debug;
 		$oldhost = $host;
 	}
 	print "$oldhost\n" if $debug;
@@ -574,97 +543,16 @@ sub do_validAddr
 	print "validAddr($addr) = ???\n" if $debug;
 	return 0;
 }
-# Some systems use expn and vrfy interchangeably.  Some only
-# implement one or the other.  Some check expn against mailing
-# lists and vrfy against users.  It doesn't appear to be
-# consistent.
-#
-# So, what do we do?  We try everything!
-#
-#
-# Ranking of result codes: good: 250, 251/551, 252, 550, anything else
-#
-# Ranking of inputs: best: user@host.domain, okay: user
-#
-# Return value: $error_string, @responses_from_server
-sub expn_vrfy
-{
-	local($u,$server) = @_;
-	local(@c) = ('expn', 'vrfy');
-	local(@try_u) = $u;
-	local(@ret,$code);
-
-	if (($u =~ /(.+)@(.+)/) && (&trhost($2) eq &trhost($server))) {
-		push(@try_u,$1);
-	}
-
-	TRY:
-	for $c (@c) {
-		for $try_u (@try_u) {
-			&alarm("${c}'ing $try_u on $server",'',$u);
-			&ps("$c $try_u");
-			alarm(0);
-			$s = <S>;
-			if ($s eq '') {
-				return "$server: lost connection";
-			}
-			if ($s !~ /^(\d+)([- ])/) {
-				return "$server: garbled reply to '$c $try_u'";
-			}
-			if ($1 == 250) {
-				$code = 250;
-				@ret = ("",$s);
-				push(@ret,&read_response($2,$debug));
-				return (@ret);
-			} 
-			if ($1 == 551 || $1 == 251) {
-				$code = $1;
-				@ret = ("",$s);
-				push(@ret,&read_response($2,$debug));
-				next;
-			}
-			if ($1 == 252 && ($code == 0 || $code == 550)) {
-				$code = 252;
-				@ret = ("",$s);
-				push(@ret,&read_response($2,$watch));
-				next;
-			}
-			if ($1 == 550 && $code == 0) {
-				$code = 550;
-				@ret = ("",$s);
-				push(@ret,&read_response($2,$watch));
-				next;
-			}
-			&read_response($2,$watch);
-		}
-	}
-	return "$server: expn/vrfy not implemented" unless @ret;
-	return @ret;
-}
-# sometimes the old parse routine (now parse2) didn't
-# reject funky addresses. 
-sub parse
-{
-	local($oldaddr,$server,$oldname,$one_to_one) = @_;
-	local($newhost, $newaddr, $newname, $um) =  &parse2($oldaddr,$server,$oldname,$one_to_one);
-	if ($newaddr =~ m,^["/],) {
-		return (undef, $oldaddr, $newname) if $valid;
-		return (undef, $um, $newname);
-	}
-	return ($newhost, $newaddr, $newname);
-}
-
 # returns ($new_smtp_server,$new_address,$new_name)
-# given a response from a SMTP server ($newaddr), the 
+# given a responce from a SMTP server ($newaddr), the 
 # current host ($server), the old "name" and a flag that
 # indicates if it is being called during the initial 
 # command line parsing ($parsing_args)
-sub parse2
+sub parse
 {
 	local($newaddr,$context_host,$old_name,$parsing_args) = @_;
 	local(@names) = $old_name;
 	local($urx) = "[-A-Za-z_.0-9+]+";
-	local($unmangle);
 
 	#
 	# first, separate out the address part.
@@ -679,13 +567,13 @@ sub parse2
 	#
 	if ($newaddr =~ /^\<(.*)\>$/) {
 		print "<A:$1>\n" if $debug;
-		($newaddr) = &trim($1);
+		$newaddr = &trim($1);
 		print "na = $newaddr\n" if $debug;
 	}
 	if ($newaddr =~ /^([^\<\>]*)\<([^\<\>]*)\>([^\<\>]*)$/) {
 		# address has a < > pair in it.
 		print "N:$1 <A:$2> N:$3\n" if $debug;
-		($newaddr) = &trim($2);
+		$newaddr = &trim($2);
 		unshift(@names, &trim($3,$1));
 		print "na = $newaddr\n" if $debug;
 	}
@@ -712,27 +600,26 @@ sub parse2
 	# b!a
 	# a
 	#
-	$unmangle = $newaddr;
 	if ($newaddr =~ /^\@($urx)\:(.+)$/) {
 		print "(\@:)" if $debug;
 		# this is a bit of a cheat, but it seems necessary
-		return (&domainify($1,$context_host,$2),$2,&firstname(@names),$unmangle);
+		return (&domainify($1,$context_host,$2),$2,&firstname(@names));
 	}
 	if ($newaddr =~ /^(.+)\@($urx)$/) {
 		print "(\@)" if $debug;
-		return (&domainify($2,$context_host,$newaddr),$newaddr,&firstname(@names),$unmangle);
+		return (&domainify($2,$context_host,$newaddr),$newaddr,&firstname(@names));
 	}
 	if ($parsing_args) {
 		if ($newaddr =~ /^($urx)\!(.+)$/) {
-			return (&domainify($1,$context_host,$newaddr),$newaddr,&firstname(@names),$unmangle);
+			return (&domainify($1,$context_host,$newaddr),$newaddr,&firstname(@names));
 		}
 		if ($newaddr =~ /^($urx)$/) {
-			return ($context_host,$newaddr,&firstname(@names),$unmangle);
+			return ($context_host,$newaddr,&firstname(@names));
 		}
 		print STDERR "Could not parse $newaddr\n";
 	}
 	print "(?)" if $debug;
-	return(undef,$newaddr,&firstname(@names),$unmangle);
+	return(undef,$newaddr,&firstname(@names));
 }
 # return $u (@$server) unless $u includes reference to $server
 sub compact
@@ -761,7 +648,7 @@ sub trim
 }
 # using the host part of an address, and the server name, add the
 # servers' domain to the address if it doesn't already have a 
-# domain.  Since this sometimes fails, save a back reference so
+# domain.  Since this sometimes failes, save a back reference so
 # it can be unrolled.
 sub domainify
 {
@@ -1054,6 +941,11 @@ sub mxlookup
 
 	# provide fallbacks in case $nserver doesn't work out
 	if (defined $fallback{$cpref}) {
+#		for $u (@users) {
+#			print "mx_secondary{$u *** $nserver} = ".$fallback{$cpref}."\n"
+#				if $debug;
+#			$mx_secondary{"$u *** $nserver"} = $fallback{$cpref};
+#		}
 		$mx_secondary{$server} = $fallback{$cpref};
 	}
 
@@ -1186,33 +1078,15 @@ sub final
 	}
 	"\t$name<$addr>$error\n";
 }
-
-sub alarm
+# read the rest of the current smtp daemon's responce (and toss it away)
+sub toss
 {
-	local($alarm_action,$alarm_redirect,$alarm_user) = @_;
-	alarm(3600);
-	$SIG{ALRM} = 'handle_alarm';
-}
-# this involves one great big ugly hack.
-# the "next HOST" unwinds the stack!
-sub handle_alarm
-{
-	&giveup($alarm_redirect,"Timed out during $alarm_action",$alarm_user);
-	next HOST;
-}
-
-# read the rest of the current smtp daemon's response (and toss it away)
-sub read_response
-{
-	local($done,$watch) = @_;
-	local(@resp);
+	local($done) = @_;
 	print $s if $watch;
 	while(($done eq "-") && ($s = <S>) && ($s =~ /^\d+([- ])/)) {
 		print $s if $watch;
 		$done = $1;
-		push(@resp,$s);
 	}
-	return @resp;
 }
 # print args if verbose.  Return them in any case
 sub verbose
@@ -1227,15 +1101,14 @@ $flag_d;
 $flag_1;
 %already_domainify_fellback;
 %already_mx_fellback;
-&handle_alarm;
 ################### BEGIN PERL/TROFF TRANSITION 
-.00 ;	
+.00;
 
-'di
-.nr nl 0-1
-.nr % 0
-.\\"'; __END__ 
-.\" ############## END PERL/TROFF TRANSITION
+'di		\\ " finish diversion--previous line must be blank
+.nr nl 0-1	\\ " fake up transition to first page again
+.nr % 0		\\ " start at page 1
+'; __END__  
+.\" ############### END PERL/TROFF TRANSITION
 .TH EXPN 1 "March 11, 1993"
 .AT 3
 .SH NAME
@@ -1246,7 +1119,6 @@ expn \- recursively expand mail aliases
 .RI [ -v ]
 .RI [ -w ]
 .RI [ -d ]
-.RI [ -1 ]
 .IR user [@ hostname ]
 .RI [ user [@ hostname ]]...
 .SH DESCRIPTION
@@ -1361,7 +1233,7 @@ and Jon Broome has dropped off the face of the earth!
 .SH AVAILABILITY
 The latest version of 
 .B expn
-is available through anonymous ftp at
-.IR ftp://ftp.idiom.com/pub/muir-programs/expn .
+is available through anonymous ftp to
+.IR idiom.berkeley.ca.us .
 .SH AUTHOR
-.I David Muir Sharnoff\ \ \ \ <muir@idiom.com>
+.I David Muir Sharnoff\ \ \ \ <muir@idiom.berkeley.ca.us>
