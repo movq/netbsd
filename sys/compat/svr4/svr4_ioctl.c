@@ -1,4 +1,4 @@
-/*	$NetBSD: svr4_ioctl.c,v 1.9 1994/11/18 02:53:47 christos Exp $	 */
+/*	$NetBSD: svr4_ioctl.c,v 1.10 1995/07/04 19:47:02 christos Exp $	 */
 
 /*
  * Copyright (c) 1994 Christos Zoulas
@@ -52,6 +52,7 @@
 #include <compat/svr4/svr4_termios.h>
 #include <compat/svr4/svr4_ttold.h>
 #include <compat/svr4/svr4_filio.h>
+#include <compat/svr4/svr4_sockio.h>
 
 #ifdef DEBUG_SVR4
 /*
@@ -122,6 +123,9 @@ svr4_ioctl(p, uap, retval)
 
 	case SVR4_FIOC:
 		return svr4_filioctl(fp, cmd, SCARG(uap, data), p, retval);
+
+	case SVR4_SIOC:
+		return svr4_sockioctl(fp, cmd, SCARG(uap, data), p, retval);
 
 	default:
 		DPRINTF(("Unimplemented ioctl %x\n", cmd));

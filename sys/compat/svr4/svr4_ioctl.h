@@ -1,4 +1,4 @@
-/*	$NetBSD: svr4_ioctl.h,v 1.2 1994/11/18 02:53:48 christos Exp $	 */
+/*	$NetBSD: svr4_ioctl.h,v 1.3 1995/07/04 19:47:04 christos Exp $	 */
 
 /*
  * Copyright (c) 1994 Christos Zoulas
@@ -51,5 +51,7 @@ int	svr4_ttoldioctl __P((struct file* fp, u_long cmd, caddr_t data,
 			     struct proc* p, register_t *retval));
 int	svr4_filioctl __P((struct file* fp, u_long cmd, caddr_t data,
 			   struct proc* p, register_t *retval));
+int	svr4_sockioctl __P((struct file* fp, u_long cmd, caddr_t data,
+			    struct proc* p, register_t *retval));
 
 #endif /* !_SVR4_IOCTL_H_ */
