@@ -1,4 +1,4 @@
-/*	$NetBSD: btowc.c,v 1.1 2003/03/02 22:18:14 tshiozak Exp $	*/
+/*	$NetBSD: btowc.c,v 1.2 2003/03/03 07:39:54 tshiozak Exp $	*/
 
 /*-
  * Copyright (c)2003 Citrus Project,
@@ -28,7 +28,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: btowc.c,v 1.1 2003/03/02 22:18:14 tshiozak Exp $");
+__RCSID("$NetBSD: btowc.c,v 1.2 2003/03/03 07:39:54 tshiozak Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include "namespace.h"
@@ -38,14 +38,23 @@ __RCSID("$NetBSD: btowc.c,v 1.1 2003/03/02 22:18:14 tshiozak Exp $");
 #include <stdio.h>
 
 /*
- * Compare strings with using collating information.
+ * convert a single byte character to a corresponding wide character.
  */
 wint_t
 btowc(c)
 	int c;
 {
+	char mb;
+	mbstate_t mbs;
+	wchar_t wc;
+
 	if (c==EOF)
 		return (WEOF);
 
-	return ((wint_t)(unsigned char)c);
+	mb = (unsigned char)c;
+	memset(&mbs, 0, sizeof(mbs));
+	if (mbrtowc(&wc, &mb, 1, &mbs) != 1)
+		return (WEOF);
+
+	return ((wint_t)wc);
 }
