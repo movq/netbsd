@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 1998/03/29 11:34:24 mrg Exp $
+#	$NetBSD: Makefile,v 1.1.1.1 1998/03/29 11:34:24 mrg Exp $
 
 INCS=	exception new new.h typeinfo
 INCSDIR=/usr/include/g++

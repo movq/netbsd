@@ -1,5 +1,5 @@
 #	from: @(#)Makefile    6.2 (Berkeley) 3/25/91
-#	$NetBSD: Makefile,v 1.1 1998/03/29 11:34:23 mrg Exp $
+#	$NetBSD: Makefile,v 1.1.1.1 1998/03/29 11:34:23 mrg Exp $
 
 .if	(${MACHINE_ARCH} == "sparc") || \
 	(${MACHINE_ARCH} == "mips")
