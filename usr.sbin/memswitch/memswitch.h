@@ -1,4 +1,4 @@
-/*	$NetBSD: memswitch.h,v 1.1 1999/06/21 15:56:03 minoura Exp $	*/
+/*	$NetBSD: memswitch.h,v 1.1.1.1 1999/06/21 15:56:03 minoura Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
