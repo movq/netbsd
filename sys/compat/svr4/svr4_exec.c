@@ -1,4 +1,4 @@
-/*	$NetBSD: svr4_exec.c,v 1.35 2000/12/01 12:28:35 jdolecek Exp $	 */
+/*	$NetBSD: svr4_exec.c,v 1.36 2000/12/01 19:26:26 jdolecek Exp $	 */
 
 /*-
  * Copyright (c) 1994 The NetBSD Foundation, Inc.
@@ -40,23 +40,10 @@
 
 #include <sys/param.h>
 #include <sys/systm.h>
-#include <sys/kernel.h>
 #include <sys/proc.h>
-#include <sys/malloc.h>
-#include <sys/namei.h>
-#include <sys/vnode.h>
-#include <sys/exec_elf.h>
-#include <sys/exec.h>
-
-#include <sys/mman.h>
-
-#include <machine/cpu.h>
-#include <machine/reg.h>
 
 #include <compat/svr4/svr4_types.h>
-#include <compat/svr4/svr4_util.h>
 #include <compat/svr4/svr4_syscall.h>
-#include <compat/svr4/svr4_exec.h>
 #include <compat/svr4/svr4_errno.h>
 #include <compat/svr4/svr4_signal.h>
 
@@ -76,60 +63,3 @@ const struct emul emul_svr4 = {
 	svr4_sigcode,
 	svr4_esigcode,
 };
-
-void *
-svr4_copyargs(pack, arginfo, stack, argp)
-	struct exec_package *pack;
-	struct ps_strings *arginfo;
-	void *stack;
-	void *argp;
-{
-	AuxInfo *a;
-
-	if (!(a = (AuxInfo *) elf32_copyargs(pack, arginfo, stack, argp)))
-		return NULL;
-#ifdef SVR4_COMPAT_SOLARIS2
-	if (pack->ep_emul_arg) {
-		a->au_type = AT_SUN_UID;
-		a->au_v = p->p_ucred->cr_uid;
-		a++;
-
-		a->au_type = AT_SUN_RUID;
-		a->au_v = p->p_cred->ruid;
-		a++;
-
-		a->au_type = AT_SUN_GID;
-		a->au_v = p->p_ucred->cr_gid;
-		a++;
-
-		a->au_type = AT_SUN_RGID;
-		a->au_v = p->p_cred->rgid;
-		a++;
-	}
-#endif
-	return a;
-}
-
-int
-svr4_elf32_probe(p, epp, eh, itp, pos)
-	struct proc *p;
-	struct exec_package *epp;
-	void *eh;
-	char *itp;
-	vaddr_t *pos;
-{
-	const char *bp;
-	int error;
-	size_t len;
-
-	if (itp[0]) {
-		if ((error = emul_find(p, NULL, epp->ep_esch->es_emul->e_path,
-		    itp, &bp, 0)))
-			return error;
-		if ((error = copystr(bp, itp, MAXPATHLEN, &len)))
-			return error;
-		free((void *)bp, M_TEMP);
-	}
-	*pos = SVR4_INTERP_ADDR;
-	return 0;
-}
