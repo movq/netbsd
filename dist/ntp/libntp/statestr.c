@@ -1,4 +1,4 @@
-/*	$NetBSD: statestr.c,v 1.1 2000/03/29 12:38:50 simonb Exp $	*/
+/*	$NetBSD: statestr.c,v 1.1.1.1 2000/03/29 12:38:50 simonb Exp $	*/
 
 /*
  * pretty printing of status information

@@ -1,4 +1,4 @@
-/*	$NetBSD: jupiter.h,v 1.1 2000/03/29 12:38:52 simonb Exp $	*/
+/*	$NetBSD: jupiter.h,v 1.1.1.1 2000/03/29 12:38:52 simonb Exp $	*/
 
 /* @(#) Header: /cvs/ntp/ntpd/jupiter.h,v 1.1.1.1 1999/05/26 00:48:19 stenn Exp (LBL) */
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: findconfig.c,v 1.1 2000/03/29 12:38:49 simonb Exp $	*/
+/*	$NetBSD: findconfig.c,v 1.1.1.1 2000/03/29 12:38:49 simonb Exp $	*/
 
 
 #ifdef HAVE_CONFIG_H

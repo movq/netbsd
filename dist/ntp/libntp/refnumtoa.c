@@ -1,4 +1,4 @@
-/*	$NetBSD: refnumtoa.c,v 1.1 2000/03/29 12:38:50 simonb Exp $	*/
+/*	$NetBSD: refnumtoa.c,v 1.1.1.1 2000/03/29 12:38:50 simonb Exp $	*/
 
 /*
  * refnumtoa - return asciized refclock addresses stored in local array space

@@ -1,4 +1,4 @@
-/*	$NetBSD: refclock_conf.c,v 1.1 2000/03/29 12:38:53 simonb Exp $	*/
+/*	$NetBSD: refclock_conf.c,v 1.1.1.1 2000/03/29 12:38:53 simonb Exp $	*/
 
 /*
  * refclock_conf.c - reference clock configuration

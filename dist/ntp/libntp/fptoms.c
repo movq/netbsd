@@ -1,4 +1,4 @@
-/*	$NetBSD: fptoms.c,v 1.1 2000/03/29 12:38:49 simonb Exp $	*/
+/*	$NetBSD: fptoms.c,v 1.1.1.1 2000/03/29 12:38:49 simonb Exp $	*/
 
 /*
  * fptoms - return an asciized s_fp number in milliseconds

@@ -1,4 +1,4 @@
-/*	$NetBSD: ntpdate.h,v 1.1 2000/03/29 12:38:54 simonb Exp $	*/
+/*	$NetBSD: ntpdate.h,v 1.1.1.1 2000/03/29 12:38:54 simonb Exp $	*/
 
 /*
  * ntpdate.h - declarations for the ntpdate and ntptimeset programs

@@ -1,4 +1,4 @@
-/*	$NetBSD: ntp_string.h,v 1.1 2000/03/29 12:38:48 simonb Exp $	*/
+/*	$NetBSD: ntp_string.h,v 1.1.1.1 2000/03/29 12:38:48 simonb Exp $	*/
 
 /*
  * Define string ops: strchr strrchr memcmp memmove memset 

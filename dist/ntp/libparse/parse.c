@@ -1,4 +1,4 @@
-/*	$NetBSD: parse.c,v 1.1 2000/03/29 12:38:51 simonb Exp $	*/
+/*	$NetBSD: parse.c,v 1.1.1.1 2000/03/29 12:38:51 simonb Exp $	*/
 
 /*
  * /src/NTP/ntp-4/libparse/parse.c,v 4.14 1999/11/28 09:13:52 kardel RELEASE_19991128_A

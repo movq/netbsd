@@ -1,4 +1,4 @@
-/*	$NetBSD: tickadj.c,v 1.1 2000/03/29 12:39:00 simonb Exp $	*/
+/*	$NetBSD: tickadj.c,v 1.1.1.1 2000/03/29 12:39:00 simonb Exp $	*/
 
 /*
  * tickadj - read, and possibly modify, the kernel `tick' and

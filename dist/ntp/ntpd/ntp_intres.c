@@ -1,4 +1,4 @@
-/*	$NetBSD: ntp_intres.c,v 1.1 2000/03/29 12:38:52 simonb Exp $	*/
+/*	$NetBSD: ntp_intres.c,v 1.1.1.1 2000/03/29 12:38:52 simonb Exp $	*/
 
 /*
  * ripped off from ../ntpres/ntpres.c by Greg Troxel 4/2/92

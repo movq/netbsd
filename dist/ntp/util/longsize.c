@@ -1,4 +1,4 @@
-/*	$NetBSD: longsize.c,v 1.1 2000/03/29 12:38:59 simonb Exp $	*/
+/*	$NetBSD: longsize.c,v 1.1.1.1 2000/03/29 12:38:59 simonb Exp $	*/
 
 #include <stdio.h>
 

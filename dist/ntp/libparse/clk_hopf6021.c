@@ -1,4 +1,4 @@
-/*	$NetBSD: clk_hopf6021.c,v 1.1 2000/03/29 12:38:51 simonb Exp $	*/
+/*	$NetBSD: clk_hopf6021.c,v 1.1.1.1 2000/03/29 12:38:51 simonb Exp $	*/
 
 /*
  * /src/NTP/ntp-4/libparse/clk_hopf6021.c,v 4.7 1999/11/28 09:13:49 kardel RELEASE_19991128_A

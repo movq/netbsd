@@ -1,4 +1,4 @@
-/*	$NetBSD: ntptime_config.c,v 1.1 2000/03/29 12:38:54 simonb Exp $	*/
+/*	$NetBSD: ntptime_config.c,v 1.1.1.1 2000/03/29 12:38:54 simonb Exp $	*/
 
 /*
  * ntptime_config.c

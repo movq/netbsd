@@ -1,4 +1,4 @@
-/*	$NetBSD: timetrim.c,v 1.1 2000/03/29 12:39:00 simonb Exp $	*/
+/*	$NetBSD: timetrim.c,v 1.1.1.1 2000/03/29 12:39:00 simonb Exp $	*/
 
 #ifdef sgi
 /*

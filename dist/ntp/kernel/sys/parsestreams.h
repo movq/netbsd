@@ -1,4 +1,4 @@
-/*	$NetBSD: parsestreams.h,v 1.1 2000/03/29 12:38:49 simonb Exp $	*/
+/*	$NetBSD: parsestreams.h,v 1.1.1.1 2000/03/29 12:38:49 simonb Exp $	*/
 
 /*
  * /src/NTP/ntp-4/kernel/sys/parsestreams.h,v 4.4 1998/06/14 21:09:32 kardel RELEASE_19990228_A

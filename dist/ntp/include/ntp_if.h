@@ -1,4 +1,4 @@
-/*	$NetBSD: ntp_if.h,v 1.1 2000/03/29 12:38:48 simonb Exp $	*/
+/*	$NetBSD: ntp_if.h,v 1.1.1.1 2000/03/29 12:38:48 simonb Exp $	*/
 
 /*
  * Sockets are not standard.

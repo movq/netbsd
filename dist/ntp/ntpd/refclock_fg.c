@@ -1,4 +1,4 @@
-/*	$NetBSD: refclock_fg.c,v 1.1 2000/03/29 12:38:53 simonb Exp $	*/
+/*	$NetBSD: refclock_fg.c,v 1.1.1.1 2000/03/29 12:38:53 simonb Exp $	*/
 
 /*
  * refclock_fg - clock driver for the Forum Graphic GPS datating station

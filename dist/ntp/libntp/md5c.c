@@ -1,4 +1,4 @@
-/*	$NetBSD: md5c.c,v 1.1 2000/03/29 12:38:50 simonb Exp $	*/
+/*	$NetBSD: md5c.c,v 1.1.1.1 2000/03/29 12:38:50 simonb Exp $	*/
 
 /* MD5C.C - RSA Data Security, Inc., MD5 message-digest algorithm
  */

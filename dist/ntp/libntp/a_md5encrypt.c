@@ -1,4 +1,4 @@
-/*	$NetBSD: a_md5encrypt.c,v 1.1 2000/03/29 12:38:49 simonb Exp $	*/
+/*	$NetBSD: a_md5encrypt.c,v 1.1.1.1 2000/03/29 12:38:49 simonb Exp $	*/
 
 /*
  *	MD5 interface for rsaref2.0

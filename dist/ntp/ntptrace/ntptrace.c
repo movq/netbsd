@@ -1,4 +1,4 @@
-/*	$NetBSD: ntptrace.c,v 1.1 2000/03/29 12:38:55 simonb Exp $	*/
+/*	$NetBSD: ntptrace.c,v 1.1.1.1 2000/03/29 12:38:55 simonb Exp $	*/
 
 /*
  * ntptrace - show the chain from an NTP host leading back to

@@ -1,4 +1,4 @@
-/*	$NetBSD: md5.h,v 1.1 2000/03/29 12:38:48 simonb Exp $	*/
+/*	$NetBSD: md5.h,v 1.1.1.1 2000/03/29 12:38:48 simonb Exp $	*/
 
 /* MD5.H - header file for MD5C.C
  */

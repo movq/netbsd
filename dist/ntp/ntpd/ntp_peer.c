@@ -1,4 +1,4 @@
-/*	$NetBSD: ntp_peer.c,v 1.1 2000/03/29 12:38:52 simonb Exp $	*/
+/*	$NetBSD: ntp_peer.c,v 1.1.1.1 2000/03/29 12:38:52 simonb Exp $	*/
 
 /*
  * ntp_peer.c - management of data maintained for peer associations
