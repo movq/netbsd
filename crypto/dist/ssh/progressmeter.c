@@ -1,4 +1,4 @@
-/*	$NetBSD: progressmeter.c,v 1.1 2003/04/03 05:57:27 itojun Exp $	*/
+/*	$NetBSD: progressmeter.c,v 1.1.1.1 2003/04/03 05:57:27 itojun Exp $	*/
 /*
  * Copyright (c) 1999 Theo de Raadt.  All rights reserved.
  * Copyright (c) 1999 Aaron Campbell.  All rights reserved.
