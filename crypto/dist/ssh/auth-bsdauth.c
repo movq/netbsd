@@ -1,4 +1,4 @@
-/*	$NetBSD: auth-bsdauth.c,v 1.1 2001/06/23 16:36:59 itojun Exp $	*/
+/*	$NetBSD: auth-bsdauth.c,v 1.1.1.1 2001/06/23 16:36:59 itojun Exp $	*/
 /*
  * Copyright (c) 2001 Markus Friedl.  All rights reserved.
  *
