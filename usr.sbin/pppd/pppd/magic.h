@@ -15,8 +15,9 @@
  * THIS SOFTWARE IS PROVIDED ``AS IS'' AND WITHOUT ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, WITHOUT LIMITATION, THE IMPLIED
  * WARRANTIES OF MERCHANTIBILITY AND FITNESS FOR A PARTICULAR PURPOSE.
+ *
+ * $Id: magic.h,v 1.1.1.1 1997/03/12 19:38:21 christos Exp $
  */
-#include "args.h"
 
-void magic_init __ARGS((void));	/* Initialize the magic number generator */
-u_long magic __ARGS((void));	/* Returns the next magic number */
+void magic_init __P((void));	/* Initialize the magic number generator */
+u_int32_t magic __P((void));	/* Returns the next magic number */
