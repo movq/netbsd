@@ -1,4 +1,4 @@
-/*	$NetBSD: dmavar.h,v 1.1 1996/05/05 12:17:08 oki Exp $	*/
+/*	$NetBSD: dmavar.h,v 1.1.1.1 1996/05/05 12:17:03 oki Exp $	*/
 
 /*
  * Copyright (c) 1995 Masanobu Saitoh.  All rights reserved.

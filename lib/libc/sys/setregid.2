@@ -1,3 +1,4 @@
+.\" Copyright (c) 1996 Charles M. Hannum.  All rights reserved.
 .\" Copyright (c) 1983, 1991 The Regents of the University of California.
 .\" All rights reserved.
 .\"
@@ -30,28 +31,51 @@
 .\" SUCH DAMAGE.
 .\"
 .\"     from: @(#)setregid.2	6.4 (Berkeley) 3/10/91
-.\"	$Id: setregid.2,v 1.4 1993/11/29 21:25:35 jtc Exp $
+.\"	$Id: setregid.2,v 1.6 1996/06/23 11:52:53 mycroft Exp $
 .\"
-.Dd March 10, 1991
+.Dd June 23, 1996
 .Dt SETREGID 2
 .Os BSD 4.2
 .Sh NAME
 .Nm setregid
-.Nd set real and effective group ID
+.Nd set real and effective group ID's
 .Sh SYNOPSIS
 .Fd #include <unistd.h>
 .Ft int
 .Fn setregid "int rgid" "int egid"
 .Sh DESCRIPTION
-The real and effective group ID's of the current process
-are set to the arguments.
+The real and effective group ID's of the
+current process are set according to the arguments.  If the real group ID
+is changed, the saved group ID is changed to the new value of the effective
+group ID.
+.Pp
+If
+.Fa rgid
+or
+.Fa egid
+is -1, the current gid is filled in by the system.
 Unprivileged users may change the real group
-ID to the effective group ID and vice-versa; only the super-user may
+ID to the effective group ID, and may change the effective group ID to the
+real group ID or the saved group ID; only the super-user may
 make other changes.
 .Pp
-Supplying a value of -1 for either the real or effective
-group ID forces the system to substitute the current
-ID in place of the -1 parameter.
+The 
+.Fn setregid
+function has been used to swap the real and effective group
+IDs in set-group-ID programs to temporarily relinquish the set-group-ID
+value.  This purpose is now better served by the use of the
+.Fn setegid
+function (see
+.Xr setuid 2 ).
+.Pp
+When setting the real and effective group IDs to the same value, this
+function is equivalent to the
+.Fn setgid
+function.
+When setting only the effective group ID, this function is equivalent to
+the
+.Fn setegid
+function.
 .Sh RETURN VALUES
 Upon successful completion, a value of 0 is returned.  Otherwise,
 a value of -1 is returned and
@@ -66,10 +90,18 @@ was specified.
 .El
 .Sh SEE ALSO
 .Xr getgid 2 ,
-.Xr setreuid 2 ,
-.Xr setgid 3
+.Xr setegid 2 ,
+.Xr setgid 2 ,
+.Xr setuid 2
 .Sh HISTORY
 The
 .Fn setregid
 function call appeared in
-.Bx 4.2 .
+.Bx 4.2
+and was dropped in
+.Bx 4.4 .
+It was reimplemented in
+.Nx 1.2
+in a way compatible with
+.Bx 4.3 ,
+SunOS and Linux.
