@@ -1,7 +1,11 @@
-/*	$NetBSD: atapi_base.c,v 1.5 1998/01/15 02:21:27 cgd Exp $	*/
+/*	$NetBSD: atapi_base.c,v 1.9 1998/08/15 10:10:55 mycroft Exp $	*/
 
-/*
- * Copyright (c) 1994, 1995, 1997 Charles M. Hannum.  All rights reserved.
+/*-
+ * Copyright (c) 1998 The NetBSD Foundation, Inc.
+ * All rights reserved.
+ *
+ * This code is derived from software contributed to The NetBSD Foundation
+ * by Charles M. Hannum.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -13,24 +17,23 @@
  *    documentation and/or other materials provided with the distribution.
  * 3. All advertising materials mentioning features or use of this software
  *    must display the following acknowledgement:
- *	This product includes software developed by Charles M. Hannum.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
+ *        This product includes software developed by the NetBSD
+ *        Foundation, Inc. and its contributors.
+ * 4. Neither the name of The NetBSD Foundation nor the names of its
+ *    contributors may be used to endorse or promote products derived
+ *    from this software without specific prior written permission.
  *
- * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
- * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
- * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
- * IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
- * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
- * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
- * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
- * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
- * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- */
-
-/*
- * Originally written by Julian Elischer (julian@dialix.oz.au)
+ * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
+ * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
+ * TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+ * PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE FOUNDATION OR CONTRIBUTORS
+ * BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
  */
 
 #include <sys/types.h>
@@ -74,19 +77,19 @@ atapi_interpret_sense(xs)
 		SC_DEBUG(sc_link, SDEV_DB2,
 		    ("calling private err_handler()\n"));
 		error = (*sc_link->device->err_handler) (xs);
-		if (error != -1)
+		if (error != SCSIRET_CONTINUE)
 			return (error);		/* error >= 0  better ? */
 	}
 	/* otherwise use the default */
 	switch (key) {
-		case 0x1: /* RECOVERED ERROR */
+		case SKEY_RECOVERED_ERROR:
 			msg = "soft error (corrected)";
-		case 0x0: /* NO SENSE */
+		case SKEY_NO_SENSE:
 			if (xs->resid == xs->datalen)
 				xs->resid = 0;  /* not short read */
-		error = 0;
-		break;
-		case 0x2:	/* NOT READY */
+			error = 0;
+			break;
+		case SKEY_NOT_READY:
 			if ((sc_link->flags & SDEV_REMOVABLE) != 0)
 				sc_link->flags &= ~SDEV_MEDIA_LOADED;
 			if ((xs->flags & SCSI_IGNORE_NOT_READY) != 0)
@@ -96,15 +99,15 @@ atapi_interpret_sense(xs)
 			msg = "not ready";
 			error = EIO;
 			break;
-		case 0x03: /* MEDIUM ERROR */
+		case SKEY_MEDIUM_ERROR: /* MEDIUM ERROR */
 			msg = "medium error";
 			error = EIO;
 			break;
-		case 0x04:
+		case SKEY_HARDWARE_ERROR:
 			msg = "non-media hardware failure";
 			error = EIO;
 			break;
-		case 0x5:	/* ILLEGAL REQUEST */
+		case SKEY_ILLEGAL_REQUEST:
 			if ((xs->flags & SCSI_IGNORE_ILLEGAL_REQUEST) != 0)
 				return (0);
 			if ((xs->flags & SCSI_SILENT) != 0)
@@ -112,7 +115,7 @@ atapi_interpret_sense(xs)
 			msg = "illegal request";
 			error = EINVAL;
 			break;
-		case 0x6:	/* UNIT ATTENTION */
+		case SKEY_UNIT_ATTENTION:
 			if ((sc_link->flags & SDEV_REMOVABLE) != 0)
 				sc_link->flags &= ~SDEV_MEDIA_LOADED;
 			if ((xs->flags & SCSI_IGNORE_MEDIA_CHANGE) != 0 ||
@@ -124,11 +127,11 @@ atapi_interpret_sense(xs)
 			msg = "unit attention";
 			error = EIO;
 			break;
-		case 0x7:	/* DATA PROTECT */
+		case SKEY_WRITE_PROTECT:
 			msg = "readonly device";
 			error = EROFS;
 			break;
-		case 0xb:	/* COMMAND ABORTED */
+		case SKEY_ABORTED_COMMAND:
 			msg = "command aborted";
 			error = ERESTART;
 			break;
