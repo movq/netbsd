@@ -1,8 +1,8 @@
-/* $Header: /home/mike/src/cvs/netbsd/src/usr.bin/patch/Attic/version.c,v 1.1 1993/04/09 11:34:12 cgd Exp $
+/* $Header: /home/mike/src/cvs/netbsd/src/usr.bin/patch/Attic/version.c,v 1.1.1.1 1997/01/09 14:47:40 tls Exp $
  *
  * $Log: version.c,v $
- * Revision 1.1  1993/04/09 11:34:12  cgd
- * patch 2.0.12u8, from prep.ai.mit.edu.  this is not under the GPL.
+ * Revision 1.1.1.1  1997/01/09 14:47:40  tls
+ * Import from 4.4BSD-Lite2
  *
  * Revision 2.0  86/09/17  15:40:11  lwall
  * Baseline for netwide release.
@@ -16,13 +16,16 @@
 #include "patchlevel.h"
 #include "version.h"
 
-void my_exit();
-
 /* Print out the version number and die. */
 
 void
 version()
 {
-    fprintf(stderr, "Patch version 2.0, patch level %s\n", PATCHLEVEL);
-    my_exit(0);
+    extern char rcsid[];
+
+#ifdef lint
+    rcsid[0] = rcsid[0];
+#else
+    fatal3("%s\nPatch level: %d\n", rcsid, PATCHLEVEL);
+#endif
 }

@@ -1,6 +1,6 @@
-# $Header: /home/mike/src/cvs/netbsd/src/usr.bin/patch/Makefile,v 1.1 1993/04/09 11:33:53 cgd Exp $
+#	@(#)Makefile	8.1 (Berkeley) 6/6/93
 
 PROG=	patch
-SRCS=	patch.c pch.c inp.c version.c util.c backupfile.c
+SRCS=	patch.c pch.c inp.c version.c util.c
 
 .include <bsd.prog.mk>

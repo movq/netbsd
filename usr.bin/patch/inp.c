@@ -1,12 +1,9 @@
-/* $Header: /home/mike/src/cvs/netbsd/src/usr.bin/patch/inp.c,v 1.1 1993/04/09 11:34:00 cgd Exp $
+/* $Header: /home/mike/src/cvs/netbsd/src/usr.bin/patch/inp.c,v 1.1.1.1 1997/01/09 14:47:39 tls Exp $
  *
  * $Log: inp.c,v $
- * Revision 1.1  1993/04/09 11:34:00  cgd
- * patch 2.0.12u8, from prep.ai.mit.edu.  this is not under the GPL.
+ * Revision 1.1.1.1  1997/01/09 14:47:39  tls
+ * Import from 4.4BSD-Lite2
  *
- * Revision 2.0.1.1  88/06/03  15:06:13  lwall
- * patch10: made a little smarter about sccs files
- * 
  * Revision 2.0  86/09/17  15:37:02  lwall
  * Baseline for netwide release.
  * 
@@ -79,78 +76,43 @@ bool
 plan_a(filename)
 char *filename;
 {
-    int ifd, statfailed;
+    int ifd;
     Reg1 char *s;
     Reg2 LINENUM iline;
-    char lbuf[MAXLINELEN];
 
-    statfailed = stat(filename, &filestat);
-    if (statfailed && ok_to_create_file) {
+    if (ok_to_create_file && stat(filename, &filestat) < 0) {
 	if (verbose)
 	    say2("(Creating file %s...)\n",filename);
 	makedirs(filename, TRUE);
 	close(creat(filename, 0666));
-	statfailed = stat(filename, &filestat);
     }
-    /* For nonexistent or read-only files, look for RCS or SCCS versions.  */
-    if (statfailed
-	/* No one can write to it.  */
-	|| (filestat.st_mode & 0222) == 0
-	/* I can't write to it.  */
-	|| ((filestat.st_mode & 0022) == 0 && filestat.st_uid != myuid)) {
-	struct stat cstat;
-	char *cs = Nullch;
-	char *filebase;
-	int pathlen;
-
-	filebase = basename(filename);
-	pathlen = filebase - filename;
-
-	/* Put any leading path into `s'.
-	   Leave room in lbuf for the diff command.  */
-	s = lbuf + 20;
-	strncpy(s, filename, pathlen);
-
-#define try(f, a1, a2) (Sprintf(s + pathlen, f, a1, a2), stat(s, &cstat) == 0)
-	if (   try("RCS/%s%s", filebase, RCSSUFFIX)
-	    || try("RCS/%s"  , filebase,         0)
-	    || try(    "%s%s", filebase, RCSSUFFIX)) {
+    if (stat(filename, &filestat) < 0) {
+	Sprintf(buf, "RCS/%s%s", filename, RCSSUFFIX);
+	if (stat(buf, &filestat) >= 0 || stat(buf+4, &filestat) >= 0) {
 	    Sprintf(buf, CHECKOUT, filename);
-	    Sprintf(lbuf, RCSDIFF, filename);
-	    cs = "RCS";
-	} else if (   try("SCCS/%s%s", SCCSPREFIX, filebase)
-		   || try(     "%s%s", SCCSPREFIX, filebase)) {
-	    Sprintf(buf, GET, s);
-	    Sprintf(lbuf, SCCSDIFF, s, filename);
-	    cs = "SCCS";
-	} else if (statfailed)
-	    fatal2("can't find %s\n", filename);
-	/* else we can't write to it but it's not under a version
-	   control system, so just proceed.  */
-	if (cs) {
-	    if (!statfailed) {
-		if ((filestat.st_mode & 0222) != 0)
-		    /* The owner can write to it.  */
-		    fatal3("file %s seems to be locked by somebody else under %s\n",
-			   filename, cs);
-		/* It might be checked out unlocked.  See if it's safe to
-		   check out the default version locked.  */
-		if (verbose)
-		    say3("Comparing file %s to default %s version...\n",
-			 filename, cs);
-		if (system(lbuf))
-		    fatal3("can't check out file %s: differs from default %s version\n",
-			   filename, cs);
-	    }
 	    if (verbose)
-		say3("Checking out file %s from %s...\n", filename, cs);
+		say2("Can't find %s--attempting to check it out from RCS.\n",
+		    filename);
 	    if (system(buf) || stat(filename, &filestat))
-		fatal3("can't check out file %s from %s\n", filename, cs);
+		fatal2("Can't check out %s.\n", filename);
+	}
+	else {
+	    Sprintf(buf, "SCCS/%s%s", SCCSPREFIX, filename);
+	    if (stat(buf, &filestat) >= 0 || stat(buf+5, &filestat) >= 0) {
+		Sprintf(buf, GET, filename);
+		if (verbose)
+		    say2("Can't find %s--attempting to get it from SCCS.\n",
+			filename);
+		if (system(buf) || stat(filename, &filestat))
+		    fatal2("Can't get %s.\n", filename);
+	    }
+	    else
+		fatal2("Can't find %s.\n", filename);
 	}
     }
     filemode = filestat.st_mode;
-    if (!S_ISREG(filemode))
-	fatal2("%s is not a normal file--can't patch\n", filename);
+    if ((filemode & S_IFMT) & ~S_IFREG)
+	fatal2("%s is not a normal file--can't patch.\n", filename);
     i_size = filestat.st_size;
     if (out_of_mem) {
 	set_hunkmax();		/* make sure dynamic arrays are allocated */
@@ -166,7 +128,7 @@ char *filename;
     if (i_womp == Nullch)
 	return FALSE;
     if ((ifd = open(filename, 0)) < 0)
-	pfatal2("can't open file %s", filename);
+	fatal2("Can't open file %s\n", filename);
 #ifndef lint
     if (read(ifd, i_womp, (int)i_size) != i_size) {
 	Close(ifd);	/* probably means i_size > 15 or 16 bits worth */
@@ -212,20 +174,16 @@ char *filename;
 	if (!rev_in_string(i_womp)) {
 	    if (force) {
 		if (verbose)
-		    say2(
-"Warning: this file doesn't appear to be the %s version--patching anyway.\n",
+		    say2("\
+Warning: this file doesn't appear to be the %s version--patching anyway.\n",
 			revision);
 	    }
-	    else if (batch) {
-		fatal2(
-"this file doesn't appear to be the %s version--aborting.\n", revision);
-	    }
 	    else {
-		ask2(
-"This file doesn't appear to be the %s version--patch anyway? [n] ",
+		ask2("\
+This file doesn't appear to be the %s version--patch anyway? [n] ",
 		    revision);
 	    if (*buf != 'y')
-		fatal1("aborted\n");
+		fatal1("Aborted.\n");
 	    }
 	}
 	else if (verbose)
@@ -248,9 +206,9 @@ char *filename;
 
     using_plan_a = FALSE;
     if ((ifp = fopen(filename, "r")) == Nullfp)
-	pfatal2("can't open file %s", filename);
+	fatal2("Can't open file %s\n", filename);
     if ((tifd = creat(TMPINNAME, 0666)) < 0)
-	pfatal2("can't open file %s", TMPINNAME);
+	fatal2("Can't open file %s\n", TMPINNAME);
     while (fgets(buf, sizeof buf, ifp) != Nullch) {
 	if (revision != Nullch && !found_revision && rev_in_string(buf))
 	    found_revision = TRUE;
@@ -261,20 +219,16 @@ char *filename;
 	if (!found_revision) {
 	    if (force) {
 		if (verbose)
-		    say2(
-"Warning: this file doesn't appear to be the %s version--patching anyway.\n",
+		    say2("\
+Warning: this file doesn't appear to be the %s version--patching anyway.\n",
 			revision);
 	    }
-	    else if (batch) {
-		fatal2(
-"this file doesn't appear to be the %s version--aborting.\n", revision);
-	    }
 	    else {
-		ask2(
-"This file doesn't appear to be the %s version--patch anyway? [n] ",
+		ask2("\
+This file doesn't appear to be the %s version--patch anyway? [n] ",
 		    revision);
 		if (*buf != 'y')
-		    fatal1("aborted\n");
+		    fatal1("Aborted.\n");
 	    }
 	}
 	else if (verbose)
@@ -287,24 +241,24 @@ char *filename;
     tibuf[0] = malloc((MEM)(BUFFERSIZE + 1));
     tibuf[1] = malloc((MEM)(BUFFERSIZE + 1));
     if (tibuf[1] == Nullch)
-	fatal1("out of memory\n");
+	fatal1("Can't seem to get enough memory.\n");
     for (i=1; ; i++) {
 	if (! (i % lines_per_buf))	/* new block */
 	    if (write(tifd, tibuf[0], BUFFERSIZE) < BUFFERSIZE)
-		pfatal1("can't write temp file");
+		fatal1("patch: can't write temp file.\n");
 	if (fgets(tibuf[0] + maxlen * (i%lines_per_buf), maxlen + 1, ifp)
 	  == Nullch) {
 	    input_lines = i - 1;
 	    if (i % lines_per_buf)
 		if (write(tifd, tibuf[0], BUFFERSIZE) < BUFFERSIZE)
-		    pfatal1("can't write temp file");
+		    fatal1("patch: can't write temp file.\n");
 	    break;
 	}
     }
     Fclose(ifp);
     Close(tifd);
     if ((tifd = open(TMPINNAME, 0)) < 0) {
-	pfatal2("can't reopen file %s", TMPINNAME);
+	fatal2("Can't reopen file %s\n", TMPINNAME);
     }
 }
 
@@ -330,10 +284,10 @@ int whichbuf;				/* ignored when file in memory */
 	else {
 	    tiline[whichbuf] = baseline;
 #ifndef lint		/* complains of long accuracy */
-	    Lseek(tifd, (long)baseline / lines_per_buf * BUFFERSIZE, 0);
+	    Lseek(tifd, (off_t)baseline / lines_per_buf * BUFFERSIZE, 0);
 #endif
 	    if (read(tifd, tibuf[whichbuf], BUFFERSIZE) < 0)
-		pfatal2("error reading tmp file %s", TMPINNAME);
+		fatal2("Error reading tmp file %s.\n", TMPINNAME);
 	}
 	return tibuf[whichbuf] + (tireclen*offline);
     }
@@ -351,8 +305,6 @@ char *string;
     if (revision == Nullch)
 	return TRUE;
     patlen = strlen(revision);
-    if (strnEQ(string,revision,patlen) && isspace(string[patlen]))
-	return TRUE;
     for (s = string; *s; s++) {
 	if (isspace(*s) && strnEQ(s+1, revision, patlen) && 
 		isspace(s[patlen+1] )) {
@@ -361,3 +313,4 @@ char *string;
     }
     return FALSE;
 }
+

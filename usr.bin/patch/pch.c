@@ -1,16 +1,9 @@
-/* $Header: /home/mike/src/cvs/netbsd/src/usr.bin/patch/pch.c,v 1.1 1993/04/09 11:34:07 cgd Exp $
+/* $Header: /home/mike/src/cvs/netbsd/src/usr.bin/patch/pch.c,v 1.1.1.1 1997/01/09 14:47:40 tls Exp $
  *
  * $Log: pch.c,v $
- * Revision 1.1  1993/04/09 11:34:07  cgd
- * patch 2.0.12u8, from prep.ai.mit.edu.  this is not under the GPL.
+ * Revision 1.1.1.1  1997/01/09 14:47:40  tls
+ * Import from 4.4BSD-Lite2
  *
- * Revision 2.0.2.0  90/05/01  22:17:51  davison
- * patch12u: unidiff support added
- *
- * Revision 2.0.1.7  88/06/03  15:13:28  lwall
- * patch10: Can now find patches in shar scripts.
- * patch10: Hunks that swapped and then swapped back could core dump.
- * 
  * Revision 2.0.1.6  87/06/04  16:18:13  lwall
  * pch_swap didn't swap p_bfake and p_efake.
  * 
@@ -88,7 +81,7 @@ char *filename;
     if (filename == Nullch || !*filename || strEQ(filename, "-")) {
 	pfp = fopen(TMPPATNAME, "w");
 	if (pfp == Nullfp)
-	    pfatal2("can't create %s", TMPPATNAME);
+	    fatal2("patch: can't create %s.\n", TMPPATNAME);
 	while (fgets(buf, sizeof buf, stdin) != Nullch)
 	    fputs(buf, pfp);
 	Fclose(pfp);
@@ -96,7 +89,7 @@ char *filename;
     }
     pfp = fopen(filename, "r");
     if (pfp == Nullfp)
-	pfatal2("patch file %s not found", filename);
+	fatal2("patch file %s not found\n", filename);
     Fstat(fileno(pfp), &filestat);
     p_filesize = filestat.st_size;
     next_intuit_at(0L,1L);			/* start at the beginning */
@@ -138,7 +131,7 @@ grow_hunkmax()
     if (p_line != Null(char**) && p_len != Null(short*) && p_char != Nullch)
 	return;
     if (!using_plan_a)
-	fatal1("out of memory\n");
+	fatal1("patch: out of memory (grow_hunkmax)\n");
     out_of_mem = TRUE;		/* whatever is null will be allocated again */
 				/* from within plan_a(), of all places */
 }
@@ -168,7 +161,6 @@ there_is_another_patch()
     if (verbose)
 	say3("  %sooks like %s to me...\n",
 	    (p_base == 0L ? "L" : "The next patch l"),
-	    diff_type == UNI_DIFF ? "a unified diff" :
 	    diff_type == CONTEXT_DIFF ? "a context diff" :
 	    diff_type == NEW_CONTEXT_DIFF ? "a new-style context diff" :
 	    diff_type == NORMAL_DIFF ? "a normal diff" :
@@ -177,7 +169,7 @@ there_is_another_patch()
 	say3("(Patch is indented %d space%s.)\n", p_indent, p_indent==1?"":"s");
     skip_to(p_start,p_sline);
     while (filearg[0] == Nullch) {
-	if (force || batch) {
+	if (force) {
 	    say1("No file to patch.  Skipping...\n");
 	    filearg[0] = savestr(bestguess);
 	    return TRUE;
@@ -254,7 +246,7 @@ intuit_diff_type()
 		goto scan_exit;
 	    }
 	}
-	for (s = buf; *s == ' ' || *s == '\t' || *s == 'X'; s++) {
+	for (s = buf; *s == ' ' || *s == '\t'; s++) {
 	    if (*s == '\t')
 		indent += 8 - (indent % 8);
 	    else
@@ -272,8 +264,6 @@ intuit_diff_type()
 	    oldtmp = savestr(s+4);
 	else if (strnEQ(s, "--- ", 4))
 	    newtmp = savestr(s+4);
-	else if (strnEQ(s, "+++ ", 4))
-	    oldtmp = savestr(s+4);	/* pretend it is the old name */
 	else if (strnEQ(s, "Index:", 6))
 	    indtmp = savestr(s+6);
 	else if (strnEQ(s, "Prereq:", 7)) {
@@ -293,15 +283,6 @@ intuit_diff_type()
 	    p_start = first_command_line;
 	    p_sline = fcl_line;
 	    retval = ED_DIFF;
-	    goto scan_exit;
-	}
-	if ((!diff_type || diff_type == UNI_DIFF) && strnEQ(s, "@@ -", 4)) {
-	    if (!atol(s+3))
-		ok_to_create_file = TRUE;
-	    p_indent = indent;
-	    p_start = this_line;
-	    p_sline = p_input_line;
-	    retval = UNI_DIFF;
 	    goto scan_exit;
 	}
 	stars_this_line = strnEQ(s, "********", 8);
@@ -425,14 +406,6 @@ long file_line;
     p_input_line = file_line - 1;
 }
 
-/* Make this a function for better debugging.  */
-static void
-malformed ()
-{
-    fatal3("malformed patch at line %ld: %s", p_input_line, buf);
-		/* about as informative as "Syntax error" in C */
-}
-
 /* True if there is more of the current diff listing to process. */
 
 bool
@@ -490,17 +463,13 @@ another_hunk()
 			repl_missing = TRUE;
 			goto hunk_done;
 		    }
-		    fatal1("unexpected end of file in patch\n");
+		    fatal1("Unexpected end of file in patch.\n");
 		}
 	    }
 	    p_end++;
 	    assert(p_end < hunkmax);
 	    p_char[p_end] = *buf;
-#ifdef zilog
-	    p_line[(short)p_end] = Nullch;
-#else
 	    p_line[p_end] = Nullch;
-#endif
 	    switch (*buf) {
 	    case '*':
 		if (strnEQ(buf, "********", 8)) {
@@ -509,7 +478,7 @@ another_hunk()
 			goto hunk_done;
 		    }
 		    else
-			fatal2("unexpected end of hunk at line %ld\n",
+			fatal2("Unexpected end of hunk at line %ld.\n",
 			    p_input_line);
 		}
 		if (p_end != 0) {
@@ -517,7 +486,7 @@ another_hunk()
 			repl_missing = TRUE;
 			goto hunk_done;
 		    }
-		    fatal3("unexpected *** at line %ld: %s", p_input_line, buf);
+		    fatal3("Unexpected *** at line %ld: %s", p_input_line, buf);
 		}
 		context = 0;
 		p_line[p_end] = savestr(buf);
@@ -527,15 +496,13 @@ another_hunk()
 		}
 		for (s=buf; *s && !isdigit(*s); s++) ;
 		if (!*s)
-		    malformed ();
-		if (strnEQ(s,"0,0",3))
-		    strcpy(s,s+2);
+		    goto malformed;
 		p_first = (LINENUM) atol(s);
 		while (isdigit(*s)) s++;
 		if (*s == ',') {
 		    for (; *s && !isdigit(*s); s++) ;
 		    if (!*s)
-			malformed ();
+			goto malformed;
 		    p_ptrn_lines = ((LINENUM)atol(s)) - p_first + 1;
 		}
 		else if (p_first)
@@ -569,12 +536,12 @@ another_hunk()
 				    goto hunk_done;
 				}
 				fatal3(
-"duplicate \"---\" at line %ld--check line numbers at line %ld\n",
+"Duplicate \"---\" at line %ld--check line numbers at line %ld.\n",
 				    p_input_line, p_hunk_beg + repl_beginning);
 			    }
 			    else {
 				fatal4(
-"%s \"---\" at line %ld--check line numbers at line %ld\n",
+"%s \"---\" at line %ld--check line numbers at line %ld.\n",
 				    (p_end <= p_ptrn_lines
 					? "Premature"
 					: "Overdue" ),
@@ -593,13 +560,13 @@ another_hunk()
 		    p_char[p_end] = '=';
 		    for (s=buf; *s && !isdigit(*s); s++) ;
 		    if (!*s)
-			malformed ();
+			goto malformed;
 		    p_newfirst = (LINENUM) atol(s);
 		    while (isdigit(*s)) s++;
 		    if (*s == ',') {
 			for (; *s && !isdigit(*s); s++) ;
 			if (!*s)
-			    malformed ();
+			    goto malformed;
 			p_repl_lines = ((LINENUM)atol(s)) - p_newfirst + 1;
 		    }
 		    else if (p_newfirst)
@@ -610,12 +577,11 @@ another_hunk()
 		    }
 		    p_max = p_repl_lines + p_end;
 		    if (p_max > MAXHUNKSIZE)
-			fatal4("hunk too large (%ld lines) at line %ld: %s",
+			fatal4("Hunk too large (%ld lines) at line %ld: %s",
 			      p_max, p_input_line, buf);
 		    while (p_max >= hunkmax)
 			grow_hunkmax();
-		    if (p_repl_lines != ptrn_copiable
-		     && (p_context != 0 || p_repl_lines != 1))
+		    if (p_repl_lines != ptrn_copiable)
 			repl_could_be_missing = FALSE;
 		    break;
 		}
@@ -623,14 +589,12 @@ another_hunk()
 	    case '+':  case '!':
 		repl_could_be_missing = FALSE;
 	      change_line:
-		if (buf[1] == '\n' && canonicalize)
-		    strcpy(buf+1," \n");
 		if (!isspace(buf[1]) && buf[1] != '>' && buf[1] != '<' &&
 		  repl_beginning && repl_could_be_missing) {
 		    repl_missing = TRUE;
 		    goto hunk_done;
 		}
-		if (context >= 0) {
+		if (context > 0) {
 		    if (context < p_context)
 			p_context = context;
 		    context = -1000;
@@ -680,7 +644,7 @@ another_hunk()
 		    repl_missing = TRUE;
 		    goto hunk_done;
 		}
-		malformed ();
+		goto malformed;
 	    }
 	    /* set up p_len for strncmp() so we don't have to */
 	    /* assume null termination */
@@ -692,7 +656,7 @@ another_hunk()
 	
     hunk_done:
 	if (p_end >=0 && !repl_beginning)
-	    fatal2("no --- found in patch at line %ld\n", pch_hunk_beg());
+	    fatal2("No --- found in patch at line %ld\n", pch_hunk_beg());
 
 	if (repl_missing) {
 	    
@@ -704,40 +668,18 @@ another_hunk()
 	    
 	    /* redundant 'new' context lines were omitted - set */
 	    /* up to fill them in from the old file context */
-	    if (!p_context && p_repl_lines == 1) {
-		p_repl_lines = 0;
-		p_max--;
-	    }
 	    fillsrc = 1;
 	    filldst = repl_beginning+1;
 	    fillcnt = p_repl_lines;
 	    p_end = p_max;
 	}
-	else if (!p_context && fillcnt == 1) {
-	    /* the first hunk was a null hunk with no context */
-	    /* and we were expecting one line -- fix it up. */
-	    while (filldst < p_end) {
-		p_line[filldst] = p_line[filldst+1];
-		p_char[filldst] = p_char[filldst+1];
-		p_len[filldst] = p_len[filldst+1];
-		filldst++;
-	    }
-#if 0
-	    repl_beginning--;		/* this doesn't need to be fixed */
-#endif
-	    p_end--;
-	    p_first++;			/* do append rather than insert */
-	    fillcnt = 0;
-	    p_ptrn_lines = 0;
-	}
 
 	if (diff_type == CONTEXT_DIFF &&
 	  (fillcnt || (p_first > 1 && ptrn_copiable > 2*p_context)) ) {
 	    if (verbose)
-		say4("%s\n%s\n%s\n",
-"(Fascinating--this is really a new-style context diff but without",
-"the telltale extra asterisks on the *** line that usually indicate",
-"the new style...)");
+		say1("\
+(Fascinating--this is really a new-style context diff but without the telltale\n\
+extra asterisks on the *** line that usually indicate the new style...)\n");
 	    diff_type = NEW_CONTEXT_DIFF;
 	}
 	
@@ -749,7 +691,7 @@ another_hunk()
 		while (fillsrc <= p_end && p_char[fillsrc] != ' ')
 		    fillsrc++;
 		if (fillsrc > p_end)
-		    fatal2("replacement text or line numbers mangled in hunk at line %ld\n",
+		    fatal2("Replacement text or line numbers mangled in hunk at line %ld\n",
 			p_hunk_beg);
 		p_line[filldst] = p_line[fillsrc];
 		p_char[filldst] = p_char[fillsrc];
@@ -767,149 +709,6 @@ another_hunk()
 	    assert(fillsrc==p_end+1 || fillsrc==repl_beginning);
 	    assert(filldst==p_end+1 || filldst==repl_beginning);
 	}
-    }
-    else if (diff_type == UNI_DIFF) {
-	long line_beginning = ftell(pfp);
-					/* file pos of the current line */
-	Reg4 LINENUM fillsrc;		/* index of old lines */
-	Reg5 LINENUM filldst;		/* index of new lines */
-	char ch;
-
-	ret = pgets(buf, sizeof buf, pfp);
-	p_input_line++;
-	if (ret == Nullch || strnNE(buf, "@@ -", 4)) {
-	    next_intuit_at(line_beginning,p_input_line);
-	    return FALSE;
-	}
-	s = buf+4;
-	if (!*s)
-	    malformed ();
-	p_first = (LINENUM) atol(s);
-	while (isdigit(*s)) s++;
-	if (*s == ',') {
-	    p_ptrn_lines = (LINENUM) atol(++s);
-	    while (isdigit(*s)) s++;
-	} else
-	    p_ptrn_lines = 1;
-	if (*s == ' ') s++;
-	if (*s != '+' || !*++s)
-	    malformed ();
-	p_newfirst = (LINENUM) atol(s);
-	while (isdigit(*s)) s++;
-	if (*s == ',') {
-	    p_repl_lines = (LINENUM) atol(++s);
-	    while (isdigit(*s)) s++;
-	} else
-	    p_repl_lines = 1;
-	if (*s == ' ') s++;
-	if (*s != '@')
-	    malformed ();
-	if (!p_ptrn_lines)
-	    p_first++;			/* do append rather than insert */
-	p_max = p_ptrn_lines + p_repl_lines + 1;
-	while (p_max >= hunkmax)
-	    grow_hunkmax();
-	fillsrc = 1;
-	filldst = fillsrc + p_ptrn_lines;
-	p_end = filldst + p_repl_lines;
-	Sprintf(buf,"*** %ld,%ld ****\n",p_first,p_first + p_ptrn_lines - 1);
-	p_line[0] = savestr(buf);
-	if (out_of_mem) {
-	    p_end = -1;
-	    return FALSE;
-	}
-	p_char[0] = '*';
-        Sprintf(buf,"--- %ld,%ld ----\n",p_newfirst,p_newfirst+p_repl_lines-1);
-	p_line[filldst] = savestr(buf);
-	if (out_of_mem) {
-	    p_end = 0;
-	    return FALSE;
-	}
-	p_char[filldst++] = '=';
-	p_context = 100;
-	context = 0;
-	p_hunk_beg = p_input_line + 1;
-	while (fillsrc <= p_ptrn_lines || filldst <= p_end) {
-	    line_beginning = ftell(pfp);
-	    ret = pgets(buf, sizeof buf, pfp);
-	    p_input_line++;
-	    if (ret == Nullch) {
-		if (p_max - filldst < 3)
-		    Strcpy(buf, " \n");  /* assume blank lines got chopped */
-		else {
-		    fatal1("unexpected end of file in patch\n");
-		}
-	    }
-	    if (*buf == '\t' || *buf == '\n') {
-		ch = ' ';		/* assume the space got eaten */
-		s = savestr(buf);
-	    }
-	    else {
-		ch = *buf;
-		s = savestr(buf+1);
-	    }
-	    if (out_of_mem) {
-		while (--filldst > p_ptrn_lines)
-		    free(p_line[filldst]);
-		p_end = fillsrc-1;
-		return FALSE;
-	    }
-	    switch (ch) {
-	    case '-':
-		if (fillsrc > p_ptrn_lines) {
-		    free(s);
-		    p_end = filldst-1;
-		    malformed ();
-		}
-		p_char[fillsrc] = ch;
-		p_line[fillsrc] = s;
-		p_len[fillsrc++] = strlen(s);
-		break;
-	    case '=':
-		ch = ' ';
-		/* FALL THROUGH */
-	    case ' ':
-		if (fillsrc > p_ptrn_lines) {
-		    free(s);
-		    while (--filldst > p_ptrn_lines)
-			free(p_line[filldst]);
-		    p_end = fillsrc-1;
-		    malformed ();
-		}
-		context++;
-		p_char[fillsrc] = ch;
-		p_line[fillsrc] = s;
-		p_len[fillsrc++] = strlen(s);
-		s = savestr(s);
-		if (out_of_mem) {
-		    while (--filldst > p_ptrn_lines)
-			free(p_line[filldst]);
-		    p_end = fillsrc-1;
-		    return FALSE;
-		}
-		/* FALL THROUGH */
-	    case '+':
-		if (filldst > p_end) {
-		    free(s);
-		    while (--filldst > p_ptrn_lines)
-			free(p_line[filldst]);
-		    p_end = fillsrc-1;
-		    malformed ();
-		}
-		p_char[filldst] = ch;
-		p_line[filldst] = s;
-		p_len[filldst++] = strlen(s);
-		break;
-	    default:
-		p_end = filldst;
-		malformed ();
-	    }
-	    if (ch != ' ' && context > 0) {
-		if (context < p_context)
-		    p_context = context;
-		context = -1000;
-	    }
-	}/* while */
     }
     else {				/* normal diff--fake it up */
 	char hunk_type;
@@ -945,7 +744,7 @@ another_hunk()
 	    min++;
 	p_end = p_ptrn_lines + 1 + max - min + 1;
 	if (p_end > MAXHUNKSIZE)
-	    fatal4("hunk too large (%ld lines) at line %ld: %s",
+	    fatal4("Hunk too large (%ld lines) at line %ld: %s",
 		  p_end, p_input_line, buf);
 	while (p_end >= hunkmax)
 	    grow_hunkmax();
@@ -962,10 +761,10 @@ another_hunk()
 	    ret = pgets(buf, sizeof buf, pfp);
 	    p_input_line++;
 	    if (ret == Nullch)
-		fatal2("unexpected end of file in patch at line %ld\n",
+		fatal2("Unexpected end of file in patch at line %ld.\n",
 		  p_input_line);
 	    if (*buf != '<')
-		fatal2("< expected at line %ld of patch\n", p_input_line);
+		fatal2("< expected at line %ld of patch.\n", p_input_line);
 	    p_line[i] = savestr(buf+2);
 	    if (out_of_mem) {
 		p_end = i-1;
@@ -978,10 +777,10 @@ another_hunk()
 	    ret = pgets(buf, sizeof buf, pfp);
 	    p_input_line++;
 	    if (ret == Nullch)
-		fatal2("unexpected end of file in patch at line %ld\n",
+		fatal2("Unexpected end of file in patch at line %ld.\n",
 		    p_input_line);
 	    if (*buf != '-')
-		fatal2("--- expected at line %ld of patch\n", p_input_line);
+		fatal2("--- expected at line %ld of patch.\n", p_input_line);
 	}
 	Sprintf(buf, "--- %ld,%ld\n", min, max);
 	p_line[i] = savestr(buf);
@@ -994,10 +793,10 @@ another_hunk()
 	    ret = pgets(buf, sizeof buf, pfp);
 	    p_input_line++;
 	    if (ret == Nullch)
-		fatal2("unexpected end of file in patch at line %ld\n",
+		fatal2("Unexpected end of file in patch at line %ld.\n",
 		    p_input_line);
 	    if (*buf != '>')
-		fatal2("> expected at line %ld of patch\n", p_input_line);
+		fatal2("> expected at line %ld of patch.\n", p_input_line);
 	    p_line[i] = savestr(buf+2);
 	    if (out_of_mem) {
 		p_end = i-1;
@@ -1028,6 +827,11 @@ another_hunk()
     if (p_end+1 < hunkmax)	/* paranoia reigns supreme... */
 	p_char[p_end+1] = '^';  /* add a stopper for apply_hunk */
     return TRUE;
+
+malformed:
+    fatal3("Malformed patch at line %ld: %s", p_input_line, buf);
+		/* about as informative as "Syntax error" in C */
+    return FALSE;	/* for lint */
 }
 
 /* Input a line from the patch file, worrying about indentation. */
@@ -1043,8 +847,7 @@ FILE *fp;
     Reg2 int indent = 0;
 
     if (p_indent && ret != Nullch) {
-	for (s=buf;
-	  indent < p_indent && (*s == ' ' || *s == '\t' || *s == 'X'); s++) {
+	for (s=buf; indent < p_indent && (*s == ' ' || *s == '\t'); s++) {
 	    if (*s == '\t')
 		indent += 8 - (indent % 7);
 	    else
@@ -1105,10 +908,9 @@ pch_swap()
 	i++;
     }
     if (p_efake >= 0) {			/* fix non-freeable ptr range */
-	if (p_efake <= i)
-	    n = p_end - i + 1;
-	else
-	    n = -i;
+	n = p_end - i + 1;
+	if (p_efake > i)
+	    n = -n;
 	p_efake += n;
 	p_bfake += n;
     }
@@ -1253,6 +1055,7 @@ do_ed_script()
     Reg2 long beginning_of_this_line;
     Reg3 bool this_line_is_command = FALSE;
     Reg4 FILE *pipefp;
+    FILE *popen();
 
     if (!skip_rest_of_patch) {
 	Unlink(TMPOUTNAME);
@@ -1304,5 +1107,5 @@ do_ed_script()
     }
     else
 	chmod(outname, filemode);
-    set_signals(1);
+    set_signals();
 }

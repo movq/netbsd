@@ -2,22 +2,6 @@
 #include "common.h"
 #include "INTERN.h"
 #include "util.h"
-#include "backupfile.h"
-
-void my_exit();
-
-static char *
-private_strerror (errnum)
-     int errnum;
-{
-  extern char *sys_errlist[];
-  extern int sys_nerr;
-
-  if (errnum > 0 && errnum <= sys_nerr)
-    return sys_errlist[errnum];
-  return "Unknown system error";
-}
-#define strerror private_strerror
 
 /* Rename a file, copying it if necessary. */
 
@@ -39,31 +23,17 @@ char *from, *to;
 #endif
 	fromfd = open(from, 0);
 	if (fromfd < 0)
-	    pfatal2("internal error, can't reopen %s", from);
+	    fatal2("patch: internal error, can't reopen %s\n", from);
 	while ((i=read(fromfd, buf, sizeof buf)) > 0)
 	    if (write(1, buf, i) != 1)
-		pfatal1("write failed");
+		fatal1("patch: write failed\n");
 	Close(fromfd);
 	return 0;
     }
 
-    if (origprae) {
-	Strcpy(bakname, origprae);
-	Strcat(bakname, to);
-    } else {
-#ifndef NODIR
-	char *backupname = find_backup_file_name(to);
-	if (backupname == (char *) 0)
-	    fatal1("out of memory\n");
-	Strcpy(bakname, backupname);
-	free(backupname);
-#else /* NODIR */
-	Strcpy(bakname, to);
-    	Strcat(bakname, simple_backup_suffix);
-#endif /* NODIR */
-    }
-
-    if (stat(to, &filestat) == 0) {	/* output file exists */
+    Strcpy(bakname, to);
+    Strcat(bakname, origext?origext:ORIGEXT);
+    if (stat(to, &filestat) >= 0) {	/* output file exists */
 	dev_t to_device = filestat.st_dev;
 	ino_t to_inode  = filestat.st_ino;
 	char *simplename = bakname;
@@ -72,12 +42,9 @@ char *from, *to;
 	    if (*s == '/')
 		simplename = s+1;
 	}
-	/* Find a backup name that is not the same file.
-	   Change the first lowercase char into uppercase;
-	   if that isn't sufficient, chop off the first char and try again.  */
-	while (stat(bakname, &filestat) == 0 &&
+	/* find a backup name that is not the same file */
+	while (stat(bakname, &filestat) >= 0 &&
 		to_device == filestat.st_dev && to_inode == filestat.st_ino) {
-	    /* Skip initial non-lowercase chars.  */
 	    for (s=simplename; *s && !islower(*s); s++) ;
 	    if (*s)
 		*s = toupper(*s);
@@ -90,26 +57,9 @@ char *from, *to;
 	    say3("Moving %s to %s.\n", to, bakname);
 #endif
 	if (link(to, bakname) < 0) {
-	    /* Maybe `to' is a symlink into a different file system.
-	       Copying replaces the symlink with a file; using rename
-	       would be better.  */
-	    Reg4 int tofd;
-	    Reg5 int bakfd;
-
-	    bakfd = creat(bakname, 0666);
-	    if (bakfd < 0) {
-		say4("Can't backup %s, output is in %s: %s\n", to, from,
-		     strerror(errno));
-		return -1;
-	    }
-	    tofd = open(to, 0);
-	    if (tofd < 0)
-		pfatal2("internal error, can't open %s", to);
-	    while ((i=read(tofd, buf, sizeof buf)) > 0)
-		if (write(bakfd, buf, i) != i)
-		    pfatal1("write failed");
-	    Close(tofd);
-	    Close(bakfd);
+	    say3("patch: can't backup %s, output is in %s\n",
+		to, from);
+	    return -1;
 	}
 	while (unlink(to) >= 0) ;
     }
@@ -122,16 +72,16 @@ char *from, *to;
 	
 	tofd = creat(to, 0666);
 	if (tofd < 0) {
-	    say4("Can't create %s, output is in %s: %s\n",
-	      to, from, strerror(errno));
+	    say3("patch: can't create %s, output is in %s.\n",
+	      to, from);
 	    return -1;
 	}
 	fromfd = open(from, 0);
 	if (fromfd < 0)
-	    pfatal2("internal error, can't reopen %s", from);
+	    fatal2("patch: internal error, can't reopen %s\n", from);
 	while ((i=read(fromfd, buf, sizeof buf)) > 0)
 	    if (write(tofd, buf, i) != i)
-		pfatal1("write failed");
+		fatal1("patch: write failed\n");
 	Close(fromfd);
 	Close(tofd);
     }
@@ -151,13 +101,13 @@ char *from, *to;
     
     tofd = creat(to, 0666);
     if (tofd < 0)
-	pfatal2("can't create %s", to);
+	fatal2("patch: can't create %s.\n", to);
     fromfd = open(from, 0);
     if (fromfd < 0)
-	pfatal2("internal error, can't reopen %s", from);
+	fatal2("patch: internal error, can't reopen %s\n", from);
     while ((i=read(fromfd, buf, sizeof buf)) > 0)
 	if (write(tofd, buf, i) != i)
-	    pfatal2("write to %s failed", to);
+	    fatal2("patch: write (%s) failed\n", to);
     Close(fromfd);
     Close(tofd);
 }
@@ -180,7 +130,7 @@ Reg1 char *s;
 	if (using_plan_a)
 	    out_of_mem = TRUE;
 	else
-	    fatal1("out of memory\n");
+	    fatal1("patch: out of memory (savestr)\n");
     }
     else {
 	t = rv;
@@ -196,8 +146,6 @@ say(pat) char *pat; { ; }
 /*VARARGS ARGSUSED*/
 fatal(pat) char *pat; { ; }
 /*VARARGS ARGSUSED*/
-pfatal(pat) char *pat; { ; }
-/*VARARGS ARGSUSED*/
 ask(pat) char *pat; { ; }
 
 #else
@@ -207,7 +155,7 @@ ask(pat) char *pat; { ; }
 void
 say(pat,arg1,arg2,arg3)
 char *pat;
-long arg1,arg2,arg3;
+int arg1,arg2,arg3;
 {
     fprintf(stderr, pat, arg1, arg2, arg3);
     Fflush(stderr);
@@ -218,25 +166,11 @@ long arg1,arg2,arg3;
 void				/* very void */
 fatal(pat,arg1,arg2,arg3)
 char *pat;
-long arg1,arg2,arg3;
+int arg1,arg2,arg3;
 {
-    fprintf(stderr, "patch: **** ");
-    fprintf(stderr, pat, arg1, arg2, arg3);
-    my_exit(1);
-}
+    void my_exit();
 
-/* Say something from patch, something from the system, then silence . . . */
-
-void				/* very void */
-pfatal(pat,arg1,arg2,arg3)
-char *pat;
-long arg1,arg2,arg3;
-{
-    int errnum = errno;
-
-    fprintf(stderr, "patch: **** ");
-    fprintf(stderr, pat, arg1, arg2, arg3);
-    fprintf(stderr, ": %s\n", strerror(errnum));
+    say(pat, arg1, arg2, arg3);
     my_exit(1);
 }
 
@@ -245,7 +179,7 @@ long arg1,arg2,arg3;
 void
 ask(pat,arg1,arg2,arg3)
 char *pat;
-long arg1,arg2,arg3;
+int arg1,arg2,arg3;
 {
     int ttyfd;
     int r;
@@ -284,39 +218,20 @@ long arg1,arg2,arg3;
     if (!tty2)
 	say1(buf);
 }
-#endif /* lint */
+#endif lint
 
 /* How to handle certain events when not in a critical region. */
 
 void
-set_signals(reset)
-int reset;
+set_signals()
 {
-#ifndef lint
-#ifdef VOIDSIG
-    static void (*hupval)(),(*intval)();
-#else
-    static int (*hupval)(),(*intval)();
-#endif
+    void my_exit();
 
-    if (!reset) {
-	hupval = signal(SIGHUP, SIG_IGN);
-	if (hupval != SIG_IGN)
-#ifdef VOIDSIG
-	    hupval = my_exit;
-#else
-	    hupval = (int(*)())my_exit;
-#endif
-	intval = signal(SIGINT, SIG_IGN);
-	if (intval != SIG_IGN)
-#ifdef VOIDSIG
-	    intval = my_exit;
-#else
-	    intval = (int(*)())my_exit;
-#endif
-    }
-    Signal(SIGHUP, hupval);
-    Signal(SIGINT, intval);
+#ifndef lint
+    if (signal(SIGHUP, SIG_IGN) != SIG_IGN)
+	Signal(SIGHUP, my_exit);
+    if (signal(SIGINT, SIG_IGN) != SIG_IGN)
+	Signal(SIGINT, my_exit);
 #endif
 }
 
@@ -331,8 +246,7 @@ ignore_signals()
 #endif
 }
 
-/* Make sure we'll have the directories to create a file.
-   If `striplast' is TRUE, ignore the last element of `filename'.  */
+/* Make sure we'll have the directories to create a file. */
 
 void
 makedirs(filename,striplast)
@@ -341,12 +255,10 @@ bool striplast;
 {
     char tmpbuf[256];
     Reg2 char *s = tmpbuf;
-    char *dirv[20];		/* Point to the NULs between elements.  */
+    char *dirv[20];
     Reg3 int i;
-    Reg4 int dirvp = 0;		/* Number of finished entries in dirv. */
+    Reg4 int dirvp = 0;
 
-    /* Copy `filename' into `tmpbuf' with a NUL instead of a slash
-       between the directories.  */
     while (*filename) {
 	if (*filename == '/') {
 	    filename++;
@@ -363,21 +275,15 @@ bool striplast;
 	dirvp--;
     if (dirvp < 0)
 	return;
-
     strcpy(buf, "mkdir");
     s = buf;
     for (i=0; i<=dirvp; i++) {
-	struct stat sbuf;
-
-	if (stat(tmpbuf, &sbuf) && errno == ENOENT) {
-	    while (*s) s++;
-	    *s++ = ' ';
-	    strcpy(s, tmpbuf);
-	}
+	while (*s) s++;
+	*s++ = ' ';
+	strcpy(s, tmpbuf);
 	*dirv[i] = '/';
     }
-    if (s != buf)
-	system(buf);
+    system(buf);
 }
 
 /* Make filenames more reasonable. */
@@ -388,63 +294,46 @@ char *at;
 int strip_leading;
 int assume_exists;
 {
-    char *fullname;
+    char *s;
     char *name;
     Reg1 char *t;
     char tmpbuf[200];
-    int sleading = strip_leading;
 
     if (!at)
 	return Nullch;
-    while (isspace(*at))
-	at++;
+    s = savestr(at);
+    for (t=s; isspace(*t); t++) ;
+    name = t;
 #ifdef DEBUGGING
     if (debug & 128)
-	say4("fetchname %s %d %d\n",at,strip_leading,assume_exists);
+	say4("fetchname %s %d %d\n",name,strip_leading,assume_exists);
 #endif
-    if (strnEQ(at, "/dev/null", 9))	/* so files can be created by diffing */
+    if (strnEQ(name, "/dev/null", 9))	/* so files can be created by diffing */
 	return Nullch;			/*   against /dev/null. */
-    name = fullname = t = savestr(at);
-
-    /* Strip off up to `sleading' leading slashes and null terminate.  */
     for (; *t && !isspace(*t); t++)
 	if (*t == '/')
-	    if (--sleading >= 0)
+	    if (--strip_leading >= 0)
 		name = t+1;
     *t = '\0';
-
-    /* If no -p option was given (957 is the default value!),
-       we were given a relative pathname,
-       and the leading directories that we just stripped off all exist,
-       put them back on.  */
-    if (strip_leading == 957 && name != fullname && *fullname != '/') {
+    if (name != s && *s != '/') {
 	name[-1] = '\0';
-	if (stat(fullname, &filestat) == 0 && S_ISDIR (filestat.st_mode)) {
+	if (stat(s, &filestat) && filestat.st_mode & S_IFDIR) {
 	    name[-1] = '/';
-	    name=fullname;
+	    name=s;
 	}
     }
-
     name = savestr(name);
-    free(fullname);
-
-    if (stat(name, &filestat) && !assume_exists) {
-	char *filebase = basename(name);
-	int pathlen = filebase - name;
-
-	/* Put any leading path into `tmpbuf'.  */
-	strncpy(tmpbuf, name, pathlen);
-
-#define try(f, a1, a2) (Sprintf(tmpbuf + pathlen, f, a1, a2), stat(tmpbuf, &filestat) == 0)
-	if (   try("RCS/%s%s", filebase, RCSSUFFIX)
-	    || try("RCS/%s"  , filebase,         0)
-	    || try(    "%s%s", filebase, RCSSUFFIX)
-	    || try("SCCS/%s%s", SCCSPREFIX, filebase)
-	    || try(     "%s%s", SCCSPREFIX, filebase))
-	  return name;
-	free(name);
-	name = Nullch;
+    Sprintf(tmpbuf, "RCS/%s", name);
+    free(s);
+    if (stat(name, &filestat) < 0 && !assume_exists) {
+	Strcat(tmpbuf, RCSSUFFIX);
+	if (stat(tmpbuf, &filestat) < 0 && stat(tmpbuf+4, &filestat) < 0) {
+	    Sprintf(tmpbuf, "SCCS/%s%s", SCCSPREFIX, name);
+	    if (stat(tmpbuf, &filestat) < 0 && stat(tmpbuf+5, &filestat) < 0) {
+		free(name);
+		name = Nullch;
+	    }
+	}
     }
-
     return name;
 }

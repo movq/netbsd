@@ -1,5 +1,9 @@
+#ifndef lint
+static char sccsid[] = "@(#)patch.c	8.1 (Berkeley) 6/6/93";
+#endif not lint
+
 char rcsid[] =
-	"$Header: /home/mike/src/cvs/netbsd/src/usr.bin/patch/patch.c,v 1.1 1993/04/09 11:34:05 cgd Exp $";
+	"$Header: /home/mike/src/cvs/netbsd/src/usr.bin/patch/patch.c,v 1.1.1.1 1997/01/09 14:47:39 tls Exp $";
 
 /* patch - a program to apply diffs to original files
  *
@@ -9,19 +13,9 @@ char rcsid[] =
  * money off of it, or pretend that you wrote it.
  *
  * $Log: patch.c,v $
- * Revision 1.1  1993/04/09 11:34:05  cgd
- * patch 2.0.12u8, from prep.ai.mit.edu.  this is not under the GPL.
+ * Revision 1.1.1.1  1997/01/09 14:47:39  tls
+ * Import from 4.4BSD-Lite2
  *
- * Revision 2.0.2.0  90/05/01  22:17:50  davison
- * patch12u: unidiff support added
- * 
- * Revision 2.0.1.6  88/06/22  20:46:39  lwall
- * patch12: rindex() wasn't declared
- * 
- * Revision 2.0.1.5  88/06/03  15:09:37  lwall
- * patch10: exit code improved.
- * patch10: better support for non-flexfilenames.
- * 
  * Revision 2.0.1.4  87/02/16  14:00:04  lwall
  * Short replacement caused spurious "Out of sync" message.
  * 
@@ -100,7 +94,6 @@ char rcsid[] =
 #include "util.h"
 #include "pch.h"
 #include "inp.h"
-#include "backupfile.h"
 
 /* procedures */
 
@@ -119,15 +112,8 @@ bool similar();
 void re_input();
 void my_exit();
 
-/* TRUE if -E was specified on command line.  */
-static int remove_empty_files = FALSE;
-
-/* TRUE if -R was specified on command line.  */
-static int reverse_flag_specified = FALSE;
-
 /* Apply a set of diffs as appropriate. */
 
-int
 main(argc,argv)
 int argc;
 char **argv;
@@ -138,61 +124,15 @@ char **argv;
     LINENUM mymaxfuzz;
     int hunk = 0;
     int failed = 0;
-    int failtotal = 0;
     int i;
 
     setbuf(stderr, serrbuf);
     for (i = 0; i<MAXFILEC; i++)
 	filearg[i] = Nullch;
-
-    myuid = getuid();
-
-    /* Cons up the names of the temporary files.  */
-    {
-      /* Directory for temporary files.  */
-      char *tmpdir;
-      int tmpname_len;
-
-      tmpdir = getenv ("TMPDIR");
-      if (tmpdir == NULL) {
-	tmpdir = "/tmp";
-      }
-      tmpname_len = strlen (tmpdir) + 20;
-
-      TMPOUTNAME = (char *) malloc (tmpname_len);
-      strcpy (TMPOUTNAME, tmpdir);
-      strcat (TMPOUTNAME, "/patchoXXXXXX");
-      Mktemp(TMPOUTNAME);
-
-      TMPINNAME = (char *) malloc (tmpname_len);
-      strcpy (TMPINNAME, tmpdir);
-      strcat (TMPINNAME, "/patchiXXXXXX");
-      Mktemp(TMPINNAME);
-
-      TMPREJNAME = (char *) malloc (tmpname_len);
-      strcpy (TMPREJNAME, tmpdir);
-      strcat (TMPREJNAME, "/patchrXXXXXX");
-      Mktemp(TMPREJNAME);
-
-      TMPPATNAME = (char *) malloc (tmpname_len);
-      strcpy (TMPPATNAME, tmpdir);
-      strcat (TMPPATNAME, "/patchpXXXXXX");
-      Mktemp(TMPPATNAME);
-    }
-
-    {
-      char *v;
-
-      v = getenv ("SIMPLE_BACKUP_SUFFIX");
-      if (v)
-	simple_backup_suffix = v;
-      else
-	simple_backup_suffix = ORIGEXT;
-#ifndef NODIR
-      v = getenv ("VERSION_CONTROL");
-      backup_type = get_version (v); /* OK to pass NULL. */
-#endif
-    }
+    Mktemp(TMPOUTNAME);
+    Mktemp(TMPINNAME);
+    Mktemp(TMPREJNAME);
+    Mktemp(TMPPATNAME);
 
     /* parse switches */
     Argc = argc;
@@ -200,7 +140,7 @@ char **argv;
     get_some_switches();
     
     /* make sure we clean up /tmp in case of disaster */
-    set_signals(0);
+    set_signals();
 
     for (
 	open_patch_file(filearg[1]);
@@ -211,15 +151,15 @@ char **argv;
 	if (outname == Nullch)
 	    outname = savestr(filearg[0]);
     
+	/* initialize the patched file */
+	if (!skip_rest_of_patch)
+	    init_output(TMPOUTNAME);
+    
 	/* for ed script just up and do it and exit */
 	if (diff_type == ED_DIFF) {
 	    do_ed_script();
 	    continue;
 	}
-    
-	/* initialize the patched file */
-	if (!skip_rest_of_patch)
-	    init_output(TMPOUTNAME);
     
 	/* initialize reject file */
 	init_reject(TMPREJNAME);
@@ -248,35 +188,28 @@ char **argv;
 						/* dwim for reversed patch? */
 			if (!pch_swap()) {
 			    if (fuzz == Nulline)
-				say1(
-"Not enough memory to try swapped hunk!  Assuming unswapped.\n");
+				say1("\
+Not enough memory to try swapped hunk!  Assuming unswapped.\n");
 			    continue;
 			}
 			reverse = !reverse;
 			where = locate_hunk(fuzz);  /* try again */
 			if (where == Nulline) {	    /* didn't find it swapped */
 			    if (!pch_swap())         /* put it back to normal */
-				fatal1("lost hunk on alloc error!\n");
+				fatal1("Lost hunk on alloc error!\n");
 			    reverse = !reverse;
 			}
 			else if (noreverse) {
 			    if (!pch_swap())         /* put it back to normal */
-				fatal1("lost hunk on alloc error!\n");
+				fatal1("Lost hunk on alloc error!\n");
 			    reverse = !reverse;
-			    say1(
-"Ignoring previously applied (or reversed) patch.\n");
+			    say1("\
+Ignoring previously applied (or reversed) patch.\n");
 			    skip_rest_of_patch = TRUE;
 			}
-			else if (batch) {
-			    if (verbose)
-				say3(
-"%seversed (or previously applied) patch detected!  %s -R.",
-				reverse ? "R" : "Unr",
-				reverse ? "Assuming" : "Ignoring");
-			}
 			else {
-			    ask3(
-"%seversed (or previously applied) patch detected!  %s -R? [y] ",
+			    ask3("\
+%seversed (or previously applied) patch detected!  %s -R? [y] ",
 				reverse ? "R" : "Unr",
 				reverse ? "Assume" : "Ignore");
 			    if (*buf == 'n') {
@@ -286,7 +219,7 @@ char **argv;
 				where = Nulline;
 				reverse = !reverse;
 				if (!pch_swap())  /* put it back to normal */
-				    fatal1("lost hunk on alloc error!\n");
+				    fatal1("Lost hunk on alloc error!\n");
 			    }
 			}
 		    }
@@ -330,12 +263,6 @@ char **argv;
 	    Argc = Argc_last;
 	    Argv = Argv_last;
 	    say1("\n\nRan out of memory using Plan A--trying again...\n\n");
-	    if (ofp)
-	        Fclose(ofp);
-	    ofp = Nullfp;
-	    if (rejfp)
-	        Fclose(rejfp);
-	    rejfp = Nullfp;
 	    continue;
 	}
     
@@ -348,43 +275,19 @@ char **argv;
 	/* and put the output where desired */
 	ignore_signals();
 	if (!skip_rest_of_patch) {
-	    struct stat statbuf;
-	    char *realout = outname;
-
 	    if (move_file(TMPOUTNAME, outname) < 0) {
 		toutkeep = TRUE;
-		realout = TMPOUTNAME;
 		chmod(TMPOUTNAME, filemode);
 	    }
 	    else
 		chmod(outname, filemode);
-
-	    if (remove_empty_files && stat(realout, &statbuf) == 0
-		&& statbuf.st_size == 0) {
-		if (verbose)
-		    say2("Removing %s (empty after patching).\n", realout);
-	        while (unlink(realout) >= 0) ; /* while is for Eunice.  */
-	    }
 	}
 	Fclose(rejfp);
 	rejfp = Nullfp;
 	if (failed) {
-	    failtotal += failed;
 	    if (!*rejname) {
 		Strcpy(rejname, outname);
-#ifndef FLEXFILENAMES
-		{
-		    char *s = rindex(rejname,'/');
-
-		    if (!s)
-			s = rejname;
-		    if (strlen(s) > 13)
-			if (s[12] == '.')	/* try to preserve difference */
-			    s[12] = s[13];	/* between .h, .c, .y, etc. */
-			s[13] = '\0';
-		}
-#endif
-		Strcat(rejname, REJEXT);
+		Strcat(rejname, ".rej");
 	    }
 	    if (skip_rest_of_patch) {
 		say4("%d out of %d hunks ignored--saving rejects to %s\n",
@@ -397,9 +300,9 @@ char **argv;
 	    if (move_file(TMPREJNAME, rejname) < 0)
 		trejkeep = TRUE;
 	}
-	set_signals(1);
+	set_signals();
     }
-    my_exit(failtotal);
+    my_exit(0);
 }
 
 /* Prepare to find the next patch to do in the patch file. */
@@ -433,21 +336,13 @@ reinitialize_almost_everything()
 	revision = Nullch;
     }
 
-    reverse = reverse_flag_specified;
+    reverse = FALSE;
     skip_rest_of_patch = FALSE;
 
     get_some_switches();
 
     if (filec >= 2)
-	fatal1("you may not change to a different patch file\n");
-}
-
-static char *
-nextarg()
-{
-    if (!--Argc)
-	fatal2("missing argument after `%s'\n", *Argv);
-    return *++Argv;
+	fatal1("You may not change to a different patch file.\n");
 }
 
 /* Process switches and filenames up to next '+' or end of list. */
@@ -469,41 +364,38 @@ get_some_switches()
 	}
 	if (*s != '-' || !s[1]) {
 	    if (filec == MAXFILEC)
-		fatal1("too many file arguments\n");
+		fatal1("Too many file arguments.\n");
 	    filearg[filec++] = savestr(s);
 	}
 	else {
 	    switch (*++s) {
 	    case 'b':
-		simple_backup_suffix = savestr(nextarg());
-		break;
-	    case 'B':
-		origprae = savestr(nextarg());
+		origext = savestr(Argv[1]);
+		Argc--,Argv++;
 		break;
 	    case 'c':
 		diff_type = CONTEXT_DIFF;
 		break;
 	    case 'd':
-		if (!*++s)
-		    s = nextarg();
+		if (!*++s) {
+		    Argc--,Argv++;
+		    s = Argv[0];
+		}
 		if (chdir(s) < 0)
-		    pfatal2("can't cd to %s", s);
+		    fatal2("Can't cd to %s.\n", s);
 		break;
 	    case 'D':
 	    	do_defines = TRUE;
-		if (!*++s)
-		    s = nextarg();
-		if (!isalpha(*s) && '_' != *s)
-		    fatal1("argument to -D is not an identifier\n");
+		if (!*++s) {
+		    Argc--,Argv++;
+		    s = Argv[0];
+		}
 		Sprintf(if_defined, "#ifdef %s\n", s);
 		Sprintf(not_defined, "#ifndef %s\n", s);
 		Sprintf(end_defined, "#endif /* %s */\n", s);
 		break;
 	    case 'e':
 		diff_type = ED_DIFF;
-		break;
-	    case 'E':
-		remove_empty_files = TRUE;
 		break;
 	    case 'f':
 		force = TRUE;
@@ -523,7 +415,8 @@ get_some_switches()
 		noreverse = TRUE;
 		break;
 	    case 'o':
-		outname = savestr(nextarg());
+		outname = savestr(Argv[1]);
+		Argc--,Argv++;
 		break;
 	    case 'p':
 		if (*++s == '=')
@@ -531,11 +424,11 @@ get_some_switches()
 		strippath = atoi(s);
 		break;
 	    case 'r':
-		Strcpy(rejname, nextarg());
+		Strcpy(rejname, Argv[1]);
+		Argc--,Argv++;
 		break;
 	    case 'R':
 		reverse = TRUE;
-		reverse_flag_specified = TRUE;
 		break;
 	    case 's':
 		verbose = FALSE;
@@ -543,19 +436,8 @@ get_some_switches()
 	    case 'S':
 		skip_rest_of_patch = TRUE;
 		break;
-	    case 't':
-		batch = TRUE;
-		break;
-	    case 'u':
-		diff_type = UNI_DIFF;
-		break;
 	    case 'v':
 		version();
-		break;
-	    case 'V':
-#ifndef NODIR
-		backup_type = get_version (nextarg ());
-#endif
 		break;
 #ifdef DEBUGGING
 	    case 'x':
@@ -563,14 +445,7 @@ get_some_switches()
 		break;
 #endif
 	    default:
-		fprintf(stderr, "patch: unrecognized option `%s'\n", Argv[0]);
-		fprintf(stderr, "\
-Usage: patch [options] [origfile [patchfile]] [+ [options] [origfile]]...\n\
-Options:\n\
-       [-ceEflnNRsStuv] [-b backup-ext] [-B backup-prefix] [-d directory]\n\
-       [-D symbol] [-Fmax-fuzz] [-o out-file] [-p[strip-count]]\n\
-       [-r rej-name] [-V {numbered,existing,simple}]\n");
-		my_exit(1);
+		fatal2("Unrecognized switch: %s\n", Argv[0]);
 	    }
 	}
     }
@@ -633,8 +508,8 @@ abort_hunk()
     LINENUM newfirst = pch_newfirst() + last_offset;
     LINENUM oldlast = oldfirst + pch_ptrn_lines() - 1;
     LINENUM newlast = newfirst + pch_repl_lines() - 1;
-    char *stars = (diff_type >= NEW_CONTEXT_DIFF ? " ****" : "");
-    char *minuses = (diff_type >= NEW_CONTEXT_DIFF ? " ----" : " -----");
+    char *stars = (diff_type == NEW_CONTEXT_DIFF ? " ****" : "");
+    char *minuses = (diff_type == NEW_CONTEXT_DIFF ? " ----" : " -----");
 
     fprintf(rejfp, "***************\n");
     for (i=0; i<=pat_end; i++) {
@@ -662,7 +537,8 @@ abort_hunk()
 	    fprintf(rejfp, "%c %s", pch_char(i), pfetch(i));
 	    break;
 	default:
-	    fatal1("fatal internal error in abort_hunk\n"); 
+	    say1("Fatal internal error in abort_hunk().\n"); 
+	    abort();
 	}
     }
 }
@@ -705,9 +581,8 @@ LINENUM where;
 	    last_frozen_line++;
 	    old++;
 	}
-	else if (new > pat_end) {
+	else if (new > pat_end)
 	    break;
-	}
 	else if (pch_char(new) == '+') {
 	    copy_till(where + old - 1);
 	    if (R_do_defines) {
@@ -723,45 +598,47 @@ LINENUM where;
 	    fputs(pfetch(new), ofp);
 	    new++;
 	}
-	else if (pch_char(new) != pch_char(old)) {
-	    say3("Out-of-sync patch, lines %ld,%ld--mangled text or line numbers, maybe?\n",
-		pch_hunk_beg() + old,
-		pch_hunk_beg() + new);
-#ifdef DEBUGGING
-	    say3("oldchar = '%c', newchar = '%c'\n",
-		pch_char(old), pch_char(new));
-#endif
-	    my_exit(1);
-	}
-	else if (pch_char(new) == '!') {
-	    copy_till(where + old - 1);
-	    if (R_do_defines) {
-	       fputs(not_defined, ofp);
-	       def_state = IN_IFNDEF;
-	    }
-	    while (pch_char(old) == '!') {
-		if (R_do_defines) {
-		    fputs(pfetch(old), ofp);
-		}
-		last_frozen_line++;
-		old++;
-	    }
-	    if (R_do_defines) {
-		fputs(else_defined, ofp);
-		def_state = IN_ELSE;
-	    }
-	    while (pch_char(new) == '!') {
-		fputs(pfetch(new), ofp);
-		new++;
-	    }
-	}
 	else {
-	    assert(pch_char(new) == ' ');
-	    old++;
-	    new++;
-	    if (R_do_defines && def_state != OUTSIDE) {
-		fputs(end_defined, ofp);
-		def_state = OUTSIDE;
+	    if (pch_char(new) != pch_char(old)) {
+		say3("Out-of-sync patch, lines %ld,%ld--mangled text or line numbers, maybe?\n",
+		    pch_hunk_beg() + old,
+		    pch_hunk_beg() + new);
+#ifdef DEBUGGING
+		say3("oldchar = '%c', newchar = '%c'\n",
+		    pch_char(old), pch_char(new));
+#endif
+		my_exit(1);
+	    }
+	    if (pch_char(new) == '!') {
+		copy_till(where + old - 1);
+		if (R_do_defines) {
+		   fputs(not_defined, ofp);
+		   def_state = IN_IFNDEF;
+		}
+		while (pch_char(old) == '!') {
+		    if (R_do_defines) {
+			fputs(pfetch(old), ofp);
+		    }
+		    last_frozen_line++;
+		    old++;
+		}
+		if (R_do_defines) {
+		    fputs(else_defined, ofp);
+		    def_state = IN_ELSE;
+		}
+		while (pch_char(new) == '!') {
+		    fputs(pfetch(new), ofp);
+		    new++;
+		}
+		if (R_do_defines) {
+		    fputs(end_defined, ofp);
+		    def_state = OUTSIDE;
+		}
+	    }
+	    else {
+		assert(pch_char(new) == ' ');
+		old++;
+		new++;
 	    }
 	}
     }
@@ -795,7 +672,7 @@ char *name;
 {
     ofp = fopen(name, "w");
     if (ofp == Nullfp)
-	pfatal2("can't create %s", name);
+	fatal2("patch: can't create %s.\n", name);
 }
 
 /* Open a file to put hunks we can't locate. */
@@ -806,7 +683,7 @@ char *name;
 {
     rejfp = fopen(name, "w");
     if (rejfp == Nullfp)
-	pfatal2("can't create %s", name);
+	fatal2("patch: can't create %s.\n", name);
 }
 
 /* Copy input file to output, up to wherever hunk is to be applied. */
@@ -818,7 +695,7 @@ Reg1 LINENUM lastline;
     Reg2 LINENUM R_last_frozen_line = last_frozen_line;
 
     if (R_last_frozen_line > lastline)
-	fatal1("misordered hunks! output would be garbled\n");
+	say1("patch: misordered hunks! output will be garbled.\n");
     while (R_last_frozen_line < lastline) {
 	dump_line(++R_last_frozen_line);
     }

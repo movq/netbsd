@@ -1,8 +1,8 @@
-/* $Header: /home/mike/src/cvs/netbsd/src/usr.bin/patch/util.h,v 1.1 1993/04/09 11:34:11 cgd Exp $
+/* $Header: /home/mike/src/cvs/netbsd/src/usr.bin/patch/util.h,v 1.1.1.1 1997/01/09 14:47:40 tls Exp $
  *
  * $Log: util.h,v $
- * Revision 1.1  1993/04/09 11:34:11  cgd
- * patch 2.0.12u8, from prep.ai.mit.edu.  this is not under the GPL.
+ * Revision 1.1.1.1  1997/01/09 14:47:40  tls
+ * Import from 4.4BSD-Lite2
  *
  * Revision 2.0  86/09/17  15:40:06  lwall
  * Baseline for netwide release.
@@ -25,10 +25,6 @@
 #define fatal2 fatal
 #define fatal3 fatal
 #define fatal4 fatal
-#define pfatal1 pfatal
-#define pfatal2 pfatal
-#define pfatal3 pfatal
-#define pfatal4 pfatal
 
 #else /* hope they allow multi-line macro actual arguments */
 
@@ -46,10 +42,6 @@
 #define fatal2(a,b) fatal(a, (b)==(b), 0, 0)
 #define fatal3(a,b,c) fatal(a, (b)==(b), (c)==(c), 0)
 #define fatal4(a,b,c,d) fatal(a, (b)==(b), (c)==(c), (d)==(d))
-#define pfatal1(a) pfatal(a, 0, 0, 0)
-#define pfatal2(a,b) pfatal(a, (b)==(b), 0, 0)
-#define pfatal3(a,b,c) pfatal(a, (b)==(b), (c)==(c), 0)
-#define pfatal4(a,b,c,d) pfatal(a, (b)==(b), (c)==(c), (d)==(d))
 
 #else /* lint */
     /* if this doesn't work, try defining CANVARARG above */
@@ -65,10 +57,6 @@
 #define fatal2(a,b) fatal(a, b, Nullch, Nullch)
 #define fatal3(a,b,c) fatal(a, b, c, Nullch)
 #define fatal4 fatal
-#define pfatal1(a) pfatal(a, Nullch, Nullch, Nullch)
-#define pfatal2(a,b) pfatal(a, b, Nullch, Nullch)
-#define pfatal3(a,b,c) pfatal(a, b, c, Nullch)
-#define pfatal4 pfatal
 
 #endif /* lint */
 
@@ -82,10 +70,8 @@ int move_file();
 void copy_file();
 void say();
 void fatal();
-void pfatal();
 void ask();
 char *savestr();
 void set_signals();
 void ignore_signals();
 void makedirs();
-char *basename();

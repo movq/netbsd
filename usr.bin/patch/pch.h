@@ -1,8 +1,8 @@
-/* $Header: /home/mike/src/cvs/netbsd/src/usr.bin/patch/pch.h,v 1.1 1993/04/09 11:34:09 cgd Exp $
+/* $Header: /home/mike/src/cvs/netbsd/src/usr.bin/patch/pch.h,v 1.1.1.1 1997/01/09 14:47:40 tls Exp $
  *
  * $Log: pch.h,v $
- * Revision 1.1  1993/04/09 11:34:09  cgd
- * patch 2.0.12u8, from prep.ai.mit.edu.  this is not under the GPL.
+ * Revision 1.1.1.1  1997/01/09 14:47:40  tls
+ * Import from 4.4BSD-Lite2
  *
  * Revision 2.0.1.1  87/01/30  22:47:16  lwall
  * Added do_ed_script().
