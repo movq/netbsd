@@ -1,4 +1,4 @@
-/*	$NetBSD: zsvar.h,v 1.4 1998/01/12 19:51:16 thorpej Exp $	*/
+/*	$NetBSD: zsvar.h,v 1.5 2000/03/18 22:33:05 scw Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -79,7 +79,7 @@ struct zsdevice {
 extern	u_char zs_init_reg[];
 
 /* Functions exported to ASIC-specific drivers. */
-void	zs_config __P((struct zsc_softc *, struct zschan *(*)(int, int)));
-void	zs_cnconfig __P((int, int, struct zschan *));
+void	zs_config __P((struct zsc_softc *, bus_space_tag_t,bus_space_handle_t));
+void	zs_cnconfig __P((int, int, bus_space_tag_t, bus_space_handle_t));
 int	zshard __P((void *));
-int	zssoft __P((void *));
+void	zssoft __P((void *));
