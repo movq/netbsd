@@ -33,7 +33,7 @@
  */
 
 #ifndef lint
-static char sccsid[] = "@(#)mci.c	8.1 (Berkeley) 6/7/93";
+static char sccsid[] = "@(#)mci.c	8.9 (Berkeley) 12/1/93";
 #endif /* not lint */
 
 #include "sendmail.h"
@@ -103,6 +103,16 @@ mci_cache(mci)
 	/* otherwise we may have to clear the slot */
 	if (*mcislot != NULL)
 		mci_uncache(mcislot, TRUE);
+
+	if (tTd(42, 5))
+		printf("mci_cache: caching %x (%s) in slot %d\n",
+			mci, mci->mci_host, mcislot - MciCache);
+#ifdef LOG
+	if (tTd(91, 100))
+		syslog(LOG_DEBUG, "%s: mci_cache: caching %x (%s) in slot %d",
+			CurEnv->e_id ? CurEnv->e_id : "NOQUEUE",
+			mci, mci->mci_host, mcislot - MciCache);
+#endif
 
 	*mcislot = mci;
 	mci->mci_flags |= MCIF_CACHED;
@@ -185,6 +195,16 @@ mci_uncache(mcislot, doquit)
 		return;
 	*mcislot = NULL;
 
+	if (tTd(42, 5))
+		printf("mci_uncache: uncaching %x (%s) from slot %d (%d)\n",
+			mci, mci->mci_host, mcislot - MciCache, doquit);
+#ifdef LOG
+	if (tTd(91, 100))
+		syslog(LOG_DEBUG, "%s: mci_uncache: uncaching %x (%s) from slot %d (%d)",
+			CurEnv->e_id ? CurEnv->e_id : "NOQUEUE",
+			mci, mci->mci_host, mcislot - MciCache, doquit);
+#endif
+
 	if (doquit)
 	{
 		message("Closing connection to %s", mci->mci_host);
@@ -253,8 +273,10 @@ mci_get(host, m)
 
 	/* clear CurHostAddr so we don't get a bogus address with this name */
 	bzero(&CurHostAddr, sizeof CurHostAddr);
-#endif DAEMON
+#endif
 
+	if (m->m_mno < 0)
+		syserr("negative mno %d (%s)", m->m_mno, m->m_name);
 	s = stab(host, ST_MCI + m->m_mno, ST_ENTER);
 	mci = &s->s_mci;
 	mci->mci_host = s->s_name;
@@ -295,24 +317,62 @@ mci_get(host, m)
 **		none.
 */
 
-mci_dump(mci)
+mci_dump(mci, logit)
 	register MCI *mci;
+	bool logit;
 {
+	register char *p;
+	char *sep;
+	char buf[1000];
 	extern char *ctime();
 
-	printf("MCI@%x: ", mci);
+	sep = logit ? " " : "\n\t";
+	p = buf;
+	sprintf(p, "MCI@%x: ", mci);
+	p += strlen(p);
 	if (mci == NULL)
 	{
-		printf("NULL\n");
-		return;
+		sprintf(p, "NULL");
+		goto printit;
 	}
-	printf("flags=%o, errno=%d, exitstat=%d, state=%d, pid=%d, maxsize=%ld\n",
-		mci->mci_flags, mci->mci_errno, mci->mci_exitstat,
-		mci->mci_state, mci->mci_pid, mci->mci_maxsize);
-	printf("\tphase=%s, mailer=%s,\n",
+	sprintf(p, "flags=%o, errno=%d, herrno=%d, exitstat=%d, state=%d, pid=%d,%s",
+		mci->mci_flags, mci->mci_errno, mci->mci_herrno,
+		mci->mci_exitstat, mci->mci_state, mci->mci_pid, sep);
+	p += strlen(p);
+	sprintf(p, "maxsize=%ld, phase=%s, mailer=%s,%s",
+		mci->mci_maxsize,
 		mci->mci_phase == NULL ? "NULL" : mci->mci_phase,
-		mci->mci_mailer == NULL ? "NULL" : mci->mci_mailer->m_name);
-	printf("\thost=%s, lastuse=%s\n",
+		mci->mci_mailer == NULL ? "NULL" : mci->mci_mailer->m_name,
+		sep);
+	p += strlen(p);
+	sprintf(p, "host=%s, lastuse=%s",
 		mci->mci_host == NULL ? "NULL" : mci->mci_host,
 		ctime(&mci->mci_lastuse));
+printit:
+	if (logit)
+		syslog(LOG_DEBUG, "%s", buf);
+	else
+		printf("%s\n", buf);
+}
+/*
+**  MCI_DUMP_ALL -- print the entire MCI cache
+**
+**	Parameters:
+**		logit -- if set, log the result instead of printing
+**			to stdout.
+**
+**	Returns:
+**		none.
+*/
+
+mci_dump_all(logit)
+	bool logit;
+{
+	register int i;
+
+	if (MciCache == NULL)
+		return;
+
+	for (i = 0; i < MaxMciCache; i++)
+		mci_dump(MciCache[i], logit);
 }

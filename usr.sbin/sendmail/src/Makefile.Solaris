@@ -5,65 +5,60 @@
 #  old make program (I recommend that you get and port the new make if you
 #  are going to be doing any signficant work on sendmail).
 #
-#  This has been tested on Ultrix.
-#
-#	@(#)Makefile.dist	6.5 (Berkeley) 2/26/93
+#  This has been tested on Solaris 2.1 and 2.2.
 #
 
 # use O=-O (usual) or O=-g (debugging)
-O=	-O
+# warning: do not use -O with gcc
+O=	
 
-CC=	gcc -V2.3.3
+CC=	gcc
 
 # define the database mechanism used for alias lookups:
 #	-DNDBM -- use new DBM
 #	-DNEWDB -- use new Berkeley DB
-#	-DNDBM -DNEWDB -- use both new DBM and new Berkeley DB
-#	-DNDBM -DNEWDB -DYPCOMPAT -- use both plus YP compatility
+#	-DNIS -- include NIS support
 # The really old (V7) DBM library is no longer supported.
-# If YPCOMPAT is defined and /var/yp/Makefile exists, sendmail will build
-#   both the NEWDB and DBM libraries (the DBM just for YP).
+# See READ_ME for a description of how these flags interact.
 #
-DBMDEF=	-DNDBM
+DBMDEF=	-DNDBM -DNIS
 
-# define the load average calculation on your system: -DLA_TYPE=LA_INT,
-#   -DLA_TYPE=LA_FLOAT, -DLA_TYPE=LA_SUBR, or -DLA_TYPE=LA_ZERO
-# leave undefined to use internal guess
-#LADEF=	-DLA_TYPE=LA_SUBR
-
-ENVDEF=	-D_PATH_SENDMAILCF=\"/etc/mail/sendmail.cf\" \
-	-D_PATH_SENDMAILPID=\"/etc/sendmail/sendmail.pid\"
+# environment definitions (e.g., -D_AIX3)
+# include -DSOLARIS_2_3 for version 2.3 and higher
+ENVDEF=	-DSOLARIS
 
 # see also conf.h for additional compilation flags
 
 # include directories
-INCDIRS=-I/usr/sww/include/db
+INCDIRS=-I/usr/sww/include/db -I.
 
 # library directories
-LIBDIRS=-L/usr/sww/lib -L/usr/ucblib
+LIBDIRS=-L/usr/sww/lib
 
 # libraries required on your system
-#LIBS=	-lresolv -lsocket -lnsl -lucb -lelf
 LIBS=	-lresolv -lsocket -lnsl -lelf
 
 # location of sendmail binary (usually /usr/sbin or /usr/lib)
-BINDIR=	${DESTDIR}/usr/sbin
+BINDIR=	${DESTDIR}/usr/lib
 
 # location of sendmail.st file (usually /var/log or /usr/lib)
 STDIR=	${DESTDIR}/var/log
 
 # location of sendmail.hf file (usually /usr/share/misc or /usr/lib)
-HFDIR=	${DESTDIR}/usr/share/misc
+HFDIR=	${DESTDIR}/etc/mail
+
+# additional .o files needed
+OBJADD=
 
 ###################  end of user configuration flags  ######################
 
-CFLAGS=	-I. $O ${INCDIRS} ${DBMDEF} ${LADEF} ${ENVDEF} -DSOLARIS
+CFLAGS=	-I. $O ${INCDIRS} ${DBMDEF} ${ENVDEF}
 
 OBJS=	alias.o arpadate.o clock.o collect.o conf.o convtime.o daemon.o \
 	deliver.o domain.o envelope.o err.o headers.o macro.o main.o \
 	map.o mci.o parseaddr.o queue.o readcf.o recipient.o \
 	savemail.o srvrsmtp.o stab.o stats.o sysexits.o \
-	trace.o udb.o usersmtp.o util.o version.o
+	trace.o udb.o usersmtp.o util.o version.o ${OBJADD}
 
 LINKS=	${DESTDIR}/usr/ucb/newaliases ${DESTDIR}/usr/ucb/mailq
 BINOWN=	root
@@ -71,7 +66,11 @@ BINGRP=	sys
 BINMODE=6555
 INSTALL=/usr/ucb/install
 
-sendmail: ${OBJS}
+ALL=	sendmail aliases.0 newaliases.0 sendmail.0
+
+all: ${ALL}
+
+sendmail: ${BEFORE} ${OBJS}
 	${CC} -o sendmail ${OBJS} ${LIBDIRS} ${LIBS}
 
 aliases.0: aliases.5
@@ -87,8 +86,8 @@ install: install-sendmail install-docs
 
 install-sendmail: sendmail
 	${INSTALL} -o ${BINOWN} -g ${BINGRP} -m ${BINMODE} sendmail ${BINDIR}
-	for i in ${LINKS}; do ; rm -f $$i; ln -s ${BINDIR}/sendmail $$i; done
-	${INSTALL} -c -o ${BINOWN} -g ${BINGRP} -m 666 /dev/null \
+	for i in ${LINKS}; do rm -f $$i; ln -s ${BINDIR}/sendmail $$i; done
+	${INSTALL} -c -o ${BINOWN} -g ${BINGRP} -m 644 /dev/null \
 	    ${STDIR}/sendmail.st
 	${INSTALL} -c -o ${BINOWN} -g ${BINGRP} -m 444 sendmail.hf ${HFDIR}
 
