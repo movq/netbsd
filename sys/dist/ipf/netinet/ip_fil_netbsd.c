@@ -1,4 +1,4 @@
-/*	$NetBSD: ip_fil_netbsd.c,v 1.1 2004/10/01 15:26:00 christos Exp $	*/
+/*	$NetBSD: ip_fil_netbsd.c,v 1.1.1.1 2004/12/31 11:30:42 martti Exp $	*/
 
 /*
  * Copyright (C) 1993-2003 by Darren Reed.
@@ -80,6 +80,8 @@ MALLOC_DEFINE(M_IPFILTER, "IP Filter", "IP Filter packet filter data structures"
 # define	csuminfo	csum_flags
 #endif
 
+extern	struct	protosw	inetsw[];
+
 static	int	(*fr_savep) __P((ip_t *, int, void *, int, struct mbuf **));
 static	int	fr_send_ip __P((fr_info_t *, mb_t *, mb_t **));
 #ifdef KMUTEX_T
@@ -125,21 +127,8 @@ struct mbuf **mp;
 struct ifnet *ifp;
 int dir;
 {
-	struct ip *ip;
-	int rv, hlen;
-	int error;
-
-	/*
-	 * ensure that mbufs are writable beforehand
-	 * as it's assumed by ipf code.
-	 * XXX inefficient
-	 */
-	error = m_makewritable(mp, 0, M_COPYALL, M_DONTWAIT);
-	if (error) {
-		m_freem(*mp);
-		*mp = NULL;
-		return error;
-	}
+	struct ip *ip = mtod(*mp, struct ip *);
+	int rv, hlen = ip->ip_hl << 2;
 
 #if defined(M_CSUM_TCPv4)
 	/*
@@ -155,9 +144,6 @@ int dir;
 		}
 	}
 #endif /* M_CSUM_TCPv4 */
-
-	ip = mtod(*mp, struct ip *);
-	hlen = ip->ip_hl << 2;
 
 	/*
 	 * We get the packet with all fields in network byte
@@ -193,20 +179,7 @@ struct mbuf **mp;
 struct ifnet *ifp;
 int dir;
 {
-	int error;
 	
-	/*
-	 * ensure that mbufs are writable beforehand
-	 * as it's assumed by ipf code.
-	 * XXX inefficient
-	 */
-	error = m_makewritable(mp, 0, M_COPYALL, M_DONTWAIT);
-	if (error) {
-		m_freem(*mp);
-		*mp = NULL;
-		return error;
-	}
-
 	return (fr_check(mtod(*mp, struct ip *), sizeof(struct ip6_hdr),
 	    ifp, (dir == PFIL_OUT), mp));
 }
@@ -893,6 +866,8 @@ int dst;
 	xtra = 0;
 	hlen = 0;
 	ohlen = 0;
+	avail = 0;
+	m = NULL;
 	ifp = fin->fin_ifp;
 	if (fin->fin_v == 4) {
 		if ((fin->fin_p == IPPROTO_ICMP) &&
