@@ -34,7 +34,7 @@
  * SUCH DAMAGE.
  *
  *	@(#)scsivar.h	7.1 (Berkeley) 5/8/90
- *	$Id: scsivar.h,v 1.7 1994/02/11 07:02:13 chopps Exp $
+ *	$Id: scsivar.h,v 1.8 1994/02/28 06:06:29 chopps Exp $
  */
 
 /*
@@ -55,13 +55,14 @@ struct	scsi_softc {
 	struct	devqueue sc_dq;
 	struct	devqueue sc_sq;
 	dmafree_t dmafree;
-	dmago_t   dmago;
+	dmago_t	dmago;
 	dmanext_t dmanext;
 	dmastop_t dmastop;
-	char	  *dmabuffer;
-	char	  *dmausrbuf;
-	u_long	  dmausrlen;
-	u_long    dmamask;
+	char	*dmabuffer;
+	char	*dmausrbuf;
+	u_long	dmausrlen;
+	u_long	dmamask;
+	u_short	bankmask;
 	u_char	sc_flags;
 	u_long	sc_clock_freq;
 	/* one for each target */
