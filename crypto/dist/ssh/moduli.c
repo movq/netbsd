@@ -1,4 +1,4 @@
-/*	$NetBSD: moduli.c,v 1.1 2005/02/13 00:53:02 christos Exp $	*/
+/*	$NetBSD: moduli.c,v 1.1.1.1 2005/02/13 00:53:02 christos Exp $	*/
 /* $OpenBSD: moduli.c,v 1.9 2004/07/11 17:48:47 deraadt Exp $ */
 /*
  * Copyright 1994 Phil Karn <karn@qualcomm.com>

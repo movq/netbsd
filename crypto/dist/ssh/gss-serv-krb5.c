@@ -1,4 +1,4 @@
-/*	$NetBSD: gss-serv-krb5.c,v 1.1 2005/02/13 00:53:00 christos Exp $	*/
+/*	$NetBSD: gss-serv-krb5.c,v 1.1.1.1 2005/02/13 00:53:00 christos Exp $	*/
 /*	$OpenBSD: gss-serv-krb5.c,v 1.3 2004/07/21 10:36:23 djm Exp $	*/
 
 /*

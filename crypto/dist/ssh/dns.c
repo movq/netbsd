@@ -1,4 +1,4 @@
-/*	$NetBSD: dns.c,v 1.1 2005/02/13 00:52:59 christos Exp $	*/
+/*	$NetBSD: dns.c,v 1.1.1.1 2005/02/13 00:52:59 christos Exp $	*/
 /*	$OpenBSD: dns.c,v 1.10 2004/06/21 17:36:31 avsm Exp $	*/
 
 /*

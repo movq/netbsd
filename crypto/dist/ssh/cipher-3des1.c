@@ -1,4 +1,4 @@
-/*	$NetBSD: cipher-3des1.c,v 1.1 2005/02/13 00:52:56 christos Exp $	*/
+/*	$NetBSD: cipher-3des1.c,v 1.1.1.1 2005/02/13 00:52:56 christos Exp $	*/
 /*
  * Copyright (c) 2003 Markus Friedl.  All rights reserved.
  *
