@@ -1,5 +1,5 @@
 #	from: @(#)Makefile	5.2 (Berkeley) 3/5/91
-#	$Id: Makefile,v 1.35 1995/02/13 21:57:24 cgd Exp $
+#	$Id: Makefile,v 1.31 1995/01/06 00:09:19 cgd Exp $
 #
 # All library objects contain sccsid strings by default; they may be
 # excluded as a space-saving measure.  To produce a library that does
@@ -15,7 +15,7 @@
 # actually call the YP functions, put -DYP on the CFLAGS line below.
 
 LIB=c
-CFLAGS+=-DNLS -DYP -DLIBC_SCCS -DSYSLIBC_SCCS -I${.CURDIR}/include
+CFLAGS+=-DNLS -DYP -DLIBC_SCCS -DSYSLIBC_SCCS
 AINC=	-I${.CURDIR}/arch/${MACHINE_ARCH}
 .if defined(DESTDIR)
 AINC+=	-nostdinc -idirafter ${DESTDIR}/usr/include
@@ -33,9 +33,7 @@ AINC+=	-nostdinc -idirafter ${DESTDIR}/usr/include
 .include "${.CURDIR}/locale/Makefile.inc"
 .include "${.CURDIR}/net/Makefile.inc"
 .include "${.CURDIR}/nls/Makefile.inc"
-.if (${MACHINE_ARCH} != "alpha")
 .include "${.CURDIR}/quad/Makefile.inc"
-.endif
 .include "${.CURDIR}/regex/Makefile.inc"
 .include "${.CURDIR}/rpc/Makefile.inc"
 .include "${.CURDIR}/stdio/Makefile.inc"
@@ -48,20 +46,17 @@ LIBKERN=	${.CURDIR}/../../sys/lib/libkern
 
 KSRCS=	bcmp.c bzero.c ffs.c strcat.c strcmp.c strcpy.c strlen.c strncmp.c \
 	strncpy.c htonl.c htons.c ntohl.c ntohs.c
-.if (${MACHINE_ARCH} != "alpha")
 KSRCS+=	adddi3.c anddi3.c ashldi3.c ashrdi3.c cmpdi2.c divdi3.c iordi3.c \
 	lshldi3.c lshrdi3.c moddi3.c muldi3.c negdi2.c notdi2.c qdivrem.c \
 	subdi3.c  ucmpdi2.c udivdi3.c umoddi3.c xordi3.c
+
 KINCLUDES+=	quad/quad.h
-.endif
 
 copy-to-libkern:	copy-to-libkern-machind copy-to-libkern-machdep
 
 copy-to-libkern-machind: ${KSRCS}
 	cp -p ${.ALLSRC} ${LIBKERN}
-.if defined(KINCLUDES) && !empty(KINCLUDES)
 	(cd ${.CURDIR} ; cp -p ${KINCLUDES} ${LIBKERN})
-.endif
 
 copy-to-libkern-machdep: ${KMSRCS}
 .if defined(KMSRCS) && !empty(KMSRCS)
@@ -76,5 +71,5 @@ rm-from-libkern:
 .if defined(KMSRCS) && !empty(KMSRCS)
 	for i in ${KMSRCS}; do rm -f ${LIBKERN}/arch/${MACHINE_ARCH}/$$i; done
 .endif
-
+	
 .include <bsd.lib.mk>
