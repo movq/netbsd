@@ -1,4 +1,4 @@
-/*	$NetBSD: common.c,v 1.6 2000/02/08 16:23:00 scottb Exp $	*/
+/*	$NetBSD: common.c,v 1.7 2000/04/02 15:35:47 minoura Exp $	*/
 
 /*
  * Copyright (c) 1995 Christopher G. Demetriou
@@ -56,13 +56,6 @@ asm ("_eprol:");
 #endif
 
 #ifdef DYNAMIC
-#ifdef __weak_alias
-__weak_alias(dlopen,_dlopen);
-__weak_alias(dlclose,_dlclose);
-__weak_alias(dlsym,_dlsym);
-__weak_alias(dlerror,_dlerror);
-__weak_alias(dladdr,_dladdr);
-#endif
 
 void
 _rtld_setup(cleanup, obj)
@@ -79,66 +72,13 @@ _rtld_setup(cleanup, obj)
 	atexit(cleanup);
 }
 
-void *
-dlopen(name, mode)
-	const char *name;
-	int mode;
-{
-
-	if (__mainprog_obj == NULL)
-		return NULL;
-	return (__mainprog_obj->dlopen)(name, mode);
-}
-
-int
-dlclose(fd)
-	void *fd;
-{
-
-	if (__mainprog_obj == NULL)
-		return -1;
-	return (__mainprog_obj->dlclose)(fd);
-}
-
-void *
-dlsym(fd, name)
-	void *fd;
-	const char *name;
-{
-
-	if (__mainprog_obj == NULL)
-		return NULL;
-	return (__mainprog_obj->dlsym)(fd, name);
-}
-
-#if 0 /* not supported for ELF shlibs, apparently */
-int
-dlctl(fd, cmd, arg)
-	void *fd, *arg;
-	int cmd;
-{
-
-	if (__mainprog_obj == NULL)
-		return -1;
-	return (__mainprog_obj->dlctl)(fd, cmd, arg);
-}
+#ifdef __weak_alias
+__weak_alias(dlopen,_dlopen);
+__weak_alias(dlclose,_dlclose);
+__weak_alias(dlsym,_dlsym);
+__weak_alias(dlerror,_dlerror);
+__weak_alias(dladdr,_dladdr);
 #endif
 
-__aconst char *
-dlerror()
-{
-
-	if (__mainprog_obj == NULL)
-		return ("Dynamic linker interface not available");
-	return (__mainprog_obj->dlerror)();
-}
-
-int
-dladdr(const void *addr, Dl_info *dli)
-{
-
-	if (__mainprog_obj == NULL)
-		return -1;
-	return (__mainprog_obj->dladdr)(addr, dli);
-}
+#include <dlfcn_stubs.c>
 #endif /* DYNAMIC */
