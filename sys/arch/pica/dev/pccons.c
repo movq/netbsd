@@ -1,4 +1,4 @@
-/*	$NetBSD: pccons.c,v 1.9 1998/01/12 20:04:29 thorpej Exp $	*/
+/*	$NetBSD: pccons.c,v 1.1 1996/03/13 04:58:06 jonathan Exp $	*/
 
 /*-
  * Copyright (c) 1993, 1994, 1995 Charles Hannum.  All rights reserved.
@@ -62,21 +62,17 @@
 #include <sys/vnode.h>
 #include <sys/device.h>
 #include <sys/file.h>
-#include <sys/poll.h>
 
 #include <dev/cons.h>
 
 #include <machine/cpu.h>
 #include <machine/pio.h>
 #include <machine/autoconf.h>
-#include <machine/bus.h>
 #include <machine/display.h>
 #include <machine/pccons.h>
 #include <pica/pica/pica.h>
 
-#ifdef notyet
 #include <dev/isa/isavar.h>
-#endif
 #include <machine/kbdreg.h>
 
 #define	XFREE86_BUG_COMPAT
@@ -145,18 +141,16 @@ int pcmatch __P((struct device *, void *, void *));
 void pcattach __P((struct device *, struct device *, void *));
 int pcintr __P((void *));
 
-struct cfattach pc_ca = {
-	sizeof(struct pc_softc), pcmatch, pcattach
+struct cfdriver pccd = {
+	NULL, "pc", pcmatch, pcattach, DV_TTY, sizeof(struct pc_softc)
 };
-
-extern struct cfdriver pc_cd;
 
 int pmsprobe __P((struct device *, void *, void *));
 void pmsattach __P((struct device *, struct device *, void *));
 int pmsintr __P((void *));
 
-struct cfattach pms_ca = {
-	sizeof(struct pms_softc), pmsprobe, pmsattach
+struct cfdriver pmscd = {
+	NULL, "pms", pmsprobe, pmsattach, DV_TTY, sizeof(struct pms_softc)
 };
 
 #define	PMSUNIT(dev)	(minor(dev))
@@ -520,9 +514,9 @@ pcopen(dev, flag, mode, p)
 	int unit = PCUNIT(dev);
 	struct tty *tp;
 
-	if (unit >= pc_cd.cd_ndevs)
+	if (unit >= pccd.cd_ndevs)
 		return ENXIO;
-	sc = pc_cd.cd_devs[unit];
+	sc = pccd.cd_devs[unit];
 	if (sc == 0)
 		return ENXIO;
 
@@ -559,7 +553,7 @@ pcclose(dev, flag, mode, p)
 	int flag, mode;
 	struct proc *p;
 {
-	struct pc_softc *sc = pc_cd.cd_devs[PCUNIT(dev)];
+	struct pc_softc *sc = pccd.cd_devs[PCUNIT(dev)];
 	struct tty *tp = sc->sc_tty;
 
 	(*linesw[tp->t_line].l_close)(tp, flag);
@@ -576,7 +570,7 @@ pcread(dev, uio, flag)
 	struct uio *uio;
 	int flag;
 {
-	struct pc_softc *sc = pc_cd.cd_devs[PCUNIT(dev)];
+	struct pc_softc *sc = pccd.cd_devs[PCUNIT(dev)];
 	struct tty *tp = sc->sc_tty;
 
 	return ((*linesw[tp->t_line].l_read)(tp, uio, flag));
@@ -588,7 +582,7 @@ pcwrite(dev, uio, flag)
 	struct uio *uio;
 	int flag;
 {
-	struct pc_softc *sc = pc_cd.cd_devs[PCUNIT(dev)];
+	struct pc_softc *sc = pccd.cd_devs[PCUNIT(dev)];
 	struct tty *tp = sc->sc_tty;
 
 	return ((*linesw[tp->t_line].l_write)(tp, uio, flag));
@@ -598,7 +592,7 @@ struct tty *
 pctty(dev)
 	dev_t dev;
 {
-	struct pc_softc *sc = pc_cd.cd_devs[PCUNIT(dev)];
+	struct pc_softc *sc = pccd.cd_devs[PCUNIT(dev)];
 	struct tty *tp = sc->sc_tty;
 
 	return (tp);
@@ -641,7 +635,7 @@ pcioctl(dev, cmd, data, flag, p)
 	int flag;
 	struct proc *p;
 {
-	struct pc_softc *sc = pc_cd.cd_devs[PCUNIT(dev)];
+	struct pc_softc *sc = pccd.cd_devs[PCUNIT(dev)];
 	struct tty *tp = sc->sc_tty;
 	int error;
 
@@ -824,8 +818,8 @@ pccnpollc(dev, on)
 		 * interrupts.
 		 */
 		unit = PCUNIT(dev);
-		if (pc_cd.cd_ndevs > unit) {
-			sc = pc_cd.cd_devs[unit];
+		if (pccd.cd_ndevs > unit) {
+			sc = pccd.cd_devs[unit];
 			if (sc != 0) {
 				s = spltty();
 				pcintr(sc);
@@ -1865,7 +1859,7 @@ pc_xmode_off()
 #endif
 	async_update();
 }
-/*	$NetBSD: pccons.c,v 1.9 1998/01/12 20:04:29 thorpej Exp $	*/
+/*	$NetBSD: pccons.c,v 1.1 1996/03/13 04:58:06 jonathan Exp $	*/
 
 #include <machine/mouse.h>
 
@@ -1972,9 +1966,9 @@ pmsopen(dev, flag)
 	int unit = PMSUNIT(dev);
 	struct pms_softc *sc;
 
-	if (unit >= pms_cd.cd_ndevs)
+	if (unit >= pmscd.cd_ndevs)
 		return ENXIO;
-	sc = pms_cd.cd_devs[unit];
+	sc = pmscd.cd_devs[unit];
 	if (!sc)
 		return ENXIO;
 
@@ -2009,7 +2003,7 @@ pmsclose(dev, flag)
 	dev_t dev;
 	int flag;
 {
-	struct pms_softc *sc = pms_cd.cd_devs[PMSUNIT(dev)];
+	struct pms_softc *sc = pmscd.cd_devs[PMSUNIT(dev)];
 
 	/* Disable interrupts. */
 	pms_dev_cmd(PMS_DEV_DISABLE);
@@ -2029,7 +2023,7 @@ pmsread(dev, uio, flag)
 	struct uio *uio;
 	int flag;
 {
-	struct pms_softc *sc = pms_cd.cd_devs[PMSUNIT(dev)];
+	struct pms_softc *sc = pmscd.cd_devs[PMSUNIT(dev)];
 	int s;
 	int error;
 	size_t length;
@@ -2077,7 +2071,7 @@ pmsioctl(dev, cmd, addr, flag)
 	caddr_t addr;
 	int flag;
 {
-	struct pms_softc *sc = pms_cd.cd_devs[PMSUNIT(dev)];
+	struct pms_softc *sc = pmscd.cd_devs[PMSUNIT(dev)];
 	struct mouseinfo info;
 	int s;
 	int error;
@@ -2201,21 +2195,25 @@ pmsintr(arg)
 }
 
 int
-pmspoll(dev, events, p)
+pmsselect(dev, rw, p)
 	dev_t dev;
-	int events;
+	int rw;
 	struct proc *p;
 {
-	struct pms_softc *sc = pms_cd.cd_devs[PMSUNIT(dev)];
-	int revents = 0;
-	int s = spltty();
+	struct pms_softc *sc = pmscd.cd_devs[PMSUNIT(dev)];
+	int s;
+	int ret;
 
-	if (events & (POLLIN | POLLRDNORM))
-		if (sc->sc_q.c_cc > 0)
-			revents |= events & (POLLIN | POLLRDNORM);
-		else
-			selrecord(p, &sc->sc_rsel);
+	if (rw == FWRITE)
+		return 0;
 
+	s = spltty();
+	if (!sc->sc_q.c_cc) {
+		selrecord(p, &sc->sc_rsel);
+		ret = 0;
+	} else
+		ret = 1;
 	splx(s);
-	return (revents);
+
+	return ret;
 }

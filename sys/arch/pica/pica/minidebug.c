@@ -1,5 +1,3 @@
-/*	$NetBSD: minidebug.c,v 1.5 1997/06/23 02:56:48 jonathan Exp $	*/
-
 /*-
  * Copyright (c) 1991, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -36,6 +34,7 @@
  * SUCH DAMAGE.
  *
  *	from: @(#)kadb.c	8.1 (Berkeley) 6/10/93
+ *      $Id: minidebug.c,v 1.1 1996/03/13 04:58:12 jonathan Exp $
  */
 
 /*
@@ -253,7 +252,7 @@ break_insert()
 	for(i = 0; i < MAXBRK; i++) {
 		if(brk_tab[i].addr != 0) {
 			brk_tab[i].inst = *(u_int *)brk_tab[i].addr;
-			*(u_int *)brk_tab[i].addr = MIPS_BREAK_BRKPT;
+			*(u_int *)brk_tab[i].addr = MACH_BREAK_BRKPT;
 			MachFlushDCache(brk_tab[i].addr,4);
 			MachFlushICache(brk_tab[i].addr,4);
 		}
@@ -305,11 +304,11 @@ mdb(causeReg, vadr, p, kernelmode)
 static int ssandrun;	/* Single step and run flag (when cont at brk) */
 
 	splhigh();
-	cause = (causeReg & MIPS_CR_EXC_CODE) >> MIPS_CR_EXC_CODE_SHIFT;
+	cause = (causeReg & MACH_CR_EXC_CODE) >> MACH_CR_EXC_CODE_SHIFT;
 	newaddr = (int)(mdbpcb.pcb_regs[PC]);
 	switch(cause) {
 	case T_BREAK:
-		if(*(int *)newaddr == MIPS_BREAK_SOVER) {
+		if(*(int *)newaddr == MACH_BREAK_SOVER) {
 			break_restore();
 			mdbpcb.pcb_regs[PC] += 4;
 			printf("\nStop break (panic)\n# ");
@@ -318,7 +317,7 @@ static int ssandrun;	/* Single step and run flag (when cont at brk) */
 			printf("\n# ");
 			break;
 		}
-		if(*(int *)newaddr == MIPS_BREAK_BRKPT) {
+		if(*(int *)newaddr == MACH_BREAK_BRKPT) {
 			break_restore();
 			printf("\rBRK %08x\t",newaddr);
 			if(mdbprintins(*(int *)newaddr, newaddr)) {
@@ -566,7 +565,7 @@ mdbsetsstep()
 	if ((int)va < 0) {
 		/* kernel address */
 		mdb_ss_instr = mdbpeek(va);
-		mdbpoke((caddr_t)va, MIPS_BREAK_SSTEP);
+		mdbpoke((caddr_t)va, MACH_BREAK_SSTEP);
 		MachFlushDCache(va,4);
 		MachFlushICache(va,4);
 		return;
@@ -591,7 +590,7 @@ mdbclrsstep(cr)
 
 	/* read break instruction */
 	instr = mdbpeek(va);
-	if (instr != MIPS_BREAK_SSTEP)
+	if (instr != MACH_BREAK_SSTEP)
 		return(FALSE);
 
 	if ((int)va < 0) {

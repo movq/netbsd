@@ -1,4 +1,4 @@
-/*	$NetBSD: mainbus.c,v 1.6 1998/01/12 20:04:32 thorpej Exp $	*/
+/*	$NetBSD: mainbus.c,v 1.1 1996/03/13 04:58:12 jonathan Exp $	*/
 
 /*
  * Copyright (c) 1994, 1995 Carnegie-Mellon University.
@@ -43,11 +43,10 @@ struct mainbus_softc {
 /* Definition of the mainbus driver. */
 static int	mbmatch __P((struct device *, void *, void *));
 static void	mbattach __P((struct device *, struct device *, void *));
-static int	mbprint __P((void *, const char *));
-
-struct cfattach mainbus_ca = {
-	sizeof(struct mainbus_softc), mbmatch, mbattach
-};
+static int	mbprint __P((void *, char *));
+struct cfdriver mainbuscd =
+    { NULL, "mainbus", mbmatch, mbattach, DV_DULL,
+	sizeof (struct mainbus_softc) };
 
 void	mb_intr_establish __P((struct confargs *, int (*)(void *), void *));
 void	mb_intr_disestablish __P((struct confargs *));
@@ -125,7 +124,7 @@ mbattach(parent, self, aux)
 static int
 mbprint(aux, pnp)
 	void *aux;
-	const char *pnp;
+	char *pnp;
 {
 
 	if (pnp)

@@ -1,7 +1,0 @@
-$NetBSD: TODO,v 1.4 1998/02/09 02:30:45 scottb Exp $
-
-* figure out semantics of sysi86(0x72, ...)
-
-* figure out why some network programs with shared libsocket don't get
-  linked correctly
-

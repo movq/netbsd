@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.h,v 1.3 1997/06/23 02:56:44 jonathan Exp $	*/
+/*	$NetBSD: autoconf.h,v 1.1 1996/03/13 04:58:07 jonathan Exp $	*/
 
 /*
  * Copyright (c) 1994, 1995 Carnegie-Mellon University.
@@ -72,7 +72,3 @@ struct confargs {
 void	set_clockintr __P((void (*)(struct clockframe *)));
 void	set_iointr __P((void (*)(void *, int)));
 int	badaddr			__P((void *, u_int64_t));
-
-int	initcpu __P((void));
-void	configure __P((void));
-void	makebootdev __P((char *cp));

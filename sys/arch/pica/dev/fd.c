@@ -1,4 +1,4 @@
-/*	$NetBSD: fd.c,v 1.10 1998/01/12 20:04:27 thorpej Exp $	*/
+/*	$NetBSD: fd.c,v 1.1 1996/03/13 04:58:06 jonathan Exp $	*/
 
 /*-
  * Copyright (c) 1993, 1994, 1995 Charles Hannum.
@@ -58,11 +58,8 @@
 #include <machine/pio.h>
 #include <machine/autoconf.h>
 
-#include <mips/locore.h>
 #include <pica/dev/fdreg.h>
 #include <pica/dev/dma.h>
-
-#include "locators.h"
 
 
 #define FDUNIT(dev)	(minor(dev) / 8)
@@ -109,8 +106,8 @@ struct fdc_softc {
 int fdcprobe __P((struct device *, void *, void *));
 void fdcattach __P((struct device *, struct device *, void *));
 
-struct cfattach fdc_ca = {
-	sizeof(struct fdc_softc), fdcprobe, fdcattach
+struct cfdriver fdccd = {
+	NULL, "fdc", fdcprobe, fdcattach, DV_DULL, sizeof(struct fdc_softc)
 };
 
 /*
@@ -176,11 +173,9 @@ struct fd_softc {
 int fdprobe __P((struct device *, void *, void *));
 void fdattach __P((struct device *, struct device *, void *));
 
-struct cfattach fd_ca = {
-	sizeof(struct fd_softc), fdprobe, fdattach
+struct cfdriver fdcd = {
+	NULL, "fd", fdprobe, fdattach, DV_DISK, sizeof(struct fd_softc)
 };
-
-extern struct cfdriver fd_cd;
 
 void fdgetdisklabel __P((struct fd_softc *));
 int fd_get_parms __P((struct fd_softc *));
@@ -246,7 +241,7 @@ struct fdc_attach_args {
 int
 fdprint(aux, fdc)
 	void *aux;
-	const char *fdc;
+	char *fdc;
 {
 	register struct fdc_attach_args *fa = aux;
 
@@ -305,8 +300,7 @@ fdprobe(parent, match, aux)
 	int iobase = fdc->sc_iobase;
 	int n;
 
-	if (cf->cf_loc[FDCCF_DRIVE] != FDCCF_DRIVE_DEFAULT &&
-	    cf->cf_loc[FDCCF_DRIVE] != drive)
+	if (cf->cf_loc[0] != -1 && cf->cf_loc[0] != drive)
 		return 0;
 
 	/* select drive and turn on motor */
@@ -430,8 +424,8 @@ fdstrategy(bp)
  	int s;
 
 	/* Valid unit, controller, and request? */
-	if (unit >= fd_cd.cd_ndevs ||
-	    (fd = fd_cd.cd_devs[unit]) == 0 ||
+	if (unit >= fdcd.cd_ndevs ||
+	    (fd = fdcd.cd_devs[unit]) == 0 ||
 	    bp->b_blkno < 0 ||
 	    (bp->b_bcount % FDC_BSIZE) != 0) {
 		bp->b_error = EINVAL;
@@ -658,9 +652,9 @@ Fdopen(dev, flags)
 	struct fd_type *type;
 
 	unit = FDUNIT(dev);
-	if (unit >= fd_cd.cd_ndevs)
+	if (unit >= fdcd.cd_ndevs)
 		return ENXIO;
-	fd = fd_cd.cd_devs[unit];
+	fd = fdcd.cd_devs[unit];
 	if (fd == 0)
 		return ENXIO;
 	type = fd_dev_to_type(fd, dev);
@@ -683,7 +677,7 @@ fdclose(dev, flags)
 	dev_t dev;
 	int flags;
 {
-	struct fd_softc *fd = fd_cd.cd_devs[FDUNIT(dev)];
+	struct fd_softc *fd = fdcd.cd_devs[FDUNIT(dev)];
 
 	fd->sc_flags &= ~FD_OPEN;
 	return 0;
@@ -713,7 +707,6 @@ fdcstatus(dv, n, s)
 {
 	struct fdc_softc *fdc = (void *)dv->dv_parent;
 	int iobase = fdc->sc_iobase;
-	char bits[64];
 
 	if (n == 0) {
 		out_fdc(fdc->sc_iobase, NE7CMD_SENSEI);
@@ -728,18 +721,15 @@ fdcstatus(dv, n, s)
 		printf("\n");
 		break;
 	case 2:
-		printf(" (st0 %s cyl %d)\n",
-		     bitmask_snprintf(fdc->sc_status[0], NE7_ST0BITS,
-		     bits, sizeof(bits)), fdc->sc_status[1]);
+		printf(" (st0 %b cyl %d)\n",
+		    fdc->sc_status[0], NE7_ST0BITS,
+		    fdc->sc_status[1]);
 		break;
 	case 7:
-		printf(" (st0 %s", bitmask_snprintf(fdc->sc_status[0],
-		    NE7_ST0BITS, bits, sizeof(bits)));
-		printf(" st1 %s", bitmask_snprintf(fdc->sc_status[1],
-		    NE7_ST1BITS, bits, sizeof(bits)));
-		printf(" st2 %s", bitmask_snprintf(fdc->sc_status[2],
-		    NE7_ST2BITS, bits, sizeof(bits)));
-		printf(" cyl %d head %d sec %d)\n",
+		printf(" (st0 %b st1 %b st2 %b cyl %d head %d sec %d)\n",
+		    fdc->sc_status[0], NE7_ST0BITS,
+		    fdc->sc_status[1], NE7_ST1BITS,
+		    fdc->sc_status[2], NE7_ST2BITS,
 		    fdc->sc_status[3], fdc->sc_status[4], fdc->sc_status[5]);
 		break;
 #ifdef DIAGNOSTIC
@@ -880,8 +870,7 @@ loop:
 #endif
 		 }}
 #endif
-		MachFlushDCache((vm_offset_t) (bp->b_data + fd->sc_skip),
-				(vm_offset_t) fd->sc_nbytes);
+		MachFlushDCache(bp->b_data + fd->sc_skip, fd->sc_nbytes);
 		read = bp->b_flags & B_READ ? DMA_FROM_DEV : DMA_TO_DEV;
 		DMA_START(fdc->dma, bp->b_data + fd->sc_skip, fd->sc_nbytes, read);
 		outb(iobase + fdctl, type->rate);
@@ -1032,7 +1021,6 @@ void
 fdcretry(fdc)
 	struct fdc_softc *fdc;
 {
-	char bits[64];
 	struct fd_softc *fd;
 	struct buf *bp;
 
@@ -1058,14 +1046,10 @@ fdcretry(fdc)
 	default:
 		diskerr(bp, "fd", "hard error", LOG_PRINTF,
 		    fd->sc_skip / FDC_BSIZE, (struct disklabel *)NULL);
-
-		printf(" (st0 %s", bitmask_snprintf(fdc->sc_status[0],
-		    NE7_ST0BITS, bits, sizeof(bits)));
-		printf(" st1 %s", bitmask_snprintf(fdc->sc_status[1],
-		    NE7_ST1BITS, bits, sizeof(bits)));
-		printf(" st2 %s", bitmask_snprintf(fdc->sc_status[2],
-		    NE7_ST2BITS, bits, sizeof(bits)));
-		printf(" cyl %d head %d sec %d)\n",
+		printf(" (st0 %b st1 %b st2 %b cyl %d head %d sec %d)\n",
+		    fdc->sc_status[0], NE7_ST0BITS,
+		    fdc->sc_status[1], NE7_ST1BITS,
+		    fdc->sc_status[2], NE7_ST2BITS,
 		    fdc->sc_status[3], fdc->sc_status[4], fdc->sc_status[5]);
 
 		bp->b_flags |= B_ERROR;
@@ -1103,7 +1087,7 @@ fdioctl(dev, cmd, addr, flag)
 	caddr_t addr;
 	int flag;
 {
-	struct fd_softc *fd = fd_cd.cd_devs[FDUNIT(dev)];
+	struct fd_softc *fd = fdcd.cd_devs[FDUNIT(dev)];
 	struct disklabel buffer;
 	int error;
 
