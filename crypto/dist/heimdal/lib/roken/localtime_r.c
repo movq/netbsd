@@ -34,7 +34,7 @@
 #ifdef HAVE_CONFIG_H
 #include <config.h>
 __RCSID("$Heimdal: localtime_r.c,v 1.2 2002/08/20 13:00:35 joda Exp $"
-        "$NetBSD: localtime_r.c,v 1.1 2002/09/12 12:41:42 joda Exp $");
+        "$NetBSD: localtime_r.c,v 1.1.1.1 2002/09/12 12:41:42 joda Exp $");
 #endif
 
 #include <stdio.h>

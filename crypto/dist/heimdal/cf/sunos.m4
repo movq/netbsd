@@ -1,6 +1,6 @@
 dnl
 dnl $Heimdal: sunos.m4,v 1.1 2002/08/28 19:53:51 joda Exp $
-dnl $NetBSD: sunos.m4,v 1.1 2002/09/12 12:41:44 joda Exp $
+dnl $NetBSD: sunos.m4,v 1.1.1.1 2002/09/12 12:41:44 joda Exp $
 dnl
 
 AC_DEFUN([rk_SUNOS],[

@@ -34,7 +34,7 @@
 #ifdef HAVE_CONFIG_H
 #include <config.h>
 __RCSID("$Heimdal: parse_reply-test.c,v 1.2 2002/09/04 03:25:06 assar Exp $"
-        "$NetBSD: parse_reply-test.c,v 1.1 2002/09/12 12:41:42 joda Exp $");
+        "$NetBSD: parse_reply-test.c,v 1.1.1.1 2002/09/12 12:41:42 joda Exp $");
 #endif
 
 #include <sys/types.h>
