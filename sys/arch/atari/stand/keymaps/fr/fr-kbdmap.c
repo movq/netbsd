@@ -1,4 +1,4 @@
-/*	$NetBSD: fr-kbdmap.c,v 1.1 1996/06/22 20:14:11 leo Exp $	*/
+/*	$NetBSD: fr-kbdmap.c,v 1.1.1.1 1996/06/22 20:14:11 leo Exp $	*/
 
 /*
  * Contributed by Cedric Moreau
