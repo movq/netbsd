@@ -1,5 +1,5 @@
 /*-
- * Copyright (c) 1993, 1994
+ * Copyright (c) 1993
  *	The Regents of the University of California.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -32,28 +32,17 @@
  */
 
 #ifndef lint
-static const char sccsid[] = "@(#)sex_util.c	8.16 (Berkeley) 8/17/94";
+static char sccsid[] = "@(#)sex_util.c	8.9 (Berkeley) 12/23/93";
 #endif /* not lint */
 
 #include <sys/types.h>
-#include <sys/queue.h>
-#include <sys/time.h>
 
-#include <bitstring.h>
 #include <errno.h>
-#include <limits.h>
-#include <signal.h>
-#include <stdio.h>
 #include <string.h>
 #include <termios.h>
 #include <unistd.h>
 
-#include "compat.h"
-#include <db.h>
-#include <regex.h>
-
 #include "vi.h"
-#include "excmd.h"
 #include "sex_screen.h"
 
 /*
@@ -77,29 +66,6 @@ sex_busy(sp, msg)
 }
 
 /*
- * sex_optchange --
- *	Screen specific "option changed" routine.
- */
-int
-sex_optchange(sp, opt)
-	SCR *sp;
-	int opt;
-{
-	switch (opt) {
-	case O_TERM:
-		/* Reset the screen size. */
-		if (sp->s_window(sp, 0))
-			return (1);
-		F_SET(sp, S_RESIZE);
-		break;
-	}
-
-	(void)ex_optchange(sp, opt);
-
-	return (0);
-}
-
-/*
  * sex_suspend --
  *	Suspend an ex screen.
  */
@@ -108,41 +74,24 @@ sex_suspend(sp)
 	SCR *sp;
 {
 	struct termios t;
-	GS *gp;
 	int rval;
 
-	rval = 0;
-
-	/* Save current terminal settings, and restore the original ones. */
-	gp = sp->gp;
-	if (F_ISSET(gp, G_STDIN_TTY)) {
-		if (tcgetattr(STDIN_FILENO, &t)) {
-			msgq(sp, M_SYSERR, "suspend: tcgetattr");
-			return (1);
-		}
-		if (F_ISSET(gp, G_TERMIOS_SET) && tcsetattr(STDIN_FILENO,
-		    TCSASOFT | TCSADRAIN, &gp->original_termios)) {
-			msgq(sp, M_SYSERR, "suspend: tcsetattr original");
-			return (1);
-		}
+	/* Save ex/vi terminal settings, and restore the original ones. */
+	if (F_ISSET(sp->gp, G_ISFROMTTY)) {
+		(void)tcgetattr(STDIN_FILENO, &t);
+		(void)tcsetattr(STDIN_FILENO,
+		    TCSADRAIN, &sp->gp->original_termios);
 	}
 
-	/* Push out any waiting messages. */
-	(void)sex_refresh(sp, sp->ep);
+	/* Kill the process group. */
+	F_SET(sp->gp, G_SLEEPING);
+	if (rval = kill(0, SIGTSTP))
+		msgq(sp, M_SYSERR, "SIGTSTP");
+	F_CLR(sp->gp, G_SLEEPING);
 
-	/* Stop the process group. */
-	if (kill(0, SIGTSTP)) {
-		msgq(sp, M_SYSERR, "suspend: kill");
-		rval = 1;
-	}
+	/* Restore ex/vi terminal settings. */
+	if (F_ISSET(sp->gp, G_ISFROMTTY))
+		(void)tcsetattr(STDIN_FILENO, TCSADRAIN, &t);
 
-	/* Time passes ... */
-
-	/* Restore current terminal settings. */
-	if (F_ISSET(gp, G_STDIN_TTY) &&
-	    tcsetattr(STDIN_FILENO, TCSASOFT | TCSADRAIN, &t)) {
-		msgq(sp, M_SYSERR, "suspend: tcsetattr current");
-		rval = 1;
-	}
 	return (rval);
 }

@@ -1,5 +1,5 @@
 /*-
- * Copyright (c) 1993, 1994
+ * Copyright (c) 1993
  *	The Regents of the University of California.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -32,24 +32,13 @@
  */
 
 #ifndef lint
-static const char sccsid[] = "@(#)svi_line.c	8.26 (Berkeley) 8/17/94";
+static char sccsid[] = "@(#)svi_line.c	8.18 (Berkeley) 1/22/94";
 #endif /* not lint */
 
 #include <sys/types.h>
-#include <sys/queue.h>
-#include <sys/time.h>
 
-#include <bitstring.h>
-#include <limits.h>
-#include <signal.h>
-#include <stdio.h>
-#include <string.h>
-#include <termios.h>
-
-#include "compat.h"
 #include <curses.h>
-#include <db.h>
-#include <regex.h>
+#include <string.h>
 
 #include "vi.h"
 #include "svi_screen.h"
@@ -73,12 +62,12 @@ svi_line(sp, ep, smp, yp, xp)
 	SMAP *smp;
 	size_t *xp, *yp;
 {
+	CHNAME const *cname;
 	SMAP *tsmp;
 	size_t chlen, cols_per_screen, cno_cnt, len, scno, skip_screens;
 	size_t offset_in_char, offset_in_line;
 	size_t oldy, oldx;
-	int ch, is_cached, is_infoline, is_partial, is_tab;
-	int list_tab, list_dollar;
+	int ch, is_cached, is_infoline, is_partial, is_tab, listset;
 	char *p, nbuf[10];
 
 #if defined(DEBUG) && 0
@@ -109,6 +98,9 @@ svi_line(sp, ep, smp, yp, xp)
 	getyx(stdscr, oldy, oldx);
 	MOVE(sp, smp - HMAP, 0);
 
+	/* Get the character map. */
+	cname = sp->gp->cname;
+
 	/* Get a copy of the line. */
 	p = file_gline(sp, ep, smp->lno, &len);
 
@@ -128,15 +120,14 @@ svi_line(sp, ep, smp, yp, xp)
 	 * Set the number of columns for this screen.
 	 */
 	cols_per_screen = sp->cols;
-	list_tab = O_ISSET(sp, O_LIST);
 	if (is_infoline = ISINFOLINE(sp, smp)) {
-		list_dollar = 0;
+		listset = 0;
 		if (O_ISSET(sp, O_LEFTRIGHT))
 			skip_screens = 0;
 		else
 			skip_screens = smp->off - 1;
 	} else {
-		list_dollar = list_tab;
+		listset = O_ISSET(sp, O_LIST);
 		skip_screens = smp->off - 1;
 
 		/*
@@ -174,23 +165,11 @@ svi_line(sp, ep, smp, yp, xp)
 		smp->c_sboff = smp->c_eboff = 0;
 		smp->c_scoff = smp->c_eclen = 0;
 
-		/* Lots of special cases for empty lines. */
-		if (skip_screens == 0)
-			if (p == NULL) {
-				if (smp->lno == 1) {
-					if (list_dollar) {
-						ch = '$';
-						goto empty;
-					}
-				} else {
-					ch = '~';
-					goto empty;
-				}
-			} else
-				if (list_dollar) {
-					ch = '$';
-empty:					ADDCH(ch);
-				}
+		if (p == NULL) {
+			if (smp->lno != 1)
+				ADDCH(listset && skip_screens == 0 ? '$' : '~');
+		} else if (listset && skip_screens == 0)
+			ADDCH('$');
 
 		clrtoeol();
 		MOVEA(sp, oldy, oldx);
@@ -249,8 +228,8 @@ empty:					ADDCH(ch);
 			smp->c_scoff = offset_in_char;
 		} else for (scno = 0; offset_in_line < len; ++offset_in_line) {
 			scno += chlen =
-			    (ch = *(u_char *)p++) == '\t' && !list_tab ?
-			    TAB_OFF(sp, scno) : KEY_LEN(sp, ch);
+			    (ch = *(u_char *)p++) == '\t' && !listset ?
+			    TAB_OFF(sp, scno) : cname[ch].len;
 			if (scno < cols_per_screen)
 				continue;
 			/*
@@ -300,11 +279,11 @@ empty:					ADDCH(ch);
 	/* This is the loop that actually displays characters. */
 	for (is_partial = 0, scno = 0;
 	    offset_in_line < len; ++offset_in_line, offset_in_char = 0) {
-		if ((ch = *(u_char *)p++) == '\t' && !list_tab) {
+		if ((ch = *(u_char *)p++) == '\t' && !listset) {
 			scno += chlen = TAB_OFF(sp, scno) - offset_in_char;
 			is_tab = 1;
 		} else {
-			scno += chlen = KEY_LEN(sp, ch) - offset_in_char;
+			scno += chlen = cname[ch].len - offset_in_char;
 			is_tab = 0;
 		}
 
@@ -368,12 +347,12 @@ empty:					ADDCH(ch);
 				while (chlen--)
 					ADDCH(TABCH);
 		} else
-			ADDNSTR(KEY_NAME(sp, ch) + offset_in_char, chlen);
+			ADDNSTR(cname[ch].name + offset_in_char, chlen);
 	}
 
 	if (scno < cols_per_screen) {
 		/* If didn't paint the whole line, update the cache. */
-		smp->c_ecsize = smp->c_eclen = KEY_LEN(sp, ch);
+		smp->c_ecsize = smp->c_eclen = cname[ch].len;
 		smp->c_eboff = len - 1;
 
 		/*
@@ -381,7 +360,7 @@ empty:					ADDCH(ch);
 		 * end of the line, and the line ended on this screen,
 		 * add a trailing $.
 		 */
-		if (list_dollar) {
+		if (listset) {
 			++scno;
 			ADDCH('$');
 		}
@@ -405,8 +384,9 @@ svi_number(sp, ep)
 	EXF *ep;
 {
 	SMAP *smp;
+	recno_t lno;
 	size_t oldy, oldx;
-	char *lp, nbuf[10];
+	char *lp, *p, nbuf[10];
 
 	/*
 	 * Try and avoid getting the last line in the file, by getting the
@@ -430,7 +410,7 @@ svi_number(sp, ep)
 		if (ISINFOLINE(sp, smp))
 			break;
 		if (smp->lno != 1 && lp == NULL &&
-		    file_gline(sp, ep, smp->lno, NULL) == NULL)
+		    (p = file_gline(sp, ep, smp->lno, NULL)) == NULL)
 			break;
 		MOVE(sp, smp - HMAP, 0);
 		(void)snprintf(nbuf, sizeof(nbuf), O_NUMBER_FMT, smp->lno);

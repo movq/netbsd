@@ -1,5 +1,5 @@
 /*-
- * Copyright (c) 1992, 1993, 1994
+ * Copyright (c) 1992, 1993
  *	The Regents of the University of California.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -32,23 +32,12 @@
  */
 
 #ifndef lint
-static char sccsid[] = "@(#)v_tag.c	8.4 (Berkeley) 3/8/94";
+static char sccsid[] = "@(#)v_tag.c	8.2 (Berkeley) 12/3/93";
 #endif /* not lint */
 
 #include <sys/types.h>
-#include <sys/queue.h>
-#include <sys/time.h>
 
-#include <bitstring.h>
-#include <limits.h>
-#include <signal.h>
-#include <stdio.h>
 #include <string.h>
-#include <termios.h>
-
-#include "compat.h"
-#include <db.h>
-#include <regex.h>
 
 #include "vi.h"
 #include "excmd.h"
@@ -59,29 +48,32 @@ static char sccsid[] = "@(#)v_tag.c	8.4 (Berkeley) 3/8/94";
  *	Do a tag search on a the cursor keyword.
  */
 int
-v_tagpush(sp, ep, vp)
+v_tagpush(sp, ep, vp, fm, tm, rp)
 	SCR *sp;
 	EXF *ep;
 	VICMDARG *vp;
+	MARK *fm, *tm, *rp;
 {
 	EXCMDARG cmd;
 
 	SETCMDARG(cmd, C_TAG, 0, OOBLNO, 0, 0, vp->keyword);
-	return (sp->s_ex_cmd(sp, ep, &cmd, &vp->m_final));
+	return (sp->s_ex_cmd(sp, ep, &cmd, rp));
 }
 
 /*
  * v_tagpop -- ^T
  *	Pop the tags stack.
  */
+/* ARGSUSED */
 int
-v_tagpop(sp, ep, vp)
+v_tagpop(sp, ep, vp, fm, tm, rp)
 	SCR *sp;
 	EXF *ep;
 	VICMDARG *vp;
+	MARK *fm, *tm, *rp;
 {
 	EXCMDARG cmd;
 
 	SETCMDARG(cmd, C_TAGPOP, 0, OOBLNO, 0, 0, NULL);
-	return (sp->s_ex_cmd(sp, ep, &cmd, &vp->m_final));
+	return (sp->s_ex_cmd(sp, ep, &cmd, rp));
 }

@@ -1,5 +1,5 @@
 /*-
- * Copyright (c) 1993, 1994
+ * Copyright (c) 1993
  *	The Regents of the University of California.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -30,7 +30,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)svi_screen.h	8.52 (Berkeley) 7/20/94
+ *	@(#)svi_screen.h	8.30 (Berkeley) 12/22/93
  */
 
 /*
@@ -76,8 +76,7 @@ typedef struct _svi_private {
 	size_t	 extotalcount;	/* Ex overwrite count. */
 	size_t	 exlcontinue;	/* Ex line continue value. */
 
-				/* svi_opt_screens() cache information. */
-#define	SVI_SCR_CFLUSH(svp)	svp->ss_lno = OOBLNO
+				/* svi_screens() cache information. */
 	recno_t	 ss_lno;	/* 1-N: Line number. */
 	size_t	 ss_screens;	/* Return value. */
 
@@ -90,12 +89,12 @@ typedef struct _svi_private {
 
 	char	*VB;		/* Visual bell termcap string. */
 
-#define	SVI_CURSES_INIT	0x001	/* Curses/termcap initialized. */
-#define	SVI_CUR_INVALID	0x002	/* Cursor position is unknown. */
-#define	SVI_DIVIDER	0x004	/* Screen divider is displayed. */
-#define	SVI_INFOLINE	0x008	/* The infoline is being used by v_ntext(). */
+#define	SVI_CUR_INVALID	0x001	/* Cursor position is unknown. */
+#define	SVI_DIVIDER	0x002	/* Screen divider is displayed. */
+#define	SVI_INFOLINE	0x004	/* The infoline is being used by v_ntext(). */
+#define	SVI_NO_VBELL	0x008	/* No visual bell available. */
 #define	SVI_SCREENDIRTY	0x010	/* Screen needs refreshing. */
-	u_int8_t flags;
+	u_int	 flags;
 } SVI_PRIVATE;
 
 #define	SVP(sp)		((SVI_PRIVATE *)((sp)->svi_private))
@@ -125,136 +124,113 @@ typedef struct _svi_private {
 						/* Small screen test. */
 #define	ISSMALLSCREEN(sp)	((sp)->t_minrows != (sp)->t_maxrows)
 
-/*
- * Next tab offset.
- *
- * !!!
- * There are problems with how the historical vi handled tabs.  For example,
- * by doing "set ts=3" and building lines that fold, you can get it to step
- * through tabs as if they were spaces and move inserted characters to new
- * positions when <esc> is entered.  I think that nvi does tabs correctly,
- * but there may be some historical incompatibilities.
- */
+						/* Next tab offset. */
 #define	TAB_OFF(sp, c)	(O_VAL(sp, O_TABSTOP) - (c) % O_VAL(sp, O_TABSTOP))
 
+						
+#define SCNO_INCREMENT				/* Step through line. */\
+	scno += (ch = *(u_char *)p++) == '\t' && !listset ?		\
+	    TAB_OFF(sp, scno) : cname[ch].len
+
 /* Move in a screen (absolute), and fail if it doesn't work. */
-#ifdef DEBUG
 #define	MOVEA(sp, lno, cno) {						\
 	if (move(lno, cno) == ERR) {					\
 		msgq(sp, M_ERR,						\
-		    "Error: %s/%d: move:l(%u), c(%u), abs",		\
+		    "Error: %s/%d: move:l(%u), c(%u), abs.",		\
 		    tail(__FILE__), __LINE__, lno, cno);		\
 		return (1);						\
 	}								\
 }
-#else
-#define	MOVEA(sp, lno, cno)	(void)move(lno, cno)
-#endif
 
 /* Move in a window, and fail if it doesn't work. */
-#ifdef DEBUG
 #define	MOVE(sp, lno, cno) {						\
 	size_t __lno = (sp)->woff + (lno);				\
 	if (move(__lno, cno) == ERR) {					\
 		msgq(sp, M_ERR,						\
-		    "Error: %s/%d: move:l(%u), c(%u), o(%u)",		\
+		    "Error: %s/%d: move:l(%u), c(%u), o(%u).",		\
 		    tail(__FILE__), __LINE__, lno, cno, sp->woff);	\
 		return (1);						\
 	}								\
 }
-#else
-#define	MOVE(sp, lno, cno)	(void)move((sp)->woff + (lno), cno)
-#endif
 
 /* Add a character. */
 #define	ADDCH(ch) {							\
-	CHAR_T __ch = ch;						\
-	ADDNSTR(KEY_NAME(sp, __ch), KEY_LEN(sp, __ch));			\
+	int __ch = (ch);						\
+	ADDNSTR(cname[__ch].name, cname[__ch].len);			\
 }
 
 /* Add a string len bytes long. */
-#ifdef DEBUG
 #define	ADDNSTR(str, len) {						\
 	if (addnstr(str, len) == ERR) {					\
 		int __x, __y;						\
 		getyx(stdscr, __y, __x);				\
-		msgq(sp, M_ERR, "Error: %s/%d: addnstr: (%d/%u)",	\
+		msgq(sp, M_ERR, "Error: %s/%d: addnstr: (%d/%u).",	\
 		    tail(__FILE__), __LINE__, __y, __x);		\
 		return (1);						\
 	}								\
 }
-#else
-#define	ADDNSTR(str, len)	(void)addnstr(str, len)
-#endif
 
 /* Add a string. */
-#ifdef DEBUG
 #define	ADDSTR(str) {							\
 	if (addstr(str) == ERR) {					\
 		int __x, __y;						\
 		getyx(stdscr, __y, __x);				\
-		msgq(sp, M_ERR, "Error: %s/%d: addstr: (%d/%u)",	\
+		msgq(sp, M_ERR, "Error: %s/%d: addstr: (%d/%u).",	\
 		    tail(__FILE__), __LINE__, __y, __x);		\
 		return (1);						\
 	}								\
 }
-#else
-#define	ADDSTR(str)	(void)addstr(str);
-#endif
 
 /* Public routines. */
 void	svi_bell __P((SCR *));
 int	svi_bg __P((SCR *));
 int	svi_busy __P((SCR *, char const *));
 int	svi_change __P((SCR *, EXF *, recno_t, enum operation));
-size_t	svi_cm_public __P((SCR *, EXF *, recno_t, size_t));
+size_t	svi_chposition __P((SCR *, EXF *, recno_t, size_t));
 int	svi_column __P((SCR *, EXF *, size_t *));
 enum confirm
 	svi_confirm __P((SCR *, EXF *, MARK *, MARK *));
 int	svi_clear __P((SCR *));
-int	svi_crel __P((SCR *, long));
 int	svi_ex_cmd __P((SCR *, EXF *, struct _excmdarg *, MARK *));
 int	svi_ex_run __P((SCR *, EXF *, MARK *));
 int	svi_ex_write __P((void *, const char *, int));
 int	svi_fg __P((SCR *, CHAR_T *));
-int	svi_fmap __P((SCR *, enum seqtype, CHAR_T *, size_t, CHAR_T *, size_t));
 enum input
-	svi_get __P((SCR *, EXF *, TEXTH *, ARG_CHAR_T, u_int));
+	svi_get __P((SCR *, EXF *, TEXTH *, int, u_int));
 int	svi_optchange __P((SCR *, int));
-int	svi_rabs __P((SCR *, long, enum adjust));
-size_t	svi_rcm __P((SCR *, EXF *, recno_t));
+int	svi_rabs __P((SCR *, long));
 int	svi_refresh __P((SCR *, EXF *));
+size_t	svi_relative __P((SCR *, EXF *, recno_t));
+int	svi_rrel __P((SCR *, long));
 int	svi_screen_copy __P((SCR *, SCR *));
 int	svi_screen_edit __P((SCR *, EXF *));
 int	svi_screen_end __P((SCR *));
+int	svi_sm_down __P((SCR *, EXF *, MARK *, recno_t, int));
 int	svi_sm_fill __P((SCR *, EXF *, recno_t, enum position));
 int	svi_sm_position __P((SCR *, EXF *, MARK *, u_long, enum position));
-int	svi_sm_scroll __P((SCR *, EXF *, MARK *, recno_t, enum sctype));
-int	svi_split __P((SCR *, ARGS *[], int));
+int	svi_sm_up __P((SCR *, EXF *, MARK *, recno_t, int));
+int	svi_split __P((SCR *, ARGS *[]));
 int	svi_suspend __P((SCR *));
 int	svi_swap __P((SCR *, SCR **, char *));
 
 /* Private routines. */
-size_t	svi_cm_private __P((SCR *, EXF *, recno_t, size_t, size_t));
 int	svi_curses_end __P((SCR *));
 int	svi_curses_init __P((SCR *));
-void	svi_dtoh __P((SCR *, char *));
+int	svi_divider __P((SCR *));
 int	svi_init __P((SCR *));
 int	svi_join __P((SCR *, SCR **));
-void	svi_keypad __P((SCR *, int));
 int	svi_line __P((SCR *, EXF *, SMAP *, size_t *, size_t *));
-int	svi_msgflush __P((SCR *));
+size_t	svi_lrelative __P((SCR *, EXF *, recno_t, size_t));
+size_t	svi_ncols __P((SCR *, u_char *, size_t, size_t *));
 int	svi_number __P((SCR *, EXF *));
-size_t	svi_opt_screens __P((SCR *, EXF *, recno_t, size_t *));
 int	svi_paint __P((SCR *, EXF *));
+size_t	svi_screens __P((SCR *, EXF *, recno_t, size_t *));
 int	svi_sm_1down __P((SCR *, EXF *));
 int	svi_sm_1up __P((SCR *, EXF *));
 int	svi_sm_cursor __P((SCR *, EXF *, SMAP **));
 int	svi_sm_next __P((SCR *, EXF *, SMAP *, SMAP *));
 recno_t	svi_sm_nlines __P((SCR *, EXF *, SMAP *, recno_t, size_t));
 int	svi_sm_prev __P((SCR *, EXF *, SMAP *, SMAP *));
-int	svi_term_end __P((SCR *sp));
-int	svi_term_init __P((SCR *sp));
 
 /* Private debugging routines. */
 #ifdef DEBUG

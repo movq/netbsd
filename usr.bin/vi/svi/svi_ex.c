@@ -1,5 +1,5 @@
 /*-
- * Copyright (c) 1993, 1994
+ * Copyright (c) 1993
  *	The Regents of the University of California.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -32,43 +32,26 @@
  */
 
 #ifndef lint
-static const char sccsid[] = "@(#)svi_ex.c	8.55 (Berkeley) 8/17/94";
+static char sccsid[] = "@(#)svi_ex.c	8.36 (Berkeley) 12/23/93";
 #endif /* not lint */
 
 #include <sys/types.h>
-#include <sys/queue.h>
-#include <sys/time.h>
 
-#include <bitstring.h>
 #include <ctype.h>
+#include <curses.h>
 #include <errno.h>
-#include <limits.h>
-#include <signal.h>
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <termios.h>
 #include <unistd.h>
 
-#include "compat.h"
-#include <curses.h>
-#include <db.h>
-#include <regex.h>
-
 #include "vi.h"
-#include "../vi/vcmd.h"
+#include "vcmd.h"
 #include "excmd.h"
 #include "svi_screen.h"
 #include "../sex/sex_screen.h"
 
-static int	svi_ex_divider __P((SCR *));
 static int	svi_ex_done __P((SCR *, EXF *, MARK *));
-static int	svi_ex_inv __P((SCR *));
-static int	svi_ex_scroll __P((SCR *, int, CH *));
-
-#define	MSGS_WAITING(sp)						\
-	((sp)->msgq.lh_first != NULL &&					\
-	    !F_ISSET((sp)->msgq.lh_first, M_EMPTY))
+static int	svi_ex_scroll __P((SCR *, int, int, CH *));
 
 /*
  * svi_ex_cmd --
@@ -90,26 +73,26 @@ svi_ex_cmd(sp, ep, exp, rp)
 	(void)svi_busy(sp, NULL);
 	rval = exp->cmd->fn(sp, ep, exp);
 
+	/* No longer interruptible. */
+	F_CLR(sp, S_INTERRUPTIBLE);
+
 	(void)msg_rpt(sp, 0);
 	(void)ex_fflush(EXCOOKIE);
 
 	/*
 	 * If displayed anything, figure out if we have to wait.  If the
-	 * screen wasn't trashed, only one line output and there are no
-	 * waiting messages, don't wait, but don't overwrite it with mode
-	 * information either.
+	 * screen wasn't trashed, only one line and there are no waiting
+	 * messages, don't wait, but don't overwrite it with mode information
+	 * either.  If there's a screen under this one, change the line to
+	 * inverse video.
 	 */
 	if (svp->extotalcount > 0)
-		if (!F_ISSET(sp, S_REFRESH) &&
-		    svp->extotalcount == 1 && !MSGS_WAITING(sp)) {
+		if (!F_ISSET(sp, S_REFRESH) && svp->extotalcount == 1 &&
+		    (sp->msgq.lh_first == NULL ||
+		    F_ISSET(sp->msgq.lh_first, M_EMPTY)))
 			F_SET(sp, S_UPDATE_MODE);
-			if (sp->q.cqe_next != (void *)&sp->gp->dq)
-				(void)svi_ex_inv(sp);
-		} else {
-			/* This message isn't interruptible. */
-			F_CLR(sp, S_INTERRUPTIBLE);
-			(void)svi_ex_scroll(sp, 1, NULL);
-		}
+		else
+			(void)svi_ex_scroll(sp, 1, 0, NULL);
 	return (svi_ex_done(sp, ep, rp) || rval);
 }
 
@@ -123,8 +106,8 @@ svi_ex_run(sp, ep, rp)
 	EXF *ep;
 	MARK *rp;
 {
-	enum input (*get) __P((SCR *, EXF *, TEXTH *, ARG_CHAR_T, u_int));
-	struct termios t;
+	enum input (*get) __P((SCR *, EXF *, TEXTH *, int, u_int));
+	struct termios rawt, t;
 	CH ikey;
 	SVI_PRIVATE *svp;
 	TEXT *tp;
@@ -146,102 +129,90 @@ svi_ex_run(sp, ep, rp)
 	get = svi_get;
 	flags = TXT_BS | TXT_PROMPT;
 	for (in_exmode = rval = 0;;) {
-		/*
-		 * Get the next command.  Interrupt flag manipulation is safe
-		 * because ex_icmd clears them all.
-		 */
-		F_SET(sp, S_INTERRUPTIBLE);
-		if (get(sp, ep, sp->tiqp, ':', flags) != INP_OK) {
+		if (get(sp, ep, &sp->tiq, ':', flags) != INP_OK) {
 			rval = 1;
 			break;
 		}
-		if (INTERRUPTED(sp))
-			break;
 
 		/*
 		 * Len is 0 if the user backspaced over the prompt,
 		 * 1 if only a CR was entered.
 		 */
-		tp = sp->tiqp->cqh_first;
+		tp = sp->tiq.cqh_first;
 		if (tp->len == 0)
 			break;
 
 		if (!in_exmode)
 			(void)svi_busy(sp, NULL);
 
-		/* Ignore return, presumably an error message was displayed. */
-		(void)ex_icmd(sp, ep, tp->lb, tp->len, 0);
+		(void)ex_icmd(sp, ep, tp->lb, tp->len);
 		(void)ex_fflush(EXCOOKIE);
 
 		/*
-		 * The file or screen may have changed, in which case, the
-		 * main editor loop takes care of it.
+		 * The file or screen may have changed, in which case,
+		 * the main editor loop takes care of it.
 		 */
 		if (F_ISSET(sp, S_MAJOR_CHANGE))
 			break;
-
+		
 		/*
 		 * If continue not required, and one or no lines, and there
 		 * are no waiting messages, don't wait, but don't overwrite
-		 * it with mode information either.
+		 * it with mode information either.  If there's a screen under
+		 * this one, change the line to inverse video.
 		 */
-		if (!F_ISSET(sp, S_CONTINUE) && (svp->extotalcount == 0 ||
-		    svp->extotalcount == 1 && !MSGS_WAITING(sp))) {
-			if (svp->extotalcount == 1) {
+		if (!F_ISSET(sp, S_CONTINUE) &&
+		    (svp->extotalcount == 0 || svp->extotalcount == 1 &&
+		    (sp->msgq.lh_first == NULL ||
+		    F_ISSET(sp->msgq.lh_first, M_EMPTY)))) {
+			if (svp->extotalcount == 1)
 				F_SET(sp, S_UPDATE_MODE);
-				if (sp->q.cqe_next != (void *)&sp->gp->dq)
-					svi_ex_inv(sp);
-			}
 			break;
 		}
 
-		if (INTERRUPTED(sp))
-			break;
-
-		/*
-		 * If the screen is trashed, or there are messages waiting,
-		 * go into ex mode.
-		 */
-		if (!in_exmode &&
-		    (F_ISSET(sp, S_REFRESH) || MSGS_WAITING(sp))) {
+		/* If the screen is trashed, go into ex mode. */
+		if (!in_exmode && F_ISSET(sp, S_REFRESH)) {
 			/* Initialize the terminal state. */
-			if (F_ISSET(sp->gp, G_STDIN_TTY))
-				SEX_RAW(t);
-			get = sex_get;
+			if (F_ISSET(sp->gp, G_ISFROMTTY)) {
+				SEX_RAW(t, rawt);
+				get = sex_get;
+			} else
+				get = sex_get_notty;
 			flags = TXT_CR | TXT_NLECHO | TXT_PROMPT;
 			in_exmode = 1;
 		}
-
-		/* Display any waiting messages. */
-		if (MSGS_WAITING(sp))
-			(void)sex_refresh(sp, ep);
-
+			
 		/*
-		 * Get a continue character; users may continue in ex mode by
-		 * entering a ':'.
-		 *
-		 * !!!
-		 * Historic practice is that any key can be used to continue.
-		 * Nvi used to require that the user enter a <carriage-return>
-		 * or <newline>, but this broke historic users.
+		 * If the user hasn't already indicated that they're done,
+		 * they may continue in ex mode by entering a ':'.
 		 */
-		if (in_exmode) {
-			(void)write(STDOUT_FILENO,
-			    STR_CMSG, sizeof(STR_CMSG) - 1);
-			if (term_key(sp, &ikey, 0) != INP_OK) {
-				rval = 1;
-				goto ret;
-			}
-		} else {
-			/* This message isn't interruptible. */
-			F_CLR(sp, S_INTERRUPTIBLE);
-			(void)svi_ex_scroll(sp, 1, &ikey);
-		}
-		if (ikey.ch != ':')
+		if (F_ISSET(sp, S_INTERRUPTED))
 			break;
 
+		/* No longer interruptible. */
+		F_CLR(sp, S_INTERRUPTIBLE);
+
+		if (in_exmode) {
+			(void)write(STDOUT_FILENO,
+			    CONTMSG, sizeof(CONTMSG) - 1);
+			for (;;) {
+				if (term_user_key(sp, &ikey) != INP_OK) {
+					rval = 1;
+					goto ret;
+				}
+				if (ikey.ch == ' ' || ikey.ch == ':')
+					break;
+				if (ikey.value == K_CR || ikey.value == K_NL)
+					break;
+				sex_bell(sp);
+			}
+		} else
+			(void)svi_ex_scroll(sp, 1, 1, &ikey);
+		if (ikey.ch != ':')
+                        break;
+
 		if (in_exmode)
-			(void)write(STDOUT_FILENO, "\n", 1);
+			(void)write(STDOUT_FILENO, "\r\n", 2);
 		else {
 			++svp->extotalcount;
 			++svp->exlinecount;
@@ -250,95 +221,13 @@ svi_ex_run(sp, ep, rp)
 
 ret:	if (in_exmode) {
 		/* Reset the terminal state. */
-		if (F_ISSET(sp->gp, G_STDIN_TTY) && SEX_NORAW(t))
+		if (F_ISSET(sp->gp, G_ISFROMTTY) && SEX_NORAW(t))
 			rval = 1;
 		F_SET(sp, S_REFRESH);
 	} else
 		if (svi_ex_done(sp, ep, rp))
 			rval = 1;
-
 	F_CLR(sp, S_CONTINUE);
-	return (rval);
-}
-
-/*
- * svi_msgflush --
- *	Flush any accumulated messages.
- */
-int
-svi_msgflush(sp)
-	SCR *sp;
-{
-	enum {INVERSE, NORMAL} inverse;
-	SVI_PRIVATE *svp;
-	MSG *mp;
-	int rval;
-
-	svp = SVP(sp);
-	svp->exlcontinue = svp->exlinecount = svp->extotalcount = 0;
-
-	/*
-	 * XXX
-	 * S_IVIDEO is a bit of a kluge.  We can only pass a single magic
-	 * cookie into the svi_ex_write routine, and it has to be the SCR
-	 * structure.  So, the inverse video bit has to be there.
-	 */
-	inverse = NORMAL;
-	for (mp = sp->msgq.lh_first;
-	    mp != NULL && !F_ISSET(mp, M_EMPTY); mp = mp->q.le_next) {
-		/*
-		 * If the second and subsequent messages fit on the current
-		 * line, write a separator.  Otherwise, put out a newline
-		 * and break the line.
-		 */
-		if (mp != sp->msgq.lh_first)
-			if (mp->len + svp->exlcontinue + 3 >= sp->cols) {
-				if (inverse == INVERSE)
-					F_SET(sp, S_IVIDEO);
-				(void)svi_ex_write(sp, ".\n", 2);
-				F_CLR(sp, S_IVIDEO);
-			} else  {
-				if (inverse == INVERSE)
-					F_SET(sp, S_IVIDEO);
-				(void)svi_ex_write(sp, ";", 1);
-				F_CLR(sp, S_IVIDEO);
-				(void)svi_ex_write(sp, "  ", 2);
-			}
-
-		inverse = F_ISSET(mp, M_INV_VIDEO) ? INVERSE : NORMAL;
-		if (inverse == INVERSE)
-			F_SET(sp, S_IVIDEO);
-		(void)svi_ex_write(sp, mp->mbuf, mp->len);
-		F_CLR(sp, S_IVIDEO);
-
-		F_SET(mp, M_EMPTY);
-	}
-
-	/*
-	 * None of the messages end with periods, we do it in the message
-	 * flush routine, which makes it possible to join messages.
-	 */
-	if (inverse == INVERSE)
-		F_SET(sp, S_IVIDEO);
-	(void)svi_ex_write(sp, ".", 1);
-	F_CLR(sp, S_IVIDEO);
-
-	/*
-	 * Figure out if we have to wait.  Don't wait for only one line,
-	 * but don't overwrite it with mode information either.
-	 */
-	if (svp->extotalcount == 1) {
-		F_SET(sp, S_UPDATE_MODE);
-		if (sp->q.cqe_next != (void *)&sp->gp->dq)
-			svi_ex_inv(sp);
-		return (0);
-	}
-
-	rval = svi_ex_scroll(sp, 1, NULL);
-	if (svi_ex_done(sp, sp->ep, NULL))
-		rval = 1;
-	MOVE(sp, INFOLINE(sp), 0);
-	clrtoeol();
 	return (rval);
 }
 
@@ -390,15 +279,10 @@ svi_ex_done(sp, ep, rp)
 				if (svi_line(sp, ep, smp, NULL, NULL))
 					return (1);
 			}
-
-	/* Ignore the cursor if the caller doesn't care. */
-	if (rp == NULL)
-		return (0);
-
 	/*
 	 * Do a reality check on a cursor value, and make sure it's okay.
 	 * If necessary, change it.  Ex keeps track of the line number,
-	 * but it doesn't care about the column and it may have disappeared.
+	 * but ex doesn't care about the column and it may have disappeared.
 	 */
 	if (file_gline(sp, ep, sp->lno, &len) == NULL) {
 		if (file_lline(sp, ep, &lno))
@@ -418,6 +302,12 @@ svi_ex_done(sp, ep, rp)
 /*
  * svi_ex_write --
  *	Write out the ex messages.
+ *
+ * There is no tab or character translation going on, so, whatever the ex
+ * and/or curses routines do with special characters is all that gets done.
+ * This is probably okay, I don't see any reason that user's tab settings
+ * should affect ex output, and ex should have displayed everything else
+ * exactly as it wanted it on the screen.
  */
 int
 svi_ex_write(cookie, line, llen)
@@ -428,8 +318,8 @@ svi_ex_write(cookie, line, llen)
 	SCR *sp;
 	SVI_PRIVATE *svp;
 	size_t oldy, oldx;
-	int len, rlen, tlen;
-	const char *p, *t;
+	int len, rlen;
+	const char *p;
 
 	/*
 	 * XXX
@@ -438,7 +328,7 @@ svi_ex_write(cookie, line, llen)
 	 */
 	sp = cookie;
 	svp = SVP(sp);
-	if (INTERRUPTED(sp))
+	if (F_ISSET(sp, S_INTERRUPTED))
 		return (llen);
 
 	p = line;			/* In case of a write of 0. */
@@ -467,7 +357,7 @@ svi_ex_write(cookie, line, llen)
 			if (svp->extotalcount == 1) {
 				MOVE(sp, INFOLINE(sp) - 1, 0);
 				clrtoeol();
-				if (svi_ex_divider(sp))
+				if (svi_divider(sp))
 					return (-1);
 				F_SET(svp, SVI_DIVIDER);
 				++svp->extotalcount;
@@ -480,23 +370,20 @@ svi_ex_write(cookie, line, llen)
 				F_CLR(svp, SVI_DIVIDER);
 			}
 			if (svp->extotalcount != 0 &&
-			    svi_ex_scroll(sp, 0, NULL))
+			    svi_ex_scroll(sp, 0, 0, NULL))
 				return (-1);
 			MOVE(sp, INFOLINE(sp), 0);
 			++svp->extotalcount;
 			++svp->exlinecount;
-			if (F_ISSET(sp, S_INTERRUPTIBLE) && INTERRUPTED(sp))
+			if (F_ISSET(sp, S_INTERRUPTIBLE) &&
+			    F_ISSET(sp, S_INTERRUPTED))
 				break;
 		} else
 			MOVE(sp, INFOLINE(sp), svp->exlcontinue);
 
-		/* Display the line, doing character translation. */
-		if (F_ISSET(sp, S_IVIDEO))
-			standout();
-		for (t = line, tlen = len; tlen--; ++t)
-			ADDCH(*t);
-		if (F_ISSET(sp, S_IVIDEO))
-			standend();
+		/* Display the line. */
+		if (len)
+			ADDNSTR(line, len);
 
 		/* Clear to EOL. */
 		getyx(stdscr, oldy, oldx);
@@ -528,9 +415,9 @@ svi_ex_write(cookie, line, llen)
  *	Scroll the screen for ex output.
  */
 static int
-svi_ex_scroll(sp, mustwait, chp)
+svi_ex_scroll(sp, mustwait, colon_ok, chp)
 	SCR *sp;
-	int mustwait;
+	int mustwait, colon_ok;
 	CH *chp;
 {
 	CH ikey;
@@ -559,92 +446,31 @@ svi_ex_scroll(sp, mustwait, chp)
 	if (mustwait || svp->exlinecount == sp->t_maxrows) {
 		MOVE(sp, INFOLINE(sp), 0);
 		if (F_ISSET(sp, S_INTERRUPTIBLE)) {
-			ADDNSTR(STR_QMSG, (int)sizeof(STR_QMSG) - 1);
+			ADDNSTR(CONTMSG_I, (int)sizeof(CONTMSG_I) - 1);
 		} else {
-			ADDNSTR(STR_CMSG, (int)sizeof(STR_CMSG) - 1);
+			ADDNSTR(CONTMSG, (int)sizeof(CONTMSG) - 1);
 		}
 		clrtoeol();
 		refresh();
-		/*
-		 * !!!
-		 * Historic practice is that any key can be used to continue.
-		 * Nvi used to require that the user enter a <carriage-return>
-		 * or <newline>, but this broke historic users.
-		 */
-		if (term_key(sp, &ikey, 0) != INP_OK)
-			return (-1);
-		if (ikey.ch == CH_QUIT && F_ISSET(sp, S_INTERRUPTIBLE))
-			F_SET(sp, S_INTERRUPTED);
+		for (;;) {
+			if (term_user_key(sp, &ikey) != INP_OK)
+				return (-1);
+			if (ikey.ch == ' ')
+				break;
+			if (colon_ok && ikey.ch == ':')
+				break;
+			if (ikey.value == K_CR || ikey.value == K_NL)
+				break;
+			if (ikey.ch == QUIT_CH &&
+			    F_ISSET(sp, S_INTERRUPTIBLE)) {
+				F_SET(sp, S_INTERRUPTED);
+				break;
+			}
+			svi_bell(sp);
+		}
 		if (chp != NULL)
 			*chp = ikey;
 		svp->exlinecount = 0;
 	}
-	return (0);
-}
-
-/*
- * svi_ex_inv --
- *	Change whatever is on the info line to inverse video so we have
- *	a divider line between split screens.
- */
-static int
-svi_ex_inv(sp)
-	SCR *sp;
-{
-	CHAR_T ch;
-	size_t spcnt, col, row;
-
-	row = INFOLINE(sp);
-
-	/*
-	 * Walk through the line, retrieving each character and writing
-	 * it back out in inverse video.  Since curses doesn't have an
-	 * EOL marker, only put out trailing spaces if we find another
-	 * character.
-	 *
-	 * XXX
-	 * This is a major kluge -- curses should have an interface
-	 * that allows us to change attributes on a per line basis.
-	 */
-	MOVE(sp, row, 0);
-	standout();
-	for (spcnt = col = 0;;) {
-		ch = winch(stdscr);
-		if (isspace(ch)) {
-			++spcnt;
-			if (++col >= sp->cols)
-				break;
-			MOVE(sp, row, col);
-		} else {
-			if (spcnt) {
-				MOVE(sp, row, col - spcnt);
-				for (; spcnt > 0; --spcnt)
-					ADDCH(' ');
-			}
-			ADDCH(ch);
-			if (++col >= sp->cols)
-				break;
-		}
-	}
-	standend();
-	return (0);
-}
-
-/*
- * svi_ex_divider --
- *	Draw a dividing line between the screens.
- */
-static int
-svi_ex_divider(sp)
-	SCR *sp;
-{
-	size_t len;
-
-#define	DIVIDESTR	"+=+=+=+=+=+=+=+"
-	len = sizeof(DIVIDESTR) - 1 > sp->cols ?
-	    sp->cols : sizeof(DIVIDESTR) - 1;
-	standout();
-	ADDNSTR(DIVIDESTR, len);
-	standend();
 	return (0);
 }

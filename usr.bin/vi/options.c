@@ -1,5 +1,5 @@
 /*-
- * Copyright (c) 1991, 1993, 1994
+ * Copyright (c) 1991, 1993
  *	The Regents of the University of California.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -32,37 +32,27 @@
  */
 
 #ifndef lint
-static char sccsid[] = "@(#)options.c	8.52 (Berkeley) 3/24/94";
+static char sccsid[] = "@(#)options.c	8.36 (Berkeley) 12/29/93";
 #endif /* not lint */
 
 #include <sys/types.h>
-#include <sys/queue.h>
 #include <sys/stat.h>
-#include <sys/time.h>
 
-#include <bitstring.h>
 #include <ctype.h>
+#include <curses.h>
 #include <errno.h>
-#include <limits.h>
-#include <signal.h>
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <termios.h>
 #include <unistd.h>
-
-#include "compat.h"
-#include <db.h>
-#include <regex.h>
-#include <pathnames.h>
 
 #include "vi.h"
 #include "excmd.h"
+#include "pathnames.h"
 
 static int	 	 opts_abbcmp __P((const void *, const void *));
 static int	 	 opts_cmp __P((const void *, const void *));
 static OPTLIST const	*opts_prefix __P((char *));
-static int	 	 opts_print __P((SCR *, OPTLIST const *));
+static int	 	 opts_print __P((SCR *, OPTLIST const *, OPTION *));
 
 /*
  * O'Reilly noted options and abbreviations are from "Learning the VI Editor",
@@ -83,8 +73,6 @@ static OPTLIST const optlist[] = {
 	{"autowrite",	NULL,		OPT_0BOOL,	0},
 /* O_BEAUTIFY	    4BSD */
 	{"beautify",	NULL,		OPT_0BOOL,	0},
-/* O_CDPATH	  4.4BSD */
-	{"cdpath",	f_cdpath,	OPT_STR,	0},
 /* O_COLUMNS	  4.4BSD */
 	{"columns",	f_columns,	OPT_NUM,	OPT_NOSAVE},
 /* O_COMMENT	  4.4BSD */
@@ -114,12 +102,7 @@ static OPTLIST const optlist[] = {
 /* O_LINES	  4.4BSD */
 	{"lines",	f_lines,	OPT_NUM,	OPT_NOSAVE},
 /* O_LISP	    4BSD */
-/*
- * XXX
- * When the lisp option is implemented, delete
- * the OPT_NOSAVE flag, so that :mkexrc dumps it.
- */
-	{"lisp",	f_lisp,		OPT_0BOOL,	OPT_NOSAVE},
+	{"lisp",	f_lisp,		OPT_0BOOL,	0},
 /* O_LIST	    4BSD */
 	{"list",	f_list,		OPT_0BOOL,	0},
 /* O_MAGIC	    4BSD */
@@ -135,7 +118,7 @@ static OPTLIST const optlist[] = {
 /* O_OPEN	    4BSD */
 	{"open",	NULL,		OPT_1BOOL,	0},
 /* O_OPTIMIZE	    4BSD */
-	{"optimize",	NULL,		OPT_1BOOL,	0},
+	{"optimize",	f_optimize,	OPT_1BOOL,	0},
 /* O_PARAGRAPHS	    4BSD */
 	{"paragraphs",	f_paragraph,	OPT_STR,	0},
 /* O_PROMPT	    4BSD */
@@ -148,8 +131,6 @@ static OPTLIST const optlist[] = {
 	{"redraw",	NULL,		OPT_0BOOL,	0},
 /* O_REMAP	    4BSD */
 	{"remap",	NULL,		OPT_1BOOL,	0},
-/* O_REMAPMAX	  4.4BSD */
-	{"remapmax",	NULL,		OPT_1BOOL,	0},
 /* O_REPORT	    4BSD */
 	{"report",	NULL,		OPT_NUM,	OPT_NOSTR},
 /* O_RULER	  4.4BSD */
@@ -191,11 +172,11 @@ static OPTLIST const optlist[] = {
 /* O_VERBOSE	  4.4BSD */
 	{"verbose",	NULL,		OPT_0BOOL,	0},
 /* O_W1200	    4BSD */
-	{"w1200",	f_w1200,	OPT_NUM,	OPT_NEVER|OPT_NOSAVE},
+	{"w1200",	f_w1200,	OPT_NUM,	OPT_NEVER},
 /* O_W300	    4BSD */
-	{"w300",	f_w300,		OPT_NUM,	OPT_NEVER|OPT_NOSAVE},
+	{"w300",	f_w300,		OPT_NUM,	OPT_NEVER},
 /* O_W9600	    4BSD */
-	{"w9600",	f_w9600,	OPT_NUM,	OPT_NEVER|OPT_NOSAVE},
+	{"w9600",	f_w9600,	OPT_NUM,	OPT_NEVER},
 /* O_WARN	    4BSD */
 	{"warn",	NULL,		OPT_1BOOL,	0},
 /* O_WINDOW	    4BSD */
@@ -292,11 +273,7 @@ opts_init(sp)
 			O_CLR(sp, cnt);
 		else if (op->type == OPT_1BOOL)
 			O_SET(sp, cnt);
-
-	(void)snprintf(b1, sizeof(b1), "cdpath=%s",
-	    (s = getenv("CDPATH")) == NULL ? ":" : s);
-	SET_DEF(O_CDPATH, b1);
-
+			
 	/*
 	 * !!!
 	 * Vi historically stored temporary files in /var/tmp.  We store them
@@ -316,16 +293,16 @@ opts_init(sp)
 	(void)snprintf(b1, sizeof(b1), "scroll=%ld", O_VAL(sp, O_LINES) / 2);
 	SET_DEF(O_SCROLL, b1);
 	SET_DEF(O_SECTIONS, "sections=NHSHH HUnhsh");
-	(void)snprintf(b1, sizeof(b1), "shell=%s",
-	    (s = getenv("SHELL")) == NULL ? _PATH_BSHELL : s);
+	(void)snprintf(b1, sizeof(b1),
+	    "shell=%s", (s = getenv("SHELL")) == NULL ? _PATH_BSHELL : s);
 	SET_DEF(O_SHELL, b1);
 	SET_DEF(O_SHIFTWIDTH, "shiftwidth=8");
 	SET_DEF(O_SIDESCROLL, "sidescroll=16");
 	SET_DEF(O_TABSTOP, "tabstop=8");
 	(void)snprintf(b1, sizeof(b1), "tags=%s", _PATH_TAGS);
 	SET_DEF(O_TAGS, b1);
-	(void)snprintf(b1, sizeof(b1), "term=%s",
-	    (s = getenv("TERM")) == NULL ? "unknown" : s);
+	(void)snprintf(b1, sizeof(b1),
+	    "term=%s", (s = getenv("TERM")) == NULL ? "unknown" : s);
 	SET_DEF(O_TERM, b1);
 
 	/*
@@ -371,7 +348,7 @@ opts_set(sp, argv)
 	u_long value, turnoff;
 	int ch, offset, rval;
 	char *endp, *equals, *name, *p;
-
+	
 	disp = NO_DISPLAY;
 	for (rval = 0; (*argv)->len != 0; ++argv) {
 		/*
@@ -382,11 +359,10 @@ opts_set(sp, argv)
 			disp = ALL_DISPLAY;
 			continue;
 		}
-
+			
 		/* Find equals sign or end of set, skipping backquoted chars. */
-		for (equals = NULL,
-		    p = name = argv[0]->bp; (ch = *p) != '\0'; ++p)
-			switch (ch) {
+		for (p = name = argv[0]->bp, equals = NULL; ch = *p; ++p)
+			switch(ch) {
 			case '=':
 				equals = p;
 				break;
@@ -549,7 +525,7 @@ change:			if (sp->s_optchange != NULL)
 			abort();
 		}
 	}
-	if (disp != NO_DISPLAY)
+	if (disp)
 		opts_dump(sp, disp);
 	return (rval);
 }
@@ -570,41 +546,31 @@ opts_dump(sp, type)
 	char nbuf[20];
 
 	/*
-	 * XXX
-	 * It's possible to get here by putting "set option" in the
-	 * .exrc file.  I can't think of a clean way to layer this,
-	 * or a reasonable check to make, so we block it here.
-	 */
-	if (sp->stdfp == NULL) {
-		msgq(sp, M_ERR,
-		    "Option display requires that the screen be initialized.");
-		return;
-	}
-
-	/*
 	 * Options are output in two groups -- those that fit in a column and
 	 * those that don't.  Output is done on 6 character "tab" boundaries
 	 * for no particular reason.  (Since we don't output tab characters,
 	 * we can ignore the terminal's tab settings.)  Ignore the user's tab
 	 * setting because we have no idea how reasonable it is.
-	 *
-	 * Find a column width we can live with.
 	 */
+#define	BOUND	6
+
+	/* Find a column width we can live with. */
 	for (cnt = 6; cnt > 1; --cnt) {
-		colwidth = (sp->cols - 1) / cnt & ~(STANDARD_TAB - 1);
+		colwidth = (sp->cols - 1) / cnt & ~(BOUND - 1);
 		if (colwidth >= 10) {
-			colwidth =
-			    (colwidth + STANDARD_TAB) & ~(STANDARD_TAB - 1);
+			colwidth = (colwidth + BOUND) & ~(BOUND - 1);
 			break;
 		}
 		colwidth = 0;
 	}
 
-	/*
-	 * Get the set of options to list, entering them into
-	 * the column list or the overflow list.
+	/* 
+	 * Two passes.  First, get the set of options to list, entering them
+	 * into the column list or the overflow list.  No error checking,
+	 * since we know that at least one option (O_TERM) has the OPT_SET bit
+	 * set.
 	 */
-	for (b_num = s_num = 0, op = optlist; op->name != NULL; ++op) {
+	for (b_num = s_num = 0, op = optlist; op->name; ++op) {
 		cnt = op - optlist;
 
 		/* If OPT_NEVER set, it's never displayed. */
@@ -652,32 +618,29 @@ opts_dump(sp, type)
 			b_op[b_num++] = cnt;
 	}
 
-	if (s_num > 0) {
-		/* Figure out the number of columns. */
-		numcols = (sp->cols - 1) / colwidth;
-		if (s_num > numcols) {
-			numrows = s_num / numcols;
-			if (s_num % numcols)
-				++numrows;
-		} else
-			numrows = 1;
+	numcols = (sp->cols - 1) / colwidth;
+	if (s_num > numcols) {
+		numrows = s_num / numcols;
+		if (s_num % numcols)
+			++numrows;
+	} else
+		numrows = 1;
 
-		/* Display the options in sorted order. */
-		for (row = 0; row < numrows;) {
-			for (base = row, col = 0; col < numcols; ++col) {
-				cnt = opts_print(sp, &optlist[s_op[base]]);
-				if ((base += numrows) >= s_num)
-					break;
-				(void)ex_printf(EXCOOKIE,
-				    "%*s", (int)(colwidth - cnt), "");
-			}
-			if (++row < numrows || b_num)
-				(void)ex_printf(EXCOOKIE, "\n");
+	for (row = 0; row < numrows;) {
+		for (base = row, col = 0; col < numcols; ++col) {
+			cnt = opts_print(sp,
+			    &optlist[s_op[base]], &sp->opts[s_op[base]]);
+			if ((base += numrows) >= s_num)
+				break;
+			(void)ex_printf(EXCOOKIE,
+			    "%*s", (int)(colwidth - cnt), "");
 		}
+		if (++row < numrows || b_num)
+			(void)ex_printf(EXCOOKIE, "\n");
 	}
 
 	for (row = 0; row < b_num;) {
-		(void)opts_print(sp, &optlist[b_op[row]]);
+		(void)opts_print(sp, &optlist[b_op[row]], &sp->opts[b_op[row]]);
 		if (++row < b_num)
 			(void)ex_printf(EXCOOKIE, "\n");
 	}
@@ -689,9 +652,10 @@ opts_dump(sp, type)
  *	Print out an option.
  */
 static int
-opts_print(sp, op)
+opts_print(sp, op, spo)
 	SCR *sp;
 	OPTLIST const *op;
+	OPTION *spo;
 {
 	int curlen, offset;
 
@@ -724,11 +688,12 @@ opts_save(sp, fp)
 	SCR *sp;
 	FILE *fp;
 {
+	OPTION *spo;
 	OPTLIST const *op;
 	int ch, cnt;
 	char *p;
 
-	for (op = optlist; op->name != NULL; ++op) {
+	for (spo = sp->opts, op = optlist; op->name; ++op) {
 		if (F_ISSET(op, OPT_NOSAVE))
 			continue;
 		cnt = op - optlist;

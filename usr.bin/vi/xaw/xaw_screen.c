@@ -1,6 +1,6 @@
 /*-
- * Copyright (c) 1993, 1994
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1993 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,21 +32,8 @@
  */
 
 #ifndef lint
-static const char sccsid[] = "@(#)xaw_screen.c	8.7 (Berkeley) 8/17/94";
+static char sccsid[] = "@(#)xaw_screen.c	8.4 (Berkeley) 1/11/94";
 #endif /* not lint */
-
-#include <sys/queue.h>
-#include <sys/time.h>
-
-#include <bitstring.h>
-#include <limits.h>
-#include <signal.h>
-#include <stdio.h>
-#include <termios.h>
-
-#include "compat.h"
-#include <db.h>
-#include <regex.h>
 
 #include "vi.h"
 
@@ -58,7 +45,7 @@ int
 xaw_screen_init(sp)
 	SCR *sp;
 {
-	msgq(sp, M_ERR, "The Athena widget screen not yet implemented");
+	msgq(sp, M_ERR, "The Athena widget screen not yet implemented.");
 	return (1);
 }
 
