@@ -1,6 +1,6 @@
 dnl
 dnl $KTH-KRB: destdirs.m4,v 1.2 2002/08/12 15:12:50 joda Exp $
-dnl $NetBSD: destdirs.m4,v 1.1 2002/09/12 12:22:14 joda Exp $
+dnl $NetBSD: destdirs.m4,v 1.1.1.1 2002/09/12 12:22:14 joda Exp $
 dnl
 
 AC_DEFUN([rk_DESTDIRS], [

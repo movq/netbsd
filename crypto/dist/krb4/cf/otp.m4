@@ -1,5 +1,5 @@
 dnl $KTH-KRB: otp.m4,v 1.2 2002/05/19 20:51:08 joda Exp $
-dnl $NetBSD: otp.m4,v 1.1 2002/09/12 12:22:14 joda Exp $
+dnl $NetBSD: otp.m4,v 1.1.1.1 2002/09/12 12:22:14 joda Exp $
 dnl
 dnl check requirements for OTP library
 dnl

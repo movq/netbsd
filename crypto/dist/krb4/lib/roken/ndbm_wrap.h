@@ -32,7 +32,7 @@
  */
 
 /* $KTH-KRB: ndbm_wrap.h,v 1.1 2002/04/30 16:37:20 joda Exp $
-   $NetBSD: ndbm_wrap.h,v 1.1 2002/09/12 12:22:10 joda Exp $ */
+   $NetBSD: ndbm_wrap.h,v 1.1.1.1 2002/09/12 12:22:10 joda Exp $ */
 
 #ifndef __ndbm_wrap_h__
 #define __ndbm_wrap_h__

@@ -1,6 +1,6 @@
 dnl
 dnl $KTH-KRB: dlopen.m4,v 1.1 2002/08/28 16:32:16 joda Exp $
-dnl $NetBSD: dlopen.m4,v 1.1 2002/09/12 12:22:14 joda Exp $
+dnl $NetBSD: dlopen.m4,v 1.1.1.1 2002/09/12 12:22:14 joda Exp $
 dnl
 
 AC_DEFUN([rk_DLOPEN], [

@@ -66,7 +66,7 @@
 #include "krb_locl.h"
 
 __RCSID("$KTH-KRB: quad_cksum.c,v 1.1 2002/09/09 18:00:47 joda Exp $"
-      "$NetBSD: quad_cksum.c,v 1.1 2002/09/12 12:22:09 joda Exp $");
+      "$NetBSD: quad_cksum.c,v 1.1.1.1 2002/09/12 12:22:09 joda Exp $");
 
 /* some versions of openssl has a broken des_quad_cksum, so we need
    to include a working version here */

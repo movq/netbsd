@@ -34,7 +34,7 @@
 #ifdef HAVE_CONFIG_H
 #include <config.h>
 __RCSID("$KTH-KRB: ndbm_wrap.c,v 1.1 2002/04/30 16:37:08 joda Exp $"
-      "$NetBSD: ndbm_wrap.c,v 1.1 2002/09/12 12:22:10 joda Exp $");
+      "$NetBSD: ndbm_wrap.c,v 1.1.1.1 2002/09/12 12:22:10 joda Exp $");
 #endif
 
 #include "ndbm_wrap.h"

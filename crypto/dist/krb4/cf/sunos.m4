@@ -1,6 +1,6 @@
 dnl
 dnl $KTH-KRB: sunos.m4,v 1.1 2002/08/28 19:53:51 joda Exp $
-dnl $NetBSD: sunos.m4,v 1.1 2002/09/12 12:22:14 joda Exp $
+dnl $NetBSD: sunos.m4,v 1.1.1.1 2002/09/12 12:22:14 joda Exp $
 dnl
 
 AC_DEFUN([rk_SUNOS],[

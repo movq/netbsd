@@ -1,6 +1,6 @@
 dnl
 dnl $KTH-KRB: irix.m4,v 1.1 2002/08/28 19:11:44 joda Exp $
-dnl $NetBSD: irix.m4,v 1.1 2002/09/12 12:22:14 joda Exp $
+dnl $NetBSD: irix.m4,v 1.1.1.1 2002/09/12 12:22:14 joda Exp $
 dnl
 
 AC_DEFUN([rk_IRIX],
