@@ -1,4 +1,4 @@
-/*	$NetBSD: kparamb.h,v 1.1 1996/01/07 21:50:49 leo Exp $	*/
+/*	$NetBSD: kparamb.h,v 1.1.1.1 1996/01/07 21:50:49 leo Exp $	*/
 
 /*
  * Copyright (c) 1995 L. Weppelman
