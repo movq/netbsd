@@ -1,29 +1,34 @@
-#	$NetBSD: Makefile,v 1.16 1999/02/13 02:54:27 lukem Exp $
-
-.include <bsd.own.mk>
-
-# XXX -- this depends on ../include/defs.h
+TMACOWN?=	bin
+TMACGRP?=	bin
+TMACMODE?=	444
 TMACDIR?=	/usr/share/tmac
 
-TMACOWN?=	${FILESOWN}
-TMACGRP?=	${FILESGRP}
-TMACMODE?=	${FILESMODE}
+FILES=		0.MT 5.MT 4.MT ms.cov se_ms.cov 
+LOCALE=		locale se_locale
 
-# The Swedish man page is temporarily disabled. We will soon implement
-# a scheme for internationalized man pages and turn it on again.
-#MAN=		groff_mm.7 groff_mmse.7
-#MLINKS= 	groff_mm.7 mm.7 groff_mmse.7 mmse.7
-MAN=		groff_mm.7 groff_mmse.7
-MLINKS= 	groff_mm.7 mm.7 groff_mmse.7 mmse.7
+MAN7=		groff_mm.0 groff_mmse.0
+MLINKS=		groff_mm.7 mm.7 groff_mmse.7 mmse.7
 
-.if ${MKSHARE} != "no"
-FILES=		tmac.m
-LINKS=		${TMACDIR}/tmac.m ${TMACDIR}/tmac.mse
-FILESDIR=	${TMACDIR}
-.endif
+afterinstall:
+	install -c -o $(TMACOWN) -g $(TMACGRP) -m $(TMACMODE) \
+		$(.CURDIR)/tmac.m $(DESTDIR)$(TMACDIR)/tmac.$(tmac_m)
+	install -c -o $(TMACOWN) -g $(TMACGRP) -m $(TMACMODE) \
+		$(.CURDIR)/tmac.m $(DESTDIR)$(TMACDIR)/tmac.$(tmac_m)se
 
-SUBDIR=		mm
+	test -d $(DESTDIR)$(TMACDIR)/mm || mkdir $(DESTDIR)$(TMACDIR)/mm
+	chown $(TMACOWN).$(TMACGRP) $(DESTDIR)$(TMACDIR)/mm
+	chmod 755 $(DESTDIR)$(TMACDIR)/mm
 
-.include "../Makefile.cfg"
+	for f in $(FILES); do \
+		rm -f $(TMACDIR)/mm/$$f; \
+		install -c -o $(TMACOWN) -g $(TMACGRP) -m $(TMACMODE) \
+			$(.CURDIR)/mm/$$f $(DESTDIR)$(TMACDIR)/mm/$$f; \
+	done
+	for f in $(LOCALE); do \
+		test -f $(DESTDIR)$(TMACDIR)/mm/$$f || touch $(DESTDIR)$(TMACDIR)/mm/$$f; \
+		chown $(TMACOWN).$(TMACGRP) $(DESTDIR)$(TMACDIR)/mm/$$f; \
+		chmod $(TMACMODE) $(DESTDIR)$(TMACDIR)/mm/$$f; \
+	done
+
 .include <bsd.prog.mk>
-.include <bsd.subdir.mk>
+.include "../Makefile.cfg"

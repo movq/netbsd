@@ -1,7 +1,7 @@
-/*	$NetBSD: attributes.c,v 1.5 2000/04/20 12:17:57 blymn Exp $	*/
+/*      $Id: attributes.c,v 1.1 1999/11/23 11:12:34 blymn Exp $ */
 
 /*-
- * Copyright (c) 1998-1999 Brett Lymn (blymn@baea.com.au, brett_lymn@yahoo.com.au)
+ * Copyright (c) 1998-1999 Brett Lymn (blymn@baea.com.au, brett_lymn@yahoo.com)
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -35,7 +35,9 @@ extern MENU _menui_default_menu;
  * Set the menu foreground attribute
  */
 int
-set_menu_fore(MENU *menu, attr_t attr)
+set_menu_fore(menu, attr)
+        MENU *menu;
+        attr_t attr;
 {
 	if (menu == NULL)
 		_menui_default_menu.fore = attr;
@@ -48,7 +50,8 @@ set_menu_fore(MENU *menu, attr_t attr)
  * Return the menu foreground attribute
  */
 char
-menu_fore(MENU *menu)
+menu_fore(menu)
+        MENU *menu;
 {
 	if (menu == NULL)
 		return _menui_default_menu.fore;
@@ -60,7 +63,9 @@ menu_fore(MENU *menu)
  * Set the menu background attribute
  */
 int
-set_menu_back(MENU *menu, attr_t attr)
+set_menu_back(menu, attr)
+        MENU *menu;
+        attr_t attr;
 {
 	if (menu == NULL)
 		_menui_default_menu.back = attr;
@@ -73,7 +78,8 @@ set_menu_back(MENU *menu, attr_t attr)
  * Return the menu background attribute
  */
 char
-menu_back(MENU *menu)
+menu_back(menu)
+        MENU *menu;
 {
 	if (menu == NULL)
 		return _menui_default_menu.back;
@@ -85,7 +91,9 @@ menu_back(MENU *menu)
  * Set the menu greyed out attribute
  */
 int
-set_menu_grey(MENU *menu, attr_t attr)
+set_menu_grey(menu, attr)
+        MENU *menu;
+        attr_t attr;
 {
 	if (menu == NULL)
 		_menui_default_menu.grey = attr;
@@ -98,7 +106,8 @@ set_menu_grey(MENU *menu, attr_t attr)
  * Return the menu greyed out attribute
  */
 char
-menu_grey(MENU *menu)
+menu_grey(menu)
+        MENU *menu;
 {
 	if (menu == NULL)
 		return _menui_default_menu.grey;
@@ -110,7 +119,9 @@ menu_grey(MENU *menu)
  * Set the menu pad character - the filler char between name and description
  */
 int
-set_menu_pad(MENU *menu, int pad)
+set_menu_pad(menu, pad)
+        MENU *menu;
+        int pad;
 {
 	if (menu == NULL)
 		_menui_default_menu.pad = pad;
@@ -123,7 +134,8 @@ set_menu_pad(MENU *menu, int pad)
  * Return the menu pad character
  */
 int
-menu_pad(MENU *menu)
+menu_pad(menu)
+        MENU *menu;
 {
 	if (menu == NULL)
 		return _menui_default_menu.pad;

@@ -1,49 +1,38 @@
-#	$NetBSD: Makefile,v 1.13 2000/09/23 13:53:43 simonb Exp $
+#	$NetBSD: Makefile,v 1.1 2000/02/08 13:45:41 tron Exp $
 #	install these sources in /usr/share/sendmail/cf
 
 DIST=		${.CURDIR}/../../../../dist
 .PATH: ${DIST}/sendmail/cf/cf
 
 FILESDIR=	/usr/share/sendmail/cf
-FILES=		boat-anchor.mc chimera.mc ihack.net.mc minbar.mc \
-		netbsd-proto.mc netbsd-proto-IPv4only.mc sun-lamp.mc zhadum.mc \
-		Makefile
+FILES=		boat-anchor.mc chimera.mc sun-lamp.mc ihack.net.mc \
+        	clientproto.mc netbsd-proto.mc tcpproto.mc uucpproto.mc \
+		zhadum.mc Makefile
 
 .if (${.CURDIR} == ${FILESDIR})
 CFDIR=		${.CURDIR}/..
 .else
-CFDIR?=		${DIST}/sendmail/cf
+CFDIR=		${DIST}/sendmail/cf
 .endif
 CHMOD=		chmod
 M4=		m4
 ROMODE=		444
 RM=		rm -f
 
-ALL=		netbsd-proto.cf netbsd-proto-IPv4only.cf
+ALL=		netbsd-proto.cf
 
-OTHERS=		${FILES:S/Makefile//:C/netbsd-proto.*//:S/.mc/.cf/g}
+OTHERS=		boat-anchor.cf chimera.cf sun-lamp.cf ihack.net.cf \
+		clientproto.cf tcpproto.cf uucpproto.cf zhadum.cf
 
 .SUFFIXES: .mc .cf
 
 .mc.cf:
 	${RM} $@
-	(cd ${CFDIR}/cf && \
-	    ${M4} ${CFDIR}/m4/cf.m4 ${.CURDIR}/${@:R}.mc > ${.OBJDIR}/$@)
+	(cd ${CFDIR}/cf && ${M4} ${.CURDIR}/${@:R}.mc > ${.OBJDIR}/$@)
 	${CHMOD} ${ROMODE} $@
 
 realall: ${ALL}
 
-# netbsd-proto.mc pulls in netbsd-proto-IPv4only.mc
-netbsd-proto.cf: netbsd-proto-IPv4only.mc
-
-afterinstall:
-	sed 's,../../../../usr.sbin/sendmail/cf/cf/,,g' \
-		<${DESTDIR}${FILESDIR}/netbsd-proto.mc \
-		>${DESTDIR}${FILESDIR}/netbsd-proto.mc.new
-	mv ${DESTDIR}${FILESDIR}/netbsd-proto.mc.new ${DESTDIR}${FILESDIR}/netbsd-proto.mc
-	${CHMOD} ${ROMODE} ${DESTDIR}${FILESDIR}/netbsd-proto.mc
-
-# XXX not friendly with "make obj"
 others: ${OTHERS}
 
 clean cleandir distclean:
@@ -51,11 +40,9 @@ clean cleandir distclean:
 
 realdepend:
 
-distribution: netbsd-proto.cf
-	${INSTALL} ${INSTPRIV} ${COPY} -o root -g wheel -m 444 \
-	    netbsd-proto.cf ${DESTDIR}/etc/mail/sendmail.cf
-	${INSTALL} ${INSTPRIV} ${COPY} -o root -g wheel -m 444 \
-	    netbsd-proto-IPv4only.cf ${DESTDIR}/etc/mail/sendmail-IPv4only.cf
+distribution:
+	${INSTALL} -c -o root -g wheel -m 444 netbsd-proto.cf \
+	    ${DESTDIR}/etc/sendmail.cf
 
 # this is overkill, but....
 M4FILES=	${CFDIR}/domain/Berkeley.EDU.m4 \
@@ -74,11 +61,8 @@ M4FILES=	${CFDIR}/domain/Berkeley.EDU.m4 \
 		${CFDIR}/feature/bestmx_is_local.m4 \
 		${CFDIR}/feature/bitdomain.m4 \
 		${CFDIR}/feature/blacklist_recipients.m4 \
-		${CFDIR}/feature/dnsbl.m4 \
 		${CFDIR}/feature/domaintable.m4 \
-		${CFDIR}/feature/generics_entire_domain.m4 \
 		${CFDIR}/feature/genericstable.m4 \
-		${CFDIR}/feature/ldap_routing.m4 \
 		${CFDIR}/feature/limited_masquerade.m4 \
 		${CFDIR}/feature/local_lmtp.m4 \
 		${CFDIR}/feature/local_procmail.m4 \
@@ -86,7 +70,6 @@ M4FILES=	${CFDIR}/domain/Berkeley.EDU.m4 \
 		${CFDIR}/feature/mailertable.m4 \
 		${CFDIR}/feature/masquerade_entire_domain.m4 \
 		${CFDIR}/feature/masquerade_envelope.m4 \
-		${CFDIR}/feature/no_default_msa.m4 \
 		${CFDIR}/feature/nocanonify.m4 \
 		${CFDIR}/feature/nodns.m4 \
 		${CFDIR}/feature/notsticky.m4 \
@@ -99,17 +82,16 @@ M4FILES=	${CFDIR}/domain/Berkeley.EDU.m4 \
 		${CFDIR}/feature/relay_entire_domain.m4 \
 		${CFDIR}/feature/relay_hosts_only.m4 \
 		${CFDIR}/feature/relay_local_from.m4 \
-		${CFDIR}/feature/relay_mail_from.m4 \
 		${CFDIR}/feature/smrsh.m4 \
 		${CFDIR}/feature/stickyhost.m4 \
 		${CFDIR}/feature/use_ct_file.m4 \
 		${CFDIR}/feature/use_cw_file.m4 \
 		${CFDIR}/feature/uucpdomain.m4 \
-		${CFDIR}/feature/virtuser_entire_domain.m4 \
 		${CFDIR}/feature/virtusertable.m4 \
 		${CFDIR}/hack/cssubdomain.m4 \
 		${CFDIR}/m4/cf.m4 \
 		${CFDIR}/m4/cfhead.m4 \
+		${CFDIR}/m4/nullrelay.m4 \
 		${CFDIR}/m4/proto.m4 \
 		${CFDIR}/m4/version.m4 \
 		${CFDIR}/mailer/cyrus.m4 \
@@ -119,7 +101,6 @@ M4FILES=	${CFDIR}/domain/Berkeley.EDU.m4 \
 		${CFDIR}/mailer/phquery.m4\
 		${CFDIR}/mailer/pop.m4 \
 		${CFDIR}/mailer/procmail.m4 \
-		${CFDIR}/mailer/qpage.m4 \
 		${CFDIR}/mailer/smtp.m4 \
 		${CFDIR}/mailer/usenet.m4 \
 		${CFDIR}/mailer/uucp.m4 \

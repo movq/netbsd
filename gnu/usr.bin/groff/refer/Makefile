@@ -1,13 +1,14 @@
-#	$NetBSD: Makefile,v 1.7 1997/10/25 10:12:22 lukem Exp $
+# Makefile for refer
 
 PROG=		refer
-SRCS=		command.cc ref.cc refer.cc token.cc label.cc
-CPPFLAGS+=	-I. -I$(.CURDIR)/../include
+SRCS=		command.cc ref.cc refer.cc token.cc
+OBJS=		label.o
+CFLAGS+=	-I. -I$(.CURDIR)/../include
 LDADD+=		$(LIBBIB) $(LIBGROFF) -lm
-DPADD+=		$(LIBBIB) $(LIBGROFF) $(LIBM)
+DPADD+=		$(LIBBIB) $(LIBGROFF) $(LIBMATH)
 
 CLEANFILES+=	label.cc label.tab.h
 
+.include <bsd.prog.mk>
 .include "../../Makefile.inc"
 .include "../Makefile.cfg"
-.include <bsd.prog.mk>

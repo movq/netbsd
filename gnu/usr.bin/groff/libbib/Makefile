@@ -1,15 +1,13 @@
-#	$NetBSD: Makefile,v 1.10 1999/02/13 02:54:27 lukem Exp $
+# Makefile for libbib
 
 LIB=		bib
 SRCS=		common.cc index.cc linear.cc search.cc map.c
-CPPFLAGS+=	-I$(.CURDIR)/../include
+CFLAGS+=	-I$(.CURDIR)/../include
 
-MKMAN=		no
-MKPROFILE=	no
-MKPIC=		no
+NOMAN=		noman
+NOPROFILE=	noprofile
 
-# only needed during build
-libinstall::
+install:
 
-.include "../Makefile.cfg"
 .include <bsd.lib.mk>
+.include "../Makefile.cfg"

@@ -1,16 +1,15 @@
 #!/bin/sh
 #
-# $NetBSD: rwho,v 1.4 2000/09/19 13:04:39 lukem Exp $
+# $NetBSD: rwho,v 1.1 2000/03/10 11:53:24 lukem Exp $
 #
 
 # PROVIDE: rwho
-# REQUIRE: DAEMON
+# REQUIRE: daemon
 
 . /etc/rc.subr
+. /etc/rc.conf
 
 name="rwhod"
-rcvar=$name
 command="/usr/sbin/${name}"
 
-load_rc_config $name
 run_rc_command "$1"

@@ -1,4 +1,4 @@
-/*	$NetBSD: random.c,v 1.1.1.1 2000/09/28 22:10:08 thorpej Exp $	*/
+/*	$NetBSD: random.c,v 1.1 2000/09/28 22:10:08 thorpej Exp $	*/
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -38,7 +38,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: random.c,v 1.1.1.1 2000/09/28 22:10:08 thorpej Exp $");
+__RCSID("$NetBSD: random.c,v 1.1 2000/09/28 22:10:08 thorpej Exp $");
 #endif
 
 /*

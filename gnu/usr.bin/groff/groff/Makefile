@@ -1,11 +1,19 @@
-#	$NetBSD: Makefile,v 1.8 1997/10/25 10:11:41 lukem Exp $
+#	@(#)Makefile	6.2 (Berkeley) 3/3/91
+
+.include "../Makefile.g++"
 
 PROG=		groff
-SRCS=		groff.cc pipeline.c
-CPPFLAGS+=	-I$(.CURDIR)/../include
-LDADD+=		$(LIBGROFF) -lm
-DPADD+=		$(LIBGROFF) $(LIBM)
+SRCS=		groff.cc
+LDADD+=		$(.CURDIR)/../libgroff/obj/libgroff.a
+# Nuke -Ig++-include when we finally install libg++.
+GXXFLAGS+= -I$(.CURDIR)/../libgroff \
+		-I$(.CURDIR)/../../../lib/libg++/g++-include
+
+afterinstall:
+	install -c -o $(BINOWN) -g $(BINGRP) -m $(BINMODE) \
+		$(.CURDIR)/nroff.sh $(DESTDIR)$(BINDIR)/nroff
+	install -c -o $(BINOWN) -g $(BINGRP) -m $(BINMODE) \
+		$(.CURDIR)/psroff.sh $(DESTDIR)$(BINDIR)/psroff
 
 .include "../../Makefile.inc"
-.include "../Makefile.cfg"
 .include <bsd.prog.mk>

@@ -1,15 +1,16 @@
 #!/bin/sh
 #
-# $NetBSD: motd,v 1.6 2000/10/09 06:01:18 nisimura Exp $
+# $NetBSD: motd,v 1.1 2000/03/10 11:53:24 lukem Exp $
 #
 
 # PROVIDE: motd
-# REQUIRE: mountcritremote
+# REQUIRE: systemfs
 
 . /etc/rc.subr
+. /etc/rc.conf
 
 name="motd"
-rcvar="update_motd"
+start_precmd="checkyesno update_motd"
 start_cmd="motd_start"
 stop_cmd=":"
 
@@ -24,11 +25,12 @@ motd_start()
 		install -c -o root -g wheel -m 664 /dev/null /etc/motd
 	fi
 	T=/etc/_motd
-	sysctl -n kern.version | while read i; do echo $i; break; done > $T
-	sed '1{/^NetBSD.*/{d;};};' < /etc/motd >> $T
+	rm -f $T
+	sysctl -n kern.version | sed 1q > $T
+	echo "" >> $T
+	sed '1,/^$/d' < /etc/motd >> $T
 	cmp -s $T /etc/motd || cp $T /etc/motd
 	rm -f $T
 }
 
-load_rc_config $name
 run_rc_command "$1"

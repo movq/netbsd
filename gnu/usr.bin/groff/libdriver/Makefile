@@ -1,15 +1,16 @@
-#	$NetBSD: Makefile,v 1.12 1999/02/13 02:54:27 lukem Exp $
+#	@(#)Makefile	6.2 (Berkeley) 4/30/91
+
+.include "../Makefile.g++"
 
 LIB=		driver
 SRCS=		input.cc printer.cc
-CPPFLAGS+=	-I$(.CURDIR)/../include
+GXXFLAGS+=	-I$(.CURDIR) -I$(.CURDIR)/../libgroff \
+		-I$(.CURDIR)/../../../lib/libg++/g++-include
+NOMAN=		noman
+NOPROFILE=	noprofile
 
-MKMAN=		no
-MKPROFILE=	no
-MKPIC=		no
+install:
 
-# only needed during build
-libinstall::
-
-.include "../Makefile.cfg"
 .include <bsd.lib.mk>
+
+.SUFFIXES: .cc

@@ -1,12 +1,14 @@
 #!/bin/sh
 #
-# $NetBSD: swap2,v 1.5 2000/08/21 23:35:41 lukem Exp $
+# $NetBSD: swap2,v 1.1 2000/03/10 11:53:24 lukem Exp $
 #
 
 # PROVIDE: nonlocalswap
+# BEFORE: daemon
 # REQUIRE: mountcritremote
 
 . /etc/rc.subr
+. /etc/rc.conf
 
 name="swap2"
 start_cmd="swap2_start"
@@ -31,5 +33,4 @@ swap2_start()
 #
 stop_cmd="swapctl -U -t noblk"
 
-load_rc_config swap
 run_rc_command "$1"

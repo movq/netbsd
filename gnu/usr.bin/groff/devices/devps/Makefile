@@ -1,17 +1,13 @@
-#	$NetBSD: Makefile,v 1.7 1999/02/13 02:54:27 lukem Exp $
+#	@(#)Makefile	6.3 (Berkeley) 4/30/91
 
 DEVICE=		ps
-FONTFILES=	$(FONTS) $(SUPPORT) $(DEVGENFILES) DESC
-FONTS=		S ZD ZDR SS AB ABI AI AR BMB BMBI BMI BMR \
-		CB CBI CI CR HB HBI HI HR HNB HNBI HNI HNR \
-		NB NBI NI NR PB PBI PI PR TB TBI TI TR ZCMI
-SUPPORT=	download prologue symbolsl.pfa text.enc zapfdr.pfa
-DEVGENFILES=	generate/Makefile generate/afmname generate/dingbatsmap \
-		generate/dingbatsrmap generate/lgreekmap generate/symbol.sed \
-		generate/symbolchars generate/symbolsl.afm generate/textmap
+FONTFILES=	$(FONTS) $(SUPPORT) DESC eqnchar
+FONTS=		AB ABI AI AR BMB BMBI BMI BMR CB CBI CI CR HB HBI \
+		HI HNB HNBI HNI HNR HR NB NBI NI NR PB PBI PI PR \
+		S SS TB TBI TI TR ZCMI ZD ZDR
+SUPPORT=        download prologue symbolsl.ps text.enc textmap \
+		zapfdr.ps
 
-MKOBJ=		no
-
-clean cleandir distclean:
+clean cleandir:
 
 .include "../Makefile.dev"

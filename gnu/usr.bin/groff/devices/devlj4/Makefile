@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.4 1999/02/13 02:54:27 lukem Exp $
+#	$Id: Makefile,v 1.1 1996/08/13 06:34:28 explorer Exp $
 
 DEVICE=		lj4
 FONTFILES=	ALBB ALBR AOB AOI AOR CB CBI CI CR GB GBI GI GR LGB LGI LGR \
@@ -6,8 +6,8 @@ FONTFILES=	ALBB ALBR AOB AOI AOR CB CBI CI CR GB GBI GI GR LGB LGI LGR \
 		CLARENDON CORONET MARIGOLD S \
 		DESC
 
-MKOBJ=		no
+NOOBJ=		noobj
 
-clean cleandir distclean:
+clean cleandir:
 
 .include "../Makefile.dev"

@@ -1,4 +1,4 @@
-/*	$NetBSD: mkdep.c,v 1.4 1999/07/21 15:20:55 kleink Exp $	*/
+/*	$NetBSD: mkdep.c,v 1.1 1999/01/25 22:10:42 tron Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -43,7 +43,7 @@ __COPYRIGHT("@(#) Copyright (c) 1999 The NetBSD Foundation, Inc.\n\
 #endif /* not lint */
 
 #ifndef lint
-__RCSID("$NetBSD: mkdep.c,v 1.4 1999/07/21 15:20:55 kleink Exp $");
+__RCSID("$NetBSD: mkdep.c,v 1.1 1999/01/25 22:10:42 tron Exp $");
 #endif /* not lint */
 
 #include <sys/param.h>
@@ -62,29 +62,25 @@ __RCSID("$NetBSD: mkdep.c,v 1.4 1999/07/21 15:20:55 kleink Exp $");
 #define DEFAULT_PATH		_PATH_DEFPATH
 #define DEFAULT_FILENAME	".depend"
 
-static void	usage __P((void));
-static char    *findcc __P((const char *));
-int		main __P((int, char **));
+void	usage __P((void));
+char   *findcc __P((const char *));
+int	main __P((int, char **));
 
-static void
+void
 usage()
 {
 	(void)fprintf(stderr,
-	    "usage: mkdep [-a] [-p] [-f file] flags file ...\n");
+	    "usage: mkdep [-a] [-p] [-f file ...] flags file ...\n");
 	exit(EXIT_FAILURE);
 }
 
-static char *
+char *
 findcc(progname)
 	const char	*progname;
 {
 	char   *path, *dir, *next;
 	char   buffer[MAXPATHLEN];
 
-	if ((next = strchr(progname, ' ')) != NULL) {
-		*next = '\0';
-	}
-	
 	if (strchr(progname, '/') != NULL)
 		return access(progname, X_OK) ? NULL : strdup(progname);
 
@@ -116,12 +112,9 @@ main(argc, argv)
 	int     argc;
 	char  **argv;
 {
-	/* LINTED local definition of index */
 	int 	aflag, pflag, index, tmpfd, status;
 	pid_t	cpid, pid;
 	char   *filename, *CC, *pathname, tmpfilename[MAXPATHLEN], **args;
-	const char *tmpdir;
-	/* LINTED local definition of tmpfile */
 	FILE   *tmpfile, *dependfile;
 	char	buffer[32768];
 
@@ -167,14 +160,18 @@ main(argc, argv)
 	args[1] = "-M";
 	(void)memcpy(&args[2], argv, (argc + 1) * sizeof(char *));
 
-	if ((tmpdir = getenv("TMPDIR")) == NULL)
-		tmpdir = _PATH_TMP;
-	(void)snprintf(tmpfilename, sizeof (tmpfilename), "%s/%s", tmpdir,
-	    "mkdepXXXXXX");
+	(void)strcpy(tmpfilename, _PATH_TMP "mkdepXXXXXX");
 	if ((tmpfd = mkstemp (tmpfilename)) < 0) {
 		warn("unable to create temporary file %s", tmpfilename);
 		return EXIT_FAILURE;
 	}
+
+#ifdef __GNUC__			/* to shut up gcc warnings */
+	(void)&aflag;
+	(void)&pflag;
+	(void)&filename;
+	(void)&pathname;
+#endif
 
 	switch (cpid = vfork()) {
 	case 0:
@@ -183,7 +180,6 @@ main(argc, argv)
 
 	    (void)execv(pathname, args);
 	    _exit(EXIT_FAILURE);
-	    /* NOTREACHED */
 
 	case -1:
 	    (void)fputs("mkdep: unable to fork.\n", stderr);
@@ -201,7 +197,7 @@ main(argc, argv)
 	    return EXIT_FAILURE;
 	}
 
-	(void)lseek(tmpfd, (off_t)0, SEEK_SET);
+	(void)lseek(tmpfd, 0, SEEK_SET);
 	if ((tmpfile = fdopen(tmpfd, "r")) == NULL) {
 	    (void)fprintf(stderr,
 			  "mkdep: unable to read temporary file %s\n",

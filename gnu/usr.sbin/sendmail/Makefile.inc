@@ -1,11 +1,9 @@
-#	$NetBSD: Makefile.inc,v 1.3 2000/05/03 11:07:59 itojun Exp $
+#	$NetBSD: Makefile.inc,v 1.1 2000/02/08 13:45:34 tron Exp $
 
 WARNS?=	0
+CPPFLAGS+=	-DNETINET6 -DNETISO
 
-CPPFLAGS+=	-DNEWDB -DNIS
-CPPFLAGS+=	-DMAP_REGEX -DTCPWRAPPERS -DNETISO
-CPPFLAGS+=	-DNEEDSGETIPNODE -DNETINET6
-CPPFLAGS+=	-I. -I${DIST}/sendmail/sendmail -I${DIST}/sendmail/include
+DBMDEF=		-DNEWDB -DNIS
 
 .if exists(${.CURDIR}/../../Makefile.inc)
 .include "${.CURDIR}/../../Makefile.inc"

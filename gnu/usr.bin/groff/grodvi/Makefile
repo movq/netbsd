@@ -1,11 +1,11 @@
-#	$NetBSD: Makefile,v 1.6 1997/10/25 10:11:37 lukem Exp $
+# Makefile for grodvi
 
 PROG=		grodvi
 SRCS=		dvi.cc
-CPPFLAGS+=	-I$(.CURDIR)/../include
+CFLAGS+=	-I$(.CURDIR)/../include
 LDADD+=		$(LIBDRIVER) $(LIBGROFF) -lm
-DPADD+=		$(LIBDRIVER) $(LIBGROFF) $(LIBM)
+DPADD+=		$(LIBDRIVER) $(LIBGROFF) $(LIBMATH)
 
+.include <bsd.prog.mk>
 .include "../../Makefile.inc"
 .include "../Makefile.cfg"
-.include <bsd.prog.mk>

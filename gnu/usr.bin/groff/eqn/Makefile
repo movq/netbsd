@@ -1,25 +1,16 @@
-#	$NetBSD: Makefile,v 1.13 2000/01/23 22:17:11 mycroft Exp $
+#	@(#)Makefile	6.1 (Berkeley) 3/3/91
+
+.include "../Makefile.g++"
+.include "../../Makefile.inc"
 
 PROG=		eqn
-SRCS=		main.cc lex.cc  box.cc limit.cc list.cc over.cc text.cc\
-		script.cc mark.cc other.cc delim.cc sqrt.cc pile.cc special.cc\
-		eqn.cc
-CPPFLAGS+=	-I. -I$(.CURDIR)/../include
-LDADD+=		$(LIBGROFF)
-DPADD+=		$(LIBGROFF)
+SRCS=		box.cc delim.cc eqn.y lex.cc limit.cc list.cc \
+		main.cc mark.cc other.cc over.cc pile.cc script.cc \
+		sqrt.cc text.cc
+LDADD+=		$(.CURDIR)/../libgroff/obj/libgroff.a
+# Delete the -Ig++-include after we fix libg++ and install it
+GXXFLAGS+=	-I. -I$(.CURDIR) -I$(.CURDIR)/../libgroff \
+		-I$(.CURDIR)/../../../lib/libg++/g++-include
+CLEANFILES+=	eqn.tab.h
 
-CLEANFILES+=	eqn.cc eqn.tab.h neqn
-
-lex.o:	eqn.cc
-
-FILES=neqn
-FILESMODE=${BINMODE}
-
-realall: neqn
-
-neqn:	neqn.sh
-	sed -e 's/@g@/$(g)/g' ${.ALLSRC} > ${.TARGET}
-
-.include "../../Makefile.inc"
-.include "../Makefile.cfg"
 .include <bsd.prog.mk>

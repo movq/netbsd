@@ -1,14 +1,9 @@
-#	$NetBSD: Makefile,v 1.7 1999/02/13 02:54:27 lukem Exp $
+#	@(#)Makefile	6.3 (Berkeley) 4/30/91
 
 DEVICE=		dvi
-FONTFILES=	R I B BI CW MI S EX H HI HB SA SB DESC $(DEVGENFILES)
-DEVGENFILES=	generate/CompileFonts generate/Makefile generate/msam.map\
-		generate/msbm.map generate/texb.map generate/texex.map \
-		generate/texi.map generate/texmi.map generate/texr.map \
-		generate/texsy.map generate/textt.map
+FONTS=		R I B BI CW MI S EX H
+FONTFILES=	$(FONTS) DESC eqnchar
 
-MKOBJ=		no
-
-clean cleandir distclean:
+clean cleandir:
 
 .include "../Makefile.dev"

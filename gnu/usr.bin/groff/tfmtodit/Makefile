@@ -1,11 +1,11 @@
-#	$NetBSD: Makefile,v 1.6 1997/10/25 10:12:30 lukem Exp $
+# Makefile for tfmtodit
 
 PROG=		tfmtodit
 SRCS=		tfmtodit.cc
-CPPFLAGS+=	-I$(.CURDIR)/../include
+CFLAGS+=	-I$(.CURDIR)/../include
 LDADD+=		$(LIBGROFF) -lm
-DPADD+=		$(LIBGROFF) $(LIBM)
+DPADD+=		$(LIBGROFF) $(LIBMATH)
 
+.include <bsd.prog.mk>
 .include "../../Makefile.inc"
 .include "../Makefile.cfg"
-.include <bsd.prog.mk>

@@ -1,7 +1,7 @@
-/*	$NetBSD: menu.c,v 1.9 2000/07/11 06:07:27 itohy Exp $	*/
+/*      $Id: menu.c,v 1.1 1999/11/23 11:12:34 blymn Exp $ */
 
 /*-
- * Copyright (c) 1998-1999 Brett Lymn (blymn@baea.com.au, brett_lymn@yahoo.com.au)
+ * Copyright (c) 1998-1999 Brett Lymn (blymn@baea.com.au, brett_lymn@yahoo.com)
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -26,9 +26,9 @@
  *
  */
 
-#include <ctype.h>
 #include <menu.h>
-#include <string.h>
+#include <ctype.h>
+#include <strings.h>
 #include <stdlib.h>
 #include "internals.h"
 
@@ -73,7 +73,9 @@ MENU _menui_default_menu = {
  * Set the menu mark character
  */
 int
-set_menu_mark(MENU *m, char *mark)
+set_menu_mark(m, mark)
+        MENU *m;
+        char *mark;
 {
 	MENU *menu = m;
 	
@@ -89,7 +91,7 @@ set_menu_mark(MENU *m, char *mark)
 	menu->mark.length = strlen(mark);
 
 	  /* max item size may have changed - recalculate. */
-	_menui_max_item_size(menu);
+	__menui_max_item_size(menu);
         return E_OK;
 }
 
@@ -97,7 +99,8 @@ set_menu_mark(MENU *m, char *mark)
  * Return the menu mark string for the menu.
  */
 char *
-menu_mark(MENU *menu)
+menu_mark(menu)
+        MENU *menu;
 {
 	if (menu == NULL)
 		return _menui_default_menu.mark.string;
@@ -109,7 +112,9 @@ menu_mark(MENU *menu)
  * Set the menu unmark character
  */
 int
-set_menu_unmark(MENU *m, char *mark)
+set_menu_unmark(m, mark)
+        MENU *m;
+        char *mark;
 {
 	MENU *menu = m;
 
@@ -124,7 +129,7 @@ set_menu_unmark(MENU *m, char *mark)
         strcpy(menu->unmark.string, mark);
 	menu->unmark.length = strlen(mark);
 	  /* max item size may have changed - recalculate. */
-	_menui_max_item_size(menu);
+	__menui_max_item_size(menu);
         return E_OK;
 }
 
@@ -145,7 +150,9 @@ menu_unmark(menu)
  * Set the menu window to the window passed.
  */
 int
-set_menu_win(MENU *menu, WINDOW *win)
+set_menu_win(menu, win)
+        MENU *menu;
+        WINDOW *win;
 {
 	if (menu == NULL)
 		_menui_default_menu.menu_win = win;
@@ -158,7 +165,8 @@ set_menu_win(MENU *menu, WINDOW *win)
  * Return the pointer to the menu window
  */
 WINDOW *
-menu_win(MENU *menu)
+menu_win(menu)
+        MENU *menu;
 {
 	if (menu == NULL)
 		return _menui_default_menu.menu_win;
@@ -185,7 +193,8 @@ set_menu_sub(menu, sub)
  * Return the subwindow pointer for the menu
  */
 WINDOW *
-menu_sub(MENU *menu)
+menu_sub(menu)
+        MENU *menu;
 {
 	if (menu == NULL)
 		return _menui_default_menu.menu_subwin;
@@ -197,7 +206,10 @@ menu_sub(MENU *menu)
  * Set the maximum number of rows and columns of items that may be displayed.
  */
 int
-set_menu_format(MENU *param_menu, int rows, int cols)
+set_menu_format(param_menu, rows, cols)
+        MENU *param_menu;
+        int rows;
+        int cols;
 {
 	MENU *menu = (param_menu != NULL) ? param_menu : &_menui_default_menu;
 	
@@ -206,7 +218,7 @@ set_menu_format(MENU *param_menu, int rows, int cols)
 
 	if (menu->items != NULL)
 		  /* recalculate the item neighbours */
-		return _menui_stitch_items(menu);
+		return __menui_stitch_items(menu);
 
 	return E_OK;
 }
@@ -215,7 +227,10 @@ set_menu_format(MENU *param_menu, int rows, int cols)
  * Return the max number of rows and cols that may be displayed.
  */
 void
-menu_format(MENU *param_menu, int *rows, int *cols)
+menu_format(param_menu, rows, cols)
+        MENU *param_menu;
+        int *rows;
+        int *cols;
 {
 	MENU *menu = (param_menu != NULL) ? param_menu : &_menui_default_menu;
 
@@ -227,7 +242,9 @@ menu_format(MENU *param_menu, int *rows, int *cols)
  * Set the user defined function to call when a menu is posted.
  */
 int
-set_menu_init(MENU *menu, Menu_Hook func)
+set_menu_init(menu, func)
+        MENU *menu;
+	_menui_menu_hook func;
 {
 	if (menu == NULL)
 		_menui_default_menu.menu_init = func;
@@ -239,7 +256,7 @@ set_menu_init(MENU *menu, Menu_Hook func)
 /*
  * Return the pointer to the menu init function.
  */
-Menu_Hook
+_menui_menu_hook
 menu_init(MENU *menu)
 {
 	if (menu == NULL)
@@ -252,7 +269,9 @@ menu_init(MENU *menu)
  * Set the user defined function called when a menu is unposted.
  */
 int
-set_menu_term(MENU *menu, Menu_Hook func)
+set_menu_term(menu, func)
+        MENU *menu;
+	_menui_menu_hook func;
 {
 	if (menu == NULL)
 		_menui_default_menu.menu_term = func;
@@ -264,8 +283,9 @@ set_menu_term(MENU *menu, Menu_Hook func)
 /*
  * Return the user defined menu termination function pointer.
  */
-Menu_Hook
-menu_term(MENU *menu)
+_menui_menu_hook
+menu_term(menu)
+        MENU *menu;
 {
 	if (menu == NULL)
 		return _menui_default_menu.menu_term;
@@ -277,7 +297,8 @@ menu_term(MENU *menu)
  * Return the current menu options set.
  */
 OPTIONS
-menu_opts(MENU *menu)
+menu_opts(menu)
+        MENU *menu;
 {
 	if (menu == NULL)
 		return _menui_default_menu.opts;
@@ -289,7 +310,9 @@ menu_opts(MENU *menu)
  * Set the menu options to the given options.
  */
 int
-set_menu_opts(MENU *param_menu, OPTIONS opts)
+set_menu_opts(param_menu, opts)
+        MENU *param_menu;
+        OPTIONS opts;
 {
 	MENU *menu = (param_menu != NULL) ? param_menu : &_menui_default_menu;
 	OPTIONS old_opts = menu->opts;
@@ -298,7 +321,7 @@ set_menu_opts(MENU *param_menu, OPTIONS opts)
 
  	if ((menu->opts & O_ROWMAJOR) != (old_opts &  O_ROWMAJOR))
 		  /* changed menu layout - need to recalc neighbours */
-		_menui_stitch_items(menu);
+		__menui_stitch_items(menu);
 	
         return E_OK;
 }
@@ -307,7 +330,9 @@ set_menu_opts(MENU *param_menu, OPTIONS opts)
  * Turn on the options in menu given by opts.
  */
 int
-menu_opts_on(MENU *param_menu, OPTIONS opts)
+menu_opts_on(param_menu, opts)
+        MENU *param_menu;
+        OPTIONS opts;
 {
 	MENU *menu = (param_menu != NULL) ? param_menu : &_menui_default_menu;
 	OPTIONS old_opts = menu->opts;
@@ -317,7 +342,7 @@ menu_opts_on(MENU *param_menu, OPTIONS opts)
 	if ((menu->items != NULL) &&
 	    (menu->opts & O_ROWMAJOR) != (old_opts &  O_ROWMAJOR))
 		  /* changed menu layout - need to recalc neighbours */
-		_menui_stitch_items(menu);
+		__menui_stitch_items(menu);
 	
         return E_OK;
 }
@@ -326,7 +351,9 @@ menu_opts_on(MENU *param_menu, OPTIONS opts)
  * Turn off the menu options given in opts.
  */
 int
-menu_opts_off(MENU *param_menu, OPTIONS opts)
+menu_opts_off(param_menu, opts)
+        MENU *param_menu;
+        OPTIONS opts;
 {
 	MENU *menu = (param_menu != NULL) ? param_menu : &_menui_default_menu;
 	OPTIONS old_opts = menu->opts;
@@ -336,7 +363,7 @@ menu_opts_off(MENU *param_menu, OPTIONS opts)
 	if ((menu->items != NULL ) &&
 	    (menu->opts & O_ROWMAJOR) != (old_opts &  O_ROWMAJOR))
 		  /* changed menu layout - need to recalc neighbours */
-		_menui_stitch_items(menu);
+		__menui_stitch_items(menu);
 	
         return E_OK;
 }
@@ -345,7 +372,8 @@ menu_opts_off(MENU *param_menu, OPTIONS opts)
  * Return the menu pattern buffer.
  */
 char *
-menu_pattern(MENU *menu)
+menu_pattern(menu)
+        MENU *menu;
 {
 	if (menu == NULL)
 		return _menui_default_menu.pattern;
@@ -358,14 +386,16 @@ menu_pattern(MENU *menu)
  * the item list.
  */
 int
-set_menu_pattern(MENU *param_menu, char *pat)
+set_menu_pattern(param_menu, pat)
+        MENU *param_menu;
+        char *pat;
 {
 	MENU *menu = (param_menu != NULL) ? param_menu : &_menui_default_menu;
 	char *p = pat;
 	
 	  /* check pattern is all printable characters */
 	while (*p)
-		if (!isprint((unsigned char) *p++)) return E_BAD_ARGUMENT;
+		if (!isprint(*p++)) return E_BAD_ARGUMENT;
 	
         if ((menu->pattern = (char *) realloc(menu->pattern,
                                      sizeof(char) * strlen(pat))) == NULL)
@@ -375,14 +405,15 @@ set_menu_pattern(MENU *param_menu, char *pat)
 	menu->plen = strlen(pat);
 	
           /* search item list for pat here */
-	return _menui_match_items(menu, MATCH_FORWARD, &menu->cur_item);
+	return __menui_match_items(menu, MATCH_FORWARD, &menu->cur_item);
 }
 
 /*
  * Allocate a new menu structure and fill it in.
  */
 MENU *
-new_menu(ITEM **items)
+new_menu(items)
+        ITEM **items;
 {
         MENU *the_menu;
         
@@ -390,7 +421,7 @@ new_menu(ITEM **items)
                 return NULL;
 
           /* copy the defaults */
-	(void)memcpy(the_menu, &_menui_default_menu, sizeof(MENU));
+	bcopy(&_menui_default_menu, the_menu, sizeof(MENU));
 
 	  /* set a default window if none already set. */
 	if (the_menu->menu_win == NULL)
@@ -411,7 +442,8 @@ new_menu(ITEM **items)
  * Free up storage allocated to the menu object and destroy it.
  */
 int
-free_menu(MENU *menu)
+free_menu(menu)
+	MENU *menu;
 {
 	int i;
 
@@ -442,7 +474,10 @@ free_menu(MENU *menu)
  * Calculate the minimum window size for the menu.
  */
 int
-scale_menu(MENU *param_menu, int *rows, int *cols)
+scale_menu(param_menu, rows, cols)
+	MENU *param_menu;
+	int *rows;
+	int *cols;
 {
 	MENU *menu = (param_menu != NULL) ? param_menu : &_menui_default_menu;
 	
@@ -450,7 +485,7 @@ scale_menu(MENU *param_menu, int *rows, int *cols)
 		return E_BAD_ARGUMENT;
 
 	  /* calculate the max item size */
-	_menui_max_item_size(menu);
+	__menui_max_item_size(menu);
 
 	*rows = menu->rows;
 	*cols = menu->cols * menu->max_item_width;
@@ -458,7 +493,7 @@ scale_menu(MENU *param_menu, int *rows, int *cols)
 	  /*
 	   * allow for spacing between columns...
 	   */
-	*cols += menu->cols;
+	*cols += menu->cols - 1;
 	
 	return E_OK;
 }
@@ -467,7 +502,9 @@ scale_menu(MENU *param_menu, int *rows, int *cols)
  * Set the menu item list to the one given.
  */
 int
-set_menu_items(MENU *param_menu, ITEM **items)
+set_menu_items(param_menu, items)
+	MENU *param_menu;
+	ITEM **items;
 {
 	MENU *menu = (param_menu != NULL) ? param_menu : &_menui_default_menu;
 	int i, new_count = 0;
@@ -510,7 +547,7 @@ set_menu_items(MENU *param_menu, ITEM **items)
 		menu->match_len = 0;
 	}
 	
-	_menui_stitch_items(menu); /* recalculate the item neighbours */
+	__menui_stitch_items(menu); /* recalculate the item neighbours */
 	
 	return E_OK;
 }
@@ -519,7 +556,8 @@ set_menu_items(MENU *param_menu, ITEM **items)
  * Return the pointer to the menu items array.
  */
 ITEM **
-menu_items(MENU *menu)
+menu_items(menu)
+	MENU *menu;
 {
 	if (menu == NULL)
 		return _menui_default_menu.items;
@@ -531,7 +569,8 @@ menu_items(MENU *menu)
  * Return the count of items connected to the menu
  */
 int
-item_count(MENU *menu)
+item_count(menu)
+	MENU *menu;
 {
 	if (menu == NULL)
 		return _menui_default_menu.item_count;
@@ -544,7 +583,9 @@ item_count(MENU *menu)
  * leftmost item on that row in the menu.
  */
 int
-set_top_row(MENU *param_menu, int row)
+set_top_row(param_menu, row)
+	MENU *param_menu;
+	int row;
 {
 	MENU *menu = (param_menu != NULL) ? param_menu : &_menui_default_menu;
 	int i, cur_item, state = E_SYSTEM_ERROR;
@@ -558,8 +599,6 @@ set_top_row(MENU *param_menu, int row)
 	if (menu->in_init == 1)
 		return E_BAD_STATE;
 
-	cur_item = 0;
-	
 	for (i = 0; i < menu->item_count; i++) {
 		  /* search for first item that matches row - this will be
 		     the current item. */
@@ -599,7 +638,8 @@ set_top_row(MENU *param_menu, int row)
  * Return the current top row number.
  */
 int
-top_row(MENU *param_menu)
+top_row(param_menu)
+	MENU *param_menu;
 {
 	MENU *menu = (param_menu != NULL) ? param_menu : &_menui_default_menu;
 
@@ -614,7 +654,8 @@ top_row(MENU *param_menu)
  *
  */
 int
-pos_menu_cursor(MENU *menu)
+pos_menu_cursor(menu)
+	MENU *menu;
 {
 	int movx, maxmark;
 	
@@ -623,7 +664,7 @@ pos_menu_cursor(MENU *menu)
 
 	maxmark = max(menu->mark.length, menu->unmark.length);
 	movx = maxmark + (menu->items[menu->cur_item]->col
-		* menu->col_width);
+		* (menu->col_width + 1));
 	
 	if (menu->match_len > 0)
 		movx += menu->match_len - 1;

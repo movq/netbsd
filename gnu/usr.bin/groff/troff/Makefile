@@ -1,31 +1,21 @@
-#	$NetBSD: Makefile,v 1.16 1999/02/13 02:54:28 lukem Exp $
+#	@(#)Makefile	6.2 (Berkeley) 3/3/91
 
-.include <bsd.own.mk>
+.include "../Makefile.g++"
+.include "../../Makefile.inc"
 
 PROG=		troff
-SRCS=		env.cc node.cc input.cc div.cc symbol.cc dictionary.cc reg.cc \
-		number.cc majorminor.cc
-CPPFLAGS+=	-I$(.CURDIR)/../include
-LDADD+=		$(LIBGROFF) -lm
-DPADD+=		$(LIBGROFF) $(LIBM)
+HYPHENDIR=	/usr/share/misc
+SRCS=		column.cc dictionary.cc div.cc env.cc input.cc \
+		node.cc number.cc reg.cc symbol.cc
+LDADD+=		$(.CURDIR)/../libgroff/obj/libgroff.a
+# Delete the -Ig++-include after we fix libg++ and install it
+GXXFLAGS+=	-I$(.CURDIR) -I$(.CURDIR)/../libgroff \
+		-I$(.CURDIR)/../../../lib/libg++/g++-include \
+		-DMACROPATH=\"/usr/share/tmac\" -DSTORE_WIDTH \
+		-DHYPHENFILE=\"$(HYPHENDIR)/hyphen\"
 
-CLEANFILES+=	majorminor.cc
-majorminor.cc: $(.CURDIR)/../VERSION
-	@echo Making $@
-	@-rm -f $@
-	@echo const char \*major_version = \
-	\"`sed -e 's/^\([^.]*\)\..*$$/\1/' $(.CURDIR)/../VERSION`\"\; >$@
-	@echo const char \*minor_version = \
-	\"`sed -e 's/^[^.]*\.\([0-9]*\).*$$/\1/' $(.CURDIR)/../VERSION`\"\; >>$@
+afterinstall:
+	install -c -o bin -g bin -m 444 $(.CURDIR)/hyphen \
+		$(DESTDIR)$(HYPHENDIR)/hyphen
 
-# XXX -- this depends on ../include/defs.h
-TMACDIR=/usr/share/tmac
-
-.if ${MKSHARE} != "no"
-FILES=hyphen.us
-FILESDIR=${TMACDIR}
-.endif
-
-.include "../../Makefile.inc"
-.include "../Makefile.cfg"
 .include <bsd.prog.mk>
