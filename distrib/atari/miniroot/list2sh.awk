@@ -1,4 +1,4 @@
-#	$NetBSD: list2sh.awk,v 1.1 1996/05/19 19:43:37 leo Exp $
+#	$NetBSD: list2sh.awk,v 1.1.1.1 1996/05/19 19:43:37 leo Exp $
 
 BEGIN {
 	printf("cd ${OBJDIR}\n");

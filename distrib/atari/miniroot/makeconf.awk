@@ -1,4 +1,4 @@
-#	$NetBSD: makeconf.awk,v 1.1 1996/05/19 19:43:37 leo Exp $
+#	$NetBSD: makeconf.awk,v 1.1.1.1 1996/05/19 19:43:37 leo Exp $
 
 #
 # generate crunchgen(1) configuration file from `list' spec.
