@@ -1,4 +1,4 @@
-/*	$NetBSD: ipaq_atmel.h,v 1.1 2001/07/31 21:33:03 ichiro Exp $	*/
+/*	$NetBSD: ipaq_atmel.h,v 1.2 2001/08/02 18:51:01 ichiro Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.  All rights reserved.
@@ -42,6 +42,7 @@
 /* Frame character */
 #define FRAME_SOF		0x02	/* Start of Frame character */
 #define FRAME_EOF		0x04	/* End of Frame character */
+#define FRAME_OVERHEAD_SIZE	3	/* FRAME_SOF + (ID+len) + checksum */
 
 /* ID */
 #define ID_VERSION		0x00	/* Get version ID */
@@ -55,6 +56,10 @@
 #define WRITE_IIC		0x0c	/* Write data via IIC protocol */
 #define SET_BACKLIGHT		0x0d	/* Backlight Control command */
 #define STATUS_EXTP		0xa1	/* Get status of Extension Pack */
+
+#define MAX_SENDSIZE		32	/* maximum data size of sendData() */
+#define MAX_RECVSIZE		16	/* maximum data size of recv data */
+
 
 /*
  * Battery status
