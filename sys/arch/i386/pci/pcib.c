@@ -1,4 +1,4 @@
-/*	$NetBSD: pcib.c,v 1.1 1996/11/28 02:53:45 thorpej Exp $	*/
+/*	$NetBSD: pcib.c,v 1.3 1997/05/18 23:14:03 thorpej Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.

@@ -1,4 +1,4 @@
-/* $NetBSD: tc_conf.h,v 1.4 1997/04/06 22:30:39 cgd Exp $ */
+/* $NetBSD: tc_conf.h,v 1.6 1997/06/06 02:42:38 thorpej Exp $ */
 
 /*
  * Copyright (c) 1995 Carnegie-Mellon University.
