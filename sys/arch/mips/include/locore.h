@@ -1,4 +1,4 @@
-/*	$NetBSD: locore.h,v 1.34 2000/06/06 17:41:07 soren Exp $	*/
+/*	$NetBSD: locore.h,v 1.36 2000/06/20 05:54:03 soda Exp $	*/
 
 /*
  * Copyright 1996 The Board of Trustees of The Leland Stanford
@@ -55,7 +55,7 @@ void mips1_SetPID   __P((int pid));
 void mips1_TBIA __P((int));
 void mips1_TBIAP __P((int));
 void mips1_TBIS __P((vaddr_t));
-void mips1_TBRPL __P((vaddr_t, vaddr_t, paddr_t));
+void mips1_TBRPL __P((vaddr_t, vaddr_t, unsigned int));
 int mips1_TLBUpdate __P((u_int, u_int));
 
 void mips1_wbflush __P((void));
@@ -72,7 +72,7 @@ void mips3_SetPID  __P((int pid));
 void mips3_TBIA __P((int));
 void mips3_TBIAP __P((int));
 void mips3_TBIS __P((vaddr_t));
-void mips3_TBRPL __P((vaddr_t, vaddr_t, paddr_t));
+void mips3_TBRPL __P((vaddr_t, vaddr_t, unsigned int));
 int mips3_TLBUpdate __P((u_int, u_int));
 struct tlb;
 void mips3_TLBRead __P((int, struct tlb *));
@@ -86,10 +86,11 @@ void mips3_FlushDCache_2way __P((vaddr_t addr, vaddr_t len));
 void mips3_HitFlushDCache_2way __P((vaddr_t, int));
 void mips3_FlushICache_2way __P((vaddr_t addr, vaddr_t len));
 
+u_int32_t mips3_read_config __P((void));
 u_int32_t mips3_cycle_count __P((void));
 u_int32_t mips3_write_count __P((u_int32_t));
 u_int32_t mips3_read_compare __P((void));
-u_int32_t mips3_read_config __P((void));
+void mips3_write_config __P((u_int32_t));
 void mips3_write_compare __P((u_int32_t));
 void mips3_write_xcontext_upper __P((u_int32_t));
 void mips3_clearBEV __P((void));
@@ -107,7 +108,7 @@ typedef struct  {
 	void (*setTLBpid)  __P((int pid));
 	void (*TBIAP)	__P((int));
 	void (*TBIS)	__P((vaddr_t));
-	void (*TBRPL)	__P((vaddr_t, vaddr_t, paddr_t));
+	void (*TBRPL)	__P((vaddr_t, vaddr_t, unsigned int));
 	int  (*tlbUpdate)  __P((u_int highreg, u_int lowreg));
 	void (*wbflush) __P((void));
 } mips_locore_jumpvec_t;
