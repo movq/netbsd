@@ -1,4 +1,4 @@
-/*	$NetBSD: ppb.c,v 1.13 1996/12/05 01:25:31 cgd Exp $	*/
+/*	$NetBSD: ppb.c,v 1.16 1998/01/12 09:40:12 thorpej Exp $	*/
 
 /*
  * Copyright (c) 1996 Christopher G. Demetriou.  All rights reserved.
@@ -58,10 +58,6 @@ void	ppbattach __P((struct device *, struct device *, void *));
 
 struct cfattach ppb_ca = {
 	sizeof(struct device), ppbmatch, ppbattach
-};
-
-struct cfdriver ppb_cd = {
-	NULL, "ppb", DV_DULL
 };
 
 int	ppbprint __P((void *, const char *pnp));
@@ -130,7 +126,9 @@ ppbattach(parent, self, aux)
 	pba.pba_busname = "pci";
 	pba.pba_iot = pa->pa_iot;
 	pba.pba_memt = pa->pa_memt;
+	pba.pba_dmat = pa->pa_dmat;
 	pba.pba_pc = pc;
+	pba.pba_flags = pa->pa_flags;
 	pba.pba_bus = PPB_BUSINFO_SECONDARY(busdata);
 	pba.pba_intrswiz = pa->pa_intrswiz;
 	pba.pba_intrtag = pa->pa_intrtag;
