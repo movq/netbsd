@@ -1,4 +1,4 @@
-/*	$NetBSD: ppmtochrpicon.c,v 1.1 1999/11/19 00:43:20 lonhyn Exp $	*/
+/*	$NetBSD: ppmtochrpicon.c,v 1.1.1.1 1999/11/19 00:43:20 lonhyn Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
