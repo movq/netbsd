@@ -1,5 +1,5 @@
 # bootpef/Makefile
-# $Id: Makefile,v 1.1 1994/05/30 20:22:31 gwr Exp $
+# $Id: Makefile,v 1.1.1.1 1994/05/30 20:22:32 gwr Exp $
 
 PROG=	bootpef
 SRCDIR= ${.CURDIR}/../../libexec/bootpd

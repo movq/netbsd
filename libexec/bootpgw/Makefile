@@ -1,5 +1,5 @@
 # bootpgw/Makefile
-# $Id: Makefile,v 1.1 1994/05/30 20:18:33 gwr Exp $
+# $Id: Makefile,v 1.1.1.1 1994/05/30 20:18:34 gwr Exp $
 
 PROG=	bootpgw
 SRCDIR= ${.CURDIR}/../bootpd
