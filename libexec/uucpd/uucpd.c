@@ -1,6 +1,6 @@
 /*
- * Copyright (c) 1985 The Regents of the University of California.
- * All rights reserved.
+ * Copyright (c) 1985, 1993
+ *	The Regents of the University of California.  All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Rick Adams.
@@ -35,13 +35,13 @@
  */
 
 #ifndef lint
-char copyright[] =
-"@(#) Copyright (c) 1985 The Regents of the University of California.\n\
- All rights reserved.\n";
+static char copyright[] =
+"@(#) Copyright (c) 1985, 1993\n\
+	The Regents of the University of California.  All rights reserved.\n";
 #endif /* not lint */
 
 #ifndef lint
-static char sccsid[] = "@(#)uucpd.c	5.10 (Berkeley) 2/26/91";
+static char sccsid[] = "@(#)uucpd.c	8.1 (Berkeley) 6/4/93";
 #endif /* not lint */
 
 /*
@@ -86,7 +86,7 @@ char **argv;
 #ifndef BSDINETD
 	register int s, tcp_socket;
 	struct servent *sp;
-#endif /* !BSDINETD */
+#endif !BSDINETD
 	extern int errno;
 	int dologout();
 
@@ -95,7 +95,7 @@ char **argv;
 	close(1); close(2);
 	dup(0); dup(0);
 	hisaddrlen = sizeof (hisctladdr);
-	if (getpeername(0, (struct sockaddr *)&hisctladdr, &hisaddrlen) < 0) {
+	if (getpeername(0, &hisctladdr, &hisaddrlen) < 0) {
 		fprintf(stderr, "%s: ", argv[0]);
 		perror("getpeername");
 		_exit(1);
@@ -104,7 +104,7 @@ char **argv;
 		doit(&hisctladdr);
 	dologout();
 	exit(1);
-#else /* !BSDINETD */
+#else !BSDINETD
 	sp = getservbyname("uucp", "tcp");
 	if (sp == NULL){
 		perror("uucpd: getservbyname");
@@ -120,6 +120,7 @@ char **argv;
 	bzero((char *)&myctladdr, sizeof (myctladdr));
 	myctladdr.sin_family = AF_INET;
 	myctladdr.sin_port = sp->s_port;
+#ifdef BSD4_2
 	tcp_socket = socket(AF_INET, SOCK_STREAM, 0);
 	if (tcp_socket < 0) {
 		perror("uucpd: socket");
@@ -149,7 +150,9 @@ char **argv;
 		}
 		close(s);
 	}
-#endif	/* !BSDINETD */
+#endif BSD4_2
+
+#endif	!BSDINETD
 }
 
 doit(sinp)
@@ -192,10 +195,14 @@ struct sockaddr_in *sinp;
 	sprintf(Username, "USER=%s", user);
 	dologin(pw, sinp);
 	setgid(pw->pw_gid);
+#ifdef BSD4_2
 	initgroups(pw->pw_name, pw->pw_gid);
+#endif BSD4_2
 	chdir(pw->pw_dir);
 	setuid(pw->pw_uid);
-	execl(_PATH_UUCICO, "uucico", (char *)0);
+#ifdef BSD4_2
+	execl(UUCICO, "uucico", (char *)0);
+#endif BSD4_2
 	perror("uucico server: execl");
 }
 
@@ -219,7 +226,9 @@ register int n;
 }
 
 #include <utmp.h>
+#ifdef BSD4_2
 #include <fcntl.h>
+#endif BSD4_2
 
 #define	SCPYN(a, b)	strncpy(a, b, sizeof (a))
 
@@ -232,9 +241,9 @@ dologout()
 
 #ifdef BSDINETD
 	while ((pid=wait((int *)&status)) > 0) {
-#else  /* !BSDINETD */
+#else  !BSDINETD
 	while ((pid=wait3((int *)&status,WNOHANG,0)) > 0) {
-#endif /* !BSDINETD */
+#endif !BSDINETD
 		wtmp = open(_PATH_WTMP, O_WRONLY|O_APPEND);
 		if (wtmp >= 0) {
 			sprintf(utmp.ut_line, "uucp%.4d", pid);

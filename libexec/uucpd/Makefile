@@ -1,11 +1,6 @@
-#	@(#)Makefile	5.3 (Berkeley) 6/25/90
+#	@(#)Makefile	8.1 (Berkeley) 6/4/93
 
-CFLAGS+= -DBSDINETD
 PROG=	uucpd
 NOMAN=	noman
-.ifndef EXPORTABLE_SYSTEM
-DPADD+=	${LIBCRYPT}
-LDADD+= -lcrypt
-.endif
 
 .include <bsd.prog.mk>
