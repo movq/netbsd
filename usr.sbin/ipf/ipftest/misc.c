@@ -39,7 +39,7 @@
 
 #if !defined(lint) && defined(LIBC_SCCS)
 static	char	sccsid[] = "@(#)misc.c	1.3 2/4/96 (C) 1995 Darren Reed";
-static	char	rcsid[] = "$Id: misc.c,v 1.1 1997/01/05 13:09:05 mrg Exp $";
+static	char	rcsid[] = "$Id: misc.c,v 1.1.1.1 1997/01/05 13:09:05 mrg Exp $";
 #endif
 
 void	debug(), verbose();

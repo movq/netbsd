@@ -40,7 +40,7 @@
 
 #if !defined(lint) && defined(LIBC_SCCS)
 static	char	sccsid[] = "@(#)ipt.c	1.19 6/3/96 (C) 1993-1996 Darren Reed";
-static	char	rcsid[] = "$Id: ipt.c,v 1.1 1997/01/05 13:09:05 mrg Exp $";
+static	char	rcsid[] = "$Id: ipt.c,v 1.1.1.1 1997/01/05 13:09:05 mrg Exp $";
 #endif
 
 extern	int	fr_check();

@@ -56,7 +56,7 @@ tcpdump -nqte
 
 #if !defined(lint) && defined(LIBC_SCCS)
 static char sccsid[] = "@(#)ipft_td.c	1.8 2/4/96 (C)1995 Darren Reed";
-static	char	rcsid[] = "$Id: ipft_td.c,v 1.1 1997/01/05 13:09:04 mrg Exp $";
+static	char	rcsid[] = "$Id: ipft_td.c,v 1.1.1.1 1997/01/05 13:09:04 mrg Exp $";
 #endif
 
 static	int	tcpd_open(), tcpd_close(), tcpd_readip();

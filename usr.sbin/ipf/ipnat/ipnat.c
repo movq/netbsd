@@ -56,7 +56,7 @@
 
 #if !defined(lint) && defined(LIBC_SCCS)
 static  char    sccsid[] ="@(#)ipnat.c	1.9 6/5/96 (C) 1993 Darren Reed";
-static	char	rcsid[] = "$Id: ipnat.c,v 1.1 1997/01/05 13:09:04 mrg Exp $";
+static	char	rcsid[] = "$Id: ipnat.c,v 1.1.1.1 1997/01/05 13:09:04 mrg Exp $";
 #endif
 
 #if	SOLARIS

@@ -35,7 +35,7 @@
 
 #if !defined(lint) && defined(LIBC_SCCS)
 static	char	sccsid[] ="@(#)parse.c	1.44 6/5/96 (C) 1993-1996 Darren Reed";
-static	char	rcsid[] = "$Id: parse.c,v 1.1 1997/01/05 13:06:38 mrg Exp $";
+static	char	rcsid[] = "$Id: parse.c,v 1.1.1.1 1997/01/05 13:06:38 mrg Exp $";
 #endif
 
 extern	struct	ipopt_names	ionames[], secclass[];

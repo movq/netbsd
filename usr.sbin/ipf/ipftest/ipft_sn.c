@@ -33,7 +33,7 @@
 #include "snoop.h"
 
 #if !defined(lint) && defined(LIBC_SCCS)
-static	char	rcsid[] = "$Id: ipft_sn.c,v 1.1 1997/01/05 13:09:04 mrg Exp $";
+static	char	rcsid[] = "$Id: ipft_sn.c,v 1.1.1.1 1997/01/05 13:09:04 mrg Exp $";
 #endif
 
 struct	llc	{

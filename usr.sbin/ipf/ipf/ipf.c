@@ -39,7 +39,7 @@ extern	char	*index();
 
 #if !defined(lint) && defined(LIBC_SCCS)
 static	char	sccsid[] = "@(#)ipf.c	1.23 6/5/96 (C) 1993-1995 Darren Reed";
-static	char	rcsid[] = "$Id: ipf.c,v 1.1 1997/01/05 13:06:38 mrg Exp $";
+static	char	rcsid[] = "$Id: ipf.c,v 1.1.1.1 1997/01/05 13:06:38 mrg Exp $";
 #endif
 
 #if	SOLARIS
