@@ -1,6 +1,6 @@
 /*
- * Copyright (c) 1985, 1988 Regents of the University of California.
- * All rights reserved.
+ * Copyright (c) 1983, 1988, 1993
+ *	The Regents of the University of California.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,7 +32,7 @@
  */
 
 #ifndef lint
-static char sccsid[] = "@(#)ns.c	5.13 (Berkeley) 3/1/91";
+static char sccsid[] = "@(#)ns.c	8.1 (Berkeley) 6/6/93";
 #endif /* not lint */
 
 #include <sys/param.h>
@@ -62,15 +62,14 @@ static char sccsid[] = "@(#)ns.c	5.13 (Berkeley) 3/1/91";
 #include <errno.h>
 #include <stdio.h>
 #include <string.h>
+#include "netstat.h"
 
 struct	nspcb nspcb;
 struct	sppcb sppcb;
 struct	socket sockb;
-extern	int Aflag;
-extern	int aflag;
-extern	int nflag;
-extern	char *plural();
-char *ns_prpr();
+
+static char *ns_prpr __P((struct ns_addr *));
+static void ns_erputil __P((int, int));
 
 static	int first = 1;
 
@@ -81,8 +80,9 @@ static	int first = 1;
  * -a (all) flag is specified.
  */
 
+void
 nsprotopr(off, name)
-	off_t off;
+	u_long off;
 	char *name;
 {
 	struct nspcb cb;
@@ -92,16 +92,16 @@ nsprotopr(off, name)
 	if (off == 0)
 		return;
 	isspp = strcmp(name, "spp") == 0;
-	kvm_read(off, (char *)&cb, sizeof (struct nspcb));
+	kread(off, (char *)&cb, sizeof (struct nspcb));
 	nspcb = cb;
 	prev = (struct nspcb *)off;
 	if (nspcb.nsp_next == (struct nspcb *)off)
 		return;
 	for (;nspcb.nsp_next != (struct nspcb *)off; prev = next) {
-		off_t ppcb;
+		u_long ppcb;
 
 		next = nspcb.nsp_next;
-		kvm_read((off_t)next, (char *)&nspcb, sizeof (nspcb));
+		kread((u_long)next, (char *)&nspcb, sizeof (nspcb));
 		if (nspcb.nsp_prev != prev) {
 			printf("???\n");
 			break;
@@ -109,12 +109,12 @@ nsprotopr(off, name)
 		if (!aflag && ns_nullhost(nspcb.nsp_faddr) ) {
 			continue;
 		}
-		kvm_read((off_t)nspcb.nsp_socket,
+		kread((u_long)nspcb.nsp_socket,
 				(char *)&sockb, sizeof (sockb));
-		ppcb = (off_t) nspcb.nsp_pcb;
+		ppcb = (u_long) nspcb.nsp_pcb;
 		if (ppcb) {
 			if (isspp) {
-				kvm_read(ppcb, (char *)&sppcb, sizeof (sppcb));
+				kread(ppcb, (char *)&sppcb, sizeof (sppcb));
 			} else continue;
 		} else
 			if (isspp) continue;
@@ -155,8 +155,9 @@ nsprotopr(off, name)
 /*
  * Dump SPP statistics structure.
  */
+void
 spp_stats(off, name)
-	off_t off;
+	u_long off;
 	char *name;
 {
 	struct spp_istat spp_istat;
@@ -164,7 +165,7 @@ spp_stats(off, name)
 
 	if (off == 0)
 		return;
-	kvm_read(off, (char *)&spp_istat, sizeof (spp_istat));
+	kread(off, (char *)&spp_istat, sizeof (spp_istat));
 	printf("%s:\n", name);
 	ANY(spp_istat.nonucn, "connection", " dropped due to no new sockets ");
 	ANY(spp_istat.gonawy, "connection", " terminated due to our end dying");
@@ -232,15 +233,16 @@ spp_stats(off, name)
 /*
  * Dump IDP statistics structure.
  */
+void
 idp_stats(off, name)
-	off_t off;
+	u_long off;
 	char *name;
 {
 	struct idpstat idpstat;
 
 	if (off == 0)
 		return;
-	kvm_read(off, (char *)&idpstat, sizeof (idpstat));
+	kread(off, (char *)&idpstat, sizeof (idpstat));
 	printf("%s:\n", name);
 	ANY(idpstat.idps_toosmall, "packet", " smaller than a header");
 	ANY(idpstat.idps_tooshort, "packet", " smaller than advertised");
@@ -267,8 +269,9 @@ static	struct {
  * Dump NS Error statistics structure.
  */
 /*ARGSUSED*/
+void
 nserr_stats(off, name)
-	off_t off;
+	u_long off;
 	char *name;
 {
 	struct ns_errstat ns_errstat;
@@ -278,7 +281,7 @@ nserr_stats(off, name)
 
 	if (off == 0)
 		return;
-	kvm_read(off, (char *)&ns_errstat, sizeof (ns_errstat));
+	kread(off, (char *)&ns_errstat, sizeof (ns_errstat));
 	printf("NS error statistics:\n");
 	ANY(ns_errstat.ns_es_error, "call", " to ns_error");
 	ANY(ns_errstat.ns_es_oldshort, "error",
@@ -309,7 +312,9 @@ nserr_stats(off, name)
 	}
 }
 
+static void
 ns_erputil(z, c)
+	int z, c;
 {
 	int j;
 	char codebuf[30];
@@ -328,19 +333,19 @@ ns_erputil(z, c)
 			where = "at destination";
 		sprintf(codebuf, "Unknown XNS error code 0%o", c);
 		name = codebuf;
-	} else 
+	} else
 		where =  ns_errnames[j].where;
 	ANY(z, name, where);
 }
 
 static struct sockaddr_ns ssns = {AF_NS};
 
+static
 char *ns_prpr(x)
 	struct ns_addr *x;
 {
 	struct sockaddr_ns *sns = &ssns;
-	extern char *ns_print();
 
 	sns->sns_addr = *x;
-	return(ns_print(sns));
+	return(ns_print((struct sockaddr *)sns));
 }
