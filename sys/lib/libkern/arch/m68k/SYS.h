@@ -1,4 +1,4 @@
-/*	$NetBSD: SYS.h,v 1.2 1994/10/26 06:39:23 cgd Exp $	*/
+/*	$NetBSD: SYS.h,v 1.3 1998/02/22 08:43:27 mycroft Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -36,44 +36,50 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)SYS.h	5.5 (Berkeley) 5/7/91
+ *	from: @(#)SYS.h	5.5 (Berkeley) 5/7/91
  */
 
 #include <sys/syscall.h>
 #include <machine/asm.h>
 
 #ifdef __STDC__
+#define	IMMEDIATE	#
+#define SYSTRAP(x)	movl IMMEDIATE SYS_ ## x ## ,d0; trap IMMEDIATE 0
+#else
+#define SYSTRAP(x)	movl #SYS_/**/x,d0; trap #0
+#endif
 
-#ifdef	PIC
-/* With PIC code, we can't pass the error to cerror in d0,
-   because the jump might go via the binder. */
-#define	SYSCALL(x)	.even; err: movl d0,sp@-; jra cerror; ENTRY(x); \
-			movl \#SYS_ ## x,d0; trap \#0; jcs err
-#else /* !PIC */
-#define	SYSCALL(x)	.even; err: jra cerror; ENTRY(x); \
-			movl \#SYS_ ## x,d0; trap \#0; jcs err
-#endif /* !PIC */
 
-#define	RSYSCALL(x)	SYSCALL(x); rts
-#define	PSEUDO(x,y)	ENTRY(x); movl \#SYS_ ## y,d0; trap \#0; rts
+#define _SYSCALL_NOERROR(x,y)						\
+	ENTRY(x);							\
+	SYSTRAP(y)
 
-#else /* !__STDC__ */
+#define _SYSCALL(x,y)							\
+	.even;								\
+	err: jra cerror;						\
+	_SYSCALL_NOERROR(x,y);						\
+	jcs err
 
-#ifdef	PIC
-/* With PIC code, we can't pass the error to cerror in d0,
-   because the jump might go via the binder. */
-#define	SYSCALL(x)	.even; err: movl d0,sp@-; jra cerror; ENTRY(x); \
-			movl #SYS_/**/x,d0; trap #0; jcs err
-#else /* !PIC */
-#define	SYSCALL(x)	.even; err: jra cerror; ENTRY(x); \
-			movl #SYS_/**/x,d0; trap #0; jcs err
-#endif /* !PIC */
+#define SYSCALL_NOERROR(x)						\
+	_SYSCALL_NOERROR(x,x)
 
-#define	RSYSCALL(x)	SYSCALL(x); rts
-#define	PSEUDO(x,y)	ENTRY(x); movl #SYS_/**/y,d0; trap #0; rts
+#define SYSCALL(x)							\
+	_SYSCALL(x,x)
 
-#endif /* !__STDC__ */
+#define PSEUDO_NOERROR(x,y)						\
+	_SYSCALL_NOERROR(x,y);						\
+	rts
 
+#define PSEUDO(x,y)							\
+	_SYSCALL(x,y);							\
+	rts
+
+#define RSYSCALL_NOERROR(x)						\
+	PSEUDO_NOERROR(x,x)
+
+#define RSYSCALL(x)							\
+	PSEUDO(x,x)
+	
 #define	ASMSTR		.asciz
 
 	.globl	cerror
