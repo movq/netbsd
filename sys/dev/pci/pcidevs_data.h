@@ -1,10 +1,10 @@
-/*	$NetBSD: pcidevs_data.h,v 1.369 2001/10/24 00:19:21 thorpej Exp $	*/
+/*	$NetBSD: pcidevs_data.h,v 1.367 2001/10/16 08:15:01 tron Exp $	*/
 
 /*
  * THIS FILE AUTOMATICALLY GENERATED.  DO NOT EDIT.
  *
  * generated from:
- *	NetBSD: pcidevs,v 1.366 2001/10/24 00:18:49 thorpej Exp 
+ *	NetBSD: pcidevs,v 1.364 2001/10/16 08:14:15 tron Exp 
  */
 
 /*
@@ -2770,19 +2770,19 @@ const struct pci_knowndev pci_knowndevs[] = {
 	    "i960 RN PCI-PCI",
 	},
 	{
-	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_82542,
+	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_82452,
 	    0,
 	    "Intel",
 	    "i82452 Gigabit Ethernet",
 	},
 	{
-	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_82543_FIBER,
+	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_82453_FIBER,
 	    0,
 	    "Intel",
 	    "i82453 Gigabit Ethernet (1000BASE-X)",
 	},
 	{
-	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_82543_SC,
+	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_82453_SC,
 	    0,
 	    "Intel",
 	    "i82453-SC Gigabit Ethernet",
@@ -2792,18 +2792,6 @@ const struct pci_knowndev pci_knowndevs[] = {
 	    0,
 	    "Intel",
 	    "i82543 Gigabit Ethernet (1000BASE-T)",
-	},
-	{
-	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_82544_XT,
-	    0,
-	    "Intel",
-	    "i82544 Gigabit Ethernet (1000BASE-T)",
-	},
-	{
-	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_82544_XF,
-	    0,
-	    "Intel",
-	    "i82544 Gigabit Ethernet (1000BASE-X)",
 	},
 	{
 	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_IN_BUSINESS,
@@ -4370,18 +4358,6 @@ const struct pci_knowndev pci_knowndevs[] = {
 	    0,
 	    "PLX Technology",
 	    "9060ES PCI bus controller",
-	},
-	{
-	    PCI_VENDOR_POWERHOUSE, PCI_PRODUCT_POWERHOUSE_POWERTOP,
-	    0,
-	    "Powerhouse Systems",
-	    "PowerTop PowerPC system controller",
-	},
-	{
-	    PCI_VENDOR_POWERHOUSE, PCI_PRODUCT_POWERHOUSE_POWERPRO,
-	    0,
-	    "Powerhouse Systems",
-	    "PowerPro PowerPC system controller",
 	},
 	{
 	    PCI_VENDOR_PROLAN, PCI_PRODUCT_PROLAN_NE2KETHER,
