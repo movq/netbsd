@@ -1,4 +1,4 @@
-/*	$NetBSD: cmd_args.c,v 1.1 2003/12/04 16:05:30 drochner Exp $	*/
+/*	$NetBSD: cmd_args.c,v 1.1.1.1 2003/12/04 16:05:30 drochner Exp $	*/
 
 /*
  * cmd_args.c = command-line argument processing

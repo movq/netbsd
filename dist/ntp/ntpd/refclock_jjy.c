@@ -1,4 +1,4 @@
-/*	$NetBSD: refclock_jjy.c,v 1.1 2003/12/04 16:05:28 drochner Exp $	*/
+/*	$NetBSD: refclock_jjy.c,v 1.1.1.1 2003/12/04 16:05:28 drochner Exp $	*/
 
 /*
  * refclock_jjy - clock driver for JJY receivers
