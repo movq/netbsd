@@ -1,6 +1,6 @@
 /*
- * Copyright (c) 1982, 1986 Regents of the University of California.
- * All rights reserved.
+ * Copyright (c) 1982, 1986, 1993
+ *	The Regents of the University of California.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -30,12 +30,9 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	from: @(#)tcpip.h	7.4 (Berkeley) 6/28/90
- *	$Id: tcpip.h,v 1.3 1993/05/20 03:50:44 cgd Exp $
+ *	from: @(#)tcpip.h	8.1 (Berkeley) 6/10/93
+ *	$Id: tcpip.h,v 1.4 1994/05/13 06:06:52 mycroft Exp $
  */
-
-#ifndef _NETINET_TCPIP_H_
-#define _NETINET_TCPIP_H_
 
 /*
  * Tcp+ip header, after ip options removed.
@@ -61,5 +58,3 @@ struct tcpiphdr {
 #define	ti_win		ti_t.th_win
 #define	ti_sum		ti_t.th_sum
 #define	ti_urp		ti_t.th_urp
-
-#endif /* !_NETINET_TCPIP_H_ */
