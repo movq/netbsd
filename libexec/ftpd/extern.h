@@ -30,8 +30,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	from: @(#)extern.h	8.2 (Berkeley) 4/4/94
- * 	$Id: extern.h,v 1.1 1994/06/29 01:49:39 deraadt Exp $
+ *	@(#)extern.h	8.2 (Berkeley) 4/4/94
  */
 
 void	blkfree __P((char **));
