@@ -1,4 +1,4 @@
-/*	$NetBSD: vasnwprintf.h,v 1.1 2004/07/12 23:27:17 wiz Exp $	*/
+/*	$NetBSD: vasnwprintf.h,v 1.1.1.1 2004/07/12 23:27:17 wiz Exp $	*/
 
 /* vswprintf with automatic memory allocation.
    Copyright (C) 2002-2003 Free Software Foundation, Inc.

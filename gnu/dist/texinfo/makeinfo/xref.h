@@ -1,4 +1,4 @@
-/*	$NetBSD: xref.h,v 1.1 2004/07/12 23:26:47 wiz Exp $	*/
+/*	$NetBSD: xref.h,v 1.1.1.1 2004/07/12 23:26:47 wiz Exp $	*/
 
 /* xref.h -- declarations for the cross references.
    Id: xref.h,v 1.2 2004/02/13 22:01:39 dirt Exp

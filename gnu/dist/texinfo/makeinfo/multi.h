@@ -1,4 +1,4 @@
-/*	$NetBSD: multi.h,v 1.1 2004/07/12 23:26:49 wiz Exp $	*/
+/*	$NetBSD: multi.h,v 1.1.1.1 2004/07/12 23:26:49 wiz Exp $	*/
 
 /* multi.h -- declarations for multi.c.
    Id: multi.h,v 1.1 2004/02/13 21:30:41 dirt Exp
