@@ -1,4 +1,4 @@
-/*	$NetBSD: setjmp.S,v 1.6 1998/07/01 02:16:27 tv Exp $	*/
+/*	$NetBSD: setjmp.S,v 1.7 1998/09/29 05:55:49 christos Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -44,7 +44,7 @@
 #if 0
 	.asciz "@(#)setjmp.s	8.1 (Berkeley) 6/4/93"
 #else
-	RCSID("$NetBSD: setjmp.S,v 1.6 1998/07/01 02:16:27 tv Exp $")
+	RCSID("$NetBSD: setjmp.S,v 1.7 1998/09/29 05:55:49 christos Exp $")
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -69,12 +69,12 @@ ENTRY(setjmp)
 	 */
 	mov	%o0, %o2	/* build sigcontext in [%o2] */
 	mov	1, %o0		/* SIG_BLOCK */
-	mov	SYS_sigprocmask, %g1
+	mov	SYS_compat_13_sigprocmask13, %g1
 	clr	%o1		/* sigprocmask(SIG_BLOCK, (sigset_t *)NULL) */
 	t	ST_SYSCALL
 	st	%o0, [%o2 + 4]	/* sc.sc_mask = current mask; */
 	mov	SYS___sigaltstack14, %g1
-	clr	%o0		/* sigstack(NULL, &foo) */
+	clr	%o0		/* sigaltstack(NULL, &foo) */
 	add	%sp, 0x48, %o1	/* (foo being in arg dump area) */
 	t	ST_SYSCALL
 	ld	[%sp + 0x50], %o0	/* foo.ss_flags */
@@ -109,7 +109,7 @@ ENTRY(longjmp)
 	 mov	1, %i1
 1:
 	st	%i1, [%i0 + 28]	/* sc.sc_o0 = v; */
-	mov	SYS_sigreturn, %g1
+	mov	SYS_compat_13_sigreturn13, %g1
 	mov	%i0, %o0
 	t	ST_SYSCALL	/* sigreturn(scp); */
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: sigsetjmp.S,v 1.3 1998/07/01 02:16:27 tv Exp $	*/
+/*	$NetBSD: sigsetjmp.S,v 1.4 1998/09/29 05:55:49 christos Exp $	*/
 /*
  * Copyright (c) 1995 Paul Kranenburg
  * All rights reserved.
@@ -64,7 +64,7 @@ ENTRY(sigsetjmp)
 	be _C_LABEL(_setjmp)
 	st %o1,[%o0+40]		! jmpbuf[JBLEN]
 	nop
-	ba,a _setjmp
+	ba,a _C_LABEL(setjmp)
 	unimp 0
 
 ENTRY(siglongjmp)

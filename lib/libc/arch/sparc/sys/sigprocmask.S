@@ -1,4 +1,4 @@
-/*	$NetBSD: sigprocmask.S,v 1.2 1997/07/16 14:38:02 christos Exp $	*/
+/*	$NetBSD: sigprocmask.S,v 1.3 1998/09/29 05:55:49 christos Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -44,7 +44,7 @@
 #if 0
 	.asciz "@(#)sigprocmask.s	8.1 (Berkeley) 6/4/93"
 #else
-	RCSID("$NetBSD: sigprocmask.S,v 1.2 1997/07/16 14:38:02 christos Exp $")
+	RCSID("$NetBSD: sigprocmask.S,v 1.3 1998/09/29 05:55:49 christos Exp $")
 #endif
 #endif /* SYSLIBC_SCCS and not lint */
 
@@ -60,7 +60,7 @@ ENTRY(sigprocmask)
 !	clr	%o1		! else block no signals ...
 	mov	1, %o0		! ... using sigprocmask(SIG_BLOCK)
 1:
-	mov	SYS_sigprocmask, %g1
+	mov	SYS_compat_13_sigprocmask13, %g1
 	t	ST_SYSCALL
 	bcc	2f		! if success,
 	 tst	%o2		!    check to see if oset requested
