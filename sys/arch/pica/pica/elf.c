@@ -1,4 +1,4 @@
-/*	$NetBSD: elf.c,v 1.1 1996/03/13 04:58:10 jonathan Exp $	*/
+/*	$NetBSD: elf.c,v 1.1.1.1 1996/03/13 04:58:10 jonathan Exp $	*/
 
 /*
  * Copyright (c) 1994 Ted Lemon

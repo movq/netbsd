@@ -1,4 +1,4 @@
-/*	$NetBSD: isa.c,v 1.1 1996/03/13 04:58:09 jonathan Exp $	*/
+/*	$NetBSD: isa.c,v 1.1.1.1 1996/03/13 04:58:09 jonathan Exp $	*/
 
 /*-
  * Copyright (c) 1995 Per Fogelstrom

@@ -31,7 +31,7 @@
  * SUCH DAMAGE.
  *
  *	from: @(#)reloc.h	8.1 (Berkeley) 6/10/93
- *      $Id: reloc.h,v 1.1 1996/03/13 04:58:08 jonathan Exp $
+ *      $Id: reloc.h,v 1.1.1.1 1996/03/13 04:58:08 jonathan Exp $
  *
  * from: Header: reloc.h,v 1.6 92/06/20 09:59:37 torek Exp
  */

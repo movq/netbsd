@@ -31,7 +31,7 @@
  * SUCH DAMAGE.
  *
  *	from: @(#)rz.c	8.1 (Berkeley) 7/29/93
- *      $Id: dma.c,v 1.1 1996/03/13 04:58:05 jonathan Exp $
+ *      $Id: dma.c,v 1.1.1.1 1996/03/13 04:58:05 jonathan Exp $
  */
 
 /*

@@ -1,4 +1,4 @@
-/*	$NetBSD: com.c,v 1.1 1996/03/13 04:58:05 jonathan Exp $	*/
+/*	$NetBSD: com.c,v 1.1.1.1 1996/03/13 04:58:05 jonathan Exp $	*/
 
 /*-
  * Copyright (c) 1993, 1994, 1995 Charles M. Hannum.  All rights reserved.

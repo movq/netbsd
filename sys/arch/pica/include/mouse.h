@@ -1,4 +1,4 @@
-/*	$NetBSD: mouse.h,v 1.1 1996/03/13 04:58:08 jonathan Exp $	*/
+/*	$NetBSD: mouse.h,v 1.1.1.1 1996/03/13 04:58:08 jonathan Exp $	*/
 
 /*-
  * Copyright (c) 1992, 1993 Erik Forsberg.

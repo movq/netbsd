@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.h,v 1.1 1996/03/13 04:58:07 jonathan Exp $	*/
+/*	$NetBSD: autoconf.h,v 1.1.1.1 1996/03/13 04:58:07 jonathan Exp $	*/
 
 /*
  * Copyright (c) 1994, 1995 Carnegie-Mellon University.

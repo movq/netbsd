@@ -34,7 +34,7 @@
  * SUCH DAMAGE.
  *
  *	from: @(#)kadb.c	8.1 (Berkeley) 6/10/93
- *      $Id: minidebug.c,v 1.1 1996/03/13 04:58:12 jonathan Exp $
+ *      $Id: minidebug.c,v 1.1.1.1 1996/03/13 04:58:12 jonathan Exp $
  */
 
 /*

@@ -38,7 +38,7 @@
  * From:
  *	Id: procfs_i386.c,v 4.1 1993/12/17 10:47:45 jsp Rel
  *
- *	$Id: process_machdep.c,v 1.1 1996/03/13 04:58:13 jonathan Exp $
+ *	$Id: process_machdep.c,v 1.1.1.1 1996/03/13 04:58:13 jonathan Exp $
  */
 
 /*

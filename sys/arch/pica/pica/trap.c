@@ -38,7 +38,7 @@
  * from: Utah Hdr: trap.c 1.32 91/04/06
  *
  *	from: @(#)trap.c	8.5 (Berkeley) 1/11/94
- *      $Id: trap.c,v 1.1 1996/03/13 04:58:13 jonathan Exp $
+ *      $Id: trap.c,v 1.1.1.1 1996/03/13 04:58:13 jonathan Exp $
  */
 
 #include <sys/param.h>
