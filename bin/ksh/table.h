@@ -1,4 +1,4 @@
-/* $Id: table.h,v 1.1 1996/09/21 23:35:17 jtc Exp $ */
+/* $Id: table.h,v 1.1.1.1 1996/09/21 23:35:17 jtc Exp $ */
 
 /*
  * generic hashed associative table for commands and variables.

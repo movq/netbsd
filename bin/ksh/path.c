@@ -12,8 +12,8 @@
 
 /*
  * $Log: path.c,v $
- * Revision 1.1  1996/09/21 23:35:15  jtc
- * Initial revision
+ * Revision 1.1.1.1  1996/09/21 23:35:15  jtc
+ * import pdksh 5.2.8
  *
  * Revision 1.2  1994/05/19  18:32:40  michael
  * Merge complete, stdio replaced, various fixes. (pre autoconf)

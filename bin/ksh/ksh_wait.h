@@ -1,5 +1,5 @@
 /* Wrapper around the ugly sys/wait includes/ifdefs */
-/* $Id: ksh_wait.h,v 1.1 1996/09/21 23:35:15 jtc Exp $ */
+/* $Id: ksh_wait.h,v 1.1.1.1 1996/09/21 23:35:15 jtc Exp $ */
 
 #ifdef HAVE_SYS_WAIT_H
 # include <sys/wait.h>

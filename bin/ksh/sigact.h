@@ -20,7 +20,7 @@
  */
 /*
  * RCSid:
- *      $Id: sigact.h,v 1.1 1996/09/21 23:35:15 jtc Exp $
+ *      $Id: sigact.h,v 1.1.1.1 1996/09/21 23:35:15 jtc Exp $
  */
 /* Changes to sigact.h for pdksh, Michael Rendell <michael@cs.mun.ca>:
  *	- changed SIG_HDLR to RETSIGTYPE for use with GNU autoconf

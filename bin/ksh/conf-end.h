@@ -1,7 +1,7 @@
 /*
  * End of configuration stuff for PD ksh.
  *
- * RCSid: $Id: conf-end.h,v 1.1 1996/09/21 23:35:13 jtc Exp $
+ * RCSid: $Id: conf-end.h,v 1.1.1.1 1996/09/21 23:35:13 jtc Exp $
  */
 
 #if defined(EMACS) || defined(VI)

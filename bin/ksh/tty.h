@@ -8,7 +8,7 @@
 
 	last edit:	30-Jul-1987	D A Gwyn
 */
-/* $Id: tty.h,v 1.1 1996/09/21 23:35:17 jtc Exp $ */
+/* $Id: tty.h,v 1.1.1.1 1996/09/21 23:35:17 jtc Exp $ */
 
 /* some useful #defines */
 #ifdef EXTERN

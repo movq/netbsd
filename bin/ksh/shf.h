@@ -1,7 +1,7 @@
 /*
  * Shell file I/O routines
  */
-/* $Id: shf.h,v 1.1 1996/09/21 23:35:15 jtc Exp $ */
+/* $Id: shf.h,v 1.1.1.1 1996/09/21 23:35:15 jtc Exp $ */
 
 #define SHF_BSIZE	512
 

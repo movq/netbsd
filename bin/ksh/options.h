@@ -1,7 +1,7 @@
 /*
  * Options configuration file for the PD ksh
  *
- * RCSid: $Id: options.h,v 1.1 1996/09/21 23:35:15 jtc Exp $
+ * RCSid: $Id: options.h,v 1.1.1.1 1996/09/21 23:35:15 jtc Exp $
  */
 
 /* Define this to the path to use if the PATH environment variable is

@@ -1,5 +1,5 @@
 /* Wrapper around the ugly sys/stat includes/ifdefs */
-/* $Id: ksh_stat.h,v 1.1 1996/09/21 23:35:14 jtc Exp $ */
+/* $Id: ksh_stat.h,v 1.1.1.1 1996/09/21 23:35:14 jtc Exp $ */
 
 /* assumes <sys/types.h> already included */
 #include <sys/stat.h>

@@ -1,5 +1,5 @@
 /* Wrapper around the values.h/limits.h includes/ifdefs */
-/* $Id: ksh_limval.h,v 1.1 1996/09/21 23:35:14 jtc Exp $ */
+/* $Id: ksh_limval.h,v 1.1.1.1 1996/09/21 23:35:14 jtc Exp $ */
 
 #ifdef HAVE_VALUES_H
 # include <values.h>

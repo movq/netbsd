@@ -1,5 +1,5 @@
 /* Wrapper around the ugly dir includes/ifdefs */
-/* $Id: ksh_dir.h,v 1.1 1996/09/21 23:35:14 jtc Exp $ */
+/* $Id: ksh_dir.h,v 1.1.1.1 1996/09/21 23:35:14 jtc Exp $ */
 
 #if defined(HAVE_DIRENT_H)
 # include <dirent.h>

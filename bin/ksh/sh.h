@@ -2,7 +2,7 @@
  * Public Domain Bourne/Korn shell
  */
 
-/* $Id: sh.h,v 1.1 1996/09/21 23:35:15 jtc Exp $ */
+/* $Id: sh.h,v 1.1.1.1 1996/09/21 23:35:15 jtc Exp $ */
 
 #include "config.h"	/* system and option configuration info */
 

@@ -1,7 +1,7 @@
 /*
  * prototypes for PD-KSH
  * originally generated using "cproto.c 3.5 92/04/11 19:28:01 cthuang "
- * $Id: proto.h,v 1.1 1996/09/21 23:35:15 jtc Exp $
+ * $Id: proto.h,v 1.1.1.1 1996/09/21 23:35:15 jtc Exp $
  */
 
 /* alloc.c */

@@ -1,5 +1,5 @@
 /* Wrapper around the ugly time.h,sys/time.h includes/ifdefs */
-/* $Id: ksh_time.h,v 1.1 1996/09/21 23:35:15 jtc Exp $ */
+/* $Id: ksh_time.h,v 1.1.1.1 1996/09/21 23:35:15 jtc Exp $ */
 
 #ifdef TIME_WITH_SYS_TIME
 # include <sys/time.h>

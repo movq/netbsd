@@ -1,7 +1,7 @@
 /*
  * Expanding strings
  */
-/* $Id: expand.h,v 1.1 1996/09/21 23:35:14 jtc Exp $ */
+/* $Id: expand.h,v 1.1.1.1 1996/09/21 23:35:14 jtc Exp $ */
 
 
 #if 0				/* Usage */
