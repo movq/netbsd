@@ -1,4 +1,4 @@
-#	$NetBSD: HYDRA,v 1.1.2.7 2000/09/23 17:19:05 sommerfeld Exp $
+#	$NetBSD: HYDRA,v 1.1.2.8 2002/05/03 19:12:55 sommerfeld Exp $
 #
 #	HYDRA -- ABIT BP6-based system used for MP development.
 #
@@ -175,8 +175,8 @@ mainbus0 at root
 #apm0	at mainbus0			# Advanced power management
 #options	APM_NO_IDLE
 
-cpu*   	at mainbus? apid ?
-ioapic*	at mainbus? apid ?
+cpu*   	at mainbus?
+ioapic*	at mainbus?
 
 options 	MULTIPROCESSOR	# use multiple CPU's
 options 	COM_MPLOCK	# com MP locking; REQUIRED on MP i386
