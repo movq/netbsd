@@ -1,5 +1,5 @@
 #!/bin/sh
-# $NetBSD: build_image.sh,v 1.1 2002/09/10 13:58:51 leo Exp $
+# $NetBSD: build_image.sh,v 1.1.1.1 2002/09/10 13:58:51 leo Exp $
 # This script is a quick hack to generate the various floppies in the
 # 'installation/floppies' directory. This script cannot be run in the
 # build environment, it is provided as a howto.
