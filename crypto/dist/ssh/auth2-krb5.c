@@ -1,4 +1,4 @@
-/*	$NetBSD: auth2-krb5.c,v 1.1 2003/05/14 18:12:50 itojun Exp $	*/
+/*	$NetBSD: auth2-krb5.c,v 1.1.1.1 2003/05/14 18:12:50 itojun Exp $	*/
 /*
  * Copyright (c) 2003 Markus Friedl.  All rights reserved.
  *
