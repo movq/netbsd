@@ -1,4 +1,4 @@
-/*	$NetBSD: addrinfo.h,v 1.1 2004/11/06 23:54:25 christos Exp $	*/
+/*	$NetBSD: addrinfo.h,v 1.1.1.1 2004/11/06 23:54:25 christos Exp $	*/
 
 /*
  * Copyright (C) 2004  Internet Systems Consortium, Inc. ("ISC")
