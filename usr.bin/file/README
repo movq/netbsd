@@ -1,5 +1,5 @@
 ** README for file(1) Command **
-@(#) $Header: /home/mike/src/cvs/netbsd/src/usr.bin/file/Attic/README,v 1.1 1993/03/21 09:45:37 cgd Exp $
+@(#) $Header: /home/mike/src/cvs/netbsd/src/usr.bin/file/Attic/README,v 1.1.1.1 1993/03/21 09:45:37 cgd Exp $
 
 This is Ian Darwin's (copyright but distributable) file(1)
 command. It follows the USG (Sys V) model of the file command,

@@ -1,5 +1,5 @@
 Portability of the new file(1) command.
-@(#) $Header: /home/mike/src/cvs/netbsd/src/usr.bin/file/Attic/PORTING,v 1.1 1993/03/21 09:45:37 cgd Exp $
+@(#) $Header: /home/mike/src/cvs/netbsd/src/usr.bin/file/Attic/PORTING,v 1.1.1.1 1993/03/21 09:45:37 cgd Exp $
 
 Read this file only if the program doesn't compile on your system.
 

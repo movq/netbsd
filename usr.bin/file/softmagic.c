@@ -30,7 +30,7 @@
 
 #ifndef	lint
 static char *moduleid = 
-	"@(#)$Header: /home/mike/src/cvs/netbsd/src/usr.bin/file/Attic/softmagic.c,v 1.1 1993/03/21 09:45:37 cgd Exp $";
+	"@(#)$Header: /home/mike/src/cvs/netbsd/src/usr.bin/file/Attic/softmagic.c,v 1.1.1.1 1993/03/21 09:45:37 cgd Exp $";
 #endif	/* lint */
 
 extern char *progname;

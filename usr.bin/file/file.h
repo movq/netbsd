@@ -1,6 +1,6 @@
 /*
  * file.h - definitions for file(1) program
- # @(#)$Header: /home/mike/src/cvs/netbsd/src/usr.bin/file/Attic/file.h,v 1.1 1993/03/21 09:45:37 cgd Exp $
+ # @(#)$Header: /home/mike/src/cvs/netbsd/src/usr.bin/file/Attic/file.h,v 1.1.1.1 1993/03/21 09:45:37 cgd Exp $
  *
  * Copyright (c) Ian F. Darwin, 1987.
  * Written by Ian F. Darwin.
