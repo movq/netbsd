@@ -1,4 +1,4 @@
-/*	$NetBSD: mkdep.c,v 1.1 1999/01/25 22:10:42 tron Exp $	*/
+/*	$NetBSD: mkdep.c,v 1.1.1.1 1999/01/25 22:10:42 tron Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -43,7 +43,7 @@ __COPYRIGHT("@(#) Copyright (c) 1999 The NetBSD Foundation, Inc.\n\
 #endif /* not lint */
 
 #ifndef lint
-__RCSID("$NetBSD: mkdep.c,v 1.1 1999/01/25 22:10:42 tron Exp $");
+__RCSID("$NetBSD: mkdep.c,v 1.1.1.1 1999/01/25 22:10:42 tron Exp $");
 #endif /* not lint */
 
 #include <sys/param.h>
