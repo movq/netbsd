@@ -1,9 +1,10 @@
 /*-
- * Copyright (c) 1991 The Regents of the University of California.
- * All rights reserved.
+ * Copyright (c) 1991, 1993
+ *	The Regents of the University of California.  All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
- * Jim R. Oldroyd at The Instruction Set.
+ * Jim R. Oldroyd at The Instruction Set and Keith Gabryelski at
+ * Commodore Business Machines.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -35,13 +36,13 @@
  */
 
 #ifndef lint
-char copyright[] =
-"@(#) Copyright (c) 1991 The Regents of the University of California.\n\
- All rights reserved.\n";
+static char copyright[] =
+"@(#) Copyright (c) 1991, 1993\n\
+	The Regents of the University of California.  All rights reserved.\n";
 #endif /* not lint */
 
 #ifndef lint
-static char sccsid[] = "@(#)quiz.c	5.1 (Berkeley) 11/10/91";
+static char sccsid[] = "@(#)quiz.c	8.2 (Berkeley) 1/3/94";
 #endif /* not lint */
 
 #include <sys/types.h>
@@ -58,7 +59,7 @@ static QE qlist;
 static int catone, cattwo, tflag;
 static u_int qsize;
 
-char	*appdstr __P((char *, char *));
+char	*appdstr __P((char *, char *, size_t));
 void	 downcase __P((char *));
 void	 err __P((const char *, ...));
 void	 get_cats __P((char *, char *));
@@ -128,13 +129,14 @@ get_file(file)
 	 */
 	qp = &qlist;
 	qsize = 0;
-	while ((lp = fgetline(fp, &len)) != NULL) {
+	while ((lp = fgetln(fp, &len)) != NULL) {
 		if (qp->q_text && qp->q_text[strlen(qp->q_text) - 1] == '\\')
-			qp->q_text = appdstr(qp->q_text, lp);
+			qp->q_text = appdstr(qp->q_text, lp, len);
 		else {
 			if ((qp->q_next = malloc(sizeof(QE))) == NULL)
 				err("%s", strerror(errno));
 			qp = qp->q_next;
+			lp[len - 1] = '\0';
 			if ((qp->q_text = strdup(lp)) == NULL)
 				err("%s", strerror(errno));
 			qp->q_asked = qp->q_answered = FALSE;
@@ -209,10 +211,10 @@ quiz()
 {
 	register QE *qp;
 	register int i;
+	size_t len;
 	u_int guesses, rights, wrongs;
 	int next;
-	char *s, *t, question[LINE_SZ];
-	char *answer;
+	char *answer, *s, *t, question[LINE_SZ];
 
 	srandom(time(NULL));
 	guesses = rights = wrongs = 0;
@@ -260,10 +262,11 @@ quiz()
 		qp->q_asked = TRUE;
 		(void)printf("%s?\n", question);
 		for (;; ++guesses) {
-			if ((answer = fgetline(stdin, NULL)) == NULL) {
+			if ((answer = fgetln(stdin, &len)) == NULL) {
 				score(rights, wrongs, guesses);
 				exit(0);
 			}
+			answer[len - 1] = '\0';
 			downcase(answer);
 			if (rxp_match(answer)) {
 				(void)printf("Right!\n");
@@ -301,15 +304,16 @@ next_cat(s)
 }
 
 char *
-appdstr(s, tp)
+appdstr(s, tp, len)
 	char *s;
 	register char *tp;
+	size_t len;
 {
 	register char *mp, *sp;
 	register int ch;
 	char *m;
 
-	if ((m = malloc(strlen(sp) + strlen(tp) + 1)) == NULL)
+	if ((m = malloc(strlen(s) + len + 1)) == NULL)
 		err("%s", strerror(errno));
 	for (mp = m, sp = s; *mp++ = *sp++;);
 

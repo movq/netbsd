@@ -1,9 +1,10 @@
 /*-
- * Copyright (c) 1991 The Regents of the University of California.
- * All rights reserved.
+ * Copyright (c) 1991, 1993
+ *	The Regents of the University of California.  All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
- * Jim R. Oldroyd at The Instruction Set.
+ * Jim R. Oldroyd at The Instruction Set and Keith Gabryelski at
+ * Commodore Business Machines.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -35,7 +36,7 @@
  */
 
 #ifndef lint
-static char sccsid[] = "@(#)rxp.c	5.1 (Berkeley) 11/10/91";
+static char sccsid[] = "@(#)rxp.c	8.1 (Berkeley) 5/31/93";
 #endif /* not lint */
 
 /*
@@ -77,9 +78,9 @@ typedef short Rxp_t;			/* type for regexp tokens */
 static Rxp_t rxpbuf[RXP_LINE_SZ];	/* compiled regular expression buffer */
 char rxperr[128];			/* parser error message */
 
-int	 rxp__compile __P((char *, int));
-char	*rxp__expand __P((int));
-int	 rxp__match __P((char *, int, Rxp_t *, Rxp_t *, char *));
+static int	 rxp__compile __P((char *, int));
+static char	*rxp__expand __P((int));
+static int	 rxp__match __P((char *, int, Rxp_t *, Rxp_t *, char *));
 
 int
 rxp_compile(s)
