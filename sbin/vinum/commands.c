@@ -36,7 +36,7 @@
  * otherwise) arising in any way out of the use of this software, even if
  * advised of the possibility of such damage.
  *
- * $Id: commands.c,v 1.1 2003/10/10 03:14:05 grog Exp $
+ * $Id: commands.c,v 1.1.1.1 2003/10/10 03:14:05 grog Exp $
  * $FreeBSD$
  */
 

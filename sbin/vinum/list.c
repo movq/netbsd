@@ -39,7 +39,7 @@
  * otherwise) arising in any way out of the use of this software, even if
  * advised of the possibility of such damage.
  *
- * $Id: list.c,v 1.1 2003/10/10 03:14:19 grog Exp $
+ * $Id: list.c,v 1.1.1.1 2003/10/10 03:14:19 grog Exp $
  * $FreeBSD$
  */
 

@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 2003/10/10 03:13:12 grog Exp $
+#	$NetBSD: Makefile,v 1.1.1.1 2003/10/10 03:13:12 grog Exp $
 
 PROG=	vinum
 SRCS=	v.c list.c vinumparser.c vinumutil.c vext.h commands.c
