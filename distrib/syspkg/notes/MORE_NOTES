@@ -40,4 +40,4 @@ supporting files are named based on the utilities they match (with the <part> ch
 Then, groups of utilities which are either likely to not be installed (UUCP, SLIP) or
 distinct from other utilities (postfix, sendmail, bind) are separated from the above.
 
-$Id: MORE_NOTES,v 1.1 2002/01/07 22:46:16 jwise Exp $
+$Id: MORE_NOTES,v 1.1.1.1 2002/01/07 22:46:16 jwise Exp $
