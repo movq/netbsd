@@ -33,7 +33,7 @@
 
 #ifndef lint
 /*static char sccsid[] = "from: @(#)exp.c	5.7 (Berkeley) 12/2/92";*/
-static char rcsid[] = "$Id: exp.c,v 1.3 1993/08/14 13:42:41 mycroft Exp $";
+static char rcsid[] = "$Id: exp.c,v 1.4 1993/08/14 19:21:14 mycroft Exp $";
 #endif /* not lint */
 
 /* EXP(X)
@@ -118,87 +118,48 @@ ic(invln2, 1.4426950408889633870E0,    0,  1.71547652B82FE)
 double exp(x)
 double x;
 {
-	double  z,hi,lo,c;
+	double z, hi, lo, t;
 	int k;
 
 #if !defined(vax)&&!defined(tahoe)
-	if(x!=x) return(x);	/* x is NaN */
+	if (x != x) return(x);	/* x is NaN */
 #endif	/* !defined(vax)&&!defined(tahoe) */
-	if( x <= lnhuge ) {
-		if( x >= lntiny ) {
+
+	if (x <= lnhuge) {
+		if (x >= lntiny) {
 
 		    /* argument reduction : x --> x - k*ln2 */
-
-			k=invln2*x+copysign(0.5,x);	/* k=NINT(x/ln2) */
-
-		    /* express x-k*ln2 as hi-lo and let x=hi-lo rounded */
-
-			hi=x-k*ln2hi;
-			x=hi-(lo=k*ln2lo);
-
-		    /* return 2^k*[1+x+x*c/(2+c)]  */
-			z=x*x;
-			c= x - z*(p1+z*(p2+z*(p3+z*(p4+z*p5))));
-			return  scalb(1.0+(hi-(lo-(x*c)/(2.0-c))),k);
-
-		}
-		/* end of x > lntiny */
-
-		else 
-		     /* exp(-big#) underflows to zero */
-		     if(finite(x))  return(scalb(1.0,-5000));
-
-		     /* exp(-INF) is zero */
-		     else return(0.0);
-	}
-	/* end of x < lnhuge */
-
-	else 
-	/* exp(INF) is INF, exp(+big#) overflows to INF */
-	    return( finite(x) ?  scalb(1.0,5000)  : x);
-}
-
-/* returns exp(r = x + c) for |c| < |x| with no overlap.  */
-
-double exp__D(x, c)
-double x, c;
-{
-	double  z,hi,lo, t;
-	int k;
-
-#if !defined(vax)&&!defined(tahoe)
-	if (x!=x) return(x);	/* x is NaN */
-#endif	/* !defined(vax)&&!defined(tahoe) */
-	if ( x <= lnhuge ) {
-		if ( x >= lntiny ) {
-
-		    /* argument reduction : x --> x - k*ln2 */
-			z = invln2*x;
+			z = invln2 * x;
 			k = z + copysign(.5, x);
 
 		    /* express (x+c)-k*ln2 as hi-lo and let x=hi-lo rounded */
+			hi = x - k * ln2hi;			/* Exact. */
+			x = hi - (lo = k * ln2lo);
 
-			hi=(x-k*ln2hi);			/* Exact. */
-			x= hi - (lo = k*ln2lo-c);
 		    /* return 2^k*[1+x+x*c/(2+c)]  */
-			z=x*x;
-			c= x - z*(p1+z*(p2+z*(p3+z*(p4+z*p5))));
-			c = (x*c)/(2.0-c);
+			z = x * x;
+			t = x - z*(p1+z*(p2+z*(p3+z*(p4+z*p5))));
+			t = (x * t) / (2. - t);
 
-			return  scalb(1.+(hi-(lo - c)), k);
+			return scalb(1. + (hi - (lo - t)), k);
 		}
 		/* end of x > lntiny */
 
 		else 
 		     /* exp(-big#) underflows to zero */
-		     if(finite(x))  return(scalb(1.0,-5000));
+			if (finite(x))
+				return(scalb(1.0, -5000));
 
 		     /* exp(-INF) is zero */
-		     else return(0.0);
+			else
+				return(0.0);
 	}
 	/* end of x < lnhuge */
 
 	else 
 	/* exp(INF) is INF, exp(+big#) overflows to INF */
-	    return( finite(x) ?  scalb(1.0,5000)  : x);
+		if (finite(x))
+			return(scalb(1.0, 5000);
+		else
+			return(x);
 }
