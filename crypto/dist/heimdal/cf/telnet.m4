@@ -1,6 +1,6 @@
 dnl
 dnl $Heimdal: telnet.m4,v 1.1 2002/08/28 19:19:01 joda Exp $
-dnl $NetBSD: telnet.m4,v 1.1 2002/09/12 12:41:44 joda Exp $
+dnl $NetBSD: telnet.m4,v 1.1.1.1 2002/09/12 12:41:44 joda Exp $
 dnl
 dnl stuff used by telnet
 
