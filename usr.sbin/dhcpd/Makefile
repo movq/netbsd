@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 1996/10/03 06:33:25 mrg Exp $
+#	$NetBSD: Makefile,v 1.1.1.1 1996/10/03 06:33:25 mrg Exp $
 
 # XXX - are these useful for users?
 #SUBDIR=	dhclient
