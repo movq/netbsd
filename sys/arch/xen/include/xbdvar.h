@@ -1,4 +1,4 @@
-/* $NetBSD: xbdvar.h,v 1.6 2004/09/15 04:55:21 tls Exp $ */
+/* $NetBSD: xbdvar.h,v 1.6.4.1 2004/12/13 17:52:21 bouyer Exp $ */
 
 /*
  *
@@ -43,17 +43,18 @@ struct xbd_softc {
 	struct simplelock	sc_slock;	/* our lock */
 	int			sc_shutdown;	/* about to be removed */
 #if NRND > 0
-	rndsource_element_t	rnd_source;
+	rndsource_element_t	sc_rnd_source;
 #endif
 };
 
 struct xbd_attach_args {
 	const char 		*xa_device;
-	xen_disk_t		*xa_xd;
+	vdisk_t			*xa_xd;
 	struct dk_intf		*xa_dkintf;
 	struct sysctlnode	*xa_diskcookies;
 };
 
 int xbd_scan(struct device *, struct xbd_attach_args *, cfprint_t);
+void xbd_scan_finish(struct device *);
 
 #endif /* _XEN_XBDVAR_H_ */
