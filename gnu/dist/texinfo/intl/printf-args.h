@@ -1,4 +1,4 @@
-/*	$NetBSD: printf-args.h,v 1.1 2004/07/12 23:27:17 wiz Exp $	*/
+/*	$NetBSD: printf-args.h,v 1.1.1.1 2004/07/12 23:27:17 wiz Exp $	*/
 
 /* Decomposed printf argument list.
    Copyright (C) 1999, 2002-2003 Free Software Foundation, Inc.

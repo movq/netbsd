@@ -1,4 +1,4 @@
-/*	$NetBSD: xref.c,v 1.1 2004/07/12 23:26:48 wiz Exp $	*/
+/*	$NetBSD: xref.c,v 1.1.1.1 2004/07/12 23:26:48 wiz Exp $	*/
 
 /* xref.c -- cross references for Texinfo.
    Id: xref.c,v 1.12 2004/03/18 22:54:48 karl Exp
