@@ -29,6 +29,8 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF 
  * SUCH DAMAGE.
  *
+ * $Id: queue.h,v 1.3 1994/02/07 22:02:36 proven Exp $ $provenid: queue.h,v 1.17 1994/02/07 03:39:52 proven Exp $
+ *
  * Description : mutex header.
  *
  *  1.00 93/07/20 proven
