@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 2000/06/12 18:51:17 he Exp $
+#	$NetBSD: Makefile,v 1.1.2.1 2000/10/09 13:43:33 fvdl Exp $
 
 TOP=		${.CURDIR}/..
 WARNS=1
@@ -6,10 +6,7 @@ WARNS=1
 .include "${TOP}/Makefile.inc"
 IMAGE=		ramdisk-tiny.fs
 
-AUXTARGETS=	install.sh upgrade.sh start.sh
-AUXDEPENDS= 	dot.profile dot.hdprofile disktab.preinstall \
-		termcap.mini
-AUXCLEAN=	${AUXTARGETS}
+AUXDEPENDS= 	dot.profile disktab.preinstall termcap.mini
 
 CBIN=		ramdiskbin
 
@@ -28,23 +25,16 @@ CRUNCHCONF=	${CBIN}.conf
 MTREE=		mtree.conf
 
 RAMDISKSPC=	128
-RAMDISKCYLS=	24
+RAMDISKCYLS=	21
 RAMDISKSIZE!=	expr ${RAMDISKSPC} \* ${RAMDISKCYLS}
-
-install.sh: install.tmpl
-	sed "s/@@VERSION@@/${VER}/" < ${.ALLSRC} > ${.TARGET}
-
-upgrade.sh: upgrade.tmpl
-	sed "s/@@VERSION@@/${VER}/" < ${.ALLSRC} > ${.TARGET}
-
-start.sh: start.tmpl
-	sed "s/@@VERSION@@/${VER}/" < ${.ALLSRC} > ${.TARGET}
 
 realall: ${IMAGE}
 
-${IMAGE}: ${AUXTARGETS} ${CBIN} ${AUXDEPENDS} ${MTREE} ${LISTS}
-	dd if=/dev/zero of=${IMAGE} count=${RAMDISKSIZE}
-	vnconfig -v -c ${VND_CDEV} ${IMAGE} 512/${RAMDISKSPC}/1/${RAMDISKCYLS}
+${IMAGE}: ${CBIN} ${AUXDEPENDS} ${MTREE} ${LISTS}
+	rm -f ${IMAGE}.tmp
+	dd if=/dev/zero of=${IMAGE}.tmp count=${RAMDISKSIZE}
+	vnconfig -v -c ${VND_CDEV} ${IMAGE}.tmp \
+	    512/${RAMDISKSPC}/1/${RAMDISKCYLS}
 	-disklabel ${VND_CDEV} >tmplabel
 	disklabel -r -R ${VND_CDEV} tmplabel
 	newfs -B le -m 0 -o space -i 3950 -c 80 ${VND_RDEV} 
@@ -57,17 +47,18 @@ ${IMAGE}: ${AUXTARGETS} ${CBIN} ${AUXDEPENDS} ${MTREE} ${LISTS}
 	@echo ""
 	umount ${MOUNT_POINT}
 	vnconfig -u ${VND_CDEV}
+	mv -f ${IMAGE}.tmp ${IMAGE}
 
 unconfig:
 	-umount -f ${MOUNT_POINT}
 	-vnconfig -u ${VND_DEV}
-	-/bin/rm -f ${IMAGE}
+	-/bin/rm -f ${IMAGE} ${IMAGE}.tmp
 
 ${CBIN}.mk ${CBIN}.cache ${CBIN}.c: ${CRUNCHCONF}
 	crunchgen -D ${TOP}/../../.. -L ${DESTDIR}/usr/lib ${.ALLSRC}
 
 ${CBIN}: ${CBIN}.mk ${CBIN}.cache ${CBIN}.c
-	make -f ${CBIN}.mk all
+	${MAKE} -f ${CBIN}.mk all
 
 # This is listed in ramdiskbin.conf but is built here.
 ${CBIN}: libhack.o
@@ -82,7 +73,7 @@ HACKOBJS:= getcap.o getgrent.o getnet.o getnetgr.o getpwent.o setlocale.o yplib.
 release:
 
 clean cleandir distclean:
-	/bin/rm -f ${AUXCLEAN} *.core ${IMAGE} ${CBIN} ${CBIN}.mk ${CBIN}.cache *.o *.cro *.c
+	/bin/rm -f *.core ${IMAGE} ${CBIN} ${CBIN}.mk ${CBIN}.cache *.o *.cro *.c
 
 .include <bsd.own.mk>
 .include <bsd.obj.mk>
