@@ -1,6 +1,6 @@
 /*-
- * Copyright (c) 1991 The Regents of the University of California.
- * All rights reserved.
+ * Copyright (c) 1991, 1993
+ *	The Regents of the University of California.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,19 +32,18 @@
  */
 
 #ifndef lint
-/*static char sccsid[] = "from: @(#)getbsize.c	5.3 (Berkeley) 3/9/92";*/
-static char rcsid[] = "$Id: getbsize.c,v 1.1 1993/08/06 17:03:55 mycroft Exp $";
+static char sccsid[] = "@(#)getbsize.c	8.1 (Berkeley) 6/4/93";
 #endif /* not lint */
 
+#include <err.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 char *
-getbsize(prog, headerlenp, blocksizep, force)
-	char *prog;
+getbsize(headerlenp, blocksizep)
 	int *headerlenp;
 	long *blocksizep;
-	int force;
 {
 	static char header[20];
 	long n, max, mul, blocksize;
@@ -55,21 +54,7 @@ getbsize(prog, headerlenp, blocksizep, force)
 #define	GB	(1024L * 1024L * 1024L)
 #define	MAXB	GB		/* No tera, peta, nor exa. */
 	form = "";
-	if (force) {
-		blocksize = *blocksizep;
-		if ((blocksize % GB) == 0) {
-			form = "G";
-			n = blocksize / GB;
-		} else if ((blocksize % MB) == 0) {
-			form = "M";
-			n = blocksize / MB;
-		} else if ((blocksize % KB) == 0) {
-			form = "K";
-			n = blocksize / KB;
-		} else {
-			n = blocksize;
-		}
-	} else if ((p = getenv("BLOCKSIZE")) != NULL && *p != '\0') {
+	if ((p = getenv("BLOCKSIZE")) != NULL && *p != '\0') {
 		if ((n = strtol(p, &ep, 10)) < 0)
 			goto underflow;
 		if (n == 0)
@@ -97,27 +82,25 @@ getbsize(prog, headerlenp, blocksizep, force)
 			mul = 1;
 			break;
 		default:
-fmterr:			(void)fprintf(stderr,
-			    "%s: %s: unknown blocksize\n", prog, p);
+fmterr:			warnx("%s: unknown blocksize", p);
 			n = 512;
 			mul = 1;
 			break;
 		}
 		if (n > max) {
-			(void)fprintf(stderr,
-			    "%s: maximum blocksize is %dG\n", prog, MAXB / GB);
+			warnx("maximum blocksize is %dG", MAXB / GB);
 			n = max;
 		}
 		if ((blocksize = n * mul) < 512) {
-underflow:		(void)fprintf(stderr,
-			    "%s: minimum blocksize is 512\n", prog);
+underflow:		warnx("minimum blocksize is 512");
 			form = "";
 			blocksize = n = 512;
 		}
 	} else
 		blocksize = n = 512;
 
-	*headerlenp = snprintf(header, sizeof(header), "%d%s-blocks", n, form);
+	(void)snprintf(header, sizeof(header), "%d%s-blocks", n, form);
+	*headerlenp = strlen(header);
 	*blocksizep = blocksize;
 	return (header);
 }
