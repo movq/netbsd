@@ -54,7 +54,7 @@ static char copyright[] =
 static char CR_continuation[] = "@(#) All rights reserved.\n";
 
 static char rcsid[] =
-    "@(#) $Header: /home/mike/src/cvs/netbsd/src/usr.bin/lex/Attic/scan.l,v 1.1 1993/03/21 09:45:37 cgd Exp $ (LBL)";
+    "@(#) $Header: /home/mike/src/cvs/netbsd/src/usr.bin/lex/Attic/scan.l,v 1.1.1.1 1993/03/21 09:45:37 cgd Exp $ (LBL)";
 #endif
 
 #define ACTION_ECHO fprintf( temp_action_file, "%s", yytext )
