@@ -18,7 +18,7 @@
  * WARRANTIES, INCLUDING, WITHOUT LIMITATION, THE IMPLIED WARRANTIES OF
  * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE.
  *
- * @(#) $Header: /home/mike/src/cvs/netbsd/src/crypto/dist/kame/racoon/tcpdump/Attic/interface.h,v 1.1 2004/06/17 03:38:51 itojun Exp $ (LBL)
+ * @(#) $Header: /home/mike/src/cvs/netbsd/src/crypto/dist/kame/racoon/tcpdump/Attic/interface.h,v 1.1.1.1 2004/06/17 03:38:51 itojun Exp $ (LBL)
  */
 
 #ifndef tcpdump_interface_h
