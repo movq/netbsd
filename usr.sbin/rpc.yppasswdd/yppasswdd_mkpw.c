@@ -1,4 +1,4 @@
-/*	$NetBSD: yppasswdd_mkpw.c,v 1.1 1996/08/09 10:19:49 thorpej Exp $	*/
+/*	$NetBSD: yppasswdd_mkpw.c,v 1.1.1.1 1996/08/09 10:19:49 thorpej Exp $	*/
 
 /*
  * Copyright (c) 1996 Jason R. Thorpe <thorpej@NetBSD.ORG>

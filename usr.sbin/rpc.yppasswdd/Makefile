@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 1996/08/09 10:19:49 thorpej Exp $
+#	$NetBSD: Makefile,v 1.1.1.1 1996/08/09 10:19:49 thorpej Exp $
 
 PROG=	rpc.yppasswdd
 SRCS=	rpc.yppasswdd.c yppasswdd_xdr.c yppasswdd_mkpw.c

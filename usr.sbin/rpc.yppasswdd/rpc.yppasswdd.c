@@ -1,4 +1,4 @@
-/*	$NetBSD: rpc.yppasswdd.c,v 1.1 1996/08/09 10:19:49 thorpej Exp $	*/
+/*	$NetBSD: rpc.yppasswdd.c,v 1.1.1.1 1996/08/09 10:19:49 thorpej Exp $	*/
 
 /*
  * Copyright (c) 1994 Mats O Jansson <moj@stacken.kth.se>
