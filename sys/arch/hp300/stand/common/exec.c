@@ -1,4 +1,4 @@
-/*	$NetBSD: exec.c,v 1.2 2003/08/07 16:27:40 agc Exp $ */
+/*	$NetBSD: exec.c,v 1.3 2003/11/14 16:52:40 tsutsui Exp $ */
 
 /*-
  * Copyright (c) 1982, 1986, 1990, 1993
@@ -35,6 +35,7 @@
 
 #include <machine/bootinfo.h>
 
+#include <lib/libsa/stand.h>
 #include <lib/libsa/loadfile.h>
 
 #include <hp300/stand/common/samachdep.h>
@@ -62,9 +63,9 @@ exec_hp300(file, loadaddr, howto)
 	    marks[MARK_SYM], marks[MARK_END]);
 
 	bt = (struct btinfo_magic *)loadaddr;
-        bt->common.type = BTINFO_MAGIC;
-        bt->magic1 = BOOTINFO_MAGIC1;
-        bt->magic2 = BOOTINFO_MAGIC2;
+	bt->common.type = BTINFO_MAGIC;
+	bt->magic1 = BOOTINFO_MAGIC1;
+	bt->magic2 = BOOTINFO_MAGIC2;
 
 	machdep_start((char *)marks[MARK_ENTRY], howto,
 	    (char *)loadaddr, (char *)marks[MARK_SYM],
