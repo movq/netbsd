@@ -1,4 +1,4 @@
-/*	$NetBSD: umount_default.c,v 1.1 2000/06/07 00:52:21 dogcow Exp $ */
+/*	$NetBSD: umount_default.c,v 1.1.1.1 2000/06/07 00:52:21 dogcow Exp $ */
 /*
  * Copyright (c) 1997-2000 Erez Zadok
  * Copyright (c) 1990 Jan-Simon Pendry

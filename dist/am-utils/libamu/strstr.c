@@ -37,7 +37,7 @@
  *
  *      %W% (Berkeley) %G%
  *
- * $Id: strstr.c,v 1.1 2000/06/07 00:52:22 dogcow Exp $
+ * $Id: strstr.c,v 1.1.1.1 2000/06/07 00:52:22 dogcow Exp $
  *
  */
 

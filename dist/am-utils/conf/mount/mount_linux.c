@@ -1,4 +1,4 @@
-/*	$NetBSD: mount_linux.c,v 1.1 2000/06/07 00:52:20 dogcow Exp $ */
+/*	$NetBSD: mount_linux.c,v 1.1.1.1 2000/06/07 00:52:20 dogcow Exp $ */
 /*
  * Copyright (c) 1997-2000 Erez Zadok
  * Copyright (c) 1990 Jan-Simon Pendry
