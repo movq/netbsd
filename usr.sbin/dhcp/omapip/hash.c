@@ -43,7 +43,7 @@
 
 #ifndef lint
 static char copyright[] =
-"$Id: hash.c,v 1.1 2000/09/04 23:10:33 mellon Exp $ Copyright (c) 1995-2000 The Internet Software Consortium.  All rights reserved.\n";
+"$Id: hash.c,v 1.1.1.1 2000/09/04 23:10:33 mellon Exp $ Copyright (c) 1995-2000 The Internet Software Consortium.  All rights reserved.\n";
 #endif /* not lint */
 
 #include <omapip/omapip_p.h>
