@@ -1,7 +1,7 @@
 /*
- * Copyright (c) 1992,1993,1994 Hellmuth Michaelis
+ * Copyright (c) 1992, 1995 Hellmuth Michaelis
  *
- * Copyright (c) 1992,1993 Holger Veit.
+ * Copyright (c) 1992, 1993 Holger Veit.
  *
  * All rights reserved.
  *
@@ -37,7 +37,7 @@
  */
 
 static char *id =
-	"@(#)kcon.c, 3.00, Last Edit-Date: [Mon Jan 10 21:23:24 1994]";
+	"@(#)kcon.c, 3.30, Last Edit-Date: [Fri Jun 30 20:11:42 1995]";
 
 /*---------------------------------------------------------------------------*
  *
@@ -53,6 +53,7 @@ static char *id =
  *	-hm	hex/octal/esc output choices
  *	-hm	remapping debugging
  *	-hm	garbage output for remapped keys bugfix
+ *	-hm	patch from Lon Willet, adding -R
  *	
  *---------------------------------------------------------------------------*/
 
@@ -64,6 +65,7 @@ static char *id =
 
 #include "keycap.h"
 
+int Rf = 0;
 int df = 0;
 int lf = 0;
 int mf = 0;
@@ -93,10 +95,14 @@ char *argv[];
 	char *map;
 	int kbfd;
 	
-	while((c = getopt(argc, argv, "d:lm:opr:st:x")) != EOF)
+	while((c = getopt(argc, argv, "Rd:lm:opr:st:x")) != EOF)
 	{
 		switch(c)
 		{
+			case 'R':
+				Rf = 1;
+				break;
+
 			case 'd':
 				df = 1;
 				delay = atoi(optarg);
@@ -108,7 +114,7 @@ char *argv[];
 
 			case 'm':
 				mf = 1;
-				map = argv[optind-1];
+				map = optarg;
 				break;
 
 			case 'o':
@@ -152,7 +158,7 @@ char *argv[];
 		}
 	}
 
-	if((df == 0 && lf == 0 && tf == 0 && sf == 0 &&
+	if((Rf == 0 && df == 0 && lf == 0 && tf == 0 && sf == 0 &&
 	    rf == 0 && mf == 0 ) || errf)
 	{
 		usage();
@@ -174,6 +180,14 @@ char *argv[];
 	{
 		listcurrent(kbfd);
 		exit(0);
+	}
+
+	if (Rf)
+	{
+		if (ioctl(kbfd, KBDRESET, 0) < 0) {
+			perror ("kcon: ioctl KBDRESET failed");
+			exit (1);
+		}
 	}
 
 	if(tf)
@@ -211,7 +225,8 @@ char *argv[];
 usage() 
 {
 	fprintf(stderr, "\nkcon: keyboard control and remapping utility for pcvt video driver\n");
-	fprintf(stderr, "usage: [-d delay] [-l] [-m map] [-o] [-p] [-r rate] [-t +/-] [-x]\n");
+	fprintf(stderr, "usage: [-R] [-d delay] [-l] [-m map] [-o] [-p] [-r rate] [-t +/-] [-x]\n");
+	fprintf(stderr, "       -R   full reset of keyboard\n");
 	fprintf(stderr, "       -d   delay until a key is repeated (range: 0...3 => 250...1000ms)\n");
 	fprintf(stderr, "       -l   produce listing of current keyboard mapping\n");
 	fprintf(stderr, "       -m   set keyboard remapping from a keycap entry\n");
