@@ -1,4 +1,4 @@
-/*	$NetBSD: ascmagic.c,v 1.1.1.1 2003/02/23 23:08:23 pooka Exp $	*/
+/*	$NetBSD: ascmagic.c,v 1.1 2003/02/23 23:08:23 pooka Exp $	*/
 
 /*
  * ASCII magic -- file types that we know based on keywords
@@ -50,7 +50,7 @@
 #if 0
 FILE_RCSID("@(#)Id: ascmagic.c,v 1.33 2003/02/08 18:33:53 christos Exp ")
 #else
-__RCSID("$NetBSD: ascmagic.c,v 1.1.1.1 2003/02/23 23:08:23 pooka Exp $");
+__RCSID("$NetBSD: ascmagic.c,v 1.1 2003/02/23 23:08:23 pooka Exp $");
 #endif
 #endif	/* lint */
 

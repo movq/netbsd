@@ -1,4 +1,4 @@
-/*	$NetBSD: is_tar.c,v 1.1.1.1 2003/02/23 23:08:25 pooka Exp $	*/
+/*	$NetBSD: is_tar.c,v 1.1 2003/02/23 23:08:25 pooka Exp $	*/
 
 /*
  * is_tar() -- figure out whether file is a tar archive.
@@ -23,7 +23,7 @@
 #if 0
 FILE_RCSID("@(#)Id: is_tar.c,v 1.17 2002/07/03 18:26:38 christos Exp ")
 #else
-__RCSID("$NetBSD: is_tar.c,v 1.1.1.1 2003/02/23 23:08:25 pooka Exp $");
+__RCSID("$NetBSD: is_tar.c,v 1.1 2003/02/23 23:08:25 pooka Exp $");
 #endif
 #endif
 

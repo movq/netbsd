@@ -1,5 +1,3 @@
-/*	$NetBSD: print.c,v 1.29 2002/12/06 02:54:19 thorpej Exp $	*/
-
 /*
  * print.c - debugging printout routines
  *
@@ -27,206 +25,73 @@
  * 4. This notice may not be removed or altered.
  */
 
+#include <stdio.h>
+#include <errno.h>
 #include "file.h"
-#include <stdarg.h>
-#include <string.h>
-#include <stdlib.h>
-#ifdef HAVE_UNISTD_H
-#include <unistd.h>
-#endif
-#include <time.h>
 
-#if defined(__RCSID) && !defined(lint)
-#if 0
-FILE_RCSID("@(#)Id: print.c,v 1.38 2002/07/03 18:37:44 christos Exp ")
-#else
-__RCSID("$NetBSD: print.c,v 1.29 2002/12/06 02:54:19 thorpej Exp $");
-#endif
-#endif  /* lint */
+#ifndef	lint
+static char *moduleid = 
+	"@(#)$Header: /home/mike/src/cvs/netbsd/src/usr.bin/file/Attic/print.c,v 1.1 1993/03/21 09:45:37 cgd Exp $";
+#endif	/* lint */
 
-#define SZOF(a)	(sizeof(a) / sizeof(a[0]))
+#define MAXSTR		500
 
-#ifndef COMPILE_ONLY
-void
-mdump(struct magic *m)
+extern char *progname;
+extern char *magicfile;
+extern int debug, nmagic;	/* number of valid magic[]s */
+extern void showstr();
+
+mdump(m)
+struct magic *m;
 {
-	static const char *typ[] = { "invalid", "byte", "short", "invalid",
-				     "long", "string", "date", "beshort",
-				     "belong", "bedate", "leshort", "lelong",
-				     "ledate", "pstring", "ldate", "beldate",
-				     "leldate", "regex" };
-	static const char optyp[] = { '@', '&', '|', '^', '+', '-', 
-				      '*', '/', '%' };
-	(void) fputc('[', stderr);
-	(void) fprintf(stderr, ">>>>>>>> %d" + 8 - (m->cont_level & 7),
-		       m->offset);
-
-	if (m->flag & INDIR) {
-		(void) fprintf(stderr, "(%s,",
-			       /* Note: type is unsigned */
-			       (m->in_type < SZOF(typ)) ? 
-					typ[m->in_type] : "*bad*");
-		if (m->in_op & OPINVERSE)
-			(void) fputc('~', stderr);
-		(void) fprintf(stderr, "%c%d),",
-			       ((m->in_op&0x7F) < SZOF(optyp)) ? 
-					optyp[m->in_op&0x7F] : '?',
-				m->in_offset);
-	}
-	(void) fprintf(stderr, " %s%s", (m->flag & UNSIGNED) ? "u" : "",
-		       /* Note: type is unsigned */
-		       (m->type < SZOF(typ)) ? typ[m->type] : "*bad*");
-	if (m->mask_op & OPINVERSE)
-		(void) fputc('~', stderr);
-	if (m->mask) {
-		((m->mask_op&0x7F) < SZOF(optyp)) ? 
-			(void) fputc(optyp[m->mask_op&0x7F], stderr) :
-			(void) fputc('?', stderr);
-		if(STRING != m->type || PSTRING != m->type)
-			(void) fprintf(stderr, "%.8x", m->mask);
-		else {
-			if (m->mask & STRING_IGNORE_LOWERCASE) 
-				(void) fputc(CHAR_IGNORE_LOWERCASE, stderr);
-			if (m->mask & STRING_COMPACT_BLANK) 
-				(void) fputc(CHAR_COMPACT_BLANK, stderr);
-			if (m->mask & STRING_COMPACT_OPTIONAL_BLANK) 
-				(void) fputc(CHAR_COMPACT_OPTIONAL_BLANK,
-				stderr);
-		}
-	}
-
-	(void) fprintf(stderr, ",%c", m->reln);
-
-	if (m->reln != 'x') {
-		switch (m->type) {
-		case BYTE:
-		case SHORT:
-		case LONG:
-		case LESHORT:
-		case LELONG:
-		case BESHORT:
-		case BELONG:
-			(void) fprintf(stderr, "%d", m->value.l);
-			break;
-		case STRING:
-		case PSTRING:
-		case REGEX:
-			showstr(stderr, m->value.s, -1);
-			break;
-		case DATE:
-		case LEDATE:
-		case BEDATE:
-			(void)fprintf(stderr, "%s,", fmttime(m->value.l, 1));
-			break;
-		case LDATE:
-		case LELDATE:
-		case BELDATE:
-			(void)fprintf(stderr, "%s,", fmttime(m->value.l, 0));
-			break;
-		default:
-			(void) fputs("*bad*", stderr);
-			break;
-		}
-	}
-	(void) fprintf(stderr, ",\"%s\"]\n", m->desc);
-}
-#endif
-
-/*
- * ckfputs - fputs, but with error checking
- * ckfprintf - fprintf, but with error checking
- */
-void
-ckfputs(const char *str, FILE *fil)
-{
-	if (fputs(str,fil) == EOF)
-		error("write failed.\n");
-}
-
-/*VARARGS*/
-void
-ckfprintf(FILE *f, const char *fmt, ...)
-{
-	va_list va;
-
-	va_start(va, fmt);
-	(void) vfprintf(f, fmt, va);
-	if (ferror(f))
-		error("write failed.\n");
-	va_end(va);
+	(void) printf("%d\t%d\t%d\t%c\t",
+		m->contflag,
+		m->offset,
+		m->type,
+		m->reln,
+		0);
+	if (m->type == STRING)
+		showstr(m->value.s);
+	else
+		(void) printf("%d",m->value.l);
+	(void) printf("\t%s", m->desc);
+	(void) putchar('\n');
 }
 
 /*
  * error - print best error message possible and exit
  */
+/*ARGSUSED1*/
 /*VARARGS*/
 void
-error(const char *f, ...)
+error(s1, s2)
+char *s1, *s2;
 {
-	va_list va;
-
-	va_start(va, f);
-	/* cuz we use stdout for most, stderr here */
-	(void) fflush(stdout); 
-
-	if (progname != NULL) 
-		(void) fprintf(stderr, "%s: ", progname);
-	(void) vfprintf(stderr, f, va);
-	va_end(va);
+	warning(s1, s2);
 	exit(1);
 }
 
+/*ARGSUSED1*/
 /*VARARGS*/
-void
-magwarn(const char *f, ...)
+warning(f, a)
+char *f, *a;
 {
-	va_list va;
+	extern int errno, sys_nerr;
+	extern char *sys_errlist[];
+	int myerrno;
 
-	va_start(va, f);
+	myerrno = errno;
+
 	/* cuz we use stdout for most, stderr here */
 	(void) fflush(stdout); 
 
-	if (progname != NULL) 
-		(void) fprintf(stderr, "%s: %s, %d: ", 
-			       progname, magicfile, lineno);
-	(void) vfprintf(stderr, f, va);
-	va_end(va);
-	fputc('\n', stderr);
-}
-
-
-#ifndef COMPILE_ONLY
-char *
-fmttime(long v, int local)
-{
-	char *pp, *rt;
-	time_t t = (time_t)v;
-	struct tm *tm;
-
-	if (local) {
-		pp = ctime(&t);
-	} else {
-#ifndef HAVE_DAYLIGHT
-		static int daylight = 0;
-#ifdef HAVE_TM_ISDST
-		static time_t now = (time_t)0;
-
-		if (now == (time_t)0) {
-			struct tm *tm1;
-			(void)time(&now);
-			tm1 = localtime(&now);
-			daylight = tm1->tm_isdst;
-		}
-#endif /* HAVE_TM_ISDST */
-#endif /* HAVE_DAYLIGHT */
-		if (daylight)
-			t += 3600;
-		tm = gmtime(&t);
-		pp = asctime(tm);
+	if (progname != NULL) {
+		(void) fputs(progname, stderr);
+		(void) putc(':', stderr);
+		(void) putc(' ', stderr);
 	}
-
-	if ((rt = strchr(pp, '\n')) != NULL)
-		*rt = '\0';
-	return pp;
+	(void) fprintf(stderr, f, a);
+	if (myerrno > 0 && myerrno < sys_nerr)
+		(void) fprintf(stderr, " (%s)", sys_errlist[myerrno]);
+	putc('\n', stderr);
 }
-#endif

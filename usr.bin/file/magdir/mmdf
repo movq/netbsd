@@ -1,5 +1,1 @@
-
-#------------------------------------------------------------------------------
-# mmdf:  file(1) magic for MMDF mail files
-#
-0	string	\001\001\001\001	MMDF mailbox
+0	long		0x1010101	MMDF mailbox

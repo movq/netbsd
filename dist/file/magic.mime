@@ -1,4 +1,4 @@
-#	$NetBSD: magic.mime,v 1.1.1.1 2003/02/23 23:08:29 pooka Exp $
+#	$NetBSD: magic.mime,v 1.1 2003/02/23 23:08:29 pooka Exp $
 
 # Magic data for KMimeMagic (originally for file(1) command)
 #

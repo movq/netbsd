@@ -1,5 +1,3 @@
-/*	$NetBSD: fsmagic.c,v 1.17 2002/07/09 14:59:54 pooka Exp $	*/
-
 /*
  * fsmagic - magic based on filesystem info - directory, special files, etc.
  *
@@ -27,227 +25,95 @@
  * 4. This notice may not be removed or altered.
  */
 
+#include <stdio.h>
+#include <sys/types.h>
+#ifndef	major			/* if `major' not defined in types.h, */
+#include <sys/sysmacros.h>	/* try this one. */
+#endif
+#ifndef	major	/* still not defined? give up, manual intervention needed */
+		/* If cc tries to compile this, read and act on it. */
+		/* On most systems cpp will discard it automatically */
+		Congratulations, you have found a portability bug.
+		Please grep /usr/include/sys and edit the above #include 
+		to point at the file that defines the major macro.
+#endif	/*major*/
+#include <sys/stat.h>
 #include "file.h"
-#include <string.h>
-#ifdef HAVE_UNISTD_H
-#include <unistd.h>
-#endif
-#include <stdlib.h>
-/* Since major is a function on SVR4, we can't use `ifndef major'.  */
-#ifdef MAJOR_IN_MKDEV
-# include <sys/mkdev.h>
-# define HAVE_MAJOR
-#endif
-#ifdef MAJOR_IN_SYSMACROS
-# include <sys/sysmacros.h>
-# define HAVE_MAJOR
-#endif
-#ifdef major			/* Might be defined in sys/types.h.  */
-# define HAVE_MAJOR
-#endif
-  
-#ifndef HAVE_MAJOR
-# define major(dev)  (((dev) >> 8) & 0xff)
-# define minor(dev)  ((dev) & 0xff)
-#endif
-#undef HAVE_MAJOR
 
-#include <sys/cdefs.h>
 #ifndef	lint
-#if 0
-FILE_RCSID("@(#)Id: fsmagic.c,v 1.36 2002/07/03 19:00:41 christos Exp ")
-#else
-__RCSID("$NetBSD: fsmagic.c,v 1.17 2002/07/09 14:59:54 pooka Exp $");
-#endif
+static char *moduleid = 
+	"@(#)$Header: /home/mike/src/cvs/netbsd/src/usr.bin/file/Attic/fsmagic.c,v 1.1 1993/03/21 09:45:37 cgd Exp $";
 #endif	/* lint */
 
-int
-fsmagic(const char *fn, struct stat *sb)
+extern char *progname;
+extern char *ckfmsg, *magicfile;
+extern int debug;
+extern FILE *efopen();
+
+fsmagic(fn)
+char *fn;
 {
-	int ret = 0;
+	extern struct stat statbuf;
 
 	/*
 	 * Fstat is cheaper but fails for files you don't have read perms on.
-	 * On 4.2BSD and similar systems, use lstat() to identify symlinks.
+	 * On 4.2BSD and similar systems, use lstat() so identify symlinks.
 	 */
 #ifdef	S_IFLNK
-	if (!lflag)
-		ret = lstat(fn, sb);
-	else
+	if (lstat(fn, &statbuf) <0)
+#else
+	if (stat(fn, &statbuf) <0)
 #endif
-	ret = stat(fn, sb);	/* don't merge into if; see "ret =" above */
-
-	if (ret) {
-		ckfprintf(stdout,
-			/* Yes, I do mean stdout. */
-			/* No \n, caller will provide. */
-			"can't stat `%s' (%s).", fn, strerror(errno));
-		return 1;
-	}
-
-	if (iflag) {
-		if ((sb->st_mode & S_IFMT) != S_IFREG) {
-			ckfputs("application/x-not-regular-file", stdout);
-			return 1;
+		{
+			warning("can't stat", "");
+			return -1;
 		}
-	}
-	else {
-#ifdef S_ISUID
-		if (sb->st_mode & S_ISUID) ckfputs("setuid ", stdout);
-#endif
-#ifdef S_ISGID
-		if (sb->st_mode & S_ISGID) ckfputs("setgid ", stdout);
-#endif
-#ifdef S_ISVTX
-		if (sb->st_mode & S_ISVTX) ckfputs("sticky ", stdout);
-#endif
-	}
+
+	if (statbuf.st_mode & S_ISUID) ckfputs("setuid ", stdout);
+	if (statbuf.st_mode & S_ISGID) ckfputs("setgid ", stdout);
+	if (statbuf.st_mode & S_ISVTX) ckfputs("sticky ", stdout);
 	
-	switch (sb->st_mode & S_IFMT) {
+	switch (statbuf.st_mode & S_IFMT) {
 	case S_IFDIR:
 		ckfputs("directory", stdout);
 		return 1;
-#ifdef S_IFCHR
 	case S_IFCHR:
-		/* 
-		 * If -s has been specified, treat character special files
-		 * like ordinary files.  Otherwise, just report that they
-		 * are block special files and go on to the next file.
-		 */
-		if (sflag)
-			break;
-#ifdef HAVE_ST_RDEV
-# ifdef dv_unit
-		(void) printf("character special (%d/%d/%d)",
-			major(sb->st_rdev),
-			dv_unit(sb->st_rdev),
-			dv_subunit(sb->st_rdev));
-# else
-		(void) printf("character special (%ld/%ld)",
-			(long) major(sb->st_rdev), (long) minor(sb->st_rdev));
-# endif
-#else
-		(void) printf("character special");
-#endif
+		(void) printf("character special (%d/%d)",
+			major(statbuf.st_rdev), minor(statbuf.st_rdev));
 		return 1;
-#endif
-#ifdef S_IFBLK
 	case S_IFBLK:
-		/* 
-		 * If -s has been specified, treat block special files
-		 * like ordinary files.  Otherwise, just report that they
-		 * are block special files and go on to the next file.
-		 */
-		if (sflag)
-			break;
-#ifdef HAVE_ST_RDEV
-# ifdef dv_unit
-		(void) printf("block special (%d/%d/%d)",
-			major(sb->st_rdev),
-			dv_unit(sb->st_rdev),
-			dv_subunit(sb->st_rdev));
-# else
-		(void) printf("block special (%ld/%ld)",
-			(long) major(sb->st_rdev), (long) minor(sb->st_rdev));
-# endif
-#else
-		(void) printf("block special");
-#endif
+		(void) printf("block special (%d/%d)",
+			major(statbuf.st_rdev), minor(statbuf.st_rdev));
 		return 1;
-#endif
 	/* TODO add code to handle V7 MUX and Blit MUX files */
 #ifdef	S_IFIFO
 	case S_IFIFO:
 		ckfputs("fifo (named pipe)", stdout);
 		return 1;
 #endif
-#ifdef	S_IFDOOR
-	case S_IFDOOR:
-		ckfputs("door", stdout);
-		return 1;
-#endif
 #ifdef	S_IFLNK
 	case S_IFLNK:
-		{
-			char buf[BUFSIZ+4];
-			int nch;
-			struct stat tstatbuf;
-
-			if ((nch = readlink(fn, buf, BUFSIZ-1)) <= 0) {
-				ckfprintf(stdout, "unreadable symlink (%s).", 
-				      strerror(errno));
-				return 1;
-			}
-			buf[nch] = '\0';	/* readlink(2) forgets this */
-
-			/* If broken symlink, say so and quit early. */
-			if (*buf == '/') {
-			    if (stat(buf, &tstatbuf) < 0) {
-				ckfprintf(stdout,
-					"broken symbolic link to %s", buf);
-				return 1;
-			    }
-			}
-			else {
-			    char *tmp;
-			    char buf2[BUFSIZ+BUFSIZ+4];
-
-			    if ((tmp = strrchr(fn,  '/')) == NULL) {
-				tmp = buf; /* in current directory anyway */
-			    }
-			    else {
-				strcpy (buf2, fn);  /* take directory part */
-				buf2[tmp-fn+1] = '\0';
-				strcat (buf2, buf); /* plus (relative) symlink */
-				tmp = buf2;
-			    }
-			    if (stat(tmp, &tstatbuf) < 0) {
-				ckfprintf(stdout,
-					"broken symbolic link to %s", buf);
-				return 1;
-			    }
-                        }
-
-			/* Otherwise, handle it. */
-			if (lflag) {
-				process(buf, strlen(buf));
-				return 1;
-			} else { /* just print what it points to */
-				ckfputs("symbolic link to ", stdout);
-				ckfputs(buf, stdout);
-			}
-		}
+		ckfputs("symbolic link", stdout);
 		return 1;
 #endif
 #ifdef	S_IFSOCK
-#ifndef __COHERENT__
 	case S_IFSOCK:
 		ckfputs("socket", stdout);
 		return 1;
 #endif
-#endif
 	case S_IFREG:
 		break;
 	default:
-		error("invalid mode 0%o.\n", sb->st_mode);
-		/*NOTREACHED*/
+		warning("invalid st_mode %d in statbuf!", statbuf.st_mode);
 	}
 
 	/*
 	 * regular file, check next possibility
-	 *
-	 * If stat() tells us the file has zero length, report here that
-	 * the file is empty, so we can skip all the work of opening and 
-	 * reading the file.
-	 * But if the -s option has been given, we skip this optimization,
-	 * since on some systems, stat() reports zero size for raw disk
-	 * partitions.  (If the block special device really has zero length,
-	 * the fact that it is empty will be detected and reported correctly
-	 * when we read the file.)
 	 */
-	if (!sflag && sb->st_size == 0) {
-		ckfputs(iflag ? "application/x-empty" : "empty", stdout);
+	if (statbuf.st_size == 0) {
+		ckfputs("empty", stdout);
 		return 1;
 	}
 	return 0;
 }
+

@@ -1,7 +1,6 @@
-
-#------------------------------------------------------------------------------
-# lif:  file(1) magic for lif
 #
-# (Daniel Quinlan <quinlan@yggdrasil.com>)
+# magic.lif:
 #
-0	beshort		0x8000		lif file
+# XXX - byte order?
+#
+0	short		0x8000		lif file

@@ -1,36 +1,22 @@
-/*	$NetBSD: is_tar.c,v 1.16 2002/07/10 16:15:54 pooka Exp $	*/
-
 /*
  * is_tar() -- figure out whether file is a tar archive.
  *
  * Stolen (by the author!) from the public domain tar program:
- * Public Domain version written 26 Aug 1985 John Gilmore (ihnp4!hoptoad!gnu).
+ * Pubic Domain version written 26 Aug 1985 John Gilmore (ihnp4!hoptoad!gnu).
  *
  * @(#)list.c 1.18 9/23/86 Public Domain - gnu
- * Id: is_tar.c,v 1.17 2002/07/03 18:26:38 christos Exp 
  *
  * Comments changed and some code/comments reformatted
  * for file command by Ian Darwin.
  */
 
-#include "file.h"
-#include <string.h>
 #include <ctype.h>
 #include <sys/types.h>
 #include "tar.h"
 
-#include <sys/cdefs.h>
-#ifndef lint
-#if 0
-FILE_RCSID("@(#)Id: is_tar.c,v 1.17 2002/07/03 18:26:38 christos Exp ")
-#else
-__RCSID("$NetBSD: is_tar.c,v 1.16 2002/07/10 16:15:54 pooka Exp $");
-#endif
-#endif
-
 #define	isodigit(c)	( ((c) >= '0') && ((c) <= '7') )
 
-static int from_oct(int, char *);	/* Decode octal number */
+long from_oct();			/* Decode octal number */
 
 /*
  * Return 
@@ -39,21 +25,18 @@ static int from_oct(int, char *);	/* Decode octal number */
  *	2 for Unix Std (POSIX) tar file.
  */
 int
-is_tar(unsigned char *buf, int nbytes)
+is_tar(header)
+	register union record *header;
 {
-	union record *header = (union record *)buf;
-	int	i;
-	int	sum, recsum;
-	char	*p;
-
-	if (nbytes < sizeof(union record))
-		return 0;
+	register int	i;
+	register long	sum, recsum;
+	register char	*p;
 
 	recsum = from_oct(8,  header->header.chksum);
 
 	sum = 0;
 	p = header->charptr;
-	for (i = sizeof(union record); --i >= 0;) {
+	for (i = sizeof(*header); --i >= 0;) {
 		/*
 		 * We can't use unsigned char here because of old compilers,
 		 * e.g. V7.
@@ -81,12 +64,14 @@ is_tar(unsigned char *buf, int nbytes)
  *
  * Result is -1 if the field is invalid (all blank, or nonoctal).
  */
-static int
-from_oct(int digs, char *where)
+long
+from_oct(digs, where)
+	register int	digs;
+	register char	*where;
 {
-	int	value;
+	register long	value;
 
-	while (isspace((unsigned char)*where)) {	/* Skip spaces */
+	while (isspace(*where)) {		/* Skip spaces */
 		where++;
 		if (--digs <= 0)
 			return -1;		/* All blank field */
@@ -97,7 +82,7 @@ from_oct(int digs, char *where)
 		--digs;
 	}
 
-	if (digs > 0 && *where && !isspace((unsigned char)*where))
+	if (digs > 0 && *where && !isspace(*where))
 		return -1;			/* Ended on non-space/nul */
 
 	return value;

@@ -1,6 +1,5 @@
-
-#------------------------------------------------------------------------------
-# terminfo:  file(1) magic for terminfo
+#
+# Terminfo
 #
 # XXX - byte order for screen images?
 #
