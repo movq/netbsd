@@ -1,4 +1,4 @@
-/*	$NetBSD: print-hsrp.c,v 1.1 2002/02/18 09:08:03 itojun Exp $	*/
+/*	$NetBSD: print-hsrp.c,v 1.1.1.1 2002/02/18 09:08:03 itojun Exp $	*/
 
 /*
  * Copyright (C) 2001 Julian Cowley

@@ -1,4 +1,4 @@
-/*	$NetBSD: print-zephyr.c,v 1.1 2002/02/18 09:09:00 itojun Exp $	*/
+/*	$NetBSD: print-zephyr.c,v 1.1.1.1 2002/02/18 09:09:00 itojun Exp $	*/
 
 /*
  * Decode and print Zephyr packets.
