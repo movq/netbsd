@@ -36,7 +36,7 @@
  * SUCH DAMAGE.
  *
  *	from: @(#)bit.h	5.3 (Berkeley) 6/1/90
- *	$Id: bit.h,v 1.2 1993/08/01 18:12:06 mycroft Exp $
+ *	$Id: bit.h,v 1.3 1994/03/05 00:34:33 cgd Exp $
  */
 
 /*
@@ -98,4 +98,4 @@ extern Boolean 	  Bit_Union();
 extern Boolean 	  Bit_AnySet();
 extern int  	  *Bit_Expand();
 	 
-#endif _BIT
+#endif /* _BIT */
