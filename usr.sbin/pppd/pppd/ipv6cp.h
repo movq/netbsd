@@ -21,7 +21,7 @@
  * IMPLIED WARRANTIES, INCLUDING, WITHOUT LIMITATION, THE IMPLIED
  * WARRANTIES OF MERCHANTIBILITY AND FITNESS FOR A PARTICULAR PURPOSE.
  *
- * $Id: ipv6cp.h,v 1.1 1999/08/24 20:25:43 christos Exp $
+ * $Id: ipv6cp.h,v 1.1.1.1 1999/08/24 20:25:43 christos Exp $
  *
  *
  * Original version by Inria (www.inria.fr)

@@ -21,14 +21,14 @@
  * IMPLIED WARRANTIES, INCLUDING, WITHOUT LIMITATION, THE IMPLIED
  * WARRANTIES OF MERCHANTIBILITY AND FITNESS FOR A PARTICULAR PURPOSE.
  *
- * $Id: ipv6cp.c,v 1.1 1999/08/24 20:25:43 christos Exp $ 
+ * $Id: ipv6cp.c,v 1.1.1.1 1999/08/24 20:25:43 christos Exp $ 
  *
  *
  * Original version by Inria (www.inria.fr)
  * Modified to match RFC2472 by Tommi Komulainen <Tommi.Komulainen@iki.fi>
  */
 
-#define RCSID	"$Id: ipv6cp.c,v 1.1 1999/08/24 20:25:43 christos Exp $"
+#define RCSID	"$Id: ipv6cp.c,v 1.1.1.1 1999/08/24 20:25:43 christos Exp $"
 
 /*
  * TODO: 
