@@ -1,6 +1,6 @@
 /*-
- * Copyright (c) 1991 The Regents of the University of California.
- * All rights reserved.
+ * Copyright (c) 1991, 1993
+ *	The Regents of the University of California.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,7 +32,7 @@
  */
 
 #ifndef lint
-static char sccsid[] = "@(#)str.c	5.9 (Berkeley) 3/4/93";
+static char sccsid[] = "@(#)str.c	8.1 (Berkeley) 6/6/93";
 #endif /* not lint */
 
 #include <sys/cdefs.h>
@@ -155,15 +155,6 @@ int isalnum __P((int)),
     ispunct __P((int)),
     isupper __P((int)),
     isxdigit __P((int));
-
-
-static int isblank(x) /* until 4.4 */
-     int x;
-{
-    if ((x == ' ') || (x== '\t')) return 1;
-    return 0;
-}
-
 
 typedef struct {
 	char *name;
