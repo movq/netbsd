@@ -1,5 +1,5 @@
 /*-
- * Copyright (c) 1992, 1993, 1994
+ * Copyright (c) 1992, 1993
  *	The Regents of the University of California.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -32,25 +32,14 @@
  */
 
 #ifndef lint
-static char sccsid[] = "@(#)v_undo.c	8.9 (Berkeley) 3/14/94";
+static char sccsid[] = "@(#)v_undo.c	8.6 (Berkeley) 1/8/94";
 #endif /* not lint */
 
 #include <sys/types.h>
-#include <sys/queue.h>
-#include <sys/time.h>
 
-#include <bitstring.h>
 #include <errno.h>
-#include <limits.h>
-#include <signal.h>
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <termios.h>
-
-#include "compat.h"
-#include <db.h>
-#include <regex.h>
 
 #include "vi.h"
 #include "vcmd.h"
@@ -60,10 +49,11 @@ static char sccsid[] = "@(#)v_undo.c	8.9 (Berkeley) 3/14/94";
  *	Undo changes to this line.
  */
 int
-v_Undo(sp, ep, vp)
+v_Undo(sp, ep, vp, fm, tm, rp)
 	SCR *sp;
 	EXF *ep;
 	VICMDARG *vp;
+	MARK *fm, *tm, *rp;
 {
 	/*
 	 * Historically, U reset the cursor to the first column in the line
@@ -72,7 +62,8 @@ v_Undo(sp, ep, vp)
 	 * else (including the cursor position stored in the logging records)
 	 * is going to appear random.
 	 */
-	vp->m_final.cno = 0;
+	rp->lno = fm->lno;
+	rp->cno = 0;
 
 	/*
 	 * !!!
@@ -89,16 +80,17 @@ v_Undo(sp, ep, vp)
 
 	return (log_setline(sp, ep));
 }
-
+	
 /*
  * v_undo -- u
  *	Undo the last change.
  */
 int
-v_undo(sp, ep, vp)
+v_undo(sp, ep, vp, fm, tm, rp)
 	SCR *sp;
 	EXF *ep;
 	VICMDARG *vp;
+	MARK *fm, *tm, *rp;
 {
 	/* Set the command count. */
 	VIP(sp)->u_ccnt = sp->ccnt;
@@ -134,9 +126,9 @@ v_undo(sp, ep, vp)
 
 	switch (ep->lundo) {
 	case BACKWARD:
-		return (log_backward(sp, ep, &vp->m_final));
+		return (log_backward(sp, ep, rp));
 	case FORWARD:
-		return (log_forward(sp, ep, &vp->m_final));
+		return (log_forward(sp, ep, rp));
 	default:
 		abort();
 	}

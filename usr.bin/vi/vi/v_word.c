@@ -1,5 +1,5 @@
 /*-
- * Copyright (c) 1992, 1993, 1994
+ * Copyright (c) 1992, 1993
  *	The Regents of the University of California.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -32,23 +32,12 @@
  */
 
 #ifndef lint
-static char sccsid[] = "@(#)v_word.c	8.18 (Berkeley) 3/15/94";
+static char sccsid[] = "@(#)v_word.c	8.10 (Berkeley) 10/26/93";
 #endif /* not lint */
 
 #include <sys/types.h>
-#include <sys/queue.h>
-#include <sys/time.h>
 
-#include <bitstring.h>
 #include <ctype.h>
-#include <limits.h>
-#include <signal.h>
-#include <stdio.h>
-#include <termios.h>
-
-#include "compat.h"
-#include <db.h>
-#include <regex.h>
 
 #include "vi.h"
 #include "vcmd.h"
@@ -63,10 +52,9 @@ static char sccsid[] = "@(#)v_word.c	8.18 (Berkeley) 3/15/94";
  * If it is, go to the beginning or end of that group, otherwise, go to the
  * beginning or end of the current group.  The historic version of vi didn't
  * get this right, so, for example, there were cases where "4e" was not the
- * same as "eeee" -- in particular, single character words, and commands that
- * began in whitespace were almost always handled incorrectly.  To get it right
- * you have to resolve the cursor after each search so that the look-ahead to
- * figure out what type of "word" the cursor is in will be correct.
+ * same as "eeee".  To get it right you have to resolve the cursor after each
+ * search so that the look-ahead to figure out what type of "word" the cursor
+ * is in will be correct.
  *
  * Empty lines, and lines that consist of only white-space characters count
  * as a single word, and the beginning and end of the file counts as an
@@ -84,44 +72,48 @@ static char sccsid[] = "@(#)v_word.c	8.18 (Berkeley) 3/15/94";
  * would move the cursor to each new empty line.  The 'e' and 'E' commands
  * would treat groups of empty lines as a single word, i.e. the first use
  * would move past the group of lines.  The 'b' command would just beep at
- * you, or, if you did it from the start of the line as part of a motion
- * command, go absolutely nuts.  If the lines contained only white-space
- * characters, the 'w' and 'W' commands would just beep at you, and the 'B',
- * 'b', 'E' and 'e' commands would treat the group as a single word, and
- * the 'B' and 'b' commands will treat the lines as individual words.  This
- * implementation treats all of these cases as a single white-space word.
+ * you.  If the lines contained only white-space characters, the 'w' and 'W'
+ * commands will just beep at you, and the 'B', 'b', 'E' and 'e' commands
+ * will treat the group as a single word, and the 'B' and 'b' commands will
+ * treat the lines as individual words.  This implementation treats both
+ * cases as a single white-space word.
  */
+
+#define	FW(test)	for (; len && (test); --len, ++p)
+#define	BW(test)	for (; len && (test); --len, --p)
 
 enum which {BIGWORD, LITTLEWORD};
 
-static int bword __P((SCR *, EXF *, VICMDARG *, enum which));
-static int eword __P((SCR *, EXF *, VICMDARG *, enum which));
-static int fword __P((SCR *, EXF *, VICMDARG *, enum which));
-
-/*
- * v_wordW -- [count]W
- *	Move forward a bigword at a time.
- */
-int
-v_wordW(sp, ep, vp)
-	SCR *sp;
-	EXF *ep;
-	VICMDARG *vp;
-{
-	return (fword(sp, ep, vp, BIGWORD));
-}
+static int bword __P((SCR *, EXF *, VICMDARG *, MARK *, MARK *, int));
+static int eword __P((SCR *, EXF *, VICMDARG *, MARK *, MARK *, int));
+static int fword __P((SCR *, EXF *, VICMDARG *, MARK *, MARK *, enum which));
 
 /*
  * v_wordw -- [count]w
  *	Move forward a word at a time.
  */
 int
-v_wordw(sp, ep, vp)
+v_wordw(sp, ep, vp, fm, tm, rp)
 	SCR *sp;
 	EXF *ep;
 	VICMDARG *vp;
+	MARK *fm, *tm, *rp;
 {
-	return (fword(sp, ep, vp, LITTLEWORD));
+	return (fword(sp, ep, vp, fm, rp, LITTLEWORD));
+}
+
+/*
+ * v_wordW -- [count]W
+ *	Move forward a bigword at a time.
+ */
+int
+v_wordW(sp, ep, vp, fm, tm, rp)
+	SCR *sp;
+	EXF *ep;
+	VICMDARG *vp;
+	MARK *fm, *tm, *rp;
+{
+	return (fword(sp, ep, vp, fm, rp, BIGWORD));
 }
 
 /*
@@ -129,21 +121,23 @@ v_wordw(sp, ep, vp)
  *	Move forward by words.
  */
 static int
-fword(sp, ep, vp, type)
+fword(sp, ep, vp, fm, rp, type)
 	SCR *sp;
 	EXF *ep;
 	VICMDARG *vp;
+	MARK *fm, *rp;
 	enum which type;
 {
 	enum { INWORD, NOTWORD } state;
 	VCS cs;
 	u_long cnt;
 
-	cnt = F_ISSET(vp, VC_C1SET) ? vp->count : 1;
-	cs.cs_lno = vp->m_start.lno;
-	cs.cs_cno = vp->m_start.cno;
-	if (cs_init(sp, ep, &cs))
+	cs.cs_lno = fm->lno;
+	cs.cs_cno = fm->cno;
+	if (cs_init(sp, ep, &cs)) 
 		return (1);
+
+	cnt = F_ISSET(vp, VC_C1SET) ? vp->count : 1;
 
 	/*
 	 * If in white-space:
@@ -154,12 +148,14 @@ fword(sp, ep, vp, type)
 	 */
 	if (cs.cs_flags == CS_EMP || cs.cs_flags == 0 && isblank(cs.cs_ch)) {
 		if (cs.cs_flags != CS_EMP && cnt == 1) {
-			if (F_ISSET(vp, VC_C))
-				return (0);
+			if (F_ISSET(vp, VC_C)) {
+				++cs.cs_cno;
+				goto ret3;
+			}
 			if (F_ISSET(vp, VC_D | VC_Y)) {
 				if (cs_fspace(sp, ep, &cs))
 					return (1);
-				goto ret;
+				goto ret1;
 			}
 		}
 		if (cs_fblank(sp, ep, &cs))
@@ -179,7 +175,7 @@ fword(sp, ep, vp, type)
 				if (cs_next(sp, ep, &cs))
 					return (1);
 				if (cs.cs_flags == CS_EOF)
-					goto ret;
+					goto ret2;
 				if (cs.cs_flags != 0 || isblank(cs.cs_ch))
 					break;
 			}
@@ -189,7 +185,7 @@ fword(sp, ep, vp, type)
 			 * trailing blanks, but we don't move off the end
 			 * of the line regardless.
 			 */
-			if (cnt == 0 && ISMOTION(vp)) {
+			if (cnt == 0 && F_ISSET(vp, VC_C | VC_D | VC_Y)) {
 				if (F_ISSET(vp, VC_D | VC_Y) &&
 				    cs_fspace(sp, ep, &cs))
 					return (1);
@@ -200,7 +196,7 @@ fword(sp, ep, vp, type)
 			if (cs_fblank(sp, ep, &cs))
 				return (1);
 			if (cs.cs_flags == CS_EOF)
-				goto ret;
+				goto ret2;
 		}
 	else
 		while (cnt--) {
@@ -210,7 +206,7 @@ fword(sp, ep, vp, type)
 				if (cs_next(sp, ep, &cs))
 					return (1);
 				if (cs.cs_flags == CS_EOF)
-					goto ret;
+					goto ret2;
 				if (cs.cs_flags != 0 || isblank(cs.cs_ch))
 					break;
 				if (state == INWORD) {
@@ -221,7 +217,7 @@ fword(sp, ep, vp, type)
 						break;
 			}
 			/* See comment above. */
-			if (cnt == 0 && ISMOTION(vp)) {
+			if (cnt == 0 && F_ISSET(vp, VC_C | VC_D | VC_Y)) {
 				if (F_ISSET(vp, VC_D | VC_Y) &&
 				    cs_fspace(sp, ep, &cs))
 					return (1);
@@ -233,198 +229,31 @@ fword(sp, ep, vp, type)
 				if (cs_fblank(sp, ep, &cs))
 					return (1);
 			if (cs.cs_flags == CS_EOF)
-				goto ret;
+				goto ret2;
 		}
 
 	/*
-	 * If we didn't move, we must be at EOF.
-	 *
-	 * !!!
-	 * That's okay for motion commands, however.
+	 * If a motion command, and eating the trailing non-word would
+	 * move us off this line, don't do it.  Move the return cursor
+	 * to one past the EOL instead.
 	 */
-ret:	if (!ISMOTION(vp) &&
-	    cs.cs_lno == vp->m_start.lno && cs.cs_cno == vp->m_start.cno) {
-		v_eof(sp, ep, &vp->m_start);
+ret1:	if (F_ISSET(vp, VC_C | VC_D | VC_Y) && cs.cs_flags == CS_EOL)
+		++cs.cs_cno;
+
+	/* If we didn't move, we must be at EOF. */
+ret2:	if (cs.cs_lno == fm->lno && cs.cs_cno == fm->cno) {
+		v_eof(sp, ep, fm);
 		return (1);
 	}
-
-	/* Adjust the end of the range for motion commands. */
-	vp->m_stop.lno = cs.cs_lno;
-	vp->m_stop.cno = cs.cs_cno;
-	if (ISMOTION(vp) && cs.cs_flags == 0)
-		--vp->m_stop.cno;
-
 	/*
-	 * Non-motion commands move to the end of the range.  VC_D and
-	 * VC_Y stay at the start.  Ignore VC_C and VC_S.
+	 * If at EOF, and it's a motion command, move the return cursor
+	 * one past the EOF.
 	 */
-	vp->m_final = ISMOTION(vp) ? vp->m_start : vp->m_stop;
+	if (F_ISSET(vp, VC_C | VC_D | VC_Y) && cs.cs_flags == CS_EOF)
+		++cs.cs_cno;
+ret3:	rp->lno = cs.cs_lno;
+	rp->cno = cs.cs_cno;
 	return (0);
-}
-
-/*
- * v_wordE -- [count]E
- *	Move forward to the end of the bigword.
- */
-int
-v_wordE(sp, ep, vp)
-	SCR *sp;
-	EXF *ep;
-	VICMDARG *vp;
-{
-	return (eword(sp, ep, vp, BIGWORD));
-}
-
-/*
- * v_worde -- [count]e
- *	Move forward to the end of the word.
- */
-int
-v_worde(sp, ep, vp)
-	SCR *sp;
-	EXF *ep;
-	VICMDARG *vp;
-{
-	return (eword(sp, ep, vp, LITTLEWORD));
-}
-
-/*
- * eword --
- *	Move forward to the end of the word.
- */
-static int
-eword(sp, ep, vp, type)
-	SCR *sp;
-	EXF *ep;
-	VICMDARG *vp;
-	enum which type;
-{
-	enum { INWORD, NOTWORD } state;
-	VCS cs;
-	u_long cnt;
-
-	cnt = F_ISSET(vp, VC_C1SET) ? vp->count : 1;
-	cs.cs_lno = vp->m_start.lno;
-	cs.cs_cno = vp->m_start.cno;
-	if (cs_init(sp, ep, &cs))
-		return (1);
-
-	/*
-	 * !!!
-	 * If in whitespace, or the next character is whitespace, move past
-	 * it.  (This doesn't count as a word move.)  Stay at the character
-	 * past the current one, it sets word "state" for the 'e' command.
-	 */
-	if (cs.cs_flags == 0 && !isblank(cs.cs_ch)) {
-		if (cs_next(sp, ep, &cs))
-			return (1);
-		if (cs.cs_flags == 0 && !isblank(cs.cs_ch))
-			goto start;
-	}
-	if (cs_fblank(sp, ep, &cs))
-		return (1);
-
-	/*
-	 * Cyclically move to the next word -- this involves skipping
-	 * over word characters and then any trailing non-word characters.
-	 * Note, for the 'e' command, the definition of a word keeps
-	 * switching.
-	 */
-start:	if (type == BIGWORD)
-		while (cnt--) {
-			for (;;) {
-				if (cs_next(sp, ep, &cs))
-					return (1);
-				if (cs.cs_flags == CS_EOF)
-					goto ret;
-				if (cs.cs_flags != 0 || isblank(cs.cs_ch))
-					break;
-			}
-			/*
-			 * When we reach the start of the word after the last
-			 * word, we're done.  If we changed state, back up one
-			 * to the end of the previous word.
-			 */
-			if (cnt == 0) {
-				if (cs.cs_flags == 0 && cs_prev(sp, ep, &cs))
-					return (1);
-				break;
-			}
-
-			/* Eat whitespace characters. */
-			if (cs_fblank(sp, ep, &cs))
-				return (1);
-			if (cs.cs_flags == CS_EOF)
-				goto ret;
-		}
-	else
-		while (cnt--) {
-			state = cs.cs_flags == 0 &&
-			    inword(cs.cs_ch) ? INWORD : NOTWORD;
-			for (;;) {
-				if (cs_next(sp, ep, &cs))
-					return (1);
-				if (cs.cs_flags == CS_EOF)
-					goto ret;
-				if (cs.cs_flags != 0 || isblank(cs.cs_ch))
-					break;
-				if (state == INWORD) {
-					if (!inword(cs.cs_ch))
-						break;
-				} else
-					if (inword(cs.cs_ch))
-						break;
-			}
-			/* See comment above. */
-			if (cnt == 0) {
-				if (cs.cs_flags == 0 && cs_prev(sp, ep, &cs))
-					return (1);
-				break;
-			}
-
-			/* Eat whitespace characters. */
-			if (cs.cs_flags != 0 || isblank(cs.cs_ch))
-				if (cs_fblank(sp, ep, &cs))
-					return (1);
-			if (cs.cs_flags == CS_EOF)
-				goto ret;
-		}
-
-	/*
-	 * If we didn't move, we must be at EOF.
-	 *
-	 * !!!
-	 * That's okay for motion commands, however.
-	 */
-ret:	if (!ISMOTION(vp) &&
-	    cs.cs_lno == vp->m_start.lno && cs.cs_cno == vp->m_start.cno) {
-		v_eof(sp, ep, &vp->m_start);
-		return (1);
-	}
-
-	/* Set the end of the range for motion commands. */
-	vp->m_stop.lno = cs.cs_lno;
-	vp->m_stop.cno = cs.cs_cno;
-
-	/*
-	 * Non-motion commands move to the end of the range.  VC_D and
-	 * VC_Y stay at the start.  Ignore VC_C and VC_S.
-	 */
-	vp->m_final = ISMOTION(vp) ? vp->m_start : vp->m_stop;
-	return (0);
-}
-
-/*
- * v_WordB -- [count]B
- *	Move backward a bigword at a time.
- */
-int
-v_wordB(sp, ep, vp)
-	SCR *sp;
-	EXF *ep;
-	VICMDARG *vp;
-{
-	return (bword(sp, ep, vp, BIGWORD));
 }
 
 /*
@@ -432,12 +261,27 @@ v_wordB(sp, ep, vp)
  *	Move backward a word at a time.
  */
 int
-v_wordb(sp, ep, vp)
+v_wordb(sp, ep, vp, fm, tm, rp)
 	SCR *sp;
 	EXF *ep;
 	VICMDARG *vp;
+	MARK *fm, *tm, *rp;
 {
-	return (bword(sp, ep, vp, LITTLEWORD));
+	return (bword(sp, ep, vp, fm, rp, 0));
+}
+
+/*
+ * v_WordB -- [count]B
+ *	Move backward a bigword at a time.
+ */
+int
+v_wordB(sp, ep, vp, fm, tm, rp)
+	SCR *sp;
+	EXF *ep;
+	VICMDARG *vp;
+	MARK *fm, *tm, *rp;
+{
+	return (bword(sp, ep, vp, fm, rp, 1));
 }
 
 /*
@@ -445,126 +289,272 @@ v_wordb(sp, ep, vp)
  *	Move backward by words.
  */
 static int
-bword(sp, ep, vp, type)
+bword(sp, ep, vp, fm, rp, spaceonly)
 	SCR *sp;
 	EXF *ep;
 	VICMDARG *vp;
-	enum which type;
+	MARK *fm, *rp;
+	int spaceonly;
 {
-	enum { INWORD, NOTWORD } state;
-	VCS cs;
-	u_long cnt;
+	register char *p;
+	recno_t lno;
+	size_t len;
+	u_long cno, cnt;
+	char *startp;
+
+	lno = fm->lno;
+	cno = fm->cno;
+
+	/* Check for start of file. */
+	if (lno == 1 && cno == 0) {
+		v_sof(sp, NULL);
+		return (1);
+	}
+
+	if ((p = file_gline(sp, ep, lno, &len)) == NULL) {
+		if (file_lline(sp, ep, &lno))
+			return (1);
+		if (lno == 0)
+			v_sof(sp, NULL);
+		else
+			GETLINE_ERR(sp, lno);
+		return (1);
+	}
+		
+	cnt = F_ISSET(vp, VC_C1SET) ? vp->count : 1;
+
+	/*
+	 * Reset the length to the number of characters in the line; the
+	 * first character is the current cursor position.
+	 */
+	len = cno ? cno + 1 : 0;
+	if (len == 0)
+		goto line;
+	for (startp = p, p += cno; cnt--;) {
+		if (spaceonly) {
+			if (!isblank(*p)) {
+				if (len < 2)
+					goto line;
+				--p;
+				--len;
+			}
+			BW(isblank(*p));
+			if (len)
+				BW(!isblank(*p));
+			else
+				goto line;
+		} else {
+			if (!isblank(*p)) {
+				if (len < 2)
+					goto line;
+				--p;
+				--len;
+			}
+			BW(isblank(*p));
+			if (len)
+				if (inword(*p))
+					BW(inword(*p));
+				else
+					BW(!isblank(*p) && !inword(*p));
+			else
+				goto line;
+		}
+
+		if (cnt && len == 0) {
+			/* If we hit SOF, stay there (historic practice). */
+line:			if (lno == 1) {
+				rp->lno = 1;
+				rp->cno = 0;
+				return (0);
+			}
+
+			/*
+			 * Get the line.  If the line is empty, decrement
+			 * count and get another one.
+			 */
+			if ((p = file_gline(sp, ep, --lno, &len)) == NULL) {
+				GETLINE_ERR(sp, lno);
+				return (1);
+			}
+			if (len == 0) {
+				if (cnt == 0 || --cnt == 0) {
+					rp->lno = lno;
+					rp->cno = 0;
+					return (0);
+				}
+				goto line;
+			}
+
+			/*
+			 * Set the cursor to the end of the line.  If the word
+			 * at the end of this line has only a single character,
+			 * we've already skipped over it.
+			 */
+			startp = p;
+			if (len) {
+				p += len - 1;
+				if (cnt && len > 1 && !isblank(p[0]))
+					if (inword(p[0])) {
+						if (!inword(p[-1]))
+							--cnt;
+					} else if (!isblank(p[-1]) &&
+					    !inword(p[-1]))
+							--cnt;
+			}
+		} else {
+			++p;
+			++len;
+		}
+	}
+	rp->lno = lno;
+	rp->cno = p - startp;
+	return (0);
+}
+
+/*
+ * v_worde -- [count]e
+ *	Move forward to the end of the word.
+ */
+int
+v_worde(sp, ep, vp, fm, tm, rp)
+	SCR *sp;
+	EXF *ep;
+	VICMDARG *vp;
+	MARK *fm, *tm, *rp;
+{
+	return (eword(sp, ep, vp, fm, rp, 0));
+}
+
+/*
+ * v_wordE -- [count]E
+ *	Move forward to the end of the bigword.
+ */
+int
+v_wordE(sp, ep, vp, fm, tm, rp)
+	SCR *sp;
+	EXF *ep;
+	VICMDARG *vp;
+	MARK *fm, *tm, *rp;
+{
+	return (eword(sp, ep, vp, fm, rp, 1));
+}
+
+/*
+ * eword --
+ *	Move forward to the end of the word.
+ */
+static int
+eword(sp, ep, vp, fm, rp, spaceonly)
+	SCR *sp;
+	EXF *ep;
+	VICMDARG *vp;
+	MARK *fm, *rp;
+	int spaceonly;
+{
+	register char *p;
+	recno_t lno;
+	size_t len, llen;
+	u_long cno, cnt;
+	int empty;
+	char *startp;
+
+	lno = fm->lno;
+	cno = fm->cno;
+
+	if ((p = file_gline(sp, ep, lno, &llen)) == NULL) {
+		if (file_lline(sp, ep, &lno))
+			return (1);
+		if (lno == 0)
+			v_eof(sp, ep, NULL);
+		else
+			GETLINE_ERR(sp, lno);
+		return (1);
+	}
 
 	cnt = F_ISSET(vp, VC_C1SET) ? vp->count : 1;
-	cs.cs_lno = vp->m_start.lno;
-	cs.cs_cno = vp->m_start.cno;
-	if (cs_init(sp, ep, &cs))
-		return (1);
 
 	/*
-	 * !!!
-	 * If in whitespace, or the previous character is whitespace, move
-	 * past it.  (This doesn't count as a word move.)  Stay at the
-	 * character before the current one, it sets word "state" for the
-	 * 'b' command.
+	 * Reset the length; the first character is the current cursor
+	 * position.  If no more characters in this line, may already
+	 * be at EOF.
 	 */
-	if (cs.cs_flags == 0 && !isblank(cs.cs_ch)) {
-		if (cs_prev(sp, ep, &cs))
-			return (1);
-		if (cs.cs_flags == 0 && !isblank(cs.cs_ch))
-			goto start;
-	}
-	if (cs_bblank(sp, ep, &cs))
-		return (1);
+	len = llen - cno;
+	if (empty = llen == 0 || llen == cno + 1)
+		goto line;
 
-	/*
-	 * Cyclically move to the beginning of the previous word -- this
-	 * involves skipping over word characters and then any trailing
-	 * non-word characters.  Note, for the 'b' command, the definition
-	 * of a word keeps switching.
-	 */
-start:	if (type == BIGWORD)
-		while (cnt--) {
-			for (;;) {
-				if (cs_prev(sp, ep, &cs))
-					return (1);
-				if (cs.cs_flags == CS_SOF)
-					goto ret;
-				if (cs.cs_flags != 0 || isblank(cs.cs_ch))
-					break;
+	for (startp = p += cno; cnt--; empty = 0) {
+		if (spaceonly) {
+			if (!isblank(*p)) {
+				if (len < 2)
+					goto line;
+				++p;
+				--len;
 			}
-			/*
-			 * When we reach the end of the word before the last
-			 * word, we're done.  If we changed state, move forward
-			 * one to the end of the next word.
-			 */
-			if (cnt == 0) {
-				if (cs.cs_flags == 0 && cs_next(sp, ep, &cs))
-					return (1);
-				break;
+			FW(isblank(*p));
+			if (len)
+				FW(!isblank(*p));
+			else
+				++cnt;
+		} else {
+			if (!isblank(*p)) {
+				if (len < 2)
+					goto line;
+				++p;
+				--len;
 			}
-
-			/* Eat whitespace characters. */
-			if (cs_bblank(sp, ep, &cs))
-				return (1);
-			if (cs.cs_flags == CS_SOF)
-				goto ret;
-		}
-	else
-		while (cnt--) {
-			state = cs.cs_flags == 0 &&
-			    inword(cs.cs_ch) ? INWORD : NOTWORD;
-			for (;;) {
-				if (cs_prev(sp, ep, &cs))
-					return (1);
-				if (cs.cs_flags == CS_SOF)
-					goto ret;
-				if (cs.cs_flags != 0 || isblank(cs.cs_ch))
-					break;
-				if (state == INWORD) {
-					if (!inword(cs.cs_ch))
-						break;
-				} else
-					if (inword(cs.cs_ch))
-						break;
-			}
-			/* See comment above. */
-			if (cnt == 0) {
-				if (cs.cs_flags == 0 && cs_next(sp, ep, &cs))
-					return (1);
-				break;
-			}
-
-			/* Eat whitespace characters. */
-			if (cs.cs_flags != 0 || isblank(cs.cs_ch))
-				if (cs_bblank(sp, ep, &cs))
-					return (1);
-			if (cs.cs_flags == CS_SOF)
-				goto ret;
+			FW(isblank(*p));
+			if (len)
+				if (inword(*p))
+					FW(inword(*p));
+				else
+					FW(!isblank(*p) && !inword(*p));
+			else
+				++cnt;
 		}
 
-	/* If we didn't move, we must be at SOF. */
-ret:	if (cs.cs_lno == vp->m_start.lno && cs.cs_cno == vp->m_start.cno) {
-		v_sof(sp, &vp->m_start);
-		return (1);
+		if (cnt && len == 0) {
+			/* If we hit EOF, stay there (historic practice). */
+line:			if ((p = file_gline(sp, ep, ++lno, &llen)) == NULL) {
+				/*
+				 * If already at eof, complain, unless it's
+				 * a change command or a delete command and
+				 * there's something to delete.
+				 */
+				if (empty) {
+					if (F_ISSET(vp, VC_C) ||
+					    F_ISSET(vp, VC_D) && llen != 0) {
+						rp->lno = lno - 1;
+						rp->cno = llen ? llen : 1;
+						return (0);
+					}
+					v_eof(sp, ep, NULL);
+					return (1);
+				}
+				if ((p =
+				    file_gline(sp, ep, --lno, &llen)) == NULL) {
+					GETLINE_ERR(sp, lno);
+					return (1);
+				}
+				rp->lno = lno;
+				rp->cno = llen ? llen - 1 : 0;
+				/* The 'c', 'd' and 'y' need one more space. */
+				if (F_ISSET(vp, VC_C | VC_D | VC_Y))
+					++rp->cno;
+				return (0);
+			}
+			len = llen;
+			cno = 0;
+			startp = p;
+		} else {
+			--p;
+			++len;
+		}
 	}
+	rp->lno = lno;
+	rp->cno = cno + (p - startp);
 
-	/* Set the end of the range for motion commands. */
-	vp->m_stop.lno = cs.cs_lno;
-	vp->m_stop.cno = cs.cs_cno;
-
-	/*
-	 * Non-motion commands move to the end of the range.  VC_D commands
-	 * move to the end of the range.  VC_Y stays at the start unless the
-	 * end of the range is on a different line, when it moves to the end
-	 * of the range.  Ignore VC_C and VC_S.  Motion commands adjust the
-	 * starting point to the character before the current one.
-	 */
-	vp->m_final = vp->m_stop;
-	if (ISMOTION(vp)) {
-		--vp->m_start.cno;
-		if (F_ISSET(vp, VC_Y) && vp->m_start.lno == vp->m_stop.lno)
-			vp->m_final = vp->m_start;
-	}
+	/* The 'c', 'd' and 'y' need one more space. */
+	if (F_ISSET(vp, VC_C | VC_D | VC_Y))
+		++rp->cno;
 	return (0);
 }

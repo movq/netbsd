@@ -1,5 +1,5 @@
 /*-
- * Copyright (c) 1991, 1993, 1994
+ * Copyright (c) 1991, 1993
  *	The Regents of the University of California.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -32,41 +32,30 @@
  */
 
 #ifndef lint
-static char sccsid[] = "@(#)v_at.c	8.5 (Berkeley) 3/8/94";
+static char sccsid[] = "@(#)v_at.c	8.3 (Berkeley) 8/25/93";
 #endif /* not lint */
 
 #include <sys/types.h>
-#include <sys/queue.h>
-#include <sys/time.h>
 
-#include <bitstring.h>
-#include <limits.h>
-#include <signal.h>
-#include <stdio.h>
+#include <ctype.h>
+#include <errno.h>
+#include <stdlib.h>
 #include <string.h>
-#include <termios.h>
-
-#include "compat.h"
-#include <db.h>
-#include <regex.h>
 
 #include "vi.h"
 #include "excmd.h"
 #include "vcmd.h"
 
-/*
- * v_at -- @
- *	Execute a buffer.
- */
 int
-v_at(sp, ep, vp)
+v_at(sp, ep, vp, fm, tm, rp)
 	SCR *sp;
 	EXF *ep;
 	VICMDARG *vp;
+	MARK *fm, *tm, *rp;
 {
 	EXCMDARG cmd;
 
         SETCMDARG(cmd, C_AT, 0, OOBLNO, OOBLNO, 0, NULL);
 	cmd.buffer = vp->buffer;
-        return (sp->s_ex_cmd(sp, ep, &cmd, &vp->m_final));
+        return (sp->s_ex_cmd(sp, ep, &cmd, rp));
 }

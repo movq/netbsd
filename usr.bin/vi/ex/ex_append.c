@@ -1,5 +1,5 @@
 /*-
- * Copyright (c) 1992, 1993, 1994
+ * Copyright (c) 1992, 1993
  *	The Regents of the University of California.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -32,22 +32,10 @@
  */
 
 #ifndef lint
-static char sccsid[] = "@(#)ex_append.c	8.9 (Berkeley) 3/14/94";
+static char sccsid[] = "@(#)ex_append.c	8.6 (Berkeley) 11/23/93";
 #endif /* not lint */
 
 #include <sys/types.h>
-#include <sys/queue.h>
-#include <sys/time.h>
-
-#include <bitstring.h>
-#include <limits.h>
-#include <signal.h>
-#include <stdio.h>
-#include <termios.h>
-
-#include "compat.h"
-#include <db.h>
-#include <regex.h>
 
 #include "vi.h"
 #include "excmd.h"
@@ -107,7 +95,6 @@ aci(sp, ep, cmdp, cmd)
 	MARK m;
 	TEXT *tp;
 	recno_t cnt;
-	u_int flags;
 	int rval, aiset;
 
 	/*
@@ -131,11 +118,6 @@ aci(sp, ep, cmdp, cmd)
 		--m.lno;
 		cmd = APPEND;
 	}
-
-	LF_INIT(TXT_CR | TXT_NLECHO);
-	if (O_ISSET(sp, O_BEAUTIFY))
-		LF_SET(TXT_BEAUTIFY);
-
 	if (cmd == CHANGE)
 		for (;; ++m.lno) {
 			if (m.lno > cmdp->addr2.lno) {
@@ -143,7 +125,8 @@ aci(sp, ep, cmdp, cmd)
 				--m.lno;
 				break;
 			}
-			switch (sp->s_get(sp, ep, &sp->tiq, 0, flags)) {
+			switch (sp->s_get(sp, ep, &sp->tiq, 0,
+			    TXT_BEAUTIFY | TXT_CR | TXT_NLECHO)) {
 			case INP_OK:
 				break;
 			case INP_EOF:
@@ -169,7 +152,8 @@ aci(sp, ep, cmdp, cmd)
 
 	if (cmd == APPEND)
 		for (;; ++m.lno) {
-			switch (sp->s_get(sp, ep, &sp->tiq, 0, flags)) {
+			switch (sp->s_get(sp, ep, &sp->tiq, 0,
+			    TXT_BEAUTIFY | TXT_CR | TXT_NLECHO)) {
 			case INP_OK:
 				break;
 			case INP_EOF:

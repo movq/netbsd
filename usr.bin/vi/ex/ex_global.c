@@ -1,5 +1,5 @@
 /*-
- * Copyright (c) 1992, 1993, 1994
+ * Copyright (c) 1992, 1993
  *	The Regents of the University of California.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -32,34 +32,25 @@
  */
 
 #ifndef lint
-static char sccsid[] = "@(#)ex_global.c	8.32 (Berkeley) 3/22/94";
+static char sccsid[] = "@(#)ex_global.c	8.29 (Berkeley) 1/9/94";
 #endif /* not lint */
 
 #include <sys/types.h>
-#include <sys/queue.h>
-#include <sys/time.h>
 
-#include <bitstring.h>
 #include <ctype.h>
 #include <errno.h>
-#include <limits.h>
-#include <signal.h>
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <termios.h>
 #include <unistd.h>
-
-#include "compat.h"
-#include <db.h>
-#include <regex.h>
 
 #include "vi.h"
 #include "excmd.h"
+#include "interrupt.h"
 
 enum which {GLOBAL, VGLOBAL};
 
 static int	global __P((SCR *, EXF *, EXCMDARG *, enum which));
+static void	global_intr __P((int));
 
 /*
  * ex_global -- [line [,line]] g[lobal][!] /pattern/ [commands]
@@ -95,13 +86,14 @@ global(sp, ep, cmdp, cmd)
 	EXCMDARG *cmdp;
 	enum which cmd;
 {
+	DECLARE_INTERRUPTS;
 	RANGE *rp;
 	EX_PRIVATE *exp;
 	recno_t elno, lno;
 	regmatch_t match[1];
 	regex_t *re, lre;
 	size_t clen, len;
-	int delim, eval, reflags, replaced, rval, teardown;
+	int delim, eval, reflags, replaced, rval;
 	char *cb, *ptrn, *p, *t;
 
 	/*
@@ -196,7 +188,7 @@ global(sp, ep, cmdp, cmd)
 
 	/* Set the global flag, and set up interrupts. */
 	F_SET(sp, S_GLOBAL);
-	teardown = !intr_init(sp);
+	SET_UP_INTERRUPTS(global_intr);
 
 	/*
 	 * For each line...  The semantics of global matching are that we first
@@ -208,7 +200,7 @@ global(sp, ep, cmdp, cmd)
 	 * What we do is create linked list of lines that are tracked through
 	 * each ex command.  There's a callback routine which the DB interface
 	 * routines call when a line is created or deleted.  This doesn't help
-	 * the layering much.
+	 * the layering much. 
 	 */
 	exp = EXP(sp);
 	for (rval = 0, lno = cmdp->addr1.lno,
@@ -296,9 +288,9 @@ interrupted:		msgq(sp, M_INFO, "Interrupted.");
 err:		rval = 1;
 	}
 
+interrupt_err:
 	F_CLR(sp, S_GLOBAL);
-	if (teardown)
-		intr_end(sp);
+	TEAR_DOWN_INTERRUPTS;
 
 	/* Free any remaining ranges and the command buffer. */
 	while ((rp = exp->rangeq.cqh_first) != (void *)&exp->rangeq) {
@@ -385,4 +377,27 @@ global_insdel(sp, ep, op, lno)
 	 * the line after the deleted/inserted line.
 	 */
 	exp->range_lno = lno;
+}
+
+/*
+ * global_intr --
+ *	Set the interrupt bit in any screen that is running an interruptible
+ *	global.
+ *
+ * XXX
+ * In the future this may be a problem.  The user should be able to move to
+ * another screen and keep typing while this runs.  If so, and the user has
+ * more than one global running, it will be hard to decide which one to
+ * stop.
+ */
+static void
+global_intr(signo)
+	int signo;
+{
+	SCR *sp;
+
+	for (sp = __global_list->dq.cqh_first;
+	    sp != (void *)&__global_list->dq; sp = sp->q.cqe_next)
+		if (F_ISSET(sp, S_GLOBAL) && F_ISSET(sp, S_INTERRUPTIBLE))
+			F_SET(sp, S_INTERRUPTED);
 }

@@ -1,5 +1,5 @@
 /*-
- * Copyright (c) 1992, 1993, 1994
+ * Copyright (c) 1992, 1993
  *	The Regents of the University of California.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -32,22 +32,10 @@
  */
 
 #ifndef lint
-static char sccsid[] = "@(#)v_left.c	8.8 (Berkeley) 3/10/94";
+static char sccsid[] = "@(#)v_left.c	8.3 (Berkeley) 12/16/93";
 #endif /* not lint */
 
 #include <sys/types.h>
-#include <sys/queue.h>
-#include <sys/time.h>
-
-#include <bitstring.h>
-#include <limits.h>
-#include <signal.h>
-#include <stdio.h>
-#include <termios.h>
-
-#include "compat.h"
-#include <db.h>
-#include <regex.h>
 
 #include "vi.h"
 #include "vcmd.h"
@@ -57,139 +45,85 @@ static char sccsid[] = "@(#)v_left.c	8.8 (Berkeley) 3/10/94";
  *	Move left by columns.
  */
 int
-v_left(sp, ep, vp)
+v_left(sp, ep, vp, fm, tm, rp)
 	SCR *sp;
 	EXF *ep;
 	VICMDARG *vp;
+	MARK *fm, *tm, *rp;
 {
 	recno_t cnt;
 
-	/*
-	 * !!!
-	 * The ^H and h commands always failed in the first column.
-	 */
-	if (vp->m_start.cno == 0) {
-		v_sol(sp);
+	cnt = F_ISSET(vp, VC_C1SET) ? vp->count : 1;
+
+	if (fm->cno == 0) {
+		msgq(sp, M_BERR, "Already in the first column.");
 		return (1);
 	}
 
-	/* Find the end of the range. */
-	cnt = F_ISSET(vp, VC_C1SET) ? vp->count : 1;
-	if (vp->m_start.cno > cnt)
-		vp->m_stop.cno = vp->m_start.cno - cnt;
+	rp->lno = fm->lno;
+	if (fm->cno > cnt)
+		rp->cno = fm->cno - cnt;
 	else
-		vp->m_stop.cno = 0;
-
-	/*
-	 * VC_D and non-motion commands move to the end of the range,
-	 * VC_Y stays at the start.  Ignore VC_C and VC_S.  Motion
-	 * commands adjust the starting point to the character before
-	 * the current one.
-	 */
-	vp->m_final = F_ISSET(vp, VC_Y) ? vp->m_start : vp->m_stop;
-	if (ISMOTION(vp))
-		--vp->m_start.cno;
+		rp->cno = 0;
 	return (0);
 }
 
 /*
  * v_cfirst -- [count]_
- *	Move to the first non-blank character in a line.
+ *
+ *	Move to the first non-blank column on a line.
  */
 int
-v_cfirst(sp, ep, vp)
+v_cfirst(sp, ep, vp, fm, tm, rp)
 	SCR *sp;
 	EXF *ep;
 	VICMDARG *vp;
+	MARK *fm, *tm, *rp;
 {
 	recno_t cnt;
 
 	/*
-	 * !!!
-	 * If the _ is a motion component, it makes the command a line motion
-	 * e.g. "d_" deletes the line.  It also means that the cursor doesn't
-	 * move.
+	 * A count moves down count - 1 rows, so, "3_" is the same as "2j_".
 	 *
-	 * The _ command never failed in the first column.
-	 */
-	if (ISMOTION(vp))
-		F_SET(vp, VM_LMODE);
-	/*
 	 * !!!
-	 * Historically a specified count makes _ move down count - 1
-	 * rows, so, "3_" is the same as "2j_".
+	 * Historically, if the _ is a motion, it is always a line motion,
+	 * and the line motion flag is set.
 	 */
 	cnt = F_ISSET(vp, VC_C1SET) ? vp->count : 1;
 	if (cnt != 1) {
 		--vp->count;
-		return (v_down(sp, ep, vp));
-	}
-
-	/*
-	 * Move to the first non-blank.
-	 *
-	 * Can't just use RCM_SET_FNB, in case _ is used as the motion
-	 * component of another command.
-	 */
-	vp->m_stop.cno = 0;
-	if (nonblank(sp, ep, vp->m_stop.lno, &vp->m_stop.cno))
+		if (v_down(sp, ep, vp, fm, tm, rp))
+			return (1);
+		if (F_ISSET(vp, VC_C | VC_D | VC_Y))
+			F_SET(vp, VC_LMODE);
+	} else
+		rp->lno = fm->lno;
+	rp->cno = 0;
+	if (nonblank(sp, ep, rp->lno, &rp->cno))
 		return (1);
-
-	/*
-	 * VC_D and non-motion commands move to the end of the range,
-	 * VC_Y stays at the start.  Ignore VC_C and VC_S.
-	 */
-	vp->m_final = F_ISSET(vp, VC_Y) ? vp->m_start : vp->m_stop;
 	return (0);
 }
 
 /*
  * v_first -- ^
- *	Move to the first non-blank character in this line.
+ *	Move to the first non-blank column on this line.
  */
 int
-v_first(sp, ep, vp)
+v_first(sp, ep, vp, fm, tm, rp)
 	SCR *sp;
 	EXF *ep;
 	VICMDARG *vp;
+	MARK *fm, *tm, *rp;
 {
 	/*
-	 * !!!
 	 * Yielding to none in our quest for compatibility with every
 	 * historical blemish of vi, no matter how strange it might be,
 	 * we permit the user to enter a count and then ignore it.
 	 */
-
-	/*
-	 * Move to the first non-blank.
-	 *
-	 * Can't just use RCM_SET_FNB, in case ^ is used as the motion
-	 * component of another command.
-	 */
-	vp->m_stop.cno = 0;
-	if (nonblank(sp, ep, vp->m_stop.lno, &vp->m_stop.cno))
+	rp->cno = 0;
+	if (nonblank(sp, ep, fm->lno, &rp->cno))
 		return (1);
-
-	/*
-	 * !!!
-	 * The ^ command succeeded if used as a command without a whitespace
-	 * character preceding the cursor in the line, but failed if used as
-	 * a motion component in the same situation.
-	 */
-	if (ISMOTION(vp) && vp->m_start.cno <= vp->m_stop.cno) {
-		v_sol(sp);
-		return (1);
-	}
-
-	/*
-	 * VC_D and non-motion commands move to the end of the range,
-	 * VC_Y stays at the start.  Ignore VC_C and VC_S.  Motion
-	 * commands adjust the starting point to the character before
-	 * the current one.
-	 */
-	vp->m_final = F_ISSET(vp, VC_Y) ? vp->m_start : vp->m_stop;
-	if (ISMOTION(vp))
-		--vp->m_start.cno;
+	rp->lno = fm->lno;
 	return (0);
 }
 
@@ -200,56 +134,18 @@ v_first(sp, ep, vp)
  *	that we have to know character column widths to make this work.
  */
 int
-v_ncol(sp, ep, vp)
+v_ncol(sp, ep, vp, fm, tm, rp)
 	SCR *sp;
 	EXF *ep;
 	VICMDARG *vp;
+	MARK *fm, *tm, *rp;
 {
-	if (F_ISSET(vp, VC_C1SET) && vp->count > 1) {
-		--vp->count;
-		vp->m_stop.cno =
-		    sp->s_colpos(sp, ep, vp->m_start.lno, (size_t)vp->count);
-		/*
-		 * !!!
-		 * The | command succeeded if used as a command and the cursor
-		 * didn't move, but failed if used as a motion component in the
-		 * same situation.
-		 */
-		if (ISMOTION(vp) && vp->m_stop.cno == vp->m_start.cno) {
-			v_nomove(sp);
-			return (1);
-		}
-	} else {
-		/*
-		 * !!!
-		 * The | command succeeded if used as a command in column 0
-		 * without a count, but failed if used as a motion component
-		 * in the same situation.
-		 */
-		if (ISMOTION(vp) && vp->m_start.cno == 0) {
-			v_sol(sp);
-			return (1);
-		}
-		vp->m_stop.cno = 0;
-	}
-
-	/*
-	 * If moving right, non-motion commands move to the end of the range.
-	 * VC_D and VC_Y stay at the start.  If moving left, non-motion and
-	 * VC_D commands move to the end of the range.  VC_Y remains at the
-	 * start.  Ignore VC_C and VC_S.  Motion left commands adjust the
-	 * starting point to the character before the current one.
-	 */
-	if (vp->m_start.cno < vp->m_stop.cno)
-		vp->m_final = ISMOTION(vp) ? vp->m_start : vp->m_stop;
-	else {
-		vp->m_final = vp->m_stop;
-		if (ISMOTION(vp)) {
-			if (F_ISSET(vp, VC_Y))
-				vp->m_final = vp->m_start;
-			--vp->m_start.cno;
-		}
-	}
+	if (F_ISSET(vp, VC_C1SET) && vp->count > 1)
+		rp->cno =
+		    sp->s_chposition(sp, ep, fm->lno, (size_t)--vp->count);
+	else
+		rp->cno = 0;
+	rp->lno = fm->lno;
 	return (0);
 }
 
@@ -258,30 +154,13 @@ v_ncol(sp, ep, vp)
  *	Move to the first column on this line.
  */
 int
-v_zero(sp, ep, vp)
+v_zero(sp, ep, vp, fm, tm, rp)
 	SCR *sp;
 	EXF *ep;
 	VICMDARG *vp;
+	MARK *fm, *tm, *rp;
 {
-	/*
-	 * !!!
-	 * The 0 command succeeded if used as a command in the first column
-	 * but failed if used as a motion component in the same situation.
-	 */
-	if (ISMOTION(vp) && vp->m_start.cno == 0) {
-		v_sol(sp);
-		return (1);
-	}
-
-	/*
-	 * VC_D and non-motion commands move to the end of the range,
-	 * VC_Y stays at the start.  Ignore VC_C and VC_S.  Motion
-	 * commands adjust the starting point to the character before
-	 * the current one.
-	 */
-	vp->m_stop.cno = 0;
-	vp->m_final = F_ISSET(vp, VC_Y) ? vp->m_start : vp->m_stop;
-	if (ISMOTION(vp))
-		--vp->m_start.cno;
+	rp->lno = fm->lno;
+	rp->cno = 0;
 	return (0);
 }

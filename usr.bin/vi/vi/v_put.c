@@ -1,5 +1,5 @@
 /*-
- * Copyright (c) 1992, 1993, 1994
+ * Copyright (c) 1992, 1993
  *	The Regents of the University of California.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -32,22 +32,10 @@
  */
 
 #ifndef lint
-static char sccsid[] = "@(#)v_put.c	8.8 (Berkeley) 3/8/94";
+static char sccsid[] = "@(#)v_put.c	8.6 (Berkeley) 1/9/94";
 #endif /* not lint */
 
 #include <sys/types.h>
-#include <sys/queue.h>
-#include <sys/time.h>
-
-#include <bitstring.h>
-#include <limits.h>
-#include <signal.h>
-#include <stdio.h>
-#include <termios.h>
-
-#include "compat.h"
-#include <db.h>
-#include <regex.h>
 
 #include "vi.h"
 #include "vcmd.h"
@@ -59,16 +47,16 @@ static void	inc_buf __P((SCR *, VICMDARG *));
  *	Insert the contents of the buffer before the cursor.
  */
 int
-v_Put(sp, ep, vp)
+v_Put(sp, ep, vp, fm, tm, rp)
 	SCR *sp;
 	EXF *ep;
 	VICMDARG *vp;
+	MARK *fm, *tm, *rp;
 {
 	if (F_ISSET(vp, VC_ISDOT))
 		inc_buf(sp, vp);
-
-	return (put(sp, ep, NULL, F_ISSET(vp, VC_BUFFER) ? &vp->buffer : NULL,
-	    &vp->m_start, &vp->m_final, 0));
+	return (put(sp, ep,
+	    NULL, F_ISSET(vp, VC_BUFFER) ? &vp->buffer : NULL, fm, rp, 0));
 }
 
 /*
@@ -76,20 +64,20 @@ v_Put(sp, ep, vp)
  *	Insert the contents of the buffer after the cursor.
  */
 int
-v_put(sp, ep, vp)
+v_put(sp, ep, vp, fm, tm, rp)
 	SCR *sp;
 	EXF *ep;
 	VICMDARG *vp;
+	MARK *fm, *tm, *rp;
 {
 	if (F_ISSET(vp, VC_ISDOT))
 		inc_buf(sp, vp);
 
-	return (put(sp, ep, NULL, F_ISSET(vp, VC_BUFFER) ? &vp->buffer : NULL,
-	    &vp->m_start, &vp->m_final, 1));
+	return (put(sp, ep,
+	    NULL, F_ISSET(vp, VC_BUFFER) ? &vp->buffer : NULL, fm, rp, 1));
 }
 
 /*
- * !!!
  * Historical whackadoo.  The dot command `puts' the numbered buffer
  * after the last one put.  For example, `"4p.' would put buffer #4
  * and buffer #5.  If the user continued to enter '.', the #9 buffer
