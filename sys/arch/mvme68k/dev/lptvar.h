@@ -1,4 +1,4 @@
-/*	$NetBSD: lptvar.h,v 1.1.2.1 1999/01/30 21:58:42 scw Exp $ */
+/*	$NetBSD: lptvar.h,v 1.1.2.2 1999/02/13 16:54:26 scw Exp $ */
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -43,23 +43,48 @@
 #ifndef __mvme68k_lptvar_h
 #define __mvme68k_lptvar_h
 
+struct lpt_funcs;
+
+
+struct lpt_softc {
+	struct device		sc_dev;
+	struct lpt_funcs	*sc_funcs;
+	void			*sc_arg;
+	size_t			sc_count;
+	struct buf		*sc_inbuf;
+	u_char			*sc_cp;
+	int			sc_spinmax;
+	u_char			sc_state;
+#define	LPT_OPEN	0x01	/* device is open */
+#define	LPT_OBUSY	0x02	/* printer is busy doing output */
+#define	LPT_INIT	0x04	/* waiting to initialize for open */
+	u_char			sc_flags;
+#define	LPT_FAST_STROBE	0x10	/* Select 1.6uS strobe pulse */
+#define	LPT_AUTOLF	0x20	/* automatic LF on CR */
+#define	LPT_NOPRIME	0x40	/* don't prime on open */
+#define	LPT_NOINTR	0x80	/* do not use interrupt */
+
+	/* Back-end specific stuff */
+	void			*sc_regs;
+	int			sc_ipl;
+	u_char			sc_icr;
+	u_char			sc_laststatus;
+};
+
+
 struct lpt_funcs {
-	void	(*lf_hook_int) __P((void *, int (*)__P((void *)), void *));
-	void	(*lf_open) __P((void *, int));
-	void	(*lf_close) __P((void *));
-	void	(*lf_iprime) __P((void *));
-	void	(*lf_speed) __P((void *, int));
-	int	(*lf_notrdy) __P((void *, int));
-	void	(*lf_wrdata) __P((void *, u_char));
+	void	(*lf_open) __P((struct lpt_softc *, int));
+	void	(*lf_close) __P((struct lpt_softc *));
+	void	(*lf_iprime) __P((struct lpt_softc *));
+	void	(*lf_speed) __P((struct lpt_softc *, int));
+	int	(*lf_notrdy) __P((struct lpt_softc *, int));
+	void	(*lf_wrdata) __P((struct lpt_softc *, u_char));
 };
 
 #define	LPT_STROBE_FAST	0
 #define LPT_STROBE_SLOW	1
 
-
-struct lpt_attach_args {
-	struct lpt_funcs	*pa_funcs;
-	void			*pa_arg;
-};
+extern	void	lpt_attach_subr	__P((struct lpt_softc *));
+extern	int	lpt_intr	__P((struct lpt_softc *));
 
 #endif	/* __mvme68k_lptvar_h */
