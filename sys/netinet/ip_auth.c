@@ -1,4 +1,4 @@
-/*	$NetBSD: ip_auth.c,v 1.1 1997/07/06 05:02:26 thorpej Exp $	*/
+/*	$NetBSD: ip_auth.c,v 1.1.1.1 1997/07/06 05:02:26 thorpej Exp $	*/
 
 /*
  * (C)opyright 1997 by Darren Reed & Guido van Rooij.
