@@ -1,6 +1,6 @@
 \input texinfo
 @setfilename gdbint.info
-@c $Id: gdbint.texinfo,v 1.1 1997/09/24 16:57:52 gwr Exp $
+@c $Id: gdbint.texinfo,v 1.1.1.1 1997/09/24 16:57:52 gwr Exp $
 
 @ifinfo
 @format
@@ -42,7 +42,7 @@ regarded as a program in the language TeX).
 @page
 @tex
 \def\$#1${{#1}}  % Kluge: collect RCS revision info without $...$
-\xdef\manvers{\$Revision: 1.1 $}  % For use in headers, footers too
+\xdef\manvers{\$Revision: 1.1.1.1 $}  % For use in headers, footers too
 {\parskip=0pt
 \hfill Cygnus Support\par
 \hfill \manvers\par
