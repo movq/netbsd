@@ -1,4 +1,4 @@
-/*	$NetBSD: sparc.c,v 1.6 2002/05/15 09:58:19 lukem Exp $ */
+/*	$NetBSD: sparc.c,v 1.7 2002/05/20 16:05:27 lukem Exp $ */
 
 /*-
  * Copyright (c) 1998, 2002 The NetBSD Foundation, Inc.
@@ -38,7 +38,7 @@
 
 #include <sys/cdefs.h>
 #if defined(__RCSID) && !defined(__lint)
-__RCSID("$NetBSD: sparc.c,v 1.6 2002/05/15 09:58:19 lukem Exp $");
+__RCSID("$NetBSD: sparc.c,v 1.7 2002/05/20 16:05:27 lukem Exp $");
 #endif	/* !__lint */
 
 #if HAVE_CONFIG_H
@@ -63,11 +63,11 @@ static struct bbinfo_params bbparams = {
 	SPARC_BOOT_BLOCK_BLOCKSIZE,
 	SPARC_BOOT_BLOCK_MAX_SIZE,
 	32,			/* leave room for a.out header */
-	0,
+	BBINFO_BIG_ENDIAN,
 };
 
-static int sparc_frobheader(ib_params *, struct bbinfo_params *, char *);
-
+static int sparc_clearheader(ib_params *, struct bbinfo_params *, uint8_t *);
+static int sparc_setheader(ib_params *, struct bbinfo_params *, uint8_t *);
 
 int
 sparc_clearboot(ib_params *params)
@@ -80,11 +80,38 @@ sparc_clearboot(ib_params *params)
 		    params->machine->name);
 		return (0);
 	}
-	return (shared_bbinfo_clearboot(params, &bbparams));
+	return (shared_bbinfo_clearboot(params, &bbparams, sparc_clearheader));
+}
+
+int
+sparc_setboot(ib_params *params)
+{
+	assert(params != NULL);
+
+	if (params->flags & IB_STAGE1START) {
+		warnx("`-b bno' is not supported for %s",
+		    params->machine->name);
+		return (0);
+	}
+	return (shared_bbinfo_setboot(params, &bbparams, sparc_setheader));
+}
+
+
+static int
+sparc_clearheader(ib_params *params, struct bbinfo_params *bb_params,
+	uint8_t *bb)
+{
+
+	assert(params != NULL);
+	assert(bb_params != NULL);
+	assert(bb != NULL);
+
+	memset(bb, 0, bb_params->headeroffset);
+	return (1);
 }
 
 static int
-sparc_frobheader(ib_params *params, struct bbinfo_params *bb_params, char *bb)
+sparc_setheader(ib_params *params, struct bbinfo_params *bb_params, uint8_t *bb)
 {
 
 	assert(params != NULL);
@@ -108,17 +135,4 @@ sparc_frobheader(ib_params *params, struct bbinfo_params *bb_params, char *bb)
 	*((uint32_t *)bb + 1) = htobe32(SUN4_BASTART);
 
 	return (1);
-}
-
-int
-sparc_setboot(ib_params *params)
-{
-	assert(params != NULL);
-
-	if (params->flags & IB_STAGE1START) {
-		warnx("`-b bno' is not supported for %s",
-		    params->machine->name);
-		return (0);
-	}
-	return (shared_bbinfo_setboot(params, &bbparams, sparc_frobheader));
 }
