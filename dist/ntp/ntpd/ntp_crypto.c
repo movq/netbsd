@@ -1,4 +1,4 @@
-/*	$NetBSD: ntp_crypto.c,v 1.1 2000/04/22 14:53:16 simonb Exp $	*/
+/*	$NetBSD: ntp_crypto.c,v 1.1.1.1 2000/04/22 14:53:16 simonb Exp $	*/
 
 /*
  * ntp_crypto.c - NTP version 4 public key routines
