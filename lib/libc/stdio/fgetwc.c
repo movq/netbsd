@@ -1,4 +1,4 @@
-/* $NetBSD: fgetwc.c,v 1.2 2003/01/18 11:29:51 thorpej Exp $ */
+/* $NetBSD: fgetwc.c,v 1.3 2003/03/07 07:11:36 tshiozak Exp $ */
 
 /*-
  * Copyright (c)2001 Citrus Project,
@@ -36,7 +36,7 @@
 #include "local.h"
 
 wint_t
-fgetwc(FILE *fp)
+__fgetwc_unlock(FILE *fp)
 {
 	struct wchar_io_data *wcio;
 	mbstate_t *st;
@@ -45,11 +45,9 @@ fgetwc(FILE *fp)
 
 	_DIAGASSERT(fp != NULL);
 
-	FLOCKFILE(fp);
 	_SET_ORIENTATION(fp, 1);
 	wcio = WCIO_GET(fp);
 	if (wcio == 0) {
-		FUNLOCKFILE(fp);
 		errno = ENOMEM;
 		return WEOF;
 	}
@@ -57,7 +55,6 @@ fgetwc(FILE *fp)
 	/* if there're ungetwc'ed wchars, use them */
 	if (wcio->wcio_ungetwc_inbuf) {
 		wc = wcio->wcio_ungetwc_buf[--wcio->wcio_ungetwc_inbuf];
-		FUNLOCKFILE(fp);
 
 		return wc;
 	}
@@ -69,21 +66,33 @@ fgetwc(FILE *fp)
 		int ch = __sgetc(fp);
 
 		if (ch == EOF) {
-			FUNLOCKFILE(fp);
 			return WEOF;
 		}
 
 		c = ch;
 		size = mbrtowc(&wc, &c, 1, st);
 		if (size == (size_t)-1) {
-			FUNLOCKFILE(fp);
 			errno = EILSEQ;
 			return WEOF;
 		}
 	} while (size == (size_t)-2);
-	FUNLOCKFILE(fp);
 
 	_DIAGASSERT(size == 1);
 
 	return wc;
 }
+
+wint_t
+fgetwc(FILE *fp)
+{
+	wint_t r;
+
+	_DIAGASSERT(fp != NULL);
+
+	FLOCKFILE(fp);
+	r = __fgetwc_unlock(fp);
+	FUNLOCKFILE(fp);
+
+	return (r);
+}
+
