@@ -1,4 +1,4 @@
-/*	$NetBSD: ohcivar.h,v 1.1 1998/07/12 19:51:59 augustss Exp $	*/
+/*	$NetBSD: ohcivar.h,v 1.2 1998/07/24 21:09:07 augustss Exp $	*/
 
 /*
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -36,17 +36,6 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-typedef struct ohci_dma {
-	bus_dmamap_t map;
-        caddr_t kaddr;
-        bus_dma_segment_t segs[1];
-        int nsegs;
-        size_t size;
-	struct ohci_dma *next;
-} ohci_dma_t;
-#define DMAADDR(dma) ((dma)->segs[0].ds_addr)
-#define KERNADDR(dma) ((void *)((dma)->kaddr))
-
 typedef struct ohci_soft_ed {
 	ohci_ed_t *ed;
 	struct ohci_soft_ed *next;
@@ -79,7 +68,7 @@ typedef struct ohci_softc {
 	bus_dma_tag_t sc_dmatag;	/* DMA tag */
 	/* XXX should keep track of all DMA memory */
 
-	ohci_dma_t sc_hccadma;
+	usb_dma_t sc_hccadma;
 	struct ohci_hcca *sc_hcca;
 	ohci_soft_ed_t *sc_eds[OHCI_NO_EDS];
 	u_int sc_bws[OHCI_NO_INTRS];
