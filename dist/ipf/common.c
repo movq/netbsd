@@ -1,4 +1,4 @@
-/*	$NetBSD: common.c,v 1.1 2000/05/03 10:55:30 veego Exp $	*/
+/*	$NetBSD: common.c,v 1.1.1.1 2000/05/03 10:55:30 veego Exp $	*/
 
 /*
  * Copyright (C) 1993-2000 by Darren Reed.
