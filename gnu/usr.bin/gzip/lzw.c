@@ -3,7 +3,7 @@
  */
 
 #ifndef lint
-static char rcsid[] = "$Id: lzw.c,v 1.1 1993/07/09 15:47:38 jtc Exp $";
+static char rcsid[] = "$Id: lzw.c,v 1.1.1.1 1993/07/09 15:47:39 jtc Exp $";
 #endif
 
 #include "tailor.h"

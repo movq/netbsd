@@ -9,7 +9,7 @@
  * Kristoffer Eriksson <ske@pkmab.se>
  */
  
-/* $Id: match.S,v 1.1 1993/07/09 15:47:38 jtc Exp $ */
+/* $Id: match.S,v 1.1.1.1 1993/07/09 15:47:39 jtc Exp $ */
 
 /* Preprocess with -DNO_UNDERLINE if your C compiler does not prefix
  * external symbols with an underline character '_'.
