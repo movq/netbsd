@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# $NetBSD: lkm3,v 1.1 2000/03/10 11:53:25 lukem Exp $
+# $NetBSD: lkm3,v 1.1.1.1 2000/03/10 11:53:25 lukem Exp $
 #
 
 # PROVIDE: aftermountlkm

@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# $NetBSD: amd,v 1.1 2000/03/10 11:53:25 lukem Exp $
+# $NetBSD: amd,v 1.1.1.1 2000/03/10 11:53:25 lukem Exp $
 #
 
 # PROVIDE: amd

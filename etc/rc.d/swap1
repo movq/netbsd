@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# $NetBSD: swap1,v 1.1 2000/03/10 11:53:24 lukem Exp $
+# $NetBSD: swap1,v 1.1.1.1 2000/03/10 11:53:24 lukem Exp $
 #
 
 # PROVIDE: localswap
