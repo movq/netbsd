@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.3.2.1 2002/07/16 01:40:58 gehenna Exp $	*/
+/*	$NetBSD: machdep.c,v 1.3.2.2 2002/08/30 00:29:34 gehenna Exp $	*/
 
 /*
  * Copyright 2001, 2002 Wasabi Systems, Inc.
@@ -89,7 +89,6 @@
 #include <sys/mount.h>
 #include <sys/kcore.h>
 #include <sys/boot_flag.h>
-#include <sys/sysctl.h>
 #include <sys/termios.h>
 
 #include <uvm/uvm_extern.h>
@@ -122,10 +121,8 @@ int	comcnrate = 38400;	/* XXX should be config option */
 
 struct malta_config malta_configuration;
 
-/* For sysctl. */
-char machine[] = MACHINE;
-char machine_arch[] = MACHINE_ARCH;
-char cpu_model[] = "MIPS Malta Evaluation Board";
+/* For sysctl_hw. */
+extern char cpu_model[];
 
 /* Our exported CPU info; we can have only one. */  
 struct cpu_info cpu_info_store;
@@ -235,6 +232,8 @@ mach_init(int argc, char **argv, yamon_env_var *envp, u_long memsize)
 	mem_clusters[0].size = ctob(physmem);
 	mem_cluster_cnt = 1;
 
+	strcpy(cpu_model, "MIPS Malta Evaluation Board");
+
 	/*
 	 * XXX: check argv[0] - do something if "gdb"???
 	 */
@@ -327,8 +326,7 @@ consinit(void)
 void
 cpu_startup()
 {
-	unsigned i;
-	int base, residual;
+	u_int i, base, residual;
 	vaddr_t minaddr, maxaddr;
 	vsize_t size;
 	char pbuf[9];
@@ -408,32 +406,12 @@ cpu_startup()
 	format_bytes(pbuf, sizeof(pbuf), ptoa(uvmexp.free));
 	printf(", %s free", pbuf);
 	format_bytes(pbuf, sizeof(pbuf), bufpages * NBPG);
-	printf(", %s in %d buffers\n", pbuf, nbuf);
+	printf(", %s in %u buffers\n", pbuf, nbuf);
 
 	/*
 	 * Set up buffers, so they can be used to read disk labels.
 	 */
 	bufinit();
-}
-
-int
-cpu_sysctl(name, namelen, oldp, oldlenp, newp, newlen, p)
-	int *name;
-	u_int namelen;
-	void *oldp;
-	size_t *oldlenp;
-	void *newp;
-	size_t newlen;
-	struct proc *p;
-{
-	/* All sysctl names at this level are terminal. */
-	if (namelen != 1)
-		return ENOTDIR;
-
-	switch (name[0]) {
-	default:
-		return EOPNOTSUPP;
-	}
 }
 
 int	waittime = -1;
