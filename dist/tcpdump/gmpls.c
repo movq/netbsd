@@ -1,4 +1,4 @@
-/*	$NetBSD: gmpls.c,v 1.1.1.1 2004/09/27 17:06:46 dyoung Exp $	*/
+/*	$NetBSD: gmpls.c,v 1.1 2004/09/27 17:06:46 dyoung Exp $	*/
 
 /* 
  * Redistribution and use in source and binary forms, with or without

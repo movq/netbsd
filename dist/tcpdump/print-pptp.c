@@ -1,4 +1,4 @@
-/*	$NetBSD: print-pptp.c,v 1.4 2004/09/27 23:04:24 dyoung Exp $	*/
+/*	$NetBSD: print-pptp.c,v 1.1 2001/06/25 19:26:38 itojun Exp $	*/
 
 /*
  * Copyright (c) 1991, 1993, 1994, 1995, 1996, 1997
@@ -24,26 +24,22 @@
  */
 
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static const char rcsid[] _U_ =
-     "@(#) Header: /tcpdump/master/tcpdump/print-pptp.c,v 1.9.2.2 2003/11/16 08:51:39 guy Exp";
-#else
-__RCSID("$NetBSD: print-pptp.c,v 1.4 2004/09/27 23:04:24 dyoung Exp $");
-#endif
+static const char rcsid[] = 
+     "@(#) Header: /tcpdump/master/tcpdump/print-pptp.c,v 1.2 2001/03/17 04:41:50 itojun Exp";
 #endif
 
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
 
-#include <tcpdump-stdinc.h>
-
 #include <stdio.h>
+#include <sys/types.h>
+#include <sys/param.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
 
 #include "interface.h"
-#include "extract.h"
 
 static char tstr[] = " [|pptp]";
 
@@ -61,7 +57,7 @@ static char tstr[] = " [|pptp]";
 
 #define PPTP_CTRL_MSG_TYPE_SCCRQ	1
 #define PPTP_CTRL_MSG_TYPE_SCCRP	2
-#define PPTP_CTRL_MSG_TYPE_StopCCRQ	3
+#define PPTP_CTRL_MSG_TYPE_StopCCRQ	3 
 #define PPTP_CTRL_MSG_TYPE_StopCCRP	4
 #define PPTP_CTRL_MSG_TYPE_ECHORQ	5
 #define PPTP_CTRL_MSG_TYPE_ECHORP	6
@@ -81,7 +77,7 @@ static char tstr[] = " [|pptp]";
 #define PPTP_BEARER_CAP_ANALOG_MASK	0x00000001      /* Analog */
 #define PPTP_BEARER_CAP_DIGITAL_MASK	0x00000002      /* Digital */
 
-static const char *pptp_message_type_string[] = {
+static char *pptp_message_type_string[] = {
 	"NOT_DEFINED",		/* 0  Not defined in the RFC2637 */
 	"SCCRQ",		/* 1  Start-Control-Connection-Request */
 	"SCCRP",		/* 2  Start-Control-Connection-Reply */
@@ -191,8 +187,8 @@ struct pptp_msg_icrq {
 	u_int16_t call_ser;
 	u_int32_t bearer_type;
 	u_int32_t phy_chan_id;
-	u_int16_t dialed_no_len;
-	u_int16_t dialing_no_len;
+	u_int16_t dialed_no_len;		
+	u_int16_t dialing_no_len;		
 	u_char dialed_no[64];		/* DNIS */
 	u_char dialing_no[64];		/* CLID */
 	u_char subaddr[64];
@@ -251,7 +247,7 @@ struct pptp_msg_sli {
 
 /* attributes that appear more than once in above messages:
 
-   Number of
+   Number of         
    occurence    attributes
   --------------------------------------
       2         u_int32_t bearer_cap;
@@ -278,7 +274,7 @@ struct pptp_msg_sli {
       2         u_char subaddr[64];
       2         u_char vendor[64];
 
-  so I will prepare print out functions for these attributes (except for
+  so I will prepare print out functions for these attributes (except for 
   reserved*).
 */
 
@@ -294,10 +290,10 @@ static void
 pptp_bearer_cap_print(const u_int32_t *bearer_cap)
 {
 	printf(" BEARER_CAP(");
-	if (EXTRACT_32BITS(bearer_cap) & PPTP_BEARER_CAP_DIGITAL_MASK) {
+	if (ntohl(*bearer_cap) & PPTP_BEARER_CAP_DIGITAL_MASK) {
                 printf("D");
         }
-        if (EXTRACT_32BITS(bearer_cap) & PPTP_BEARER_CAP_ANALOG_MASK) {
+        if (ntohl(*bearer_cap) & PPTP_BEARER_CAP_ANALOG_MASK) {
                 printf("A");
         }
 	printf(")");
@@ -307,14 +303,14 @@ static void
 pptp_bearer_type_print(const u_int32_t *bearer_type)
 {
 	printf(" BEARER_TYPE(");
-	switch (EXTRACT_32BITS(bearer_type)) {
+	switch (ntohl(*bearer_type)) {
 	case 1:
 		printf("A");	/* Analog */
 		break;
 	case 2:
 		printf("D");	/* Digital */
 		break;
-	case 3:
+	case 3: 
 		printf("Any");
 		break;
 	default:
@@ -327,25 +323,25 @@ pptp_bearer_type_print(const u_int32_t *bearer_type)
 static void
 pptp_call_id_print(const u_int16_t *call_id)
 {
-	printf(" CALL_ID(%u)", EXTRACT_16BITS(call_id));
+	printf(" CALL_ID(%u)", ntohs(*call_id));
 }
 
 static void
 pptp_call_ser_print(const u_int16_t *call_ser)
 {
-	printf(" CALL_SER_NUM(%u)", EXTRACT_16BITS(call_ser));
+	printf(" CALL_SER_NUM(%u)", ntohs(*call_ser));
 }
 
 static void
 pptp_cause_code_print(const u_int16_t *cause_code)
 {
-	printf(" CAUSE_CODE(%u)", EXTRACT_16BITS(cause_code));
+	printf(" CAUSE_CODE(%u)", ntohs(*cause_code));
 }
 
 static void
 pptp_conn_speed_print(const u_int32_t *conn_speed)
 {
-	printf(" CONN_SPEED(%u)", EXTRACT_32BITS(conn_speed));
+	printf(" CONN_SPEED(%lu)", (unsigned long)ntohl(*conn_speed));
 }
 
 static void
@@ -386,17 +382,17 @@ pptp_err_code_print(const u_int8_t *err_code)
 static void
 pptp_firm_rev_print(const u_int16_t *firm_rev)
 {
-	printf(" FIRM_REV(%u)", EXTRACT_16BITS(firm_rev));
+	printf(" FIRM_REV(%u)", ntohs(*firm_rev));
 }
 
 static void
 pptp_framing_cap_print(const u_int32_t *framing_cap)
 {
 	printf(" FRAME_CAP(");
-	if (EXTRACT_32BITS(framing_cap) & PPTP_FRAMING_CAP_ASYNC_MASK) {
+	if (ntohl(*framing_cap) & PPTP_FRAMING_CAP_ASYNC_MASK) {
                 printf("A");		/* Async */
         }
-        if (EXTRACT_32BITS(framing_cap) & PPTP_FRAMING_CAP_SYNC_MASK) {
+        if (ntohl(*framing_cap) & PPTP_FRAMING_CAP_SYNC_MASK) {
                 printf("S");		/* Sync */
         }
 	printf(")");
@@ -406,7 +402,7 @@ static void
 pptp_framing_type_print(const u_int32_t *framing_type)
 {
 	printf(" FRAME_TYPE(");
-	switch (EXTRACT_32BITS(framing_type)) {
+	switch (ntohl(*framing_type)) {
 	case 1:
 		printf("A");		/* Async */
 		break;
@@ -432,45 +428,44 @@ pptp_hostname_print(const u_char *hostname)
 static void
 pptp_id_print(const u_int32_t *id)
 {
-	printf(" ID(%u)", EXTRACT_32BITS(id));
+	printf(" ID(%lu)", (unsigned long)ntohl(*id));
 }
 
 static void
 pptp_max_channel_print(const u_int16_t *max_channel)
 {
-	printf(" MAX_CHAN(%u)", EXTRACT_16BITS(max_channel));
+	printf(" MAX_CHAN(%u)", ntohs(*max_channel));
 }
 
 static void
 pptp_peer_call_id_print(const u_int16_t *peer_call_id)
 {
-	printf(" PEER_CALL_ID(%u)", EXTRACT_16BITS(peer_call_id));
+	printf(" PEER_CALL_ID(%u)", ntohs(*peer_call_id));
 }
 
 static void
 pptp_phy_chan_id_print(const u_int32_t *phy_chan_id)
 {
-	printf(" PHY_CHAN_ID(%u)", EXTRACT_32BITS(phy_chan_id));
+	printf(" PHY_CHAN_ID(%lu)", (unsigned long)ntohl(*phy_chan_id));
 }
 
 static void
 pptp_pkt_proc_delay_print(const u_int16_t *pkt_proc_delay)
 {
-	printf(" PROC_DELAY(%u)", EXTRACT_16BITS(pkt_proc_delay));
+	printf(" PHY_CHAN_ID(%u)", ntohs(*pkt_proc_delay));
 }
 
 static void
 pptp_proto_ver_print(const u_int16_t *proto_ver)
 {
 	printf(" PROTO_VER(%u.%u)",	/* Version.Revision */
-	       EXTRACT_16BITS(proto_ver) >> 8,
-	       EXTRACT_16BITS(proto_ver) & 0xff);
+	       ntohs(*proto_ver) >> 8, ntohs(*proto_ver) & 0xff);
 }
 
 static void
 pptp_recv_winsiz_print(const u_int16_t *recv_winsiz)
 {
-	printf(" RECV_WIN(%u)", EXTRACT_16BITS(recv_winsiz));
+	printf(" RECV_WIN(%u)", ntohs(*recv_winsiz));
 }
 
 static void
@@ -714,7 +709,7 @@ pptp_echorq_print(const u_char *dat)
 
 	TCHECK(ptr->id);
 	pptp_id_print(&ptr->id);
-
+	
 	return;
 
 trunc:
@@ -733,7 +728,7 @@ pptp_echorp_print(const u_char *dat)
 	TCHECK(ptr->err_code);
 	pptp_err_code_print(&ptr->err_code);
 	TCHECK(ptr->reserved1);
-
+	
 	return;
 
 trunc:
@@ -750,9 +745,9 @@ pptp_ocrq_print(const u_char *dat)
 	TCHECK(ptr->call_ser);
 	pptp_call_ser_print(&ptr->call_ser);
 	TCHECK(ptr->min_bps);
-	printf(" MIN_BPS(%u)", EXTRACT_32BITS(&ptr->min_bps));
+	printf(" MIN_BPS(%lu)", (unsigned long)ntohl(ptr->min_bps));
 	TCHECK(ptr->max_bps);
-	printf(" MAX_BPS(%u)", EXTRACT_32BITS(&ptr->max_bps));
+	printf(" MAX_BPS(%lu)", (unsigned long)ntohl(ptr->max_bps));
 	TCHECK(ptr->bearer_type);
 	pptp_bearer_type_print(&ptr->bearer_type);
 	TCHECK(ptr->framing_type);
@@ -762,7 +757,7 @@ pptp_ocrq_print(const u_char *dat)
 	TCHECK(ptr->pkt_proc_delay);
 	pptp_pkt_proc_delay_print(&ptr->pkt_proc_delay);
 	TCHECK(ptr->phone_no_len);
-	printf(" PHONE_NO_LEN(%u)", EXTRACT_16BITS(&ptr->phone_no_len));
+	printf(" PHONE_NO_LEN(%u)", ntohs(ptr->phone_no_len));
 	TCHECK(ptr->reserved1);
 	TCHECK(ptr->phone_no);
 	printf(" PHONE_NO(%.64s)", ptr->phone_no);
@@ -819,9 +814,9 @@ pptp_icrq_print(const u_char *dat)
 	TCHECK(ptr->phy_chan_id);
 	pptp_phy_chan_id_print(&ptr->phy_chan_id);
 	TCHECK(ptr->dialed_no_len);
-	printf(" DIALED_NO_LEN(%u)", EXTRACT_16BITS(&ptr->dialed_no_len));
+	printf(" DIALED_NO_LEN(%u)", ntohs(ptr->dialed_no_len));
 	TCHECK(ptr->dialing_no_len);
-	printf(" DIALING_NO_LEN(%u)", EXTRACT_16BITS(&ptr->dialing_no_len));
+	printf(" DIALING_NO_LEN(%u)", ntohs(ptr->dialing_no_len));
 	TCHECK(ptr->dialed_no);
 	printf(" DIALED_NO(%.64s)", ptr->dialed_no);
 	TCHECK(ptr->dialing_no);
@@ -839,7 +834,7 @@ static void
 pptp_icrp_print(const u_char *dat)
 {
 	struct pptp_msg_icrp *ptr = (struct pptp_msg_icrp *)dat;
-
+	
 	TCHECK(ptr->call_id);
 	pptp_call_id_print(&ptr->call_id);
 	TCHECK(ptr->peer_call_id);
@@ -930,17 +925,19 @@ pptp_wen_print(const u_char *dat)
 	pptp_peer_call_id_print(&ptr->peer_call_id);
 	TCHECK(ptr->reserved1);
 	TCHECK(ptr->crc_err);
-	printf(" CRC_ERR(%u)", EXTRACT_32BITS(&ptr->crc_err));
+	printf(" CRC_ERR(%lu)", (unsigned long)ntohl(ptr->crc_err));
 	TCHECK(ptr->framing_err);
-	printf(" FRAMING_ERR(%u)", EXTRACT_32BITS(&ptr->framing_err));
+	printf(" FRAMING_ERR(%lu)", (unsigned long)ntohl(ptr->framing_err));
 	TCHECK(ptr->hardware_overrun);
-	printf(" HARDWARE_OVERRUN(%u)", EXTRACT_32BITS(&ptr->hardware_overrun));
+	printf(" HARDWARE_OVERRUN(%lu)", 
+	       (unsigned long)ntohl(ptr->hardware_overrun));
 	TCHECK(ptr->buffer_overrun);
-	printf(" BUFFER_OVERRUN(%u)", EXTRACT_32BITS(&ptr->buffer_overrun));
+	printf(" BUFFER_OVERRUN(%lu)", 
+	       (unsigned long)ntohl(ptr->buffer_overrun));
 	TCHECK(ptr->timeout_err);
-	printf(" TIMEOUT_ERR(%u)", EXTRACT_32BITS(&ptr->timeout_err));
+	printf(" TIMEOUT_ERR(%lu)", (unsigned long)ntohl(ptr->timeout_err));
 	TCHECK(ptr->align_err);
-	printf(" ALIGN_ERR(%u)", EXTRACT_32BITS(&ptr->align_err));
+	printf(" ALIGN_ERR(%lu)", (unsigned long)ntohl(ptr->align_err));
 
 	return;
 
@@ -957,9 +954,9 @@ pptp_sli_print(const u_char *dat)
 	pptp_peer_call_id_print(&ptr->peer_call_id);
 	TCHECK(ptr->reserved1);
 	TCHECK(ptr->send_accm);
-	printf(" SEND_ACCM(0x%08x)", EXTRACT_32BITS(&ptr->send_accm));
+	printf(" SEND_ACCM(0x%08lx)", (unsigned long)ntohl(ptr->send_accm));
 	TCHECK(ptr->recv_accm);
-	printf(" RECV_ACCM(0x%08x)", EXTRACT_32BITS(&ptr->recv_accm));
+	printf(" RECV_ACCM(0x%08lx)", (unsigned long)ntohl(ptr->recv_accm));
 
 	return;
 
@@ -968,7 +965,7 @@ trunc:
 }
 
 void
-pptp_print(const u_char *dat)
+pptp_print(const u_char *dat, u_int length)
 {
 	const struct pptp_hdr *hdr;
 	u_int32_t mc;
@@ -980,11 +977,11 @@ pptp_print(const u_char *dat)
 
 	TCHECK(hdr->length);
 	if (vflag) {
-		printf(" Length=%u", EXTRACT_16BITS(&hdr->length));
+		printf(" Length=%u", ntohs(hdr->length));
 	}
 	TCHECK(hdr->msg_type);
 	if (vflag) {
-		switch(EXTRACT_16BITS(&hdr->msg_type)) {
+		switch(ntohs(hdr->msg_type)) {
 		case PPTP_MSG_TYPE_CTRL:
 			printf(" CTRL-MSG");
 			break;
@@ -998,7 +995,7 @@ pptp_print(const u_char *dat)
 	}
 
 	TCHECK(hdr->magic_cookie);
-	mc = EXTRACT_32BITS(&hdr->magic_cookie);
+	mc = ntohl(hdr->magic_cookie);
 	if (mc != PPTP_MAGIC_COOKIE) {
 		printf(" UNEXPECTED Magic-Cookie!!(%08x)", mc);
 	}
@@ -1006,9 +1003,9 @@ pptp_print(const u_char *dat)
 		printf(" Magic-Cookie=%08x", mc);
 	}
 	TCHECK(hdr->ctrl_msg_type);
-	ctrl_msg_type = EXTRACT_16BITS(&hdr->ctrl_msg_type);
+	ctrl_msg_type = ntohs(hdr->ctrl_msg_type);
 	if (ctrl_msg_type < PPTP_MAX_MSGTYPE_INDEX) {
-		printf(" CTRL_MSGTYPE=%s",
+		printf(" CTRL_MSGTYPE=%s", 
 		       pptp_message_type_string[ctrl_msg_type]);
 	} else {
 		printf(" UNKNOWN_CTRL_MSGTYPE(%u)", ctrl_msg_type);
@@ -1072,4 +1069,4 @@ pptp_print(const u_char *dat)
 
 trunc:
 	printf("%s", tstr);
-}
+}	

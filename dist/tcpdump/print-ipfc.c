@@ -1,4 +1,4 @@
-/*	$NetBSD: print-ipfc.c,v 1.1.1.1 2004/09/27 17:07:07 dyoung Exp $	*/
+/*	$NetBSD: print-ipfc.c,v 1.1 2004/09/27 17:07:07 dyoung Exp $	*/
 
 /*
  * Copyright (c) 1991, 1992, 1993, 1994, 1995, 1996, 1997

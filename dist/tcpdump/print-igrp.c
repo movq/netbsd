@@ -1,4 +1,4 @@
-/*	$NetBSD: print-igrp.c,v 1.3 2004/09/27 23:04:24 dyoung Exp $	*/
+/*	$NetBSD: print-igrp.c,v 1.1 2001/06/25 19:26:35 itojun Exp $	*/
 
 /*
  * Copyright (c) 1996, 1997
@@ -23,22 +23,22 @@
  * Initial contribution from Francis Dupont (francis.dupont@inria.fr)
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static const char rcsid[] _U_ =
-    "@(#) Header: /tcpdump/master/tcpdump/print-igrp.c,v 1.18.2.2 2003/11/16 08:51:26 guy Exp (LBL)";
-#else
-__RCSID("$NetBSD: print-igrp.c,v 1.3 2004/09/27 23:04:24 dyoung Exp $");
-#endif
+static const char rcsid[] =
+    "@(#) Header: /tcpdump/master/tcpdump/print-igrp.c,v 1.16 2001/06/15 22:17:32 fenner Exp (LBL)";
 #endif
 
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
 
-#include <tcpdump-stdinc.h>
+#include <sys/param.h>
+#include <sys/types.h>			/* concession to AIX */
+#include <sys/socket.h>
 
+#include <netinet/in.h>
+
+#include <errno.h>
 #include <stdio.h>
 
 #include "interface.h"

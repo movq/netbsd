@@ -1,8 +1,8 @@
-/*	$NetBSD: telnet.h,v 1.3 2004/09/27 23:04:25 dyoung Exp $	*/
+/*	$NetBSD: telnet.h,v 1.1 2002/02/18 09:09:10 itojun Exp $	*/
 
-/* @(#) Header: /tcpdump/master/tcpdump/telnet.h,v 1.4 2002/06/11 17:09:01 itojun Exp (LBL) */
+/* @(#) Header: /tcpdump/master/tcpdump/telnet.h,v 1.3 2001/09/17 21:58:06 fenner Exp (LBL) */
 
-/*	$NetBSD: telnet.h,v 1.3 2004/09/27 23:04:25 dyoung Exp $	*/
+/*	$NetBSD: telnet.h,v 1.1 2002/02/18 09:09:10 itojun Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -16,7 +16,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. Neither the name of the University nor the names of its contributors
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by the University of
+ *	California, Berkeley and its contributors.
+ * 4. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -218,12 +222,12 @@ const char *telopts[NTELOPTS+1] = {
  * list of names if SLC_NAMES is not defined.
  */
 #define	SLC_NAMELIST	"0", "SYNCH", "BRK", "IP", "AO", "AYT", "EOR",	\
-			"ABORT", "EOF", "SUSP", "EC", "EL", "EW", "RP",	\
-			"LNEXT", "XON", "XOFF", "FORW1", "FORW2",	\
-			"MCL", "MCR", "MCWL", "MCWR", "MCBOL",		\
-			"MCEOL", "INSRT", "OVER", "ECR", "EWR",		\
-			"EBOL", "EEOL",					\
-			0,
+ 			"ABORT", "EOF", "SUSP", "EC", "EL", "EW", "RP",	\
+ 			"LNEXT", "XON", "XOFF", "FORW1", "FORW2",	\
+ 			"MCL", "MCR", "MCWL", "MCWR", "MCBOL",		\
+ 			"MCEOL", "INSRT", "OVER", "ECR", "EWR",		\
+ 			"EBOL", "EEOL",					\
+ 			0,
 
 #ifdef	SLC_NAMES
 const char *slc_names[] = {

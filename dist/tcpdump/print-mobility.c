@@ -1,4 +1,4 @@
-/*	$NetBSD: print-mobility.c,v 1.1.1.1 2004/09/27 17:07:14 dyoung Exp $	*/
+/*	$NetBSD: print-mobility.c,v 1.1 2004/09/27 17:07:14 dyoung Exp $	*/
 
 /*
  * Copyright (C) 2002 WIDE Project.

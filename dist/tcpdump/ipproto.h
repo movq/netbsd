@@ -1,4 +1,4 @@
-/*	$NetBSD: ipproto.h,v 1.1.1.1 2004/09/27 17:06:28 dyoung Exp $	*/
+/*	$NetBSD: ipproto.h,v 1.1 2004/09/27 17:06:28 dyoung Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1990, 1993

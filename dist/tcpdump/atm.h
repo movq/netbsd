@@ -1,4 +1,4 @@
-/*	$NetBSD: atm.h,v 1.1.1.1 2004/09/27 17:06:30 dyoung Exp $	*/
+/*	$NetBSD: atm.h,v 1.1 2004/09/27 17:06:30 dyoung Exp $	*/
 
 /*
  * Copyright (c) 2002 Guy Harris.

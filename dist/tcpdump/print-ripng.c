@@ -1,4 +1,4 @@
-/*	$NetBSD: print-ripng.c,v 1.4 2004/09/27 23:04:25 dyoung Exp $	*/
+/*	$NetBSD: print-ripng.c,v 1.1 2001/06/25 19:26:38 itojun Exp $	*/
 
 /*
  * Copyright (c) 1989, 1990, 1991, 1993, 1994
@@ -21,14 +21,9 @@
  * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static const char rcsid[] _U_ =
-    "@(#) Header: /tcpdump/master/tcpdump/print-ripng.c,v 1.15.2.2 2003/11/16 08:51:42 guy Exp";
-#else
-__RCSID("$NetBSD: print-ripng.c,v 1.4 2004/09/27 23:04:25 dyoung Exp $");
-#endif
+static const char rcsid[] =
+    "@(#) Header: /tcpdump/master/tcpdump/print-ripng.c,v 1.8 2001/05/10 05:30:22 fenner Exp";
 #endif
 
 #ifdef HAVE_CONFIG_H
@@ -37,29 +32,19 @@ __RCSID("$NetBSD: print-ripng.c,v 1.4 2004/09/27 23:04:25 dyoung Exp $");
 
 #ifdef INET6
 
-#include <tcpdump-stdinc.h>
+#include <sys/param.h>
+#include <sys/time.h>
+#include <sys/types.h>
+#include <sys/socket.h>
 
-#ifdef WIN32
-const struct in6_addr in6addr_any;        /* :: */
-#endif /* WIN32 */
+#include <netinet/in.h>
 
-#ifdef __MINGW32__
-int
-IN6_ADDR_EQUAL(const struct in6_addr *a, const struct in6_addr *b)
-{
-    return (memcmp(a, b, sizeof(struct in6_addr)) == 0);
-}
-
-#define IN6_IS_ADDR_UNSPECIFIED(a) IN6_ADDR_EQUAL((a), &in6addr_any)
-
-#endif /* __MINGW32__ */
-
+#include <errno.h>
 #include <stdio.h>
 
 #include "route6d.h"
 #include "interface.h"
 #include "addrtoname.h"
-#include "extract.h"
 
 static int
 rip6_entry_print(register const struct netinfo6 *ni, int metric)
@@ -67,29 +52,25 @@ rip6_entry_print(register const struct netinfo6 *ni, int metric)
 	int l;
 	l = printf("%s/%d", ip6addr_string(&ni->rip6_dest), ni->rip6_plen);
 	if (ni->rip6_tag)
-		l += printf(" [%d]", EXTRACT_16BITS(&ni->rip6_tag));
+		l += printf(" [%d]", ntohs(ni->rip6_tag));
 	if (metric)
 		l += printf(" (%d)", ni->rip6_metric);
 	return l;
 }
 
 void
-ripng_print(const u_char *dat, unsigned int length)
+ripng_print(const u_char *dat, int length)
 {
 	register const struct rip6 *rp = (struct rip6 *)dat;
 	register const struct netinfo6 *ni;
-	register u_int amt;
-	register u_int i;
+	register int amt = snapend - dat;
+	register int i = min(length, amt) -
+			 (sizeof(struct rip6) - sizeof(struct netinfo6));
 	int j;
 	int trunc;
 
-	if (snapend < dat)
+	if (i < 0)
 		return;
-	amt = snapend - dat;
-	i = min(length, amt);
-	if (i < (sizeof(struct rip6) - sizeof(struct netinfo6)))
-		return;
-	i -= (sizeof(struct rip6) - sizeof(struct netinfo6));
 
 	switch (rp->rip6_cmd) {
 
@@ -102,12 +83,11 @@ ripng_print(const u_char *dat, unsigned int length)
 			break;
 		}
 		if (j * sizeof(*ni) != length - 4)
-			printf(" ripng-req %d[%u]:", j, length);
+			printf(" ripng-req %d[%d]:", j, length);
 		else
 			printf(" ripng-req %d:", j);
 		trunc = ((i / sizeof(*ni)) * sizeof(*ni) != i);
-		for (ni = rp->rip6_nets; i >= sizeof(*ni);
-		    i -= sizeof(*ni), ++ni) {
+		for (ni = rp->rip6_nets; (i -= sizeof(*ni)) >= 0; ++ni) {
 			if (vflag > 1)
 				printf("\n\t");
 			else
@@ -118,12 +98,11 @@ ripng_print(const u_char *dat, unsigned int length)
 	case RIP6_RESPONSE:
 		j = length / sizeof(*ni);
 		if (j * sizeof(*ni) != length - 4)
-			printf(" ripng-resp %d[%u]:", j, length);
+			printf(" ripng-resp %d[%d]:", j, length);
 		else
 			printf(" ripng-resp %d:", j);
 		trunc = ((i / sizeof(*ni)) * sizeof(*ni) != i);
-		for (ni = rp->rip6_nets; i >= sizeof(*ni);
-		    i -= sizeof(*ni), ++ni) {
+		for (ni = rp->rip6_nets; (i -= sizeof(*ni)) >= 0; ++ni) {
 			if (vflag > 1)
 				printf("\n\t");
 			else
@@ -131,10 +110,10 @@ ripng_print(const u_char *dat, unsigned int length)
 			rip6_entry_print(ni, ni->rip6_metric);
 		}
 		if (trunc)
-			printf("[|ripng]");
+			printf("[|rip]");
 		break;
 	default:
-		printf(" ripng-%d ?? %u", rp->rip6_cmd, length);
+		printf(" ripng-%d ?? %d", rp->rip6_cmd, length);
 		break;
 	}
 	if (rp->rip6_vers != RIP6_VERSION)

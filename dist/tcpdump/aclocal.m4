@@ -1,4 +1,4 @@
-dnl @(#) Header: /tcpdump/master/tcpdump/aclocal.m4,v 1.98.2.4 2004/03/28 21:04:49 fenner Exp (LBL)
+dnl @(#) Header: /tcpdump/master/tcpdump/aclocal.m4,v 1.73 2001/01/02 22:18:27 guy Exp (LBL)
 dnl
 dnl Copyright (c) 1995, 1996, 1997, 1998
 dnl	The Regents of the University of California.  All rights reserved.
@@ -57,7 +57,7 @@ AC_DEFUN(AC_LBL_C_INIT,
 	    LBL_CFLAGS="$CFLAGS"
     fi
     if test -z "$CC" ; then
-	    case "$host_os" in
+	    case "$target_os" in
 
 	    bsdi*)
 		    AC_CHECK_PROG(SHLICC2, shlicc2, yes, no)
@@ -100,7 +100,7 @@ AC_DEFUN(AC_LBL_C_INIT,
 		    ac_cv_lbl_cc_ansi_prototypes=no))
 	    AC_MSG_RESULT($ac_cv_lbl_cc_ansi_prototypes)
 	    if test $ac_cv_lbl_cc_ansi_prototypes = no ; then
-		    case "$host_os" in
+		    case "$target_os" in
 
 		    hpux*)
 			    AC_MSG_CHECKING(for HP-UX ansi compiler ($CC -Aa -D_HPUX_SOURCE))
@@ -129,14 +129,14 @@ AC_DEFUN(AC_LBL_C_INIT,
 	    $2="$$2 -I/usr/local/include"
 	    LDFLAGS="$LDFLAGS -L/usr/local/lib"
 
-	    case "$host_os" in
+	    case "$target_os" in
 
 	    irix*)
-		    V_CCOPT="$V_CCOPT -xansi -signed -O"
+		    V_CCOPT="$V_CCOPT -xansi -signed -g3"
 		    ;;
 
 	    osf*)
-		    V_CCOPT="$V_CCOPT -std1 -O"
+		    V_CCOPT="$V_CCOPT -std1 -g3"
 		    ;;
 
 	    ultrix*)
@@ -156,51 +156,6 @@ AC_DEFUN(AC_LBL_C_INIT,
 	    esac
     fi
 ])
-
-#
-# Try compiling a sample of the type of code that appears in
-# gencode.c with "inline", "__inline__", and "__inline".
-#
-# Autoconf's AC_C_INLINE, at least in autoconf 2.13, isn't good enough,
-# as it just tests whether a function returning "int" can be inlined;
-# at least some versions of HP's C compiler can inline that, but can't
-# inline a function that returns a struct pointer.
-#
-AC_DEFUN(AC_LBL_C_INLINE,
-    [AC_MSG_CHECKING(for inline)
-    AC_CACHE_VAL(ac_cv_lbl_inline, [
-	ac_cv_lbl_inline=""
-	ac_lbl_cc_inline=no
-	for ac_lbl_inline in inline __inline__ __inline
-	do
-	    AC_TRY_COMPILE(
-		[#define inline $ac_lbl_inline
-		static inline struct iltest *foo(void);
-		struct iltest {
-		    int iltest1;
-		    int iltest2;
-		};
-
-		static inline struct iltest *
-		foo()
-		{
-		    static struct iltest xxx;
-
-		    return &xxx;
-		}],,ac_lbl_cc_inline=yes,)
-	    if test "$ac_lbl_cc_inline" = yes ; then
-		break;
-	    fi
-	done
-	if test "$ac_lbl_cc_inline" = yes ; then
-	    ac_cv_lbl_inline=$ac_lbl_inline
-	fi])
-    if test ! -z "$ac_cv_lbl_inline" ; then
-	AC_MSG_RESULT($ac_cv_lbl_inline)
-    else
-	AC_MSG_RESULT(no)
-    fi
-    AC_DEFINE_UNQUOTED(inline, $ac_cv_lbl_inline, [Define as token for inline if inlining supported])])
 
 dnl
 dnl Use pfopen.c if available and pfopen() not in standard libraries
@@ -236,9 +191,9 @@ AC_DEFUN(AC_LBL_LIBPCAP,
     AC_MSG_CHECKING(for local pcap library)
     libpcap=FAIL
     lastdir=FAIL
-    places=`ls $srcdir/.. | sed -e 's,/$,,' -e "s,^,$srcdir/../," | \
+    places=`ls .. | sed -e 's,/$,,' -e 's,^,../,' | \
 	egrep '/libpcap-[[0-9]]*.[[0-9]]*(.[[0-9]]*)?([[ab]][[0-9]]*)?$'`
-    for dir in $places $srcdir/../libpcap $srcdir/libpcap ; do
+    for dir in $places ../libpcap libpcap ; do
 	    basedir=`echo $dir | sed -e 's/[[ab]][[0-9]]*$//'`
 	    if test $lastdir = $basedir ; then
 		    dnl skip alphas when an actual release is present
@@ -257,51 +212,19 @@ AC_DEFUN(AC_LBL_LIBPCAP,
 	    if test $libpcap = FAIL ; then
 		    AC_MSG_ERROR(see the INSTALL doc for more info)
 	    fi
-	    dnl
-	    dnl Good old Red Hat Linux puts "pcap.h" in
-	    dnl "/usr/include/pcap"; had the LBL folks done so,
-	    dnl that would have been a good idea, but for
-	    dnl the Red Hat folks to do so just breaks source
-	    dnl compatibility with other systems.
-	    dnl
-	    dnl We work around this by assuming that, as we didn't
-	    dnl find a local libpcap, libpcap is in /usr/lib or
-	    dnl /usr/local/lib and that the corresponding header
-	    dnl file is under one of those directories; if we don't
-	    dnl find it in either of those directories, we check to
-	    dnl see if it's in a "pcap" subdirectory of them and,
-	    dnl if so, add that subdirectory to the "-I" list.
-	    dnl
-	    AC_MSG_CHECKING(for extraneous pcap header directories)
-	    if test \( ! -r /usr/local/include/pcap.h \) -a \
-			\( ! -r /usr/include/pcap.h \); then
-		if test -r /usr/local/include/pcap/pcap.h; then
-		    d="/usr/local/include/pcap"
-		elif test -r /usr/include/pcap/pcap.h; then
-		    d="/usr/include/pcap"
-		fi
-	    fi
-	    if test -z "$d" ; then
-		AC_MSG_RESULT(not found)
-	    else
-		$2="-I$d $$2"
-		AC_MSG_RESULT(found -- -I$d added)
-	    fi
     else
 	    $1=$libpcap
-	    places=`ls $srcdir/.. | sed -e 's,/$,,' -e "s,^,$srcdir/../," | \
-    	 		egrep '/libpcap-[[0-9]]*.[[0-9]]*(.[[0-9]]*)?([[ab]][[0-9]]*)?$'`
 	    if test -r $d/pcap.h; then
 		    $2="-I$d $$2"
-	    elif test -r $places/pcap.h; then
-		    $2="-I$places $$2"
+	    elif test -r $srcdir/../libpcap/pcap.h; then
+		    $2="-I$d -I$srcdir/../libpcap $$2"
 	    else
                     AC_MSG_ERROR(cannot find pcap.h, see INSTALL)
  	    fi
 	    AC_MSG_RESULT($libpcap)
     fi
     LIBS="$libpcap $LIBS"
-    case "$host_os" in
+    case "$target_os" in
 
     aix*)
 	    pseexe="/lib/pse.exp"
@@ -310,42 +233,8 @@ AC_DEFUN(AC_LBL_LIBPCAP,
 		    AC_MSG_RESULT(yes)
 		    LIBS="$LIBS -I:$pseexe"
 	    fi
-	    #
-	    # We need "-lodm" and "-lcfg", as libpcap requires them on
-	    # AIX, and we just build a static libpcap.a and thus can't
-	    # arrange that when you link with libpcap you automatically
-	    # link with those libraries.
-	    #
-	    LIBS="$LIBS -lodm -lcfg"
 	    ;;
-    esac
-
-    dnl
-    dnl Check for "pcap_list_datalinks()", "pcap_set_datalink()",
-    dnl and "pcap_datalink_name_to_val()", and use substitute versions
-    dnl if they're not present
-    dnl
-    AC_CHECK_FUNC(pcap_list_datalinks,
-	AC_DEFINE(HAVE_PCAP_LIST_DATALINKS),
-	AC_LIBOBJ(datalinks))
-    AC_CHECK_FUNC(pcap_set_datalink,
-	AC_DEFINE(HAVE_PCAP_SET_DATALINK))
-    AC_CHECK_FUNC(pcap_datalink_name_to_val,
-	[
-	    AC_DEFINE(HAVE_PCAP_DATALINK_NAME_TO_VAL)
-	    AC_CHECK_FUNC(pcap_datalink_val_to_description,
-		AC_DEFINE(HAVE_PCAP_DATALINK_VAL_TO_DESCRIPTION),
-		AC_LIBOBJ(dlnames))
-	],
-	AC_LIBOBJ(dlnames))
-
-    dnl
-    dnl Check for "pcap_breakloop()"; you can't substitute for it if
-    dnl it's absent (it has hooks into the live capture routines),
-    dnl so just define the HAVE_ value if it's there.
-    dnl
-    AC_CHECK_FUNCS(pcap_breakloop)
-])
+    esac])
 
 dnl
 dnl Define RETSIGTYPE and RETSIGVAL
@@ -367,17 +256,17 @@ AC_DEFUN(AC_LBL_TYPE_SIGNAL,
     else
 	    AC_DEFINE(RETSIGVAL,(0))
     fi
-    case "$host_os" in
+    case "$target_os" in
 
     irix*)
 	    AC_DEFINE(_BSD_SIGNALS)
 	    ;;
 
     *)
-	    dnl prefer sigaction() to sigset()
-	    AC_CHECK_FUNCS(sigaction)
-	    if test $ac_cv_func_sigaction = no ; then
-		    AC_CHECK_FUNCS(sigset)
+	    dnl prefer sigset() to sigaction()
+	    AC_CHECK_FUNCS(sigset)
+	    if test $ac_cv_func_sigset = no ; then
+		    AC_CHECK_FUNCS(sigaction)
 	    fi
 	    ;;
     esac])
@@ -600,41 +489,10 @@ dnl
 AC_DEFUN(AC_LBL_UNALIGNED_ACCESS,
     [AC_MSG_CHECKING(if unaligned accesses fail)
     AC_CACHE_VAL(ac_cv_lbl_unaligned_fail,
-	[case "$host_cpu" in
+	[case "$target_cpu" in
 
-	#
-	# These are CPU types where:
-	#
-	#	the CPU faults on an unaligned access, but at least some
-	#	OSes that support that CPU catch the fault and simulate
-	#	the unaligned access (e.g., Alpha/{Digital,Tru64} UNIX) -
-	#	the simulation is slow, so we don't want to use it;
-	#
-	#	the CPU, I infer (from the old
-	#
 	# XXX: should also check that they don't do weird things (like on arm)
-	#
-	#	comment) doesn't fault on unaligned accesses, but doesn't
-	#	do a normal unaligned fetch, either (e.g., presumably, ARM);
-	#
-	#	for whatever reason, the test program doesn't work
-	#	(this has been claimed to be the case for several of those
-	#	CPUs - I don't know what the problem is; the problem
-	#	was reported as "the test program dumps core" for SuperH,
-	#	but that's what the test program is *supposed* to do -
-	#	it dumps core before it writes anything, so the test
-	#	for an empty output file should find an empty output
-	#	file and conclude that unaligned accesses don't work).
-	#
-	# This run-time test won't work if you're cross-compiling, so
-	# in order to support cross-compiling for a particular CPU,
-	# we have to wire in the list of CPU types anyway, as far as
-	# I know, so perhaps we should just have a set of CPUs on
-	# which we know it doesn't work, a set of CPUs on which we
-	# know it does work, and have the script just fail on other
-	# cpu types and update it when such a failure occurs.
-	#
-	alpha*|arm*|hp*|mips*|sh*|sparc*|ia64|nv1)
+	alpha*|arm*|hp*|mips|sparc)
 		ac_cv_lbl_unaligned_fail=yes
 		;;
 
@@ -689,8 +547,7 @@ EOF
 dnl
 dnl If using gcc and the file .devel exists:
 dnl	Compile with -g (if supported) and -Wall
-dnl	If using gcc 2 or later, do extra prototype checking and some other
-dnl	checks
+dnl	If using gcc 2, do extra prototype checking
 dnl	If an os prototype include exists, symlink os-proto.h to it
 dnl
 dnl usage:
@@ -716,11 +573,11 @@ AC_DEFUN(AC_LBL_DEVEL,
 			    fi
 			    $1="$$1 -Wall"
 			    if test $ac_cv_lbl_gcc_vers -gt 1 ; then
-				    $1="$$1 -Wmissing-prototypes -Wstrict-prototypes -Wwrite-strings -W"
+				    $1="$$1 -Wmissing-prototypes -Wstrict-prototypes"
 			    fi
 		    fi
 	    else
-		    case "$host_os" in
+		    case "$target_os" in
 
 		    irix6*)
 			    V_CCOPT="$V_CCOPT -n32"
@@ -730,7 +587,7 @@ AC_DEFUN(AC_LBL_DEVEL,
 			    ;;
 		    esac
 	    fi
-	    os=`echo $host_os | sed -e 's/\([[0-9]][[0-9]]*\)[[^0-9]].*$/\1/'`
+	    os=`echo $target_os | sed -e 's/\([[0-9]][[0-9]]*\)[[^0-9]].*$/\1/'`
 	    name="lbl/os-$os.h"
 	    if test -f $name ; then
 		    ln -s $name os-proto.h
@@ -754,19 +611,13 @@ dnl results:
 dnl
 dnl	LIBS
 dnl
-dnl XXX - "AC_LBL_LIBRARY_NET" was redone to use "AC_SEARCH_LIBS"
-dnl rather than "AC_LBL_CHECK_LIB", so this isn't used any more.
-dnl We keep it around for reference purposes in case it's ever
-dnl useful in the future.
-dnl
 
 define(AC_LBL_CHECK_LIB,
 [AC_MSG_CHECKING([for $2 in -l$1])
-dnl Use a cache variable name containing the library, function
-dnl name, and extra libraries to link with, because the test really is
-dnl for library $1 defining function $2, when linked with potinal
-dnl library $5, not just for library $1.  Separate tests with the same
-dnl $1 and different $2's or $5's may have different results.
+dnl Use a cache variable name containing both the library and function name,
+dnl because the test really is for library $1 defining function $2, not
+dnl just for library $1.  Separate tests with the same $1 and different $2's
+dnl may have different results.
 ac_lib_var=`echo $1['_']$2['_']$5 | sed 'y%./+- %__p__%'`
 AC_CACHE_VAL(ac_cv_lbl_lib_$ac_lib_var,
 [ac_save_LIBS="$LIBS"
@@ -842,20 +693,23 @@ dnl
 AC_DEFUN(AC_LBL_LIBRARY_NET, [
     # Most operating systems have gethostbyname() in the default searched
     # libraries (i.e. libc):
-    # Some OSes (eg. Solaris) place it in libnsl
-    # Some strange OSes (SINIX) have it in libsocket:
-    AC_SEARCH_LIBS(gethostbyname, nsl socket resolv)
-    # Unfortunately libsocket sometimes depends on libnsl and
-    # AC_SEARCH_LIBS isn't up to the task of handling dependencies like this.
-    if test "$ac_cv_search_gethostbyname" = "no"
-    then
-	AC_CHECK_LIB(socket, gethostbyname,
-                     LIBS="-lsocket -lnsl $LIBS", , -lnsl)
-    fi
-    AC_SEARCH_LIBS(socket, socket, ,
-	AC_CHECK_LIB(socket, socket, LIBS="-lsocket -lnsl $LIBS", , -lnsl))
+    AC_CHECK_FUNC(gethostbyname, ,
+	# Some OSes (eg. Solaris) place it in libnsl:
+	AC_LBL_CHECK_LIB(nsl, gethostbyname, , 
+	    # Some strange OSes (SINIX) have it in libsocket:
+	    AC_LBL_CHECK_LIB(socket, gethostbyname, ,
+		# Unfortunately libsocket sometimes depends on libnsl.
+		# AC_CHECK_LIB's API is essentially broken so the
+		# following ugliness is necessary:
+		AC_LBL_CHECK_LIB(socket, gethostbyname,
+		    LIBS="-lsocket -lnsl $LIBS",
+		    AC_CHECK_LIB(resolv, gethostbyname),
+		    -lnsl))))
+    AC_CHECK_FUNC(socket, , AC_CHECK_LIB(socket, socket, ,
+	AC_LBL_CHECK_LIB(socket, socket, LIBS="-lsocket -lnsl $LIBS", ,
+	    -lnsl)))
     # DLPI needs putmsg under HPUX so test for -lstr while we're at it
-    AC_SEARCH_LIBS(putmsg, str)
+    AC_CHECK_LIB(str, putmsg)
     ])
 
 dnl Copyright (c) 1999 WIDE Project. All rights reserved.
@@ -1198,9 +1052,6 @@ ac_cv___attribute__=yes,
 ac_cv___attribute__=no)])
 if test "$ac_cv___attribute__" = "yes"; then
   AC_DEFINE(HAVE___ATTRIBUTE__, 1, [define if your compiler has __attribute__])
-  V_DEFS="$V_DEFS -D_U_=\"__attribute__((unused))\""
-else
-  V_DEFS="$V_DEFS -D_U_=\"\""
 fi
 AC_MSG_RESULT($ac_cv___attribute__)
 ])

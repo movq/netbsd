@@ -1,8 +1,8 @@
-/*	$NetBSD: print-cip.c,v 1.4 2004/09/27 23:04:24 dyoung Exp $	*/
+/*	$NetBSD: print-cip.c,v 1.1 2001/06/25 19:26:34 itojun Exp $	*/
 
 /*
- * Marko Kiiskila carnil@cs.tut.fi
- *
+ * Marko Kiiskila carnil@cs.tut.fi 
+ * 
  * Tampere University of Technology - Telecommunications Laboratory
  *
  * Permission to use, copy, modify and distribute this
@@ -14,22 +14,17 @@
  * documentation, and that the use of this software is
  * acknowledged in any publications resulting from using
  * the software.
- *
+ * 
  * TUT ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS"
  * CONDITION AND DISCLAIMS ANY LIABILITY OF ANY KIND FOR
  * ANY DAMAGES WHATSOEVER RESULTING FROM THE USE OF THIS
  * SOFTWARE.
- *
+ * 
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static const char rcsid[] _U_ =
-    "@(#) Header: /tcpdump/master/tcpdump/print-cip.c,v 1.21.2.2 2003/11/16 08:51:15 guy Exp (LBL)";
-#else
-__RCSID("$NetBSD: print-cip.c,v 1.4 2004/09/27 23:04:24 dyoung Exp $");
-#endif
+static const char rcsid[] =
+    "@(#) Header: /tcpdump/master/tcpdump/print-cip.c,v 1.13 2001/06/08 04:48:23 guy Exp (LBL)";
 #endif
 
 #ifdef HAVE_CONFIG_H
@@ -38,7 +33,13 @@ __RCSID("$NetBSD: print-cip.c,v 1.4 2004/09/27 23:04:24 dyoung Exp $");
 
 #include <string.h>
 
-#include <tcpdump-stdinc.h>
+#include <sys/param.h>
+#include <sys/time.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+
+
+#include <netinet/in.h>
 
 #include <stdio.h>
 #include <pcap.h>
@@ -48,7 +49,7 @@ __RCSID("$NetBSD: print-cip.c,v 1.4 2004/09/27 23:04:24 dyoung Exp $");
 #include "ethertype.h"
 #include "ether.h"
 
-#define RFC1483LLC_LEN	8
+#define RFC1483LLC_LEN	8 
 
 static unsigned char rfcllc[] = {
 	0xaa,	/* DSAP: non-ISO */
@@ -59,44 +60,84 @@ static unsigned char rfcllc[] = {
 	0x00 };
 
 static inline void
-cip_print(int length)
+cip_print(register const u_char *bp, int length)
 {
-	/*
-	 * There is no MAC-layer header, so just print the length.
-	 */
-	printf("%d: ", length);
+	int i;
+
+	if (memcmp(rfcllc, bp, sizeof(rfcllc))) {
+		if (qflag) {
+			for (i = 0;i < RFC1483LLC_LEN; i++)
+			(void)printf("%2.2x ",bp[i]);
+		} else {
+			for (i = 0;i < RFC1483LLC_LEN - 2; i++)
+				(void)printf("%2.2x ",bp[i]);
+			etherproto_string(((u_short*)bp)[3]);
+		} 
+	} else {
+		if (qflag)
+			(void)printf("(null encapsulation)");
+		else {
+			(void)printf("(null encap)");
+			etherproto_string(ETHERTYPE_IP);
+		}
+	}
 }
 
 /*
- * This is the top level routine of the printer.  'p' points
- * to the LLC/SNAP or raw header of the packet, 'h->ts' is the timestamp,
- * 'h->length' is the length of the packet off the wire, and 'h->caplen'
+ * This is the top level routine of the printer.  'p' is the points
+ * to the raw header of the packet, 'tvp' is the timestamp,
+ * 'length' is the length of the packet off the wire, and 'caplen'
  * is the number of bytes actually captured.
  */
-u_int
-cip_if_print(const struct pcap_pkthdr *h, const u_char *p)
+void
+cip_if_print(u_char *user, const struct pcap_pkthdr *h, const u_char *p)
 {
-	u_int caplen = h->caplen;
-	u_int length = h->len;
+	int caplen = h->caplen;
+	int length = h->len;
+	u_short ether_type;
 	u_short extracted_ethertype;
+	u_short *bp;
+
+	ts_print(&h->ts);
 
 	if (memcmp(rfcllc, p, sizeof(rfcllc))==0 && caplen < RFC1483LLC_LEN) {
 		printf("[|cip]");
-		return (0);
+		goto out;
 	}
 
 	if (eflag)
-		cip_print(length);
+		cip_print(p, length);
 
-	if (memcmp(rfcllc, p, sizeof(rfcllc)) == 0) {
-		/*
-		 * LLC header is present.  Try to print it & higher layers.
-		 */
+	/*
+	 * Some printers want to get back at the ethernet addresses,
+	 * and/or check that they're not walking off the end of the packet.
+	 * Rather than pass them all the way down, we set these globals.
+	 */
+	packetp = p;
+	snapend = p + caplen;
+
+	if (memcmp(rfcllc, p, sizeof(rfcllc))==0) {
+		length -= RFC1483LLC_LEN;
+		caplen -= RFC1483LLC_LEN;
+		bp = (u_short *)p;
+		p += RFC1483LLC_LEN;
+		ether_type = ntohs(bp[3]);
+	} else {
+		ether_type = ETHERTYPE_IP;
+		bp = (u_short *)p;
+	}
+
+	/*
+	 * Is it (gag) an 802.3 encapsulation?
+	 */
+	extracted_ethertype = 0;
+	if (ether_type < ETHERMTU) {
+		/* Try to print the LLC-layer header & higher layers */
 		if (llc_print(p, length, caplen, NULL, NULL,
-		    &extracted_ethertype) == 0) {
+		    &extracted_ethertype)==0) {
 			/* ether_type not known, print raw packet */
 			if (!eflag)
-				cip_print(length);
+				cip_print((u_char *)bp, length + RFC1483LLC_LEN);
 			if (extracted_ethertype) {
 				printf("(LLC %s) ",
 			       etherproto_string(htons(extracted_ethertype)));
@@ -104,12 +145,16 @@ cip_if_print(const struct pcap_pkthdr *h, const u_char *p)
 			if (!xflag && !qflag)
 				default_print(p, caplen);
 		}
-	} else {
-		/*
-		 * LLC header is absent; treat it as just IP.
-		 */
-		ip_print(p, length);
+	} else if (ether_encap_print(ether_type, p, length, caplen,
+	    &extracted_ethertype) == 0) {
+		/* ether_type not known, print raw packet */
+		if (!eflag)
+			cip_print((u_char *)bp, length + RFC1483LLC_LEN);
+		if (!xflag && !qflag)
+			default_print(p, caplen);
 	}
-
-	return (0);
+	if (xflag)
+		default_print(p, caplen);
+ out:
+	putchar('\n');
 }

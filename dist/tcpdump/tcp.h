@@ -1,6 +1,6 @@
-/*	$NetBSD: tcp.h,v 1.4 2004/09/27 23:04:25 dyoung Exp $	*/
+/*	$NetBSD: tcp.h,v 1.1 2001/06/25 19:26:41 itojun Exp $	*/
 
-/* @(#) Header: /tcpdump/master/tcpdump/tcp.h,v 1.10 2002/12/11 07:14:11 guy Exp (LBL) */
+/* @(#) Header: /tcpdump/master/tcpdump/tcp.h,v 1.8 2001/05/09 01:16:57 fenner Exp (LBL) */
 /*
  * Copyright (c) 1982, 1986, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -13,7 +13,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. Neither the name of the University nor the names of its contributors
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by the University of
+ *	California, Berkeley and its contributors.
+ * 4. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -73,7 +77,6 @@ struct tcphdr {
 #define TCPOPT_CC		11	/* T/TCP CC options (rfc1644) */
 #define TCPOPT_CCNEW		12	/* T/TCP CC options (rfc1644) */
 #define TCPOPT_CCECHO		13	/* T/TCP CC options (rfc1644) */
-#define TCPOPT_SIGNATURE	19	/* TCP MD5 signature */
 
 #define TCPOPT_TSTAMP_HDR	\
     (TCPOPT_NOP<<24|TCPOPT_NOP<<16|TCPOPT_TIMESTAMP<<8|TCPOLEN_TIMESTAMP)

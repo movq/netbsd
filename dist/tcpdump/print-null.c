@@ -1,4 +1,4 @@
-/*	$NetBSD: print-null.c,v 1.4 2004/09/27 23:04:24 dyoung Exp $	*/
+/*	$NetBSD: print-null.c,v 1.1 2001/06/25 19:26:37 itojun Exp $	*/
 
 /*
  * Copyright (c) 1991, 1993, 1994, 1995, 1996, 1997
@@ -21,21 +21,25 @@
  * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static const char rcsid[] _U_ =
-    "@(#) Header: /tcpdump/master/tcpdump/print-null.c,v 1.49.2.2 2003/11/16 08:51:36 guy Exp (LBL)";
-#else
-__RCSID("$NetBSD: print-null.c,v 1.4 2004/09/27 23:04:24 dyoung Exp $");
-#endif
+static const char rcsid[] =
+    "@(#) Header: /tcpdump/master/tcpdump/print-null.c,v 1.40 2000/12/16 22:00:50 guy Exp (LBL)";
 #endif
 
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
 
-#include <tcpdump-stdinc.h>
+#include <sys/param.h>
+#include <sys/time.h>
+#include <sys/socket.h>
+#include <sys/file.h>
+#include <sys/ioctl.h>
+
+struct mbuf;
+struct rtentry;
+
+#include <netinet/in.h>
 
 #include <pcap.h>
 #include <stdio.h>
@@ -47,6 +51,10 @@ __RCSID("$NetBSD: print-null.c,v 1.4 2004/09/27 23:04:24 dyoung Exp $");
 #include "ip.h"
 #ifdef INET6
 #include "ip6.h"
+#endif
+
+#ifndef AF_NS
+#define AF_NS		6		/* XEROX NS protocols */
 #endif
 
 /*
@@ -61,22 +69,6 @@ __RCSID("$NetBSD: print-null.c,v 1.4 2004/09/27 23:04:24 dyoung Exp $");
  */
 #define	NULL_HDRLEN 4
 
-/*
- * BSD AF_ values.
- *
- * Unfortunately, the BSDs don't all use the same value for AF_INET6,
- * so, because we want to be able to read captures from all of the BSDs,
- * we check for all of them.
- */
-#define BSD_AF_INET		2
-#define BSD_AF_NS		6		/* XEROX NS protocols */
-#define BSD_AF_ISO		7
-#define BSD_AF_APPLETALK	16
-#define BSD_AF_IPX		23
-#define BSD_AF_INET6_BSD	24	/* OpenBSD (and probably NetBSD), BSD/OS */
-#define BSD_AF_INET6_FREEBSD	28
-#define BSD_AF_INET6_DARWIN	30
-
 static void
 null_print(u_int family, u_int length)
 {
@@ -85,32 +77,18 @@ null_print(u_int family, u_int length)
 	else {
 		switch (family) {
 
-		case BSD_AF_INET:
+		case AF_INET:
 			printf("ip ");
 			break;
 
 #ifdef INET6
-		case BSD_AF_INET6_BSD:
-		case BSD_AF_INET6_FREEBSD:
-		case BSD_AF_INET6_DARWIN:
+		case AF_INET6:
 			printf("ip6 ");
 			break;
 #endif
 
-		case BSD_AF_NS:
+		case AF_NS:
 			printf("ns ");
-			break;
-
-		case BSD_AF_ISO:
-			printf("osi ");
-			break;
-
-		case BSD_AF_APPLETALK:
-			printf("atalk ");
-			break;
-
-		case BSD_AF_IPX:
-			printf("ipx ");
 			break;
 
 		default:
@@ -129,23 +107,15 @@ null_print(u_int family, u_int length)
 #define	SWAPLONG(y) \
 ((((y)&0xff)<<24) | (((y)&0xff00)<<8) | (((y)&0xff0000)>>8) | (((y)>>24)&0xff))
 
-/*
- * This is the top level routine of the printer.  'p' points
- * to the ether header of the packet, 'h->ts' is the timestamp,
- * 'h->length' is the length of the packet off the wire, and 'h->caplen'
- * is the number of bytes actually captured.
- */
-u_int
-null_if_print(const struct pcap_pkthdr *h, const u_char *p)
+void
+null_if_print(u_char *user, const struct pcap_pkthdr *h, const u_char *p)
 {
 	u_int length = h->len;
 	u_int caplen = h->caplen;
+	const struct ip *ip;
 	u_int family;
 
-	if (caplen < NULL_HDRLEN) {
-		printf("[|null]");
-		return (NULL_HDRLEN);
-	}
+	ts_print(&h->ts);
 
 	memcpy((char *)&family, (char *)p, sizeof(family));
 
@@ -160,47 +130,37 @@ null_if_print(const struct pcap_pkthdr *h, const u_char *p)
 	if ((family & 0xFFFF0000) != 0)
 		family = SWAPLONG(family);
 
+	/*
+	 * Some printers want to get back at the link level addresses,
+	 * and/or check that they're not walking off the end of the packet.
+	 * Rather than pass them all the way down, we set these globals.
+	 */
+	packetp = p;
+	snapend = p + caplen;
+
 	length -= NULL_HDRLEN;
-	caplen -= NULL_HDRLEN;
-	p += NULL_HDRLEN;
+
+	ip = (struct ip *)(p + NULL_HDRLEN);
 
 	if (eflag)
 		null_print(family, length);
 
-	switch (family) {
-
-	case BSD_AF_INET:
-		ip_print(p, length);
+	switch (IP_V(ip)) {
+	case 4:
+		ip_print((const u_char *)ip, length);
 		break;
-
 #ifdef INET6
-	case BSD_AF_INET6_BSD:
-	case BSD_AF_INET6_FREEBSD:
-	case BSD_AF_INET6_DARWIN:
-		ip6_print(p, length);
+	case 6:
+		ip6_print((const u_char *)ip, length);
 		break;
-#endif
-
-	case BSD_AF_ISO:
-		isoclns_print(p, length, caplen);
-		break;
-
-	case BSD_AF_APPLETALK:
-		atalk_print(p, length);
-		break;
-
-	case BSD_AF_IPX:
-		ipx_print(p, length);
-		break;
-
+#endif /* INET6 */
 	default:
-		/* unknown AF_ value */
-		if (!eflag)
-			null_print(family, length + NULL_HDRLEN);
-		if (!xflag && !qflag)
-			default_print(p, caplen);
+		printf("ip v%d", IP_V(ip));
+		break;
 	}
 
-	return (NULL_HDRLEN);
+	if (xflag)
+		default_print((const u_char *)ip, caplen - NULL_HDRLEN);
+	putchar('\n');
 }
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: print-frag6.c,v 1.4 2004/09/27 23:04:24 dyoung Exp $	*/
+/*	$NetBSD: print-frag6.c,v 1.1 2001/06/25 19:26:34 itojun Exp $	*/
 
 /*
  * Copyright (c) 1988, 1989, 1990, 1991, 1993, 1994
@@ -21,14 +21,9 @@
  * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static const char rcsid[] _U_ =
-    "@(#) Header: /tcpdump/master/tcpdump/print-frag6.c,v 1.16.2.3 2003/11/19 00:35:43 guy Exp";
-#else
-__RCSID("$NetBSD: print-frag6.c,v 1.4 2004/09/27 23:04:24 dyoung Exp $");
-#endif
+static const char rcsid[] =
+    "@(#) Header: /tcpdump/master/tcpdump/print-frag6.c,v 1.12 2000/10/07 05:53:10 itojun Exp";
 #endif
 
 #ifdef HAVE_CONFIG_H
@@ -37,7 +32,13 @@ __RCSID("$NetBSD: print-frag6.c,v 1.4 2004/09/27 23:04:24 dyoung Exp $");
 
 #ifdef INET6
 
-#include <tcpdump-stdinc.h>
+#include <sys/param.h>
+#include <sys/time.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+
+
+#include <netinet/in.h>
 
 #include <stdio.h>
 
@@ -45,7 +46,6 @@ __RCSID("$NetBSD: print-frag6.c,v 1.4 2004/09/27 23:04:24 dyoung Exp $");
 
 #include "interface.h"
 #include "addrtoname.h"
-#include "extract.h"
 
 int
 frag6_print(register const u_char *bp, register const u_char *bp2)
@@ -58,8 +58,8 @@ frag6_print(register const u_char *bp, register const u_char *bp2)
 #define TCHECK(var) if ((u_char *)&(var) >= ep - sizeof(var)) goto trunc
 #endif
 
-	dp = (const struct ip6_frag *)bp;
-	ip6 = (const struct ip6_hdr *)bp2;
+	dp = (struct ip6_frag *)bp;
+	ip6 = (struct ip6_hdr *)bp2;
 
 	/* 'ep' points to the end of available data. */
 	ep = snapend;
@@ -68,21 +68,21 @@ frag6_print(register const u_char *bp, register const u_char *bp2)
 
 	if (vflag) {
 		printf("frag (0x%08x:%d|%ld)",
-		       EXTRACT_32BITS(&dp->ip6f_ident),
-		       EXTRACT_16BITS(&dp->ip6f_offlg) & IP6F_OFF_MASK,
-		       sizeof(struct ip6_hdr) + EXTRACT_16BITS(&ip6->ip6_plen) -
+		       (u_int32_t)ntohl(dp->ip6f_ident),
+		       ntohs(dp->ip6f_offlg & IP6F_OFF_MASK),
+		       sizeof(struct ip6_hdr) + ntohs(ip6->ip6_plen) -
 			       (long)(bp - bp2) - sizeof(struct ip6_frag));
 	} else {
 		printf("frag (%d|%ld)",
-		       EXTRACT_16BITS(&dp->ip6f_offlg) & IP6F_OFF_MASK,
-		       sizeof(struct ip6_hdr) + EXTRACT_16BITS(&ip6->ip6_plen) -
+		       ntohs(dp->ip6f_offlg & IP6F_OFF_MASK),
+		       sizeof(struct ip6_hdr) + ntohs(ip6->ip6_plen) -
 			       (long)(bp - bp2) - sizeof(struct ip6_frag));
 	}
 
 #if 1
 	/* it is meaningless to decode non-first fragment */
-	if ((EXTRACT_16BITS(&dp->ip6f_offlg) & IP6F_OFF_MASK) != 0)
-		return -1;
+	if (ntohs(dp->ip6f_offlg & IP6F_OFF_MASK) != 0)
+		return 65535;
 	else
 #endif
 	{
@@ -91,7 +91,7 @@ frag6_print(register const u_char *bp, register const u_char *bp2)
 	}
 trunc:
 	fputs("[|frag]", stdout);
-	return -1;
+	return 65535;
 #undef TCHECK
 }
 #endif /* INET6 */

@@ -1,4 +1,4 @@
-/*	$NetBSD: print-atalk.c,v 1.6 2004/09/27 23:04:24 dyoung Exp $	*/
+/*	$NetBSD: print-atalk.c,v 1.1 2001/06/25 19:26:33 itojun Exp $	*/
 
 /*
  * Copyright (c) 1988, 1989, 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1997
@@ -23,25 +23,25 @@
  * Format and print AppleTalk packets.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static const char rcsid[] _U_ =
-    "@(#) Header: /tcpdump/master/tcpdump/print-atalk.c,v 1.78.2.2 2003/11/16 08:51:11 guy Exp (LBL)";
-#else
-__RCSID("$NetBSD: print-atalk.c,v 1.6 2004/09/27 23:04:24 dyoung Exp $");
-#endif
+static const char rcsid[] =
+    "@(#) Header: /tcpdump/master/tcpdump/print-atalk.c,v 1.66 2001/06/18 08:52:53 guy Exp (LBL)";
 #endif
 
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
 
-#include <tcpdump-stdinc.h>
+#include <sys/param.h>
+#include <sys/time.h>
+#include <sys/socket.h>
+
+#include <netinet/in.h>
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <netdb.h>		/* for MAXHOSTNAMELEN on some platforms */
 #include <pcap.h>
 
 #include "interface.h"
@@ -88,42 +88,37 @@ static const char *ddpskt_string(int);
 /*
  * Print LLAP packets received on a physical LocalTalk interface.
  */
-u_int
-ltalk_if_print(const struct pcap_pkthdr *h, const u_char *p)
+void
+ltalk_if_print(u_char *user, const struct pcap_pkthdr *h, const u_char *p)
 {
-	return (llap_print(p, h->caplen));
+	snapend = p + h->caplen;
+	ts_print(&h->ts);
+	llap_print(p, h->caplen);
+	if(xflag)
+		default_print(p, h->caplen);
+	putchar('\n');
 }
 
 /*
  * Print AppleTalk LLAP packets.
  */
-u_int
+void
 llap_print(register const u_char *bp, u_int length)
 {
 	register const struct LAP *lp;
 	register const struct atDDP *dp;
 	register const struct atShortDDP *sdp;
 	u_short snet;
-	u_int hdrlen;
 
-	/*
-	 * Our packet is on a 4-byte boundary, as we're either called
-	 * directly from a top-level link-layer printer (ltalk_if_print)
-	 * or from the UDP printer.  The LLAP+DDP header is a multiple
-	 * of 4 bytes in length, so the DDP payload is also on a 4-byte
-	 * boundary, and we don't need to align it before calling
-	 * "ddp_print()".
-	 */
-	lp = (const struct LAP *)bp;
+	lp = (struct LAP *)bp;
 	bp += sizeof(*lp);
 	length -= sizeof(*lp);
-	hdrlen = sizeof(*lp);
 	switch (lp->type) {
 
 	case lapShortDDP:
 		if (length < ddpSSize) {
 			(void)printf(" [|sddp %d]", length);
-			return (length);
+			return;
 		}
 		sdp = (const struct atShortDDP *)bp;
 		printf("%s.%s",
@@ -132,14 +127,13 @@ llap_print(register const u_char *bp, u_int length)
 		    ataddr_string(0, lp->dst), ddpskt_string(sdp->dstSkt));
 		bp += ddpSSize;
 		length -= ddpSSize;
-		hdrlen += ddpSSize;
 		ddp_print(bp, length, sdp->type, 0, lp->src, sdp->srcSkt);
 		break;
 
 	case lapDDP:
 		if (length < ddpSize) {
 			(void)printf(" [|ddp %d]", length);
-			return (length);
+			return;
 		}
 		dp = (const struct atDDP *)bp;
 		snet = EXTRACT_16BITS(&dp->srcNet);
@@ -150,7 +144,6 @@ llap_print(register const u_char *bp, u_int length)
 		    ddpskt_string(dp->dstSkt));
 		bp += ddpSize;
 		length -= ddpSize;
-		hdrlen += ddpSize;
 		ddp_print(bp, length, dp->type, snet, dp->srcNode, dp->srcSkt);
 		break;
 
@@ -165,7 +158,6 @@ llap_print(register const u_char *bp, u_int length)
 		    lp->src, lp->dst, lp->type, length);
 		break;
 	}
-	return (hdrlen);
 }
 
 /*
@@ -180,8 +172,8 @@ atalk_print(register const u_char *bp, u_int length)
 	u_short snet;
 
 	if (length < ddpSize) {
-		(void)printf(" [|ddp %d]", length);
-		return;
+	  (void)printf(" [|ddp %d]", length);
+	  return;
 	}
 	dp = (const struct atDDP *)bp;
 	snet = EXTRACT_16BITS(&dp->srcNet);
@@ -205,10 +197,9 @@ aarp_print(register const u_char *bp, u_int length)
 
 	printf("aarp ");
 	ap = (const struct aarp *)bp;
-	if (EXTRACT_16BITS(&ap->htype) == 1 &&
-	    EXTRACT_16BITS(&ap->ptype) == ETHERTYPE_ATALK &&
+	if (ntohs(ap->htype) == 1 && ntohs(ap->ptype) == ETHERTYPE_ATALK &&
 	    ap->halen == 6 && ap->palen == 4 )
-		switch (EXTRACT_16BITS(&ap->op)) {
+		switch (ntohs(ap->op)) {
 
 		case 1:				/* request */
 			(void)printf("who-has %s tell %s",
@@ -226,8 +217,8 @@ aarp_print(register const u_char *bp, u_int length)
 			return;
 		}
 	(void)printf("len %u op %u htype %u ptype %#x halen %u palen %u",
-	    length, EXTRACT_16BITS(&ap->op), EXTRACT_16BITS(&ap->htype),
-	    EXTRACT_16BITS(&ap->ptype), ap->halen, ap->palen);
+	    length, ntohs(ap->op), ntohs(ap->htype), ntohs(ap->ptype),
+	    ap->halen, ap->palen);
 }
 
 /*
@@ -382,14 +373,9 @@ nbp_print(register const struct atNBP *np, u_int length, register u_short snet,
 	  register u_char snode, register u_char skt)
 {
 	register const struct atNBPtuple *tp =
-		(const struct atNBPtuple *)((u_char *)np + nbpHeaderSize);
+			(struct atNBPtuple *)((u_char *)np + nbpHeaderSize);
 	int i;
 	const u_char *ep;
-
-	if (length < nbpHeaderSize) {
-		(void)printf(" truncated-nbp %d", length);
-		return;
-	}
 
 	length -= nbpHeaderSize;
 	if (length < 8) {
@@ -463,7 +449,7 @@ print_cstring(register const char *cp, register const u_char *ep)
 		return (0);
 	}
 	while ((int)--length >= 0) {
-		if (cp >= (const char *)ep) {
+		if (cp >= (char *)ep) {
 			fputs(tstr, stdout);
 			return (0);
 		}

@@ -1,6 +1,6 @@
-/*	$NetBSD: nameser.h,v 1.4 2004/09/27 23:04:24 dyoung Exp $	*/
+/*	$NetBSD: nameser.h,v 1.1 2001/06/25 19:26:32 itojun Exp $	*/
 
-/* @(#) Header: /tcpdump/master/tcpdump/nameser.h,v 1.14 2003/11/05 06:02:59 guy Exp (LBL) */
+/* @(#) Header: /tcpdump/master/tcpdump/nameser.h,v 1.7 2001/02/20 06:31:34 itojun Exp (LBL) */
 /*
  * Copyright (c) 1983, 1989, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -13,7 +13,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. Neither the name of the University nor the names of its contributors
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by the University of
+ *	California, Berkeley and its contributors.
+ * 4. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -32,14 +36,14 @@
  *      @(#)nameser.h	8.2 (Berkeley) 2/16/94
  * -
  * Portions Copyright (c) 1993 by Digital Equipment Corporation.
- *
+ * 
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
  * copyright notice and this permission notice appear in all copies, and that
  * the name of Digital Equipment Corporation not be used in advertising or
  * publicity pertaining to distribution of the document or software without
  * specific, written prior permission.
- *
+ * 
  * THE SOFTWARE IS PROVIDED "AS IS" AND DIGITAL EQUIPMENT CORP. DISCLAIMS ALL
  * WARRANTIES WITH REGARD TO THIS SOFTWARE, INCLUDING ALL IMPLIED WARRANTIES
  * OF MERCHANTABILITY AND FITNESS.   IN NO EVENT SHALL DIGITAL EQUIPMENT
@@ -73,7 +77,6 @@
  * Internet nameserver port number
  */
 #define NAMESERVER_PORT	53
-#define MULTICASTDNS_PORT	5353
 
 /*
  * Currently defined opcodes
@@ -93,23 +96,6 @@
 
 #define ZONEINIT	0xe		/* initial zone transfer */
 #define ZONEREF		0xf		/* incremental zone referesh */
-
-/*
- * Undefine various #defines from various System V-flavored OSes (Solaris,
- * SINIX, HP-UX) so the compiler doesn't whine that we redefine them.
- */
-#ifdef T_NULL
-#undef T_NULL
-#endif
-#ifdef T_OPT
-#undef T_OPT
-#endif
-#ifdef T_UNSPEC
-#undef T_UNSPEC
-#endif
-#ifdef NOERROR
-#undef NOERROR
-#endif
 
 /*
  * Currently defined response codes
@@ -188,7 +174,6 @@
 #define C_HS		4		/* for Hesiod name server (MIT) (XXX) */
 	/* Query class values which do not appear in resource records */
 #define C_ANY		255		/* wildcard match */
-#define C_CACHE_FLUSH	0x8000		/* mDNS cache flush flag */
 
 /*
  * Status return codes for T_UNSPEC conversion routines
@@ -231,7 +216,7 @@ typedef struct {
  */
 #define INDIR_MASK	0xc0	/* 11.... */
 #define EDNS0_MASK	0x40	/* 01.... */
-#  define EDNS0_ELT_BITLABEL 0x01
+#  define EDNS0_ELT_BITLABEL 0x01 
 
 /*
  * Structure for passing resource records around.

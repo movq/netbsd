@@ -1,4 +1,4 @@
-/*	$NetBSD: print-sl.c,v 1.4 2004/09/27 23:04:25 dyoung Exp $	*/
+/*	$NetBSD: print-sl.c,v 1.1 2001/06/25 19:26:39 itojun Exp $	*/
 
 /*
  * Copyright (c) 1989, 1990, 1991, 1993, 1994, 1995, 1996, 1997
@@ -21,22 +21,22 @@
  * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static const char rcsid[] _U_ =
-    "@(#) Header: /tcpdump/master/tcpdump/print-sl.c,v 1.62.2.2 2003/11/16 08:51:44 guy Exp (LBL)";
-#else
-__RCSID("$NetBSD: print-sl.c,v 1.4 2004/09/27 23:04:25 dyoung Exp $");
-#endif
+static const char rcsid[] =
+    "@(#) Header: /tcpdump/master/tcpdump/print-sl.c,v 1.56 2000/10/10 05:06:10 guy Exp (LBL)";
 #endif
 
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
 
-#include <tcpdump-stdinc.h>
+#include <sys/param.h>
+#include <sys/time.h>
 
+#include <netinet/in.h>
+
+#include <ctype.h>
+#include <netdb.h>
 #include <pcap.h>
 #include <stdio.h>
 
@@ -55,17 +55,26 @@ static u_int lastconn = 255;
 static void sliplink_print(const u_char *, const struct ip *, u_int);
 static void compressed_sl_print(const u_char *, const struct ip *, u_int, int);
 
-u_int
-sl_if_print(const struct pcap_pkthdr *h, const u_char *p)
+void
+sl_if_print(u_char *user, const struct pcap_pkthdr *h, const u_char *p)
 {
 	register u_int caplen = h->caplen;
 	register u_int length = h->len;
 	register const struct ip *ip;
 
+	ts_print(&h->ts);
+
 	if (caplen < SLIP_HDRLEN) {
 		printf("[|slip]");
-		return (caplen);
+		goto out;
 	}
+	/*
+	 * Some printers want to get back at the link level addresses,
+	 * and/or check that they're not walking off the end of the packet.
+	 * Rather than pass them all the way down, we set these globals.
+	 */
+	packetp = p;
+	snapend = p + caplen;
 
 	length -= SLIP_HDRLEN;
 
@@ -87,20 +96,33 @@ sl_if_print(const struct pcap_pkthdr *h, const u_char *p)
 		printf ("ip v%d", IP_V(ip));
 	}
 
-	return (SLIP_HDRLEN);
+	if (xflag)
+		default_print((u_char *)ip, caplen - SLIP_HDRLEN);
+ out:
+	putchar('\n');
 }
 
-u_int
-sl_bsdos_if_print(const struct pcap_pkthdr *h, const u_char *p)
+
+void
+sl_bsdos_if_print(u_char *user, const struct pcap_pkthdr *h, const u_char *p)
 {
 	register u_int caplen = h->caplen;
 	register u_int length = h->len;
 	register const struct ip *ip;
 
+	ts_print(&h->ts);
+
 	if (caplen < SLIP_HDRLEN) {
 		printf("[|slip]");
-		return (caplen);
+		goto out;
 	}
+	/*
+	 * Some printers want to get back at the link level addresses,
+	 * and/or check that they're not walking off the end of the packet.
+	 * Rather than pass them all the way down, we set these globals.
+	 */
+	packetp = p;
+	snapend = p + caplen;
 
 	length -= SLIP_HDRLEN;
 
@@ -113,7 +135,10 @@ sl_bsdos_if_print(const struct pcap_pkthdr *h, const u_char *p)
 
 	ip_print((u_char *)ip, length);
 
-	return (SLIP_HDRLEN);
+	if (xflag)
+		default_print((u_char *)ip, caplen - SLIP_HDRLEN);
+ out:
+	putchar('\n');
 }
 
 static void

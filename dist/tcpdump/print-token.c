@@ -1,4 +1,4 @@
-/*	$NetBSD: print-token.c,v 1.5 2004/09/27 23:04:25 dyoung Exp $	*/
+/*	$NetBSD: print-token.c,v 1.1 2001/06/25 19:26:40 itojun Exp $	*/
 
 /*
  * Copyright (c) 1988, 1989, 1990, 1991, 1992, 1993, 1994, 1995, 1996
@@ -25,21 +25,20 @@
  * Further tweaked to more closely resemble print-fddi.c
  *	Guy Harris <guy@alum.mit.edu>
  */
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static const char rcsid[] _U_ =
-    "@(#) Header: /tcpdump/master/tcpdump/print-token.c,v 1.22.2.2 2003/11/16 08:51:51 guy Exp";
-#else
-__RCSID("$NetBSD: print-token.c,v 1.5 2004/09/27 23:04:25 dyoung Exp $");
-#endif
+static const char rcsid[] =
+    "@(#) Header: /tcpdump/master/tcpdump/print-token.c,v 1.11 2000/12/23 20:48:13 guy Exp";
 #endif
 
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
 
-#include <tcpdump-stdinc.h>
+#include <sys/param.h>
+#include <sys/time.h>
+#include <sys/socket.h>
+
+#include <netinet/in.h>
 
 #include <pcap.h>
 #include <stdio.h>
@@ -56,18 +55,18 @@ __RCSID("$NetBSD: print-token.c,v 1.5 2004/09/27 23:04:25 dyoung Exp $");
 static inline void
 extract_token_addrs(const struct token_header *trp, char *fsrc, char *fdst)
 {
-	memcpy(fdst, (const char *)trp->token_dhost, 6);
-	memcpy(fsrc, (const char *)trp->token_shost, 6);
+	memcpy(fdst, (char *)trp->token_dhost, 6);
+	memcpy(fsrc, (char *)trp->token_shost, 6);
 }
 
 /*
  * Print the TR MAC header
  */
 static inline void
-token_hdr_print(register const struct token_header *trp, register u_int length,
+token_print(register const struct token_header *trp, register u_int length,
 	   register const u_char *fsrc, register const u_char *fdst)
 {
-	const char *srcname, *dstname;
+	char *srcname, *dstname;
 
 	srcname = etheraddr_string(fsrc);
 	dstname = etheraddr_string(fdst);
@@ -82,18 +81,18 @@ token_hdr_print(register const struct token_header *trp, register u_int length,
 		printf("%s %s %d: ", srcname, dstname, length);
 }
 
-static const char *broadcast_indicator[] = {
+static char *broadcast_indicator[] = {
 	"Non-Broadcast", "Non-Broadcast",
 	"Non-Broadcast", "Non-Broadcast",
 	"All-routes",    "All-routes",
 	"Single-route",  "Single-route"
 };
 
-static const char *direction[] = {
+static char *direction[] = {
 	"Forward", "Backward"
 };
 
-static const char *largest_frame[] = {
+static char *largest_frame[] = {
 	"516",
 	"1500",
 	"2052",
@@ -104,26 +103,47 @@ static const char *largest_frame[] = {
 	"??"
 };
 
-u_int
-token_print(const u_char *p, u_int length, u_int caplen)
+/*
+ * This is the top level routine of the printer.  'p' is the points
+ * to the TR header of the packet, 'tvp' is the timestamp,
+ * 'length' is the length of the packet off the wire, and 'caplen'
+ * is the number of bytes actually captured.
+ */
+void
+token_if_print(u_char *user, const struct pcap_pkthdr *h, const u_char *p)
 {
-	const struct token_header *trp;
+	u_int caplen = h->caplen;
+	u_int length = h->len;
+	struct token_header *trp;
 	u_short extracted_ethertype;
 	struct ether_header ehdr;
-	u_int route_len = 0, hdr_len = TOKEN_HDRLEN;
-	int seg;
+	u_int route_len = 0, seg;
 
-	trp = (const struct token_header *)p;
+	trp = (struct token_header *)p;
+
+	ts_print(&h->ts);
 
 	if (caplen < TOKEN_HDRLEN) {
 		printf("[|token-ring]");
-		return hdr_len;
+		goto out;
 	}
-
 	/*
 	 * Get the TR addresses into a canonical form
 	 */
 	extract_token_addrs(trp, (char*)ESRC(&ehdr), (char*)EDST(&ehdr));
+	/*
+	 * Some printers want to get back at the ethernet addresses,
+	 * and/or check that they're not walking off the end of the packet.
+	 * Rather than pass them all the way down, we set these globals.
+	 */
+	snapend = p + caplen;
+	/*
+	 * Actually, the only printers that use packetp are print-arp.c
+	 * and print-bootp.c, and they assume that packetp points to an
+	 * Ethernet header.  The right thing to do is to fix them to know
+	 * which link type is in use when they excavate. XXX
+	 */
+	packetp = (u_char *)&ehdr;
 
 	/* Adjust for source routing information in the MAC header */
 	if (IS_SOURCE_ROUTED(trp)) {
@@ -131,33 +151,32 @@ token_print(const u_char *p, u_int length, u_int caplen)
 		*ESRC(&ehdr) &= 0x7f;
 
 		if (eflag)
-			token_hdr_print(trp, length, ESRC(&ehdr), EDST(&ehdr));
+			token_print(trp, length, ESRC(&ehdr), EDST(&ehdr));
 
 		route_len = RIF_LENGTH(trp);
 		if (vflag) {
 			printf("%s ", broadcast_indicator[BROADCAST(trp)]);
 			printf("%s", direction[DIRECTION(trp)]);
-
+     
 			for (seg = 0; seg < SEGMENT_COUNT(trp); seg++)
 				printf(" [%d:%d]", RING_NUMBER(trp, seg),
 				    BRIDGE_NUMBER(trp, seg));
 		} else {
 			printf("rt = %x", ntohs(trp->token_rcf));
-
+ 
 			for (seg = 0; seg < SEGMENT_COUNT(trp); seg++)
 				printf(":%x", ntohs(trp->token_rseg[seg]));
 		}
 		printf(" (%s) ", largest_frame[LARGEST_FRAME(trp)]);
 	} else {
 		if (eflag)
-			token_hdr_print(trp, length, ESRC(&ehdr), EDST(&ehdr));
+			token_print(trp, length, ESRC(&ehdr), EDST(&ehdr));
 	}
 
 	/* Skip over token ring MAC header and routing information */
-	hdr_len += route_len;
-	length -= hdr_len;
-	p += hdr_len;
-	caplen -= hdr_len;
+	length -= TOKEN_HDRLEN + route_len;
+	p += TOKEN_HDRLEN + route_len;
+	caplen -= TOKEN_HDRLEN + route_len;
 
 	/* Frame Control field determines interpretation of packet */
 	extracted_ethertype = 0;
@@ -167,7 +186,7 @@ token_print(const u_char *p, u_int length, u_int caplen)
 		    &extracted_ethertype) == 0) {
 			/* ether_type not known, print raw packet */
 			if (!eflag)
-				token_hdr_print(trp,
+				token_print(trp,
 				    length + TOKEN_HDRLEN + route_len,
 				    ESRC(&ehdr), EDST(&ehdr));
 			if (extracted_ethertype) {
@@ -181,22 +200,13 @@ token_print(const u_char *p, u_int length, u_int caplen)
 		/* Some kinds of TR packet we cannot handle intelligently */
 		/* XXX - dissect MAC packets if frame type is 0 */
 		if (!eflag)
-			token_hdr_print(trp, length + TOKEN_HDRLEN + route_len,
+			token_print(trp, length + TOKEN_HDRLEN + route_len,
 			    ESRC(&ehdr), EDST(&ehdr));
 		if (!xflag && !qflag)
 			default_print(p, caplen);
 	}
-	return (hdr_len);
-}
-
-/*
- * This is the top level routine of the printer.  'p' points
- * to the TR header of the packet, 'h->ts' is the timestamp,
- * 'h->length' is the length of the packet off the wire, and 'h->caplen'
- * is the number of bytes actually captured.
- */
-u_int
-token_if_print(const struct pcap_pkthdr *h, const u_char *p)
-{
-	return (token_print(p, h->len, h->caplen));
+	if (xflag)
+		default_print(p, caplen);
+out:
+	putchar('\n');
 }

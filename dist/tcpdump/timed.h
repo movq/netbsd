@@ -1,6 +1,6 @@
-/*	$NetBSD: timed.h,v 1.3 2004/09/27 23:04:25 dyoung Exp $	*/
+/*	$NetBSD: timed.h,v 1.1 2001/06/25 19:26:41 itojun Exp $	*/
 
-/* @(#) Header: /tcpdump/master/tcpdump/timed.h,v 1.5 2002/12/11 07:14:12 guy Exp (LBL) */
+/* @(#) Header: /tcpdump/master/tcpdump/timed.h,v 1.3 2000/12/17 23:07:51 guy Exp (LBL) */
 /*
  * Copyright (c) 1983, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -13,7 +13,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. Neither the name of the University nor the names of its contributors
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by the University of
+ *	California, Berkeley and its contributors.
+ * 4. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -43,14 +47,14 @@
 #define ANYADDR 	NULL
 
 struct tsp {
-	u_int8_t	tsp_type;
-	u_int8_t	tsp_vers;
-	u_int16_t	tsp_seq;
+	u_char	tsp_type;
+	u_char	tsp_vers;
+	u_short	tsp_seq;
 	union {
 		struct timeval tspu_time;
-		int8_t tspu_hopcnt;
+		char tspu_hopcnt;
 	} tsp_u;
-	int8_t tsp_name[256];
+	char tsp_name[256];
 };
 
 #define	tsp_time	tsp_u.tspu_time
