@@ -1,4 +1,4 @@
-/* -*-C++-*-	$NetBSD: framebuffer.cpp,v 1.6 2001/03/25 17:14:04 uch Exp $	*/
+/* -*-C++-*-	$NetBSD: framebuffer.cpp,v 1.7 2001/04/24 19:27:59 uch Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -85,8 +85,7 @@ FrameBufferInfo::~FrameBufferInfo()
 int
 FrameBufferInfo::type()
 {
-	HpcMenuInterface &menu = HpcMenuInterface::Instance();
-	BOOL reverse = menu._pref.reverse_video;
+	BOOL reverse = HPC_PREFERENCE.reverse_video;
 	int type;
 	
 	switch(_fb->bpp) {
