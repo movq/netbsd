@@ -1,5 +1,5 @@
 /*
- * $Id: pathnames.h,v 1.1 1994/01/05 20:40:15 jtc Exp $
+ * $Id: pathnames.h,v 1.1.1.1 1994/01/05 20:40:16 jtc Exp $
  */
 
 #if (defined(BSD)) && (BSD >= 199103) || defined(__linux) || defined(AIX)
