@@ -1,4 +1,4 @@
-/*	$NetBSD: hdfd.c,v 1.15 1999/08/06 08:27:31 leo Exp $	*/
+/*	$NetBSD: hdfd.c,v 1.15.6.1 1999/12/21 23:15:56 wrstuden Exp $	*/
 
 /*-
  * Copyright (c) 1996 Leo Weppelman
@@ -1338,7 +1338,8 @@ fdioctl(dev, cmd, addr, flag, p)
 		if (error)
 			return error;
 
-		error = writedisklabel(dev, fdstrategy, &buffer, NULL);
+		error = writedisklabel(dev, fdstrategy, &buffer, NULL,
+				7 + fd->sc_type->secsize);
 		return error;
 
 	case FDIOCGETFORMAT:
@@ -1556,7 +1557,7 @@ dev_t		dev;
 	/*
 	 * If there is no label on the disk: fake one
 	 */
-	if (readdisklabel(dev, fdstrategy, lp, &cpulab) != NULL)
+	if (readdisklabel(dev, fdstrategy, lp, &cpulab, FDC_BSHIFT) != NULL)
 		fdgetdefaultlabel(fd, lp, RAW_PART);
 
 	if ((FDC_BSIZE * fd->sc_type->size)

@@ -1,4 +1,4 @@
-#	$NetBSD: GENERIC,v 1.128 1999/07/29 10:37:14 augustss Exp $
+#	$NetBSD: GENERIC,v 1.128.2.1 1999/12/21 23:15:53 wrstuden Exp $
 
 #
 #if 0
@@ -119,6 +119,7 @@ options 	UCONSOLE	# anyone can redirect a virtual console
 #options 	INSECURE	# allow, among other insecure stuff, LKM 
 				# loading in multi-user mode.
 options 	SCSIVERBOSE	# Verbose SCSI errors
+#options	NON_PO2_BLOCKS	# non-2**n block size support
 
 options 	NTP		# NTP phase/frequency locked loop
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: cd.c,v 1.130 1999/09/30 22:57:53 thorpej Exp $	*/
+/*	$NetBSD: cd.c,v 1.130.2.1 1999/12/21 23:19:54 wrstuden Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -166,6 +166,7 @@ cdattach(parent, cd, sc_link, ops)
 	 */
   	cd->sc_dk.dk_driver = &cddkdriver;
 	cd->sc_dk.dk_name = cd->sc_dev.dv_xname;
+	cd->sc_dk.dk_byteshift = DEF_BSHIFT;
 	disk_attach(&cd->sc_dk);
 
 #if !defined(i386)
@@ -387,6 +388,17 @@ cdopen(dev, flag, fmt, p)
 				goto bad2;
 			}
 			SC_DEBUG(sc_link, SDEV_DB3, ("Params loaded "));
+			if powerof2(cd->params.blksize) {
+				cd->sc_dk.dk_byteshift =
+					intlog2(cd->params.blksize);
+			} else if (blocksize(-1) == 1) {
+				cd->sc_dk.dk_byteshift = -cd->params.blksize;
+			} else {
+				/* kernel only supports 2**n disks which this
+				 * isn't. Too bad. */
+				error = ENXIO;
+				goto bad2;
+			}
 
 			/* Fabricate a disk label. */
 			cdgetdisklabel(cd);
@@ -633,12 +645,13 @@ cdstart(v)
 		 * First, translate the block to absolute and put it in terms
 		 * of the logical blocksize of the device.
 		 */
-		blkno = bp->b_blkno / (lp->d_secsize / DEV_BSIZE);
+		blkno = bp->b_blkno;
 		if (CDPART(bp->b_dev) != RAW_PART) {
 			p = &lp->d_partitions[CDPART(bp->b_dev)];
 			blkno += p->p_offset;
 		}
-		nblks = howmany(bp->b_bcount, lp->d_secsize);
+		blkno *= lp->d_secsize / cd->params.blksize;
+		nblks = howmany(bp->b_bcount, cd->params.blksize);
 
 #if NCD_SCSIBUS > 0
 		/*
@@ -741,8 +754,10 @@ cdread(dev, uio, ioflag)
 	struct uio *uio;
 	int ioflag;
 {
+	struct cd_softc *cd = cd_cd.cd_devs[CDUNIT(dev)];
 
-	return (physio(cdstrategy, NULL, dev, B_READ, cdminphys, uio));
+	return (physio(cdstrategy, NULL, dev, B_READ, cdminphys, uio,
+			cd->sc_dk.dk_byteshift));
 }
 
 int
@@ -751,8 +766,10 @@ cdwrite(dev, uio, ioflag)
 	struct uio *uio;
 	int ioflag;
 {
-
-	return (physio(cdstrategy, NULL, dev, B_WRITE, cdminphys, uio));
+	struct cd_softc *cd = cd_cd.cd_devs[CDUNIT(dev)];
+ 
+	return (physio(cdstrategy, NULL, dev, B_WRITE, cdminphys, uio,
+			cd->sc_dk.dk_byteshift));
 }
 
 /*
@@ -1117,6 +1134,7 @@ cdgetdefaultlabel(cd, lp)
 	struct cd_softc *cd;
 	struct disklabel *lp;
 {
+	char	*errstring;
 
 	bzero(lp, sizeof(struct disklabel));
 
@@ -1146,18 +1164,37 @@ cdgetdefaultlabel(cd, lp)
 	lp->d_flags = D_REMOVABLE;
 
 	lp->d_partitions[0].p_offset = 0;
-	lp->d_partitions[0].p_size =
-	    lp->d_secperunit * (lp->d_secsize / DEV_BSIZE);
+	lp->d_partitions[0].p_size = lp->d_secperunit;
 	lp->d_partitions[0].p_fstype = FS_ISO9660;
 	lp->d_partitions[RAW_PART].p_offset = 0;
-	lp->d_partitions[RAW_PART].p_size =
-	    lp->d_secperunit * (lp->d_secsize / DEV_BSIZE);
+	lp->d_partitions[RAW_PART].p_size = lp->d_secperunit;
 	lp->d_partitions[RAW_PART].p_fstype = FS_ISO9660;
 	lp->d_npartitions = RAW_PART + 1;
 
 	lp->d_magic = DISKMAGIC;
 	lp->d_magic2 = DISKMAGIC;
 	lp->d_checksum = dkcksum(lp);
+
+	/*
+	 * Call the generic disklabel extraction routine
+	 */
+	errstring = readdisklabel(MAKECDDEV(0, cd->sc_dev.dv_unit, RAW_PART),
+			  cdstrategy, lp, cd->sc_dk.dk_cpulabel,
+			  cd->sc_dk.dk_byteshift);
+
+	if (errstring && strcmp(errstring, "no disk label") == 0) {
+		lp->d_partitions[0].p_offset = 0;
+		lp->d_partitions[0].p_size = lp->d_secperunit;
+		lp->d_partitions[0].p_fstype = FS_ISO9660;
+		lp->d_partitions[RAW_PART].p_offset = 0;
+		lp->d_partitions[RAW_PART].p_size = lp->d_secperunit;
+		lp->d_partitions[RAW_PART].p_fstype = FS_ISO9660;
+		lp->d_npartitions = RAW_PART + 1;
+
+		lp->d_magic = DISKMAGIC;
+		lp->d_magic2 = DISKMAGIC;
+		lp->d_checksum = dkcksum(lp);
+	}
 }
 
 /*
@@ -1188,7 +1225,7 @@ cd_size(cd, flags)
 {
 	struct scsipi_read_cd_cap_data rdcap;
 	struct scsipi_read_cd_capacity scsipi_cmd;
-	int blksize;
+	int blksize, i;
 	u_long size;
 
 	if (cd->sc_link->quirks & ADEV_NOCAPACITY) {
@@ -1196,6 +1233,7 @@ cd_size(cd, flags)
 		 * the drive doesn't support the READ_CD_CAPACITY command
 		 * use a fake size
 		 */
+		cd->sc_dk.dk_byteshift = 11;
 		cd->params.blksize = 2048;
 		cd->params.disksize = 400000;
 		return (400000);
@@ -1219,9 +1257,11 @@ cd_size(cd, flags)
 		return (0);
 
 	blksize = _4btol(rdcap.length);
-	if ((blksize < 512) || ((blksize & 511) != 0))
+	if ((blksize < 512) /*|| ((blksize & 511) != 0)*/)
 		blksize = 2048;	/* some drives lie ! */
 	cd->params.blksize = blksize;
+	i = intlog2(blksize);
+	cd->sc_dk.dk_byteshift = (blksize & ((1 << i) -1)) ? 0 : i;
 
 	size = _4btol(rdcap.addr) + 1;
 	if (size < 100)

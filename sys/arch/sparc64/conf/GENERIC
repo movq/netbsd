@@ -1,4 +1,4 @@
-# 	$NetBSD: GENERIC,v 1.19 1999/09/12 01:17:21 chs Exp $
+# 	$NetBSD: GENERIC,v 1.19.8.1 1999/12/21 23:16:17 wrstuden Exp $
 
 include "arch/sparc64/conf/std.sparc64"
 
@@ -51,6 +51,9 @@ options 	SYSVSHM		# System V shared memory
 
 ## Loadable kernel module support; still under development.
 options 	LKM
+
+## Support for block sizes which aren't 2**n
+#options	NON_PO2_BLOCKS
 
 ## NFS boot options; default on sparc is the bootparam protocol
 options 	NFS_BOOT_BOOTPARAM

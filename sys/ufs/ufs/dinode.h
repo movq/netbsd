@@ -1,4 +1,4 @@
-/*	$NetBSD: dinode.h,v 1.11 1999/08/03 19:22:44 drochner Exp $	*/
+/*	$NetBSD: dinode.h,v 1.11.8.1 1999/12/21 23:20:11 wrstuden Exp $	*/
 
 /*
  * Copyright (c) 1982, 1989, 1993
@@ -90,6 +90,13 @@ struct dinode {
 	u_int32_t	di_gid;		/* 116: File group. */
 	int32_t		di_spare[2];	/* 120: Reserved; currently unused */
 };
+
+/*
+ * Define units for di_blocks, and for quotas. Should be equal to S_BLKSIZE,
+ * which is 512.
+ */
+#define	UFS_BSHIFT	9
+#define	UFS_BSIZE	(1 << UFS_BSHIFT)
 
 /*
  * The di_db fields may be overlaid with other information for

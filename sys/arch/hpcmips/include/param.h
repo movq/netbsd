@@ -1,4 +1,4 @@
-/*	$NetBSD: param.h,v 1.1.1.1 1999/09/16 12:23:23 takemura Exp $	*/
+/*	$NetBSD: param.h,v 1.1.1.1.8.1 1999/12/21 23:16:00 wrstuden Exp $	*/
 
 /*
  * Copyright (c) 1988 University of Utah.
@@ -64,8 +64,8 @@
 #define KERNTEXTOFF	0x80030000	/* start of kernel text for kvm_mkdb */
 #define	BTOPKERNBASE	((u_long)KERNBASE >> PGSHIFT)
 
-#define	DEV_BSIZE	512
-#define	DEV_BSHIFT	9		/* log2(DEV_BSIZE) */
+#define	DEF_BSIZE	512
+#define	DEF_BSHIFT	9		/* log2(DEF_BSIZE) */
 #define BLKDEV_IOSIZE	2048
 #define	MAXPHYS		(64 * 1024)	/* max raw I/O transfer size */
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: specdev.h,v 1.17 1998/03/01 02:21:34 fvdl Exp $	*/
+/*	$NetBSD: specdev.h,v 1.17.20.1 1999/12/21 23:20:01 wrstuden Exp $	*/
 
 /*
  * Copyright (c) 1990, 1993
@@ -46,6 +46,8 @@ struct specinfo {
 	long	si_flags;
 	dev_t	si_rdev;
 	struct	lockf *si_lockf;
+	int	si_bshift;	/* for disk devices, block shift value */
+				/* valid after device opened */
 };
 /*
  * Exported shorthand
@@ -55,6 +57,7 @@ struct specinfo {
 #define v_specnext	v_specinfo->si_specnext
 #define v_specflags	v_specinfo->si_flags
 #define v_speclockf	v_specinfo->si_lockf
+#define v_specbshift	v_specinfo->si_bshift
 
 /*
  * Flags for specinfo

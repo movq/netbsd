@@ -1,4 +1,4 @@
-/*	$NetBSD: fd.c,v 1.67 1999/03/24 05:51:10 mrg Exp $	*/
+/*	$NetBSD: fd.c,v 1.67.14.1 1999/12/21 23:16:16 wrstuden Exp $	*/
 
 /*-
  * Copyright (c) 1993, 1994, 1995 Charles M. Hannum.
@@ -1721,7 +1721,8 @@ fdioctl(dev, cmd, addr, flag, p)
 
 		error = writedisklabel(dev, fdstrategy,
 				       fd->sc_dk.dk_label,
-				       fd->sc_dk.dk_cpulabel);
+				       fd->sc_dk.dk_cpulabel,
+				       7 + fd->sc_type->secsize);
 		return (error);
 
 	case DIOCLOCK:
@@ -2014,7 +2015,7 @@ fdgetdisklabel(dev)
 	 * Call the generic disklabel extraction routine.  If there's
 	 * not a label there, fake it.
 	 */
-	if (readdisklabel(dev, fdstrategy, lp, clp) != NULL) {
+	if (readdisklabel(dev, fdstrategy, lp, clp, FD_BSHIFT(fd)) != NULL) {
 		strncpy(lp->d_packname, "default label",
 		    sizeof(lp->d_packname));
 		/*

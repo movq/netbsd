@@ -1,4 +1,4 @@
-/*	$NetBSD: vfs_cluster.c,v 1.21 1998/11/08 18:18:31 mycroft Exp $	*/
+/*	$NetBSD: vfs_cluster.c,v 1.21.18.1 1999/12/21 23:19:58 wrstuden Exp $	*/
 
 /*-
  * Copyright (c) 1993
@@ -333,7 +333,7 @@ cluster_rbuild(vp, filesize, bp, lbn, blkno, size, run, flags)
 	if (size != roundup(size, CLBYTES))
 		return (bp);
 
-	inc = btodb(size);
+	inc = btodb(size, bp->b_bshift);
 	for (bn = blkno + inc, i = 1; i <= run; ++i, bn += inc) {
 		/*
 		 * If a component of the cluster is already in core,
@@ -510,7 +510,7 @@ cluster_write(bp, filesize)
 		vp->v_lasta = vp->v_clen = vp->v_cstart = vp->v_lastw = 0;
 
         if (vp->v_clen == 0 || lbn != vp->v_lastw + 1 ||
-	    (bp->b_blkno != vp->v_lasta + btodb(bp->b_bcount))) {
+	    (bp->b_blkno != vp->v_lasta + btodb(bp->b_bcount, bp->b_bshift))) {
 		maxclen = MAXBSIZE / vp->v_mount->mnt_stat.f_iosize - 1;
 		if (vp->v_clen != 0) {
 			/*
@@ -715,7 +715,8 @@ redo:
 		++b_save->bs_nchildren;
 
 		/* Move memory from children to parent */
-		if (tbp->b_blkno != (bp->b_blkno + btodb(bp->b_bufsize))) {
+		if (tbp->b_blkno != (bp->b_blkno +
+					btodb(bp->b_bufsize, bp->b_bshift))) {
 			printf("Clustered Block: %d addr %x bufsize: %ld\n",
 			    bp->b_lblkno, bp->b_blkno, bp->b_bufsize);
 			printf("Child Block: %d addr: %x\n", tbp->b_lblkno,

@@ -1,4 +1,4 @@
-/*	$NetBSD: param.h,v 1.1 1999/09/13 10:31:19 itojun Exp $	*/
+/*	$NetBSD: param.h,v 1.1.8.1 1999/12/21 23:16:15 wrstuden Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -48,6 +48,9 @@
 #else
 #include <machine/cpu.h>
 #endif
+#ifndef LKM
+#include "opt_non_po2_blocks.h"
+#endif
 #endif
 
 #define	_MACHINE	sh3
@@ -85,8 +88,8 @@
 #define NPGDIR (1*NBPG)
 #define SYSMAP (5*NBPG) /* page table area offset from _end */
 
-#define	DEV_BSHIFT	9		/* log2(DEV_BSIZE) */
-#define	DEV_BSIZE	(1 << DEV_BSHIFT)
+#define	DEF_BSHIFT	9		/* log2(DEF_BSIZE) */
+#define	DEF_BSIZE	(1 << DEF_BSHIFT)
 #define	BLKDEV_IOSIZE	2048
 #define	MAXPHYS		(64 * 1024)	/* max raw I/O transfer size */
 
@@ -139,16 +142,23 @@
 #endif
 
 /* pages ("clicks") to disk blocks */
-#define	ctod(x)		((x) << (PGSHIFT - DEV_BSHIFT))
-#define	dtoc(x)		((x) >> (PGSHIFT - DEV_BSHIFT))
+#define	ctod(x, sh)		((x) << (PGSHIFT - (sh)))
+#define	dtoc(x, sh)		((x) >> (PGSHIFT - (sh)))
 
 /* bytes to pages */
 #define	ctob(x)		((x) << PGSHIFT)
 #define	btoc(x)		(((x) + PGOFSET) >> PGSHIFT)
 
 /* bytes to disk blocks */
-#define	dbtob(x)	((x) << DEV_BSHIFT)
-#define	btodb(x)	((x) >> DEV_BSHIFT)
+#if defined(_LKM) || defined(NON_PO2_BLOCKS)
+#define	dbtob(x, sh)	(((sh) >= 0) ? ((x) << (sh)) : ((x) * (-sh)))
+#define	btodb(x, sh)	(((sh) >= 0) ? ((x) >> (sh)) : ((x) / (-sh)))
+#define	blocksize(sh)	(((sh) >= 0) ? (1 << (sh))   : (-sh))
+#else
+#define	dbtob(x, sh)	((x) << (sh))
+#define	btodb(x, sh)	((x) >> (sh))
+#define	blocksize(sh)	(((sh) >= 0) ? (1 << (sh))   : (0))
+#endif
 
 /*
  * Map a ``block device block'' to a file system block.

@@ -1,7 +1,7 @@
 #
 # NEWS3400 config file
 #
-# 	$NetBSD: GENERIC,v 1.10 1999/07/29 10:37:20 augustss Exp $
+# 	$NetBSD: GENERIC,v 1.10.8.1 1999/12/21 23:16:07 wrstuden Exp $
 #
 include		"arch/newsmips/conf/std.newsmips"
 
@@ -21,6 +21,7 @@ options 	LKM			# loadable kernel modules
 options 	NKMEMCLUSTERS=1024	# 4K pages in kernel malloc pool
 #options 	NTP			# network time protocol
 #options 	UCONSOLE		# users can redirect console (unsafe)
+#options	NON_PO2_BLOCKS	# non-2**n block size support
 
 # Debugging options
 #options 	DDB			# kernel dynamic debugger

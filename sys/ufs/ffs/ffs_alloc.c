@@ -1,4 +1,4 @@
-/*	$NetBSD: ffs_alloc.c,v 1.29 1999/03/24 05:51:30 mrg Exp $	*/
+/*	$NetBSD: ffs_alloc.c,v 1.29.14.1 1999/12/21 23:20:07 wrstuden Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1989, 1993
@@ -133,7 +133,7 @@ ffs_alloc(ip, lbn, bpref, size, cred, bnp)
 	if (cred->cr_uid != 0 && freespace(fs, fs->fs_minfree) <= 0)
 		goto nospace;
 #ifdef QUOTA
-	if ((error = chkdq(ip, (long)btodb(size), cred, 0)) != 0)
+	if ((error = chkdq(ip, (long)btodb(size, UFS_BSHIFT), cred, 0)) != 0)
 		return (error);
 #endif
 	if (bpref >= fs->fs_size)
@@ -145,7 +145,7 @@ ffs_alloc(ip, lbn, bpref, size, cred, bnp)
 	bno = (ufs_daddr_t)ffs_hashalloc(ip, cg, (long)bpref, size,
 	    			     ffs_alloccg);
 	if (bno > 0) {
-		ip->i_ffs_blocks += btodb(size);
+		ip->i_ffs_blocks += btodb(size, UFS_BSHIFT);
 		ip->i_flag |= IN_CHANGE | IN_UPDATE;
 		*bnp = bno;
 		return (0);
@@ -154,7 +154,7 @@ ffs_alloc(ip, lbn, bpref, size, cred, bnp)
 	/*
 	 * Restore user's disk quota because allocation failed.
 	 */
-	(void) chkdq(ip, (long)-btodb(size), cred, FORCE);
+	(void) chkdq(ip, (long)-btodb(size, UFS_BSHIFT), cred, FORCE);
 #endif
 nospace:
 	ffs_fserr(fs, cred->cr_uid, "file system full");
@@ -212,7 +212,7 @@ ffs_realloccg(ip, lbprev, bpref, osize, nsize, cred, bpp)
 		return (error);
 	}
 #ifdef QUOTA
-	if ((error = chkdq(ip, (long)btodb(nsize - osize), cred, 0)) != 0) {
+	if ((error = chkdq(ip, (long)btodb(nsize - osize, UFS_BSHIFT), cred, 0)) != 0) {
 		brelse(bp);
 		return (error);
 	}
@@ -224,7 +224,7 @@ ffs_realloccg(ip, lbprev, bpref, osize, nsize, cred, bpp)
 	if ((bno = ffs_fragextend(ip, cg, (long)bprev, osize, nsize)) != 0) {
 		if (bp->b_blkno != fsbtodb(fs, bno))
 			panic("bad blockno");
-		ip->i_ffs_blocks += btodb(nsize - osize);
+		ip->i_ffs_blocks += btodb(nsize - osize, UFS_BSHIFT);
 		ip->i_flag |= IN_CHANGE | IN_UPDATE;
 		allocbuf(bp, nsize);
 		bp->b_flags |= B_DONE;
@@ -289,7 +289,7 @@ ffs_realloccg(ip, lbprev, bpref, osize, nsize, cred, bpp)
 		if (nsize < request)
 			ffs_blkfree(ip, bno + numfrags(fs, nsize),
 			    (long)(request - nsize));
-		ip->i_ffs_blocks += btodb(nsize - osize);
+		ip->i_ffs_blocks += btodb(nsize - osize, UFS_BSHIFT);
 		ip->i_flag |= IN_CHANGE | IN_UPDATE;
 		allocbuf(bp, nsize);
 		bp->b_flags |= B_DONE;
@@ -301,7 +301,7 @@ ffs_realloccg(ip, lbprev, bpref, osize, nsize, cred, bpp)
 	/*
 	 * Restore user's disk quota because allocation failed.
 	 */
-	(void) chkdq(ip, (long)-btodb(nsize - osize), cred, FORCE);
+	(void) chkdq(ip, (long)-btodb(nsize - osize, UFS_BSHIFT), cred, FORCE);
 #endif
 	brelse(bp);
 nospace:

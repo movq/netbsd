@@ -1,4 +1,4 @@
-/*	$NetBSD: scsiconf.c,v 1.128 1999/09/30 22:57:53 thorpej Exp $	*/
+/*	$NetBSD: scsiconf.c,v 1.128.2.1 1999/12/21 23:19:55 wrstuden Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -156,7 +156,7 @@ scsibusmatch(parent, cf, aux)
 	    cf->cf_loc[SCSICF_CHANNEL] != SCSICF_CHANNEL_DEFAULT)
 		return (0);
 
-	return (1);
+	return ((cf->cf_loc[SCSICF_CHANNEL] == channel) ? 2 : 1);
 }
 
 /*

@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.365 1999/09/17 19:59:43 thorpej Exp $	*/
+/*	$NetBSD: machdep.c,v 1.365.2.1 1999/12/21 23:16:01 wrstuden Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997, 1998 The NetBSD Foundation, Inc.
@@ -1264,7 +1264,7 @@ cpu_dumpsize()
 
 	size = ALIGN(sizeof(kcore_seg_t)) + ALIGN(sizeof(cpu_kcore_hdr_t)) +
 	    ALIGN(mem_cluster_cnt * sizeof(phys_ram_seg_t));
-	if (roundup(size, dbtob(1)) != dbtob(1))
+	if (roundup(size, dbtob(1, DEF_BSHIFT)) != dbtob(1, DEF_BSHIFT))
 		return (-1);
 
 	return (1);
@@ -1291,7 +1291,7 @@ int
 cpu_dump()
 {
 	int (*dump) __P((dev_t, daddr_t, caddr_t, size_t));
-	char buf[dbtob(1)];
+	char buf[dbtob(1, DEF_BSHIFT)];
 	kcore_seg_t *segp;
 	cpu_kcore_hdr_t *cpuhdrp;
 	phys_ram_seg_t *memsegp;
@@ -1309,7 +1309,7 @@ cpu_dump()
 	 * Generate a segment header.
 	 */
 	CORE_SETMAGIC(*segp, KCORE_MAGIC, MID_MACHINE, CORE_CPU);
-	segp->c_size = dbtob(1) - ALIGN(sizeof(*segp));
+	segp->c_size = dbtob(1, DEF_BSHIFT) - ALIGN(sizeof(*segp));
 
 	/*
 	 * Add the machine-dependent header info.
@@ -1325,7 +1325,7 @@ cpu_dump()
 		memsegp[i].size = mem_clusters[i].size;
 	}
 
-	return (dump(dumpdev, dumplo, (caddr_t)buf, dbtob(1)));
+	return (dump(dumpdev, dumplo, (caddr_t)buf, dbtob(1, DEF_BSHIFT)));
 }
 
 /*
@@ -1349,16 +1349,16 @@ cpu_dumpconf()
 	if (bdevsw[maj].d_psize == NULL)
 		goto bad;
 	nblks = (*bdevsw[maj].d_psize)(dumpdev);
-	if (nblks <= ctod(1))
+	if (nblks <= ctod(1, DEF_BSHIFT))
 		goto bad;
 
 	dumpblks = cpu_dumpsize();
 	if (dumpblks < 0)
 		goto bad;
-	dumpblks += ctod(cpu_dump_mempagecnt());
+	dumpblks += ctod(cpu_dump_mempagecnt(), DEF_BSHIFT);
 
 	/* If dump won't fit (incl. room for possible label), punt. */
-	if (dumpblks > (nblks - ctod(1)))
+	if (dumpblks > (nblks - ctod(1, DEF_BSHIFT)))
 		goto bad;
 
 	/* Put dump at end of partition */
@@ -1461,7 +1461,7 @@ dumpsys()
 			if (error)
 				goto err;
 			maddr += n;
-			blkno += btodb(n);		/* XXX? */
+			blkno += btodb(n, DEF_BSHIFT);		/* XXX? */
 
 #if 0	/* XXX this doesn't work.  grr. */
 			/* operator aborting dump? */

@@ -1,5 +1,5 @@
 #
-# 	$NetBSD: GENERIC,v 1.47 1999/07/29 10:37:22 augustss Exp $
+# 	$NetBSD: GENERIC,v 1.47.8.1 1999/12/21 23:16:14 wrstuden Exp $
 #
 # Distribution kernel (any model) kernel config file
 #
@@ -41,6 +41,7 @@ options 	LKM			# loadable kernel modules
 options 	"NKMEMCLUSTERS=1024"	# 4K pages in kernel malloc pool
 
 #options 	SCSIVERBOSE		# Verbose SCSI errors
+#options	NON_PO2_BLOCKS	# non-2**n block size support
 
 #Old 4.4bsd/pmax kgdb options
 #options 	KGDB			# support for kernel gdb

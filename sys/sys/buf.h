@@ -1,4 +1,4 @@
-/*	$NetBSD: buf.h,v 1.34 1999/04/07 00:18:29 thorpej Exp $	*/
+/*	$NetBSD: buf.h,v 1.34.8.1 1999/12/21 23:20:04 wrstuden Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1989, 1993
@@ -71,6 +71,8 @@ struct buf {
 					/* Function to call upon completion. */
 	void	(*b_iodone) __P((struct buf *));
 	struct	vnode *b_vp;		/* Device vnode. */
+	int	b_bsize;		/* Block size of underlying dev. */
+	int	b_bshift;		/* Block shift of underlying dev. */
 	int	b_dirtyoff;		/* Offset in buffer of dirty region. */
 	int	b_dirtyend;		/* Offset of end of dirty region. */
 	struct	ucred *b_rcred;		/* Read credentials reference. */
@@ -181,7 +183,8 @@ struct buf *incore __P((struct vnode *, daddr_t));
 
 void	minphys __P((struct buf *bp));
 int	physio __P((void (*strategy)(struct buf *), struct buf *bp, dev_t dev,
-		    int flags, void (*minphys)(struct buf *), struct uio *uio));
+		    int flags, void (*minphys)(struct buf *), struct uio *uio,
+		    int bshift));
 void  brelvp __P((struct buf *));
 void  reassignbuf __P((struct buf *, struct vnode *));
 void  bgetvp __P((struct vnode *, struct buf *));

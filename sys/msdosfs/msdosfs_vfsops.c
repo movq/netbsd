@@ -1,4 +1,4 @@
-/*	$NetBSD: msdosfs_vfsops.c,v 1.62 1999/07/17 01:08:29 wrstuden Exp $	*/
+/*	$NetBSD: msdosfs_vfsops.c,v 1.62.2.1 1999/12/21 23:20:02 wrstuden Exp $	*/
 
 /*-
  * Copyright (C) 1994, 1995, 1997 Wolfgang Solfrank.
@@ -428,7 +428,7 @@ msdosfs_mountfs(devvp, mp, p, argp)
 	 * Read the boot sector of the filesystem, and then check the
 	 * boot signature.  If not a dos boot sector then error out.
 	 */
-	if ((error = bread(devvp, 0, 512, NOCRED, &bp)) != 0)
+	if ((error = bread(devvp, 0, BLKDEV_IOSIZE, NOCRED, &bp)) != 0)
 		goto error_exit;
 	bp->b_flags |= B_AGE;
 	bsp = (union bootsector *)bp->b_data;
@@ -571,6 +571,15 @@ msdosfs_mountfs(devvp, mp, p, argp)
 	    SecPerClust;
 	pmp->pm_maxcluster = pmp->pm_nmbrofclusters + 1;
 	pmp->pm_fatsize = pmp->pm_FATsecs * pmp->pm_BytesPerSec;
+#if 0
+	if (VOP_IOCTL(devvp, DIOCGPART, (caddr_t)&dpart, FREAD, NOCRED, p) != 0)
+		tmp = DEV_BSIZE;
+	else
+		tmp = dpart.disklab->d_secsize;
+#endif
+
+	mp->mnt_bshift = devvp->v_specbshift;
+	pmp->pm_fsbtosb = ffs(pmp->pm_BytesPerSec) - ffs(tmp);
 
 	if (argp->flags & MSDOSFSMNT_GEMDOSFS) {
 		if ((pmp->pm_nmbrofclusters <= (0xff0 - 2))

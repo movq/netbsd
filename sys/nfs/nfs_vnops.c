@@ -1,4 +1,4 @@
-/*	$NetBSD: nfs_vnops.c,v 1.106 1999/09/05 14:28:26 jdolecek Exp $	*/
+/*	$NetBSD: nfs_vnops.c,v 1.106.8.1 1999/12/21 23:20:03 wrstuden Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -2602,7 +2602,11 @@ nfs_bmap(v)
 	if (ap->a_vpp != NULL)
 		*ap->a_vpp = vp;
 	if (ap->a_bnp != NULL)
+#if 0
 		*ap->a_bnp = ap->a_bn * btodb(vp->v_mount->mnt_stat.f_iosize);
+#else
+		*ap->a_bnp = ap->a_bn;
+#endif
 	return (0);
 }
 
@@ -2752,7 +2756,7 @@ again:
 			 * uncommitted writes on the file.
 			 */
 			bvec[bvecpos++] = bp;
-			toff = ((u_quad_t)bp->b_blkno) * DEV_BSIZE +
+			toff = ((u_quad_t)bp->b_blkno) * NFS_FABLKSIZE +
 				bp->b_dirtyoff;
 			if (toff < off)
 				off = toff;
@@ -2777,7 +2781,7 @@ again:
 			for (i = 0; i < bvecpos; i++) {
 				off_t off, size;
 				bp = bvec[i];
-				off = ((u_quad_t)bp->b_blkno) * DEV_BSIZE +
+				off = ((u_quad_t)bp->b_blkno) * NFS_FABLKSIZE +
 					bp->b_dirtyoff;
 				size = (u_quad_t)(bp->b_dirtyend
 						  - bp->b_dirtyoff);
@@ -3111,7 +3115,7 @@ nfs_writebp(bp, force)
 	 * If B_WRITEINPROG is already set, then push it with a write anyhow.
 	 */
 	if ((oldflags & (B_NEEDCOMMIT | B_WRITEINPROG)) == B_NEEDCOMMIT) {
-		off = ((u_quad_t)bp->b_blkno) * DEV_BSIZE + bp->b_dirtyoff;
+		off = ((u_quad_t)bp->b_blkno) * NFS_FABLKSIZE + bp->b_dirtyoff;
 		bp->b_flags |= B_WRITEINPROG;
 		retv = nfs_commit(bp->b_vp, off, bp->b_dirtyend-bp->b_dirtyoff,
 			bp->b_wcred, bp->b_proc);

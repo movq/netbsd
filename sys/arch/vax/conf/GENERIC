@@ -1,4 +1,4 @@
-#	$NetBSD: GENERIC,v 1.51 1999/08/27 20:04:32 ragge Exp $
+#	$NetBSD: GENERIC,v 1.51.8.1 1999/12/21 23:16:19 wrstuden Exp $
 #
 # GENERIC VAX configuration file; all supported devices.
 #
@@ -29,6 +29,8 @@ options 	KTRACE
 #options 	DIAGNOSTIC,DEBUG,KMEMSTATS,PMAPDEBUG,TRAPDEBUG
 
 #options 	SCSIVERBOSE		# Verbose SCSI errors
+
+#options	NON_PO2_BLOCKS	# non-2**n block size support
 
 # Network support
 #options 	GATEWAY

@@ -1,4 +1,4 @@
-/*	$NetBSD: lfs_inode.c,v 1.27 1999/09/03 22:48:51 perseant Exp $	*/
+/*	$NetBSD: lfs_inode.c,v 1.27.8.1 1999/12/21 23:20:09 wrstuden Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -318,7 +318,8 @@ lfs_truncate(v)
 #endif
 			allocbuf(bp, newsize);
 		if(oldsize_newlast > newsize)
-			ip->i_ffs_blocks -= btodb(oldsize_newlast - newsize);
+			ip->i_ffs_blocks -= btodb(oldsize_newlast - newsize,
+					DEF_BSHIFT);
 		if ((e1 = VOP_BWRITE(bp)) != 0) {
 			printf("lfs_truncate: bwrite: %d\n",e1);
 			return (e1);
