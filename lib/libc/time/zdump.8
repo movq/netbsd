@@ -1,4 +1,3 @@
-.\"	$NetBSD: zdump.8,v 1.3 1996/09/10 22:04:34 jtc Exp $
 .TH ZDUMP 8
 .SH NAME
 zdump \- time zone dumper
@@ -21,7 +20,8 @@ These options are available:
 For each
 .I zonename
 on the command line,
-print the time at the lowest possible time value,
+print the current time,
+the time at the lowest possible time value,
 the time one day after the lowest possible time value,
 the times both one second before and exactly at
 each detected time discontinuity,
@@ -36,5 +36,5 @@ otherwise.
 .BI "\-c " cutoffyear
 Cut off the verbose output near the start of the given year.
 .SH "SEE ALSO"
-ctime(3), tzfile(5), zic(8)
-.\" @(#)zdump.8	7.3
+newctime(3), tzfile(5), zic(8)
+.\" @(#)zdump.8	7.2
