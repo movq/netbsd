@@ -1,4 +1,4 @@
-/*	$NetBSD: sid.h,v 1.3 1994/10/26 08:02:28 cgd Exp $	*/
+/*	$NetBSD: sid.h,v 1.4 1995/02/13 00:43:31 ragge Exp $	*/
 
 /*
  * Copyright (c) 1994 Ludd, University of Lule}, Sweden.
@@ -50,22 +50,4 @@
 #define V750UCODE(x)    ((x>>8)&255)
 #define V750HARDW(x)    (cpu_type&255)
 
-extern int cpu_type;
-
-/* Definitioner f|r system id register */
-
-/*
-union cpusid {
-	int cpusid;
-	struct cpu750 {
-		int cp_hrev:8,
-		cp_urev:8,
-		:8,
-		cpu:8;
-	}
-	struct cpuany {
-		int :24,
-		cp_type:8;
-	}
-};
-*/
+extern int cpu_type, cpunumber;
