@@ -1,4 +1,4 @@
-/*	$NetBSD: spawnvp.c,v 1.1 2004/07/30 14:44:51 wiz Exp $	*/
+/*	$NetBSD: spawnvp.c,v 1.1.1.1 2004/07/30 14:44:51 wiz Exp $	*/
 
 /* Copyright (C) 2004
    Free Software Foundation, Inc.
