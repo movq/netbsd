@@ -1,4 +1,4 @@
-/*	$NetBSD: bktr_mem.h,v 1.1 2000/10/28 14:17:41 wiz Exp $	*/
+/*	$NetBSD: bktr_mem.h,v 1.1.1.1 2000/10/28 14:17:41 wiz Exp $	*/
 
 /* FreeBSD: src/sys/dev/bktr/bktr_mem.h,v 1.1 2000/09/10 14:34:08 roger Exp */
 
