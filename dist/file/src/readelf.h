@@ -1,4 +1,4 @@
-/*	$NetBSD: readelf.h,v 1.1 2003/03/25 22:30:21 pooka Exp $	*/
+/*	$NetBSD: readelf.h,v 1.1.1.1 2003/03/25 22:30:21 pooka Exp $	*/
 
 /*
  * Copyright (c) Christos Zoulas 2003.

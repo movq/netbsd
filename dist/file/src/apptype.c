@@ -1,4 +1,4 @@
-/*	$NetBSD: apptype.c,v 1.1 2003/03/25 22:30:16 pooka Exp $	*/
+/*	$NetBSD: apptype.c,v 1.1.1.1 2003/03/25 22:30:16 pooka Exp $	*/
 
 /*
  * Adapted from: apptype.c, Written by Eberhard Mattes and put into the
@@ -43,7 +43,7 @@ typedef ULONG   APPTYPE;
 #if 0
 FILE_RCSID("@(#)Id: apptype.c,v 1.2 2003/03/24 14:53:31 christos Exp")
 #else
-__RCSID("$NetBSD: apptype.c,v 1.1 2003/03/25 22:30:16 pooka Exp $");
+__RCSID("$NetBSD: apptype.c,v 1.1.1.1 2003/03/25 22:30:16 pooka Exp $");
 #endif
 #endif /* lint */
 

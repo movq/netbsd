@@ -1,4 +1,4 @@
-/*	$NetBSD: magic.c,v 1.1 2003/03/25 22:30:19 pooka Exp $	*/
+/*	$NetBSD: magic.c,v 1.1.1.1 2003/03/25 22:30:19 pooka Exp $	*/
 
 
 #include "magic.h"
@@ -41,7 +41,7 @@
 #if 0
 FILE_RCSID("@(#)Id: magic.c,v 1.5 2003/03/24 01:34:21 christos Exp")
 #else
-__RCSID("$NetBSD: magic.c,v 1.1 2003/03/25 22:30:19 pooka Exp $");
+__RCSID("$NetBSD: magic.c,v 1.1.1.1 2003/03/25 22:30:19 pooka Exp $");
 #endif
 #endif	/* lint */
 
