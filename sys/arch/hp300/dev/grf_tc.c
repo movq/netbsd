@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 1988 University of Utah.
- * Copyright (c) 1990 The Regents of the University of California.
- * All rights reserved.
+ * Copyright (c) 1990, 1993
+ *	The Regents of the University of California.  All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * the Systems Programming Group of the University of Utah Computer
@@ -35,25 +35,27 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	from: Utah Hdr: grf_tc.c 1.18 91/04/02
- *	from: @(#)grf_tc.c	7.4 (Berkeley) 5/7/91
- *	$Id: grf_tc.c,v 1.2 1993/08/01 19:24:16 mycroft Exp $
+ * from: Utah $Hdr: grf_tc.c 1.20 93/08/13$
+ *
+ *	from: @(#)grf_tc.c	8.4 (Berkeley) 1/12/94
+ *	$Id: grf_tc.c,v 1.3 1994/05/25 11:47:53 mycroft Exp $
  */
 
 #include "grf.h"
 #if NGRF > 0
 
 /*
- * Graphics routines for TOPCAT frame buffer
+ * Graphics routines for TOPCAT and CATSEYE frame buffers
  */
-#include "sys/param.h"
-#include "sys/errno.h"
+#include <sys/param.h>
+#include <sys/errno.h>
 
-#include "grfioctl.h"
-#include "grfvar.h"
-#include "grf_tcreg.h"
+#include <hp300/dev/grfioctl.h>
+#include <hp300/dev/grfvar.h>
+#include <hp300/dev/grfreg.h>
+#include <hp300/dev/grf_tcreg.h>
 
-#include "../include/cpu.h"
+#include <machine/cpu.h>
 
 /*
  * Initialize hardware.
@@ -122,8 +124,10 @@ tc_init(gp, addr)
  * Function may not be needed anymore.
  */
 /*ARGSUSED*/
-tc_mode(gp, cmd)
+tc_mode(gp, cmd, data)
 	struct grf_softc *gp;
+	int cmd;
+	caddr_t data;
 {
 	int error = 0;
 
@@ -131,6 +135,80 @@ tc_mode(gp, cmd)
 	case GM_GRFON:
 	case GM_GRFOFF:
 		break;
+
+	/*
+	 * Remember UVA of mapping for GCDESCRIBE.
+	 * XXX this should be per-process.
+	 */
+	case GM_MAP:
+		gp->g_data = data;
+		break;
+
+	case GM_UNMAP:
+		gp->g_data = 0;
+		break;
+
+#ifdef COMPAT_HPUX
+	case GM_DESCRIBE:
+	{
+		struct grf_fbinfo *fi = (struct grf_fbinfo *)data;
+		struct grfinfo *gi = &gp->g_display;
+		int i;
+
+		/* feed it what HP-UX expects */
+		fi->id = gi->gd_id;
+		fi->mapsize = gi->gd_fbsize;
+		fi->dwidth = gi->gd_dwidth;
+		fi->dlength = gi->gd_dheight;
+		fi->width = gi->gd_fbwidth;
+		fi->length = gi->gd_fbheight;
+		fi->bpp = NBBY;
+		fi->xlen = (fi->width * fi->bpp) / NBBY;
+		fi->npl = gi->gd_planes;
+		fi->bppu = fi->npl;
+		fi->nplbytes = fi->xlen * ((fi->length * fi->bpp) / NBBY);
+		/* XXX */
+		switch (gp->g_sw->gd_hwid) {
+		case GID_HRCCATSEYE:
+			bcopy("HP98550", fi->name, 8);
+			break;
+		case GID_LRCATSEYE:
+			bcopy("HP98549", fi->name, 8);
+			break;
+		case GID_HRMCATSEYE:
+			bcopy("HP98548", fi->name, 8);
+			break;
+		case GID_TOPCAT:
+			switch (gi->gd_colors) {
+			case 64:
+				bcopy("HP98547", fi->name, 8);
+				break;
+			case 16:
+				bcopy("HP98545", fi->name, 8);
+				break;
+			case 2:
+				bcopy("HP98544", fi->name, 8);
+				break;
+			}
+			break;
+		}
+		fi->attr = 2;	/* HW block mover */
+		/*
+		 * If mapped, return the UVA where mapped.
+		 */
+		if (gp->g_data) {
+			fi->regbase = gp->g_data;
+			fi->fbbase = fi->regbase + gp->g_display.gd_regsize;
+		} else {
+			fi->fbbase = 0;
+			fi->regbase = 0;
+		}
+		for (i = 0; i < 6; i++)
+			fi->regions[i] = 0;
+		break;
+	}
+#endif
+
 	default:
 		error = EINVAL;
 		break;
