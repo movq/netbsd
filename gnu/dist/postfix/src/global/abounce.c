@@ -1,5 +1,3 @@
-/*	$NetBSD: abounce.c,v 1.1.1.5 2004/05/31 00:24:28 heas Exp $	*/
-
 /*++
 /* NAME
 /*	abounce 3
@@ -8,8 +6,7 @@
 /* SYNOPSIS
 /*	#include <abounce.h>
 /*
-/*	void	abounce_flush(flags, queue, id, encoding, sender,
-/*				callback, context)
+/*	void	abounce_flush(flags, queue, id, encoding, sender, callback, context)
 /*	int	flags;
 /*	const char *queue;
 /*	const char *id;
@@ -18,29 +15,7 @@
 /*	void	(*callback)(int status, char *context);
 /*	char	*context;
 /*
-/*	void	abounce_flush_verp(flags, queue, id, encoding,
-/*				sender, verp, callback, context)
-/*	int	flags;
-/*	const char *queue;
-/*	const char *id;
-/*	const char *encoding;
-/*	const char *sender;
-/*	const char *verp;
-/*	void	(*callback)(int status, char *context);
-/*	char	*context;
-/*
-/*	void	adefer_flush(flags, queue, id, encoding, sender,
-/*				callback, context)
-/*	int	flags;
-/*	const char *queue;
-/*	const char *id;
-/*	const char *encoding;
-/*	const char *sender;
-/*	void	(*callback)(int status, char *context);
-/*	char	*context;
-/*
-/*	void	adefer_flush_verp(flags, queue, id, encoding,
-/*				sender, verp, callback, context)
+/*	void	abounce_flush_verp(flags, queue, id, encoding, sender, verp, callback, context)
 /*	int	flags;
 /*	const char *queue;
 /*	const char *id;
@@ -50,8 +25,26 @@
 /*	void	(*callback)(int status, char *context);
 /*	char	*context;
 /*
-/*	void	adefer_warn(flags, queue, id, encoding, sender,
-/*				callback, context)
+/*	void	adefer_flush(flags, queue, id, encoding, sender, callback, context)
+/*	int	flags;
+/*	const char *queue;
+/*	const char *id;
+/*	const char *encoding;
+/*	const char *sender;
+/*	void	(*callback)(int status, char *context);
+/*	char	*context;
+/*
+/*	void	adefer_flush_verp(flags, queue, id, encoding, sender, verp, callback, context)
+/*	int	flags;
+/*	const char *queue;
+/*	const char *id;
+/*	const char *encoding;
+/*	const char *sender;
+/*	const char *verp;
+/*	void	(*callback)(int status, char *context);
+/*	char	*context;
+/*
+/*	void	adefer_warn(flags, queue, id, encoding, sender, callback, context)
 /*	int	flags;
 /*	const char *queue;
 /*	const char *id;
@@ -74,8 +67,6 @@
 /*	adefer_flush() bounces the specified message to
 /*	the specified sender, including the defer log that was
 /*	built with defer_append().
-/*	adefer_flush() requests that the deferred recipients are deleted
-/*	from the original queue file.
 /*
 /*	adefer_flush_verp() is like adefer_flush() but sends
 /*	one VERP style notification per undeliverable recipient.
@@ -253,7 +244,6 @@ void    adefer_flush_verp(int flags, const char *queue, const char *id,
 			          const char *verp, ABOUNCE_FN callback,
 			          char *context)
 {
-    flags |= BOUNCE_FLAG_DELRCPT;
     abounce_request_verp(MAIL_CLASS_PRIVATE, var_defer_service,
 			 BOUNCE_CMD_VERP, flags, queue, id, encoding,
 			 sender, verp, callback, context);
@@ -312,7 +302,6 @@ void    adefer_flush(int flags, const char *queue, const char *id,
 		             const char *encoding, const char *sender,
 		             ABOUNCE_FN callback, char *context)
 {
-    flags |= BOUNCE_FLAG_DELRCPT;
     abounce_request(MAIL_CLASS_PRIVATE, var_defer_service, BOUNCE_CMD_FLUSH,
 		    flags, queue, id, encoding, sender, callback, context);
 }

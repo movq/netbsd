@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.70 2004/10/23 17:07:38 thorpej Exp $	*/
+/*	$NetBSD: autoconf.c,v 1.68 2003/11/17 14:37:59 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997, 2002 The NetBSD Foundation, Inc.
@@ -143,7 +143,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.70 2004/10/23 17:07:38 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.68 2003/11/17 14:37:59 tsutsui Exp $");
 
 #include "hil.h"
 #include "dvbox.h"
@@ -214,12 +214,15 @@ extern int hypercnattach(bus_space_tag_t, bus_addr_t, int);
 extern int topcatcnattach(bus_space_tag_t, bus_addr_t, int);
 extern int dnkbdcnattach(bus_space_tag_t, bus_addr_t);
 
-static int	dio_scan(int (*func)(bus_space_tag_t, bus_addr_t, int));
-static int	dio_scode_probe(int,
-		    int (*func)(bus_space_tag_t, bus_addr_t, int));
+int dio_scan(int (*func)(bus_space_tag_t, bus_addr_t, int));
+int dio_scode_probe(int, int (*func)(bus_space_tag_t, bus_addr_t, int));
 
 extern	caddr_t internalhpib;
 extern	char *extiobase;
+
+/* The boot device. */
+struct	device *booted_device;
+int	booted_partition;
 
 /* How we were booted. */
 u_int	bootdev;
@@ -275,26 +278,29 @@ struct dev_data {
 	int			dd_punit; /* and punit... */
 };
 typedef LIST_HEAD(, dev_data) ddlist_t;
-static ddlist_t	dev_data_list;	  	/* all dev_datas */
-static ddlist_t	dev_data_list_hpib;	/* hpib controller dev_datas */
-static ddlist_t	dev_data_list_scsi;	/* scsi controller dev_datas */
+ddlist_t	dev_data_list;	  	/* all dev_datas */
+ddlist_t	dev_data_list_hpib;	/* hpib controller dev_datas */
+ddlist_t	dev_data_list_scsi;	/* scsi controller dev_datas */
 
-static void	findbootdev(void);
-static void	findbootdev_slave(ddlist_t *, int, int, int);
-static void	setbootdev(void);
+void	findbootdev __P((void));
+void	findbootdev_slave __P((ddlist_t *, int, int, int));
+void	setbootdev __P((void));
 
-static struct dev_data *dev_data_lookup(struct device *);
-static void	dev_data_insert(struct dev_data *, ddlist_t *);
+static	struct dev_data *dev_data_lookup __P((struct device *));
+static	void dev_data_insert __P((struct dev_data *, ddlist_t *));
 
-static int	mainbusmatch(struct device *, struct cfdata *, void *);
-static void	mainbusattach(struct device *, struct device *, void *);
-static int	mainbussearch(struct device *, struct cfdata *, void *);
+int	mainbusmatch __P((struct device *, struct cfdata *, void *));
+void	mainbusattach __P((struct device *, struct device *, void *));
+int	mainbussearch __P((struct device *, struct cfdata *, void *));
 
 CFATTACH_DECL(mainbus, sizeof(struct device),
     mainbusmatch, mainbusattach, NULL, NULL);
 
-static int
-mainbusmatch(struct device *parent, struct cfdata *match, void *aux)
+int
+mainbusmatch(parent, match, aux)
+	struct device *parent;
+	struct cfdata *match;
+	void *aux;
 {
 	static int mainbus_matched = 0;
 
@@ -306,8 +312,10 @@ mainbusmatch(struct device *parent, struct cfdata *match, void *aux)
 	return (1);
 }
 
-static void
-mainbusattach(struct device *parent, struct device *self, void *aux)
+void
+mainbusattach(parent, self, aux)
+	struct device *parent, *self;
+	void *aux;
 {
 
 	printf("\n");
@@ -316,8 +324,11 @@ mainbusattach(struct device *parent, struct device *self, void *aux)
 	config_search(mainbussearch, self, NULL);
 }
 
-static int
-mainbussearch(struct device *parent, struct cfdata *cf, void *aux)
+int
+mainbussearch(parent, cf, aux)
+	struct device *parent;
+	struct cfdata *cf;
+	void *aux;
 {
 
 	if (config_match(parent, cf, NULL) > 0)
@@ -329,7 +340,7 @@ mainbussearch(struct device *parent, struct cfdata *cf, void *aux)
  * Determine the device configuration for the running system.
  */
 void
-cpu_configure(void)
+cpu_configure()
 {
 
 	/*
@@ -358,7 +369,7 @@ cpu_configure(void)
  **********************************************************************/
 
 void
-cpu_rootconf(void)
+cpu_rootconf()
 {
 	struct dev_data *dd;
 	struct device *dv;
@@ -436,7 +447,9 @@ cpu_rootconf(void)
  * used to attach it.  This is used to find the boot device.
  */
 void
-device_register(struct device *dev, void *aux)
+device_register(dev, aux)
+	struct device *dev;
+	void *aux;
 {
 	struct dev_data *dd;
 	static int seen_netdevice = 0;
@@ -516,8 +529,8 @@ device_register(struct device *dev, void *aux)
 	}
 }
 
-static void
-findbootdev(void)
+void
+findbootdev()
 {
 	int type, ctlr, slave, punit, part;
 	int scsiboot, hpibboot, netboot;
@@ -613,8 +626,10 @@ findbootdev(void)
 		booted_partition = part;
 }
 
-static void
-findbootdev_slave(ddlist_t *ddlist, int ctlr, int slave, int punit)
+void
+findbootdev_slave(ddlist, ctlr, slave, punit)
+	ddlist_t *ddlist;
+	int ctlr, slave, punit;
 {
 	struct dev_data *cdd, *dd;
 
@@ -655,8 +670,8 @@ findbootdev_slave(ddlist_t *ddlist, int ctlr, int slave, int punit)
 	}
 }
 
-static void
-setbootdev(void)
+void
+setbootdev()
 {
 	struct dev_data *cdd, *dd;
 	int type, ctlr;
@@ -743,7 +758,8 @@ setbootdev(void)
  * Return the dev_data corresponding to the given device.
  */
 static struct dev_data *
-dev_data_lookup(struct device *dev)
+dev_data_lookup(dev)
+	struct device *dev;
 {
 	struct dev_data *dd;
 
@@ -758,7 +774,9 @@ dev_data_lookup(struct device *dev)
  * Insert a dev_data into the provided list, sorted by select code.
  */
 static void
-dev_data_insert(struct dev_data *dd, ddlist_t *ddlist)
+dev_data_insert(dd, ddlist)
+	struct dev_data *dd;
+	ddlist_t *ddlist;
 {
 	struct dev_data *de;
 
@@ -803,7 +821,7 @@ dev_data_insert(struct dev_data *dd, ddlist_t *ddlist)
  **********************************************************************/
 
 void
-hp300_cninit(void)
+hp300_cninit()
 {
 	struct bus_space_tag tag;
 	bus_space_tag_t bst;
@@ -887,8 +905,9 @@ find_kbd:
 #endif	/* NITE */
 }
 
-static int
-dio_scan(int (*func)(bus_space_tag_t, bus_addr_t, int))
+int
+dio_scan(func)
+	int (*func)(bus_space_tag_t, bus_addr_t, int);
 {
 #ifndef CONSCODE
 	int scode, sctop;
@@ -908,9 +927,10 @@ dio_scan(int (*func)(bus_space_tag_t, bus_addr_t, int))
 	return (1);
 }
 
-static int
-dio_scode_probe(int scode,
-    int (*func)(bus_space_tag_t, bus_addr_t, int))
+int
+dio_scode_probe(scode, func)
+	int scode;
+	int (*func)(bus_space_tag_t, bus_addr_t, int);
 {
 	struct bus_space_tag tag;
 	bus_space_tag_t bst;
@@ -956,7 +976,9 @@ iomap_init(void)
  * space mapping the indicated physical address range [pa - pa+size)
  */
 caddr_t
-iomap(caddr_t pa, int size)
+iomap(pa, size)
+	caddr_t pa;
+	int size;
 {
 	u_long kva;
 	int error;
@@ -980,7 +1002,9 @@ iomap(caddr_t pa, int size)
  * Unmap a previously mapped device.
  */
 void
-iounmap(caddr_t kva, int size)
+iounmap(kva, size)
+	caddr_t kva;
+	int size;
 {
 
 #ifdef DEBUG

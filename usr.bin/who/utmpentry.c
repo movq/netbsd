@@ -1,4 +1,4 @@
-/*	$NetBSD: utmpentry.c,v 1.5 2004/10/22 15:50:47 christos Exp $	*/
+/*	$NetBSD: utmpentry.c,v 1.4 2003/02/12 17:39:36 christos Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -38,7 +38,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: utmpentry.c,v 1.5 2004/10/22 15:50:47 christos Exp $");
+__RCSID("$NetBSD: utmpentry.c,v 1.4 2003/02/12 17:39:36 christos Exp $");
 #endif
 
 #include <sys/stat.h>
@@ -94,7 +94,6 @@ setup(const char *fname)
 {
 	int what = 3;
 	struct stat st;
-	const char *sfname;
 
 	if (fname == NULL) {
 #ifdef SUPPORT_UTMPX
@@ -111,49 +110,38 @@ setup(const char *fname)
 		if (what == 1) {
 #ifdef SUPPORT_UTMPX
 			if (utmpxname(fname) == 0)
-				warnx("Cannot set utmpx file to `%s'",
-				    fname);
+				err(1, "Cannot open `%s'", fname);
 #else
-			warnx("utmpx support not compiled in");
+			errx(1, "utmpx support not compiled in");
 #endif
 		} else {
 #ifdef SUPPORT_UTMP
 			if (utmpname(fname) == 0)
-				warnx("Cannot set utmp file to `%s'",
-				    fname);
+				err(1, "Cannot open `%s'", fname);
 #else
-			warnx("utmp support not compiled in");
+			errx(1, "utmp support not compiled in");
 #endif
 		}
 	}
 #ifdef SUPPORT_UTMPX
 	if (what & 1) {
-		sfname = fname ? fname : _PATH_UTMPX;
-		if (stat(sfname, &st) == -1) {
-			warn("Cannot stat `%s'", sfname);
+		(void)stat(fname ? fname : _PATH_UTMPX, &st);
+		if (st.st_mtime > utmpxtime)
+			utmpxtime = st.st_mtime;
+		else
 			what &= ~1;
-		} else {
-			if (st.st_mtime > utmpxtime)
-			    utmpxtime = st.st_mtime;
-			else
-			    what &= ~1;
-		}
 	}
 #endif
 #ifdef SUPPORT_UTMP
 	if (what & 2) {
-		sfname = fname ? fname : _PATH_UTMP;
-		if (stat(sfname, &st) == -1) {
-			warn("Cannot stat `%s'", sfname);
+		(void)stat(fname ? fname : _PATH_UTMP, &st);
+		if (st.st_mtime > utmptime)
+			utmptime = st.st_mtime;
+		else
 			what &= ~2;
-		} else {
-			if (st.st_mtime > utmptime)
-				utmptime = st.st_mtime;
-			else
-				what &= ~2;
-		}
 	}
 #endif
+			
 	return what;
 }
 #endif
@@ -191,13 +179,10 @@ getutentries(const char *fname, struct utmpentry **epp)
 	struct utmpentry *ep;
 	int what = setup(fname);
 	struct utmpentry **nextp = &ehead;
-	switch (what) {
-	case 0:
-		/* No updates */
+	if (what == 0) {
 		*epp = ehead;
 		return numutmp;
-	default:
-		/* Need to re-scan */
+	} else {
 		ehead = NULL;
 		numutmp = 0;
 	}
@@ -207,10 +192,8 @@ getutentries(const char *fname, struct utmpentry **epp)
 	while ((what & 1) && (utx = getutxent()) != NULL) {
 		if (fname == NULL && utx->ut_type != USER_PROCESS)
 			continue;
-		if ((ep = calloc(1, sizeof(struct utmpentry))) == NULL) {
-			warn(NULL);
-			return 0;
-		}
+		if ((ep = calloc(1, sizeof(struct utmpentry))) == NULL)
+			err(1, NULL);
 		getentryx(ep, utx);
 		*nextp = ep;
 		nextp = &(ep->next);
@@ -230,10 +213,8 @@ getutentries(const char *fname, struct utmpentry **epp)
 		}
 		if (ep != NULL)
 			continue;
-		if ((ep = calloc(1, sizeof(struct utmpentry))) == NULL) {
-			warn(NULL);
-			return 0;
-		}
+		if ((ep = calloc(1, sizeof(struct utmpentry))) == NULL)
+			err(1, NULL);
 		getentry(ep, ut);
 		*nextp = ep;
 		nextp = &(ep->next);

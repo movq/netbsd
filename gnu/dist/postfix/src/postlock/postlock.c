@@ -1,5 +1,3 @@
-/*	$NetBSD: postlock.c,v 1.1.1.3 2004/05/31 00:24:42 heas Exp $	*/
-
 /*++
 /* NAME
 /*	postlock 1
@@ -51,37 +49,30 @@
 /* .ad
 /* .fi
 /*	The following \fBmain.cf\fR parameters are especially relevant to
-/*	this program. 
-/*	The text below provides only a parameter summary. See
-/*	postconf(5) for more details including examples.
-/* LOCKING CONTROLS
+/*	this program. See the Postfix \fBmain.cf\fR file for syntax details
+/*	and for default values.
+/* .SH "Locking controls"
 /* .ad
 /* .fi
-/* .IP "\fBdeliver_lock_attempts (20)\fR"
-/*	The maximal number of attempts to acquire an exclusive lock on a
-/*	mailbox file or bounce(8) logfile.
-/* .IP "\fBdeliver_lock_delay (1s)\fR"
-/*	The time between attempts to acquire an exclusive lock on a mailbox
-/*	file or bounce(8) logfile.
-/* .IP "\fBstale_lock_time (500s)\fR"
-/*	The time after which a stale exclusive mailbox lockfile is removed.
-/* .IP "\fBmailbox_delivery_lock (see 'postconf -d' output)\fR"
-/*	How to lock a UNIX-style local(8) mailbox before attempting delivery.
-/* RESOURCE AND RATE CONTROLS
+/* .IP \fBdeliver_lock_attempts\fR
+/*	Limit the number of attempts to acquire an exclusive lock.
+/* .IP \fBdeliver_lock_delay\fR
+/*	Time in seconds between successive attempts to acquire
+/*	an exclusive lock.
+/* .IP \fBstale_lock_time\fR
+/*	Limit the time after which a stale lock is removed.
+/* .IP \fBmailbox_delivery_lock\fR
+/*	What file locking method(s) to use when delivering to a UNIX-style
+/*	mailbox.
+/*	The default setting is system dependent.  For a list of available
+/*	file locking methods, use the \fBpostconf -l\fR command.
+/* .SH "Resource controls"
 /* .ad
 /* .fi
-/* .IP "\fBfork_attempts (5)\fR"
-/*	The maximal number of attempts to fork() a child process.
-/* .IP "\fBfork_delay (1s)\fR"
-/*	The delay between attempts to fork() a child process.
-/* MISCELLANEOUS CONTROLS
-/* .ad
-/* .fi
-/* .IP "\fBconfig_directory (see 'postconf -d' output)\fR"
-/*	The default location of the Postfix main.cf and master.cf
-/*	configuration files.
-/* SEE ALSO
-/*	postconf(5), configuration parameters
+/* .IP \fBfork_attempts\fR
+/*	Number of attempts to \fBfork\fR() a process before giving up.
+/* .IP \fBfork_delay\fR
+/*	Delay in seconds between successive \fBfork\fR() attempts.
 /* LICENSE
 /* .ad
 /* .fi

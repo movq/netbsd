@@ -1,4 +1,4 @@
-/*	$NetBSD: smbfs_vnops.c,v 1.45 2004/10/27 19:17:13 peter Exp $	*/
+/*	$NetBSD: smbfs_vnops.c,v 1.42 2004/03/22 16:40:48 jdolecek Exp $	*/
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -71,7 +71,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: smbfs_vnops.c,v 1.45 2004/10/27 19:17:13 peter Exp $");
+__KERNEL_RCSID(0, "$NetBSD: smbfs_vnops.c,v 1.42 2004/03/22 16:40:48 jdolecek Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -270,25 +270,17 @@ do_open:
 
 	smb_makescred(&scred, ap->a_p, ap->a_cred);
 	if (vp->v_type == VDIR)
-		error = smbfs_smb_ntcreatex(np,
-		    SMB_SM_DENYNONE|SMB_AM_OPENREAD, &scred);
+		error = smbfs_smb_ntcreatex(np, SMB_AM_OPENREAD, &scred);
 	else {
-		/*
-		 * Use DENYNONE to give unixy semantics of permitting
-		 * everything not forbidden by permissions.  Ie denial
-		 * is up to server with clients/openers needing to use
-		 * advisory locks for further control.
-		 */
-		accmode = SMB_SM_DENYNONE|SMB_AM_OPENREAD;
+		accmode = SMB_AM_OPENREAD;
 		if ((vp->v_mount->mnt_flag & MNT_RDONLY) == 0)
-			accmode = SMB_SM_DENYNONE|SMB_AM_OPENRW;
+			accmode = SMB_AM_OPENRW;
 		error = smbfs_smb_open(np, accmode, &scred);
 		if (error) {
 			if (ap->a_mode & FWRITE)
 				return EACCES;
 		
-			error = smbfs_smb_open(np,
-			    SMB_SM_DENYNONE|SMB_AM_OPENREAD, &scred);
+			error = smbfs_smb_open(np, SMB_AM_OPENREAD, &scred);
 		}
 	}
 	if (!error)
@@ -428,8 +420,7 @@ smbfs_setattr(v)
  		np->n_size = vap->va_size;
 		uvm_vnp_setsize(vp, vap->va_size);
 		if ((np->n_flag & NOPEN) == 0) {
-			error = smbfs_smb_open(np,
-			    SMB_SM_DENYNONE|SMB_AM_OPENRW, &scred);
+			error = smbfs_smb_open(np, SMB_AM_OPENRW, &scred);
 			if (error == 0)
 				doclose = 1;
 		}
@@ -915,6 +906,8 @@ smbfs_pathconf(v)
 		int a_name;
 		register_t *a_retval;
 	} */ *ap = v;
+	struct smbmount *smp = VFSTOSMBFS(VTOVFS(ap->a_vp));
+	struct smb_vc *vcp = SSTOVC(smp->sm_share);
 	register_t *retval = ap->a_retval;
 	int error = 0;
 	
@@ -929,7 +922,7 @@ smbfs_pathconf(v)
 		*retval = 0;
 		break;
 	case _PC_NAME_MAX:
-		*retval = ap->a_vp->v_mount->mnt_stat.f_namemax;
+		*retval = (vcp->vc_hflags2 & SMB_FLAGS2_KNOWS_LONG_NAMES) ? 255 : 12;
 		break;
 	case _PC_PATH_MAX:
 		*retval = 800;	/* XXX: a correct one ? */
@@ -1024,7 +1017,7 @@ smbfs_advlock(v)
 {
 	struct vop_advlock_args /* {
 		struct vnode *a_vp;
-		void *a_id;
+		caddr_t  a_id;
 		int  a_op;
 		struct flock *a_fl;
 		int  a_flags;

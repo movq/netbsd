@@ -1,4 +1,4 @@
-/*	$NetBSD: heapsort.c,v 1.15 2004/11/28 06:57:14 jmc Exp $	*/
+/*	$NetBSD: heapsort.c,v 1.14 2003/09/07 19:06:50 wiz Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -32,21 +32,12 @@
  * SUCH DAMAGE.
  */
 
-#if HAVE_NBTOOL_CONFIG_H
-#include "nbtool_config.h"
-/*
- * XXX Undefine the renames of these functions so that we don't
- * XXX rename the versions found in the host's headers by mistake!
- */
-#undef heapsort
-#endif
-
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
 #if 0
 static char sccsid[] = "from: @(#)heapsort.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: heapsort.c,v 1.15 2004/11/28 06:57:14 jmc Exp $");
+__RCSID("$NetBSD: heapsort.c,v 1.14 2003/09/07 19:06:50 wiz Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -56,11 +47,6 @@ __RCSID("$NetBSD: heapsort.c,v 1.15 2004/11/28 06:57:14 jmc Exp $");
 #include <assert.h>
 #include <errno.h>
 #include <stdlib.h>
-
-#if HAVE_NBTOOL_CONFIG_H
-/* XXX Now, re-apply the renaming that we undid above. */
-#define heapsort	__nbcompat_heapsort
-#endif
 
 #ifdef __weak_alias
 __weak_alias(heapsort,_heapsort)

@@ -1,5 +1,3 @@
-/*	$NetBSD: events.h,v 1.1.1.4 2004/05/31 00:24:59 heas Exp $	*/
-
 #ifndef _EVENTS_H_INCLUDED_
 #define _EVENTS_H_INCLUDED_
 
@@ -31,7 +29,7 @@ extern void event_disable_readwrite(int);
 extern time_t event_request_timer(EVENT_NOTIFY_TIME, char *, int);
 extern int event_cancel_timer(EVENT_NOTIFY_TIME, char *);
 extern void event_loop(int);
-extern void event_drain(int);
+extern void event_drain(void);
 
  /*
   * Event codes.

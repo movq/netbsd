@@ -1,11 +1,11 @@
-/*	$NetBSD: perform.c,v 1.57 2004/11/02 01:03:29 erh Exp $	*/
+/*	$NetBSD: perform.c,v 1.51.2.1 2004/08/11 19:54:26 jmc Exp $	*/
 
 #include <sys/cdefs.h>
 #ifndef lint
 #if 0
 static const char *rcsid = "from FreeBSD Id: perform.c,v 1.23 1997/10/13 15:03:53 jkh Exp";
 #else
-__RCSID("$NetBSD: perform.c,v 1.57 2004/11/02 01:03:29 erh Exp $");
+__RCSID("$NetBSD: perform.c,v 1.51.2.1 2004/08/11 19:54:26 jmc Exp $");
 #endif
 #endif
 
@@ -51,14 +51,13 @@ pkg_do(char *pkg)
 	struct stat sb;
 	char   *cp = NULL;
 	int     code = 0;
-	char flist[sizeof(ALL_FNAMES)];
 
 	if (IS_URL(pkg)) {
 		if ((cp = fileGetURL(pkg)) != NULL) {
 			strlcpy(fname, cp, sizeof(fname));
 			isTMP = TRUE;
 		}
-	} else if (usedot && fexists(pkg) && isfile(pkg)) {
+	} else if (fexists(pkg) && isfile(pkg)) {
 		int     len;
 
 		if (*pkg != '/') {
@@ -72,7 +71,7 @@ pkg_do(char *pkg)
 			strlcpy(fname, pkg, sizeof(fname));
 		}
 		cp = fname;
-	} else if (usedot) {
+	} else {
 		if ((cp = fileFindByPath(pkg)) != NULL) {
 			strncpy(fname, cp, FILENAME_MAX);
 		}
@@ -95,19 +94,13 @@ pkg_do(char *pkg)
 				}
 				strcpy(PlayPen, cp2);
 			} else {
-				if (!usedot) {
-					/* only recognise a local uninstalled package if usedot was given */
-					warnx("can't find package file '%s'", fname);
-					code = 1;
-					goto bail;
-				}
-
 				/*
 				 * Apply a crude heuristic to see how much space the package will
 				 * take up once it's unpacked.  I've noticed that most packages
 				 * compress an average of 75%, but we're only unpacking the + files
 				 * needed so be very optimistic.
 				 */
+				char flist[sizeof(ALL_FNAMES)];
 
 				/* Determine which +-files to unpack - not all may be present! */
 				strcat(flist, CONTENTS_FNAME); strcat(flist, " ");
@@ -161,8 +154,7 @@ pkg_do(char *pkg)
 			}
 
 			/* No match */
-			warnx("can't find package `%s' installed%s!", pkg,
-				  usedot ? " or in a file" : "");
+			warnx("can't find package `%s' installed or in a file!", pkg);
 			return 1;
 		}
 		if (chdir(log_dir) == FAIL) {
@@ -181,8 +173,6 @@ pkg_do(char *pkg)
 
 		(void) snprintf(tmp, sizeof(tmp), "%-19s ", pkg);
 		show_index(tmp, COMMENT_FNAME);
-	} else if (Flags & SHOW_BI_VAR) {
-		show_var(BUILD_INFO_FNAME, BuildInfoVariable);
 	} else {
 		FILE   *fp;
 		package_t plist;

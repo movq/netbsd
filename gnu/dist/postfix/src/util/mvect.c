@@ -1,5 +1,3 @@
-/*	$NetBSD: mvect.c,v 1.1.1.3 2004/05/31 00:25:00 heas Exp $	*/
-
 /*++
 /* NAME
 /*	mvect 3
@@ -72,12 +70,11 @@
 char   *mvect_alloc(MVECT *vect, int elsize, int nelm,
                void (*init_fn) (char *, int), void (*wipe_fn) (char *, int))
 {
-    vect->init_fn = init_fn;
-    vect->wipe_fn = wipe_fn;
-    vect->nelm = 0;
-    vect->ptr = mymalloc(elsize * nelm);
     vect->nelm = nelm;
     vect->elsize = elsize;
+    vect->init_fn = init_fn;
+    vect->wipe_fn = wipe_fn;
+    vect->ptr = mymalloc(vect->elsize * vect->nelm);
     if (vect->init_fn)
 	vect->init_fn(vect->ptr, vect->nelm);
     return (vect->ptr);
@@ -89,14 +86,12 @@ char   *mvect_realloc(MVECT *vect, int nelm)
 {
     int     old_len = vect->nelm;
     int     incr = nelm - old_len;
-    int     new_nelm;
 
     if (incr > 0) {
 	if (incr < old_len)
 	    incr = old_len;
-	new_nelm = vect->nelm + incr;
-	vect->ptr = myrealloc(vect->ptr, vect->elsize * new_nelm);
-	vect->nelm = new_nelm;
+	vect->nelm += incr;
+	vect->ptr = myrealloc(vect->ptr, vect->elsize * vect->nelm);
 	if (vect->init_fn)
 	    vect->init_fn(vect->ptr + old_len * vect->elsize, incr);
     }

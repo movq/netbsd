@@ -1,4 +1,4 @@
-# $NetBSD: md.x68k,v 1.49 2004/05/12 14:25:08 minoura Exp $
+# $NetBSD: md.x68k,v 1.46 2004/01/11 10:13:42 lukem Exp $
 ./usr/include/ieeefp.h				comp-c-include
 ./usr/include/x68k				comp-c-include
 ./usr/include/x68k/_G_config.h			comp-obsolete		obsolete
@@ -30,7 +30,6 @@
 ./usr/include/x68k/intr.h			comp-c-include
 ./usr/include/x68k/iteioctl.h			comp-c-include
 ./usr/include/x68k/kbd.h			comp-c-include
-./usr/include/x68k/kbdmap.h			comp-c-include
 ./usr/include/x68k/kbio.h			comp-c-include
 ./usr/include/x68k/kcore.h			comp-c-include
 ./usr/include/x68k/limits.h			comp-c-include
@@ -38,7 +37,6 @@
 ./usr/include/x68k/math.h			comp-c-include
 ./usr/include/x68k/mcontext.h			comp-c-include
 ./usr/include/x68k/opmbellio.h			comp-c-include
-./usr/include/x68k/opmreg.h			comp-c-include
 ./usr/include/x68k/param.h			comp-c-include
 ./usr/include/x68k/parioctl.h			comp-c-include
 ./usr/include/x68k/pcb.h			comp-c-include
@@ -63,4 +61,3 @@
 ./usr/include/x68k/varargs.h			comp-c-include
 ./usr/include/x68k/vmparam.h			comp-c-include
 ./usr/include/x68k/vuid_event.h			comp-c-include
-./usr/include/x68k/wchar_limits.h		comp-c-include

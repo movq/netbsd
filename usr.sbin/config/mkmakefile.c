@@ -1,4 +1,4 @@
-/*	$NetBSD: mkmakefile.c,v 1.62 2004/06/20 22:20:17 jmc Exp $	*/
+/*	$NetBSD: mkmakefile.c,v 1.59.2.1 2004/06/22 07:21:04 tron Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -70,7 +70,6 @@ static int emitsfiles(FILE *);
 static int emitrules(FILE *);
 static int emitload(FILE *);
 static int emitincludes(FILE *);
-static int emitappmkoptions(FILE *);
 
 int
 mkmakefile(void)
@@ -127,8 +126,6 @@ mkmakefile(void)
 			fn = emitload;
 		else if (strcmp(line, "%INCLUDES\n") == 0)
 			fn = emitincludes;
-		else if (strcmp(line, "%MAKEOPTIONSAPPEND\n") == 0)
-			fn = emitappmkoptions;
 		else {
 			xerror(ifname, lineno,
 			    "unknown %% construct ignored: %s", line);
@@ -517,35 +514,4 @@ emitincludes(FILE *fp)
 	}
 
 	return (0);
-}
-
-static int
-print_condmkopts(const char *name, void *value, void *arg)
-{
-	struct nvlist *nv;
-	FILE *fp = arg;
-
-	if (ht_lookup(selecttab, name) == 0)
-		return (0);
-
-	for (nv = value; nv != NULL; nv = nv->nv_next)
-		if (fprintf(fp, "%s+=%s\n", nv->nv_name, nv->nv_str) < 0)
-			return (1);
-
-	return (0);
-}
-
-/*
- * Emit appending makeoptions.
- */
-static int
-emitappmkoptions(FILE *fp)
-{
-	struct nvlist *nv;
-
-	for (nv = appmkoptions; nv != NULL; nv = nv->nv_next)
-		if (fprintf(fp, "%s+=%s\n", nv->nv_name, nv->nv_str) < 0)
-			return (1);
-
-	return (ht_enumerate(condmkopttab, print_condmkopts, fp));
 }

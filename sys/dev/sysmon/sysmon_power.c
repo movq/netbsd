@@ -1,4 +1,4 @@
-/*	$NetBSD: sysmon_power.c,v 1.10 2004/05/22 11:32:50 cube Exp $	*/
+/*	$NetBSD: sysmon_power.c,v 1.8 2003/07/14 15:47:28 lukem Exp $	*/
 
 /*
  * Copyright (c) 2003 Wasabi Systems, Inc.
@@ -44,7 +44,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sysmon_power.c,v 1.10 2004/05/22 11:32:50 cube Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sysmon_power.c,v 1.8 2003/07/14 15:47:28 lukem Exp $");
 
 #include <sys/param.h>
 #include <sys/reboot.h>
@@ -491,24 +491,6 @@ sysmon_pswitch_event(struct sysmon_pswitch *smpsw, int event)
 		default:
 			printf("%s: unknown lid switch event: %d\n",
 			    smpsw->smpsw_name, event);
-		}
-		break;
-
-	case PSWITCH_TYPE_ACADAPTER:
-		switch (event) {
-		case PSWITCH_EVENT_PRESSED:
-			/*
-			 * Come out of power-save state.
-			 */
-			printf("%s: AC adapter online.\n", smpsw->smpsw_name);
-			break;
-
-		case PSWITCH_EVENT_RELEASED:
-			/*
-			 * Try to enter a power-save state.
-			 */
-			printf("%s: AC adapter offline.\n", smpsw->smpsw_name);
-			break;
 		}
 		break;
 

@@ -1,7 +1,7 @@
-/* -*-C++-*-	$NetBSD: hpcmenu.cpp,v 1.14 2004/08/06 18:33:09 uch Exp $	*/
+/* -*-C++-*-	$NetBSD: hpcmenu.cpp,v 1.12 2004/03/16 22:30:36 uwe Exp $	*/
 
 /*-
- * Copyright (c) 2001, 2004 The NetBSD Foundation, Inc.
+ * Copyright (c) 2001 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -53,7 +53,6 @@ HpcMenuInterface *HpcMenuInterface::_instance = 0;
 HpcMenuInterface &
 HpcMenuInterface::Instance()
 {
-
 	if (!_instance)
 		_instance = new HpcMenuInterface();
 	return *_instance;
@@ -62,19 +61,17 @@ HpcMenuInterface::Instance()
 void
 HpcMenuInterface::Destroy()
 {
-
 	if (_instance)
 		delete _instance;
 }
 
 HpcMenuInterface::HpcMenuInterface()
 {
-
 	if (!load())
 		_set_default_pref();
 	_pref._version	= HPCBOOT_VERSION;
 	_pref._size	= sizeof(HpcMenuPreferences);
-
+    
 	_cons_parameter = 0;
 	memset(_cons_hook, 0, sizeof(struct cons_hook_args) * 4);
 	memset(&_boot_hook, 0, sizeof(struct boot_hook_args));
@@ -83,7 +80,6 @@ HpcMenuInterface::HpcMenuInterface()
 void
 HpcMenuInterface::print(TCHAR *buf)
 {
-
 	if (_console)
 		_console->print(buf);
 }
@@ -91,7 +87,6 @@ HpcMenuInterface::print(TCHAR *buf)
 void
 HpcMenuInterface::get_options()
 {
-
 	_main->get();
 	_option->get();
 }
@@ -100,31 +95,28 @@ TCHAR *
 HpcMenuInterface::dir(int i)
 {
 	int res = IDS_DIR_RES(i);
-
 	if (!IDS_DIR_RES_VALID(res))
 		return 0;
-
+  
 	if (_pref.dir_user && res == IDS_DIR_USER_DEFINED) {
 		return _pref.dir_user_path;
 	}
 
 	TCHAR *s = reinterpret_cast <TCHAR *>
 	    (LoadString(_root->_app._instance, res, 0, 0));
-
+  
 	return s;
 }
 
 int
 HpcMenuInterface::dir_default()
 {
-
 	return _pref.dir_user ? IDS_DIR_SEQ(IDS_DIR_USER_DEFINED) : 0;
 }
 
 void
 HpcMenuInterface::_set_default_pref()
 {
-
 	_pref._magic		= HPCBOOT_MAGIC;
 	_pref.dir		= 0;
 	_pref.dir_user		= FALSE;
@@ -167,7 +159,7 @@ HpcMenuInterface::load()
 	    FILE_ATTRIBUTE_NORMAL, 0);
 	if (file == INVALID_HANDLE_VALUE)
 		return FALSE;
-
+  
 	DWORD cnt;
 	// read header.
 	if (!ReadFile(file, &_pref, 12, &cnt, 0))
@@ -190,7 +182,7 @@ BOOL
 HpcMenuInterface::save()
 {
 	TCHAR path[MAX_PATH];
-
+  
 	if (_find_pref_dir(path)) {
 		TCHAR filename[MAX_PATH];
 		wsprintf(filename, TEXT("\\%s\\hpcboot.cnf"), path);
@@ -218,7 +210,7 @@ HpcMenuInterface::setup_kernel_args(vaddr_t v, paddr_t p, size_t sz)
 	TCHAR *w;
 	char *ptr;
 
-#define	SETOPT(c)							\
+#define SETOPT(c)							\
 __BEGIN_MACRO								\
 	argv[argc++] = ptokv(locp);					\
 	*loc++ =(c);							\
@@ -231,7 +223,7 @@ __END_MACRO
 	w = _pref.kernel_user_file;
 	argv[argc++] = ptokv(locp);
 	len = WideCharToMultiByte(CP_ACP, 0, w, wcslen(w), 0, 0, 0, 0);
-	WideCharToMultiByte(CP_ACP, 0, w, len, loc, len, 0, 0);
+	WideCharToMultiByte(CP_ACP, 0, w, len, loc, len, 0, 0); 
 	loc[len] = '\0';
 	loc += len + 1;
 	locp += len + 1;
@@ -287,9 +279,9 @@ __END_MACRO
 		    MB_ICONWARNING | MB_OK);
 		UpdateWindow(_root->_window);
 
-		return argc;
+		return argc;  
 	}
-	WideCharToMultiByte(CP_ACP, 0, w, len, ptr, len, 0, 0);
+	WideCharToMultiByte(CP_ACP, 0, w, len, ptr, len, 0, 0); 
 	ptr[len]='\0';
 
 	while (*ptr == ' ' || *ptr == '\t')
@@ -312,7 +304,7 @@ __END_MACRO
 		loc[len] = '\0';
 		loc += len + 1;
 		locp += len + 1;
-
+	
 		ptr += len;
 		while (*ptr == ' ' || *ptr == '\t')
 			ptr++;
@@ -345,16 +337,14 @@ HpcMenuInterface::setup_bootinfo(struct bootinfo &bi)
 
 // Progress bar
 void
-HpcMenuInterface::progress(const char *msg)
+HpcMenuInterface::progress()
 {
-
-	_root->progress(msg);
+	_root->progress();
 }
 
 void
 HpcMenuInterface::unprogress()
 {
-
 	_root->unprogress();
 }
 

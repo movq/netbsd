@@ -1,4 +1,4 @@
-/*	$NetBSD: asm.h,v 1.28 2004/05/13 20:30:39 yamt Exp $	*/
+/*	$NetBSD: asm.h,v 1.26 2003/08/07 16:27:57 agc Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -132,16 +132,6 @@
 #endif /* __ELF__ */
 
 #define _ALIGN_TEXT ALIGN_TEXT
-
-#ifdef GPROF
-#ifdef __ELF__
-#define	MCOUNT_ASM	call	_C_LABEL(__mcount)
-#else /* __ELF__ */
-#define	MCOUNT_ASM	call	_C_LABEL(mcount)
-#endif /* __ELF__ */
-#else /* GPROF */
-#define	MCOUNT_ASM	/* nothing */
-#endif /* GPROF */
 
 #endif /* _KERNEL */
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: sysctlnametomib.c,v 1.2 2004/04/08 05:45:26 atatat Exp $ */
+/*	$NetBSD: sysctlnametomib.c,v 1.1.2.1 2004/04/08 19:38:11 jdc Exp $ */
 
 /*-
  * Copyright (c) 2003,2004 The NetBSD Foundation, Inc.

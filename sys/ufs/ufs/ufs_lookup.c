@@ -1,4 +1,4 @@
-/*	$NetBSD: ufs_lookup.c,v 1.60 2004/09/17 14:11:27 skrll Exp $	*/
+/*	$NetBSD: ufs_lookup.c,v 1.55 2004/03/06 06:54:12 yamt Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ufs_lookup.c,v 1.60 2004/09/17 14:11:27 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ufs_lookup.c,v 1.55 2004/03/06 06:54:12 yamt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -61,7 +61,7 @@ int	dirchk = 1;
 int	dirchk = 0;
 #endif
 
-#define FSFMT(vp)   (((vp)->v_mount->mnt_iflag & IMNT_DTYPE) ==  0)
+#define FSFMT(vp)   ((vp)->v_mount->mnt_maxsymlinklen <= 0)
 
 /*
  * Convert a component of a pathname into a pointer to a locked inode.
@@ -105,8 +105,8 @@ ufs_lookup(v)
 		struct vnode **a_vpp;
 		struct componentname *a_cnp;
 	} */ *ap = v;
-	struct vnode *vdp = ap->a_dvp;	/* vnode for directory being searched */
-	struct inode *dp = VTOI(vdp);	/* inode for directory being searched */
+	struct vnode *vdp;		/* vnode for directory being searched */
+	struct inode *dp;		/* inode for directory being searched */
 	struct buf *bp;			/* a buffer of directory entries */
 	struct direct *ep;		/* the current directory entry */
 	int entryoffsetinblock;		/* offset of ep in bp's buffer */
@@ -130,10 +130,12 @@ ufs_lookup(v)
 	struct ucred *cred = cnp->cn_cred;
 	int flags;
 	int nameiop = cnp->cn_nameiop;
-	struct ufsmount *ump = dp->i_ump;
-	const int needswap = UFS_MPNEEDSWAP(ump);
-	int dirblksiz = ump->um_dirblksiz;
+	const int needswap = UFS_MPNEEDSWAP(ap->a_dvp->v_mount);
+	int dirblksiz = DIRBLKSIZ;
 	ino_t foundino;
+	if (UFS_MPISAPPLEUFS(ap->a_dvp->v_mount)) {
+		dirblksiz = APPLEUFS_DIRBLKSIZ;
+	}
 
 	cnp->cn_flags &= ~PDIRUNLOCK;
 	flags = cnp->cn_flags;
@@ -141,8 +143,12 @@ ufs_lookup(v)
 	bp = NULL;
 	slotoffset = -1;
 	*vpp = NULL;
+	vdp = ap->a_dvp;
+	dp = VTOI(vdp);
 	lockparent = flags & LOCKPARENT;
 	wantparent = flags & (LOCKPARENT|WANTPARENT);
+
+
 	/*
 	 * Check accessiblity of directory.
 	 */
@@ -174,7 +180,8 @@ ufs_lookup(v)
 	if ((nameiop == CREATE || nameiop == RENAME) &&
 	    (flags & ISLASTCN)) {
 		slotstatus = NONE;
-		slotneeded = DIRECTSIZ(cnp->cn_namelen);
+		slotneeded = (sizeof(struct direct) - MAXNAMLEN +
+			cnp->cn_namelen + 3) &~ 3;
 	}
 
 	/*
@@ -217,7 +224,7 @@ searchloop:
 			if (bp != NULL)
 				brelse(bp);
 			error = VOP_BLKATOFF(vdp, (off_t)dp->i_offset, NULL,
-			    &bp);
+					     &bp);
 			if (error)
 				return (error);
 			entryoffsetinblock = 0;
@@ -266,7 +273,7 @@ searchloop:
 					slotstatus = FOUND;
 					slotoffset = dp->i_offset;
 					slotsize = ufs_rw16(ep->d_reclen,
-					    needswap);
+						needswap);
 				} else if (slotstatus == NONE) {
 					slotfreespace += size;
 					if (slotoffset == -1)
@@ -275,8 +282,8 @@ searchloop:
 						slotstatus = COMPACT;
 						slotsize = dp->i_offset +
 						    ufs_rw16(ep->d_reclen,
-							     needswap) -
-						    slotoffset;
+							     needswap)
+						    - slotoffset;
 					}
 				}
 			}
@@ -287,25 +294,28 @@ searchloop:
 		 */
 		if (ep->d_ino) {
 #if (BYTE_ORDER == LITTLE_ENDIAN)
-			if (FSFMT(vdp) && needswap == 0)
-				namlen = ep->d_type;
-			else
+			if (vdp->v_mount->mnt_maxsymlinklen > 0 ||
+			    needswap != 0)
 				namlen = ep->d_namlen;
+			else
+				namlen = ep->d_type;
 #else
-			if (FSFMT(vdp) && needswap != 0) 
+			if (vdp->v_mount->mnt_maxsymlinklen <= 0
+			    && needswap != 0) 
 				namlen = ep->d_type;
 			else
 				namlen = ep->d_namlen;
 #endif
 			if (namlen == cnp->cn_namelen &&
 			    !memcmp(cnp->cn_nameptr, ep->d_name,
-			    (unsigned)namlen)) {
+				(unsigned)namlen)) {
 				/*
 				 * Save directory entry's inode number and
 				 * reclen in ndp->ni_ufs area, and release
 				 * directory buffer.
 				 */
-				if (!FSFMT(vdp) && ep->d_type == DT_WHT) {
+				if (vdp->v_mount->mnt_maxsymlinklen > 0 &&
+				    ep->d_type == DT_WHT) {
 					slotstatus = FOUND;
 					slotoffset = dp->i_offset;
 					slotsize = ufs_rw16(ep->d_reclen,
@@ -611,7 +621,7 @@ ufs_dirbad(ip, offset, how)
 	mp = ITOV(ip)->v_mount;
 	printf("%s: bad dir ino %d at offset %d: %s\n",
 	    mp->mnt_stat.f_mntonname, ip->i_number, offset, how);
-	if ((mp->mnt_stat.f_flag & MNT_RDONLY) == 0)
+	if ((mp->mnt_stat.f_flags & MNT_RDONLY) == 0)
 		panic("bad dir");
 }
 
@@ -631,20 +641,22 @@ ufs_dirbadentry(dp, ep, entryoffsetinblock)
 {
 	int i;
 	int namlen;
-	struct ufsmount *ump = VFSTOUFS(dp->v_mount);
-	const int needswap = UFS_MPNEEDSWAP(ump);
-	int dirblksiz = ump->um_dirblksiz;
+	const int needswap = UFS_MPNEEDSWAP(dp->v_mount);
+	int dirblksiz = DIRBLKSIZ;
+	if (UFS_MPISAPPLEUFS(dp->v_mount)) {
+		dirblksiz = APPLEUFS_DIRBLKSIZ;
+	}
 
 #if (BYTE_ORDER == LITTLE_ENDIAN)
-	if (FSFMT(dp) && needswap == 0)
-		namlen = ep->d_type;
-	else
+	if (dp->v_mount->mnt_maxsymlinklen > 0 || needswap != 0)
 		namlen = ep->d_namlen;
+	else
+		namlen = ep->d_type;
 #else
-	if (FSFMT(dp) && needswap != 0)
+	if (dp->v_mount->mnt_maxsymlinklen <= 0 && needswap != 0)
 		namlen = ep->d_type;
 	else
-		namlen = ep->d_namlen;
+	namlen = ep->d_namlen;
 #endif
 	if ((ufs_rw16(ep->d_reclen, needswap) & 0x3) != 0 ||
 	    ufs_rw16(ep->d_reclen, needswap) >
@@ -694,10 +706,11 @@ ufs_makedirentry(ip, cnp, newdirp)
 	newdirp->d_namlen = cnp->cn_namelen;
 	memcpy(newdirp->d_name, cnp->cn_nameptr, (size_t)cnp->cn_namelen);
 	newdirp->d_name[cnp->cn_namelen] = '\0';
-	if (FSFMT(ITOV(ip)))
-		newdirp->d_type = 0;
-	else
+	if (ITOV(ip)->v_mount->mnt_maxsymlinklen > 0)
 		newdirp->d_type = IFTODT(ip->i_mode);
+	else {
+		newdirp->d_type = 0;
+	}
 }
 
 /*
@@ -727,9 +740,11 @@ ufs_direnter(dvp, tvp, dirp, cnp, newdirbp)
 	int error, ret, blkoff, loc, spacefree, flags;
 	char *dirbuf;
 	struct timespec ts;
-	struct ufsmount *ump = VFSTOUFS(dvp->v_mount);
-	const int needswap = UFS_MPNEEDSWAP(ump);
-	int dirblksiz = ump->um_dirblksiz;
+	const int needswap = UFS_MPNEEDSWAP(dvp->v_mount);
+	int dirblksiz = DIRBLKSIZ;
+	if (UFS_MPISAPPLEUFS(dvp->v_mount)) {
+		dirblksiz = APPLEUFS_DIRBLKSIZ;
+	}
 
 	error = 0;
 	cr = cnp->cn_cred;
@@ -762,7 +777,7 @@ ufs_direnter(dvp, tvp, dirp, cnp, newdirbp)
 		uvm_vnp_setsize(dvp, dp->i_size);
 		dirp->d_reclen = ufs_rw16(dirblksiz, needswap);
 		dirp->d_ino = ufs_rw32(dirp->d_ino, needswap);
-		if (FSFMT(dvp)) {
+		if (dvp->v_mount->mnt_maxsymlinklen <= 0) {
 #if (BYTE_ORDER == LITTLE_ENDIAN)
 			if (needswap == 0) {
 #else
@@ -773,7 +788,8 @@ ufs_direnter(dvp, tvp, dirp, cnp, newdirbp)
 				dirp->d_type = tmp;
 			}
 		}
-		blkoff = dp->i_offset & (ump->um_mountp->mnt_stat.f_iosize - 1);
+		blkoff = dp->i_offset &
+		    (VFSTOUFS(dvp->v_mount)->um_mountp->mnt_stat.f_iosize - 1);
 		memcpy((caddr_t)bp->b_data + blkoff, (caddr_t)dirp,
 		    newentrysize);
 		if (DOINGSOFTDEP(dvp)) {
@@ -901,7 +917,7 @@ ufs_direnter(dvp, tvp, dirp, cnp, newdirbp)
 	}
 	dirp->d_reclen = ufs_rw16(dirp->d_reclen, needswap);
 	dirp->d_ino = ufs_rw32(dirp->d_ino, needswap);
-	if (FSFMT(dvp)) {
+	if (dvp->v_mount->mnt_maxsymlinklen <= 0) {
 #if (BYTE_ORDER == LITTLE_ENDIAN)
 		if (needswap == 0) {
 #else
@@ -958,13 +974,15 @@ ufs_dirremove(dvp, ip, flags, isrmdir)
 	int flags;
 	int isrmdir;
 {
-	struct inode *dp = VTOI(dvp);
+	struct inode *dp;
 	struct direct *ep;
 	struct buf *bp;
 	int error;
 #ifdef FFS_EI
-	const int needswap = UFS_MPNEEDSWAP(dp->i_ump);
+	const int needswap = UFS_MPNEEDSWAP(dvp->v_mount);
 #endif
+
+	dp = VTOI(dvp);
 
 	if (flags & DOWHITEOUT) {
 		/*
@@ -1014,14 +1032,6 @@ out:
 		error = VOP_BWRITE(bp);
 	}
 	dp->i_flag |= IN_CHANGE | IN_UPDATE;
-	/*
-	 * If the last named reference to a snapshot goes away,
-	 * drop its snapshot reference so that it will be reclaimed
-	 * when last open reference goes away.
-	 */
-	if (ip != 0 && (ip->i_flags & SF_SNAPSHOT) != 0 &&
-	    ip->i_ffs_effnlink == 0)
-		ffs_snapgone(ip);
 	return (error);
 }
 
@@ -1046,8 +1056,8 @@ ufs_dirrewrite(dp, oip, newinum, newtype, isrmdir, iflags)
 	error = VOP_BLKATOFF(vdp, (off_t)dp->i_offset, (void *)&ep, &bp);
 	if (error)
 		return (error);
-	ep->d_ino = ufs_rw32(newinum, UFS_MPNEEDSWAP(dp->i_ump));
-	if (!FSFMT(vdp))
+	ep->d_ino = ufs_rw32(newinum, UFS_MPNEEDSWAP(vdp->v_mount));
+	if (vdp->v_mount->mnt_maxsymlinklen > 0)
 		ep->d_type = newtype;
 	oip->i_ffs_effnlink--;
 	if (DOINGSOFTDEP(vdp)) {
@@ -1061,13 +1071,6 @@ ufs_dirrewrite(dp, oip, newinum, newtype, isrmdir, iflags)
 		error = VOP_BWRITE(bp);
 	}
 	dp->i_flag |= iflags;
-	/*
-	 * If the last named reference to a snapshot goes away,
-	 * drop its snapshot reference so that it will be reclaimed
-	 * when last open reference goes away.
-	 */
-	if ((oip->i_flags & SF_SNAPSHOT) != 0 && oip->i_ffs_effnlink == 0)
-		ffs_snapgone(oip);
 	return (error);
 }
 
@@ -1097,7 +1100,7 @@ ufs_dirempty(ip, parentino, cred)
 	for (off = 0; off < ip->i_size;
 	    off += ufs_rw16(dp->d_reclen, needswap)) {
 		error = vn_rdwr(UIO_READ, ITOV(ip), (caddr_t)dp, MINDIRSIZ, off,
-		   UIO_SYSSPACE, IO_NODELOCKED, cred, &count, NULL);
+		   UIO_SYSSPACE, IO_NODELOCKED, cred, &count, (struct proc *)0);
 		/*
 		 * Since we read MINDIRSIZ, residual must
 		 * be 0 unless we're at end of file.
@@ -1112,12 +1115,12 @@ ufs_dirempty(ip, parentino, cred)
 			continue;
 		/* accept only "." and ".." */
 #if (BYTE_ORDER == LITTLE_ENDIAN)
-		if (FSFMT(ITOV(ip)) && needswap == 0)
-			namlen = dp->d_type;
-		else
+		if (ITOV(ip)->v_mount->mnt_maxsymlinklen > 0 || needswap != 0)
 			namlen = dp->d_namlen;
+		else
+			namlen = dp->d_type;
 #else
-		if (FSFMT(ITOV(ip)) && needswap != 0)
+		if (ITOV(ip)->v_mount->mnt_maxsymlinklen <= 0 && needswap != 0)
 			namlen = dp->d_type;
 		else
 			namlen = dp->d_namlen;
@@ -1155,7 +1158,7 @@ ufs_checkpath(source, target, cred)
 	struct vnode *vp = ITOV(target);
 	int error, rootino, namlen;
 	struct dirtemplate dirbuf;
-	const int needswap = UFS_MPNEEDSWAP(target->i_ump);
+	const int needswap = UFS_MPNEEDSWAP(vp->v_mount);
 
 	vp = ITOV(target);
 	if (target->i_number == source->i_number) {
@@ -1174,16 +1177,18 @@ ufs_checkpath(source, target, cred)
 		}
 		error = vn_rdwr(UIO_READ, vp, (caddr_t)&dirbuf,
 		    sizeof (struct dirtemplate), (off_t)0, UIO_SYSSPACE,
-		    IO_NODELOCKED, cred, NULL, NULL);
+		    IO_NODELOCKED, cred, NULL, (struct proc *)0);
 		if (error != 0)
 			break;
 #if (BYTE_ORDER == LITTLE_ENDIAN)
-		if (FSFMT(vp) && needswap == 0)
-			namlen = dirbuf.dotdot_type;
-		else
+		if (vp->v_mount->mnt_maxsymlinklen > 0 ||
+			needswap != 0)
 			namlen = dirbuf.dotdot_namlen;
+		else
+			namlen = dirbuf.dotdot_type;
 #else
-		if (FSFMT(vp) && needswap != 0)
+		if (vp->v_mount->mnt_maxsymlinklen == 0 &&
+		    needswap != 0)
 			namlen = dirbuf.dotdot_type;
 		else
 			namlen = dirbuf.dotdot_namlen;

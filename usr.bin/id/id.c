@@ -37,7 +37,7 @@ __COPYRIGHT("@(#) Copyright (c) 1991, 1993\n\
 #if 0
 static char sccsid[] = "@(#)id.c	8.3 (Berkeley) 4/28/95";
 #else
-__RCSID("$NetBSD: id.c,v 1.24 2004/11/22 17:31:38 peter Exp $");
+__RCSID("$NetBSD: id.c,v 1.20 2003/10/21 02:17:45 fvdl Exp $");
 #endif
 #endif /* not lint */
 
@@ -52,18 +52,22 @@ __RCSID("$NetBSD: id.c,v 1.24 2004/11/22 17:31:38 peter Exp $");
 #include <string.h>
 #include <unistd.h>
 
-static void current(void);
-static void pretty(struct passwd *);
-static void group(struct passwd *, int);
-static void usage(void);
-static void user(struct passwd *);
-static struct passwd *who(char *);
+int	main __P((int, char **));
+
+static void	current __P((void));
+static void	pretty __P((struct passwd *));
+static void	group __P((struct passwd *, int));
+static void	usage __P((void));
+static void	user __P((struct passwd *));
+static struct passwd *who __P((char *));
 
 static int maxgroups;
 static gid_t *groups;
 
 int
-main(int argc, char *argv[])
+main(argc, argv)
+	int argc;
+	char *argv[];
 {
 	struct group *gr;
 	struct passwd *pw;
@@ -72,16 +76,16 @@ main(int argc, char *argv[])
 
 	Gflag = gflag = nflag = pflag = rflag = uflag = 0;
 
-	if (strcmp(getprogname(), "groups") == 0) {
+	if (!strcmp(getprogname(), "groups")) {
 		Gflag = 1;
 		nflag = 1;
-	} else if (strcmp(getprogname(), "whoami") == 0) {
+	} else if (!strcmp(getprogname(), "whoami")) {
 		uflag = 1;
 		nflag = 1;
 	}
 
 	while ((ch = getopt(argc, argv, "Ggnpru")) != -1)
-		switch (ch) {
+		switch(ch) {
 		case 'G':
 			Gflag = 1;
 			break;
@@ -107,7 +111,7 @@ main(int argc, char *argv[])
 	argc -= optind;
 	argv += optind;
 
-	switch (Gflag + gflag + pflag + uflag) {
+	switch(Gflag + gflag + pflag + uflag) {
 	case 1:
 		break;
 	case 0:
@@ -158,12 +162,12 @@ main(int argc, char *argv[])
 		current();
 done:
 	free(groups);
-
-	return 0;
+	return(0);
 }
 
 static void
-pretty(struct passwd *pw)
+pretty(pw)
+	struct passwd *pw;
 {
 	struct group *gr;
 	u_int eid, rid;
@@ -203,12 +207,12 @@ pretty(struct passwd *pw)
 }
 
 static void
-current(void)
+current()
 {
 	struct group *gr;
 	struct passwd *pw;
 	int cnt, id, eid, lastid, ngroups;
-	const char *fmt;
+	char *fmt;
 
 	id = getuid();
 	(void)printf("uid=%u", id);
@@ -243,10 +247,11 @@ current(void)
 }
 
 static void
-user(struct passwd *pw)
+user(pw)
+	struct passwd *pw;
 {
 	struct group *gr;
-	const char *fmt;
+	char *fmt;
 	int cnt, id, lastid, ngroups;
 
 	id = pw->pw_uid;
@@ -269,11 +274,13 @@ user(struct passwd *pw)
 }
 
 static void
-group(struct passwd *pw, int nflag)
+group(pw, nflag)
+	struct passwd *pw;
+	int nflag;
 {
 	struct group *gr;
 	int cnt, id, lastid, ngroups;
-	const char *fmt;
+	char *fmt;
 
 	if (pw) {
 		ngroups = maxgroups;
@@ -302,8 +309,9 @@ group(struct passwd *pw, int nflag)
 	(void)printf("\n");
 }
 
-static struct passwd *
-who(char *u)
+struct passwd *
+who(u)
+	char *u;
 {
 	struct passwd *pw;
 	long id;
@@ -314,29 +322,22 @@ who(char *u)
 	 * get it as specified.  If that fails, try it as a number.
 	 */
 	if ((pw = getpwnam(u)) != NULL)
-		return pw;
+		return(pw);
 	id = strtol(u, &ep, 10);
 	if (*u && !*ep && (pw = getpwuid(id)))
-		return pw;
+		return(pw);
 	errx(1, "%s: No such user", u);
 	/* NOTREACHED */
-	return NULL;
+	return (NULL);
 }
 
-static void
-usage(void)
+void
+usage()
 {
-
-	if (strcmp(getprogname(), "groups") == 0) {
-		(void)fprintf(stderr, "usage: groups [user]\n");
-	} else if (strcmp(getprogname(), "whoami") == 0) {
-		(void)fprintf(stderr, "usage: whoami\n");
-	} else {
-		(void)fprintf(stderr, "usage: id [user]\n");
-		(void)fprintf(stderr, "       id -G [-n] [user]\n");
-		(void)fprintf(stderr, "       id -g [-nr] [user]\n");
-		(void)fprintf(stderr, "       id -p [user]\n");
-		(void)fprintf(stderr, "       id -u [-nr] [user]\n");
-	}
+	(void)fprintf(stderr, "usage: id [user]\n");
+	(void)fprintf(stderr, "       id -G [-n] [user]\n");
+	(void)fprintf(stderr, "       id -g [-nr] [user]\n");
+	(void)fprintf(stderr, "       id -p\n");
+	(void)fprintf(stderr, "       id -u [-nr] [user]\n");
 	exit(1);
 }

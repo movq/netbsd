@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.inc,v 1.7 2004/05/10 22:16:42 thorpej Exp $
+#	$NetBSD: Makefile.inc,v 1.6.4.1 2004/05/11 14:52:00 tron Exp $
 #	@(#)Makefile.inc	8.1 (Berkeley) 6/4/93
 
 # gmon sources

@@ -1,4 +1,4 @@
-/*	$NetBSD: smb_rq.c,v 1.25 2004/04/25 16:42:42 simonb Exp $	*/
+/*	$NetBSD: smb_rq.c,v 1.24 2003/06/29 22:32:10 fvdl Exp $	*/
 
 /*
  * Copyright (c) 2000-2001, Boris Popov
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: smb_rq.c,v 1.25 2004/04/25 16:42:42 simonb Exp $");
+__KERNEL_RCSID(0, "$NetBSD: smb_rq.c,v 1.24 2003/06/29 22:32:10 fvdl Exp $");
  
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -57,12 +57,8 @@ __KERNEL_RCSID(0, "$NetBSD: smb_rq.c,v 1.25 2004/04/25 16:42:42 simonb Exp $");
 MODULE_DEPEND(netsmb, libmchain, 1, 1, 1);
 #endif
 
-#ifdef __NetBSD__
-POOL_INIT(smbrq_pool, sizeof(struct smb_rq), 0, 0, 0, "smbrqpl",
-    &pool_allocator_nointr);
-POOL_INIT(smbt2rq_pool, sizeof(struct smb_t2rq), 0, 0, 0, "smbt2pl",
-    &pool_allocator_nointr);
-#endif
+static struct pool smbrq_pool;
+static struct pool smbt2rq_pool;
 
 static int  smb_rq_init(struct smb_rq *, struct smb_connobj *, u_char,
 		struct smb_cred *);
@@ -73,7 +69,6 @@ static int  smb_t2_init(struct smb_t2rq *, struct smb_connobj *, u_short,
 		struct smb_cred *);
 static int  smb_t2_reply(struct smb_t2rq *t2p);
 
-#ifndef __NetBSD__
 int
 smb_rqinit(void)
 {
@@ -83,7 +78,6 @@ smb_rqinit(void)
 		"smbt2pl", &pool_allocator_nointr);
 	return (0);
 }
-#endif
 
 int
 smb_rq_alloc(struct smb_connobj *layer, u_char cmd, struct smb_cred *scred,

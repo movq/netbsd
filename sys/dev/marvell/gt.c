@@ -1,4 +1,4 @@
-/*	$NetBSD: gt.c,v 1.8 2004/11/26 05:10:31 jmc Exp $	*/
+/*	$NetBSD: gt.c,v 1.6 2004/03/20 01:55:00 matt Exp $	*/
 
 /*
  * Copyright (c) 2002 Allegro Networks, Inc., Wasabi Systems, Inc.
@@ -42,10 +42,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: gt.c,v 1.8 2004/11/26 05:10:31 jmc Exp $");
+__KERNEL_RCSID(0, "$NetBSD: gt.c,v 1.6 2004/03/20 01:55:00 matt Exp $");
 
 #include "opt_marvell.h"
-#include "locators.h"
 
 #include <sys/param.h>
 #include <sys/types.h>
@@ -116,8 +115,7 @@ gt_cfprint (void *aux, const char *pnp)
 
 
 static int
-gt_cfsearch(struct device *parent, struct cfdata *cf,
-	    const locdesc_t *ldesc, void *aux)
+gt_cfsearch(struct device *parent, struct cfdata *cf, void *aux)
 {
 	struct gt_softc *gt = (struct gt_softc *) parent;
 	struct gt_attach_args ga;
@@ -334,7 +332,7 @@ gt_attach_common(struct gt_softc *gt)
 	gt_devbus_intr_enb(gt);
 
 	gt_watchdog_disable();
-	config_search_ia(gt_cfsearch, &gt->gt_dev, "gt", NULL);
+	config_search(gt_cfsearch, &gt->gt_dev, NULL);
 	gt_watchdog_service();
 	gt_watchdog_enable();
 }

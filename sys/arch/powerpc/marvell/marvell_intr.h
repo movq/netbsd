@@ -1,4 +1,4 @@
-/*	$NetBSD: marvell_intr.h,v 1.7 2004/06/01 00:49:41 matt Exp $	*/
+/*	$NetBSD: marvell_intr.h,v 1.6.2.1 2004/06/04 03:40:03 jmc Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.

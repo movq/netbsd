@@ -1,4 +1,4 @@
-/*	$NetBSD: procfs_subr.c,v 1.62 2004/09/20 17:53:08 jdolecek Exp $	*/
+/*	$NetBSD: procfs_subr.c,v 1.58 2003/09/27 13:29:02 darcy Exp $	*/
 
 /*
  * Copyright (c) 1993
@@ -73,7 +73,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: procfs_subr.c,v 1.62 2004/09/20 17:53:08 jdolecek Exp $");
+__KERNEL_RCSID(0, "$NetBSD: procfs_subr.c,v 1.58 2003/09/27 13:29:02 darcy Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -246,7 +246,6 @@ procfs_allocvp(mp, vpp, pid, pfs_type, fd)
 	case PFSmeminfo:	/* /proc/meminfo = -r--r--r-- */
 	case PFScpuinfo:	/* /proc/cpuinfo = -r--r--r-- */
 	case PFSuptime:	/* /proc/uptime = -r--r--r-- */
-	case PFSmounts:	/* /proc/mounts = -r--r--r-- */
 		pfs->pfs_mode = S_IRUSR|S_IRGRP|S_IROTH;
 		vp->v_type = VREG;
 		break;
@@ -300,17 +299,9 @@ procfs_rw(v)
 	struct lwp *l;
 	struct proc *p;
 
-	if (uio->uio_offset < 0)
-		return EINVAL;
 	p = PFIND(pfs->pfs_pid);
 	if (p == 0)
-		return ESRCH;
-	/*
-	 * Do not allow init to be modified while in secure mode; it
-	 * could be duped into changing the security level.
-	 */
-	if (uio->uio_rw == UIO_WRITE && p == initproc && securelevel > -1)
-		return EPERM;
+		return (EINVAL);
 
 	/* XXX NJWLWP
 	 * The entire procfs interface needs work to be useful to
@@ -319,6 +310,26 @@ procfs_rw(v)
 	 */
 	l = proc_representative_lwp(p);
 	
+	switch (pfs->pfs_type) {
+	case PFSregs:
+	case PFSfpregs:
+	case PFSmem:
+#if defined(__HAVE_PROCFS_MACHDEP) && defined(PROCFS_MACHDEP_PROTECT_CASES)
+	PROCFS_MACHDEP_PROTECT_CASES
+#endif
+		/*
+		 * Do not allow init to be modified while in secure mode; it
+		 * could be duped into changing the security level.
+		 */
+		if (uio->uio_rw == UIO_WRITE &&
+		    p == initproc && securelevel > -1)
+			return (EPERM);
+		break;
+
+	default:
+		break;
+	}
+
 	switch (pfs->pfs_type) {
 	case PFSnote:
 	case PFSnotepg:
@@ -362,9 +373,6 @@ procfs_rw(v)
 
 	case PFSuptime:
 		return (procfs_douptime(curp, p, pfs, uio));
-
-	case PFSmounts:
-		return (procfs_domounts(curp, p, pfs, uio));
 
 #ifdef __HAVE_PROCFS_MACHDEP
 	PROCFS_MACHDEP_NODETYPE_CASES

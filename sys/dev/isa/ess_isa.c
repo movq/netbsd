@@ -1,4 +1,4 @@
-/*	$NetBSD: ess_isa.c,v 1.12 2004/09/14 20:20:47 drochner Exp $	*/
+/*	$NetBSD: ess_isa.c,v 1.10 2002/10/02 03:10:46 thorpej Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ess_isa.c,v 1.12 2004/09/14 20:20:47 drochner Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ess_isa.c,v 1.10 2002/10/02 03:10:46 thorpej Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -50,8 +50,6 @@ __KERNEL_RCSID(0, "$NetBSD: ess_isa.c,v 1.12 2004/09/14 20:20:47 drochner Exp $"
 
 #include <dev/isa/essreg.h>
 #include <dev/isa/essvar.h>
-
-#include "joy_ess.h"
 
 #ifdef ESS_ISA_DEBUG
 #define DPRINTF(x)	printf x
@@ -115,7 +113,7 @@ ess_isa_probe(parent, match, aux)
 		ia->ia_nirq = 1;
 
 		if (ia->ia_ndrq > 1 &&
-		    ia->ia_drq[1].ir_drq != ISA_UNKNOWN_DRQ)
+		    ia->ia_drq[1].ir_drq != ISACF_DRQ_DEFAULT)
 			ia->ia_ndrq = 2;
 		else
 			ia->ia_ndrq = 1;
@@ -133,7 +131,6 @@ void ess_isa_attach(parent, self, aux)
 {
 	struct ess_softc *sc = (void *)self;
 	struct isa_attach_args *ia = aux;
-	int enablejoy = 0;
 
 	printf("\n");
 
@@ -153,16 +150,7 @@ void ess_isa_attach(parent, self, aux)
 	sc->sc_audio2.irq = -1;
 	sc->sc_audio2.drq = ia->ia_ndrq > 1 ? ia->ia_drq[1].ir_drq : -1;
 
-#if NJOY_ESS > 0
-	if (sc->sc_dev.dv_cfdata->cf_flags & 1) {
-		sc->sc_joy_iot = ia->ia_iot;
-		if (!bus_space_map(sc->sc_joy_iot, 0x201, 1, 0,
-				   &sc->sc_joy_ioh))
-			enablejoy = 1;
-	}
-#endif
-
 	printf("%s", sc->sc_dev.dv_xname);
 
-	essattach(sc, enablejoy);
+	essattach(sc);
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: clnp_timer.c,v 1.12 2004/04/19 05:16:45 matt Exp $	*/
+/*	$NetBSD: clnp_timer.c,v 1.11 2003/08/07 16:33:34 agc Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -59,7 +59,7 @@ SOFTWARE.
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: clnp_timer.c,v 1.12 2004/04/19 05:16:45 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: clnp_timer.c,v 1.11 2003/08/07 16:33:34 agc Exp $");
 
 #include <sys/param.h>
 #include <sys/mbuf.h>
@@ -92,8 +92,8 @@ extern struct clnp_fragl *clnp_frags;
  *			TODO: send ER back to source
  */
 struct clnp_fragl *
-clnp_freefrags(
-	struct clnp_fragl *cfh)	/* fragment header to delete */
+clnp_freefrags(cfh)
+	struct clnp_fragl *cfh;	/* fragment header to delete */
 {
 	struct clnp_fragl *next = cfh->cfl_next;
 	struct clnp_frag *cf;
@@ -143,10 +143,10 @@ clnp_freefrags(
  * NOTES:
  */
 void
-clnp_slowtimo(void)
+clnp_slowtimo()
 {
 	struct clnp_fragl *cfh = clnp_frags;
-	int s = splsoftnet();
+	int             s = splsoftnet();
 
 	while (cfh != NULL) {
 		if (--cfh->cfl_ttl == 0) {
@@ -172,7 +172,7 @@ clnp_slowtimo(void)
  *	TODO: should send back ER
  */
 void
-clnp_drain(void)
+clnp_drain()
 {
 	struct clnp_fragl *cfh = clnp_frags;
 

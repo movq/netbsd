@@ -1,4 +1,4 @@
-/*	$NetBSD: portal_vnops.c,v 1.58 2004/11/30 04:25:44 christos Exp $	*/
+/*	$NetBSD: portal_vnops.c,v 1.52 2003/11/29 10:02:43 matt Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -40,7 +40,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: portal_vnops.c,v 1.58 2004/11/30 04:25:44 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: portal_vnops.c,v 1.52 2003/11/29 10:02:43 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -337,7 +337,7 @@ portal_open(v)
 	 * by testing whether the dupfd has been set.
 	 */
 	if (curlwp->l_dupfd >= 0)	/* XXX */
-		return EDUPFD;
+		return (ENODEV);
 
 	pt = VTOPORTAL(vp);
 	fmp = VFSTOPORTAL(vp->v_mount);
@@ -345,7 +345,7 @@ portal_open(v)
 	/*
 	 * Create a new socket.
 	 */
-	error = socreate(AF_LOCAL, &so, SOCK_STREAM, 0, p);
+	error = socreate(AF_LOCAL, &so, SOCK_STREAM, 0);
 	if (error)
 		goto bad;
 
@@ -384,7 +384,7 @@ portal_open(v)
 			splx(s);
 			goto bad;
 		}
-		(void) tsleep(&so->so_timeo, PSOCK, "portalcon", 5 * hz);
+		(void) tsleep((caddr_t) &so->so_timeo, PSOCK, "portalcon", 5 * hz);
 	}
 	splx(s);
 
@@ -407,7 +407,7 @@ portal_open(v)
 	pcred.pcr_gid = ap->a_cred->cr_gid;
 	pcred.pcr_ngroups = ap->a_cred->cr_ngroups;
 	memcpy(pcred.pcr_groups, ap->a_cred->cr_groups, NGROUPS * sizeof(gid_t));
-	aiov[0].iov_base = &pcred;
+	aiov[0].iov_base = (caddr_t) &pcred;
 	aiov[0].iov_len = sizeof(pcred);
 	aiov[1].iov_base = pt->pt_arg;
 	aiov[1].iov_len = pt->pt_size;
@@ -420,7 +420,7 @@ portal_open(v)
 	auio.uio_resid = aiov[0].iov_len + aiov[1].iov_len;
 
 	error = (*so->so_send)(so, (struct mbuf *) 0, &auio,
-			(struct mbuf *) 0, (struct mbuf *) 0, 0, p);
+			(struct mbuf *) 0, (struct mbuf *) 0, 0);
 	if (error)
 		goto bad;
 
@@ -510,11 +510,11 @@ portal_open(v)
 
 	/*
 	 * Save the dup fd in the proc structure then return the
-	 * special error code (EMOVEFD) which causes magic things to
+	 * special error code (ENXIO) which causes magic things to
 	 * happen in vn_open.  The whole concept is, well, hmmm.
 	 */
-	curlwp->l_dupfd = fd;
-	error = EMOVEFD;
+	curlwp->l_dupfd = fd;	/* XXX */
+	error = ENXIO;
 
 bad:;
 	/*
@@ -548,7 +548,7 @@ portal_getattr(v)
 	vattr_null(vap);
 	vap->va_uid = 0;
 	vap->va_gid = 0;
-	vap->va_fsid = vp->v_mount->mnt_stat.f_fsidx.__fsid_val[0];
+	vap->va_fsid = vp->v_mount->mnt_stat.f_fsid.val[0];
 	vap->va_size = DEV_BSIZE;
 	vap->va_blocksize = DEV_BSIZE;
 	/*
@@ -640,7 +640,7 @@ portal_reclaim(v)
 	struct portalnode *pt = VTOPORTAL(ap->a_vp);
 
 	if (pt->pt_arg) {
-		free(pt->pt_arg, M_TEMP);
+		free((caddr_t) pt->pt_arg, M_TEMP);
 		pt->pt_arg = 0;
 	}
 	FREE(ap->a_vp->v_data, M_TEMP);

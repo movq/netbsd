@@ -1,5 +1,3 @@
-/*	$NetBSD: namadr_list.c,v 1.1.1.4 2004/05/31 00:24:32 heas Exp $	*/
-
 /*++
 /* NAME
 /*	namadr_list 3

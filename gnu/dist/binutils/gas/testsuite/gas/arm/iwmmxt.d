@@ -1,4 +1,4 @@
-#objdump: -dr --prefix-addresses --show-raw-insn -miwmmxt
+#objdump: -dr --prefix-addresses --show-raw-insn
 #name: Intel(r) Wireless MMX(tm) technology instructions
 #as: -mcpu=xscale+iwmmxt -EL
 

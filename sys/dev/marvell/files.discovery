@@ -1,12 +1,12 @@
-#	$NetBSD: files.discovery,v 1.8 2004/09/13 12:36:18 drochner Exp $
+#	$NetBSD: files.discovery,v 1.6 2003/05/27 11:39:50 scw Exp $
 #
 # Config file and device description for machine-independent support for
-# the Marvell (formerly Galileo Technology) Discovery system controllers.
+# the Moverll (formerly Galileo Technologies) Discovery system controllers.
 #
 # Ports that include this must also supply some glue code of their own.
 # Notably:
 #	* devices here are indirectly configured by the configuration
-# 	  file since different systems will be configured somewhat
+# 	  file since difference systems will be configured somewhat
 #	  differently,
 #	* The Multi-Purpose Port (MPP) is configured differently on
 #	  different systems,
@@ -33,7 +33,7 @@ device	gt: gt
 file	dev/marvell/gt.c			gt
 
 # PCI bus
-device	gtpci: pcibus
+device	gtpci: isabus, pcibus
 attach	gtpci at gt
 file	dev/marvell/gtpci.c			gt & pci
 

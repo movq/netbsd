@@ -34,7 +34,7 @@
 #include "krb5_locl.h"
 
 __RCSID("$Heimdal: ticket.c,v 1.5.8.1 2003/09/18 21:01:57 lha Exp $"
-        "$NetBSD: ticket.c,v 1.1.1.5 2004/04/02 14:47:53 lha Exp $");
+        "$NetBSD: ticket.c,v 1.1.1.4.2.1 2004/04/21 04:55:42 jmc Exp $");
 
 krb5_error_code
 krb5_free_ticket(krb5_context context,

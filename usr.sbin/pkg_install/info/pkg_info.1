@@ -1,4 +1,4 @@
-.\" $NetBSD: pkg_info.1,v 1.45 2004/11/10 17:40:41 agc Exp $
+.\" $NetBSD: pkg_info.1,v 1.37 2004/01/06 16:22:06 wiz Exp $
 .\"
 .\" FreeBSD install - a package for the installation and maintenance
 .\" of non-core utilities.
@@ -17,7 +17,7 @@
 .\"
 .\"     @(#)pkg_info.1
 .\"
-.Dd November 10, 2004
+.Dd January 6, 2004
 .Dt PKG_INFO 1
 .Os
 .Sh NAME
@@ -25,7 +25,7 @@
 .Nd a utility for displaying information on software packages
 .Sh SYNOPSIS
 .Nm
-.Op Fl .BbcDdFfhIikLmNnpqRrSsVv
+.Op Fl BbcDdFfhIikLmNnpqRrSsVv
 .Bk -words
 .Op Fl e Ar package
 .Ek
@@ -40,11 +40,6 @@
 .Bk -words
 .Op Fl a Ar flags
 .Ek
-.Nm
-.Bk -words
-.Op Fl Q Ar variable
-.Ek
-.Ar pkg-name ...
 .Sh DESCRIPTION
 The
 .Nm
@@ -67,8 +62,6 @@ is also given), or a URL to an ftp-available package.
 .Pp
 The following command-line options are supported:
 .Bl -tag -width indent
-.It Fl .
-Recognise uninstalled binary packages in the current working directory.
 .It Fl a
 Show information for all currently installed packages.
 .It Fl B
@@ -98,9 +91,9 @@ stdout unless turned off using the
 .Fl q
 option.
 .Ar pkg-name
-can contain wildcards (see the
+can contain wildcards, see the
 .Sx PACKAGE WILDCARDS
-section below).
+section below.
 .It Fl F
 Interpret any pkg-name given as filename, and translate it to a
 package name using the Package Database.
@@ -147,17 +140,11 @@ Show which packages each package was built with (exact dependencies), if any.
 Show which packages each package needs (depends upon), if any.
 .It Fl p
 Show the installation prefix for each package.
-.It Fl Q
-Show the definition of
-.Ar variable
-from the build information for each package.
-An empty string is returned if no such variable definition is found for
-the package(s).
 .It Fl q
 Be ``quiet'' in emitting report headers and such, just dump the
 raw info (basically, assume a non-human reading).
 .It Fl R
-For each package, show the packages that require it.
+Show which packages are required by each package.
 .It Fl r
 Show the requirements script (if any) for each package.
 .It Fl S
@@ -196,7 +183,7 @@ Package wildcards use
 .Xr fnmatch 3 .
 In addition,
 .Xr csh 1
-style {,} alternates have been implemented.
+style {,} alternates have also been implemented.
 Package version numbers can also be matched in a relational manner
 using the
 .Pa \*[Ge] , \*[Le] , \*[Gt] ,
@@ -219,19 +206,18 @@ and sorts before a release candidate.
 The magic string ``rc'' equates to
 .Pa release candidate
 and sorts before a release.
-The magic string ``pre'', short for ``pre-release'', is a synonym for ``rc''.
 For example,
 .Pa name-1.3rc3
 will sort before
 .Pa name-1.3
 and after
-.Pa name-1.2.9 .
+.Pa name-1.2.9
 Similarly
 .Pa name-1.3alpha2
 will sort before
 .Pa name-1.3beta1
 and they both sort before
-.Pa name-1.3rc1 .
+.Pa name-1.3rc1
 In addition, alphabetic characters sort in the same place as
 their numeric counterparts, so that
 .Pa name-1.2e

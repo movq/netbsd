@@ -1,4 +1,4 @@
-/*	$NetBSD: fd.c,v 1.116 2004/10/28 07:07:38 yamt Exp $	*/
+/*	$NetBSD: fd.c,v 1.114 2004/03/24 15:44:46 pk Exp $	*/
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -108,7 +108,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: fd.c,v 1.116 2004/10/28 07:07:38 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: fd.c,v 1.114 2004/03/24 15:44:46 pk Exp $");
 
 #include "opt_ddb.h"
 #include "opt_md.h"
@@ -124,7 +124,6 @@ __KERNEL_RCSID(0, "$NetBSD: fd.c,v 1.116 2004/10/28 07:07:38 yamt Exp $");
 #include <sys/disk.h>
 #include <sys/fdio.h>
 #include <sys/buf.h>
-#include <sys/bufq.h>
 #include <sys/malloc.h>
 #include <sys/proc.h>
 #include <sys/uio.h>
@@ -883,7 +882,7 @@ fdstrategy(bp)
 
 #ifdef FD_DEBUG
 	if (fdc_debug > 1)
-	    printf("fdstrategy: b_blkno %lld b_bcount %d blkno %lld cylin %d\n",
+	    printf("fdstrategy: b_blkno %lld b_bcount %ld blkno %lld cylin %ld\n",
 		    (long long)bp->b_blkno, bp->b_bcount,
 		    (long long)fd->sc_blkno, bp->b_cylinder);
 #endif
@@ -2232,7 +2231,7 @@ fdformat(dev, finfo, p)
 	if (fdc_debug) {
 		int i;
 
-		printf("fdformat: blkno 0x%llx count %d\n",
+		printf("fdformat: blkno 0x%llx count %ld\n",
 			(unsigned long long)bp->b_blkno, bp->b_bcount);
 
 		printf("\tcyl:\t%d\n", finfo->cyl);

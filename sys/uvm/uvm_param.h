@@ -1,4 +1,4 @@
-/*	$NetBSD: uvm_param.h,v 1.19 2004/04/04 18:21:49 pk Exp $	*/
+/*	$NetBSD: uvm_param.h,v 1.18 2003/08/07 16:34:50 agc Exp $	*/
 
 /*
  * Copyright (c) 1991, 1993
@@ -72,7 +72,6 @@
 #endif
 #ifdef _KERNEL
 #include <machine/vmparam.h>
-#include <sys/resourcevar.h>
 #endif
 
 #if defined(_KERNEL)
@@ -237,7 +236,7 @@
 # if defined(VM_DEFAULT_ADDRESS)
 #  error "Default vm address should not be defined here"
 # else /* VM_DEFAULT_ADDRESS */
-#  define VM_DEFAULT_ADDRESS(da, sz) round_page((vaddr_t)(da) + (vsize_t)maxdmap)
+#  define VM_DEFAULT_ADDRESS(da, sz) round_page((vaddr_t)(da) + MAXDSIZ)
 # endif /* VM_DEFAULT_ADDRESS */
 #endif /* !__USING_TOPDOWN_VM */
 

@@ -1,4 +1,4 @@
-.\"	$NetBSD: netboot,v 1.24 2004/09/10 12:59:03 wiz Exp $
+.\"	$NetBSD: netboot,v 1.20.2.3 2004/09/11 10:53:52 he Exp $
 .\"
 .\" Copyright (c) 1999-2004 The NetBSD Foundation, Inc.
 .\" All rights reserved.

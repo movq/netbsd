@@ -1,4 +1,4 @@
-/*	$NetBSD: mpt_netbsd.c,v 1.8 2004/04/10 01:59:19 briggs Exp $	*/
+/*	$NetBSD: mpt_netbsd.c,v 1.7.2.1 2004/04/11 02:42:01 jmc Exp $	*/
 
 /*
  * Copyright (c) 2003 Wasabi Systems, Inc.
@@ -75,7 +75,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mpt_netbsd.c,v 1.8 2004/04/10 01:59:19 briggs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mpt_netbsd.c,v 1.7.2.1 2004/04/11 02:42:01 jmc Exp $");
 
 #include <dev/ic/mpt.h>			/* pulls in all headers */
 

@@ -7,7 +7,7 @@
 @ifnottex
 
 @node Top
-@top Whitespace in Node Names
+@top
 
 @end ifnottex
 

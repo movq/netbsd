@@ -1,4 +1,4 @@
-.\"	$NetBSD: disklabel.8,v 1.54 2004/05/28 20:46:52 snj Exp $
+.\"	$NetBSD: disklabel.8,v 1.52 2004/03/20 18:51:06 wiz Exp $
 .\"
 .\" Copyright (c) 1987, 1988, 1991, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -32,7 +32,7 @@
 .\"
 .\"	@(#)disklabel.8	8.2 (Berkeley) 4/19/94
 .\"
-.Dd May 28, 2004
+.Dd March 18, 2004
 .Dt DISKLABEL 8
 .Os
 .Sh NAME
@@ -308,25 +308,6 @@ itself and all options are related to the specification of the boot
 program as described previously.
 The final two forms are analogous to the basic write and restore versions
 except that they will install bootstrap code in addition to a new label.
-.Sh EXIT STATUS
-The exit status of
-.Nm
-is set to indicate any errors or warnings.
-The values used are:
-.Bl -tag -width indent
-.It 0
-The
-.Nm
-utility has completed successfully.
-.It 1
-A fatal error has occurred, such as unknown options passed on the command line,
-or writing the disklabel failed.
-.It 4
-An I/O error of some sort occurred.
-.It 101..n
-One or more warnings occured while reading the disklabel.
-Subtract 100 to get the number of warnings detected.
-.El
 .Sh FILES
 .Bl -tag -width /usr/mdec/xxboot -compact
 .It Pa /etc/disktab

@@ -32,7 +32,7 @@
  */
 
 /* $Heimdal: gssapi_locl.h,v 1.24.2.5 2003/09/18 22:01:52 lha Exp $
-   $NetBSD: gssapi_locl.h,v 1.5 2004/04/02 14:59:48 lha Exp $ */
+   $NetBSD: gssapi_locl.h,v 1.4.2.1 2004/04/21 04:55:40 jmc Exp $ */
 
 #ifndef GSSAPI_LOCL_H
 #define GSSAPI_LOCL_H

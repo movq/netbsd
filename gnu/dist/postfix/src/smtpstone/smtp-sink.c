@@ -1,8 +1,6 @@
-/*	$NetBSD: smtp-sink.c,v 1.1.1.6 2004/05/31 00:24:51 heas Exp $	*/
-
 /*++
 /* NAME
-/*	smtp-sink 1
+/*	smtp-sink 8
 /* SUMMARY
 /*	multi-threaded SMTP/LMTP test server
 /* SYNOPSIS
@@ -12,46 +10,32 @@
 /*
 /*	\fBsmtp-sink\fR [\fIoptions\fR] \fBunix:\fR\fIpathname\fR \fIbacklog\fR
 /* DESCRIPTION
-/*	\fBsmtp-sink\fR listens on the named host (or address) and port.
+/*	\fIsmtp-sink\fR listens on the named host (or address) and port.
 /*	It takes SMTP messages from the network and throws them away.
-/*	The purpose is to measure client performance, not protocol
+/*	The purpose is to measure SMTP client performance, not protocol
 /*	compliance.
-/*
 /*	Connections can be accepted on IPV4 endpoints or UNIX-domain sockets.
 /*	IPV4 is the default.
-/*	This program is the complement of the \fBsmtp-source\fR(1) program.
+/*	This program is the complement of the \fIsmtp-source\fR program.
 /*
 /*	Arguments:
-/* .IP \fB-a\fR
-/*	Do not announce SASL authentication support.
 /* .IP \fB-c\fR
 /*	Display a running counter that is updated whenever an SMTP
 /*	QUIT command is executed.
-/* .IP \fB-C\fR
-/*	Disable XCLIENT support.
 /* .IP \fB-e\fR
-/*	Do not announce ESMTP support.
-/* .IP "\fB-f \fIcommand,command,...\fR"
-/*	Reject the specified commands with a hard (5xx) error code.
-/* .IP \fB-F\fR
-/*	Disable XFORWARD support.
+/*	Disable ESMTP support.
 /* .IP \fB-h\fI hostname\fR
 /*	Use \fIhostname\fR in the SMTP greeting, in the HELO response,
 /*	and in the EHLO response. The default hostname is "smtp-sink".
 /* .IP \fB-L\fR
-/*	Enable LMTP instead of SMTP.
+/*	Enable LMTP rather than SMTP.
 /* .IP "\fB-n \fIcount\fR"
 /*	Terminate after \fIcount\fR sessions. This is for testing purposes.
 /* .IP \fB-p\fR
-/*	Do not announce support for ESMTP command pipelining.
+/*	Disable ESMTP command pipelining.
 /* .IP \fB-P\fR
 /*	Change the server greeting so that it appears to come through
-/*	a CISCO PIX system. Implies \fB-e\fR.
-/* .IP "\fB-q \fIcommand,command,...\fR"
-/*	Disconnect (without replying) after receiving one of the
-/*	specified commands.
-/* .IP "\fB-r \fIcommand,command,...\fR"
-/*	Reject the specified commands with a soft (4xx) error code.
+/*	a CISCO PIX system.
 /* .IP "\fB-s \fIcommand,command,...\fR"
 /*	Log the named commands to syslogd.
 /*	Examples of commands that can be logged are HELO, EHLO, LHLO, MAIL,
@@ -63,7 +47,7 @@
 /* .IP "\fB-w \fIdelay\fR"
 /*	Wait \fIdelay\fR seconds before responding to a DATA command.
 /* .IP \fB-8\fR
-/*	Do not announce 8BITMIME support.
+/*	Disable 8BITMIME support.
 /* .IP [\fBinet:\fR][\fIhost\fR]:\fIport\fR
 /*	Listen on network interface \fIhost\fR (default: any interface)
 /*	TCP port \fIport\fR. Both \fIhost\fR and \fIport\fR may be
@@ -74,7 +58,7 @@
 /*	The maximum length the queue of pending connections,
 /*	as defined by the listen(2) call.
 /* SEE ALSO
-/*	smtp-source(1), SMTP/LMTP message generator
+/*	smtp-source, SMTP/LMTP test message generator
 /* LICENSE
 /* .ad
 /* .fi
@@ -152,9 +136,6 @@ static int fixed_delay;
 static int disable_esmtp;
 static int enable_lmtp;
 static int pretend_pix;
-static int disable_saslauth;
-static int disable_xclient;
-static int disable_xforward;
 
 /* ehlo_response - respond to EHLO command */
 
@@ -165,14 +146,7 @@ static void ehlo_response(SINK_STATE *state)
 	smtp_printf(state->stream, "250-PIPELINING");
     if (!disable_8bitmime)
 	smtp_printf(state->stream, "250-8BITMIME");
-    if (!disable_saslauth)
-	smtp_printf(state->stream, "250-AUTH PLAIN LOGIN");
-    if (!disable_xclient)
-	smtp_printf(state->stream, "250-XCLIENT NAME HELO");
-    if (!disable_xforward)
-	smtp_printf(state->stream, "250-XFORWARD NAME ADDR PROTO HELO");
     smtp_printf(state->stream, "250 ");
-    smtp_flush(state->stream);
 }
 
 /* helo_response - respond to HELO command */
@@ -180,7 +154,6 @@ static void ehlo_response(SINK_STATE *state)
 static void helo_response(SINK_STATE *state)
 {
     smtp_printf(state->stream, "250 %s", var_myhostname);
-    smtp_flush(state->stream);
 }
 
 /* ok_response - send 250 OK */
@@ -188,7 +161,6 @@ static void helo_response(SINK_STATE *state)
 static void ok_response(SINK_STATE *state)
 {
     smtp_printf(state->stream, "250 Ok");
-    smtp_flush(state->stream);
 }
 
 /* mail_response - reset recipient count, send 250 OK */
@@ -213,7 +185,6 @@ static void data_response(SINK_STATE *state)
 {
     state->data_state = ST_CR_LF;
     smtp_printf(state->stream, "354 End data with <CR><LF>.<CR><LF>");
-    smtp_flush(state->stream);
     state->read = data_read;
 }
 
@@ -232,7 +203,7 @@ static void dot_response(SINK_STATE *state)
 {
     if (enable_lmtp) {
 	while (state->rcpts-- > 0)	/* XXX this could block */
-	    ok_response(state);		/* XXX this flushes too often */
+	    ok_response(state);
     } else {
 	ok_response(state);
     }
@@ -243,7 +214,6 @@ static void dot_response(SINK_STATE *state)
 static void quit_response(SINK_STATE *state)
 {
     smtp_printf(state->stream, "221 Bye");
-    smtp_flush(state->stream);
     if (count) {
 	counter++;
 	vstream_printf("%d\r", counter);
@@ -323,17 +293,11 @@ typedef struct SINK_COMMAND {
 
 #define FLAG_ENABLE	(1<<0)		/* command is enabled */
 #define FLAG_SYSLOG	(1<<1)		/* log the command */
-#define FLAG_HARD_ERR	(1<<2)		/* report hard error */
-#define FLAG_SOFT_ERR	(1<<3)		/* report soft error */
-#define FLAG_DISCONNECT	(1<<4)		/* disconnect */
 
 static SINK_COMMAND command_table[] = {
     "helo", helo_response, 0,
     "ehlo", ehlo_response, 0,
     "lhlo", ehlo_response, 0,
-    "xclient", ok_response, FLAG_ENABLE,
-    "xforward", ok_response, FLAG_ENABLE,
-    "auth", ok_response, FLAG_ENABLE,
     "mail", mail_response, FLAG_ENABLE,
     "rcpt", rcpt_response, FLAG_ENABLE,
     "data", data_response, FLAG_ENABLE,
@@ -343,20 +307,6 @@ static SINK_COMMAND command_table[] = {
     "quit", quit_response, FLAG_ENABLE,
     0,
 };
-
-/* reset_cmd_flags - reset per-command command flags */
-
-static void reset_cmd_flags(const char *cmd, int flags)
-{
-    SINK_COMMAND *cmdp;
-
-    for (cmdp = command_table; cmdp->name != 0; cmdp++)
-	if (strcasecmp(cmd, cmdp->name) == 0)
-	    break;
-    if (cmdp->name == 0)
-	msg_fatal("unknown command: %s", cmd);
-    cmdp->flags &= ~flags;
-}
 
 /* set_cmd_flags - set per-command command flags */
 
@@ -467,31 +417,17 @@ static int command_read(SINK_STATE *state)
      * Got a complete command line. Parse it.
      */
     ptr = vstring_str(state->buffer);
-    if (msg_verbose)
-	msg_info("%s", ptr);
     if ((command = mystrtok(&ptr, " \t")) == 0) {
 	smtp_printf(state->stream, "500 Error: unknown command");
-	smtp_flush(state->stream);
 	return (0);
     }
+    if (msg_verbose)
+	msg_info("%s", command);
     for (cmdp = command_table; cmdp->name != 0; cmdp++)
 	if (strcasecmp(command, cmdp->name) == 0)
 	    break;
     if (cmdp->name == 0 || (cmdp->flags & FLAG_ENABLE) == 0) {
 	smtp_printf(state->stream, "500 Error: unknown command");
-	smtp_flush(state->stream);
-	return (0);
-    }
-    if (cmdp->flags & FLAG_DISCONNECT) 
-	return (-1);
-    if (cmdp->flags & FLAG_HARD_ERR) {
-	smtp_printf(state->stream, "500 Error: command failed");
-	smtp_flush(state->stream);
-	return (0);
-    }
-    if (cmdp->flags & FLAG_SOFT_ERR) {
-	smtp_printf(state->stream, "450 Error: command failed");
-	smtp_flush(state->stream);
 	return (0);
     }
     /* We use raw syslog. Sanitize data content and length. */
@@ -587,7 +523,6 @@ static void connect_event(int unused_event, char *context)
 	    smtp_printf(state->stream, "220 %s", var_myhostname);
 	else
 	    smtp_printf(state->stream, "220 %s ESMTP", var_myhostname);
-	smtp_flush(state->stream);
 	event_enable_read(fd, read_event, (char *) state);
     }
 }
@@ -596,7 +531,7 @@ static void connect_event(int unused_event, char *context)
 
 static void usage(char *myname)
 {
-    msg_fatal("usage: %s [-acCeFLpPv8] [-f commands] [-h hostname] [-n count] [-q commands] [-r commands] [-s commands] [-w delay] [host]:port backlog", myname);
+    msg_fatal("usage: %s [-ceLpPv8] [-h hostname] [-n count] [-s commands] [-w delay] [host]:port backlog", myname);
 }
 
 int     main(int argc, char **argv)
@@ -613,27 +548,13 @@ int     main(int argc, char **argv)
     /*
      * Parse JCL.
      */
-    while ((ch = GETOPT(argc, argv, "acCef:Fh:Ln:pPq:r:s:vw:8")) > 0) {
+    while ((ch = GETOPT(argc, argv, "ceh:Ln:pPs:vw:8")) > 0) {
 	switch (ch) {
-	case 'a':
-	    disable_saslauth = 1;
-	    break;
 	case 'c':
 	    count++;
 	    break;
-	case 'C':
-	    disable_xclient = 1;
-	    reset_cmd_flags("xclient", FLAG_ENABLE);
-	    break;
 	case 'e':
 	    disable_esmtp = 1;
-	    break;
-	case 'f':
-	    set_cmds_flags(optarg, FLAG_HARD_ERR);
-	    break;
-	case 'F':
-	    disable_xforward = 1;
-	    reset_cmd_flags("xforward", FLAG_ENABLE);
 	    break;
 	case 'h':
 	    var_myhostname = optarg;
@@ -642,21 +563,13 @@ int     main(int argc, char **argv)
 	    enable_lmtp = 1;
 	    break;
 	case 'n':
-	    if ((max_count = atoi(optarg)) <= 0)
-		msg_fatal("bad count: %s", optarg);
+	    max_count = atoi(optarg);
 	    break;
 	case 'p':
 	    disable_pipelining = 1;
 	    break;
 	case 'P':
 	    pretend_pix = 1;
-	    disable_esmtp = 1;
-	    break;
-	case 'q':
-	    set_cmds_flags(optarg, FLAG_DISCONNECT);
-	    break;
-	case 'r':
-	    set_cmds_flags(optarg, FLAG_SOFT_ERR);
 	    break;
 	case 's':
 	    openlog(basename(argv[0]), LOG_PID, LOG_MAIL);

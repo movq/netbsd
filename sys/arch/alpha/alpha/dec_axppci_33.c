@@ -1,4 +1,4 @@
-/* $NetBSD: dec_axppci_33.c,v 1.56 2004/06/28 03:53:40 mycroft Exp $ */
+/* $NetBSD: dec_axppci_33.c,v 1.55.4.1 2004/07/05 22:42:15 he Exp $ */
 
 /*
  * Copyright (c) 1995, 1996, 1997 Carnegie-Mellon University.
@@ -34,7 +34,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: dec_axppci_33.c,v 1.56 2004/06/28 03:53:40 mycroft Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dec_axppci_33.c,v 1.55.4.1 2004/07/05 22:42:15 he Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

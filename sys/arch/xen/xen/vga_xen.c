@@ -1,4 +1,4 @@
-/* $NetBSD: vga_xen.c,v 1.2 2004/04/25 00:24:08 cl Exp $ */
+/* $NetBSD: vga_xen.c,v 1.2.2.2 2004/05/22 15:57:25 he Exp $ */
 
 /*
  *
@@ -33,7 +33,7 @@
 
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vga_xen.c,v 1.2 2004/04/25 00:24:08 cl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vga_xen.c,v 1.2.2.2 2004/05/22 15:57:25 he Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

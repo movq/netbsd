@@ -1,4 +1,4 @@
-/*	$NetBSD: ip_lookup.c,v 1.1.1.2 2004/07/23 05:33:56 martti Exp $	*/
+/*	$NetBSD: ip_lookup.c,v 1.1.1.1.2.1 2004/08/13 03:56:25 jmc Exp $	*/
 
 /*
  * Copyright (C) 2002-2003 by Darren Reed.

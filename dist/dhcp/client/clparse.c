@@ -43,7 +43,7 @@
 
 #ifndef lint
 static char copyright[] =
-"$Id: clparse.c,v 1.8 2004/04/02 22:53:15 mellon Exp $ Copyright (c) 1996-2001 The Internet Software Consortium.  All rights reserved.\n";
+"$Id: clparse.c,v 1.5 2003/10/24 05:19:31 mellon Exp $ Copyright (c) 1996-2001 The Internet Software Consortium.  All rights reserved.\n";
 #endif /* not lint */
 
 #include "dhcpd.h"
@@ -88,8 +88,8 @@ isc_result_t read_client_conf ()
 	top_level_config.bootp_policy = P_ACCEPT;
 	top_level_config.script_name = path_dhclient_script;
 	top_level_config.requested_options = default_requested_options;
-	top_level_config.do_forward_update = 1;
 	top_level_config.omapi_port = -1;
+	top_level_config.do_forward_update = 1;
 
 	group_allocate (&top_level_config.on_receipt, MDL);
 	if (!top_level_config.on_receipt)
@@ -440,44 +440,27 @@ void parse_client_statement (cfile, ip, config)
 	      case OMAPI:
 		token = next_token (&val, (unsigned *)0, cfile);
 		token = next_token (&val, (unsigned *)0, cfile);
-		if (config != &top_level_config) {
-			parse_warn (cfile,
-				    "omapi info must be at top level.");
-			skip_to_semi (cfile);
-			return;
-		}
-		if (token == PORT) {
-			token = next_token (&val, (unsigned *)0, cfile);
-			if (token != NUMBER) {
-				parse_warn (cfile,
-					    "invalid port number: `%s'", val);
-				skip_to_semi (cfile);
-				return;
-			}
-			tmp = atoi (val);
-			if (tmp < 0 || tmp > 65535)
-				parse_warn (cfile,
-					    "invalid omapi port %d.", tmp);
-			config -> omapi_port = tmp;
-			parse_semi (cfile);
-#if !defined (SMALL)
-		} else if (token == KEY) {
-			token = next_token (&val, (unsigned *)0, cfile);
-			if (token != STRING && !is_identifier (token)) {
-				parse_warn (cfile, "expecting key name.");
-				skip_to_semi (cfile);
-				break;
-			}
-			if (omapi_auth_key_lookup_name (&config -> omapi_key,
-							val) != ISC_R_SUCCESS)
-				parse_warn (cfile, "unknown key %s", val);
-			parse_semi (cfile);
-#endif
-		} else {
+		if (token != PORT) {
 			parse_warn (cfile,
 				    "unexpected omapi subtype: %s", val);
 			skip_to_semi (cfile);
+			return;
 		}
+		token = next_token (&val, (unsigned *)0, cfile);
+		if (token != NUMBER) {
+			parse_warn (cfile, "invalid port number: `%s'", val);
+			skip_to_semi (cfile);
+			return;
+		}
+		tmp = atoi (val);
+		if (tmp < 0 || tmp > 65535)
+			parse_warn (cfile, "invalid omapi port %d.", tmp);
+		else if (config != &top_level_config)
+			parse_warn (cfile,
+				    "omapi port only works at top level.");
+		else
+			config -> omapi_port = tmp;
+		parse_semi (cfile);
 		return;
 		
 	      case DO_FORWARD_UPDATE:
@@ -916,13 +899,6 @@ void parse_client_lease_statement (cfile, is_static)
 		if (lp -> address.len == lease -> address.len &&
 		    !memcmp (lp -> address.iabuf, lease -> address.iabuf,
 			     lease -> address.len)) {
-			/* If the lease we found is a static lease, and
-			   this one expires earlier, discard this one. */
-			if (lp->is_static &&
-			    lp->expiry > lease->expiry) {
-				destroy_client_lease(lease);
-				return;
-			}
 			if (pl)
 				pl -> next = next;
 			else

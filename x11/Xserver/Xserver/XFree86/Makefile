@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.12 2004/04/15 14:53:40 drochner Exp $
+#	$NetBSD: Makefile,v 1.11 2004/03/28 15:19:30 chris Exp $
 
 .include <bsd.own.mk>
 
@@ -51,7 +51,5 @@ SYMLINKS=	${X11BINDIR}/XFree86 ${X11BINDIR}/X
 LDADD+= -larm
 DPADD+= ${LIBARM}
 .endif
-
-LDADD+= -export-dynamic
 
 .include <bsd.prog.mk>

@@ -1,4 +1,4 @@
-/*	$NetBSD: clnp_raw.c,v 1.22 2004/04/25 21:13:13 matt Exp $	*/
+/*	$NetBSD: clnp_raw.c,v 1.19 2003/08/07 16:33:33 agc Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -59,7 +59,7 @@ SOFTWARE.
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: clnp_raw.c,v 1.22 2004/04/25 21:13:13 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: clnp_raw.c,v 1.19 2003/08/07 16:33:33 agc Exp $");
 
 #include <sys/param.h>
 #include <sys/mbuf.h>
@@ -86,7 +86,6 @@ __KERNEL_RCSID(0, "$NetBSD: clnp_raw.c,v 1.22 2004/04/25 21:13:13 matt Exp $");
 #include <machine/stdarg.h>
 
 struct sockproto rclnp_proto = {PF_ISO, 0};
-
 /*
  * FUNCTION:		rclnp_input
  *
@@ -102,7 +101,13 @@ struct sockproto rclnp_proto = {PF_ISO, 0};
  *			indicating no protocol.
  */
 void
+#if __STDC__
 rclnp_input(struct mbuf *m, ...)
+#else
+rclnp_input(m, va_alist)
+	struct mbuf    *m;	/* ptr to packet */
+	va_dcl
+#endif
 {
 	struct sockaddr_iso *src;	/* ptr to src address */
 	struct sockaddr_iso *dst;	/* ptr to dest address */
@@ -139,7 +144,13 @@ rclnp_input(struct mbuf *m, ...)
  * NOTES:
  */
 int
+#if __STDC__
 rclnp_output(struct mbuf *m0, ...)
+#else
+rclnp_output(m0, va_alist)
+	struct mbuf    *m0;	/* packet to send */
+	va_dcl
+#endif
 {
 	struct socket  *so;	/* socket to send from */
 	struct rawisopcb *rp;	/* ptr to raw cb */
@@ -195,12 +206,12 @@ rclnp_output(struct mbuf *m0, ...)
  * NOTES:
  */
 int
-rclnp_ctloutput(
-	int             op,	/* type of operation */
-	struct socket  *so,	/* ptr to socket */
-	int             level,	/* level of option */
-	int             optname,/* name of option */
-	struct mbuf   **m)	/* ptr to ptr to option data */
+rclnp_ctloutput(op, so, level, optname, m)
+	int             op;	/* type of operation */
+	struct socket  *so;	/* ptr to socket */
+	int             level;	/* level of option */
+	int             optname;/* name of option */
+	struct mbuf   **m;	/* ptr to ptr to option data */
 {
 	int             error = 0;
 	struct rawisopcb *rp = sotorawisopcb(so);	/* raw cb ptr */
@@ -286,8 +297,11 @@ rclnp_ctloutput(
 
 /* ARGSUSED */
 int
-clnp_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
-	struct mbuf *control, struct proc *p)
+clnp_usrreq(so, req, m, nam, control, p)
+	struct socket *so;
+	int req;
+	struct mbuf *m, *nam, *control;
+	struct proc *p;
 {
 	int    error = 0;
 	struct rawisopcb *rp = sotorawisopcb(so);
@@ -300,10 +314,10 @@ clnp_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
 			error = EISCONN;
 			break;
 		}
-		MALLOC(rp, struct rawisopcb *, sizeof *rp, M_PCB,
-		    M_WAITOK|M_ZERO);
+		MALLOC(rp, struct rawisopcb *, sizeof *rp, M_PCB, M_WAITOK);
 		if (rp == 0)
 			return (ENOBUFS);
+		bzero(rp, sizeof *rp);
 		so->so_pcb = rp;
 		break;
 

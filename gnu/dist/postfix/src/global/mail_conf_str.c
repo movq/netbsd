@@ -1,5 +1,3 @@
-/*	$NetBSD: mail_conf_str.c,v 1.1.1.3 2004/05/31 00:24:31 heas Exp $	*/
-
 /*++
 /* NAME
 /*	mail_conf_str 3
@@ -89,10 +87,10 @@ static void check_mail_conf_str(const char *name, const char *strval,
     int     len = strlen(strval);
 
     if (min && len < min)
-	msg_fatal("bad string length %d < %d: %s = %s",
+	msg_fatal("bad string length (%d < %d): %s = %s",
 		  len, min, name, strval);
     if (max && len > max)
-	msg_fatal("bad string length %d > %d: %s = %s",
+	msg_fatal("bad string length (%d > %d): %s = %s",
 		  len, max, name, strval);
 }
 

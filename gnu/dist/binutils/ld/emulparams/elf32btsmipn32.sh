@@ -5,7 +5,6 @@
 OUTPUT_FORMAT="elf32-ntradbigmips"
 BIG_OUTPUT_FORMAT="elf32-ntradbigmips"
 LITTLE_OUTPUT_FORMAT="elf32-ntradlittlemips"
-COMMONPAGESIZE=0x1000
 
 # Magic sections.
 OTHER_TEXT_SECTIONS='*(.mips16.fn.*) *(.mips16.call.*)'
@@ -13,3 +12,5 @@ OTHER_SECTIONS='
   .gptab.sdata : { *(.gptab.data) *(.gptab.sdata) }
   .gptab.sbss : { *(.gptab.bss) *(.gptab.sbss) }
 '
+
+TEXT_DYNAMIC=

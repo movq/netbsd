@@ -1,4 +1,4 @@
-/*	$NetBSD: uplcom.c,v 1.41 2004/10/23 14:20:50 augustss Exp $	*/
+/*	$NetBSD: uplcom.c,v 1.34.2.3 2004/07/28 10:40:40 tron Exp $	*/
 /*
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -41,7 +41,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uplcom.c,v 1.41 2004/10/23 14:20:50 augustss Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uplcom.c,v 1.34.2.3 2004/07/28 10:40:40 tron Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -174,7 +174,7 @@ static const struct usb_devno uplcom_devs[] = {
 	/* TDK USB-PDC Adapter UPA9664 */
 	{ USB_VENDOR_TDK, USB_PRODUCT_TDK_UPA9664 },
 	/* Sony Ericsson USB Cable */
-	{ USB_VENDOR_SUSTEEN, USB_PRODUCT_SUSTEEN_DCU10 },
+	{ USB_VENDOR_SONYERICSSON, USB_PRODUCT_SONYERICSSON_DCU10 },
 	/* SOURCENEXT KeikaiDenwa 8 */
 	{ USB_VENDOR_SOURCENEXT, USB_PRODUCT_SOURCENEXT_KEIKAI8 },
 	/* SOURCENEXT KeikaiDenwa 8 with charger */
@@ -182,9 +182,7 @@ static const struct usb_devno uplcom_devs[] = {
 	/* HAL Corporation Crossam2+USB */
 	{ USB_VENDOR_HAL, USB_PRODUCT_HAL_IMR001 },
 	/* Sitecom USB to serial cable */
-	{ USB_VENDOR_SITECOM, USB_PRODUCT_SITECOM_CN104 },
-	/* Pharos USB GPS - Microsoft version */
-	{ USB_VENDOR_PROLIFIC, USB_PRODUCT_PROLIFIC_PL2303X },
+	{ USB_VENDOR_SITECOM, USB_PRODUCT_SITECOM_SERIAL },
 };
 #define uplcom_lookup(v, p) usb_lookup(uplcom_devs, v, p)
 
@@ -216,7 +214,7 @@ USB_ATTACH(uplcom)
 	int i;
 	struct ucom_attach_args uca;
 
-        usbd_devinfo(dev, 0, devinfo, sizeof(devinfo));
+        usbd_devinfo(dev, 0, devinfo);
         USB_ATTACH_SETUP;
         printf("%s: %s\n", devname, devinfo);
 
@@ -376,8 +374,7 @@ USB_ATTACH(uplcom)
 
 	DPRINTF(("uplcom: in=0x%x out=0x%x intr=0x%x\n",
 			uca.bulkin, uca.bulkout, sc->sc_intr_number ));
-	sc->sc_subdev = config_found_sm_loc(self, "ucombus", NULL, &uca,
-					    ucomprint, ucomsubmatch);
+	sc->sc_subdev = config_found_sm(self, &uca, ucomprint, ucomsubmatch);
 
 	USB_ATTACH_SUCCESS_RETURN;
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.11 2004/12/14 18:07:42 tls Exp $	*/
+/*	$NetBSD: machdep.c,v 1.2.2.1 2004/05/22 15:58:02 he Exp $	*/
 /*	NetBSD: machdep.c,v 1.552 2004/03/24 15:34:49 atatat Exp 	*/
 
 /*-
@@ -73,7 +73,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.11 2004/12/14 18:07:42 tls Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.2.2.1 2004/05/22 15:58:02 he Exp $");
 
 #include "opt_beep.h"
 #include "opt_compat_ibcs2.h"
@@ -233,8 +233,8 @@ char machine_arch[] = "i386";		/* machine == machine_arch */
 
 char bootinfo[BOOTINFO_MAXSIZE];
 
-extern struct bi_devmatch *x86_alldisks;
-extern int x86_ndisks;
+struct bi_devmatch *i386_alldisks = NULL;
+int i386_ndisks = 0;
 
 #ifdef CPURESET_DELAY
 int	cpureset_delay = CPURESET_DELAY;
@@ -544,9 +544,9 @@ sysctl_machdep_diskinfo(SYSCTLFN_ARGS)
 	struct sysctlnode node;
 
 	node = *rnode;
-	node.sysctl_data = x86_alldisks;
+	node.sysctl_data = i386_alldisks;
 	node.sysctl_size = sizeof(struct disklist) +
-	    (x86_ndisks - 1) * sizeof(struct nativedisk_info);
+	    (i386_ndisks - 1) * sizeof(struct nativedisk_info);
         return (sysctl_lookup(SYSCTLFN_CALL(&node)));
 }
 
@@ -847,14 +847,12 @@ haltsys:
 		 */
 #endif
 	}
-#if 0
-	if (howto & RB_HALT) {
-#endif
-		printf("\n");
-		printf("The guest operating system has halted.\n");
-		printf("To reboot, recreate this Xen domain.\n\n");
 
-#if 0
+	if (howto & RB_HALT) {
+		printf("\n");
+		printf("The operating system has halted.\n");
+		printf("Please press any key to reboot.\n\n");
+
 #ifdef BEEP_ONHALT
 		{
 			int c;
@@ -879,9 +877,8 @@ haltsys:
 	}
 
 	printf("rebooting...\n");
-#endif
 	if (cpureset_delay > 0)
-		delay(cpureset_delay * 1000);	/* XXX not nice under Xen! */
+		delay(cpureset_delay * 1000);
 	cpu_reset();
 	for(;;) ;
 	/*NOTREACHED*/
@@ -958,7 +955,7 @@ cpu_dump()
 	/*
 	 * Add the machine-dependent header info.
 	 */
-	cpuhdrp->pdppaddr = PTDpaddr;
+	cpuhdrp->ptdpaddr = PTDpaddr;
 	cpuhdrp->nmemsegs = mem_cluster_cnt;
 
 	/*

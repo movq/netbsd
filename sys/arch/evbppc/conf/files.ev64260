@@ -1,4 +1,4 @@
-#	$NetBSD: files.ev64260,v 1.7 2004/09/13 14:38:37 drochner Exp $
+#	$NetBSD: files.ev64260,v 1.5 2004/03/13 17:31:33 bjh21 Exp $
 #
 # Marvell (Galileo) "EV64260" evaluation board's specific configuration info
 #
@@ -27,6 +27,8 @@ include "dev/scsipi/files.scsipi"
 
 include "dev/ata/files.ata"
 
+include	"dev/usb/files.usb"
+
 #
 # Memory Disk for install floppy
 #
@@ -39,7 +41,8 @@ file	dev/md_root.c				memory_disk_hooks
 #
 # System bus types
 #
-device	mainbus {}
+define mainbus { }
+device	mainbus: isabus, pcibus, mainbus
 attach	mainbus at root
 file	arch/evbppc/ev64260/mainbus.c		mainbus|cpu needs-flag
 
@@ -59,6 +62,8 @@ file	arch/evbppc/ev64260/wdc_obio.c		wdc_obio
 
 #
 # PCI-only drivers
+# XXX MUST BE INCLUDED BEFORE files.isa, as long as files.isa attaches
+# XXX devices to 'pci'.
 #
 include "dev/i2o/files.i2o"
 include "dev/pci/files.pci"
@@ -69,7 +74,7 @@ attach	pcib at pci
 file	arch/evbppc/pci/pcib.c			pcib
 
 #
-# ISA drivers
+# ISA and mixed ISA+PCI drivers
 #
 
 include "dev/isa/files.isa"
@@ -84,8 +89,6 @@ include	"dev/wscons/files.wscons"
 include	"dev/wsfont/files.wsfont"
 
 include "dev/pckbport/files.pckbport"
-
-include	"dev/usb/files.usb"
 
 # Floppy disk controller
 device	fdc {drive = -1}: isadma

@@ -1,4 +1,4 @@
-/*	$NetBSD: ccitt_proto.c,v 1.15 2004/04/22 01:01:40 matt Exp $	*/
+/*	$NetBSD: ccitt_proto.c,v 1.14 2003/08/07 16:32:59 agc Exp $	*/
 
 /*
  * Copyright (c) 1990, 1993
@@ -74,7 +74,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ccitt_proto.c,v 1.15 2004/04/22 01:01:40 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ccitt_proto.c,v 1.14 2003/08/07 16:32:59 agc Exp $");
 
 #include "opt_hdlc.h"
 #include "opt_llc.h"
@@ -108,7 +108,7 @@ extern	struct domain ccittdomain;
 #endif
 #include <netccitt/pk_extern.h>
 
-const struct protosw ccittsw[] = {
+struct protosw ccittsw[] = {
 #ifdef LLC
 {	0,		DOMAIN,		IEEEPROTO_802LLC,0,
 	0,		llc_output,	llc_ctlinput,	0,

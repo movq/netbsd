@@ -1,4 +1,4 @@
-/* $NetBSD: trap.c,v 1.96 2004/08/28 17:53:00 jdolecek Exp $ */
+/* $NetBSD: trap.c,v 1.92.2.2 2004/07/17 16:46:13 he Exp $ */
 
 /*-
  * Copyright (c) 2000, 2001 The NetBSD Foundation, Inc.
@@ -100,7 +100,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.96 2004/08/28 17:53:00 jdolecek Exp $");
+__KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.92.2.2 2004/07/17 16:46:13 he Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -514,9 +514,14 @@ do_fault:
 			if (map != kernel_map &&
 			    (caddr_t)va >= vm->vm_maxsaddr &&
 			    va < USRSTACK) {
-				if (rv == 0)
-					uvm_grow(l->l_proc, va);
-				else if (rv == EACCES &&
+				if (rv == 0) {
+					unsigned nss;
+
+					nss = btoc(USRSTACK -
+					    (unsigned long)va);
+					if (nss > vm->vm_ssize)
+						vm->vm_ssize = nss;
+				} else if (rv == EACCES &&
 					   ftype != VM_PROT_EXECUTE)
 					rv = EFAULT;
 			}
@@ -537,7 +542,6 @@ do_fault:
 				    l->l_addr->u_pcb.pcb_onfault != 0) {
 					framep->tf_regs[FRAME_PC] =
 					    l->l_addr->u_pcb.pcb_onfault;
-					framep->tf_regs[FRAME_V0] = rv;
 					l->l_addr->u_pcb.pcb_onfault = 0;
 					goto out;
 				}

@@ -1,4 +1,4 @@
-/*	$NetBSD: pmap_bootstrap.c,v 1.11 2004/09/04 13:43:11 tsutsui Exp $	*/
+/*	$NetBSD: pmap_bootstrap.c,v 1.10 2003/08/07 16:28:52 agc Exp $	*/
 
 /* 
  * Copyright (c) 1991, 1993
@@ -39,7 +39,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pmap_bootstrap.c,v 1.11 2004/09/04 13:43:11 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pmap_bootstrap.c,v 1.10 2003/08/07 16:28:52 agc Exp $");
 
 #include <sys/param.h>
 
@@ -89,7 +89,9 @@ extern caddr_t	msgbufaddr;
  * XXX a PIC compiler would make this much easier.
  */
 void
-pmap_bootstrap(paddr_t nextpa, paddr_t firstpa)
+pmap_bootstrap(nextpa, firstpa)
+	paddr_t nextpa;
+	paddr_t firstpa;
 {
 	paddr_t kstpa, kptpa, iiopa, eiopa, kptmpa, p0upa;
 	u_int nptpages, kstsize;

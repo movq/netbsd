@@ -1,9 +1,9 @@
-/*	$NetBSD: filesys.c,v 1.1.1.5 2004/07/12 23:26:56 wiz Exp $	*/
+/*	$NetBSD: filesys.c,v 1.1.1.4 2003/02/13 08:50:51 wiz Exp $	*/
 
 /* filesys.c -- filesystem specific functions.
-   Id: filesys.c,v 1.3 2004/03/14 00:57:29 karl Exp
+   Id: filesys.c,v 1.3 2003/01/31 19:18:11 karl Exp
 
-   Copyright (C) 1993, 1997, 1998, 2000, 2002, 2003, 2004 Free Software
+   Copyright (C) 1993, 1997, 1998, 2000, 2002, 2003 Free Software
    Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
@@ -28,12 +28,9 @@
 #include "filesys.h"
 
 /* Local to this file. */
-static char *info_file_in_path (char *filename, char *path);
-static char *lookup_info_filename (char *filename);
-static char *info_absolute_file (char *fname);
-
-static void remember_info_filename (char *filename, char *expansion);
-static void maybe_initialize_infopath (void);
+static char *info_file_in_path (), *lookup_info_filename ();
+static char *info_absolute_file ();
+static void remember_info_filename (), maybe_initialize_infopath ();
 
 typedef struct
 {
@@ -82,7 +79,8 @@ static char *local_temp_filename = (char *)NULL;
 static int local_temp_filename_size = 0;
 
 char *
-info_find_fullpath (char *partial)
+info_find_fullpath (partial)
+     char *partial;
 {
   int initial_character;
   char *temp;
@@ -145,7 +143,7 @@ info_find_fullpath (char *partial)
       if (temp)
         {
           remember_info_filename (partial, temp);
-          if (strlen (temp) > (unsigned int) local_temp_filename_size)
+          if (strlen (temp) > local_temp_filename_size)
             local_temp_filename = (char *) xrealloc
               (local_temp_filename,
                (local_temp_filename_size = (50 + strlen (temp))));
@@ -161,7 +159,8 @@ info_find_fullpath (char *partial)
    one that is a regular file, return it as a new string.  Otherwise, return
    a NULL pointer. */
 static char *
-info_file_in_path (char *filename, char *path)
+info_file_in_path (filename, path)
+     char *filename, *path;
 {
   struct stat finfo;
   char *temp_dirname;
@@ -258,7 +257,8 @@ info_file_in_path (char *filename, char *path)
    return a NULL pointer.  We do it by taking the file name apart
    into its directory and basename parts, and calling info_file_in_path.*/
 static char *
-info_absolute_file (char *fname)
+info_absolute_file (fname)
+     char *fname;
 {
   char *containing_dir = xstrdup (fname);
   char *base = filename_non_directory (containing_dir);
@@ -275,10 +275,12 @@ info_absolute_file (char *fname)
    are no more.  Advance IDX to the character after the colon. */
 
 char *
-extract_colon_unit (char *string, int *idx)
+extract_colon_unit (string, idx)
+     char *string;
+     int *idx;
 {
-  unsigned int i = (unsigned int) *idx;
-  unsigned int start = i;
+  int i = *idx;
+  int start = *idx;
 
   if (!string || i >= strlen (string))
     return NULL;
@@ -316,7 +318,8 @@ static int names_and_files_slots = 0;
 /* Find the result for having already called info_find_fullpath () with
    FILENAME. */
 static char *
-lookup_info_filename (char *filename)
+lookup_info_filename (filename)
+     char *filename;
 {
   if (filename && names_and_files)
     {
@@ -332,7 +335,8 @@ lookup_info_filename (char *filename)
 
 /* Add a filename and its expansion to our list. */
 static void
-remember_info_filename (char *filename, char *expansion)
+remember_info_filename (filename, expansion)
+     char *filename, *expansion;
 {
   FILENAME_LIST *new;
 
@@ -356,7 +360,7 @@ remember_info_filename (char *filename, char *expansion)
 }
 
 static void
-maybe_initialize_infopath (void)
+maybe_initialize_infopath ()
 {
   if (!infopath_size)
     {
@@ -370,7 +374,9 @@ maybe_initialize_infopath (void)
 /* Add PATH to the list of paths found in INFOPATH.  2nd argument says
    whether to put PATH at the front or end of INFOPATH. */
 void
-info_add_path (char *path, int where)
+info_add_path (path, where)
+     char *path;
+     int where;
 {
   int len;
 
@@ -404,7 +410,7 @@ info_add_path (char *path, int where)
 
 /* Make INFOPATH have absolutely nothing in it. */
 void
-zap_infopath (void)
+zap_infopath ()
 {
   if (infopath)
     free (infopath);
@@ -429,7 +435,9 @@ zap_infopath (void)
 
    FIXME: is it a good idea to show the EOL type on the modeline?  */
 long
-convert_eols (char *text, long int textlen)
+convert_eols (text, textlen)
+     char *text;
+     long textlen;
 {
   register char *s = text;
   register char *d = text;
@@ -453,8 +461,11 @@ convert_eols (char *text, long int textlen)
    If the file turns out to be compressed, set IS_COMPRESSED to non-zero.
    If the file cannot be read, return a NULL pointer. */
 char *
-filesys_read_info_file (char *pathname, long int *filesize,
-    struct stat *finfo, int *is_compressed)
+filesys_read_info_file (pathname, filesize, finfo, is_compressed)
+     char *pathname;
+     long *filesize;
+     struct stat *finfo;
+     int *is_compressed;
 {
   long st_size;
 
@@ -463,7 +474,7 @@ filesys_read_info_file (char *pathname, long int *filesize,
   if (compressed_filename_p (pathname))
     {
       *is_compressed = 1;
-      return (filesys_read_compressed (pathname, filesize));
+      return (filesys_read_compressed (pathname, filesize, finfo));
     }
   else
     {
@@ -515,7 +526,10 @@ filesys_read_info_file (char *pathname, long int *filesize,
 #define FILESYS_PIPE_BUFFER_SIZE (16 * BASIC_PIPE_BUFFER)
 
 char *
-filesys_read_compressed (char *pathname, long int *filesize)
+filesys_read_compressed (pathname, filesize, finfo)
+     char *pathname;
+     long *filesize;
+     struct stat *finfo;
 {
   FILE *stream;
   char *command, *decompressor;
@@ -541,7 +555,7 @@ filesys_read_compressed (char *pathname, long int *filesize)
 
       temp = (char *)xmalloc (5 + strlen (command));
       sprintf (temp, "%s...", command);
-      message_in_echo_area ("%s", temp, NULL);
+      message_in_echo_area ("%s", temp);
       free (temp);
     }
 #endif /* !BUILDING_LIBRARY */
@@ -603,7 +617,8 @@ filesys_read_compressed (char *pathname, long int *filesize)
 
 /* Return non-zero if FILENAME belongs to a compressed file. */
 int
-compressed_filename_p (char *filename)
+compressed_filename_p (filename)
+     char *filename;
 {
   char *decompressor;
 
@@ -619,7 +634,8 @@ compressed_filename_p (char *filename)
 
 /* Return the command string that would be used to decompress FILENAME. */
 char *
-filesys_decompressor_for_file (char *filename)
+filesys_decompressor_for_file (filename)
+     char *filename;
 {
   register int i;
   char *extension = (char *)NULL;
@@ -662,7 +678,9 @@ static char *errmsg_buf = (char *)NULL;
 static int errmsg_buf_size = 0;
 
 char *
-filesys_error_string (char *filename, int error_num)
+filesys_error_string (filename, error_num)
+     char *filename;
+     int error_num;
 {
   int len;
   char *result;
@@ -685,7 +703,8 @@ filesys_error_string (char *filename, int error_num)
    in combination.  */
 
 int
-is_dir_name (char *filename)
+is_dir_name (filename)
+    char *filename;
 {
   unsigned i;
 

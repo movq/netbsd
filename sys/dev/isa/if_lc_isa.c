@@ -1,4 +1,4 @@
-/*	$NetBSD: if_lc_isa.c,v 1.19 2004/09/14 20:20:48 drochner Exp $ */
+/*	$NetBSD: if_lc_isa.c,v 1.16 2002/10/02 03:10:48 thorpej Exp $ */
 
 /*-
  * Copyright (c) 1994, 1995, 1997 Matt Thomas <matt@3am-software.com>
@@ -33,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_lc_isa.c,v 1.19 2004/09/14 20:20:48 drochner Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_lc_isa.c,v 1.16 2002/10/02 03:10:48 thorpej Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -93,7 +93,7 @@ lemac_isa_find(sc, ia, attach)
 	/*
 	 * Disallow wildcarded i/o addresses.
 	 */
-	if (ia->ia_io[0].ir_addr == ISA_UNKNOWN_PORT)
+	if (ia->ia_io[0].ir_addr == ISACF_PORT_DEFAULT)
 		return 0;
 
 	/*
@@ -124,27 +124,22 @@ lemac_isa_find(sc, ia, attach)
 	 */
 	lemac_info_get(sc->sc_iot, sc->sc_ioh, &maddr, &msize, &irq);
 
-	if (ia->ia_iomem[0].ir_addr != ISA_UNKNOWN_IOMEM &&
+	if (ia->ia_iomem[0].ir_addr != ISACF_IOMEM_DEFAULT &&
 	    ia->ia_iomem[0].ir_addr != maddr)
 		goto outio;
 
-	if (attach) {
-		if (msize == 0) {
-			printf(": memory configuration is invalid\n");
-			goto outio;
-		}
-
-		sc->sc_memt = ia->ia_memt;
-		if (bus_space_map(ia->ia_memt, maddr, msize, 0, &sc->sc_memh)) {
+	sc->sc_memt = ia->ia_memt;
+	if (bus_space_map(ia->ia_memt, maddr, msize, 0, &sc->sc_memh)) {
+		if (attach)
 			printf(": can't map mem space\n");
-			goto outio;
-		}
+		goto outio;
 	}
+
 
 	/*
 	 * Double-check IRQ configuration.
 	 */
-	if (ia->ia_irq[0].ir_irq != ISA_UNKNOWN_IRQ &&
+	if (ia->ia_irq[0].ir_irq != ISACF_IRQ_DEFAULT &&
 	    ia->ia_irq[0].ir_irq != irq)
 		printf("%s: overriding IRQ %d to %d\n", sc->sc_dv.dv_xname,
 		       ia->ia_irq[0].ir_irq, irq);
@@ -178,7 +173,7 @@ lemac_isa_find(sc, ia, attach)
 
 	ia->ia_ndrq = 0;
 
-	if (rv == 0 && attach)
+	if (rv == 0 || !attach)
 		bus_space_unmap(sc->sc_memt, sc->sc_memh, msize);
 outio:
 	if (rv == 0 || !attach)
@@ -195,8 +190,7 @@ lemac_isa_probe(parent, match, aux)
 	struct isa_attach_args *ia = aux;
 	struct cfdata *cf = match;
 	lemac_softc_t sc;
-	snprintf(sc.sc_dv.dv_xname, sizeof(sc.sc_dv.dv_xname), "%s%d",
-	    lc_cd.cd_name, cf->cf_unit);
+	(void)sprintf(sc.sc_dv.dv_xname, "%s%d", lc_cd.cd_name, cf->cf_unit);
     
 	return lemac_isa_find(&sc, ia, 0);
 }

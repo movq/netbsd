@@ -1,4 +1,4 @@
-/*	$NetBSD: stdbool.h,v 1.2 2004/05/20 17:49:32 kleink Exp $	*/
+/*	$NetBSD: stdbool.h,v 1.1.6.1 2004/05/22 17:04:24 he Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.

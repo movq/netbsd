@@ -1,4 +1,4 @@
-/*	$NetBSD: i82365_isa.c,v 1.22 2004/09/14 20:20:47 drochner Exp $	*/
+/*	$NetBSD: i82365_isa.c,v 1.20 2002/10/02 03:10:47 thorpej Exp $	*/
 
 /*
  * Copyright (c) 1997 Marc Horowitz.  All rights reserved.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: i82365_isa.c,v 1.22 2004/09/14 20:20:47 drochner Exp $");
+__KERNEL_RCSID(0, "$NetBSD: i82365_isa.c,v 1.20 2002/10/02 03:10:47 thorpej Exp $");
 
 #define	PCICISADEBUG
 
@@ -83,7 +83,6 @@ static struct pcmcia_chip_functions pcic_isa_functions = {
 
 	pcic_chip_socket_enable,
 	pcic_chip_socket_disable,
-	pcic_chip_socket_settype,
 };
 
 int
@@ -106,15 +105,15 @@ pcic_isa_probe(parent, match, aux)
 		return (0);
 
 	/* Disallow wildcarded i/o address. */
-	if (ia->ia_io[0].ir_addr == ISA_UNKNOWN_PORT)
+	if (ia->ia_io[0].ir_addr == ISACF_PORT_DEFAULT)
 		return (0);
-	if (ia->ia_iomem[0].ir_addr == ISA_UNKNOWN_IOMEM)
+	if (ia->ia_iomem[0].ir_addr == ISACF_IOMEM_DEFAULT)
 		return (0);
 
 	if (bus_space_map(iot, ia->ia_io[0].ir_addr, PCIC_IOSIZE, 0, &ioh))
 		return (0);
 
-	if (ia->ia_iomem[0].ir_size == ISA_UNKNOWN_IOSIZ)
+	if (ia->ia_iomem[0].ir_size == ISACF_IOSIZ_DEFAULT)
 		msize = PCIC_MEMSIZE;
 	else
 		msize = ia->ia_iomem[0].ir_size;
@@ -224,7 +223,7 @@ pcic_isa_attach(parent, self, aux)
 	if (ia->ia_nirq > 0)
 		sc->irq = ia->ia_irq[0].ir_irq;
 	else
-		sc->irq = ISA_UNKNOWN_IRQ;
+		sc->irq = ISACF_IRQ_DEFAULT;
 
 	printf("\n");
 

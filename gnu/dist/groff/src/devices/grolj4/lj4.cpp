@@ -1,8 +1,7 @@
-/*	$NetBSD: lj4.cpp,v 1.1.1.2 2004/07/30 14:45:05 wiz Exp $	*/
+/*	$NetBSD: lj4.cpp,v 1.1.1.1 2003/06/30 17:52:15 wiz Exp $	*/
 
 // -*- C++ -*-
-/* Copyright (C) 1994, 2000, 2001, 2002, 2003, 2004
-   Free Software Foundation, Inc.
+/* Copyright (C) 1994, 2000, 2001, 2002, 2003 Free Software Foundation, Inc.
      Written by James Clark (jjc@jclark.com)
 
 This file is part of groff.
@@ -280,10 +279,10 @@ int is_unprintable(unsigned char c)
   return c < 32 && (c == 0 || (7 <= c && c <= 15) || c == 27);
 }
 
-void lj4_printer::set_char(int idx, font *f, const environment *env,
+void lj4_printer::set_char(int index, font *f, const environment *env,
 			   int w, const char *)
 {
-  int code = f->get_code(idx);
+  int code = f->get_code(index);
 
   unsigned char ch = code & 0xff;
   unsigned short symbol_set = code >> 8;
@@ -614,21 +613,18 @@ int main(int argc, char **argv)
     { "version", no_argument, 0, 'v' },
     { NULL, 0, 0, 0 }
   };
-  while ((c = getopt_long(argc, argv, "c:d:F:I:lp:vw:", long_options, NULL))
+  while ((c = getopt_long(argc, argv, ":F:p:d:lvw:c:", long_options, NULL))
 	 != EOF)
     switch(c) {
     case 'l':
       landscape_flag = 1;
-      break;
-    case 'I':
-      // ignore include search path
       break;
     case ':':
       if (optopt == 'd') {
 	fprintf(stderr, "duplex assumed to be long-side\n");
 	duplex_flag = 1;
       } else
-	fprintf(stderr, "option -%c requires an argument\n", optopt);
+	fprintf(stderr, "option -%c requires an operand\n", optopt);
       fflush(stderr);
       break;
     case 'd':
@@ -650,9 +646,11 @@ int main(int argc, char **argv)
 	break;
       }
     case 'v':
-      printf("GNU grolj4 (groff) version %s\n", Version_string);
-      exit(0);
-      break;
+      {
+	printf("GNU grolj4 (groff) version %s\n", Version_string);
+	exit(0);
+	break;
+      }
     case 'F':
       font::command_line_font_dir(optarg);
       break;

@@ -1,4 +1,4 @@
-/*	$NetBSD: smbfs_smb.c,v 1.24 2004/06/05 07:36:25 jdolecek Exp $	*/
+/*	$NetBSD: smbfs_smb.c,v 1.19 2004/03/21 16:04:07 jdolecek Exp $	*/
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -71,7 +71,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: smbfs_smb.c,v 1.24 2004/06/05 07:36:25 jdolecek Exp $");
+__KERNEL_RCSID(0, "$NetBSD: smbfs_smb.c,v 1.19 2004/03/21 16:04:07 jdolecek Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -182,93 +182,79 @@ smbfs_smb_lock(struct smbnode *np, int op, caddr_t id,
 }
 
 int
-smbfs_smb_statvfs(struct smb_share *ssp, struct statvfs *sbp,
+smbfs_smb_statfs2(struct smb_share *ssp, struct statfs *sbp,
 	struct smb_cred *scred)
 {
-	unsigned long bsize;	/* Block (allocation unit) size */
-	unsigned long bavail, bfree;
+	struct smb_t2rq *t2p;
+	struct mbchain *mbp;
+	struct mdchain *mdp;
+	u_int16_t bsize;
+	u_int32_t units, bpu, funits;
+	int error;
 
-	/*
-	 * The SMB request work with notion of sector size and
-	 * allocation units. Allocation unit is what 'block'
-	 * means in Unix context, sector size might be HW sector size.
-	 */
-	
-	if (SMB_DIALECT(SSTOVC(ssp)) >= SMB_DIALECT_LANMAN2_0) {
-		struct smb_t2rq *t2p;
-		struct mbchain *mbp;
-		struct mdchain *mdp;
-		u_int16_t secsz;
-		u_int32_t units, bpu, funits;
-		int error;
-
-		error = smb_t2_alloc(SSTOCP(ssp),
-		    SMB_TRANS2_QUERY_FS_INFORMATION, scred, &t2p);
-		if (error)
-			return error;
-		mbp = &t2p->t2_tparam;
-		mb_init(mbp);
-		mb_put_uint16le(mbp, SMB_INFO_ALLOCATION);
-		t2p->t2_maxpcount = 4;
-		t2p->t2_maxdcount = 4 * 4 + 2;
-		error = smb_t2_request(t2p);
-		if (error) {
-			smb_t2_done(t2p);
-			return error;
-		}
-		mdp = &t2p->t2_rdata;
-		md_get_uint32(mdp, NULL);	/* fs id */
-		md_get_uint32le(mdp, &bpu);	/* Number of sectors per unit */
-		md_get_uint32le(mdp, &units);	/* Total number of units */
-		md_get_uint32le(mdp, &funits);	/* Number of available units */
-		md_get_uint16le(mdp, &secsz);	/* Number of bytes per sector */
+	error = smb_t2_alloc(SSTOCP(ssp), SMB_TRANS2_QUERY_FS_INFORMATION,
+	    scred, &t2p);
+	if (error)
+		return error;
+	mbp = &t2p->t2_tparam;
+	mb_init(mbp);
+	mb_put_uint16le(mbp, SMB_INFO_ALLOCATION);
+	t2p->t2_maxpcount = 4;
+	t2p->t2_maxdcount = 4 * 4 + 2;
+	error = smb_t2_request(t2p);
+	if (error) {
 		smb_t2_done(t2p);
-
-		bsize = bpu * secsz;
-		bavail = units;
-		bfree = funits;
-	} else {
-		struct smb_rq *rqp;
-		struct mdchain *mdp;
-		u_int16_t units, bpu, secsz, funits;
-		int error;
-
-		error = smb_rq_alloc(SSTOCP(ssp),
-		    SMB_COM_QUERY_INFORMATION_DISK, scred, &rqp);
-		if (error)
-			return error;
-		smb_rq_wstart(rqp);
-		smb_rq_wend(rqp);
-		smb_rq_bstart(rqp);
-		smb_rq_bend(rqp);
-		error = smb_rq_simple(rqp);
-		if (error) {
-			smb_rq_done(rqp);
-			return error;
-		}
-		smb_rq_getreply(rqp, &mdp);
-		md_get_uint16le(mdp, &units);	/* Total units per server */
-		md_get_uint16le(mdp, &bpu);	/* Blocks per allocation unit */
-		md_get_uint16le(mdp, &secsz);	/* Block size (in bytes) */
-		md_get_uint16le(mdp, &funits);	/* Number of free units */
-		smb_rq_done(rqp);
-
-		bsize = bpu * secsz;
-		bavail = units;
-		bfree = funits;
+		return error;
 	}
-
-	sbp->f_bsize = bsize;		/* fundamental file system block size */
-	sbp->f_frsize = bsize;		/* fundamental file system frag size */
-	sbp->f_iosize = bsize;		/* optimal I/O size */
-	sbp->f_blocks = bavail;		/* total data blocks in file system */
-	sbp->f_bfree = bfree;		/* free blocks in fs */
-	sbp->f_bresvd = 0;		/* reserved blocks in fs */
-	sbp->f_bavail= bfree;		/* free blocks avail to non-superuser */
+	mdp = &t2p->t2_rdata;
+	md_get_uint32(mdp, NULL);	/* fs id */
+	md_get_uint32le(mdp, &bpu);
+	md_get_uint32le(mdp, &units);
+	md_get_uint32le(mdp, &funits);
+	md_get_uint16le(mdp, &bsize);
+	sbp->f_bsize = bpu * bsize;	/* fundamental file system block size */
+	sbp->f_blocks= units;		/* total data blocks in file system */
+	sbp->f_bfree = funits;		/* free blocks in fs */
+	sbp->f_bavail= funits;		/* free blocks avail to non-superuser */
 	sbp->f_files = 0xffff;		/* total file nodes in file system */
-	sbp->f_ffree = 0xffff;		/* free file nodes to non-superuser */
-	sbp->f_favail = 0xffff;		/* free file nodes in fs */
-	sbp->f_fresvd = 0;		/* reserved file nodes in fs */
+	sbp->f_ffree = 0xffff;		/* free file nodes in fs */
+	smb_t2_done(t2p);
+	return 0;
+}
+
+int
+smbfs_smb_statfs(struct smb_share *ssp, struct statfs *sbp,
+	struct smb_cred *scred)
+{
+	struct smb_rq *rqp;
+	struct mdchain *mdp;
+	u_int16_t units, bpu, bsize, funits;
+	int error;
+
+	error = smb_rq_alloc(SSTOCP(ssp), SMB_COM_QUERY_INFORMATION_DISK, scred, &rqp);
+	if (error)
+		return error;
+	smb_rq_wstart(rqp);
+	smb_rq_wend(rqp);
+	smb_rq_bstart(rqp);
+	smb_rq_bend(rqp);
+	error = smb_rq_simple(rqp);
+	if (error) {
+		smb_rq_done(rqp);
+		return error;
+	}
+	smb_rq_getreply(rqp, &mdp);
+	md_get_uint16le(mdp, &units);
+	md_get_uint16le(mdp, &bpu);
+	md_get_uint16le(mdp, &bsize);
+	md_get_uint16le(mdp, &funits);
+	sbp->f_bsize = bpu * bsize;	/* fundamental file system block size */
+	sbp->f_blocks= units;		/* total data blocks in file system */
+	sbp->f_bfree = funits;		/* free blocks in fs */
+	sbp->f_bavail= funits;		/* free blocks avail to non-superuser */
+	sbp->f_files = 0xffff;		/* total file nodes in file system */
+	sbp->f_ffree = 0xffff;		/* free file nodes in fs */
+	smb_rq_done(rqp);
 	return 0;
 }
 

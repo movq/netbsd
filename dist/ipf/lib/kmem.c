@@ -1,4 +1,4 @@
-/*	$NetBSD: kmem.c,v 1.3 2004/07/23 05:39:03 martti Exp $	*/
+/*	$NetBSD: kmem.c,v 1.2.2.1 2004/08/13 03:57:05 jmc Exp $	*/
 
 /*
  * Copyright (C) 1993-2001 by Darren Reed.

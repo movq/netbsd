@@ -1,4 +1,4 @@
-/* $NetBSD: inffast.c,v 1.6 2004/06/30 15:44:55 christos Exp $ */
+/* $NetBSD: inffast.c,v 1.5 2003/03/18 20:00:48 mycroft Exp $ */
 
 /* inffast.c -- process literals and length/distance pairs fast
  * Copyright (C) 1995-2002 Mark Adler
@@ -139,7 +139,7 @@ z_streamp z;
           }
           else
           {
-            z->msg = _ZERROR(_ZERR_INV_DISTANCE);
+            z->msg = (char*)"invalid distance code";
             UNGRAB
             UPDATE
             return Z_DATA_ERROR;
@@ -170,7 +170,7 @@ z_streamp z;
       }
       else
       {
-        z->msg = _ZERROR(_ZERR_INV_LITERAL);
+        z->msg = (char*)"invalid literal/length code";
         UNGRAB
         UPDATE
         return Z_DATA_ERROR;

@@ -1,4 +1,4 @@
-/*	$NetBSD: auviavar.h,v 1.8 2004/11/13 15:00:48 kent Exp $	*/
+/*	$NetBSD: auviavar.h,v 1.5 2002/10/16 15:27:28 kent Exp $	*/
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -73,14 +73,9 @@ struct auvia_softc {
 	struct auvia_dma *sc_dmas;
 
 	struct auvia_softc_chan sc_play, sc_record;
-
-	/* Power Management */
-	void *sc_powerhook;
-	int sc_suspend;
-
-#define AUVIA_NFORMATS	8
-	struct audio_format sc_formats[AUVIA_NFORMATS];
-	struct audio_encoding_set *sc_encodings;
 };
+
+#define IS_FIXED_RATE(codec)	!((codec)->vtbl->get_extcaps(codec) \
+				  & AC97_EXT_AUDIO_VRA)
 
 #endif /* !_DEV_PCI_AUVIAVAR_H_ */

@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.12 2004/04/18 04:31:51 lukem Exp $
+#	$NetBSD: Makefile,v 1.11 2002/09/14 21:18:20 thorpej Exp $
 
 LIB=	posix
 
@@ -18,7 +18,7 @@ ARCHDIR=	${NETBSDSRCDIR}/lib/libc/arch/${MACHINE_CPU}
 	@false
 .endif
 
-AFLAGS+=-I${ARCHDIR}
+AINC=	-I${ARCHDIR}
 
 .include "${.CURDIR}/sys/Makefile.inc"
 

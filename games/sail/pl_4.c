@@ -1,4 +1,4 @@
-/*	$NetBSD: pl_4.c,v 1.15 2004/11/05 21:30:32 dsl Exp $	*/
+/*	$NetBSD: pl_4.c,v 1.14 2003/08/07 09:37:44 agc Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)pl_4.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: pl_4.c,v 1.15 2004/11/05 21:30:32 dsl Exp $");
+__RCSID("$NetBSD: pl_4.c,v 1.14 2003/08/07 09:37:44 agc Exp $");
 #endif
 #endif /* not lint */
 
@@ -95,7 +95,7 @@ lookout(void)
 	sgetstr("What ship? ", buf, sizeof buf);
 	foreachship(sp) {
 		c = *countryname[sp->nationality];
-		if ((tolower((unsigned char)c) == *buf || colours(sp) == *buf)
+		if ((c == *buf || tolower(c) == *buf || colours(sp) == *buf)
 		    && (sp->file->stern == buf[1] || sterncolour(sp) == buf[1]
 			|| buf[1] == '?')) {
 			eyeball(sp);

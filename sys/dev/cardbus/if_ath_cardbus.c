@@ -1,4 +1,4 @@
-/*	$NetBSD: if_ath_cardbus.c,v 1.5 2004/09/09 01:40:13 enami Exp $ */
+/*	$NetBSD: if_ath_cardbus.c,v 1.1 2003/10/14 17:47:03 ichiro Exp $ */
 /*
  * Copyright (c) 2003
  *	Ichiro FUKUHARA <ichiro@ichiro.org>.
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_ath_cardbus.c,v 1.5 2004/09/09 01:40:13 enami Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_ath_cardbus.c,v 1.1 2003/10/14 17:47:03 ichiro Exp $");
 
 #include "opt_inet.h"
 #include "opt_ns.h"
@@ -91,7 +91,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_ath_cardbus.c,v 1.5 2004/09/09 01:40:13 enami Exp
 #include <dev/pci/pcidevs.h>
 
 #include <dev/cardbus/cardbusvar.h>
-#include <dev/pci/pcidevs.h>
+#include <dev/cardbus/cardbusdevs.h>
 
 /*
  * PCI configuration space registers
@@ -154,8 +154,6 @@ ath_cardbus_attach(struct device *parent, struct device *self,
 	sc->sc_dmat = ca->ca_dmat;
 	csc->sc_ct = ct;
 	csc->sc_tag = ca->ca_tag;
-
-	printf("\n");
 
 	/*
 	 * Power management hooks.
@@ -313,17 +311,37 @@ ath_cardbus_setup(struct ath_cardbus_softc *csc)
 	cardbus_chipset_tag_t cc = ct->ct_cc;
 	cardbus_function_tag_t cf = ct->ct_cf;
 	pcireg_t reg;
+	int pmreg;
 
-	(void)cardbus_setpowerstate(sc->sc_dev.dv_xname, ct, csc->sc_tag,
-	    PCI_PWR_D0);
-
-	/* Program the BAR. */
-	cardbus_conf_write(cc, cf, csc->sc_tag, ATH_PCI_MMBA,
-	    csc->sc_bar_val);
+	if (cardbus_get_capability(cc, cf, csc->sc_tag,
+	    PCI_CAP_PWRMGMT, &pmreg, 0)) {
+		reg = cardbus_conf_read(cc, cf, csc->sc_tag, pmreg + 4);
+#if 1 /* XXX Probably not right for CardBus. */
+		if (reg & 0x03) {
+			/*
+			 * The card has lost all configuration data in
+			 * this state, so punt.
+			 */
+			printf("%s: unable to wake up from power state D3\n",
+			    sc->sc_dev.dv_xname);
+			return;
+		}
+#endif
+		if (reg != 0) {
+			printf("%s: waking up from power state D%d\n",
+			    sc->sc_dev.dv_xname, reg);
+			cardbus_conf_write(cc, cf, csc->sc_tag,
+			    pmreg + 4, 0);
+		}
+	}
 
 	/* Make sure the right access type is on the CardBus bridge. */
 	(*ct->ct_cf->cardbus_ctrl)(cc, CARDBUS_MEM_ENABLE);
 	(*ct->ct_cf->cardbus_ctrl)(cc, CARDBUS_BM_ENABLE);
+
+	/* Program the BAR. */
+	cardbus_conf_write(cc, cf, csc->sc_tag, ATH_PCI_MMBA,
+	    csc->sc_bar_val);
 
 	/* Enable the appropriate bits in the PCI CSR. */
 	reg = cardbus_conf_read(cc, cf, csc->sc_tag,

@@ -1,4 +1,4 @@
-.\"	$NetBSD: getrlimit.2,v 1.29 2004/05/13 10:20:58 wiz Exp $
+.\"	$NetBSD: getrlimit.2,v 1.26 2003/08/07 16:43:59 agc Exp $
 .\"
 .\" Copyright (c) 1980, 1991, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -29,7 +29,7 @@
 .\"
 .\"     @(#)getrlimit.2	8.1 (Berkeley) 6/4/93
 .\"
-.Dd April 19, 2004
+.Dd November 23, 2001
 .Dt GETRLIMIT 2
 .Os
 .Sh NAME
@@ -88,14 +88,6 @@ grow.
 This imposes a limit on the amount of physical memory to be given to
 a process; if memory is tight, the system will prefer to take memory
 from processes that are exceeding their declared resident set size.
-.It Li RLIMIT_SBSIZE
-The maximum size (in bytes) of the socket buffers
-set by the
-.Xr setsockopt 2
-.Dv SO_RCVBUF
-and
-.Dv SO_SNDBUF
-options.
 .It Li RLIMIT_STACK
 The maximum size (in bytes) of the stack segment for a process;
 this defines how far a program's stack segment may be extended.
@@ -165,7 +157,7 @@ offending process.
 .Sh RETURN VALUES
 A 0 return value indicates that the call succeeded, changing
 or returning the resource limit.
-Otherwise, \-1 is returned and the global variable
+Otherwise, -1 is returned and the global variable
 .Va errno
 is set to indicate the error.
 .Sh ERRORS
@@ -209,9 +201,7 @@ cannot be lowered, because current usage is already higher than the limit.
 .Sh SEE ALSO
 .Xr csh 1 ,
 .Xr sh 1 ,
-.Xr mlock 2 ,
 .Xr quotactl 2 ,
-.Xr setsockopt 2 ,
 .Xr sigaction 2 ,
 .Xr sigaltstack 2 ,
 .Xr sysctl 3

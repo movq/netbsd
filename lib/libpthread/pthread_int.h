@@ -1,4 +1,4 @@
-/*	$NetBSD: pthread_int.h,v 1.30 2004/10/12 22:17:56 mycroft Exp $	*/
+/*	$NetBSD: pthread_int.h,v 1.26 2004/03/14 01:19:42 cl Exp $	*/
 
 /*-
  * Copyright (c) 2001,2002,2003 The NetBSD Foundation, Inc.
@@ -114,7 +114,7 @@ struct	__pthread_st {
 	stack_t		pt_stack;	/* Our stack */
 	ucontext_t	*pt_uc;		/* Saved context when we're stopped */
 	ucontext_t	*pt_trapuc;   	/* Kernel-saved context */
-	ucontext_t	*__pt_blockuc;  /* Kernel-saved context when blocked */
+	ucontext_t	*pt_blockuc;   	/* Kernel-saved context when blocked */
 
 	sigset_t	pt_sigmask;	/* Signals we won't take. */
 	sigset_t	pt_siglist;	/* Signals pending for us. */
@@ -204,8 +204,7 @@ struct pthread_lock_ops {
 #define PT_FLAG_SIGDEFERRED     0x0020	/* There are signals to take */
 #define PT_FLAG_SCOPE_SYSTEM	0x0040
 #define PT_FLAG_EXPLICIT_SCHED	0x0080
-#define PT_FLAG_SUSPENDED	0x0100	/* In the suspended queue */
-#define PT_FLAG_SIGNALED	0x0200
+#define	PT_FLAG_SUSPENDED	0x0100	/* In the suspended queue */
 
 #define PT_MAGIC	0x11110001
 #define PT_DEAD		0xDEAD0001
@@ -368,9 +367,7 @@ void	pthread__deliver_signal(pthread_t self, pthread_t t, siginfo_t *si);
 void	pthread__signal_deferred(pthread_t self, pthread_t t);
 
 void	pthread__destroy_tsd(pthread_t self);
-void	pthread__assertfunc(const char *file, int line, const char *function,
-		const char *expr);
-void	pthread__errorfunc(const char *file, int line, const char *function,
-		const char *msg);
+void	pthread__assertfunc(char *file, int line, char *function, char *expr);
+void	pthread__errorfunc(char *file, int line, char *function, char *msg);
 
 #endif /* _LIB_PTHREAD_INT_H */

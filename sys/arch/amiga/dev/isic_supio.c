@@ -1,4 +1,4 @@
-/*	$NetBSD: isic_supio.c,v 1.14 2004/11/21 20:43:22 is Exp $ */
+/*	$NetBSD: isic_supio.c,v 1.13.4.1 2004/11/29 06:10:34 jmc Exp $ */
 
 /*
  *   Copyright (c) 1998,2001 Ignatios Souvatzis. All rights reserved.
@@ -47,7 +47,7 @@
  *---------------------------------------------------------------------------*/
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: isic_supio.c,v 1.14 2004/11/21 20:43:22 is Exp $");
+__KERNEL_RCSID(0, "$NetBSD: isic_supio.c,v 1.13.4.1 2004/11/29 06:10:34 jmc Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>

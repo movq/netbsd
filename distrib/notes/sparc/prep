@@ -1,4 +1,4 @@
-.\"	$NetBSD: prep,v 1.22 2004/06/12 16:41:14 mbw Exp $
+.\"	$NetBSD: prep,v 1.21.2.1 2004/06/15 23:11:48 he Exp $
 .
 .Ss2 Configuring your PROM
 .

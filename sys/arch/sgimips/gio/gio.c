@@ -1,4 +1,4 @@
-/*	$NetBSD: gio.c,v 1.17 2004/09/29 04:06:52 sekiya Exp $	*/
+/*	$NetBSD: gio.c,v 1.15 2004/03/18 08:40:24 sekiya Exp $	*/
 
 /*
  * Copyright (c) 2000 Soren S. Jorvang
@@ -33,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: gio.c,v 1.17 2004/09/29 04:06:52 sekiya Exp $");
+__KERNEL_RCSID(0, "$NetBSD: gio.c,v 1.15 2004/03/18 08:40:24 sekiya Exp $");
 
 #include "opt_ddb.h"
 
@@ -49,14 +49,9 @@ __KERNEL_RCSID(0, "$NetBSD: gio.c,v 1.17 2004/09/29 04:06:52 sekiya Exp $");
 
 #include "locators.h"
 #include "newport.h"
-#include "grtwo.h"
 
 #if (NNEWPORT > 0)
 #include <sgimips/gio/newportvar.h>
-#endif
-
-#if (NGRTWO > 0)
-#include <sgimips/gio/grtwovar.h>
 #endif
 
 struct gio_softc {
@@ -82,6 +77,10 @@ static uint32_t gio_slot_addr[] = {
 static int
 gio_match(struct device *parent, struct cfdata *match, void *aux)
 {
+	struct giobus_attach_args *gba = aux;
+
+	if (strcmp(gba->gba_busname, match->cf_name) != 0)
+		return 0;
 
 	return 1;
 }

@@ -39,7 +39,7 @@
  * IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGES.
  *
- * $Id: ahc_pci.c,v 1.47 2004/10/17 01:10:44 christos Exp $
+ * $Id: ahc_pci.c,v 1.45.2.1 2004/11/12 05:55:47 jmc Exp $
  *
  * //depot/aic7xxx/aic7xxx/aic7xxx_pci.c#57 $
  *
@@ -50,7 +50,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ahc_pci.c,v 1.47 2004/10/17 01:10:44 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ahc_pci.c,v 1.45.2.1 2004/11/12 05:55:47 jmc Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

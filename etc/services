@@ -1,4 +1,4 @@
-#	$NetBSD: services,v 1.78 2004/10/09 17:04:41 christos Exp $
+#	$NetBSD: services,v 1.71 2004/01/06 00:23:01 wrstuden Exp $
 #
 # Network services, Internet style
 #
@@ -51,8 +51,8 @@ gopher		70/tcp		# Internet Gopher
 gopher		70/udp
 rje		77/tcp		netrjs
 finger		79/tcp
-http		80/tcp		www www-http	# WorldWideWeb HTTP
-http		80/udp		www www-http	# HyperText Transfer Protocol
+www		80/tcp		http	# WorldWideWeb HTTP
+www		80/udp			# HyperText Transfer Protocol
 link		87/tcp		ttylink
 kerberos	88/tcp		krb5	# Kerberos v5
 kerberos	88/udp
@@ -135,8 +135,6 @@ isakmp		500/tcp			# IPsec Key Management (ISAKMP/Oakley)
 isakmp		500/udp			# IPsec Key Management (ISAKMP/Oakley)
 ripng		521/tcp			# RIP for IPv6
 ripng		521/udp			# RIP for IPv6
-submission	587/tcp			# Message Submission
-submission	587/udp			# Message Submission
 acap		674/tcp		# Application Configuration Access Protocol
 acap		674/udp		# Application Configuration Access Protocol
 silc		706/tcp			# Secure Internet Live Conferencing
@@ -294,8 +292,6 @@ afs3-remio	7011/udp		# MR-AFS remote IO server
 #
 supfilesrv	871/tcp			# SUP server
 supfiledbg	1127/tcp		# SUP debugging
-spamd		8025/tcp		# spamd(8)
-spamd-cfg	8026/tcp		# spamd(8) configuration
 
 #
 # other common ports
@@ -314,8 +310,6 @@ sstp-2		9801/tcp		# Sakura Script Transfer Protocol-2
 sstp-2		9801/udp		# Sakura Script Transfer Protocol-2
 amanda		10080/udp		# Amanda
 kamanda		10081/udp		# Amanda with Kerberos
-amandaidx	10082/tcp		# Amanda index server
-amidxtape	10083/tcp		# Amanda dump image server
 italk		12345/tcp		# Italk Chat System
 italk		12345/udp		# Italk Chat System
 hunt		26740/udp		# multi-player/multi-host maze-wars
@@ -365,12 +359,5 @@ terabase	4000/tcp	icq	# used for both Terabase and ICQ
 terabase	4000/udp	icq	# used for both Terabase and ICQ
 radmin-port	4899/tcp		# RAdmin Port
 radmin-port	4899/udp		# RAdmin Port
-mdns		5353/tcp		# Multicast DNS
-mdns		5353/udp		# Multicast DNS
 http-alt	8080/tcp		# HTTP Alternate (see port 80)
 http-alt	8080/udp		# HTTP Alternate (see port 80)
-
-# Zephyr services
-zephyr-clt      2103/udp                        # Zephyr serv-hm connection
-zephyr-hm       2104/udp                        # Zephyr hostmanager
-zephyr-hm-srv   2105/udp                        # Zephyr hm-serv connection

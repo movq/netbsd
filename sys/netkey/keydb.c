@@ -1,4 +1,4 @@
-/*	$NetBSD: keydb.c,v 1.16 2004/04/18 23:33:58 matt Exp $	*/
+/*	$NetBSD: keydb.c,v 1.15 2003/09/12 07:38:11 itojun Exp $	*/
 /*	$KAME: keydb.c,v 1.81 2003/09/07 05:25:20 itojun Exp $	*/
 
 /*
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: keydb.c,v 1.16 2004/04/18 23:33:58 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: keydb.c,v 1.15 2003/09/12 07:38:11 itojun Exp $");
 
 #include "opt_inet.h"
 #include "opt_ipsec.h"
@@ -67,9 +67,10 @@ keydb_newsecpolicy()
 {
 	struct secpolicy *p;
 
-	p = (struct secpolicy *)malloc(sizeof(*p), M_SECA, M_NOWAIT|M_ZERO);
+	p = (struct secpolicy *)malloc(sizeof(*p), M_SECA, M_NOWAIT);
 	if (!p)
 		return p;
+	bzero(p, sizeof(*p));
 	TAILQ_INSERT_TAIL(&sptailq, p, tailq);
 
 	return p;
@@ -127,7 +128,7 @@ keydb_setsecpolicyindex(p, idx)
 		    M_SECA, M_NOWAIT);
 	if (!p->spidx)
 		return ENOMEM;
-	*p->spidx = *idx;
+	memcpy(p->spidx, idx, sizeof(*p->spidx));
 	return 0;
 }
 
@@ -140,9 +141,10 @@ keydb_newsecashead()
 	struct secashead *p;
 	int i;
 
-	p = (struct secashead *)malloc(sizeof(*p), M_SECA, M_NOWAIT|M_ZERO);
+	p = (struct secashead *)malloc(sizeof(*p), M_SECA, M_NOWAIT);
 	if (!p)
 		return p;
+	bzero(p, sizeof(*p));
 	for (i = 0; i < sizeof(p->savtree)/sizeof(p->savtree[0]); i++)
 		LIST_INIT(&p->savtree[i]);
 	return p;
@@ -165,7 +167,7 @@ keydb_newsecasvar()
 	struct secasvar *p, *q;
 	static u_int32_t said = 0;
 
-	p = (struct secasvar *)malloc(sizeof(*p), M_SECA, M_NOWAIT|M_ZERO);
+	p = (struct secasvar *)malloc(sizeof(*p), M_SECA, M_NOWAIT);
 	if (!p)
 		return p;
 
@@ -186,6 +188,7 @@ again:
 		}
 	}
 
+	bzero(p, sizeof(*p));
 	p->id = said;
 	if (q)
 		TAILQ_INSERT_AFTER(&satailq, q, p, tailq);
@@ -213,16 +216,18 @@ keydb_newsecreplay(wsize)
 {
 	struct secreplay *p;
 
-	p = (struct secreplay *)malloc(sizeof(*p), M_SECA, M_NOWAIT|M_ZERO);
+	p = (struct secreplay *)malloc(sizeof(*p), M_SECA, M_NOWAIT);
 	if (!p)
 		return p;
 
+	bzero(p, sizeof(*p));
 	if (wsize != 0) {
-		p->bitmap = malloc(wsize, M_SECA, M_NOWAIT|M_ZERO);
+		p->bitmap = malloc(wsize, M_SECA, M_NOWAIT);
 		if (!p->bitmap) {
 			free(p, M_SECA);
 			return NULL;
 		}
+		bzero(p->bitmap, wsize);
 	}
 	p->wsize = wsize;
 	return p;
@@ -246,7 +251,9 @@ keydb_newsecreg()
 {
 	struct secreg *p;
 
-	p = (struct secreg *)malloc(sizeof(*p), M_SECA, M_NOWAIT|M_ZERO);
+	p = (struct secreg *)malloc(sizeof(*p), M_SECA, M_NOWAIT);
+	if (p)
+		bzero(p, sizeof(*p));
 	return p;
 }
 

@@ -36,7 +36,7 @@
 #include <parse_bytes.h>
 #include <err.h>
 __RCSID("$Heimdal: verify_krb5_conf.c,v 1.17.2.2 2004/02/13 16:19:44 lha Exp $"
-        "$NetBSD: verify_krb5_conf.c,v 1.1.1.7 2004/04/02 14:47:53 lha Exp $");
+        "$NetBSD: verify_krb5_conf.c,v 1.1.1.6.2.1 2004/04/21 04:55:42 jmc Exp $");
 
 /* verify krb5.conf */
 

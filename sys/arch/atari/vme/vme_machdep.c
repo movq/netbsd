@@ -1,4 +1,4 @@
-/*	$NetBSD: vme_machdep.c,v 1.13 2004/12/13 02:14:13 chs Exp $	*/
+/*	$NetBSD: vme_machdep.c,v 1.12 2003/07/15 01:19:56 lukem Exp $	*/
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vme_machdep.c,v 1.13 2004/12/13 02:14:13 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vme_machdep.c,v 1.12 2003/07/15 01:19:56 lukem Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -60,8 +60,6 @@ static void	vmebusattach __P((struct device *, struct device *, void *));
 CFATTACH_DECL(avmebus, sizeof(struct device),
     vmebusmatch, vmebusattach, NULL, NULL);
 
-int vmebus_attached;
-
 int
 vmebusmatch(pdp, cfp, auxp)
 struct device	*pdp;
@@ -70,7 +68,7 @@ void		*auxp;
 {
 	if(atari_realconfig == 0)
 		return (0);
-	if (strcmp((char *)auxp, "avmebus") || vmebus_attached)
+	if (strcmp((char *)auxp, "avmebus") || cfp->cf_unit != 0)
 		return(0);
 	return(machineid & ATARI_FALCON ? 0 : 1);
 }
@@ -81,8 +79,6 @@ struct device	*pdp, *dp;
 void		*auxp;
 {
 	struct vmebus_attach_args	vba;
-
-	vmebus_attached = 1;
 
 	vba.vba_busname = "vme";
 	vba.vba_iot     = beb_alloc_bus_space_tag(NULL);

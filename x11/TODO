@@ -1,22 +1,14 @@
-$NetBSD: TODO,v 1.13 2004/05/16 10:25:14 lukem Exp $
+$NetBSD: TODO,v 1.9.2.1 2004/04/29 05:45:58 jmc Exp $
 
 clean up XTODO issues
 
-consider symlinking various CONFIGFILES dirs in lib/X11 to /etc/X11
+consider symlinking various dirs in lib/X11 -> /etc/X11, and only
+install the files on "distribution" ?
+
+lib/expat: check into -DX_BYTE_ORDER=$(X_BYTE_ORDER)
 
 check all Imakefile & config diffs between  -rv4-3-0 -rv4-4-0  , including:
+	all instances of XFREE86_FT2
 	programs/Xserver
-	lib/font/*/module
-	lib/GL
-	lib/GLU
-	lib/GLw
 
-add getconfig (needs perl)
-
-convert lbxutil to a build-only library
-
-Native lib/Xxf86dga on i386 defines HAS_APERTURE_DRV to force the
-use of /dev/xf86 (from the aperture driver) instead of /dev/mem.
-The server code in programs/Xserver/hw/xfree86/os-support/bsd
-correctly tries both /dev/xf86 and /dev/mem.
-(/dev/mem requires options INSECURE)
+add getconfig

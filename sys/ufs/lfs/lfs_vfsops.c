@@ -1,4 +1,4 @@
-/*	$NetBSD: lfs_vfsops.c,v 1.158 2004/08/16 12:49:55 mycroft Exp $	*/
+/*	$NetBSD: lfs_vfsops.c,v 1.146.2.1 2004/05/29 09:05:04 tron Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2000, 2001, 2002, 2003 The NetBSD Foundation, Inc.
@@ -67,7 +67,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: lfs_vfsops.c,v 1.158 2004/08/16 12:49:55 mycroft Exp $");
+__KERNEL_RCSID(0, "$NetBSD: lfs_vfsops.c,v 1.146.2.1 2004/05/29 09:05:04 tron Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_quota.h"
@@ -142,7 +142,7 @@ struct vfsops lfs_vfsops = {
 	lfs_unmount,
 	ufs_root,
 	ufs_quotactl,
-	lfs_statvfs,
+	lfs_statfs,
 	lfs_sync,
 	lfs_vget,
 	lfs_fhtovp,
@@ -153,7 +153,6 @@ struct vfsops lfs_vfsops = {
 	NULL,
 	lfs_mountroot,
 	ufs_check_export,
-	(int (*)(struct mount *, struct vnode *, struct timespec *)) eopnotsupp,
 	lfs_vnodeopv_descs,
 };
 
@@ -163,15 +162,9 @@ struct genfs_ops lfs_genfsops = {
 	lfs_gop_write,
 };
 
-/*
- * XXX Same structure as FFS inodes?  Should we share a common pool?
- */
-POOL_INIT(lfs_inode_pool, sizeof(struct inode), 0, 0, 0, "lfsinopl",
-    &pool_allocator_nointr);
-POOL_INIT(lfs_dinode_pool, sizeof(struct ufs1_dinode), 0, 0, 0, "lfsdinopl",
-    &pool_allocator_nointr);
-POOL_INIT(lfs_inoext_pool, sizeof(struct lfs_inode_ext), 8, 0, 0, "lfsinoextpl",
-    &pool_allocator_nointr);
+struct pool lfs_inode_pool;
+struct pool lfs_dinode_pool;
+struct pool lfs_inoext_pool;
 
 /*
  * The writer daemon.  UVM keeps track of how many dirty pages we are holding
@@ -258,15 +251,18 @@ lfs_init()
 {
 #ifdef _LKM
 	malloc_type_attach(M_SEGMENT);
-	pool_init(&lfs_inode_pool, sizeof(struct inode), 0, 0, 0,
-	    "lfsinopl", &pool_allocator_nointr);
-	pool_init(&lfs_dinode_pool, sizeof(struct ufs1_dinode), 0, 0, 0,
-	    "lfsdinopl", &pool_allocator_nointr);
-	pool_init(&lfs_inoext_pool, sizeof(struct lfs_inode_ext), 8, 0, 0,
-	    "lfsinoextpl", &pool_allocator_nointr);
 #endif
 	ufs_init();
 
+	/*
+	 * XXX Same structure as FFS inodes?  Should we share a common pool?
+	 */
+	pool_init(&lfs_inode_pool, sizeof(struct inode), 0, 0, 0,
+		  "lfsinopl", &pool_allocator_nointr);
+	pool_init(&lfs_dinode_pool, sizeof(struct ufs1_dinode), 0, 0, 0,
+		  "lfsdinopl", &pool_allocator_nointr);
+	pool_init(&lfs_inoext_pool, sizeof(struct lfs_inode_ext), 8, 0, 0,
+		  "lfsinoextpl", &pool_allocator_nointr);
 #ifdef DEBUG
 	memset(lfs_log, 0, sizeof(lfs_log));
 #endif
@@ -283,10 +279,10 @@ void
 lfs_done()
 {
 	ufs_done();
-#ifdef _LKM
 	pool_destroy(&lfs_inode_pool);
 	pool_destroy(&lfs_dinode_pool);
 	pool_destroy(&lfs_inoext_pool);
+#ifdef _LKM
 	malloc_type_detach(M_SEGMENT);
 #endif
 }
@@ -328,9 +324,9 @@ lfs_mountroot()
 	simple_lock(&mountlist_slock);
 	CIRCLEQ_INSERT_TAIL(&mountlist, mp, mnt_list);
 	simple_unlock(&mountlist_slock);
-	(void)lfs_statvfs(mp, &mp->mnt_stat, p);
+	(void)lfs_statfs(mp, &mp->mnt_stat, p);
 	vfs_unbusy(mp);
-	setrootfstime((time_t)(VFSTOUFS(mp)->um_lfs->lfs_tstamp));
+	inittodr(VFSTOUFS(mp)->um_lfs->lfs_tstamp);
 	return (0);
 }
 
@@ -436,7 +432,7 @@ lfs_mount(struct mount *mp, const char *path, void *data, struct nameidata *ndp,
 	}
 	ump = VFSTOUFS(mp);
 	fs = ump->um_lfs;					/* LFS */
-	return set_statvfs_info(path, UIO_USERSPACE, args.fspec,
+	return set_statfs_info(path, UIO_USERSPACE, args.fspec,
 	    UIO_USERSPACE, mp, p);
 }
 
@@ -595,7 +591,7 @@ update_inoblk(struct lfs *fs, daddr_t offset, struct ucred *cred,
 			ip->i_nlink = ip->i_ffs_effnlink = ip->i_ffs1_nlink;
 			ip->i_size = ip->i_ffs1_size;
 
-			LFS_SET_UINO(ip, IN_CHANGE | IN_UPDATE);
+			LFS_SET_UINO(ip, IN_CHANGE | IN_MODIFIED | IN_UPDATE);
 
 			/* Re-initialize to get type right */
 			ufs_vinit(vp->v_mount, lfs_specop_p, lfs_fifoop_p,
@@ -1053,11 +1049,10 @@ lfs_mountfs(struct vnode *devvp, struct mount *mp, struct proc *p)
 	/* Initialize the mount structure. */
 	dev = devvp->v_rdev;
 	mp->mnt_data = ump;
-	mp->mnt_stat.f_fsidx.__fsid_val[0] = (long)dev;
-	mp->mnt_stat.f_fsidx.__fsid_val[1] = makefstype(MOUNT_LFS);
-	mp->mnt_stat.f_fsid = mp->mnt_stat.f_fsidx.__fsid_val[0];
-	mp->mnt_stat.f_namemax = MAXNAMLEN;
+	mp->mnt_stat.f_fsid.val[0] = (long)dev;
+	mp->mnt_stat.f_fsid.val[1] = makefstype(MOUNT_LFS);
 	mp->mnt_stat.f_iosize = fs->lfs_bsize;
+	mp->mnt_maxsymlinklen = fs->lfs_maxsymlinklen;
 	mp->mnt_flag |= MNT_LOCAL;
 	mp->mnt_fs_bshift = fs->lfs_bshift;
 	ump->um_flags = 0;
@@ -1070,11 +1065,6 @@ lfs_mountfs(struct vnode *devvp, struct mount *mp, struct proc *p)
 	ump->um_lognindir = ffs(fs->lfs_nindir) - 1;
 	for (i = 0; i < MAXQUOTAS; i++)
 		ump->um_quotas[i] = NULLVP;
-	ump->um_maxsymlinklen = fs->lfs_maxsymlinklen;
-	ump->um_dirblksiz = DIRBLKSIZ;
-	ump->um_maxfilesize = fs->lfs_maxfilesize;
-	if (ump->um_maxsymlinklen > 0)
-		mp->mnt_iflag |= IMNT_DTYPE;
 	devvp->v_specmountpoint = mp;
 
 	/* Set up reserved memory for pageout */
@@ -1422,7 +1412,7 @@ lfs_unmount(struct mount *mp, int mntflags, struct proc *p)
  * Get file system statistics.
  */
 int
-lfs_statvfs(struct mount *mp, struct statvfs *sbp, struct proc *p)
+lfs_statfs(struct mount *mp, struct statfs *sbp, struct proc *p)
 {
 	struct lfs *fs;
 	struct ufsmount *ump;
@@ -1430,24 +1420,19 @@ lfs_statvfs(struct mount *mp, struct statvfs *sbp, struct proc *p)
 	ump = VFSTOUFS(mp);
 	fs = ump->um_lfs;
 	if (fs->lfs_magic != LFS_MAGIC)
-		panic("lfs_statvfs: magic");
+		panic("lfs_statfs: magic");
 
-	sbp->f_bsize = fs->lfs_bsize;
-	sbp->f_frsize = fs->lfs_fsize;
+	sbp->f_type = 0;
+	sbp->f_bsize = fs->lfs_fsize;
 	sbp->f_iosize = fs->lfs_bsize;
 	sbp->f_blocks = fsbtofrags(fs, LFS_EST_NONMETA(fs));
 	sbp->f_bfree = fsbtofrags(fs, LFS_EST_BFREE(fs));
-	sbp->f_bresvd = fsbtofrags(fs, LFS_EST_RSVD(fs));
-	if (sbp->f_bfree > sbp->f_bresvd)
-		sbp->f_bavail = sbp->f_bfree - sbp->f_bresvd;
-	else
-		sbp->f_bavail = 0;
+	sbp->f_bavail = fsbtofrags(fs, (long)LFS_EST_BFREE(fs) -
+				  (long)LFS_EST_RSVD(fs));
 	
 	sbp->f_files = fs->lfs_bfree / btofsb(fs, fs->lfs_ibsize) * INOPB(fs);
 	sbp->f_ffree = sbp->f_files - fs->lfs_nfiles;
-	sbp->f_favail = sbp->f_ffree;
-	sbp->f_fresvd = 0;
-	copy_statvfs_info(sbp, mp);
+	copy_statfs_info(sbp, mp);
 	return (0);
 }
 
@@ -1816,7 +1801,8 @@ lfs_gop_write(struct vnode *vp, struct vm_page **pgs, int npages, int flags)
 	UVMHIST_FUNC("lfs_gop_write"); UVMHIST_CALLED(ubchist);
 
 	/* The Ifile lives in the buffer cache */
-	KASSERT(vp != fs->lfs_ivnode);
+	if (vp == fs->lfs_ivnode)
+		return genfs_compat_gop_write(vp, pgs, npages, flags);
 
 	/*
 	 * Sometimes things slip past the filters in lfs_putpages,
@@ -2065,7 +2051,8 @@ lfs_vinit(struct mount *mp, struct vnode **vpp)
 	ufs_vinit(mp, lfs_specop_p, lfs_fifoop_p, &vp);
 
 	memset(ip->i_lfs_fragsize, 0, NDADDR * sizeof(*ip->i_lfs_fragsize));
-	if (vp->v_type != VLNK || ip->i_size >= ip->i_ump->um_maxsymlinklen) {
+	if (vp->v_type != VLNK ||
+	    VTOI(vp)->i_size >= vp->v_mount->mnt_maxsymlinklen) {
 		struct lfs *fs = ump->um_lfs;
 #ifdef DEBUG
 		for (i = (ip->i_size + fs->lfs_bsize - 1) >> fs->lfs_bshift;

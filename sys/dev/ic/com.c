@@ -1,4 +1,4 @@
-/*	$NetBSD: com.c,v 1.231 2004/08/09 16:57:14 mycroft Exp $	*/
+/*	$NetBSD: com.c,v 1.224.2.2 2004/07/05 21:57:45 he Exp $	*/
 
 /*-
  * Copyright (c) 1998, 1999, 2004 The NetBSD Foundation, Inc.
@@ -73,7 +73,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: com.c,v 1.231 2004/08/09 16:57:14 mycroft Exp $");
+__KERNEL_RCSID(0, "$NetBSD: com.c,v 1.224.2.2 2004/07/05 21:57:45 he Exp $");
 
 #include "opt_com.h"
 #include "opt_ddb.h"
@@ -85,11 +85,6 @@ __KERNEL_RCSID(0, "$NetBSD: com.c,v 1.231 2004/08/09 16:57:14 mycroft Exp $");
 #include "rnd.h"
 #if NRND > 0 && defined(RND_COM)
 #include <sys/rnd.h>
-#endif
-
-/* The COM16650 option was renamed to COM_16650. */
-#ifdef COM16650
-#error Obsolete COM16650 option; use COM_16650 instead.
 #endif
 
 /*
@@ -424,7 +419,7 @@ com_attach_subr(struct com_softc *sc)
 	bus_space_tag_t iot = sc->sc_iot;
 	bus_space_handle_t ioh = sc->sc_ioh;
 	struct tty *tp;
-#ifdef COM_16650
+#ifdef COM16650
 	u_int8_t lcr;
 #endif
 #ifdef COM_HAYESP
@@ -451,7 +446,7 @@ com_attach_subr(struct com_softc *sc)
 		comconsattached = 1;
 
 		/* Make sure the console is always "hardwired". */
-		delay(10000);			/* wait for output to finish */
+		delay(1000);			/* wait for output to finish */
 		SET(sc->sc_hwflags, COM_HW_CONSOLE);
 		SET(sc->sc_swflags, TIOCFLAG_SOFTCAR);
 	}
@@ -488,7 +483,7 @@ com_attach_subr(struct com_softc *sc)
 		    == FIFO_TRIGGER_14) {
 			SET(sc->sc_hwflags, COM_HW_FIFO);
 
-#ifdef COM_16650
+#ifdef COM16650
 			/*
 			 * IIR changes into the EFR if LCR is set to LCR_EERS
 			 * on 16650s. We also know IIR != 0 at this point.
@@ -517,7 +512,7 @@ com_attach_subr(struct com_softc *sc)
 #endif
 				sc->sc_fifolen = 16;
 
-#ifdef COM_16650
+#ifdef COM16650
 			bus_space_write_1(iot, ioh, com_lcr, lcr);
 			if (sc->sc_fifolen == 0)
 				fifo_msg = "st16650, broken fifo";
@@ -629,7 +624,6 @@ com_config(struct com_softc *sc)
 #endif
 		sc->sc_ier = 0;
 	bus_space_write_1(iot, ioh, com_ier, sc->sc_ier);
-	(void) bus_space_read_1(iot, ioh, com_iir);
 
 #ifdef COM_HAYESP
 	/* Look for a Hayes ESP board. */

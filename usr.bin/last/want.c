@@ -1,4 +1,4 @@
-/*	$NetBSD: want.c,v 1.4 2004/11/19 21:41:25 christos Exp $	*/
+/*	$NetBSD: want.c,v 1.2 2003/08/07 11:14:18 agc Exp $	*/
 
 /*
  * Copyright (c) 1987, 1993, 1994
@@ -32,31 +32,13 @@ static struct utmp *buf;
 
 static void onintr(int);
 static int want(struct utmp *, int);
-static const char *gethost(struct utmp *, int);
-
-static const char *
-gethost(struct utmp* ut, int numeric)
-{
-#if FIRSTVALID == 0
-	return numeric ? "" : ut->ut_host;
-#else
-	if (numeric) {
-		static char buf[512];
-		buf[0] = '\0';
-		(void)sockaddr_snprintf(buf, sizeof(buf), "%a",
-		    (struct sockaddr *)&ut->ut_ss);
-		return buf;
-	} else
-		return ut->ut_host;
-#endif
-}
 
 /*
  * wtmp --
  *	read through the wtmp file
  */
 void
-wtmp(const char *file, int namesz, int linesz, int hostsz, int numeric)
+wtmp(const char *file, int namesz, int linesz, int hostsz)
 {
 	struct utmp	*bp;		/* current structure */
 	TTY	*T;			/* tty list entry */
@@ -101,8 +83,7 @@ wtmp(const char *file, int namesz, int linesz, int hostsz, int numeric)
 					printf("%-*.*s  %-*.*s %-*.*s %s\n",
 					    namesz, namesz, bp->ut_name,
 					    linesz, linesz, bp->ut_line,
-					    hostsz, hostsz,
-					    gethost(bp, numeric), ct);
+					    hostsz, hostsz, bp->ut_host, ct);
 					if (maxrec != -1 && !--maxrec)
 						return;
 				}
@@ -122,7 +103,7 @@ wtmp(const char *file, int namesz, int linesz, int hostsz, int numeric)
 				    linesz, linesz,
 				    bp->ut_line,
 				    hostsz, hostsz,
-				    gethost(bp, numeric),
+				    bp->ut_host,
 				    ct);
 					if (maxrec && !--maxrec)
 						return;
@@ -146,8 +127,7 @@ wtmp(const char *file, int namesz, int linesz, int hostsz, int numeric)
 				printf("%-*.*s  %-*.*s %-*.*s %s ",
 				    namesz, namesz, bp->ut_name,
 				    linesz, linesz, bp->ut_line,
-				    hostsz, hostsz,
-				    gethost(bp, numeric),
+				    hostsz, hostsz, bp->ut_host,
 				    ct);
 				if (!T->logout)
 					puts("  still logged in");

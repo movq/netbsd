@@ -1,7 +1,7 @@
-/*	$NetBSD: ftp.c,v 1.126 2004/07/20 10:40:22 lukem Exp $	*/
+/*	$NetBSD: ftp.c,v 1.123 2003/12/10 12:34:28 lukem Exp $	*/
 
 /*-
- * Copyright (c) 1996-2004 The NetBSD Foundation, Inc.
+ * Copyright (c) 1996-2002 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -99,7 +99,7 @@
 #if 0
 static char sccsid[] = "@(#)ftp.c	8.6 (Berkeley) 10/27/94";
 #else
-__RCSID("$NetBSD: ftp.c,v 1.126 2004/07/20 10:40:22 lukem Exp $");
+__RCSID("$NetBSD: ftp.c,v 1.123 2003/12/10 12:34:28 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -131,9 +131,8 @@ __RCSID("$NetBSD: ftp.c,v 1.126 2004/07/20 10:40:22 lukem Exp $");
 
 #include "ftp_var.h"
 
-volatile sig_atomic_t	abrtflag;
-volatile sig_atomic_t	timeoutflag;
-
+volatile int	abrtflag = 0;
+volatile int	timeoutflag = 0;
 sigjmp_buf	ptabort;
 int	ptabflg;
 int	ptflag = 0;
@@ -231,7 +230,10 @@ hookup(char *host, char *port)
 			cause = "socket";
 			continue;
 		}
-		error = xconnect(s, res->ai_addr, res->ai_addrlen);
+		while ((error = xconnect(s, res->ai_addr, res->ai_addrlen)) < 0
+				&& errno == EINTR) {
+			;
+		}
 		if (error) {
 			/* this "if" clause is to prevent print warning twice */
 			if (res->ai_next) {
@@ -319,7 +321,6 @@ cmdabort(int notused)
 {
 	int oerrno = errno;
 
-	sigint_raised = 1;
 	alarmtimer(0);
 	if (fromatty)
 		write(fileno(ttyout), "\n", 1);
@@ -573,13 +574,13 @@ empty(FILE *cin, FILE *din, int sec)
 	struct pollfd pfd[2];
 
 	if (cin) {
-		pfd[nfd].fd = fileno(cin);
-		pfd[nfd++].events = POLLIN;
+	    pfd[nfd].fd = fileno(cin);
+	    pfd[nfd++].events = POLLIN;
 	}
 
 	if (din) {
-		pfd[nfd].fd = fileno(din);
-		pfd[nfd++].events = POLLIN;
+	    pfd[nfd].fd = fileno(din);
+	    pfd[nfd++].events = POLLIN;
 	}
 
 	if ((nr = poll(pfd, nfd, sec * 1000)) <= 0)
@@ -603,7 +604,6 @@ abortxfer(int notused)
 	char msgbuf[100];
 	int len;
 
-	sigint_raised = 1;
 	alarmtimer(0);
 	mflag = 0;
 	abrtflag = 0;
@@ -1546,6 +1546,8 @@ initconn(void)
 
 		while (xconnect(data, (struct sockaddr *)&data_addr.si_su,
 			    data_addr.su_len) < 0) {
+			if (errno == EINTR)
+				continue;
 			if (activefallback) {
 				(void)close(data);
 				data = -1;
@@ -1745,7 +1747,6 @@ psabort(int notused)
 {
 	int oerrno = errno;
 
-	sigint_raised = 1;
 	alarmtimer(0);
 	abrtflag++;
 	errno = oerrno;
@@ -1842,7 +1843,6 @@ void
 abortpt(int notused)
 {
 
-	sigint_raised = 1;
 	alarmtimer(0);
 	if (fromatty)
 		write(fileno(ttyout), "\n", 1);
@@ -2061,7 +2061,6 @@ abort_squared(int dummy)
 	char msgbuf[100];
 	int len;
 
-	sigint_raised = 1;
 	alarmtimer(0);
 	len = strlcpy(msgbuf, "\nremote abort aborted; closing connection.\n",
 	    sizeof(msgbuf));

@@ -1,5 +1,5 @@
 /* dllwrap.c -- wrapper for DLLTOOL and GCC to generate PE style DLLs
-   Copyright 1998, 1999, 2000, 2001, 2002, 2003 Free Software Foundation, Inc.
+   Copyright 1998, 1999, 2000, 2001, 2002 Free Software Foundation, Inc.
    Contributed by Mumit Khan (khan@xraylith.wisc.edu).
 
    This file is part of GNU Binutils.
@@ -114,17 +114,17 @@ static int delete_base_file = 1;
 static int delete_exp_file = 1;
 static int delete_def_file = 1;
 
-static int run (const char *, char *);
-static char *mybasename (const char *);
-static int strhash (const char *);
-static void usage (FILE *, int);
-static void display (const char *, va_list);
-static void inform (const char *, ...);
-static void warn (const char *, ...);
-static char *look_for_prog (const char *, const char *, int);
-static char *deduce_name (const char *);
-static void delete_temp_files (void);
-static void cleanup_and_exit (int);
+static int run PARAMS ((const char *, char *));
+static char *mybasename PARAMS ((const char *));
+static int strhash PARAMS ((const char *));
+static void usage PARAMS ((FILE *, int));
+static void display PARAMS ((const char *, va_list));
+static void inform PARAMS ((const char *, ...));
+static void warn PARAMS ((const char *, ...));
+static char *look_for_prog PARAMS ((const char *, const char *, int));
+static char *deduce_name PARAMS ((const char *));
+static void delete_temp_files PARAMS ((void));
+static void cleanup_and_exit PARAMS ((int));
 
 /**********************************************************************/
 
@@ -137,7 +137,9 @@ static void cleanup_and_exit (int);
    (hopefully) soon be retired in favor of `ld --shared.  */
 
 static void
-display (const char * message, va_list args)
+display (message, args)
+     const char * message;
+     va_list      args;
 {
   if (program_name != NULL)
     fprintf (stderr, "%s: ", program_name);
@@ -178,7 +180,10 @@ warn VPARAMS ((const char *format, ...))
    appropriate.  */
 
 static char *
-look_for_prog (const char *prog_name, const char *prefix, int end_prefix)
+look_for_prog (prog_name, prefix, end_prefix)
+     const char *prog_name;
+     const char *prefix;
+     int end_prefix;
 {
   struct stat s;
   char *cmd;
@@ -244,7 +249,8 @@ look_for_prog (const char *prog_name, const char *prefix, int end_prefix)
    Returns a dynamically allocated string.  */
 
 static char *
-deduce_name (const char *prog_name)
+deduce_name (prog_name)
+     const char *prog_name;
 {
   char *cmd;
   char *dash, *slash, *cp;
@@ -292,7 +298,7 @@ deduce_name (const char *prog_name)
 }
 
 static void
-delete_temp_files (void)
+delete_temp_files ()
 {
   if (delete_base_file && base_file_name)
     {
@@ -343,14 +349,17 @@ delete_temp_files (void)
 }
 
 static void
-cleanup_and_exit (int status)
+cleanup_and_exit (status)
+     int status;
 {
   delete_temp_files ();
   exit (status);
 }
 
 static int
-run (const char *what, char *args)
+run (what, args)
+     const char *what;
+     char *args;
 {
   char *s;
   int pid, wait_status, retcode;
@@ -436,7 +445,8 @@ run (const char *what, char *args)
 }
 
 static char *
-mybasename (const char *name)
+mybasename (name)
+     const char *name;
 {
   const char *base = name;
 
@@ -452,7 +462,8 @@ mybasename (const char *name)
 }
 
 static int
-strhash (const char *str)
+strhash (str)
+     const char *str;
 {
   const unsigned char *s;
   unsigned long hash;
@@ -477,7 +488,9 @@ strhash (const char *str)
 /**********************************************************************/
 
 static void
-usage (FILE *file, int status)
+usage (file, status)
+     FILE *file;
+     int status;
 {
   fprintf (file, _("Usage %s <option(s)> <object-file(s)>\n"), program_name);
   fprintf (file, _("  Generic options:\n"));
@@ -539,7 +552,7 @@ usage (FILE *file, int status)
 /* DLLTOOL options.  */
 #define OPTION_NODELETE		(OPTION_MNO_CYGWIN + 1)
 #define OPTION_DLLNAME		(OPTION_NODELETE + 1)
-#define OPTION_NO_IDATA4	(OPTION_DLLNAME + 1)
+#define OPTION_NO_IDATA4 	(OPTION_DLLNAME + 1)
 #define OPTION_NO_IDATA5	(OPTION_NO_IDATA4 + 1)
 #define OPTION_OUTPUT_EXP	(OPTION_NO_IDATA5 + 1)
 #define OPTION_OUTPUT_DEF	(OPTION_OUTPUT_EXP + 1)
@@ -598,10 +611,12 @@ static const struct option long_options[] =
   {0, 0, 0, 0}
 };
 
-int main (int, char **);
+int main PARAMS ((int, char **));
 
 int
-main (int argc, char **argv)
+main (argc, argv)
+     int argc;
+     char **argv;
 {
   int c;
   int i;

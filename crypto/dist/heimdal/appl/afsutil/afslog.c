@@ -34,7 +34,7 @@
 #ifdef HAVE_CONFIG_H
 #include <config.h>
 __RCSID("$Heimdal: afslog.c,v 1.21.2.2 2003/08/25 11:43:51 lha Exp $"
-        "$NetBSD: afslog.c,v 1.1.1.7 2004/04/02 14:47:23 lha Exp $");
+        "$NetBSD: afslog.c,v 1.1.1.6.2.1 2004/04/21 04:55:35 jmc Exp $");
 #endif
 #include <ctype.h>
 #ifdef KRB5

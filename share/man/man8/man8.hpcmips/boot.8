@@ -1,4 +1,4 @@
-.\"	$NetBSD: boot.8,v 1.4 2004/04/03 03:26:29 uwe Exp $
+.\"	$NetBSD: boot.8,v 1.2 2003/05/07 13:28:12 wiz Exp $
 .Dd May 5, 2003
 .Dt BOOT 8 hpcmips
 .Os
@@ -29,7 +29,7 @@ bootloaders are provided as application programs on Windows CE instead.
 You can choose
 .Xr pbsdboot 8
 or
-.Xr hpcboot 8 .
+.Ic hpcboot .
 Though the bootloaders are application programs,
 they blow away the entire Windows CE OS and its settings
 when the kernel boots successfully.
@@ -68,9 +68,8 @@ new bootloader executable file for Windows CE
 .\"
 .Sh SEE ALSO
 .\"
-.Xr kloader 4 ,
-.Xr hpcboot 8 ,
-.Xr pbsdboot 8
+.Xr pbsdboot 8 ,
+.Ic hpcboot
 .\"
 .Sh BUGS
 .\"

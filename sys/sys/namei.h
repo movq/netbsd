@@ -1,4 +1,4 @@
-/*	$NetBSD: namei.h,v 1.37 2004/06/27 08:50:44 yamt Exp $	*/
+/*	$NetBSD: namei.h,v 1.34.2.1 2004/07/10 14:23:00 tron Exp $	*/
 
 /*
  * Copyright (c) 1985, 1989, 1991, 1993
@@ -188,13 +188,12 @@ int	namei __P((struct nameidata *));
 uint32_t namei_hash __P((const char *, const char **));
 int	lookup __P((struct nameidata *));
 int	relookup __P((struct vnode *, struct vnode **, struct componentname *));
+void cache_purge __P((struct vnode *));
 void cache_purge1 __P((struct vnode *, const struct componentname *, int));
 #define	PURGE_PARENTS	1
 #define	PURGE_CHILDREN	2
 #define	cache_purge(vp)	cache_purge1((vp), NULL, PURGE_PARENTS|PURGE_CHILDREN)
 int cache_lookup __P((struct vnode *, struct vnode **, struct componentname *));
-int cache_lookup_raw __P((struct vnode *, struct vnode **,
-    struct componentname *));
 int cache_revlookup __P((struct vnode *, struct vnode **, char **, char *));
 void cache_enter __P((struct vnode *, struct vnode *, struct componentname *));
 void nchinit __P((void));

@@ -1,4 +1,4 @@
-/*	$NetBSD: ahb.c,v 1.41 2004/12/07 14:50:56 thorpej Exp $	*/
+/*	$NetBSD: ahb.c,v 1.39 2003/11/02 09:57:58 wiz Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.
@@ -53,11 +53,16 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ahb.c,v 1.41 2004/12/07 14:50:56 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ahb.c,v 1.39 2003/11/02 09:57:58 wiz Exp $");
 
 #include "opt_ddb.h"
 
 #undef	AHBDEBUG
+#ifdef DDB
+#define	integrate
+#else
+#define	integrate	static inline
+#endif
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -125,27 +130,27 @@ struct ahb_probe_data {
 	int sc_scsi_dev;
 };
 
-static void	ahb_send_mbox(struct ahb_softc *, int, struct ahb_ecb *);
-static void	ahb_send_immed(struct ahb_softc *, u_int32_t, struct ahb_ecb *);
-static int	ahbintr(void *);
-static void	ahb_free_ecb(struct ahb_softc *, struct ahb_ecb *);
-static struct	ahb_ecb *ahb_get_ecb(struct ahb_softc *);
-static struct	ahb_ecb *ahb_ecb_phys_kv(struct ahb_softc *, physaddr);
-static void	ahb_done(struct ahb_softc *, struct ahb_ecb *);
-static int	ahb_find(bus_space_tag_t, bus_space_handle_t,
-		    struct ahb_probe_data *);
-static int	ahb_init(struct ahb_softc *);
-static void	ahbminphys(struct buf *);
-static void	ahb_scsipi_request(struct scsipi_channel *,
-		    scsipi_adapter_req_t, void *);
-static int	ahb_poll(struct ahb_softc *, struct scsipi_xfer *, int);
-static void	ahb_timeout(void *);
-static int	ahb_create_ecbs(struct ahb_softc *, struct ahb_ecb *, int);
+void	ahb_send_mbox __P((struct ahb_softc *, int, struct ahb_ecb *));
+void	ahb_send_immed __P((struct ahb_softc *, u_int32_t, struct ahb_ecb *));
+int	ahbintr __P((void *));
+void	ahb_free_ecb __P((struct ahb_softc *, struct ahb_ecb *));
+struct	ahb_ecb *ahb_get_ecb __P((struct ahb_softc *));
+struct	ahb_ecb *ahb_ecb_phys_kv __P((struct ahb_softc *, physaddr));
+void	ahb_done __P((struct ahb_softc *, struct ahb_ecb *));
+int	ahb_find __P((bus_space_tag_t, bus_space_handle_t, struct ahb_probe_data *));
+int	ahb_init __P((struct ahb_softc *));
+void	ahbminphys __P((struct buf *));
+void	ahb_scsipi_request __P((struct scsipi_channel *,
+	    scsipi_adapter_req_t, void *));
+int	ahb_poll __P((struct ahb_softc *, struct scsipi_xfer *, int));
+void	ahb_timeout __P((void *));
+int	ahb_create_ecbs __P((struct ahb_softc *, struct ahb_ecb *, int));
 
-static int	ahb_init_ecb(struct ahb_softc *, struct ahb_ecb *);
+integrate void ahb_reset_ecb __P((struct ahb_softc *, struct ahb_ecb *));
+integrate int ahb_init_ecb __P((struct ahb_softc *, struct ahb_ecb *));
 
-static int	ahbmatch(struct device *, struct cfdata *, void *);
-static void	ahbattach(struct device *, struct device *, void *);
+int	ahbmatch __P((struct device *, struct cfdata *, void *));
+void	ahbattach __P((struct device *, struct device *, void *));
 
 CFATTACH_DECL(ahb, sizeof(struct ahb_softc),
     ahbmatch, ahbattach, NULL, NULL);
@@ -157,8 +162,11 @@ CFATTACH_DECL(ahb, sizeof(struct ahb_softc),
  * If we find one, note it's address (slot) and call
  * the actual probe routine to check it out.
  */
-static int
-ahbmatch(struct device *parent, struct cfdata *match, void *aux)
+int
+ahbmatch(parent, match, aux)
+	struct device *parent;
+	struct cfdata *match;
+	void *aux;
 {
 	struct eisa_attach_args *ea = aux;
 	bus_space_tag_t iot = ea->ea_iot;
@@ -187,8 +195,10 @@ ahbmatch(struct device *parent, struct cfdata *match, void *aux)
 /*
  * Attach all the sub-devices we can find
  */
-static void
-ahbattach(struct device *parent, struct device *self, void *aux)
+void
+ahbattach(parent, self, aux)
+	struct device *parent, *self;
+	void *aux;
 {
 	struct eisa_attach_args *ea = aux;
 	struct ahb_softc *sc = (void *)self;
@@ -282,8 +292,11 @@ ahbattach(struct device *parent, struct device *self, void *aux)
 /*
  * Function to send a command out through a mailbox
  */
-static void
-ahb_send_mbox(struct ahb_softc *sc, int opcode, struct ahb_ecb *ecb)
+void
+ahb_send_mbox(sc, opcode, ecb)
+	struct ahb_softc *sc;
+	int opcode;
+	struct ahb_ecb *ecb;
 {
 	bus_space_tag_t iot = sc->sc_iot;
 	bus_space_handle_t ioh = sc->sc_ioh;
@@ -317,8 +330,11 @@ ahb_send_mbox(struct ahb_softc *sc, int opcode, struct ahb_ecb *ecb)
 /*
  * Function to  send an immediate type command to the adapter
  */
-static void
-ahb_send_immed(struct ahb_softc *sc, u_int32_t cmd, struct ahb_ecb *ecb)
+void
+ahb_send_immed(sc, cmd, ecb)
+	struct ahb_softc *sc;
+	u_int32_t cmd;
+	struct ahb_ecb *ecb;
 {
 	bus_space_tag_t iot = sc->sc_iot;
 	bus_space_handle_t ioh = sc->sc_ioh;
@@ -348,8 +364,9 @@ ahb_send_immed(struct ahb_softc *sc, u_int32_t cmd, struct ahb_ecb *ecb)
 /*
  * Catch an interrupt from the adaptor
  */
-static int
-ahbintr(void *arg)
+int
+ahbintr(arg)
+	void *arg;
 {
 	struct ahb_softc *sc = arg;
 	bus_space_tag_t iot = sc->sc_iot;
@@ -419,8 +436,10 @@ ahbintr(void *arg)
 	}
 }
 
-static __inline void
-ahb_reset_ecb(struct ahb_softc *sc, struct ahb_ecb *ecb)
+integrate void
+ahb_reset_ecb(sc, ecb)
+	struct ahb_softc *sc;
+	struct ahb_ecb *ecb;
 {
 
 	ecb->flags = 0;
@@ -430,8 +449,10 @@ ahb_reset_ecb(struct ahb_softc *sc, struct ahb_ecb *ecb)
  * A ecb (and hence a mbx-out is put onto the
  * free list.
  */
-static void
-ahb_free_ecb(struct ahb_softc *sc, struct ahb_ecb *ecb)
+void
+ahb_free_ecb(sc, ecb)
+	struct ahb_softc *sc;
+	struct ahb_ecb *ecb;
 {
 	int s;
 
@@ -444,8 +465,10 @@ ahb_free_ecb(struct ahb_softc *sc, struct ahb_ecb *ecb)
 /*
  * Create a set of ecbs and add them to the free list.
  */
-static int
-ahb_init_ecb(struct ahb_softc *sc, struct ahb_ecb *ecb)
+integrate int
+ahb_init_ecb(sc, ecb)
+	struct ahb_softc *sc;
+	struct ahb_ecb *ecb;
 {
 	bus_dma_tag_t dmat = sc->sc_dmat;
 	int hashnum, error;
@@ -474,8 +497,11 @@ ahb_init_ecb(struct ahb_softc *sc, struct ahb_ecb *ecb)
 	return (0);
 }
 
-static int
-ahb_create_ecbs(struct ahb_softc *sc, struct ahb_ecb *ecbstore, int count)
+int
+ahb_create_ecbs(sc, ecbstore, count)
+	struct ahb_softc *sc;
+	struct ahb_ecb *ecbstore;
+	int count;
 {
 	struct ahb_ecb *ecb;
 	int i, error;
@@ -500,8 +526,9 @@ ahb_create_ecbs(struct ahb_softc *sc, struct ahb_ecb *ecbstore, int count)
  * If there are none, see if we can allocate a new one. If so, put it in the
  * hash table too otherwise either return an error or sleep.
  */
-static struct ahb_ecb *
-ahb_get_ecb(struct ahb_softc *sc)
+struct ahb_ecb *
+ahb_get_ecb(sc)
+	struct ahb_softc *sc;
 {
 	struct ahb_ecb *ecb;
 	int s;
@@ -519,8 +546,10 @@ ahb_get_ecb(struct ahb_softc *sc)
 /*
  * given a physical address, find the ecb that it corresponds to.
  */
-static struct ahb_ecb *
-ahb_ecb_phys_kv(struct ahb_softc *sc, physaddr ecb_phys)
+struct ahb_ecb *
+ahb_ecb_phys_kv(sc, ecb_phys)
+	struct ahb_softc *sc;
+	physaddr ecb_phys;
 {
 	int hashnum = ECB_HASH(ecb_phys);
 	struct ahb_ecb *ecb = sc->sc_ecbhash[hashnum];
@@ -537,8 +566,10 @@ ahb_ecb_phys_kv(struct ahb_softc *sc, physaddr ecb_phys)
  * We have a ecb which has been processed by the adaptor, now we look to see
  * how the operation went.
  */
-static void
-ahb_done(struct ahb_softc *sc, struct ahb_ecb *ecb)
+void
+ahb_done(sc, ecb)
+	struct ahb_softc *sc;
+	struct ahb_ecb *ecb;
 {
 	bus_dma_tag_t dmat = sc->sc_dmat;
 	struct scsipi_sense_data *s1, *s2;
@@ -613,8 +644,11 @@ done:
 /*
  * Start the board, ready for normal operation
  */
-static int
-ahb_find(bus_space_tag_t iot, bus_space_handle_t ioh, struct ahb_probe_data *sc)
+int
+ahb_find(iot, ioh, sc)
+	bus_space_tag_t iot;
+	bus_space_handle_t ioh;
+	struct ahb_probe_data *sc;
 {
 	u_char intdef;
 	int i, irq, busid;
@@ -701,8 +735,9 @@ ahb_find(bus_space_tag_t iot, bus_space_handle_t ioh, struct ahb_probe_data *sc)
 	return 0;
 }
 
-static int
-ahb_init(struct ahb_softc *sc)
+int
+ahb_init(sc)
+	struct ahb_softc *sc;
 {
 	bus_dma_segment_t seg;
 	int i, error, rseg;
@@ -762,8 +797,9 @@ ahb_init(struct ahb_softc *sc)
 	return (0);
 }
 
-static void
-ahbminphys(struct buf *bp)
+void
+ahbminphys(bp)
+	struct buf *bp;
 {
 
 	if (bp->b_bcount > AHB_MAXXFER)
@@ -775,9 +811,11 @@ ahbminphys(struct buf *bp)
  * start a scsi operation given the command and the data address.  Also needs
  * the unit, target and lu.
  */
-static void
-ahb_scsipi_request(struct scsipi_channel *chan, scsipi_adapter_req_t req,
-    void *arg)
+void
+ahb_scsipi_request(chan, req, arg)
+	struct scsipi_channel *chan;
+	scsipi_adapter_req_t req;
+	void *arg;
 {
 	struct scsipi_xfer *xs;
 	struct scsipi_periph *periph;
@@ -845,12 +883,6 @@ ahb_scsipi_request(struct scsipi_channel *chan, scsipi_adapter_req_t req,
 		/*
 		 * Put all the arguments for the xfer in the ecb
 		 */
-		if (xs->cmdlen > sizeof(ecb->scsi_cmd)) {
-			printf("%s: cmdlen %d too large for ECB\n",
-			    sc->sc_dev.dv_xname, xs->cmdlen);
-			xs->error = XS_DRIVER_STUFFUP;
-			goto out_bad;
-		}
 		ecb->opcode = ECB_SCSI_OP;
 		ecb->opt1 = ECB_SES /*| ECB_DSB*/ | ECB_ARS;
 		ecb->opt2 = periph->periph_lun | ECB_NRB;
@@ -962,8 +994,11 @@ ahb_scsipi_request(struct scsipi_channel *chan, scsipi_adapter_req_t req,
 /*
  * Function to poll for command completion when in poll mode
  */
-static int
-ahb_poll(struct ahb_softc *sc, struct scsipi_xfer *xs, int count)
+int
+ahb_poll(sc, xs, count)
+	struct ahb_softc *sc;
+	struct scsipi_xfer *xs;
+	int count;
 {				/* in msec  */
 	bus_space_tag_t iot = sc->sc_iot;
 	bus_space_handle_t ioh = sc->sc_ioh;
@@ -983,8 +1018,9 @@ ahb_poll(struct ahb_softc *sc, struct scsipi_xfer *xs, int count)
 	return 1;
 }
 
-static void
-ahb_timeout(void *arg)
+void
+ahb_timeout(arg)
+	void *arg;
 {
 	struct ahb_ecb *ecb = arg;
 	struct scsipi_xfer *xs = ecb->xs;

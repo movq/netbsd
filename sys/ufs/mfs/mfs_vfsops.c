@@ -1,4 +1,4 @@
-/*	$NetBSD: mfs_vfsops.c,v 1.62 2004/10/28 07:07:47 yamt Exp $	*/
+/*	$NetBSD: mfs_vfsops.c,v 1.55.2.1 2004/05/29 09:04:53 tron Exp $	*/
 
 /*
  * Copyright (c) 1989, 1990, 1993, 1994
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mfs_vfsops.c,v 1.62 2004/10/28 07:07:47 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mfs_vfsops.c,v 1.55.2.1 2004/05/29 09:04:53 tron Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_compat_netbsd.h"
@@ -45,7 +45,6 @@ __KERNEL_RCSID(0, "$NetBSD: mfs_vfsops.c,v 1.62 2004/10/28 07:07:47 yamt Exp $")
 #include <sys/kernel.h>
 #include <sys/proc.h>
 #include <sys/buf.h>
-#include <sys/bufq.h>
 #include <sys/mount.h>
 #include <sys/signalvar.h>
 #include <sys/vnode.h>
@@ -91,7 +90,7 @@ struct vfsops mfs_vfsops = {
 	ffs_unmount,
 	ufs_root,
 	ufs_quotactl,
-	mfs_statvfs,
+	mfs_statfs,
 	ffs_sync,
 	ffs_vget,
 	ffs_fhtovp,
@@ -102,7 +101,6 @@ struct vfsops mfs_vfsops = {
 	NULL,
 	NULL,
 	ufs_check_export,
-	(int (*)(struct mount *, struct vnode *, struct timespec *)) eopnotsupp,
 	mfs_vnodeopv_descs,
 };
 
@@ -216,8 +214,9 @@ mfs_mountroot()
 	ump = VFSTOUFS(mp);
 	fs = ump->um_fs;
 	(void) copystr(mp->mnt_stat.f_mntonname, fs->fs_fsmnt, MNAMELEN - 1, 0);
-	(void)ffs_statvfs(mp, &mp->mnt_stat, p);
+	(void)ffs_statfs(mp, &mp->mnt_stat, p);
 	vfs_unbusy(mp);
+	inittodr((time_t)0);
 	return (0);
 }
 
@@ -344,15 +343,11 @@ mfs_mount(mp, path, data, ndp, p)
 	}
 	ump = VFSTOUFS(mp);
 	fs = ump->um_fs;
-	error = set_statvfs_info(path, UIO_USERSPACE, args.fspec,
+	error = set_statfs_info(path, UIO_USERSPACE, args.fspec,
 	    UIO_USERSPACE, mp, p);
-	if (error)
-		return error;
-	(void)strncpy(fs->fs_fsmnt, mp->mnt_stat.f_mntonname,
-		sizeof(fs->fs_fsmnt));
-	fs->fs_fsmnt[sizeof(fs->fs_fsmnt) - 1] = '\0';
-	/* XXX: cleanup on error */
-	return 0;
+	(void)memcpy(fs->fs_fsmnt, mp->mnt_stat.f_mntonname,
+	    sizeof(mp->mnt_stat.f_mntonname));
+	return error;
 }
 
 int	mfs_pri = PWAIT | PCATCH;		/* XXX prob. temp */
@@ -422,18 +417,19 @@ mfs_start(mp, flags, p)
  * Get file system statistics.
  */
 int
-mfs_statvfs(mp, sbp, p)
+mfs_statfs(mp, sbp, p)
 	struct mount *mp;
-	struct statvfs *sbp;
+	struct statfs *sbp;
 	struct proc *p;
 {
 	int error;
 
-	error = ffs_statvfs(mp, sbp, p);
-	if (error)
-		return error;
-	(void)strncpy(sbp->f_fstypename, mp->mnt_op->vfs_name,
-	    sizeof(sbp->f_fstypename));
-	sbp->f_fstypename[sizeof(sbp->f_fstypename) - 1] = '\0';
-	return 0;
+	error = ffs_statfs(mp, sbp, p);
+#ifdef COMPAT_09
+	sbp->f_type = 3;
+#else
+	sbp->f_type = 0;
+#endif
+	strncpy(&sbp->f_fstypename[0], mp->mnt_op->vfs_name, MFSNAMELEN);
+	return (error);
 }

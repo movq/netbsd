@@ -1,4 +1,4 @@
-/*	$NetBSD: vm_machdep.c,v 1.57 2004/09/17 14:11:22 skrll Exp $ */
+/*	$NetBSD: vm_machdep.c,v 1.55 2004/01/19 10:39:49 martin Exp $ */
 
 /*
  * Copyright (c) 1996-2002 Eduardo Horvath.  All rights reserved.
@@ -50,7 +50,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vm_machdep.c,v 1.57 2004/09/17 14:11:22 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vm_machdep.c,v 1.55 2004/01/19 10:39:49 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -70,6 +70,31 @@ __KERNEL_RCSID(0, "$NetBSD: vm_machdep.c,v 1.57 2004/09/17 14:11:22 skrll Exp $"
 #include <machine/bus.h>
 
 #include <sparc64/sparc64/cache.h>
+
+/*
+ * Move pages from one kernel virtual address to another.
+ */
+void
+pagemove(from, to, size)
+	register caddr_t from, to;
+	size_t size;
+{
+	paddr_t pa;
+
+	if (size & PGOFSET || (long)from & PGOFSET || (long)to & PGOFSET)
+		panic("pagemove 1");
+
+	while (size > 0) {
+		if (pmap_extract(pmap_kernel(), (vaddr_t)from, &pa) == FALSE)
+			panic("pagemove 2");
+		pmap_kremove((vaddr_t)from, PAGE_SIZE);
+		pmap_kenter_pa((vaddr_t)to, pa, VM_PROT_READ | VM_PROT_WRITE);
+		from += PAGE_SIZE;
+		to += PAGE_SIZE;
+		size -= PAGE_SIZE;
+	}
+	pmap_update(pmap_kernel());
+}
 
 /*
  * Map a user I/O request into kernel virtual address space.
@@ -404,13 +429,13 @@ cpu_coredump(l, vp, cred, chdr)
 	cseg.c_size = chdr->c_cpusize;
 	error = vn_rdwr(UIO_WRITE, vp, (caddr_t)&cseg, chdr->c_seghdrsize,
 	    (off_t)chdr->c_hdrsize, UIO_SYSSPACE,
-	    IO_NODELOCKED|IO_UNIT, cred, NULL, NULL);
+	    IO_NODELOCKED|IO_UNIT, cred, NULL, l->l_proc);
 	if (error)
 		return error;
 
 	error = vn_rdwr(UIO_WRITE, vp, (caddr_t)&md_core, sizeof(md_core),
 	    (off_t)(chdr->c_hdrsize + chdr->c_seghdrsize), UIO_SYSSPACE,
-	    IO_NODELOCKED|IO_UNIT, cred, NULL, NULL);
+	    IO_NODELOCKED|IO_UNIT, cred, NULL, l->l_proc);
 	if (!error)
 		chdr->c_nseg++;
 

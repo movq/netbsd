@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.5 2004/05/16 10:25:14 lukem Exp $
+#	$NetBSD: Makefile,v 1.4 2003/11/08 13:57:29 lukem Exp $
 
 .include <bsd.own.mk>
 
@@ -8,16 +8,11 @@ SRCS=	gram.y lex.l deftwmrc.c add_window.c gc.c list.c twm.c \
 	cursor.c icons.c session.c
 
 YHEADER=1
-
-TWMCONFIGDIR=		${X11ETCDIR}/twm
-
-X11EXTRAMANDEFS+=	-DTWMDIR=${TWMCONFIGDIR}
-
 CPPFLAGS+=		-I. -I${X11SRCDIR.xc}/programs/${PROG} -DHAS_MKSTEMP
-CPPFLAGS.parse.c=	-DSYSTEM_INIT_FILE=\"${TWMCONFIGDIR}/system.twmrc\"
+CPPFLAGS.parse.c=	-DSYSTEM_INIT_FILE=\"${X11LIBDIR}/twm/system.twmrc\"
 
-CONFIGFILES=	system.twmrc
-FILESDIR=	${TWMCONFIGDIR}
+FILES=	system.twmrc
+FILESDIR=${X11LIBDIR}/twm
 
 DPSRCS+=	deftwmrc.c
 CLEANFILES+=	deftwmrc.c

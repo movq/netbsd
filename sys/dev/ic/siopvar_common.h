@@ -1,4 +1,4 @@
-/*	$NetBSD: siopvar_common.h,v 1.30 2004/07/01 21:12:44 drochner Exp $	*/
+/*	$NetBSD: siopvar_common.h,v 1.27 2004/03/10 22:02:53 bouyer Exp $	*/
 
 /*
  * Copyright (c) 2000 Manuel Bouyer.
@@ -42,7 +42,7 @@
 typedef struct scr_table {
 	u_int32_t count;
 	u_int32_t addr;
-} __packed scr_table_t;
+} scr_table_t __attribute__((__packed__));
 
 /* Number of scatter/gather entries */
 #define SIOP_NSG	(MAXPHYS/PAGE_SIZE + 1)	/* XXX PAGE_SIZE */
@@ -66,7 +66,7 @@ struct siop_common_xfer {
 	scr_table_t cmd;	/* 80 */
 	scr_table_t t_status;	/* 88 */
 	scr_table_t data[SIOP_NSG]; /* 96 */
-} __packed;
+} __attribute__((__packed__));
 
 /* status can hold the SCSI_* status values, and 2 additional values: */
 #define SCSI_SIOP_NOCHECK	0xfe	/* don't check the scsi status */
@@ -86,7 +86,6 @@ struct siop_common_cmd {
 	int status;
 	int flags;
 	int tag;	/* tag used for tagged command queuing */
-	int resid;	/* valid when CMDFL_RESID is set */
 };
 
 /* status defs */
@@ -97,7 +96,6 @@ struct siop_common_cmd {
 /* flags defs */
 #define CMDFL_TIMEOUT	0x0001 /* cmd timed out */
 #define CMDFL_TAG	0x0002 /* tagged cmd */
-#define CMDFL_RESID	0x0004 /* current offset in table is partial */
 
 /* per-target struct */
 struct siop_common_target {
@@ -192,8 +190,7 @@ void	siop_sdtr_msg __P((struct siop_common_cmd *, int, int, int));
 void	siop_wdtr_msg __P((struct siop_common_cmd *, int, int));
 void	siop_ppr_msg __P((struct siop_common_cmd *, int, int, int));
 void	siop_update_xfer_mode __P((struct siop_common_softc *, int));
-int	siop_iwr __P((struct siop_common_cmd *));
-/* actions to take at return of siop_wdtr_neg(), siop_sdtr_neg() and siop_iwr */
+/* actions to take at return of siop_wdtr_neg() and siop_sdtr_neg() */
 #define SIOP_NEG_NOP	0x0
 #define SIOP_NEG_MSGOUT	0x1
 #define SIOP_NEG_ACK	0x2
@@ -201,8 +198,6 @@ int	siop_iwr __P((struct siop_common_cmd *));
 void	siop_minphys __P((struct buf *));
 int	siop_ioctl __P((struct scsipi_channel *, u_long,
 		caddr_t, int, struct proc *));
-void 	siop_ma  __P((struct siop_common_cmd *));
-void 	siop_sdp __P((struct siop_common_cmd *, int));
-void 	siop_update_resid __P((struct siop_common_cmd *, int));
+void 	siop_sdp __P((struct siop_common_cmd *));
 void	siop_clearfifo __P((struct siop_common_softc *));
 void	siop_resetbus __P((struct siop_common_softc *));

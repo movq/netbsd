@@ -1,4 +1,4 @@
-/*	$NetBSD: npx.c,v 1.106 2004/07/06 01:30:08 mycroft Exp $	*/
+/*	$NetBSD: npx.c,v 1.103.2.2 2004/07/07 17:10:16 tron Exp $	*/
 
 /*-
  * Copyright (c) 1991 The Regents of the University of California.
@@ -67,7 +67,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: npx.c,v 1.106 2004/07/06 01:30:08 mycroft Exp $");
+__KERNEL_RCSID(0, "$NetBSD: npx.c,v 1.103.2.2 2004/07/07 17:10:16 tron Exp $");
 
 #if 0
 #define IPRINTF(x)	printf x
@@ -746,16 +746,18 @@ npxsave_lwp(struct lwp *l, int save)
 #ifdef DIAGNOSTIC
 		spincount = 0;
 #endif
-		while (l->l_addr->u_pcb.pcb_fpcpu != NULL) {
-			x86_pause();
+		while (l->l_addr->u_pcb.pcb_fpcpu != NULL)
 #ifdef DIAGNOSTIC
+		{
 			spincount++;
 			if (spincount > 10000000) {
 				panic("fp_save ipi didn't");
 			}
-#endif
-			__insn_barrier();
 		}
+#else
+		__insn_barrier();
+		;
+#endif
 	}
 #else
 	KASSERT(ci->ci_fpcurlwp == l);

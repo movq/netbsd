@@ -1,5 +1,3 @@
-/*	$NetBSD: lmtp.h,v 1.1.1.5 2004/05/31 00:24:36 heas Exp $	*/
-
 /*++
 /* NAME
 /*	lmtp 3h
@@ -63,10 +61,6 @@ typedef struct LMTP_STATE {
 #define LMTP_FEATURE_PIPELINING	(1<<2)
 #define LMTP_FEATURE_SIZE	(1<<3)
 #define LMTP_FEATURE_AUTH	(1<<5)
-#define LMTP_FEATURE_XFORWARD_NAME (1<<6)
-#define LMTP_FEATURE_XFORWARD_ADDR (1<<7)
-#define LMTP_FEATURE_XFORWARD_PROTO (1<<8)
-#define LMTP_FEATURE_XFORWARD_HELO (1<<9)
 
  /*
   * lmtp.c

@@ -1,4 +1,4 @@
-/*	$NetBSD: cmds.c,v 1.17 2004/10/30 08:44:26 dsl Exp $	*/
+/*	$NetBSD: cmds.c,v 1.16 2003/08/07 11:25:26 agc Exp $	*/
 /*
  * Copyright (c) 1983, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -36,7 +36,7 @@ __COPYRIGHT("@(#) Copyright (c) 1983, 1993\n\
 #if 0
 static char sccsid[] = "@(#)cmds.c	8.2 (Berkeley) 4/28/95";
 #else
-__RCSID("$NetBSD: cmds.c,v 1.17 2004/10/30 08:44:26 dsl Exp $");
+__RCSID("$NetBSD: cmds.c,v 1.16 2003/08/07 11:25:26 agc Exp $");
 #endif
 #endif /* not lint */
 
@@ -1036,14 +1036,14 @@ doarg(char *job)
 	/*
 	 * Check for job specified by number (example: 112 or 235ucbarpa).
 	 */
-	if (isdigit((unsigned char)*job)) {
+	if (isdigit(*job)) {
 		jobnum = 0;
 		do
 			jobnum = jobnum * 10 + (*job++ - '0');
-		while (isdigit((unsigned char)*job));
+		while (isdigit(*job));
 		for (qq = queue + nitems; --qq >= queue; ) {
 			n = 0;
-			for (cp = (*qq)->q_name+3; isdigit((unsigned char)*cp); )
+			for (cp = (*qq)->q_name+3; isdigit(*cp); )
 				n = n * 10 + (*cp++ - '0');
 			if (jobnum != n)
 				continue;

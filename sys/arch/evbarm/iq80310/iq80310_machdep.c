@@ -1,4 +1,4 @@
-/*	$NetBSD: iq80310_machdep.c,v 1.65 2004/12/12 21:03:06 abs Exp $	*/
+/*	$NetBSD: iq80310_machdep.c,v 1.63 2004/02/13 11:36:12 wiz Exp $	*/
 
 /*
  * Copyright (c) 2001, 2002, 2003 Wasabi Systems, Inc.
@@ -73,7 +73,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: iq80310_machdep.c,v 1.65 2004/12/12 21:03:06 abs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: iq80310_machdep.c,v 1.63 2004/02/13 11:36:12 wiz Exp $");
 
 #include "opt_ddb.h"
 #include "opt_pmap_debug.h"
@@ -422,7 +422,7 @@ initarm(void *arg)
 	 */
 
 	/*
-	 * Fetch the SDRAM start/size from the i80312 SDRAM configuration
+	 * Fetch the SDRAM start/size from the i80312 SDRAM configration
 	 * registers.
 	 */
 	i80312_sdram_bounds(&obio_bs_tag, I80312_PMMR_BASE + I80312_MEM_BASE,
@@ -475,7 +475,7 @@ initarm(void *arg)
 	 * array.
 	 *
 	 * The kernel page directory must be on a 16K boundary.  The page
-	 * tables must be on 4K boundaries.  What we do is allocate the
+	 * tables must be on 4K bounaries.  What we do is allocate the
 	 * page directory on the first 16K boundary that we encounter, and
 	 * the page tables on 4K boundaries otherwise.  Since we allocate
 	 * at least 3 L2 page tables, we are guaranteed to encounter at
@@ -730,7 +730,7 @@ initarm(void *arg)
 	 * Until then we will use a handler that just panics but tells us
 	 * why.
 	 * Initialisation of the vectors will just panic on a data abort.
-	 * This just fills in a slightly better one.
+	 * This just fills in a slighly better one.
 	 */
 #ifdef VERBOSE_INIT_ARM
 	printf("vectors ");

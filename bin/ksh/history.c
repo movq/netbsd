@@ -1,4 +1,4 @@
-/*	$NetBSD: history.c,v 1.8 2004/07/16 18:39:18 christos Exp $	*/
+/*	$NetBSD: history.c,v 1.6 2004/02/26 08:24:03 jdolecek Exp $	*/
 
 /*
  * command history
@@ -19,7 +19,7 @@
 #include <sys/cdefs.h>
 
 #ifndef lint
-__RCSID("$NetBSD: history.c,v 1.8 2004/07/16 18:39:18 christos Exp $");
+__RCSID("$NetBSD: history.c,v 1.6 2004/02/26 08:24:03 jdolecek Exp $");
 #endif
 
 
@@ -73,7 +73,7 @@ static char   **hist_get_newest ARGS((int allow_cur));
 static char   **hist_get_oldest ARGS((void));
 static void	histbackup ARGS((void));
 
-static char   **current;	/* current position in history[] */
+static char   **current;	/* current postition in history[] */
 static int	curpos;		/* current index in history[] */
 static char    *hname;		/* current name of history file */
 static int	hstarted;	/* set after hist_init() called */
@@ -92,11 +92,6 @@ c_fc(wp)
 	char *first = (char *) 0, *last = (char *) 0;
 	char **hfirst, **hlast, **hp;
 
-	if (hist_source == NULL) {
-		bi_errorf("not interactive");
-		return 1;
-	}
-
 	while ((optc = ksh_getopt(wp, &builtin_opt, "e:glnrs0,1,2,3,4,5,6,7,8,9,")) != EOF)
 		switch (optc) {
 		  case 'e':
@@ -104,9 +99,8 @@ c_fc(wp)
 			if (strcmp(p, "-") == 0)
 				sflag++;
 			else {
-				size_t len = strlen(p) + 4;
-				editor = str_nsave(p, len, ATEMP);
-				strlcat(editor, " $_", len);
+				editor = str_nsave(p, strlen(p) + 4, ATEMP);
+				strcat(editor, " $_");
 			}
 			break;
 		  case 'g': /* non-at&t ksh */
@@ -505,7 +499,7 @@ histnum(n)
 }
 
 /*
- * This will become unnecessary if hist_get is modified to allow
+ * This will become unecessary if hist_get is modified to allow
  * searching from positions other than the end, and in either
  * direction.
  */
@@ -872,8 +866,8 @@ hist_init(s)
 		/*
 		 * check on its validity
 		 */
-		if (base == MAP_FAILED || *base != HMAGIC1 || base[1] != HMAGIC2) {
-			if (base != MAP_FAILED)
+		if ((int)base == -1 || *base != HMAGIC1 || base[1] != HMAGIC2) {
+			if ((int)base !=  -1)
 				munmap((caddr_t)base, hsize);
 			hist_finish();
 			unlink(hname);
@@ -901,7 +895,7 @@ typedef enum state {
 	shdr,		/* expecting a header */
 	sline,		/* looking for a null byte to end the line */
 	sn1,		/* bytes 1 to 4 of a line no */
-	sn2, sn3, sn4
+	sn2, sn3, sn4,
 } State;
 
 static int
@@ -910,7 +904,7 @@ hist_count_lines(base, bytes)
 	register int bytes;
 {
 	State state = shdr;
-	int lines = 0;
+	register lines = 0;
 
 	while (bytes--) {
 		switch (state)
@@ -1029,8 +1023,8 @@ histload(s, base, bytes)
 	register int bytes;
 {
 	State state;
-	int	lno = 0;
-	unsigned char	*line = NULL;
+	int	lno;
+	unsigned char	*line;
 
 	for (state = shdr; bytes-- > 0; base++) {
 		switch (state) {
@@ -1107,7 +1101,7 @@ writehistfile(lno, cmd)
 	unsigned char	*base;
 	unsigned char	*new;
 	int	bytes;
-	unsigned char	hdr[5];
+	char	hdr[5];
 
 	(void) flock(histfd, LOCK_EX);
 	sizenow = lseek(histfd, 0L, SEEK_END);
@@ -1119,7 +1113,7 @@ writehistfile(lno, cmd)
 			/* someone has added some lines */
 			bytes = sizenow - hsize;
 			base = (unsigned char *)mmap(0, sizenow, PROT_READ, MAP_FLAGS, histfd, 0);
-			if (base == MAP_FAILED)
+			if ((int)base == -1)
 				goto bad;
 			new = base + hsize;
 			if (*new != COMMAND) {
@@ -1171,7 +1165,7 @@ static int
 sprinkle(fd)
 	int fd;
 {
-	static unsigned char mag[] = { HMAGIC1, HMAGIC2 };
+	static char mag[] = { HMAGIC1, HMAGIC2 };
 
 	return(write(fd, mag, 2) != 2);
 }

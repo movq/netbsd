@@ -1,4 +1,4 @@
-/*	$NetBSD: fpgetmask.c,v 1.5 2004/04/04 19:27:19 matt Exp $	*/
+/*	$NetBSD: fpgetmask.c,v 1.3 2002/01/13 21:45:47 thorpej Exp $	*/
 
 /*
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -42,20 +42,16 @@
 
 #include <sys/types.h>
 #include <ieeefp.h>
-#include <powerpc/fpu.h>
 
 #ifdef __weak_alias
 __weak_alias(fpgetmask,_fpgetmask)
 #endif
 
-#define	MASKBITS	(FPSCR_VE|FPSCR_OE|FPSCR_UE|FPSCR_ZE|FPSCR_XE)
-#define	MASKSHFT	3
-
 fp_except
-fpgetmask(void)
+fpgetmask()
 {
-	uint64_t fpscr;
+	u_int64_t fpscr;
 
 	__asm__ __volatile("mffs %0" : "=f"(fpscr));
-	return (((uint32_t)fpscr & MASKBITS) >> MASKSHFT);
+	return ((fp_except)((fpscr >> 3) & 0x1f));
 }

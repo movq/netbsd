@@ -1,4 +1,4 @@
-/*	$NetBSD: _fileno.c,v 1.1 2004/05/09 17:27:53 kleink Exp $	*/
+/*	$NetBSD: _fileno.c,v 1.1.2.2 2004/05/11 15:48:13 tron Exp $	*/
 
 /*
  * Copyright (c) 1996 Christos Zoulas.  All rights reserved.

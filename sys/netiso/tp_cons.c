@@ -1,4 +1,4 @@
-/*	$NetBSD: tp_cons.c,v 1.18 2004/04/21 23:19:49 matt Exp $	*/
+/*	$NetBSD: tp_cons.c,v 1.16 2003/08/07 16:33:38 agc Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -68,7 +68,7 @@ SOFTWARE.
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tp_cons.c,v 1.18 2004/04/21 23:19:49 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tp_cons.c,v 1.16 2003/08/07 16:33:38 agc Exp $");
 
 #include "opt_iso.h"
 
@@ -111,6 +111,9 @@ __KERNEL_RCSID(0, "$NetBSD: tp_cons.c,v 1.18 2004/04/21 23:19:49 matt Exp $");
 
 #include <machine/stdarg.h>
 
+#include <netiso/if_cons.c>
+
+
 /*
  * CALLED FROM:
  *  tp_route_to() for PRU_CONNECT
@@ -119,7 +122,9 @@ __KERNEL_RCSID(0, "$NetBSD: tp_cons.c,v 1.18 2004/04/21 23:19:49 matt Exp $");
  */
 
 int
-tpcons_pcbconnect(void *v, struct mbuf *nam)
+tpcons_pcbconnect(v, nam)
+	void *v;
+	struct mbuf *nam;
 {
 	struct isopcb  *isop = v;
 	int             error;
@@ -150,7 +155,10 @@ tpcons_pcbconnect(void *v, struct mbuf *nam)
  * THIS MAYBE BELONGS IN SOME OTHER PLACE??? but i think not -
  */
 void *
-tpcons_ctlinput(int cmd, struct sockaddr *siso, void *v)
+tpcons_ctlinput(cmd, siso, v)
+	int             cmd;
+	struct sockaddr *siso;
+	void *v;
 {
 	struct isopcb  *isop = v;
 	struct tp_pcb *tpcb = 0;
@@ -186,10 +194,10 @@ tpcons_ctlinput(int cmd, struct sockaddr *siso, void *v)
 					printf("FAKE ACK seq 0x%x cdt 1\n", seq);
 				}
 #endif
-				E.ev_union.EV_AK_TPDU.e_cdt = 1;
-				E.ev_union.EV_AK_TPDU.e_seq = seq;
-				E.ev_union.EV_AK_TPDU.e_subseq = 0;
-				E.ev_union.EV_AK_TPDU.e_fcc_present = 0;
+				E.TP_ATTR(AK_TPDU).e_cdt = 1;
+				E.TP_ATTR(AK_TPDU).e_seq = seq;
+				E.TP_ATTR(AK_TPDU).e_subseq = 0;
+				E.TP_ATTR(AK_TPDU).e_fcc_present = 0;
 				error = DoEvent(AK_TPDU);
 				if (error) {
 					tpcb->tp_sock->so_error = error;
@@ -218,7 +226,13 @@ tpcons_ctlinput(int cmd, struct sockaddr *siso, void *v)
  * No return value.
  */
 void
+#if __STDC__
 tpcons_input(struct mbuf *m, ...)
+#else
+tpcons_input(m, va_alist)
+	struct mbuf    *m;
+	va_dcl
+#endif
 {
 	struct sockaddr *faddr, *laddr;
 	caddr_t         channel;
@@ -235,7 +249,7 @@ tpcons_input(struct mbuf *m, ...)
 
 #ifdef ARGO_DEBUG
 	if (argo_debug[D_TPINPUT]) {
-		printf("tpcons_input before tp_input(m %p)\n", m);
+		printf("tpcons_input before tp_input(m 0x%x)\n", m);
 		dump_buf(m, 12 + m->m_len);
 	}
 #endif
@@ -256,7 +270,13 @@ tpcons_input(struct mbuf *m, ...)
  */
 
 int
+#if __STDC__
 tpcons_output(struct mbuf *m0, ...)
+#else
+tpcons_output(m0, va_alist)
+	struct mbuf    *m0;
+	va_dcl
+#endif
 {
 	struct isopcb  *isop;
 	int             datalen;
@@ -274,7 +294,7 @@ tpcons_output(struct mbuf *m0, ...)
 #ifdef ARGO_DEBUG
 	if (argo_debug[D_EMIT]) {
 		printf(
-		  "tpcons_output(isop=%p, m=%p, len=%#x socket=%p\n",
+		  "tpcons_output(isop 0x%x, m 0x%x, len 0x%x socket 0x%x\n",
 		       isop, m0, datalen, isop->isop_socket);
 	}
 #endif
@@ -324,7 +344,13 @@ tpcons_output(struct mbuf *m0, ...)
  */
 
 int
+#if __STDC__
 tpcons_output_dg(struct mbuf *m0, ...)
+#else
+tpcons_output_dg(m0, va_alist)
+	struct mbuf    *m0;
+	va_dcl
+#endif
 {
 	int             datalen;
 	caddr_t         chan;
@@ -345,10 +371,16 @@ tpcons_output_dg(struct mbuf *m0, ...)
 
 struct mbuf;
 
-int tpcons_output (struct mbuf *m0, ...);
+int tpcons_output __P((struct mbuf *m0, ...));
 
 int
+#if __STDC__
 tpcons_output(struct mbuf *m0, ...)
+#else
+tpcons_output(m0, va_alist)
+	struct mbuf    *m0;
+	va_dcl
+#endif
 {
 	return 0;
 }

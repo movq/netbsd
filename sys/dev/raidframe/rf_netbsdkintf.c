@@ -1,4 +1,4 @@
-/*	$NetBSD: rf_netbsdkintf.c,v 1.185 2004/11/17 01:34:10 oster Exp $	*/
+/*	$NetBSD: rf_netbsdkintf.c,v 1.178.2.1 2004/07/02 18:03:06 he Exp $	*/
 /*-
  * Copyright (c) 1996, 1997, 1998 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -146,7 +146,7 @@
  ***********************************************************/
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rf_netbsdkintf.c,v 1.185 2004/11/17 01:34:10 oster Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rf_netbsdkintf.c,v 1.178.2.1 2004/07/02 18:03:06 he Exp $");
 
 #include <sys/param.h>
 #include <sys/errno.h>
@@ -165,7 +165,6 @@ __KERNEL_RCSID(0, "$NetBSD: rf_netbsdkintf.c,v 1.185 2004/11/17 01:34:10 oster E
 #include <sys/conf.h>
 #include <sys/lock.h>
 #include <sys/buf.h>
-#include <sys/bufq.h>
 #include <sys/user.h>
 #include <sys/reboot.h>
 
@@ -404,8 +403,7 @@ raidattach(int num)
 		raidrootdev[raidID].dv_unit   = raidID;
 		raidrootdev[raidID].dv_parent = NULL;
 		raidrootdev[raidID].dv_flags  = 0;
-		snprintf(raidrootdev[raidID].dv_xname,
-		    sizeof(raidrootdev[raidID].dv_xname), "raid%d", raidID);
+		sprintf(raidrootdev[raidID].dv_xname,"raid%d",raidID);
 
 		RF_Malloc(raidPtrs[raidID], sizeof(RF_Raid_t),
 			  (RF_Raid_t *));
@@ -1285,12 +1283,6 @@ raidioctl(dev_t dev, u_long cmd, caddr_t data, int flag, struct proc *p)
 
 
 		RF_LOCK_MUTEX(raidPtr->mutex);
-		if (raidPtr->status == rf_rs_reconstructing) {
-			/* you can't fail a disk while we're reconstructing! */
-			/* XXX wrong for RAID6 */
-			RF_UNLOCK_MUTEX(raidPtr->mutex);
-			return (EINVAL);
-		}
 		if ((raidPtr->Disks[rr->col].status == 
 		     rf_ds_optimal) && (raidPtr->numFailures > 0)) { 
 			/* some other component has failed.  Let's not make
@@ -1610,8 +1602,7 @@ raidinit(RF_Raid_t *raidPtr)
 	/* XXX should check return code first... */
 	rs->sc_flags |= RAIDF_INITED;
 
-	/* XXX doesn't check bounds. */
-	snprintf(rs->sc_xname, sizeof(rs->sc_xname), "raid%d", unit);
+	sprintf(rs->sc_xname, "raid%d", unit);	/* XXX doesn't check bounds. */
 
 	rs->sc_dkdev.dk_name = rs->sc_xname;
 
@@ -1953,11 +1944,8 @@ KernelWakeupFunc(struct buf *vbp)
 	if (bp->b_flags & B_ERROR) {
 		/* Mark the disk as dead */
 		/* but only mark it once... */
-		/* and only if it wouldn't leave this RAID set 
-		   completely broken */
-		if ((queue->raidPtr->Disks[queue->col].status ==
-		    rf_ds_optimal) && (queue->raidPtr->numFailures < 
-				       queue->raidPtr->Layout.map->faultsTolerated)) {
+		if (queue->raidPtr->Disks[queue->col].status ==
+		    rf_ds_optimal) {
 			printf("raid%d: IO Error.  Marking %s as failed.\n",
 			       queue->raidPtr->raidid,
 			       queue->raidPtr->Disks[queue->col].devname);
@@ -2550,7 +2538,6 @@ rf_RewriteParityThread(RF_Raid_t *raidPtr)
 	int retcode;
 	int s;
 
-	raidPtr->parity_rewrite_stripes_done = 0;
 	raidPtr->parity_rewrite_in_progress = 1;
 	s = splbio();
 	retcode = rf_RewriteParity(raidPtr);
@@ -2681,9 +2668,8 @@ rf_find_raid_components()
 			 * XXX can't happen - open() would
 			 * have errored out (or faked up one)
 			 */
-			if (error != ENOTTY)
-				printf("RAIDframe: can't get label for dev "
-				    "%s (%d)\n", dv->dv_xname, error);
+			printf("can't get label for dev %s%c (%d)!?!?\n",
+			       dv->dv_xname, 'a' + RAW_PART, error);
 		}
 
 		/* don't need this any more.  We'll allocate it again
@@ -2691,9 +2677,6 @@ rf_find_raid_components()
 		vn_lock(vp, LK_EXCLUSIVE | LK_RETRY);
 		VOP_CLOSE(vp, FREAD | FWRITE, NOCRED, 0);
 		vput(vp);
-
-		if (error)
-			continue;
 
 		for (i=0; i < label.d_npartitions; i++) {
 			/* We only support partitions marked as RAID */
@@ -2744,9 +2727,8 @@ rf_find_raid_components()
 						return(NULL);
 					}
 					
-					snprintf(ac->devname,
-					    sizeof(ac->devname), "%s%c",
-					    dv->dv_xname, 'a'+i);
+					sprintf(ac->devname, "%s%c",
+						dv->dv_xname, 'a'+i);
 					ac->dev = dev;
 					ac->vp = vp;
 					ac->clabel = clabel;

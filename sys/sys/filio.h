@@ -1,4 +1,4 @@
-/*	$NetBSD: filio.h,v 1.9 2004/11/06 02:03:20 wrstuden Exp $	*/
+/*	$NetBSD: filio.h,v 1.8 2003/08/07 16:34:04 agc Exp $	*/
 
 /*-
  * Copyright (c) 1982, 1986, 1990, 1993, 1994
@@ -51,10 +51,6 @@
 #define	FIOGETOWN	_IOR('f', 123, int)	/* get owner */
 #define	OFIOGETBMAP	_IOWR('f', 122, uint32_t) /* get underlying block no. */
 #define	FIOGETBMAP	_IOWR('f', 122, daddr_t) /* get underlying block no. */
-#define	FIONWRITE	_IOR('f', 121, int)	/* get # bytes outstanding
-						 * in send queue. */
-#define	FIONSPACE	_IOR('f', 120, int)	/* get space in send queue. */
-
 
 /* Ugly symbol for compatibility with other operating systems */
 #define	FIBMAP		FIOGETBMAP

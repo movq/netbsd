@@ -1,4 +1,4 @@
-/*	$NetBSD: hash.c,v 1.9 2004/06/20 22:20:17 jmc Exp $	*/
+/*	$NetBSD: hash.c,v 1.8.4.1 2004/06/22 07:20:43 tron Exp $	*/
 
 /*
  * Copyright (c) 1994, 1995 Jochen Pohl
@@ -37,7 +37,7 @@
 
 #include <sys/cdefs.h>
 #if defined(__RCSID) && !defined(lint)
-__RCSID("$NetBSD: hash.c,v 1.9 2004/06/20 22:20:17 jmc Exp $");
+__RCSID("$NetBSD: hash.c,v 1.8.4.1 2004/06/22 07:20:43 tron Exp $");
 #endif
 
 /*

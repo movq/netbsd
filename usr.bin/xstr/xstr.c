@@ -1,4 +1,4 @@
-/*	$NetBSD: xstr.c,v 1.20 2004/07/23 13:45:59 wiz Exp $	*/
+/*	$NetBSD: xstr.c,v 1.17 2004/01/05 23:23:37 jmmv Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -39,7 +39,7 @@ __COPYRIGHT("@(#) Copyright (c) 1980, 1993\n\
 #if 0
 static char sccsid[] = "@(#)xstr.c	8.1 (Berkeley) 6/9/93";
 #else
-__RCSID("$NetBSD: xstr.c,v 1.20 2004/07/23 13:45:59 wiz Exp $");
+__RCSID("$NetBSD: xstr.c,v 1.17 2004/01/05 23:23:37 jmmv Exp $");
 #endif
 #endif /* not lint */
 
@@ -84,7 +84,7 @@ static char	*array =	0;
 static int	cflg;
 static int	vflg;
 static int	readstd;
-static char	linebuf[8192];
+static char	linebuf[BUFSIZ];
 
 #define	BUCKETS	128
 
@@ -260,49 +260,17 @@ yankstr(char **cpp)
 {
 	char *cp = *cpp;
 	int c, ch;
-	char *dbuf, *dp, *edp;
+	char dbuf[BUFSIZ];
+	char *dp = dbuf;
 	char *tp;
-	off_t hash;
-	size_t bsiz = BUFSIZ;
-
-	if ((dp = dbuf = malloc(bsiz)) == NULL)
-		err(1, "malloc");
-	edp = dbuf + bsiz;
 
 	while ((c = *cp++) != '\0') {
 		switch (c) {
 
 		case '"':
-			/* Look for a concatenated string */
-			for (;;) {
-				while (isspace((unsigned char)*cp))
-					cp++;
-				if (*cp == '\0') {
-					if (fgets(linebuf,
-					    sizeof linebuf, stdin) == NULL) {
-						if (ferror(stdin))
-							err(1,
-							"Error reading `x.c'");
-						goto out;
-					}
-					cp = linebuf;
-				} else {
-					if (*cp == '"') {
-						cp++;
-						if (*cp == '"') {
-							cp++;
-							continue;
-						} else {
-							c = *cp++;
-							goto gotc;
-						}
-					} else {
-						cp++;
-						goto out;
-					}
-				}
-			}
-			/*NOTREACHED*/
+			cp++;
+			goto out;
+
 		case '\\':
 			c = *cp++;
 			if (c == 0)
@@ -336,25 +304,12 @@ yankstr(char **cpp)
 			break;
 		}
 gotc:
-		if (dp >= edp - 1) {
-			char *nbuf;
-			bsiz += BUFSIZ;
-			if ((nbuf = realloc(dbuf, bsiz)) == NULL) {
-				free(dbuf);
-				err(1, "realloc");
-			}
-			dp = nbuf + (dp - dbuf);
-			edp = nbuf + bsiz;
-			dbuf = nbuf;
-		}
 		*dp++ = c;
 	}
 out:
 	*cpp = --cp;
-	*dp = '\0';
-	hash = hashit(dbuf, 1);
-	free(dbuf);
-	return hash;
+	*dp = 0;
+	return hashit(dbuf, 1);
 }
 
 static int
@@ -561,7 +516,7 @@ static void
 usage(void)
 {
 
-	(void)fprintf(stderr, "usage: %s [-cv] [-l array] [-] [<name> ...]\n",
+	(void)fprintf(stderr, "usage: %s [-vc] [-l array] [-] [<name> ...]\n",
 	    getprogname());
 	exit(1);
 }

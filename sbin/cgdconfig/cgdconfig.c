@@ -1,4 +1,4 @@
-/* $NetBSD: cgdconfig.c,v 1.12 2004/08/13 15:03:57 tv Exp $ */
+/* $NetBSD: cgdconfig.c,v 1.10.2.1 2004/08/13 15:02:17 tv Exp $ */
 
 /*-
  * Copyright (c) 2002, 2003 The NetBSD Foundation, Inc.
@@ -41,7 +41,7 @@
 __COPYRIGHT(
 "@(#) Copyright (c) 2002, 2003\
 	The NetBSD Foundation, Inc.  All rights reserved.");
-__RCSID("$NetBSD: cgdconfig.c,v 1.12 2004/08/13 15:03:57 tv Exp $");
+__RCSID("$NetBSD: cgdconfig.c,v 1.10.2.1 2004/08/13 15:02:17 tv Exp $");
 #endif
 
 #include <err.h>
@@ -96,7 +96,7 @@ static int	 configure_params(int, const char *, const char *,
 				  struct params *);
 static bits_t	*getkey(const char *, struct keygen *, int);
 static bits_t	*getkey_storedkey(const char *, struct keygen *, int);
-static bits_t	*getkey_randomkey(const char *, struct keygen *, int, int);
+static bits_t	*getkey_randomkey(const char *, struct keygen *, int);
 static bits_t	*getkey_pkcs5_pbkdf2(const char *, struct keygen *, int, int);
 static int	 opendisk_werror(const char *, char *, int);
 static int	 unconfigure_fd(int);
@@ -255,10 +255,7 @@ getkey(const char *dev, struct keygen *kg, int len)
 			tmp = getkey_storedkey(dev, kg, len);
 			break;
 		case KEYGEN_RANDOMKEY:
-			tmp = getkey_randomkey(dev, kg, len, 1);
-			break;
-		case KEYGEN_URANDOMKEY:
-			tmp = getkey_randomkey(dev, kg, len, 0);
+			tmp = getkey_randomkey(dev, kg, len);
 			break;
 		case KEYGEN_PKCS5_PBKDF2_SHA1:
 			tmp = getkey_pkcs5_pbkdf2(dev, kg, len, 0);
@@ -294,10 +291,10 @@ getkey_storedkey(const char *target, struct keygen *kg, int keylen)
 
 /*ARGSUSED*/
 static bits_t *
-getkey_randomkey(const char *target, struct keygen *kg, int keylen, int hard)
+getkey_randomkey(const char *target, struct keygen *kg, int keylen)
 {
 
-	return bits_getrandombits(keylen, hard);
+	return bits_getrandombits(keylen);
 }
 
 /*ARGSUSED*/

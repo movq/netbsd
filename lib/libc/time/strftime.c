@@ -1,11 +1,11 @@
-/*	$NetBSD: strftime.c,v 1.16 2004/05/12 23:03:11 kleink Exp $	*/
+/*	$NetBSD: strftime.c,v 1.14.2.2 2004/05/17 10:38:03 tron Exp $	*/
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
 #if 0
 static char	elsieid[] = "@(#)strftime.c	7.64";
 #else
-__RCSID("$NetBSD: strftime.c,v 1.16 2004/05/12 23:03:11 kleink Exp $");
+__RCSID("$NetBSD: strftime.c,v 1.14.2.2 2004/05/17 10:38:03 tron Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 

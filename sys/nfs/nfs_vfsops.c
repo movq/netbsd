@@ -1,4 +1,4 @@
-/*	$NetBSD: nfs_vfsops.c,v 1.143 2004/08/15 07:19:54 mycroft Exp $	*/
+/*	$NetBSD: nfs_vfsops.c,v 1.135.2.1 2004/05/29 09:04:02 tron Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993, 1995
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nfs_vfsops.c,v 1.143 2004/08/15 07:19:54 mycroft Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nfs_vfsops.c,v 1.135.2.1 2004/05/29 09:04:02 tron Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_compat_netbsd.h"
@@ -53,7 +53,6 @@ __KERNEL_RCSID(0, "$NetBSD: nfs_vfsops.c,v 1.143 2004/08/15 07:19:54 mycroft Exp
 #include <sys/mount.h>
 #include <sys/buf.h>
 #include <sys/mbuf.h>
-#include <sys/dirent.h>
 #include <sys/socket.h>
 #include <sys/socketvar.h>
 #include <sys/sysctl.h>
@@ -101,7 +100,7 @@ struct vfsops nfs_vfsops = {
 	nfs_unmount,
 	nfs_root,
 	nfs_quotactl,
-	nfs_statvfs,
+	nfs_statfs,
 	nfs_sync,
 	nfs_vget,
 	nfs_fhtovp,
@@ -112,7 +111,6 @@ struct vfsops nfs_vfsops = {
 	NULL,
 	nfs_mountroot,
 	nfs_checkexp,
-	(int (*)(struct mount *, struct vnode *, struct timespec *)) eopnotsupp,
 	nfs_vnodeopv_descs,
 };
 
@@ -123,12 +121,12 @@ static int nfs_mount_diskless __P((struct nfs_dlmount *, const char *,
     struct mount **, struct vnode **, struct proc *));
 
 /*
- * nfs statvfs call
+ * nfs statfs call
  */
 int
-nfs_statvfs(mp, sbp, p)
+nfs_statfs(mp, sbp, p)
 	struct mount *mp;
-	struct statvfs *sbp;
+	struct statfs *sbp;
 	struct proc *p;
 {
 	struct vnode *vp;
@@ -169,50 +167,40 @@ nfs_statvfs(mp, sbp, p)
 	if (error) {
 		if (mrep != NULL) {
 			if (mrep->m_next != NULL)
-				printf("nfs_vfsops: nfs_statvfs would lose buffers\n");
+				printf("nfs_vfsops: nfs_statfs would loose buffers\n");
 			m_freem(mrep);
 		}
 		goto nfsmout;
 	}
 	nfsm_dissect(sfp, struct nfs_statfs *, NFSX_STATFS(v3));
-	sbp->f_flag = nmp->nm_flag;
+#ifdef COMPAT_09
+	sbp->f_type = 2;
+#else
+	sbp->f_type = 0;
+#endif
+	sbp->f_flags = nmp->nm_flag;
 	sbp->f_iosize = min(nmp->nm_rsize, nmp->nm_wsize);
 	if (v3) {
-		sbp->f_frsize = sbp->f_bsize = NFS_FABLKSIZE;
-		tquad = fxdr_hyper(&sfp->sf_tbytes);
-		sbp->f_blocks = ((quad_t)tquad / (quad_t)NFS_FABLKSIZE);
-		tquad = fxdr_hyper(&sfp->sf_fbytes);
-		sbp->f_bfree = ((quad_t)tquad / (quad_t)NFS_FABLKSIZE);
-		tquad = fxdr_hyper(&sfp->sf_abytes);
-		tquad = ((quad_t)tquad / (quad_t)NFS_FABLKSIZE);
-		sbp->f_bresvd = sbp->f_bfree - tquad;
-		sbp->f_bavail = tquad;
-#ifdef COMPAT_20
-		/* Handle older NFS servers returning negative values */
-		if ((quad_t)sbp->f_bavail < 0)
-			sbp->f_bavail = 0;
-#endif
-		tquad = fxdr_hyper(&sfp->sf_tfiles);
-		sbp->f_files = tquad;
-		tquad = fxdr_hyper(&sfp->sf_ffiles);
-		sbp->f_ffree = tquad;
-		sbp->f_favail = tquad;
-		sbp->f_fresvd = 0;
-		sbp->f_namemax = MAXNAMLEN;
-	} else {
 		sbp->f_bsize = NFS_FABLKSIZE;
-		sbp->f_frsize = fxdr_unsigned(int32_t, sfp->sf_bsize);
+		tquad = fxdr_hyper(&sfp->sf_tbytes);
+		sbp->f_blocks = (long)((quad_t)tquad / (quad_t)NFS_FABLKSIZE);
+		tquad = fxdr_hyper(&sfp->sf_fbytes);
+		sbp->f_bfree = (long)((quad_t)tquad / (quad_t)NFS_FABLKSIZE);
+		tquad = fxdr_hyper(&sfp->sf_abytes);
+		sbp->f_bavail = (long)((quad_t)tquad / (quad_t)NFS_FABLKSIZE);
+		tquad = fxdr_hyper(&sfp->sf_tfiles);
+		sbp->f_files = (long)tquad;
+		tquad = fxdr_hyper(&sfp->sf_ffiles);
+		sbp->f_ffree = (long)tquad;
+	} else {
+		sbp->f_bsize = fxdr_unsigned(int32_t, sfp->sf_bsize);
 		sbp->f_blocks = fxdr_unsigned(int32_t, sfp->sf_blocks);
 		sbp->f_bfree = fxdr_unsigned(int32_t, sfp->sf_bfree);
 		sbp->f_bavail = fxdr_unsigned(int32_t, sfp->sf_bavail);
-		sbp->f_fresvd = 0;
 		sbp->f_files = 0;
 		sbp->f_ffree = 0;
-		sbp->f_favail = 0;
-		sbp->f_fresvd = 0;
-		sbp->f_namemax = MAXNAMLEN;
 	}
-	copy_statvfs_info(sbp, mp);
+	copy_statfs_info(sbp, mp);
 	nfsm_reqdone;
 	crfree(cred);
 	return (error);
@@ -282,8 +270,6 @@ nfs_fsinfo(nmp, vp, cred, p)
 		maxfsize = fxdr_hyper(&fsp->fs_maxfilesize);
 		if (maxfsize > 0 && maxfsize < nmp->nm_maxfilesize)
 			nmp->nm_maxfilesize = maxfsize;
-		nmp->nm_mountp->mnt_fs_bshift =
-		    ffs(MIN(nmp->nm_rsize, nmp->nm_wsize)) - 1;
 		nmp->nm_iflag |= NFSMNT_GOTFSINFO;
 	}
 	nfsm_reqdone;
@@ -359,7 +345,7 @@ nfs_mountroot()
 #ifdef	DEBUG
 	printf("root time: 0x%lx\n", n);
 #endif
-	setrootfstime(n);
+	inittodr(n);
 
 out:
 	if (error)
@@ -418,10 +404,9 @@ nfs_mount_diskless(ndmntp, mntname, mpp, vpp, p)
 }
 
 void
-nfs_decode_args(nmp, argp, p)
+nfs_decode_args(nmp, argp)
 	struct nfsmount *nmp;
 	struct nfs_args *argp;
-	struct proc *p;
 {
 	int s;
 	int adjsock;
@@ -542,7 +527,7 @@ nfs_decode_args(nmp, argp, p)
 	if (nmp->nm_so && adjsock) {
 		nfs_safedisconnect(nmp);
 		if (nmp->nm_sotype == SOCK_DGRAM)
-			while (nfs_connect(nmp, (struct nfsreq *)0, p)) {
+			while (nfs_connect(nmp, (struct nfsreq *)0)) {
 				printf("nfs_args: retrying connect\n");
 				(void) tsleep((caddr_t)&lbolt,
 					      PSOCK, "nfscn3", 0);
@@ -633,7 +618,7 @@ nfs_mount(mp, path, data, ndp, p)
 		    ~(NFSMNT_NFSV3|NFSMNT_NQNFS|NFSMNT_XLATECOOKIE)) |
 		    (nmp->nm_flag &
 			(NFSMNT_NFSV3|NFSMNT_NQNFS|NFSMNT_XLATECOOKIE));
-		nfs_decode_args(nmp, &args, p);
+		nfs_decode_args(nmp, &args);
 		return (0);
 	}
 	if (args.fhsize < 0 || args.fhsize > NFSX_V3FHMAX)
@@ -718,7 +703,13 @@ mountnfs(argp, mp, nam, pth, hst, vpp, p)
 
 #ifndef NFS_V2_ONLY
 	if (argp->flags & NFSMNT_NQNFS)
-		mp->mnt_iflag |= IMNT_DTYPE;
+		/*
+		 * We have to set mnt_maxsymlink to a non-zero value so
+		 * that COMPAT_43 routines will know that we are setting
+		 * the d_type field in directories (and can zero it for
+		 * unsuspecting binaries).
+		 */
+		mp->mnt_maxsymlinklen = 1;
 #endif
 
 #ifndef NFS_V2_ONLY
@@ -741,7 +732,12 @@ mountnfs(argp, mp, nam, pth, hst, vpp, p)
 	nmp->nm_deadthresh = NQ_DEADTHRESH;
 	CIRCLEQ_INIT(&nmp->nm_timerhead);
 	nmp->nm_inprog = NULLVP;
-	error = set_statvfs_info(pth, UIO_SYSSPACE, hst, UIO_SYSSPACE, mp, p);
+#ifdef COMPAT_09
+	mp->mnt_stat.f_type = 2;
+#else
+	mp->mnt_stat.f_type = 0;
+#endif
+	error = set_statfs_info(pth, UIO_SYSSPACE, hst, UIO_SYSSPACE, mp, p);
 	if (error)
 		goto bad;
 	nmp->nm_nam = nam;
@@ -750,7 +746,7 @@ mountnfs(argp, mp, nam, pth, hst, vpp, p)
 	nmp->nm_sotype = argp->sotype;
 	nmp->nm_soproto = argp->proto;
 
-	nfs_decode_args(nmp, argp, p);
+	nfs_decode_args(nmp, argp);
 
 	mp->mnt_fs_bshift = ffs(MIN(nmp->nm_rsize, nmp->nm_wsize)) - 1;
 	mp->mnt_dev_bshift = DEV_BSHIFT;
@@ -760,12 +756,12 @@ mountnfs(argp, mp, nam, pth, hst, vpp, p)
 	 * the first request, in case the server is not responding.
 	 */
 	if (nmp->nm_sotype == SOCK_DGRAM &&
-		(error = nfs_connect(nmp, (struct nfsreq *)0, p)))
+		(error = nfs_connect(nmp, (struct nfsreq *)0)))
 		goto bad;
 
 	/*
 	 * This is silly, but it has to be set so that vinifod() works.
-	 * We do not want to do an nfs_statvfs() here since we can get
+	 * We do not want to do an nfs_statfs() here since we can get
 	 * stuck on a dead server and we are holding a lock on the mount
 	 * point.
 	 */
@@ -1078,7 +1074,7 @@ nfs_quotactl(mp, cmd, uid, arg, p)
 	struct mount *mp;
 	int cmd;
 	uid_t uid;
-	void *arg;
+	caddr_t arg;
 	struct proc *p;
 {
 

@@ -1,6 +1,6 @@
 #! /bin/sh
 #
-#	$NetBSD: ipf2netbsd,v 1.15 2004/06/07 11:52:46 martti Exp $
+#	$NetBSD: ipf2netbsd,v 1.14.2.1 2004/08/13 03:56:40 jmc Exp $
 #
 # Copyright (c) 1999 The NetBSD Foundation, Inc.
 # All rights reserved.

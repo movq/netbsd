@@ -1,4 +1,4 @@
-/*	$NetBSD: pthread_rwlock.c,v 1.9 2004/08/03 11:50:45 yamt Exp $ */
+/*	$NetBSD: pthread_rwlock.c,v 1.7.2.2 2004/08/12 18:26:38 jmc Exp $ */
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: pthread_rwlock.c,v 1.9 2004/08/03 11:50:45 yamt Exp $");
+__RCSID("$NetBSD: pthread_rwlock.c,v 1.7.2.2 2004/08/12 18:26:38 jmc Exp $");
 
 #include <errno.h>
 

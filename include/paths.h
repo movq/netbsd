@@ -1,4 +1,4 @@
-/*	$NetBSD: paths.h,v 1.30 2004/12/11 06:01:33 christos Exp $	*/
+/*	$NetBSD: paths.h,v 1.25 2003/10/03 13:17:12 dsl Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -39,11 +39,7 @@
  * set by login(1), rshd(8), rexecd(8)
  * used by execvp(3) absent PATH from the environ(7)
  */
-#ifdef RESCUEDIR
-#define	_PATH_DEFPATH	RESCUEDIR ":/usr/bin:/bin:/usr/pkg/bin:/usr/local/bin"
-#else
 #define	_PATH_DEFPATH	"/usr/bin:/bin:/usr/pkg/bin:/usr/local/bin"
-#endif
 
 /*
  * All standard utilities path.
@@ -57,19 +53,19 @@
 #define	_PATH_AUDIO0	"/dev/audio0"
 #define	_PATH_AUDIOCTL	"/dev/audioctl"
 #define	_PATH_AUDIOCTL0	"/dev/audioctl0"
-#define	_PATH_BPF	"/dev/bpf"
+#define	_PATH_BSHELL	"/bin/sh"
 #define	_PATH_CLOCKCTL	"/dev/clockctl"
 #define	_PATH_CONSOLE	"/dev/console"
 #define	_PATH_CONSTTY	"/dev/constty"
-#define	_PATH_CSMAPPER	"/usr/share/i18n/csmapper"
+#define	_PATH_CSHELL	"/bin/csh"
 #define	_PATH_DEFTAPE	"/dev/nrst0"
 #define	_PATH_DEVDB	"/var/run/dev.db"
 #define	_PATH_DEVNULL	"/dev/null"
 #define	_PATH_DRUM	"/dev/drum"
-#define	_PATH_ESDB	"/usr/share/i18n/esdb"
-#define	_PATH_FTPUSERS	"/etc/ftpusers"
 #define	_PATH_I18NMODULE "/usr/lib/i18n"
 #define	_PATH_ICONV	"/usr/share/i18n/iconv"
+#define	_PATH_ESDB	"/usr/share/i18n/esdb"
+#define	_PATH_CSMAPPER	"/usr/share/i18n/csmapper"
 #define	_PATH_KMEM	"/dev/kmem"
 #define	_PATH_KSYMS	"/dev/ksyms"
 #define	_PATH_KVMDB	"/var/db/kvm.db"
@@ -97,20 +93,10 @@
  * see the __CONCAT() macro from <sys/cdefs.h> for cpp examples.
  */
 #define	_PATH_DEV	"/dev/"
-#define	_PATH_DEV_PTS	"/dev/pts/"
 #define	_PATH_EMUL_AOUT	"/emul/aout/"
 #define	_PATH_TMP	"/tmp/"
 #define	_PATH_VARDB	"/var/db/"
 #define	_PATH_VARRUN	"/var/run/"
 #define	_PATH_VARTMP	"/var/tmp/"
 
-#ifdef RESCUEDIR
-#define	_PATH_BSHELL	RESCUEDIR "/sh"
-#define	_PATH_CSHELL	RESCUEDIR "/csh"
-#else
-#define	_PATH_BSHELL	"/bin/sh"
-#define	_PATH_CSHELL	"/bin/csh"
-#endif
-
 #endif /* !_PATHS_H_ */
-

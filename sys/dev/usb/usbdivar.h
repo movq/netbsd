@@ -1,4 +1,4 @@
-/*	$NetBSD: usbdivar.h,v 1.72 2004/10/23 16:17:56 augustss Exp $	*/
+/*	$NetBSD: usbdivar.h,v 1.70 2002/07/11 21:14:36 augustss Exp $	*/
 /*	$FreeBSD: src/sys/dev/usb/usbdivar.h,v 1.11 1999/11/17 22:33:51 n_hibma Exp $	*/
 
 /*
@@ -73,10 +73,6 @@ struct usbd_pipe_methods {
 	void		      (*done)(usbd_xfer_handle xfer);
 };
 
-struct usbd_tt {
-	struct usbd_hub	       *hub;
-};
-
 struct usbd_port {
 	usb_port_status_t	status;
 	u_int16_t		power;	/* mA of current on port */
@@ -85,7 +81,6 @@ struct usbd_port {
 #define USBD_RESTART_MAX 5
 	struct usbd_device     *device;	/* Connected device */
 	struct usbd_device     *parent;	/* The ports hub */
-	struct usbd_tt	       *tt; /* Transaction translator (if any) */
 };
 
 struct usbd_hub {
@@ -148,7 +143,7 @@ struct usbd_device {
 	usb_event_cookie_t	cookie;	       /* unique connection id */
 	struct usbd_port       *powersrc;      /* upstream hub port, or 0 */
 	struct usbd_device     *myhub; 	       /* upstream hub */
-	struct usbd_port       *myhsport;      /* closest high speed port */
+	struct usbd_device     *myhighhub;     /* closest high speed hub */
 	struct usbd_endpoint	def_ep;	       /* for pipe 0 */
 	usb_endpoint_descriptor_t def_ep_desc; /* for pipe 0 */
 	struct usbd_interface  *ifaces;        /* array of all interfaces */
@@ -242,21 +237,24 @@ void usbd_dump_pipe(usbd_pipe_handle pipe);
 /* Routines from usb_subr.c */
 int		usbctlprint(void *, const char *);
 void		usb_delay_ms(usbd_bus_handle, u_int);
-usbd_status	usbd_reset_port(usbd_device_handle, int, usb_port_status_t *);
+usbd_status	usbd_reset_port(usbd_device_handle dev,
+				int port, usb_port_status_t *ps);
 usbd_status	usbd_setup_pipe(usbd_device_handle dev,
 				usbd_interface_handle iface,
 				struct usbd_endpoint *, int,
 				usbd_pipe_handle *pipe);
-usbd_status	usbd_new_device(device_ptr_t, usbd_bus_handle, int, int, int,
+usbd_status	usbd_new_device(device_ptr_t parent,
+				usbd_bus_handle bus, int depth,
+				int lowspeed, int port,
 				struct usbd_port *);
 void		usbd_remove_device(usbd_device_handle, struct usbd_port *);
-int		usbd_printBCD(char *, size_t, int);
-usbd_status	usbd_fill_iface_data(usbd_device_handle, int, int);
+int		usbd_printBCD(char *cp, int bcd);
+usbd_status	usbd_fill_iface_data(usbd_device_handle dev, int i, int a);
 void		usb_free_device(usbd_device_handle);
 
-usbd_status	usb_insert_transfer(usbd_xfer_handle);
-void		usb_transfer_complete(usbd_xfer_handle);
-void		usb_disconnect_port(struct usbd_port *, device_ptr_t);
+usbd_status	usb_insert_transfer(usbd_xfer_handle xfer);
+void		usb_transfer_complete(usbd_xfer_handle xfer);
+void		usb_disconnect_port(struct usbd_port *up, device_ptr_t);
 
 /* Routines from usb.c */
 void		usb_needs_explore(usbd_device_handle);

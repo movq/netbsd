@@ -1,5 +1,5 @@
 %{/* nlmheader.y - parse NLM header specification keywords.
-     Copyright 1993, 1994, 1995, 1997, 1998, 2001, 2002, 2003
+     Copyright 1993, 1994, 1995, 1997, 1998, 2001, 2002
      Free Software Foundation, Inc.
 
 This file is part of GNU Binutils.
@@ -91,21 +91,22 @@ static char *symbol_prefix;
 #define yyerror(msg) nlmheader_error (msg);
 
 /* Local functions.  */
-static int yylex (void);
-static void nlmlex_file_push (const char *);
-static bfd_boolean nlmlex_file_open (const char *);
-static int nlmlex_buf_init (void);
-static char nlmlex_buf_add (int);
-static long nlmlex_get_number (const char *);
-static void nlmheader_identify (void);
-static void nlmheader_warn (const char *, int);
-static void nlmheader_error (const char *);
-static struct string_list * string_list_cons (char *, struct string_list *);
-static struct string_list * string_list_append (struct string_list *,
-						struct string_list *);
-static struct string_list * string_list_append1 (struct string_list *,
-						 char *);
-static char *xstrdup (const char *);
+static int yylex PARAMS ((void));
+static void nlmlex_file_push PARAMS ((const char *));
+static bfd_boolean nlmlex_file_open PARAMS ((const char *));
+static int nlmlex_buf_init PARAMS ((void));
+static char nlmlex_buf_add PARAMS ((int));
+static long nlmlex_get_number PARAMS ((const char *));
+static void nlmheader_identify PARAMS ((void));
+static void nlmheader_warn PARAMS ((const char *, int));
+static void nlmheader_error PARAMS ((const char *));
+static struct string_list * string_list_cons PARAMS ((char *,
+						      struct string_list *));
+static struct string_list * string_list_append PARAMS ((struct string_list *,
+							struct string_list *));
+static struct string_list * string_list_append1 PARAMS ((struct string_list *,
+							 char *));
+static char *xstrdup PARAMS ((const char *));
 
 %}
 
@@ -536,7 +537,8 @@ static struct input current;
 /* Start the lexer going on the main input file.  */
 
 bfd_boolean
-nlmlex_file (const char *name)
+nlmlex_file (name)
+     const char *name;
 {
   current.next = NULL;
   return nlmlex_file_open (name);
@@ -545,7 +547,8 @@ nlmlex_file (const char *name)
 /* Start the lexer going on a subsidiary input file.  */
 
 static void
-nlmlex_file_push (const char *name)
+nlmlex_file_push (name)
+     const char *name;
 {
   struct input *push;
 
@@ -563,7 +566,8 @@ nlmlex_file_push (const char *name)
 /* Start lexing from a file.  */
 
 static bfd_boolean
-nlmlex_file_open (const char *name)
+nlmlex_file_open (name)
+     const char *name;
 {
   current.file = fopen (name, "r");
   if (current.file == NULL)
@@ -636,7 +640,7 @@ static int lex_pos;
   ((void) (lex_buf != NULL ? lex_pos = 0 : nlmlex_buf_init ()))
 
 static int
-nlmlex_buf_init (void)
+nlmlex_buf_init ()
 {
   lex_size = 10;
   lex_buf = xmalloc (lex_size + 1);
@@ -654,7 +658,8 @@ nlmlex_buf_init (void)
 	   : nlmlex_buf_add (c)))
 
 static char
-nlmlex_buf_add (int c)
+nlmlex_buf_add (c)
+     int c;
 {
   if (lex_pos >= lex_size)
     {
@@ -669,7 +674,7 @@ nlmlex_buf_add (int c)
    code.  */
 
 static int
-yylex (void)
+yylex ()
 {
   int c;
 
@@ -852,7 +857,8 @@ tail_recurse:
 /* Get a number from a string.  */
 
 static long
-nlmlex_get_number (const char *s)
+nlmlex_get_number (s)
+     const char *s;
 {
   long ret;
   char *send;
@@ -869,7 +875,7 @@ nlmlex_get_number (const char *s)
    number.  */
 
 static void
-nlmheader_identify (void)
+nlmheader_identify ()
 {
   static int done;
 
@@ -884,7 +890,9 @@ nlmheader_identify (void)
 /* Issue a warning.  */
 
 static void
-nlmheader_warn (const char *s, int imax)
+nlmheader_warn (s, imax)
+     const char *s;
+     int imax;
 {
   nlmheader_identify ();
   fprintf (stderr, "%s:%d: %s", current.name, current.lineno, s);
@@ -896,7 +904,8 @@ nlmheader_warn (const char *s, int imax)
 /* Report an error.  */
 
 static void
-nlmheader_error (const char *s)
+nlmheader_error (s)
+     const char *s;
 {
   nlmheader_warn (s, -1);
   ++parse_errors;
@@ -905,7 +914,9 @@ nlmheader_error (const char *s)
 /* Add a string to a string list.  */
 
 static struct string_list *
-string_list_cons (char *s, struct string_list *l)
+string_list_cons (s, l)
+     char *s;
+     struct string_list *l;
 {
   struct string_list *ret;
 
@@ -918,7 +929,9 @@ string_list_cons (char *s, struct string_list *l)
 /* Append a string list to another string list.  */
 
 static struct string_list *
-string_list_append (struct string_list *l1, struct string_list *l2)
+string_list_append (l1, l2)
+     struct string_list *l1;
+     struct string_list *l2;
 {
   register struct string_list **pp;
 
@@ -931,7 +944,9 @@ string_list_append (struct string_list *l1, struct string_list *l2)
 /* Append a string to a string list.  */
 
 static struct string_list *
-string_list_append1 (struct string_list *l, char *s)
+string_list_append1 (l, s)
+     struct string_list *l;
+     char *s;
 {
   struct string_list *n;
   register struct string_list **pp;
@@ -948,7 +963,8 @@ string_list_append1 (struct string_list *l, char *s)
 /* Duplicate a string in memory.  */
 
 static char *
-xstrdup (const char *s)
+xstrdup (s)
+     const char *s;
 {
   unsigned long len;
   char *ret;

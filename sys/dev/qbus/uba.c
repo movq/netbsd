@@ -1,4 +1,4 @@
-/*	$NetBSD: uba.c,v 1.70 2004/12/14 02:32:03 chs Exp $	   */
+/*	$NetBSD: uba.c,v 1.68 2003/08/28 14:59:06 ragge Exp $	   */
 /*
  * Copyright (c) 1982, 1986 The Regents of the University of California.
  * All rights reserved.
@@ -69,7 +69,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uba.c,v 1.70 2004/12/14 02:32:03 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uba.c,v 1.68 2003/08/28 14:59:06 ragge Exp $");
 
 #include <sys/param.h>
 #include <sys/time.h>
@@ -92,10 +92,8 @@ __KERNEL_RCSID(0, "$NetBSD: uba.c,v 1.70 2004/12/14 02:32:03 chs Exp $");
 #include <dev/qbus/ubavar.h>
 
 #include "ioconf.h"
-#include "locators.h"
 
-static int ubasearch (struct device *, struct cfdata *,
-		      const locdesc_t *, void *);
+static int ubasearch (struct device *, struct cfdata *, void *);
 static int ubaprint (void *, const char *);
 
 /*
@@ -278,7 +276,7 @@ uba_attach(struct uba_softc *sc, paddr_t iopagephys)
 	/*
 	 * Now start searching for devices.
 	 */
-	config_search_ia(ubasearch,(struct device *)sc, "uba", NULL);
+	config_search(ubasearch,(struct device *)sc, NULL);
 
 	if (sc->uh_afterscan)
 		(*sc->uh_afterscan)(sc);
@@ -287,18 +285,16 @@ uba_attach(struct uba_softc *sc, paddr_t iopagephys)
 }
 
 int
-ubasearch(struct device *parent, struct cfdata *cf,
-	  const locdesc_t *ldesc, void *aux)
+ubasearch(struct device *parent, struct cfdata *cf, void *aux)
 {
 	struct	uba_softc *sc = (struct uba_softc *)parent;
 	struct	uba_attach_args ua;
-	int	i, csr, vec, br;
+	int	i, vec, br;
 
-	csr = cf->cf_loc[UBACF_CSR];
-	if (sc->uh_used[ubdevreg(csr)])
+	if (sc->uh_used[ubdevreg(cf->cf_loc[0])])
 		return 0; /* something are already at this address */
 
-	ua.ua_ioh = ubdevreg(csr) + sc->uh_ioh;
+	ua.ua_ioh = ubdevreg(cf->cf_loc[0]) + sc->uh_ioh;
 	ua.ua_iot = sc->uh_iot;
 	ua.ua_dmat = sc->uh_dmat;
 
@@ -323,10 +319,10 @@ ubasearch(struct device *parent, struct cfdata *cf,
 
 	ua.ua_br = br;
 	ua.ua_cvec = vec;
-	ua.ua_iaddr = csr;
+	ua.ua_iaddr = cf->cf_loc[0];
 	ua.ua_evcnt = NULL;
 
-	sc->uh_used[ubdevreg(csr)] = 1;
+	sc->uh_used[ubdevreg(cf->cf_loc[0])] = 1;
 
 	config_attach(parent, cf, &ua, ubaprint);
 	return 0;
@@ -334,7 +330,7 @@ ubasearch(struct device *parent, struct cfdata *cf,
 fail:
 	printf("%s%d at %s csr %o %s\n",
 	    cf->cf_name, cf->cf_unit, parent->dv_xname,
-	    csr, (i ? "zero vector" : "didn't interrupt"));
+	    cf->cf_loc[0], (i ? "zero vector" : "didn't interrupt"));
 
 forgetit:
 	return 0;

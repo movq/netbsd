@@ -1,4 +1,4 @@
-/*	$NetBSD: rf_psstatus.h,v 1.10 2004/04/09 17:01:03 oster Exp $	*/
+/*	$NetBSD: rf_psstatus.h,v 1.9.2.1 2004/04/09 18:26:02 jmc Exp $	*/
 /*
  * Copyright (c) 1995 Carnegie-Mellon University.
  * All rights reserved.

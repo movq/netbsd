@@ -1,4 +1,4 @@
-/*	$NetBSD: if_aue.c,v 1.89 2004/11/03 22:59:31 rjs Exp $	*/
+/*	$NetBSD: if_aue.c,v 1.85 2004/01/05 13:36:24 augustss Exp $	*/
 /*
  * Copyright (c) 1997, 1998, 1999, 2000
  *	Bill Paul <wpaul@ee.columbia.edu>.  All rights reserved.
@@ -77,7 +77,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_aue.c,v 1.89 2004/11/03 22:59:31 rjs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_aue.c,v 1.85 2004/01/05 13:36:24 augustss Exp $");
 
 #if defined(__NetBSD__)
 #include "opt_inet.h"
@@ -169,7 +169,7 @@ struct aue_type {
 };
 
 Static const struct aue_type aue_devs[] = {
- {{ USB_VENDOR_3COM,		USB_PRODUCT_3COM_3C460B},	  PII },
+ {{ USB_VENDOR_3COM,		USB_PRODUCT_3COM_3C460B},         PII },
  {{ USB_VENDOR_ABOCOM,		USB_PRODUCT_ABOCOM_XX1},	  PNA|PII },
  {{ USB_VENDOR_ABOCOM,		USB_PRODUCT_ABOCOM_XX2},	  PII },
  {{ USB_VENDOR_ABOCOM,		USB_PRODUCT_ABOCOM_UFE1000},	  LSYS },
@@ -185,8 +185,6 @@ Static const struct aue_type aue_devs[] = {
  {{ USB_VENDOR_ACCTON,		USB_PRODUCT_ACCTON_SS1001},	  PII },
  {{ USB_VENDOR_ADMTEK,		USB_PRODUCT_ADMTEK_PEGASUS},	  PNA },
  {{ USB_VENDOR_ADMTEK,		USB_PRODUCT_ADMTEK_PEGASUSII},	  PII },
- {{ USB_VENDOR_ADMTEK,		USB_PRODUCT_ADMTEK_PEGASUSII_2},  PII },
- {{ USB_VENDOR_AEI,		USB_PRODUCT_AEI_USBTOLAN},	  PII },
  {{ USB_VENDOR_BELKIN,		USB_PRODUCT_BELKIN_USB2LAN},	  PII },
  {{ USB_VENDOR_BILLIONTON,	USB_PRODUCT_BILLIONTON_USB100},	  0 },
  {{ USB_VENDOR_BILLIONTON,	USB_PRODUCT_BILLIONTON_USBLP100}, PNA },
@@ -736,7 +734,7 @@ USB_ATTACH(aue)
 
 	DPRINTFN(5,(" : aue_attach: sc=%p", sc));
 
-	usbd_devinfo(dev, 0, devinfo, sizeof(devinfo));
+	usbd_devinfo(dev, 0, devinfo);
 	USB_ATTACH_SETUP;
 	printf("%s: %s\n", USBDEVNAME(sc->aue_dev), devinfo);
 
@@ -1617,12 +1615,10 @@ aue_ioctl(struct ifnet *ifp, u_long command, caddr_t data)
 			ether_addmulti(ifr, &sc->aue_ec) :
 			ether_delmulti(ifr, &sc->aue_ec);
 		if (error == ENETRESET) {
-			if (ifp->if_flags & IFF_RUNNING) {
-				aue_init(sc);
-				aue_setmulti(sc);
-			}
-			error = 0;
+			aue_init(sc);
 		}
+		aue_setmulti(sc);
+		error = 0;
 		break;
 	case SIOCGIFMEDIA:
 	case SIOCSIFMEDIA:

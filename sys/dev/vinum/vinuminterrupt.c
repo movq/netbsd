@@ -39,7 +39,7 @@
  * otherwise) arising in any way out of the use of this software, even if
  * advised of the possibility of such damage.
  *
- * $Id: vinuminterrupt.c,v 1.4 2004/11/08 21:30:05 explorer Exp $
+ * $Id: vinuminterrupt.c,v 1.2 2003/11/25 20:11:59 jdolecek Exp $
  * $FreeBSD$
  */
 
@@ -100,7 +100,7 @@ complete_rqe(struct buf *bp)
 		set_sd_state(rqe->sdno, sd_crashed, setstate_force); /* subdisk is crashed */
 	    }
 	    log(LOG_ERR,
-		"%s:%s read error, block %lld for %d bytes\n",
+		"%s:%s read error, block %lld for %ld bytes\n",
 		gravity,
 		sd->name,
 		(long long int) bp->b_blkno,
@@ -111,20 +111,20 @@ complete_rqe(struct buf *bp)
 		set_sd_state(rqe->sdno, sd_stale, setstate_force); /* subdisk is stale */
 	    }
 	    log(LOG_ERR,
-		"%s:%s write error, block %lld for %d bytes\n",
+		"%s:%s write error, block %lld for %ld bytes\n",
 		gravity,
 		sd->name,
 		(long long int)bp->b_blkno,
 		bp->b_bcount);
 	}
 	log(LOG_ERR,
-	    "%s: user buffer block %lld for %d bytes\n",
+	    "%s: user buffer block %lld for %ld bytes\n",
 	    sd->name,
 	    (long long int)ubp->b_blkno,
 	    ubp->b_bcount);
 	if (rq->error == ENXIO) {			    /* the drive's down too */
 	    log(LOG_ERR,
-		"%s: fatal drive I/O error, block %lld for %d bytes\n",
+		"%s: fatal drive I/O error, block %lld for %ld bytes\n",
 		DRIVE[rqe->driveno].label.name,
 		(long long int)bp->b_blkno,
 		bp->b_bcount);
@@ -404,7 +404,7 @@ complete_raid5_write(struct rqelement *rqe)
 #ifdef VINUMDEBUG
 		    if (debug & DEBUG_ADDRESSES)
 			log(LOG_DEBUG,
-			    "  %s dev %d.%d, sd %d, offset 0x%x, devoffset 0x%llx, length %d\n",
+			    "  %s dev %d.%d, sd %d, offset 0x%x, devoffset 0x%llx, length %ld\n",
 			    rqe->b.b_flags & B_READ ? "Read" : "Write",
 			    major(rqe->b.b_dev),
 			    minor(rqe->b.b_dev),
@@ -446,7 +446,7 @@ complete_raid5_write(struct rqelement *rqe)
 #ifdef VINUMDEBUG
     if (debug & DEBUG_ADDRESSES)
 	log(LOG_DEBUG,
-	    "  %s dev %d.%d, sd %d, offset 0x%x, devoffset 0x%llx, length %d\n",
+	    "  %s dev %d.%d, sd %d, offset 0x%x, devoffset 0x%llx, length %ld\n",
 	    rqe->b.b_flags & B_READ ? "Read" : "Write",
 	    major(rqe->b.b_dev),
 	    minor(rqe->b.b_dev),

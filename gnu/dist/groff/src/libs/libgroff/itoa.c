@@ -1,6 +1,6 @@
-/*	$NetBSD: itoa.c,v 1.1.1.3 2004/07/30 14:44:51 wiz Exp $	*/
+/*	$NetBSD: itoa.c,v 1.1.1.2 2003/06/30 17:52:06 wiz Exp $	*/
 
-/* Copyright (C) 1989, 1990, 1991, 1992, 2000, 2002, 2004
+/* Copyright (C) 1989, 1990, 1991, 1992, 2000, 2002
      Free Software Foundation, Inc.
      Written by James Clark (jjc@jclark.com)
 
@@ -23,11 +23,8 @@ Foundation, 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA. */
 #define INT_DIGITS 19		/* enough for 64 bit integer */
 #define UINT_DIGITS 20
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-char *i_to_a(int i)
+char *i_to_a(i)
+     int i;
 {
   /* Room for INT_DIGITS digits, - and '\0' */
   static char buf[INT_DIGITS + 2];
@@ -49,7 +46,8 @@ char *i_to_a(int i)
   return p;
 }
 
-char *ui_to_a(unsigned int i)
+char *ui_to_a(i)
+     unsigned int i;
 {
   /* Room for UINT_DIGITS digits and '\0' */
   static char buf[UINT_DIGITS + 1];
@@ -60,7 +58,3 @@ char *ui_to_a(unsigned int i)
   } while (i != 0);
   return p;
 }
-
-#ifdef __cplusplus
-}
-#endif

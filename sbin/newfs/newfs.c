@@ -1,4 +1,4 @@
-/*	$NetBSD: newfs.c,v 1.85 2004/11/15 12:21:29 he Exp $	*/
+/*	$NetBSD: newfs.c,v 1.81 2004/03/18 20:32:06 dsl Exp $	*/
 
 /*
  * Copyright (c) 1983, 1989, 1993, 1994
@@ -78,7 +78,7 @@ __COPYRIGHT("@(#) Copyright (c) 1983, 1989, 1993, 1994\n\
 #if 0
 static char sccsid[] = "@(#)newfs.c	8.13 (Berkeley) 5/1/95";
 #else
-__RCSID("$NetBSD: newfs.c,v 1.85 2004/11/15 12:21:29 he Exp $");
+__RCSID("$NetBSD: newfs.c,v 1.81 2004/03/18 20:32:06 dsl Exp $");
 #endif
 #endif /* not lint */
 
@@ -196,7 +196,7 @@ int	maxbsize = 0;		/* maximum clustering */
 int	minfree = MINFREE;	/* free space threshold */
 int	opt = DEFAULTOPT;	/* optimization preference (space or time) */
 int	density;		/* number of bytes per inode */
-int	num_inodes;		/* number of inodes (overrides density) */
+int	num_inodes;		/* number of inoder (overrides density) */
 int	maxcontig = 0;		/* max contiguous blocks to allocate */
 int	maxbpg;			/* maximum blocks per file in a cyl group */
 int	avgfilesize = AVFILESIZ;/* expected average file size */
@@ -220,7 +220,7 @@ main(int argc, char *argv[])
 	struct partition *pp = NULL;
 	struct disklabel *lp = NULL;
 	struct partition oldpartition;
-	struct statvfs *mp;
+	struct statfs *mp;
 	struct stat sb;
 	int ch, fsi, fso, len, n, Fflag, Iflag, Zflag;
 	uint ptn = 0;	/* gcc -Wuninitialised */
@@ -231,7 +231,7 @@ main(int argc, char *argv[])
 	struct mfs_args args;
 	char mountfromname[100];
 	pid_t pid, res;
-	struct statvfs sf;
+	struct statfs sf;
 	int status;
 #endif
 	mode_t mfsmode = 01777;	/* default mode for a /tmp-type directory */
@@ -253,8 +253,8 @@ main(int argc, char *argv[])
 	}
 
 	opstring = mfs ?
-	    "NT:a:b:d:e:f:g:h:i:m:n:o:p:s:u:" :
-	    "B:FINO:S:T:Za:b:d:e:f:g:h:i:l:m:n:o:p:r:s:u:v:";
+	    "NT:a:b:c:d:e:f:g:h:i:m:n:o:p:s:u:" :
+	    "B:FINO:S:T:Za:b:c:d:e:f:g:h:i:l:m:n:o:p:r:s:u:v:";
 	while ((ch = getopt(argc, argv, opstring)) != -1)
 		switch (ch) {
 		case 'B':
@@ -300,6 +300,8 @@ main(int argc, char *argv[])
 		case 'b':
 			bsize = strsuftoi64("block size",
 			    optarg, MINBSIZE, MAXBSIZE, NULL);
+			break;
+		case 'c':	/* was cylinders per group... */
 			break;
 		case 'd':
 			maxbsize = strsuftoi64("maximum extent size",
@@ -526,10 +528,10 @@ main(int argc, char *argv[])
 		char	*buf;
 		int	bufsize, i;
 		off_t	bufrem;
-		struct statvfs sfs;
+		struct statfs sfs;
 
-		if (fstatvfs(fso, &sfs) == -1) {
-			warn("can't fstatvfs `%s'", special);
+		if (fstatfs(fso, &sfs) == -1) {
+			warn("can't fstatfs `%s'", special);
 			bufsize = 8192;
 		} else
 			bufsize = sfs.f_iosize;
@@ -644,8 +646,8 @@ main(int argc, char *argv[])
 				 * can mount a filesystem which hides our
 				 * ramdisk before we see the success.
 				 */
-				if (statvfs(argv[1], &sf) < 0)
-					err(88, "statvfs %s", argv[1]);
+				if (statfs(argv[1], &sf) < 0)
+					err(88, "statfs %s", argv[1]);
 				if (!strcmp(sf.f_mntfromname, mountfromname) &&
 				    !strncmp(sf.f_mntonname, argv[1],
 					     MNAMELEN) &&
@@ -747,7 +749,7 @@ rewritelabel(char *s, int fd, struct disklabel *lp)
 		 */
 		strlcpy(specname, s, sizeof(specname));
 		cp = specname + strlen(specname) - 1;
-		if (!isdigit((unsigned char)*cp))
+		if (!isdigit(*cp))
 			*cp = 'c';
 		cfd = open(specname, O_WRONLY);
 		if (cfd < 0)
@@ -858,6 +860,7 @@ struct help_strings {
 	{ NEWFS,	"-Z \t\tpre-zero the image file" },
 	{ BOTH,		"-a maxcontig\tmaximum contiguous blocks" },
 	{ BOTH,		"-b bsize\tblock size" },
+	{ BOTH,		"-c blocks\tblocks per cylinder group" },
 	{ BOTH,		"-d maxbsize\tmaximum extent size" },
 	{ BOTH,		"-e maxbpg\tmaximum blocks per file in a cylinder group"
 			    },

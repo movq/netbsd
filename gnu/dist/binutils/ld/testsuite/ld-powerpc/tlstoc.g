@@ -2,12 +2,12 @@
 #source: tlstoc.s
 #as: -a64
 #ld: -melf64ppc
-#objdump: -sj.got
+#objdump: -sj.toc
 #target: powerpc64*-*-*
 
 .*: +file format elf64-powerpc
 
-Contents of section \.got:
+Contents of section \.toc:
  100101a0 00000000 00000001 00000000 00000000  .*
  100101b0 00000000 00000001 00000000 00000000  .*
  100101c0 00000000 00000001 00000000 00000000  .*

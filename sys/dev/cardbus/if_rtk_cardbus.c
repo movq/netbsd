@@ -1,4 +1,4 @@
-/*	$NetBSD: if_rtk_cardbus.c,v 1.23 2004/08/02 19:26:51 mycroft Exp $	*/
+/*	$NetBSD: if_rtk_cardbus.c,v 1.19 2004/03/11 12:19:14 kanaoka Exp $	*/
 
 /*
  * Copyright (c) 2000 Masanori Kanaoka
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_rtk_cardbus.c,v 1.23 2004/08/02 19:26:51 mycroft Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_rtk_cardbus.c,v 1.19 2004/03/11 12:19:14 kanaoka Exp $");
 
 #include "opt_inet.h"
 #include "opt_ns.h"
@@ -81,7 +81,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_rtk_cardbus.c,v 1.23 2004/08/02 19:26:51 mycroft 
 #include <dev/pci/pcidevs.h>
 
 #include <dev/cardbus/cardbusvar.h>
-#include <dev/pci/pcidevs.h>
+#include <dev/cardbus/cardbusdevs.h>
 
 #include <dev/mii/mii.h>
 #include <dev/mii/miivar.h>
@@ -103,23 +103,23 @@ __KERNEL_RCSID(0, "$NetBSD: if_rtk_cardbus.c,v 1.23 2004/08/02 19:26:51 mycroft 
  * Various supported device vendors/types and their names.
  */
 static const struct rtk_type rtk_cardbus_devs[] = {
-	{ PCI_VENDOR_ACCTON, PCI_PRODUCT_ACCTON_MPX5030,
+	{ CARDBUS_VENDOR_ACCTON, CARDBUS_PRODUCT_ACCTON_MPX5030,
 		RTK_8139, "Accton MPX 5030/5038 10/100BaseTX" },
-	{ PCI_VENDOR_DLINK, PCI_PRODUCT_DLINK_DFE690TXD,
+	{ CARDBUS_VENDOR_DLINK, CARDBUS_PRODUCT_DLINK_DFE_690TXD,
 		RTK_8139, "D-Link DFE-690TXD 10/100BaseTX" },
-	{ PCI_VENDOR_REALTEK, PCI_PRODUCT_REALTEK_RT8138,
+	{ CARDBUS_VENDOR_REALTEK, CARDBUS_PRODUCT_REALTEK_RT8138,
 		RTK_8139, "Realtek 8138 10/100BaseTX" },
-	{ PCI_VENDOR_REALTEK, PCI_PRODUCT_REALTEK_RT8139,
+	{ CARDBUS_VENDOR_REALTEK, CARDBUS_PRODUCT_REALTEK_RT8139,
 		RTK_8139, "Realtek 8139 10/100BaseTX" },
-	{ PCI_VENDOR_COREGA, PCI_PRODUCT_COREGA_CB_TXD,
+	{ CARDBUS_VENDOR_COREGA, CARDBUS_PRODUCT_COREGA_CB_TXD,
 		RTK_8139, "Corega FEther CB-TXD 10/100BaseTX" },
-	{ PCI_VENDOR_COREGA, PCI_PRODUCT_COREGA_2CB_TXD,
+	{ CARDBUS_VENDOR_COREGA, CARDBUS_PRODUCT_COREGA_2CB_TXD,
 		RTK_8139, "Corega FEther II CB-TXD 10/100BaseTX" },
-	{ PCI_VENDOR_PLANEX, PCI_PRODUCT_PLANEX_FNW_3603_TX,
+	{ CARDBUS_VENDOR_PLANEX, CARDBUS_PRODUCT_PLANEX_FNW_3603_TX,
 		RTK_8139, "Planex FNW-3603 10/100BaseTX" },
-	{ PCI_VENDOR_PLANEX, PCI_PRODUCT_PLANEX_FNW_3800_TX,
+	{ CARDBUS_VENDOR_PLANEX, CARDBUS_PRODUCT_PLANEX_FNW_3800_TX,
 		RTK_8139, "Planex 10/100BaseTX FNW-3800-TX" },
-	{ PCI_VENDOR_ABOCOM, PCI_PRODUCT_ABOCOM_FE2000VX,
+	{ CARDBUS_VENDOR_ABOCOM, CARDBUS_PRODUCT_ABOCOM_FE2000VX,
 		RTK_8139, "AboCom FE2000VX 10/100BaseTX" },
 
 	{ 0, 0, 0, NULL }
@@ -314,8 +314,7 @@ rtk_cardbus_setup(csc)
 	 */
 	if (cardbus_get_capability(cc, cf, csc->sc_tag,
 	    PCI_CAP_PWRMGMT, &pmreg, 0)) {
-		command = cardbus_conf_read(cc, cf, csc->sc_tag,
-		    pmreg + PCI_PMCSR);
+		command = cardbus_conf_read(cc, cf, csc->sc_tag, pmreg + 4);
 		if (command & RTK_PSTATE_MASK) {
 			pcireg_t		iobase, membase, irq;
 
@@ -331,9 +330,9 @@ rtk_cardbus_setup(csc)
 			printf("%s: chip is in D%d power mode "
 			    "-- setting to D0\n", sc->sc_dev.dv_xname,
 			    command & RTK_PSTATE_MASK);
-			command &= ~RTK_PSTATE_MASK;
+			command &= 0xFFFFFFFC;
 			cardbus_conf_write(cc, cf, csc->sc_tag,
-			    pmreg + PCI_PMCSR, command);
+			    pmreg + 4, command);
 
 			/* Restore PCI config data. */
 			cardbus_conf_write(cc, cf, csc->sc_tag,
@@ -345,13 +344,13 @@ rtk_cardbus_setup(csc)
 		}
 	}
 
-	/* Program the BAR */
-	cardbus_conf_write(cc, cf, csc->sc_tag,
-		csc->sc_bar_reg, csc->sc_bar_val);
-
 	/* Make sure the right access type is on the CardBus bridge. */
 	(*ct->ct_cf->cardbus_ctrl)(cc, csc->sc_cben);
 	(*ct->ct_cf->cardbus_ctrl)(cc, CARDBUS_BM_ENABLE);
+
+	/* Program the BAR */
+	cardbus_conf_write(cc, cf, csc->sc_tag,
+		csc->sc_bar_reg, csc->sc_bar_val);
 
 	/* Enable the appropriate bits in the CARDBUS CSR. */
 	reg = cardbus_conf_read(cc, cf, csc->sc_tag, 

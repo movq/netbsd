@@ -1,9 +1,9 @@
-/*	$NetBSD: toc.c,v 1.1.1.3 2004/07/12 23:26:48 wiz Exp $	*/
+/*	$NetBSD: toc.c,v 1.1.1.2 2003/01/17 14:54:36 wiz Exp $	*/
 
 /* toc.c -- table of contents handling.
-   Id: toc.c,v 1.8 2004/03/10 23:28:43 dirt Exp
+   Id: toc.c,v 1.3 2002/11/07 16:13:59 karl Exp
 
-   Copyright (C) 1999, 2000, 2001, 2002, 2003 Free Software Foundation, Inc.
+   Copyright (C) 1999, 2000, 2001, 2002 Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -32,20 +32,36 @@
 #include "makeinfo.h"
 #include "sectioning.h"
 #include "toc.h"
-#include "xml.h"
 
+
+
 /* array of toc entries */
 static TOC_ENTRY_ELT **toc_entry_alist = NULL;
 
 /* toc_counter start from 0 ... n for every @chapter, @section ... */
 static int toc_counter = 0;
+
+/* the file where we found the @contents directive */
+char *contents_filename;
+
+/* the file where we found the @shortcontents directive */
+char *shortcontents_filename;
+
+static const char contents_placebo[] = "\n...Table of Contents...\n";
+static const char shortcontents_placebo[] = "\n...Short Contents...\n";
+static const char lots_of_stars[] =
+"***************************************************************************";
+
 
 /* Routine to add an entry to the table of contents */
 int
-toc_add_entry (char *tocname, int level, char *node_name, char *anchor)
+toc_add_entry (tocname, level, node_name, anchor)
+     char *tocname;
+     int level;
+     char *node_name;
+     char *anchor;
 {
-  char *tocname_and_node, *expanded_node, *d;
-  char *s = NULL;
+  char *tocname_and_node, *expanded_node, *s, *d;
   char *filename = NULL;
 
   if (!node_name)
@@ -93,11 +109,14 @@ toc_add_entry (char *tocname, int level, char *node_name, char *anchor)
         {
           for (; *s; s++)
             {
-              if (cr_or_whitespace (*s))
-                *d++ = '-';
+              if (*s == '&')
+                {
+                  strcpy (d, "&amp;");
+                  d += 5;
+                }
               else if (! URL_SAFE_CHAR (*s))
                 {
-                  sprintf (d, "_00%x", (unsigned char) *s);
+                  sprintf (d, "%%%x", (unsigned char) *s);
                   /* do this manually since sprintf returns char * on
                      SunOS 4 and other old systems.  */
                   while (*d)
@@ -148,7 +167,8 @@ toc_add_entry (char *tocname, int level, char *node_name, char *anchor)
    more than a single chapter structioning command in a node,
    or if they have a node without any structuring commands.  */
 char *
-toc_find_section_of_node (char *node)
+toc_find_section_of_node (node)
+     char *node;
 {
   int i;
 
@@ -163,7 +183,7 @@ toc_find_section_of_node (char *node)
 
 /* free up memory used by toc entries */
 void
-toc_free (void)
+toc_free ()
 {
   int i;
 
@@ -181,11 +201,13 @@ toc_free (void)
       toc_counter = 0; /* to be absolutley sure ;-) */
     }
 }
+
 
 /* Print table of contents in HTML.  */
 
 static void
-contents_update_html (void)
+contents_update_html (fp)
+     FILE *fp;
 {
   int i;
   int k;
@@ -196,7 +218,9 @@ contents_update_html (void)
       /* no, so return to sender ;-) */
       return;
 
-  add_html_block_elt_args ("\n<div class=\"contents\">\n<h2>%s</h2>\n<ul>\n", _("Table of Contents"));
+  flush_output ();      /* in case we are writing stdout */
+
+  fprintf (fp, "\n<div class=\"contents\">\n<h2>%s</h2>\n<ul>\n", _("Table of Contents"));
 
   last_level = toc_entry_alist[0]->level;
 
@@ -208,14 +232,14 @@ contents_update_html (void)
              @chapter ...
              @subsubsection ...      ? */
           for (k = 0; k < (toc_entry_alist[i]->level-last_level); k++)
-            add_html_block_elt ("<ul>\n");
+            fputs ("<ul>\n", fp);
         }
       else if (toc_entry_alist[i]->level < last_level)
         {
           /* @subsubsection ...
              @chapter ... this IS usual.*/
           for (k = 0; k < (last_level-toc_entry_alist[i]->level); k++)
-            add_word ("</li></ul>\n");
+            fputs ("</li></ul>\n", fp);
         }
 
       /* No double entries in TOC.  */
@@ -223,11 +247,11 @@ contents_update_html (void)
 			 toc_entry_alist[i-1]->name) == 0))
         {
           /* each toc entry is a list item.  */
-          add_word ("<li>");
+          fputs ("<li>", fp);
 
           /* Insert link -- to an external file if splitting, or
              within the current document if not splitting.  */
-	  add_word ("<a ");
+	  fprintf (fp, "<a ");
           /* For chapters (only), insert an anchor that the short contents
              will link to.  */
           if (toc_entry_alist[i]->level == 0)
@@ -240,10 +264,10 @@ contents_update_html (void)
 		 ends, and use that in toc_FOO.  */
 	      while (*p && *p != '"')
 		p++;
-	      add_word_args ("name=\"toc_%.*s\" ",
+	      fprintf (fp, "name=\"toc_%.*s\" ",
 		       p - toc_entry_alist[i]->name, toc_entry_alist[i]->name);
 	    }
-	  add_word_args ("href=\"%s#%s</a>\n",
+	  fprintf (fp, "href=\"%s#%s</a>\n",
 		   splitting ? toc_entry_alist[i]->html_file : "",
 		   toc_entry_alist[i]->name);
         }
@@ -254,15 +278,16 @@ contents_update_html (void)
   /* Go back to start level. */
   if (toc_entry_alist[0]->level < last_level)
     for (k = 0; k < (last_level-toc_entry_alist[0]->level); k++)
-      add_word ("</li></ul>\n");
+      fputs ("</li></ul>\n", fp);
 
-  add_word ("</li></ul>\n</div>\n\n");
+  fputs ("</li></ul>\n</div>\n\n", fp);
 }
 
 /* print table of contents in ASCII (--no-headers)
    May be we should create a new command line switch --ascii ? */
 static void
-contents_update_info (void)
+contents_update_info (fp)
+     FILE *fp;
 {
   int i;
   int k;
@@ -270,40 +295,41 @@ contents_update_info (void)
   if (!toc_counter)
       return;
 
-  insert_string ((char *) _("Table of Contents"));
-  insert ('\n');
-  for (i = 0; i < strlen (_("Table of Contents")); i++)
-    insert ('*');
-  insert_string ("\n\n");
+  flush_output ();      /* in case we are writing stdout */
+
+  fprintf (fp, "%s\n%.*s\n\n", _("Table of Contents"),
+           (int) strlen (_("Table of Contents")), lots_of_stars);
 
   for (i = 0; i < toc_counter; i++)
     {
       if (toc_entry_alist[i]->level == 0)
-        add_char ('\n');
+        fputs ("\n", fp);
 
       /* indention with two spaces per level, should this
          changed? */
       for (k = 0; k < toc_entry_alist[i]->level; k++)
-        insert_string ("  ");
+        fputs ("  ", fp);
 
-      insert_string (toc_entry_alist[i]->name);
-      insert ('\n');
+      fprintf (fp, "%s\n", toc_entry_alist[i]->name);
     }
-  insert_string ("\n\n");
+  fputs ("\n\n", fp);
 }
 
 /* shortcontents in HTML; Should this produce a standalone file? */
 static void
-shortcontents_update_html (char *contents_filename)
+shortcontents_update_html (fp)
+     FILE *fp;
 {
   int i;
-  char *toc_file = NULL;
+  char *toc_file;
 
   /* does exist any toc? */
   if (!toc_counter)
     return;
 
-  add_html_block_elt_args ("\n<div class=\"shortcontents\">\n<h2>%s</h2>\n<ul>\n", _("Short Contents"));
+  flush_output ();      /* in case we are writing stdout */
+
+  fprintf (fp, "\n<div class=\"shortcontents\">\n<h2>%s</h2>\n<ul>\n", _("Short Contents"));
 
   if (contents_filename)
     toc_file = filename_part (contents_filename);
@@ -315,76 +341,194 @@ shortcontents_update_html (char *contents_filename)
       if (toc_entry_alist[i]->level == 0)
 	{
 	  if (contents_filename)
-	    add_word_args ("<li><a href=\"%s#toc_%s</a></li>\n",
+	    fprintf (fp, "<li><a href=\"%s#toc_%s</a></li>\n",
 		     splitting ? toc_file : "", name);
 	  else
-	    add_word_args ("<a href=\"%s#%s</a>\n",
+	    fprintf (fp, "<a href=\"%s#%s</a>\n",
 		     splitting ? toc_entry_alist[i]->html_file : "", name);
 	}
     }
-  add_word ("</ul>\n</div>\n\n");
+  fputs ("</ul>\n</div>\n\n", fp);
   if (contents_filename)
     free (toc_file);
 }
 
 /* short contents in ASCII (--no-headers).  */
 static void
-shortcontents_update_info (void)
+shortcontents_update_info (fp)
+     FILE *fp;
 {
   int i;
 
   if (!toc_counter)
       return;
 
-  insert_string ((char *) _("Short Contents"));
-  insert ('\n');
-  for (i = 0; i < strlen (_("Short Contents")); i++)
-    insert ('*');
-  insert_string ("\n\n");
+  flush_output ();      /* in case we are writing stdout */
+
+  fprintf (fp, "%s\n%.*s\n\n", _("Short Contents"),
+           (int) strlen (_("Short Contents")), lots_of_stars);
 
   for (i = 0; i < toc_counter; i++)
     {
       if (toc_entry_alist[i]->level == 0)
-        {
-          insert_string (toc_entry_alist[i]->name);
-          insert ('\n');
-        }
+        fprintf (fp, "%s\n", toc_entry_alist[i]->name);
     }
-  insert_string ("\n\n");
+  fputs ("\n\n", fp);
+}
+
+
+static FILE *toc_fp;
+static char *toc_buf;
+
+static int
+rewrite_top (fname, placebo)
+     const char *fname, *placebo;
+{
+  int idx;
+
+  /* Can't rewrite standard output or the null device.  No point in
+     complaining.  */
+  if (STREQ (fname, "-")
+      || FILENAME_CMP (fname, NULL_DEVICE) == 0
+      || FILENAME_CMP (fname, ALSO_NULL_DEVICE) == 0)
+    return -1;
+
+  toc_buf = find_and_load (fname);
+
+  if (!toc_buf)
+    {
+      fs_error (fname);
+      return -1;
+    }
+
+  idx = search_forward (placebo, 0);
+
+  if (idx < 0)
+    {
+      error (_("%s: TOC should be here, but it was not found"), fname);
+      return -1;
+    }
+
+  toc_fp = fopen (fname, "w");
+  if (!toc_fp)
+    {
+      fs_error (fname);
+      return -1;
+    }
+
+  if (fwrite (toc_buf, 1, idx, toc_fp) != idx)
+    {
+      fs_error (fname);
+      return -1;
+    }
+
+  return idx + strlen (placebo);
+}
+
+static void
+contents_update ()
+{
+  int cont_idx = rewrite_top (contents_filename, contents_placebo);
+
+  if (cont_idx < 0)
+    return;
+
+  if (html)
+    contents_update_html (toc_fp);
+  else
+    contents_update_info (toc_fp);
+
+  if (fwrite (toc_buf + cont_idx, 1, input_text_length - cont_idx, toc_fp)
+      != input_text_length - cont_idx
+      || fclose (toc_fp) != 0)
+    fs_error (contents_filename);
+}
+
+static void
+shortcontents_update ()
+{
+  int cont_idx = rewrite_top (shortcontents_filename, shortcontents_placebo);
+
+  if (cont_idx < 0)
+    return;
+
+  if (html)
+    shortcontents_update_html (toc_fp);
+  else
+    shortcontents_update_info (toc_fp);
+
+  if (fwrite (toc_buf + cont_idx, 1, input_text_length - cont_idx - 1, toc_fp)
+      != input_text_length - cont_idx - 1
+      || fclose (toc_fp) != 0)
+    fs_error (shortcontents_filename);
 }
 
 void
-cm_contents (int arg)
+toc_update ()
 {
-  /* the file where we found the @contents directive */
-  static char *contents_filename;
+  if (!html && !no_headers)
+    return;
 
-  /* No need to mess with delayed stuff for XML and Docbook.  */
-  if (xml)
+  if (contents_filename)
+    contents_update ();
+  if (shortcontents_filename)
+    shortcontents_update ();
+}
+
+void
+cm_contents (arg)
+     int arg;
+{
+  if ((html || no_headers) && arg == START)
     {
-      if (arg == START)
+      if (contents_filename)
         {
-          int elt = STREQ (command, "contents") ? CONTENTS : SHORTCONTENTS;
-          xml_insert_element (elt, START);
-          xml_insert_element (elt, END);
+          free (contents_filename);
+          contents_filename = NULL;
         }
-    }
-  else if (!handling_delayed_writes)
-    {
-      register_delayed_write (STREQ (command, "contents")
-          ? "@contents" : "@shortcontents");
 
-      if (html && STREQ (command, "contents"))
+      if (contents_filename && STREQ (contents_filename, "-"))
         {
-          if (contents_filename)
-            free (contents_filename);
+          if (html)
+            contents_update_html (stdout);
+          else
+            contents_update_info (stdout);
+        }
+      else
+        {
+          if (!executing_string && html)
+            html_output_head ();
           contents_filename = xstrdup (current_output_filename);
+          insert_string (contents_placebo); /* just mark it, for now */
         }
     }
-  else if (html)
-    STREQ (command, "contents")
-      ? contents_update_html () : shortcontents_update_html (contents_filename);
-  else if (no_headers)
-    STREQ (command, "contents")
-      ? contents_update_info () : shortcontents_update_info ();
+}
+
+void
+cm_shortcontents (arg)
+     int arg;
+{
+  if ((html || no_headers) && arg == START)
+    {
+      if (shortcontents_filename)
+        {
+          free (shortcontents_filename);
+          shortcontents_filename = NULL;
+        }
+
+      if (shortcontents_filename && STREQ (shortcontents_filename, "-"))
+        {
+          if (html)
+            shortcontents_update_html (stdout);
+          else
+            shortcontents_update_info (stdout);
+        }
+      else
+        {
+          if (!executing_string && html)
+            html_output_head ();
+          shortcontents_filename = xstrdup (current_output_filename);
+          insert_string (shortcontents_placebo); /* just mark it, for now */
+        }
+    }
 }

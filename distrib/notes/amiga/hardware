@@ -1,4 +1,4 @@
-.\"	$NetBSD: hardware,v 1.45 2004/09/06 18:56:16 is Exp $
+.\"	$NetBSD: hardware,v 1.44.2.1 2004/09/10 03:03:44 jmc Exp $
 .
 .Nx \*V
 runs on any Amiga that has a 68020 or better CPU with

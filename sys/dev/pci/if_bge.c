@@ -1,4 +1,4 @@
-/*	$NetBSD: if_bge.c,v 1.79 2004/11/19 17:59:09 jmmv Exp $	*/
+/*	$NetBSD: if_bge.c,v 1.66.2.3 2004/05/29 09:00:24 tron Exp $	*/
 
 /*
  * Copyright (c) 2001 Wind River Systems
@@ -79,7 +79,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_bge.c,v 1.79 2004/11/19 17:59:09 jmmv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_bge.c,v 1.66.2.3 2004/05/29 09:00:24 tron Exp $");
 
 #include "bpfilter.h"
 #include "vlan.h"
@@ -254,16 +254,6 @@ int	bgedebug = 0;
 #else
 #define DPRINTF(x)
 #define DPRINTFN(n,x)
-#endif
-
-#ifdef BGE_EVENT_COUNTERS
-#define	BGE_EVCNT_INCR(ev)	(ev).ev_count++
-#define	BGE_EVCNT_ADD(ev, val)	(ev).ev_count += (val)
-#define	BGE_EVCNT_UPD(ev, val)	(ev).ev_count = (val)
-#else
-#define	BGE_EVCNT_INCR(ev)	/* nothing */
-#define	BGE_EVCNT_ADD(ev, val)	/* nothing */
-#define	BGE_EVCNT_UPD(ev, val)	/* nothing */
 #endif
 
 /* Various chip quirks. */
@@ -593,15 +583,6 @@ bge_miibus_statchg(dev)
 	struct bge_softc *sc = (struct bge_softc *)dev;
 	struct mii_data *mii = &sc->bge_mii;
 
-	/*
-	 * Get flow control negotiation result.
-	 */
-	if (IFM_SUBTYPE(mii->mii_media.ifm_cur->ifm_media) == IFM_AUTO &&
-	    (mii->mii_media_active & IFM_ETH_FMASK) != sc->bge_flowflags) {
-		sc->bge_flowflags = mii->mii_media_active & IFM_ETH_FMASK;
-		mii->mii_media_active &= ~IFM_ETH_FMASK;
-	}
-
 	BGE_CLRBIT(sc, BGE_MAC_MODE, BGE_MACMODE_PORTMODE);
 	if (IFM_SUBTYPE(mii->mii_media_active) == IFM_1000_T) {
 		BGE_SETBIT(sc, BGE_MAC_MODE, BGE_PORTMODE_GMII);
@@ -613,20 +594,6 @@ bge_miibus_statchg(dev)
 		BGE_CLRBIT(sc, BGE_MAC_MODE, BGE_MACMODE_HALF_DUPLEX);
 	} else {
 		BGE_SETBIT(sc, BGE_MAC_MODE, BGE_MACMODE_HALF_DUPLEX);
-	}
-
-	/*
-	 * 802.3x flow control
-	 */
-	if (sc->bge_flowflags & IFM_ETH_RXPAUSE) {
-		BGE_SETBIT(sc, BGE_RX_MODE, BGE_RXMODE_FLOWCTL_ENABLE);
-	} else {
-		BGE_CLRBIT(sc, BGE_RX_MODE, BGE_RXMODE_FLOWCTL_ENABLE);
-	}
-	if (sc->bge_flowflags & IFM_ETH_TXPAUSE) {
-		BGE_SETBIT(sc, BGE_TX_MODE, BGE_TXMODE_FLOWCTL_ENABLE);
-	} else {
-		BGE_CLRBIT(sc, BGE_TX_MODE, BGE_TXMODE_FLOWCTL_ENABLE);
 	}
 }
 
@@ -644,7 +611,7 @@ bge_set_thresh(struct ifnet *ifp, int lvl)
 	 * that a threshold update is pending.  Updating the hardware
 	 * registers here (even at splhigh()) is observed to
 	 * occasionaly cause glitches where Rx-interrupts are not
-	 * honoured for up to 10 seconds. jonathan@NetBSD.org, 2003-04-05
+	 * honoured for up to 10 seconds. jonathan@netbsd.org, 2003-04-05
 	 */
 	s = splnet();
 	sc->bge_rx_coal_ticks = bge_rx_threshes[lvl].rx_ticks;
@@ -934,7 +901,7 @@ bge_newbuf_jumbo(sc, i, m)
 	struct bge_rx_bd *r;
 
 	if (m == NULL) {
-		caddr_t			buf = NULL;
+		caddr_t			*buf = NULL;
 
 		/* Allocate the mbuf. */
 		MGETHDR(m_new, M_DONTWAIT, MT_DATA);
@@ -955,7 +922,6 @@ bge_newbuf_jumbo(sc, i, m)
 		m_new->m_len = m_new->m_pkthdr.len = BGE_JUMBO_FRAMELEN;
 		MEXTADD(m_new, buf, BGE_JUMBO_FRAMELEN, M_DEVBUF,
 		    bge_jfree, sc);
-		m_new->m_flags |= M_EXT_RW;
 	} else {
 		m_new = m;
 		m_new->m_data = m_new->m_ext.ext_buf;
@@ -1288,14 +1254,7 @@ bge_chipinit(sc)
 		BGE_MEMWIN_WRITE(pa->pa_pc, pa->pa_tag, i, 0);
 
 	/* Set up the PCI DMA control register. */
-	if (sc->bge_pcie) {
-		/* From FreeBSD */
-		DPRINTFN(4, ("(%s: PCI-Express DMA setting)\n",
-		    sc->bge_dev.dv_xname));
-		dma_rw_ctl = (BGE_PCI_READ_CMD | BGE_PCI_WRITE_CMD |
-		    (0xf << BGE_PCIDMARWCTL_RD_WAT_SHIFT) |
-		    (0x2 << BGE_PCIDMARWCTL_WR_WAT_SHIFT));
-	} else if (pci_conf_read(pa->pa_pc, pa->pa_tag,BGE_PCI_PCISTATE) &
+	if (pci_conf_read(pa->pa_pc, pa->pa_tag,BGE_PCI_PCISTATE) &
 	    BGE_PCISTATE_PCI_BUSMODE) {
 		/* Conventional PCI bus */
 	  	DPRINTFN(4, ("(%s: PCI 2.2 DMA setting)\n", sc->bge_dev.dv_xname));
@@ -1466,21 +1425,13 @@ bge_blockinit(sc)
 #else
 	/* new broadcom docs strongly recommend these: */
 	if ((sc->bge_quirks & BGE_QUIRK_5705_CORE) == 0) {
-		if (ifp->if_mtu > ETHER_MAX_LEN) {
-			CSR_WRITE_4(sc, BGE_BMAN_MBUFPOOL_READDMA_LOWAT, 0x50);
-			CSR_WRITE_4(sc, BGE_BMAN_MBUFPOOL_MACRX_LOWAT, 0x20);
-			CSR_WRITE_4(sc, BGE_BMAN_MBUFPOOL_HIWAT, 0x60);
-		} else {
-			/* Values from Linux driver... */
-			CSR_WRITE_4(sc, BGE_BMAN_MBUFPOOL_READDMA_LOWAT, 304);
-			CSR_WRITE_4(sc, BGE_BMAN_MBUFPOOL_MACRX_LOWAT, 152);
-			CSR_WRITE_4(sc, BGE_BMAN_MBUFPOOL_HIWAT, 380);
-		}
+		CSR_WRITE_4(sc, BGE_BMAN_MBUFPOOL_READDMA_LOWAT, 0x50);
+		CSR_WRITE_4(sc, BGE_BMAN_MBUFPOOL_MACRX_LOWAT, 0x20);
 	} else {
 		CSR_WRITE_4(sc, BGE_BMAN_MBUFPOOL_READDMA_LOWAT, 0x0);
 		CSR_WRITE_4(sc, BGE_BMAN_MBUFPOOL_MACRX_LOWAT, 0x10);
-		CSR_WRITE_4(sc, BGE_BMAN_MBUFPOOL_HIWAT, 0x60);
 	}
+	CSR_WRITE_4(sc, BGE_BMAN_MBUFPOOL_HIWAT, 0x60);
 #endif
 
 	/* Configure DMA resource watermarks */
@@ -1933,14 +1884,6 @@ static const struct bge_revision {
 	  BGE_QUIRK_ONLY_PHY_1|BGE_QUIRK_5705_CORE,
 	  "BCM5705 A3" },
 
-	{ BGE_CHIPID_BCM5750_A0,
-	  BGE_QUIRK_ONLY_PHY_1|BGE_QUIRK_5705_CORE,
-	  "BCM5750 A1" },
-
-	{ BGE_CHIPID_BCM5750_A1,
-	  BGE_QUIRK_ONLY_PHY_1|BGE_QUIRK_5705_CORE,
-	  "BCM5750 A1" },
-
 	{ 0, 0, NULL }
 };
 
@@ -1968,10 +1911,6 @@ static const struct bge_revision bge_majorrevs[] = {
 	{ BGE_ASICREV_BCM5705,
 	  BGE_QUIRK_ONLY_PHY_1|BGE_QUIRK_5705_CORE,
 	  "unknown BCM5705" },
-
-	{ BGE_ASICREV_BCM5750,
-	  BGE_QUIRK_ONLY_PHY_1|BGE_QUIRK_5705_CORE,
-	  "unknown BCM5750" },
 
 	{ 0,
 	  0,
@@ -2073,31 +2012,12 @@ static const struct bge_product {
 	  "Broadcom BCM5705 Gigabit Ethernet",
 	  },
    	{ PCI_VENDOR_BROADCOM,
-	  PCI_PRODUCT_BROADCOM_BCM5705K,
-	  "Broadcom BCM5705K Gigabit Ethernet",
-	  },
-   	{ PCI_VENDOR_BROADCOM,
 	  PCI_PRODUCT_BROADCOM_BCM5705_ALT,
 	  "Broadcom BCM5705 Gigabit Ethernet",
 	  },
    	{ PCI_VENDOR_BROADCOM,
 	  PCI_PRODUCT_BROADCOM_BCM5705M,
 	  "Broadcom BCM5705M Gigabit Ethernet",
-	  },
-
-	{ PCI_VENDOR_BROADCOM,
-	  PCI_PRODUCT_BROADCOM_BCM5750,
-	  "Broadcom BCM5750 Gigabit Ethernet",
-	  },
-
-	{ PCI_VENDOR_BROADCOM,
-	  PCI_PRODUCT_BROADCOM_BCM5750M,
-	  "Broadcom BCM5750M Gigabit Ethernet",
-	  },
-
-	{ PCI_VENDOR_BROADCOM,
-	  PCI_PRODUCT_BROADCOM_BCM5751,
-	  "Broadcom BCM5751 Gigabit Ethernet",
 	  },
 
    	{ PCI_VENDOR_BROADCOM,
@@ -2318,25 +2238,6 @@ bge_attach(parent, self, aux)
 	pci_conf_write(pc, pa->pa_tag, BGE_PCI_PWRMGMT_CMD, pm_ctl);
 	DELAY(1000);	/* 27 usec is allegedly sufficent */
 
-	/*
-	 * Save ASIC rev.  Look up any quirks associated with this
-	 * ASIC.
-	 */
-	sc->bge_chipid =
-	    pci_conf_read(pa->pa_pc, pa->pa_tag, BGE_PCI_MISC_CTL) &
-	    BGE_PCIMISCCTL_ASICREV;
-
-	/*
-	 * Detect PCI-Express devices
-	 * XXX: guessed from Linux/FreeBSD; no documentation
-	 */
-	if (BGE_ASICREV(sc->bge_chipid) == BGE_ASICREV_BCM5750 &&
-	    pci_get_capability(pa->pa_pc, pa->pa_tag, PCI_CAP_PCIEXPRESS,
-	    NULL, NULL) != 0)
-		sc->bge_pcie = 1;
-	else
-		sc->bge_pcie = 0;
-
 	/* Try to reset the chip. */
 	DPRINTFN(5, ("bge_reset\n"));
 	bge_reset(sc);
@@ -2368,7 +2269,15 @@ bge_attach(parent, self, aux)
 		return;
 	}
 
+	/*
+	 * Save ASIC rev.  Look up any quirks associated with this
+	 * ASIC.
+	 */
+	sc->bge_chipid =
+	    pci_conf_read(pa->pa_pc, pa->pa_tag, BGE_PCI_MISC_CTL) &
+	    BGE_PCIMISCCTL_ASICREV;
 	br = bge_lookup_rev(sc->bge_chipid);
+
 	aprint_normal("%s: ", sc->bge_dev.dv_xname);
 
 	if (br == NULL) {
@@ -2516,8 +2425,7 @@ bge_attach(parent, self, aux)
 		ifmedia_init(&sc->bge_mii.mii_media, 0, bge_ifmedia_upd,
 			     bge_ifmedia_sts);
 		mii_attach(&sc->bge_dev, &sc->bge_mii, 0xffffffff,
-			   MII_PHY_ANY, MII_OFFSET_ANY,
-			   MIIF_FORCEANEG|MIIF_DOPAUSE);
+			   MII_PHY_ANY, MII_OFFSET_ANY, MIIF_FORCEANEG);
 		
 		if (LIST_FIRST(&sc->bge_mii.mii_phys) == NULL) {
 			printf("%s: no PHY found!\n", sc->bge_dev.dv_xname);
@@ -2553,25 +2461,6 @@ bge_attach(parent, self, aux)
 	if_attach(ifp);
 	DPRINTFN(5, ("ether_ifattach\n"));
 	ether_ifattach(ifp, eaddr);
-#ifdef BGE_EVENT_COUNTERS
-	/*
-	 * Attach event counters.
-	 */
-	evcnt_attach_dynamic(&sc->bge_ev_intr, EVCNT_TYPE_INTR,
-	    NULL, sc->bge_dev.dv_xname, "intr");
-	evcnt_attach_dynamic(&sc->bge_ev_tx_xoff, EVCNT_TYPE_MISC,
-	    NULL, sc->bge_dev.dv_xname, "tx_xoff");
-	evcnt_attach_dynamic(&sc->bge_ev_tx_xon, EVCNT_TYPE_MISC,
-	    NULL, sc->bge_dev.dv_xname, "tx_xon");
-	evcnt_attach_dynamic(&sc->bge_ev_rx_xoff, EVCNT_TYPE_MISC,
-	    NULL, sc->bge_dev.dv_xname, "rx_xoff");
-	evcnt_attach_dynamic(&sc->bge_ev_rx_xon, EVCNT_TYPE_MISC,
-	    NULL, sc->bge_dev.dv_xname, "rx_xon");
-	evcnt_attach_dynamic(&sc->bge_ev_rx_macctl, EVCNT_TYPE_MISC,
-	    NULL, sc->bge_dev.dv_xname, "rx_macctl");
-	evcnt_attach_dynamic(&sc->bge_ev_xoffentered, EVCNT_TYPE_MISC,
-	    NULL, sc->bge_dev.dv_xname, "xoffentered");
-#endif /* BGE_EVENT_COUNTERS */
 	DPRINTFN(5, ("callout_init\n"));
 	callout_init(&sc->bge_timeout);
 }
@@ -2593,7 +2482,7 @@ bge_reset(sc)
 {
 	struct pci_attach_args *pa = &sc->bge_pa;
 	u_int32_t cachesize, command, pcistate, new_pcistate;
-	int i, val;
+	int i, val = 0;
 
 	/* Save some important PCI state. */
 	cachesize = pci_conf_read(pa->pa_pc, pa->pa_tag, BGE_PCI_CACHESZ);
@@ -2604,41 +2493,11 @@ bge_reset(sc)
 	    BGE_PCIMISCCTL_INDIRECT_ACCESS|BGE_PCIMISCCTL_MASK_PCI_INTR|
 	    BGE_HIF_SWAP_OPTIONS|BGE_PCIMISCCTL_PCISTATE_RW);
 
-	val = BGE_MISCCFG_RESET_CORE_CLOCKS | (65<<1);
-	/*
-	 * XXX: from FreeBSD/Linux; no documentation
-	 */
-	if (sc->bge_pcie) {
-		if (CSR_READ_4(sc, BGE_PCIE_CTL1) == 0x60)
-			CSR_WRITE_4(sc, BGE_PCIE_CTL1, 0x20);
-		if (sc->bge_chipid != BGE_CHIPID_BCM5750_A0) {
-			/* No idea what that actually means */
-			CSR_WRITE_4(sc, BGE_MISC_CFG, 1 << 29);
-			val |= (1<<29);
-		}
-	}
-
 	/* Issue global reset */
-	bge_writereg_ind(sc, BGE_MISC_CFG, val);
+	bge_writereg_ind(sc, BGE_MISC_CFG,
+	    BGE_MISCCFG_RESET_CORE_CLOCKS|(65<<1));
 
 	DELAY(1000);
-
-	/*
-	 * XXX: from FreeBSD/Linux; no documentation
-	 */
-	if (sc->bge_pcie) {
-		if (sc->bge_chipid == BGE_CHIPID_BCM5750_A0) {
-			pcireg_t reg;
-
-			DELAY(500000);
-			/* XXX: Magic Numbers */
-			reg = pci_conf_read(pa->pa_pc, pa->pa_tag, BGE_PCI_UNKNOWN0);
-			pci_conf_write(pa->pa_pc, pa->pa_tag, BGE_PCI_UNKNOWN0,
-			    reg | (1 << 15));
-		}
-		/* XXX: Magic Numbers */
-		pci_conf_write(pa->pa_pc, pa->pa_tag, BGE_PCI_UNKNOWN1, 0xf5000);
-	}
 
 	/* Reset some of the PCI state that got zapped by reset */
 	pci_conf_write(pa->pa_pc, pa->pa_tag, BGE_PCI_MISC_CTL,
@@ -2699,10 +2558,6 @@ bge_reset(sc)
 		printf("%s: pcistate failed to revert\n",
 		    sc->bge_dev.dv_xname);
 	}
-
-	/* XXX: from FreeBSD/Linux; no documentation */
-	if (sc->bge_pcie && sc->bge_chipid != BGE_CHIPID_BCM5750_A0)
-		CSR_WRITE_4(sc, BGE_PCIE_CTL0, CSR_READ_4(sc, BGE_PCIE_CTL0) | (1<<25));
 
 	/* Enable memory arbiter. */
 	if ((sc->bge_quirks & BGE_QUIRK_5705_CORE) == 0) {
@@ -2980,8 +2835,6 @@ bge_intr(xsc)
 	/* Ack interrupt and stop others from occuring. */
 	CSR_WRITE_4(sc, BGE_MBX_IRQ0_LO, 1);
 
-	BGE_EVCNT_INCR(sc->bge_ev_intr);
-
 	/*
 	 * Process link state changes.
 	 * Grrr. The link status word in the status block does
@@ -3117,19 +2970,6 @@ bge_stats_update(sc)
 		    READ_RSTAT(sc, rstats, dot3StatsMultipleCollisionFrames) +
 		    READ_RSTAT(sc, rstats, dot3StatsExcessiveCollisions) +
 		    READ_RSTAT(sc, rstats, dot3StatsLateCollisions);
-
-		BGE_EVCNT_ADD(sc->bge_ev_tx_xoff,
-			      READ_RSTAT(sc, rstats, outXoffSent));
-		BGE_EVCNT_ADD(sc->bge_ev_tx_xon,
-			      READ_RSTAT(sc, rstats, outXonSent));
-		BGE_EVCNT_ADD(sc->bge_ev_rx_xoff,
-			      READ_RSTAT(sc, rstats, xoffPauseFramesReceived));
-		BGE_EVCNT_ADD(sc->bge_ev_rx_xon,
-			      READ_RSTAT(sc, rstats, xonPauseFramesReceived));
-		BGE_EVCNT_ADD(sc->bge_ev_rx_macctl,
-			      READ_RSTAT(sc, rstats, macControlFramesReceived));
-		BGE_EVCNT_ADD(sc->bge_ev_xoffentered,
-			      READ_RSTAT(sc, rstats, xoffStateEntered));
 		return;
 	}
 
@@ -3143,21 +2983,6 @@ bge_stats_update(sc)
 	   READ_STAT(sc, stats, dot3StatsExcessiveCollisions.bge_addr_lo) +
 	   READ_STAT(sc, stats, dot3StatsLateCollisions.bge_addr_lo)) -
 	  ifp->if_collisions;
-
-	BGE_EVCNT_UPD(sc->bge_ev_tx_xoff,
-		      READ_STAT(sc, stats, outXoffSent.bge_addr_lo));
-	BGE_EVCNT_UPD(sc->bge_ev_tx_xon,
-		      READ_STAT(sc, stats, outXonSent.bge_addr_lo));
-	BGE_EVCNT_UPD(sc->bge_ev_rx_xoff,
-		      READ_STAT(sc, stats,
-		      		xoffPauseFramesReceived.bge_addr_lo));
-	BGE_EVCNT_UPD(sc->bge_ev_rx_xon,
-		      READ_STAT(sc, stats, xonPauseFramesReceived.bge_addr_lo));
-	BGE_EVCNT_UPD(sc->bge_ev_rx_macctl,
-		      READ_STAT(sc, stats,
-		      		macControlFramesReceived.bge_addr_lo));
-	BGE_EVCNT_UPD(sc->bge_ev_xoffentered,
-		      READ_STAT(sc, stats, xoffStateEntered.bge_addr_lo));
 
 #undef READ_STAT
 
@@ -3610,8 +3435,6 @@ bge_init(ifp)
 	/* Turn on receiver */
 	BGE_SETBIT(sc, BGE_RX_MODE, BGE_RXMODE_ENABLE);
 
-	CSR_WRITE_4(sc, BGE_MAX_RX_FRAME_LOWAT, 2);
-
 	/* Tell firmware we're alive. */
 	BGE_SETBIT(sc, BGE_MODE_CTL, BGE_MODECTL_STACKUP);
 
@@ -3662,7 +3485,6 @@ bge_ifmedia_upd(ifp)
 		default:
 			return(EINVAL);
 		}
-		/* XXX 802.3x flow control for 1000BASE-SX */
 		return(0);
 	}
 
@@ -3698,9 +3520,8 @@ bge_ifmedia_sts(ifp, ifmr)
 	}
 
 	mii_pollstat(mii);
+	ifmr->ifm_active = mii->mii_media_active;
 	ifmr->ifm_status = mii->mii_media_status;
-	ifmr->ifm_active = (mii->mii_media_active & ~IFM_ETH_FMASK) |
-	    sc->bge_flowflags;
 }
 
 int
@@ -3748,26 +3569,6 @@ bge_ioctl(ifp, command, data)
 		error = 0;
 		break;
 	case SIOCSIFMEDIA:
-		/* XXX Flow control is not supported for 1000BASE-SX */
-		if (sc->bge_tbi) {
-			ifr->ifr_media &= ~IFM_ETH_FMASK;
-			sc->bge_flowflags = 0;
-		}
-
-		/* Flow control requires full-duplex mode. */
-		if (IFM_SUBTYPE(ifr->ifr_media) == IFM_AUTO ||
-		    (ifr->ifr_media & IFM_FDX) == 0) {
-		    	ifr->ifr_media &= ~IFM_ETH_FMASK;
-		}
-		if (IFM_SUBTYPE(ifr->ifr_media) != IFM_AUTO) {
-			if ((ifr->ifr_media & IFM_ETH_FMASK) == IFM_FLOW) {
-				/* We an do both TXPAUSE and RXPAUSE. */
-				ifr->ifr_media |=
-				    IFM_ETH_TXPAUSE | IFM_ETH_RXPAUSE;
-			}
-			sc->bge_flowflags = ifr->ifr_media & IFM_ETH_FMASK;
-		}
-		/* FALLTHROUGH */
 	case SIOCGIFMEDIA:
 		if (sc->bge_tbi) {
 			error = ifmedia_ioctl(ifp, ifr, &sc->bge_ifmedia,
@@ -3777,12 +3578,12 @@ bge_ioctl(ifp, command, data)
 			error = ifmedia_ioctl(ifp, ifr, &mii->mii_media,
 			    command);
 		}
+		error = 0;
 		break;
 	default:
 		error = ether_ioctl(ifp, command, data);
 		if (error == ENETRESET) {
-			if (ifp->if_flags & IFF_RUNNING)
-				bge_setmulti(sc);
+			bge_setmulti(sc);
 			error = 0;
 		}
 		break;

@@ -1,4 +1,4 @@
-/*	$NetBSD: mbmem.c,v 1.14 2004/12/13 02:14:13 chs Exp $	*/
+/*	$NetBSD: mbmem.c,v 1.13 2003/07/15 03:36:13 lukem Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mbmem.c,v 1.14 2004/12/13 02:14:13 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mbmem.c,v 1.13 2003/07/15 03:36:13 lukem Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -68,8 +68,6 @@ struct mbmem_softc {
 
 CFATTACH_DECL(mbmem, sizeof(struct mbmem_softc),
     mbmem_match, mbmem_attach, NULL, NULL);
-
-static int mbmem_attached;
 
 static	paddr_t mbmem_bus_mmap __P((bus_space_tag_t, bus_type_t, bus_addr_t,
 				off_t, int, int));
@@ -104,9 +102,6 @@ mbmem_match(parent, cf, aux)
 {
 	struct mainbus_attach_args *ma = aux;
 
-	if (mbmem_attached)
-		return 0;
-
 	return (cpu_has_multibus && (ma->ma_name == NULL || strcmp(cf->cf_name, ma->ma_name) == 0));
 }
 
@@ -125,8 +120,13 @@ mbmem_attach(parent, self, aux)
 		NULL
 	};
 
-	mbmem_attached = 1;
-
+	/*
+	 * There is only one mbmem bus
+	 */
+	if (self->dv_unit > 0) {
+		printf(" unsupported\n");
+		return;
+	}
 	printf("\n");
 
 	sc->sc_bustag = ma->ma_bustag;

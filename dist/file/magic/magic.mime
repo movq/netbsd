@@ -11,102 +11,9 @@
 # Localstuff:  file(1) magic for locally observed files
 # Add any locally observed files here.
 
-# Real Audio (Magic .ra\0375)
-0	belong		0x2e7261fd	audio/x-pn-realaudio
-0	string		.RMF		application/vnd.rn-realmedia
-
-#video/x-pn-realvideo
-#video/vnd.rn-realvideo
-#application/vnd.rn-realmedia
-#	sigh, there are many mimes for that but the above are the most common.
-
-# Taken from magic, converted to magic.mime
-# mime types according to http://www.geocities.com/nevilo/mod.htm:
-#	audio/it	.it
-#	audio/x-zipped-it	.itz
-#	audio/xm	fasttracker modules
-#	audio/x-s3m	screamtracker modules
-#	audio/s3m	screamtracker modules
-#	audio/x-zipped-mod	mdz
-#	audio/mod	mod
-#	audio/x-mod	All modules (mod, s3m, 669, mtm, med, xm, it, mdz, stm, itz, xmz, s3z)
-
-# Taken from loader code from mikmod version 2.14
-# by Steve McIntyre (stevem@chiark.greenend.org.uk)
-# <doj@cubic.org> added title printing on 2003-06-24
-0	string	MAS_UTrack_V00
->14	string	>/0		audio/x-mod
-#audio/x-tracker-module
-
-#0	string	UN05		MikMod UNI format module sound data
-
-0	string	Extended\ Module: audio/x-mod
-#audio/x-tracker-module
-##>17	string	>\0		Title: "%s"
-
-21	string/c	!SCREAM!	audio/x-mod
-#audio/x-screamtracker-module
-21	string	BMOD2STM	audio/x-mod
-#audio/x-screamtracker-module
-1080	string	M.K.		audio/x-mod
-#audio/x-protracker-module
-#>0	string	>\0		Title: "%s"
-1080	string	M!K!		audio/x-mod
-#audio/x-protracker-module
-#>0	string	>\0		Title: "%s"
-1080	string	FLT4		audio/x-mod
-#audio/x-startracker-module
-#>0	string	>\0		Title: "%s"
-1080	string	FLT8		audio/x-mod
-#audio/x-startracker-module
-#>0	string	>\0		Title: "%s"
-1080	string	4CHN		audio/x-mod
-#audio/x-fasttracker-module
-#>0	string	>\0		Title: "%s"
-1080	string	6CHN		audio/x-mod
-#audio/x-fasttracker-module
-#>0	string	>\0		Title: "%s"
-1080	string	8CHN		audio/x-mod
-#audio/x-fasttracker-module
-#>0	string	>\0		Title: "%s"
-1080	string	CD81		audio/x-mod
-#audio/x-oktalyzer-tracker-module
-#>0	string	>\0		Title: "%s"
-1080	string	OKTA		audio/x-mod
-#audio/x-oktalyzer-tracker-module
-#>0	string	>\0		Title: "%s"
-# Not good enough.
-#1082	string	CH
-#>1080	string	>/0		%.2s-channel Fasttracker "oktalyzer" module sound data
-1080	string	16CN		audio/x-mod
-#audio/x-taketracker-module
-#>0	string	>\0		Title: "%s"
-1080	string	32CN		audio/x-mod
-#audio/x-taketracker-module
-#>0	string	>\0		Title: "%s"
-
-# Impuse tracker module (it)
-0	string		IMPM		audio/x-mod
-#>4	string		>\0		"%s"
-#>40	leshort		!0		compatible w/ITv%x
-#>42	leshort		!0		created w/ITv%x
-
 #------------------------------------------------------------------------------
 # end local stuff
 #------------------------------------------------------------------------------
-
-# xml based formats!
-
-# svg
-
-0	string		\<?xml
-#			text/xml
->38	string		\<\!DOCTYPE\040svg	image/svg+xml
-
-
-# xml
-0	string		\<?xml			text/xml
-
 
 #------------------------------------------------------------------------------
 # Java
@@ -154,8 +61,6 @@
 #					IFF/8SVX audio data
 8	string		8SVX		audio/x-aiff	
 
-
-
 # Creative Labs AUDIO stuff
 #					Standard MIDI data
 0	string	MThd			audio/unknown	
@@ -184,8 +89,9 @@
 0	string		RIFF
 #					- WAVE format
 >8	string		WAVE		audio/x-wav
->8	string/B	AVI		video/x-msvideo
+>8	string		AVI		video/x-msvideo
 #
+0	belong		0x2e7261fd	application/x-realaudio
 >8 	string		CDRA		image/x-coreldraw
 
 
@@ -194,7 +100,7 @@
 #MP3 with ID3 tag
 0	string		ID3		audio/mpeg
 # Ogg/Vorbis
-0	string		OggS		application/ogg
+0	string		OggS		audio/ogg
 
 #------------------------------------------------------------------------------
 # c-lang:  file(1) magic for C programs or various scripts
@@ -478,18 +384,6 @@
 #0	string		CP		color pointer
 #0	string		BA		bitmap array
 
-# CDROM Filesystems
-32769    string    CD001     application/x-iso9660
-
-# Newer StuffIt archives (grant@netbsd.org)
-0	string		StuffIt			application/x-stuffit
-#>162	string		>0			: %s
-
-# BinHex is the Macintosh ASCII-encoded file format (see also "apple")
-# Daniel Quinlan, quinlan@yggdrasil.com
-11	string	must\ be\ converted\ with\ BinHex\ 4	application/mac-binhex40
-##>41	string	x					\b, version %.3s
-
 
 #------------------------------------------------------------------------------
 # lisp:  file(1) magic for lisp programs
@@ -587,40 +481,20 @@
 #
 # animation formats, originally from vax@ccwf.cc.utexas.edu (VaX#n8)
 #						MPEG file
-# MPEG sequences
-0	belong		   0x000001BA	  video/mpeg
-0	belong		   0x000001BB	  video/mpeg
-0	belong		   0x000001B0	  video/mp4v-es
-0	belong		   0x000001B5	  video/mp4v-es
-0	belong		   0x000001B3	  video/mpv
-0	belong&0xFF5FFF1F  0x47400010	  video/mp2t
+0	belong		0x000001b3			video/mpeg
+0	belong		0x000001ba			video/mpeg
 # FLI animation format
 0	leshort		0xAF11				video/fli
 # FLC animation format
 0	leshort		0xAF12				video/flc
+# AVI
+>8	string		AVI\ 				video/avi
 #
 # SGI and Apple formats
-# Added ISO mimes
-# Added ISO mimes
-0	string		MOVI	      video/sgi
-4	string		moov	      video/quicktime
-4	string		mdat	      video/quicktime
-4	string		wide	      video/quicktime
-4	string		skip	      video/quicktime
-4	string		free	      video/quicktime
-4	string		idsc	      image/x-quicktime
-4	string		idat	      image/x-quicktime
-4	string		pckg	      application/x-quicktime
-4	string/B	jP	      image/jp2
-4	string		ftyp	      application/octet-stream
->8	string		isom	      video/mp4
->8	string		mp41	      video/mp4
->8	string		mp42	      video/mp4
->8	string/B	jp2	      image/jp2
->8	string		3gp	      video/3gpp
->8	string		mmp4	      video/mp4
->8	string/B	M4A	      audio/mp4
->8	string/B	qt	      video/quicktime
+#
+0	string		MOVI				video/sgi
+4	string		moov				video/quicktime	moov
+4	string		mdat				video/quicktime	mdat
 # The contributor claims:
 #   I couldn't find a real magic number for these, however, this
 #   -appears- to work.  Note that it might catch other files, too,
@@ -647,17 +521,17 @@
 #
 # Executables
 #
-0	string		\177ELF 
->16	leshort		0		application/octet-stream
->16	leshort		1		application/x-object
->16	leshort		2		application/x-executable
->16	leshort		3		application/x-sharedlib
->16	leshort		4		application/x-coredump
->16	beshort		0		application/octet-stream
->16	beshort		1		application/x-object
->16	beshort		2		application/x-executable
->16	beshort		3		application/x-sharedlib
->16	beshort		4		application/x-coredump
+0       string          \177ELF 
+>4      byte            0
+>4      byte            1
+>4      byte            2
+>5      byte            0
+>5      byte            1
+>>16    leshort         0
+>>16    leshort         1               application/x-object
+>>16    leshort         2               application/x-executable
+>>16    leshort         3               application/x-sharedlib
+>>16    leshort         4               application/x-coredump
 #
 # DOS
 0		string			MZ				application/x-dosexec
@@ -887,22 +761,27 @@
 # Microsoft Outlook's Transport Neutral Encapsulation Format (TNEF)
 0		lelong	0x223e9f78	application/ms-tnef
 
-# From: stephane.loeuillet@tiscali.f
-# http://www.djvuzone.org/
-0	string		AT&TFORM	image/x.djvu
 
-# Danny Milosavljevic <danny.milo@gmx.net>
-# this are adrift (adventure game standard) game files, extension .taf
-# depending on version magic continues with 0x93453E6139FA (V 4.0)
-# 0x9445376139FA (V 3.90)
-# 0x9445366139FA (V 3.80)
-# this is from source (http://www.adrift.org.uk/) and I have some taf
-# files, and checked them.
-#0	belong	0x3C423FC9
-#>4	belong	0x6A87C2CF	application/x-adrift
-#0	string	\000\000\001\000	image/x-ico
+#
+# QuickTime format
+# Contributer: Peter Breton
+#
 
-# Quark Xpress 3 Files:
-# (made the mimetype up) 
-0	string	\0\0MMXPR3\0	application/x-quark-xpress-3
+0	string		MOVI		video/quicktime
+4	string		moov		video/quicktime
+4	string		mdat		video/quicktime
+
+# Video Formate
+0       string          RIFF
+# AVI == Audio Video Interleave
+>8      string          AVI\            
+#>0xbc   string         >\0             video/x-%s
+
+>>0xbc  string          DIV3            video/x-DivX-3
+>>0xbc  string          div3            video/x-divX-3
+>>0xbc  string          DIV4            video/x-DivX-4
+>>0x70  string          DX50            video/x-DIVX-5
+>>0x70  string          MP4             video/x-MPEG-4
+>>0xbc  string          DIVX            video/x-DivX
+>8      string          WAVE            audio/x-wav
 

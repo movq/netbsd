@@ -1,4 +1,4 @@
-/*	$NetBSD: rbus_ppb.c,v 1.13 2004/08/30 15:05:19 drochner Exp $	*/
+/*	$NetBSD: rbus_ppb.c,v 1.10 2003/11/24 06:11:56 lukem Exp $	*/
 
 /*
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -41,7 +41,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rbus_ppb.c,v 1.13 2004/08/30 15:05:19 drochner Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rbus_ppb.c,v 1.10 2003/11/24 06:11:56 lukem Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -74,7 +74,7 @@ __KERNEL_RCSID(0, "$NetBSD: rbus_ppb.c,v 1.13 2004/08/30 15:05:19 drochner Exp $
 #include <dev/pci/pccbbvar.h>
 
 #include <dev/cardbus/cardbusvar.h>
-#include <dev/pci/pcidevs.h>
+#include <dev/cardbus/cardbusdevs.h>
 
 #include <i386/pci/pci_addr_fixup.h>
 #include <i386/pci/pci_bus_fixup.h>
@@ -697,7 +697,7 @@ ppb_cardbus_attach(parent, self, aux)
 	csc->foo=parent_sc->sc_intrline;
 	
 
-	pci_devinfo(ca->ca_id, ca->ca_class, 0, devinfo, sizeof(devinfo));
+	pci_devinfo(ca->ca_id, ca->ca_class, 0, devinfo);
 	printf(": %s (rev. 0x%02x)\n", devinfo, PCI_REVISION(ca->ca_class));
 
 	csc->sc_tag = ca->ca_tag;	/* XXX cardbustag_t == pcitag_t */
@@ -768,7 +768,8 @@ ppb_cardbus_attach(parent, self, aux)
 	 *
 	 * XXX Don't pass-through Memory Read Multiple.  Should we?
 	 * XXX Consult the spec...
-	 */	
+	 */
+	pba.pba_busname = "pci";	
 	pba.pba_iot  = ca->ca_iot;
 	pba.pba_memt = ca->ca_memt;
 	pba.pba_dmat = ca->ca_dmat;
@@ -779,7 +780,7 @@ ppb_cardbus_attach(parent, self, aux)
 	/*pba.pba_intrswiz = parent_sc->sc_intrswiz; */
 	pba.pba_intrtag  = psc->sc_pa.pa_intrtag;
 
-	config_found_ia(self, "pcibus", &pba, rppbprint);
+	config_found(self, &pba, rppbprint);
 }
 
 void

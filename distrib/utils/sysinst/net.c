@@ -1,4 +1,4 @@
-/*	$NetBSD: net.c,v 1.105 2004/11/11 22:10:54 dsl Exp $	*/
+/*	$NetBSD: net.c,v 1.100.2.1 2004/06/07 10:20:57 tron Exp $	*/
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -50,10 +50,8 @@
 #include <sys/sysctl.h>
 #endif
 #include <sys/socket.h>
-#include <sys/ioctl.h>
 #include <netinet/in.h>
 #include <net/if.h>
-#include <net/if_media.h>
 #include <arpa/inet.h>
 #include "defs.h"
 #include "md.h"
@@ -88,15 +86,20 @@ static int net_ip6conf;
 
 /* URL encode unsafe characters.  */
 
-static char *url_encode (char *dst, const char *src, const char *ep,
+static char *url_encode (char *dst, const char *src, size_t len,
 				const char *safe_chars,
 				int encode_leading_slash);
+
+/* Get the list of network interfaces. */
+
+static void get_ifinterface_info (void);
 
 static void write_etc_hosts(FILE *f);
 
 #define DHCLIENT_EX "/sbin/dhclient"
 #include <signal.h>
 static int config_dhcp(char *);
+static void get_command_out(char *, size_t, int, const char *, const char *);
 static void get_dhcp_value(char *, size_t, const char *);
 
 #ifdef INET6
@@ -169,34 +172,34 @@ static int get_v6wait (void);
 #define RFC1738_SAFE_LESS_SHELL_PLUS_SLASH	"-_.+!,/"
 
 static char *
-url_encode(char *dst, const char *src, const char *ep,
+url_encode(char *dst, const char *src, size_t len,
 	const char *safe_chars, int encode_leading_slash)
 {
+	char *p = dst;
+	char *ep = dst + len;
 	int ch;
 
-	ep--;
-
-	for (; dst < ep; src++) {
+	for (; ep - p > 1; src++) {
 		ch = *src & 0xff;
 		if (ch == 0)
 			break;
 		if (safe_chars != NULL &&
 		    (ch != '/' || !encode_leading_slash) &&
 		    (isalnum(ch) || strchr(safe_chars, ch))) {
-			*dst++ = ch;
+			*p++ = ch;
 		} else {
 			/* encode this char */
-			if (ep - dst < 3)
+			if (ep - p < 3)
 				break;
-			snprintf(dst, ep - dst, "%%%02X", ch);
-			dst += 3;
+			snprintf(p, ep - p, "%%%02X", ch);
+			p += 3;
 		}
 		encode_leading_slash = 0;
 	}
-	*dst = '\0';
+done:
+	*p = '\0';
 	return dst;
 }
-
 
 static const char *ignored_if_names[] = {
 	"eon",			/* netiso */
@@ -290,64 +293,48 @@ get_ifconfig_info(void)
 	free(textbuf);
 }
 
-static int
-do_ifreq(struct ifmediareq *ifmr, int cmd)
-{
-	int sock;
-	int rval;
-
-	sock = socket(PF_INET, SOCK_DGRAM, 0);
-	if (sock == -1)
-		return -1;
-
-	memset(ifmr, 0, sizeof *ifmr);
-	strncpy(ifmr->ifm_name, net_dev, sizeof ifmr->ifm_name);
-	rval = ioctl(sock, cmd, ifmr);
-	close(sock);
-
-	return rval;
-}
-
 /* Fill in defaults network values for the selected interface */
 static void
 get_ifinterface_info(void)
 {
-	struct ifmediareq ifmr;
-	struct sockaddr_in *sa_in = (void *)&((struct ifreq *)&ifmr)->ifr_addr;
-	int modew;
-	const char *media_opt;
-	const char *sep;
+	char *textbuf;
+	int textsize;
+	char *t;
+	char hostname[MAXHOSTNAMELEN + 1];
+	char *dot;
 
-	if (do_ifreq(&ifmr, SIOCGIFADDR) == 0 && sa_in->sin_addr.s_addr != 0)
-		strlcpy(net_ip, inet_ntoa(sa_in->sin_addr), sizeof net_ip);
-
-	if (do_ifreq(&ifmr, SIOCGIFNETMASK) == 0 && sa_in->sin_addr.s_addr != 0)
-		strlcpy(net_mask, inet_ntoa(sa_in->sin_addr), sizeof net_mask);
-
-	if (do_ifreq(&ifmr, SIOCGIFMEDIA) == 0) {
-		/* Get the name of the media word */
-		modew = ifmr.ifm_current;
-		strlcpy(net_media, get_media_mode_string(modew),
-		    sizeof net_media);
-		/* and add any media options */
-		sep = " mediaopt ";
-		while ((media_opt = get_media_option_string(&modew)) != NULL) {
-			strlcat(net_media, sep, sizeof net_media);
-			strlcat(net_media, media_opt, sizeof net_media);
-			sep = ",";
+	/* First look to see if the selected interface is already configured. */
+	textsize = collect(T_OUTPUT, &textbuf,
+	    "/sbin/ifconfig %s inet 2>/dev/null", net_dev);
+	if (textsize >= 0) {
+		(void)strtok(textbuf, " \t\n"); /* ignore interface name */
+		while ((t = strtok(NULL, " \t\n")) != NULL) {
+			if (strcmp(t, "inet") == 0) {
+				t = strtok(NULL, " \t\n");
+				if (strcmp(t, "0.0.0.0") != 0)
+					strlcpy(net_ip, t, sizeof(net_ip));
+				continue;
+			}
+			if (strcmp(t, "netmask") == 0) {
+				t = strtok(NULL, " \t\n");
+				if (strcmp(t, "0x0") != 0)
+					strlcpy(net_mask, t, sizeof(net_mask));
+				continue;
+			}
+			if (strcmp(t, "media:") == 0) {
+				t = strtok(NULL, " \t\n");
+				/* handle "media: Ethernet manual" */
+				if (strcmp(t, "Ethernet") == 0)
+					t = strtok(NULL, " \t\n");
+				if (strcmp(t, "none") != 0 &&
+				    strcmp(t, "manual") != 0)
+					strlcpy(net_media, t,
+					    sizeof(net_media));
+			}
 		}
 	}
-}
-
-#ifndef INET6
-#define get_if6interface_info()
-#else
-static void
-get_if6interface_info(void)
-{
-	char *textbuf, *t;
-	int textsize;
-
+	free(textbuf);
+#ifdef INET6
 	textsize = collect(T_OUTPUT, &textbuf,
 	    "/sbin/ifconfig %s inet6 2>/dev/null", net_dev);
 	if (textsize >= 0) {
@@ -372,14 +359,7 @@ get_if6interface_info(void)
 		}
 	}
 	free(textbuf);
-}
 #endif
-
-static void
-get_host_info(void)
-{
-	char hostname[MAXHOSTNAMELEN + 1];
-	char *dot;
 
 	/* Check host (and domain?) name */
 	if (gethostname(hostname, sizeof(hostname)) == 0 && hostname[0] != 0) {
@@ -399,7 +379,7 @@ get_host_info(void)
 }
 
 /*
- * recombine name parts split in get_host_info and config_network
+ * recombine name parts split in get_ifinterface_info and config_network
  * (common code moved here from write_etc_hosts)
  */
 static char *
@@ -481,7 +461,6 @@ config_network(void)
 	char *tp;
 	char *defname;
 	const char *prompt;
-	char *textbuf;
 	int  octet0;
 	int  pass, dhcp_config;
 	int l;
@@ -535,79 +514,31 @@ again:
 
 	/* Preload any defaults we can find */
 	get_ifinterface_info();
-	get_if6interface_info();
-	get_host_info();
 	pass = net_mask[0] == '\0' ? 0 : 1;
 
 	/* domain and host */
 	msg_display(MSG_netinfo);
 
 	/* ethernet medium */
-	for (;;) {
+	if (net_media[0] != '\0')
 		msg_prompt_add(MSG_net_media, net_media, net_media,
-				sizeof net_media);
-
-		/*
-		 * ifconfig does not allow media specifiers on IFM_MANUAL
-		 * interfaces.  Our UI gives no way to set an option back
-		 * to null-string if it gets accidentally set.
-		 * Check for plausible alternatives.
-		 */
-		if (strcmp(net_media, "<default>") == 0 ||
-		    strcmp(net_media, "default") == 0 ||
-		    strcmp(net_media, "<manual>") == 0 ||
-		    strcmp(net_media, "manual") == 0 ||
-		    strcmp(net_media, "<none>") == 0 ||
-		    strcmp(net_media, "none") == 0 ||
-		    strcmp(net_media, " ") == 0) {
-			*net_media = '\0';
-		}
-
-		if (*net_media == '\0')
-			break;
-		/* We must set the media type here - to give dhcp a chance */
-		if (run_program(0, "/sbin/ifconfig %s media %s",
-			    net_dev, net_media) == 0)
-			break;
-		/* Failed to set - output the supported values */
-		if (collect(T_OUTPUT, &textbuf, "/sbin/ifconfig -m %s |"
-			    "while IFS=; read line;"
-			    " do [ \"$line\" = \"${line#*media}\" ] || echo $line;"
-			    " done", net_dev ) > 0)
-			msg_display(textbuf);
-		free(textbuf);
-	}
+		    sizeof net_media);
 
 	/* try a dhcp configuration */
 	dhcp_config = config_dhcp(net_dev);
 	if (dhcp_config) {
 		/* Get newly configured data off interface. */
 		get_ifinterface_info();
-		get_if6interface_info();
-		get_host_info();
 
 		net_dhcpconf |= DHCPCONF_IPADDR;
 
-		/* Extract default route from output of 'route -n show' */
-		if (collect(T_OUTPUT, &textbuf,
-			    "/sbin/route -n show | "
-			    "while read dest gateway flags;"
-			    " do [ \"$dest\" = default ] && {"
-				" echo $gateway; break; };"
-			    " done" ) > 0)
-			strlcpy(net_defroute, textbuf, sizeof net_defroute);
-		free(textbuf);
+		/* run route show and extract data */
+		get_command_out(net_defroute, sizeof(net_defroute), AF_INET,
+		    "/sbin/route -n show -inet 2>/dev/null", "default");
 
 		/* pull nameserver info out of /etc/resolv.conf */
-		if (collect(T_OUTPUT, &textbuf,
-			    "cat /etc/resolv.conf 2>/dev/null |"
-			    " while read keyword address rest;"
-			    " do [ \"$keyword\" = nameserver "
-				" -a \"${address#*:}\" = \"${address}\" ] && {"
-				    " echo $address; break; };"
-			    " done" ) > 0)
-			strlcpy(net_namesvr, textbuf, sizeof net_namesvr);
-		free(textbuf);
+		get_command_out(net_namesvr, sizeof(net_namesvr), AF_INET,
+		    "cat /etc/resolv.conf 2> /dev/null", "nameserver");
 		if (net_namesvr[0] != '\0')
 			net_dhcpconf |= DHCPCONF_NAMESVR;
 
@@ -618,7 +549,7 @@ again:
 
 		/* pull hostname out of leases file */
 		dhcp_host[0] = 0;
-		get_dhcp_value(dhcp_host, sizeof(dhcp_host), "hostname");
+		get_dhcp_value(dhcp_host, sizeof(net_host), "hostname");
 		if (dhcp_host[0] != '\0') {
 			net_dhcpconf |= DHCPCONF_HOST;
 			strlcpy(net_host, dhcp_host, sizeof net_host);
@@ -658,7 +589,7 @@ again:
 	if (!is_v6kernel())
 		v6config = 0;
 	else if (v6config) {
-		process_menu(MENU_noyes, deconst(MSG_Perform_IPv6_autoconfiguration));
+		process_menu(MENU_yesno, deconst(MSG_Perform_IPv6_autoconfiguration));
 		v6config = yesno ? 1 : 0;
 		net_ip6conf |= yesno ? IP6CONF_AUTOHOST : 0;
 	}
@@ -702,7 +633,11 @@ again:
 	    || net_namesvr6[0] != '\0'
 #endif
 		) {
+#ifdef DEBUG
+		f = fopen("/tmp/resolv.conf", "w");
+#else
 		f = fopen("/etc/resolv.conf", "w");
+#endif
 		if (f == NULL) {
 			if (logging)
 				(void)fprintf(logfp,
@@ -730,6 +665,26 @@ again:
 
 	run_program(0, "/sbin/ifconfig lo0 127.0.0.1");
 
+	/*
+	 * ifconfig does not allow media specifiers on IFM_MANUAL interfaces.
+	 * Our UI gives no way to set an option back to null-string if it
+	 * gets accidentally set.
+	 * Check for plausible alternatives.
+	 */
+	if (strcmp(net_media, "<default>") == 0 ||
+	    strcmp(net_media, "default") == 0 ||
+	    strcmp(net_media, "<manual>") == 0 ||
+	    strcmp(net_media, "manual") == 0 ||
+	    strcmp(net_media, "<none>") == 0 ||
+	    strcmp(net_media, "none") == 0 ||
+	    strcmp(net_media, " ") == 0) {
+		*net_media = '\0';
+	}
+
+	if (*net_media != '\0')
+		run_program(0, "/sbin/ifconfig %s media %s",
+		    net_dev, net_media);
+
 #ifdef INET6
 	if (v6config) {
 		init_v6kernel(1);
@@ -756,10 +711,8 @@ again:
 
 	/* Set a default route if one was given */
 	if (net_defroute[0] != '\0') {
-		run_program(RUN_DISPLAY | RUN_PROGRESS,
-				"/sbin/route -n flush -inet");
-		run_program(RUN_DISPLAY | RUN_PROGRESS,
-				"/sbin/route -n add default %s", net_defroute);
+		run_program(0, "/sbin/route -n flush -inet");
+		run_program(0, "/sbin/route -n add default %s", net_defroute);
 	}
 
 	/*
@@ -797,7 +750,7 @@ again:
 }
 
 int
-get_via_ftp(const char *xfer_type)
+get_via_ftp(void)
 {
 	distinfo *list;
 	char ftp_user_encoded[STRSIZE];
@@ -825,7 +778,7 @@ get_via_ftp(const char *xfer_type)
 	cwd = open(".", O_RDONLY);
 	cd_dist_dir("ftp");
 
-	process_menu(MENU_ftpsource, deconst(xfer_type));
+	process_menu(MENU_ftpsource, NULL);
 
 	list = dist_list;
 	while (list->desc) {
@@ -849,29 +802,32 @@ get_via_ftp(const char *xfer_type)
 			ftp_user_encoded[0] = 0;
 		} else {
 			ftp_opt = "";
-			cp = url_encode(ftp_user_encoded, ftp_user,
-				ftp_user_encoded + sizeof ftp_user_encoded - 1,
-				RFC1738_SAFE_LESS_SHELL, 0);
+			url_encode(ftp_user_encoded, ftp_user,
+				    sizeof ftp_user_encoded / 2 - 1,
+				    RFC1738_SAFE_LESS_SHELL, 0),
+			cp = strchr(ftp_user_encoded, 0);
 			*cp++ = ':';
-			cp = url_encode(cp, ftp_pass,
-				ftp_user_encoded + sizeof ftp_user_encoded - 1,
-				NULL, 0);
+			url_encode(cp, ftp_pass,
+				    sizeof ftp_user_encoded / 2 - 1,
+				    NULL, 0),
+			cp = strchr(cp, 0);
 			*cp++ = '@';
 			*cp = 0;
 		}
 
-		cp = url_encode(ftp_dir_encoded, ftp_dir,
-				ftp_dir_encoded + sizeof ftp_dir_encoded - 1,
-				RFC1738_SAFE_LESS_SHELL_PLUS_SLASH, 1);
+		url_encode(ftp_dir_encoded, ftp_dir,
+			    sizeof ftp_dir_encoded - 1,
+			    RFC1738_SAFE_LESS_SHELL_PLUS_SLASH, 1),
+		cp = strchr(ftp_dir_encoded, 0);
 		if (set_dir[0] != '/')
 			*cp++ = '/';
 		url_encode(cp, set_dir,
-				ftp_dir_encoded + sizeof ftp_dir_encoded,
-				RFC1738_SAFE_LESS_SHELL_PLUS_SLASH, 0);
+			    ftp_dir_encoded + sizeof ftp_dir_encoded - cp,
+			    RFC1738_SAFE_LESS_SHELL_PLUS_SLASH, 0),
 
 		ret = run_program(RUN_DISPLAY | RUN_PROGRESS, 
-			    "/usr/bin/ftp %s%s://%s%s/%s/%s%s",
-			    ftp_opt, xfer_type, ftp_user_encoded, ftp_host,
+			    "/usr/bin/ftp %sftp://%s%s/%s/%s%s",
+			    ftp_opt, ftp_user_encoded, ftp_host,
 			    ftp_dir_encoded, list->name, dist_postfix);
 
 		if (ret == 0) {
@@ -986,8 +942,10 @@ write_etc_hosts(FILE *f)
 void
 mnt_net_config(void)
 {
+	char ans[8];
 	char ifconfig_fn[STRSIZE];
 	FILE *ifconf = NULL;
+	const char *yes = msg_string(MSG_Yes);
 
 	if (!network_up)
 		return;
@@ -1047,7 +1005,7 @@ mnt_net_config(void)
 		/*
 		 * Add IPaddr/hostname to  /etc/hosts.
 		 * Be careful not to clobber any existing contents.
-		 * Relies on ordered search of /etc/hosts. XXX YP?
+		 * Relies on ordered seach of /etc/hosts. XXX YP?
 		 */
 		hosts = target_fopen("/etc/hosts", "a");
 		if (hosts != 0) {
@@ -1109,12 +1067,49 @@ config_dhcp(char *inter)
 	process_menu(MENU_yesno, deconst(MSG_Perform_DHCP_autoconfiguration));
 	if (yesno) {
 		/* spawn off dhclient and wait for parent to exit */
-		dhcpautoconf = run_program(RUN_DISPLAY | RUN_PROGRESS,
-		    "%s -q -pf /tmp/dhclnt.pid -lf /tmp/dhclient.leases %s",
+		dhcpautoconf = run_program(RUN_DISPLAY, 
+		    "%s -pf /tmp/dhclient.pid -lf /tmp/dhclient.leases %s",
 		    DHCLIENT_EX, inter);
 		return dhcpautoconf ? 0 : 1;
 	}
 	return 0;
+}
+
+static void
+get_command_out(char *targ, size_t l, int af, const char *command,
+    const char *search)
+{
+	int textsize;
+	char *textbuf;
+	const char *t;
+#ifndef INET6
+	struct in_addr in;
+#else
+	struct in6_addr in;
+#endif
+
+	textsize = collect(T_OUTPUT, &textbuf, command);
+	if (textsize < 0) {
+		if (logging)
+			(void)fprintf(logfp,
+			    "Aborting: Could not run %s.\n", command);
+		(void)fprintf(stderr, "Could not run ifconfig.");
+		exit(1);
+	}
+	if (textsize >= 0) {
+		(void)strtok(textbuf, " \t\n"); /* ignore interface name */
+		while ((t = strtok(NULL, " \t\n")) != NULL) {
+			if (strcmp(t, search) == 0) {
+				t = strtok(NULL, " \t\n");
+				if (inet_pton(af, t, &in) == 1 &&
+				    strcmp(t, "0.0.0.0") != 0) {
+					strlcpy(targ, t, l);
+				}
+			}
+		}
+	}
+	free(textbuf);
+	return;
 }
 
 static void

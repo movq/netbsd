@@ -1,4 +1,4 @@
-/*	$NetBSD: if_mecreg.h,v 1.2 2004/07/11 03:13:04 tsutsui Exp $	*/
+/*	$NetBSD: if_mecreg.h,v 1.1.2.1 2004/07/15 15:38:16 tron Exp $	*/
 
 /*
  * Copyright (c) 2001 Christopher Sekiya

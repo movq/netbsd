@@ -1,4 +1,4 @@
-/*	$NetBSD: trap.c,v 1.95 2004/09/02 02:18:38 tacha Exp $     */
+/*	$NetBSD: trap.c,v 1.93 2004/03/14 01:08:49 cl Exp $     */
 
 /*
  * Copyright (c) 1994 Ludd, University of Lule}, Sweden.
@@ -33,7 +33,7 @@
  /* All bugs are subject to removal without further notice */
 		
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.95 2004/09/02 02:18:38 tacha Exp $");
+__KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.93 2004/03/14 01:08:49 cl Exp $");
 
 #include "opt_ddb.h"
 #include "opt_ktrace.h"
@@ -175,6 +175,7 @@ trap(struct trapframe *frame)
 	struct vmspace *vm;
 	struct vm_map *map;
 	vm_prot_t ftype;
+	vsize_t nss;
 
 	if ((l = curlwp) != NULL)
 		p = l->l_proc;
@@ -276,6 +277,20 @@ if(faultdebug)printf("trap accflt type %lx, code %lx, pc %lx, psl %lx\n",
 		} else
 			KERNEL_LOCK(LK_CANRECURSE|LK_EXCLUSIVE);
 
+		nss = 0;
+		if (map != kernel_map &&
+		    (caddr_t)addr >= vm->vm_maxsaddr &&
+		    (caddr_t)addr < (caddr_t)USRSTACK) {
+			nss = btoc(USRSTACK - addr);
+			if (nss > btoc(p->p_rlimit[RLIMIT_STACK].rlim_cur)) {
+				/*
+				 * Set nss to 0, since this case is not
+				 * a "stack extension".
+				 */
+				nss = 0;
+			}
+		}
+
 		rv = uvm_fault(map, addr, 0, ftype);
 		if (rv != 0) {
 			if (umode == 0) {
@@ -299,8 +314,8 @@ if(faultdebug)printf("trap accflt type %lx, code %lx, pc %lx, psl %lx\n",
 			}
 		} else {
 			trapsig = 0;
-			if (map != kernel_map && (caddr_t)addr >= vm->vm_maxsaddr)
-				uvm_grow(p, addr);
+			if (nss != 0 && nss > vm->vm_ssize)
+				vm->vm_ssize = nss;
 		}
 		if (umode) {
 			l->l_flag &= ~L_SA_PAGEFAULT;

@@ -1,4 +1,4 @@
-/*	$NetBSD: sbp2.c,v 1.19 2004/06/29 11:10:29 mycroft Exp $	*/
+/*	$NetBSD: sbp2.c,v 1.18.4.1 2004/07/02 17:27:56 he Exp $	*/
 
 /*
  * Copyright (c) 2001,2002 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sbp2.c,v 1.19 2004/06/29 11:10:29 mycroft Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sbp2.c,v 1.18.4.1 2004/07/02 17:27:56 he Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>

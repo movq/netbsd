@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_microtime.c,v 1.13 2004/09/22 11:32:03 yamt Exp $	*/
+/*	$NetBSD: kern_microtime.c,v 1.4.4.2 2004/07/04 12:34:32 he Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -54,7 +54,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: kern_microtime.c,v 1.13 2004/09/22 11:32:03 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_microtime.c,v 1.4.4.2 2004/07/04 12:34:32 he Exp $");
 
 #include "opt_multiprocessor.h"
 
@@ -65,12 +65,6 @@ __KERNEL_RCSID(0, "$NetBSD: kern_microtime.c,v 1.13 2004/09/22 11:32:03 yamt Exp
 
 #include <machine/cpu.h>
 #include <machine/cpu_counter.h>
-
-/* XXX compat definitions */
-#define	ci_cc_time	ci_cc.cc_time
-#define	ci_cc_cc	ci_cc.cc_cc
-#define	ci_cc_ms_delta	ci_cc.cc_ms_delta
-#define	ci_cc_denom	ci_cc.cc_denom
 
 struct timeval cc_microset_time;
 
@@ -208,13 +202,13 @@ cc_microset(struct cpu_info *ci)
 		ci->ci_cc_ms_delta = delta;
 		ci->ci_cc_denom = denom;
 #if 0
-		printf("cc_microset[%lu]: delta %" PRId64
-		    ", denom %" PRId64 "\n", ci->ci_cpuid, delta, denom);
+		printf("cc_microset: delta %" PRId64 ", denom %" PRId64 "\n",
+		       delta, denom);
 #endif
 	} else {
-#ifdef DIAGNOSTIC
-		printf("cc_microset[%lu]: delta %" PRId64 ", resetting state\n",
-		       (u_long)ci->ci_cpuid, delta);
+#if 0
+		printf("cc_microset: delta %" PRId64 ", resetting state\n",
+		       delta);
 #endif
 		ci->ci_cc_ms_delta = 1000000;
 		ci->ci_cc_denom = cpu_frequency(ci);

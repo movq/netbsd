@@ -1,7 +1,7 @@
 #
 # kernel config file for debugging.
 #
-# 	$NetBSD: DEBUG,v 1.12 2004/10/23 14:00:53 augustss Exp $
+# 	$NetBSD: DEBUG,v 1.9.4.1 2004/07/15 20:19:34 he Exp $
 #
 
 include 	"arch/playstation2/conf/std.playstation2"
@@ -14,8 +14,6 @@ config		netbsd		root on ? type ?
 makeoptions	DEFGP="-G 0"
 
 options 	KLOADER_KERNEL_PATH="\"/netbsd\""
-options 	KLOADER
-
 options 	NMBCLUSTERS=4096 # Max. number of mbuf clusters
 
 options 	PPP_BSDCOMP	# BSD-Compress compression support for PPP
@@ -70,9 +68,9 @@ umidi* at uhub? port ? configuration ?
 
 # USB Ethernet adapters
 aue*	at uhub? port ?		# ADMtek AN986 Pegasus based adapters
-axe*	at uhub? port ?		# ASIX AX88172 based adapters
 cue*	at uhub? port ?		# CATC USB-EL1201A based adapters
 kue*	at uhub? port ?		# Kawasaki LSI KL5KUSB101B based adapters
+uax*	at uhub? port ?		# ASIX AX88172 based adapters
 url*	at uhub? port ?		# Realtek RTL8150L based adapters
 
 # Prolofic PL2301/PL2302 host-to-host adapter

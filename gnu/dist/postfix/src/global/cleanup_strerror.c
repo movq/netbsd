@@ -1,5 +1,3 @@
-/*	$NetBSD: cleanup_strerror.c,v 1.1.1.3 2004/05/31 00:24:28 heas Exp $	*/
-
 /*++
 /* NAME
 /*	cleanup_strerror 3
@@ -51,6 +49,8 @@ struct cleanup_stat_map {
 
 static struct cleanup_stat_map cleanup_stat_map[] = {
     CLEANUP_STAT_BAD, "Internal protocol error",
+    CLEANUP_STAT_HOVFL, "Message header too long",
+    CLEANUP_STAT_ROVFL, "Too many extracted recipients",
     CLEANUP_STAT_RCPT, "No recipients specified",
     CLEANUP_STAT_HOPS, "Too many hops",
     CLEANUP_STAT_SIZE, "Message file too big",

@@ -1,4 +1,4 @@
-/*	$NetBSD: ffs_softdep.c,v 1.61 2004/12/15 07:11:51 mycroft Exp $	*/
+/*	$NetBSD: ffs_softdep.c,v 1.57 2004/03/11 11:50:43 yamt Exp $	*/
 
 /*
  * Copyright 1998 Marshall Kirk McKusick. All Rights Reserved.
@@ -33,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ffs_softdep.c,v 1.61 2004/12/15 07:11:51 mycroft Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ffs_softdep.c,v 1.57 2004/03/11 11:50:43 yamt Exp $");
 
 #include <sys/param.h>
 #include <sys/buf.h>
@@ -57,9 +57,7 @@ __KERNEL_RCSID(0, "$NetBSD: ffs_softdep.c,v 1.61 2004/12/15 07:11:51 mycroft Exp
 #include <ufs/ufs/ufs_bswap.h>
 
 #include <uvm/uvm.h>
-
-static POOL_INIT(sdpcpool, sizeof(struct buf), 0, 0, 0, "sdpcpool",
-    &pool_allocator_nointr);
+struct pool sdpcpool;
 u_int softdep_lockedbufs;
 
 extern struct simplelock bqueue_slock; /* XXX */
@@ -382,34 +380,20 @@ sema_release(semap)
  * Memory management.
  */
 
-static POOL_INIT(pagedep_pool, sizeof(struct pagedep), 0, 0, 0, "pagedeppl",
-    &pool_allocator_nointr);
-static POOL_INIT(inodedep_pool, sizeof(struct inodedep), 0, 0, 0, "inodedeppl",
-    &pool_allocator_nointr);
-static POOL_INIT(newblk_pool, sizeof(struct newblk), 0, 0, 0, "newblkpl",
-    &pool_allocator_nointr);
-static POOL_INIT(bmsafemap_pool, sizeof(struct bmsafemap), 0, 0, 0,
-    "bmsafemappl", &pool_allocator_nointr);
-static POOL_INIT(allocdirect_pool, sizeof(struct allocdirect), 0, 0, 0,
-    "allocdirectpl", &pool_allocator_nointr);
-static POOL_INIT(indirdep_pool, sizeof(struct indirdep), 0, 0, 0, "indirdeppl",
-    &pool_allocator_nointr);
-static POOL_INIT(allocindir_pool, sizeof(struct allocindir), 0, 0, 0,
-    "allocindirpl", &pool_allocator_nointr);
-static POOL_INIT(freefrag_pool, sizeof(struct freefrag), 0, 0, 0,
-    "freefragpl", &pool_allocator_nointr);
-static POOL_INIT(freeblks_pool, sizeof(struct freeblks), 0, 0, 0,
-    "freeblkspl", &pool_allocator_nointr);
-static POOL_INIT(freefile_pool, sizeof(struct freefile), 0, 0, 0,
-    "freefilepl", &pool_allocator_nointr);
-static POOL_INIT(diradd_pool, sizeof(struct diradd), 0, 0, 0, "diraddpl",
-    &pool_allocator_nointr);
-static POOL_INIT(mkdir_pool, sizeof(struct mkdir), 0, 0, 0, "mkdirpl",
-    &pool_allocator_nointr);
-static POOL_INIT(dirrem_pool, sizeof(struct dirrem), 0, 0, 0, "dirrempl",
-    &pool_allocator_nointr);
-static POOL_INIT(newdirblk_pool, sizeof (struct newdirblk), 0, 0, 0,
-    "newdirblkpl", &pool_allocator_nointr);
+static struct pool pagedep_pool;
+static struct pool inodedep_pool;
+static struct pool newblk_pool;
+static struct pool bmsafemap_pool;
+static struct pool allocdirect_pool;
+static struct pool indirdep_pool;
+static struct pool allocindir_pool;
+static struct pool freefrag_pool;
+static struct pool freeblks_pool;
+static struct pool freefile_pool;
+static struct pool diradd_pool;
+static struct pool mkdir_pool;
+static struct pool dirrem_pool;
+static struct pool newdirblk_pool;
 
 static __inline void
 softdep_free(struct worklist *item, int type)
@@ -1215,9 +1199,40 @@ softdep_initialize()
 	newblk_hashtbl = hashinit(64, HASH_LIST, M_NEWBLK, M_WAITOK,
 	    &newblk_hash);
 	sema_init(&newblk_in_progress, "newblk", PRIBIO, 0);
+	pool_init(&sdpcpool, sizeof(struct buf), 0, 0, 0, "sdpcpool",
+	    &pool_allocator_nointr);
 	for (i = 0; i < PCBPHASHSIZE; i++) {
 		LIST_INIT(&pcbphashhead[i]);
 	}
+
+	pool_init(&pagedep_pool, sizeof(struct pagedep), 0, 0, 0,
+	    "pagedeppl", &pool_allocator_nointr);
+	pool_init(&inodedep_pool, sizeof(struct inodedep), 0, 0, 0,
+	    "inodedeppl", &pool_allocator_nointr);
+	pool_init(&newblk_pool, sizeof(struct newblk), 0, 0, 0,
+	    "newblkpl", &pool_allocator_nointr);
+	pool_init(&bmsafemap_pool, sizeof(struct bmsafemap), 0, 0, 0,
+	    "bmsafemappl", &pool_allocator_nointr);
+	pool_init(&allocdirect_pool, sizeof(struct allocdirect), 0, 0, 0,
+	    "allocdirectpl", &pool_allocator_nointr);
+	pool_init(&indirdep_pool, sizeof(struct indirdep), 0, 0, 0,
+	    "indirdeppl", &pool_allocator_nointr);
+	pool_init(&allocindir_pool, sizeof(struct allocindir), 0, 0, 0,
+	    "allocindirpl", &pool_allocator_nointr);
+	pool_init(&freefrag_pool, sizeof(struct freefrag), 0, 0, 0,
+	    "freefragpl", &pool_allocator_nointr);
+	pool_init(&freeblks_pool, sizeof(struct freeblks), 0, 0, 0,
+	    "freeblkspl", &pool_allocator_nointr);
+	pool_init(&freefile_pool, sizeof(struct freefile), 0, 0, 0,
+	    "freefilepl", &pool_allocator_nointr);
+	pool_init(&diradd_pool, sizeof(struct diradd), 0, 0, 0,
+	    "diraddpl", &pool_allocator_nointr);
+	pool_init(&mkdir_pool, sizeof(struct mkdir), 0, 0, 0,
+	    "mkdirpl", &pool_allocator_nointr);
+	pool_init(&dirrem_pool, sizeof(struct dirrem), 0, 0, 0,
+	    "dirrempl", &pool_allocator_nointr);
+	pool_init(&newdirblk_pool, sizeof (struct newdirblk), 0, 0, 0,
+	    "newdirblkpl", &pool_allocator_nointr);
 }
 
 /*
@@ -1707,8 +1722,7 @@ handle_workitem_freefrag(freefrag)
 	tip.i_vnode = &vp;
 	lockinit(&tip.i_gnode.g_glock, PVFS, "fglock", 0, 0);
 	lockmgr(&tip.i_gnode.g_glock, LK_EXCLUSIVE, NULL);
-	ffs_blkfree(ump->um_fs, ump->um_devvp, freefrag->ff_blkno,
-	    freefrag->ff_fragsize, tip.i_number);
+	ffs_blkfree(&tip, freefrag->ff_blkno, freefrag->ff_fragsize);
 	lockmgr(&tip.i_gnode.g_glock, LK_RELEASE, NULL);
 	pool_put(&freefrag_pool, freefrag);
 }
@@ -2493,7 +2507,7 @@ handle_workitem_freeblocks(freeblks)
 		if ((error = indir_trunc(&tip, fsbtodb(fs, bn), level,
 		    baselbns[level], &blocksreleased)) != 0)
 			allerror = error;
-		ffs_blkfree(fs, devvp, bn, fs->fs_bsize, tip.i_number);
+		ffs_blkfree(&tip, bn, fs->fs_bsize);
 		fs->fs_pendingblocks -= nblocks;
 		blocksreleased += nblocks;
 	}
@@ -2504,7 +2518,7 @@ handle_workitem_freeblocks(freeblks)
 		if ((bn = freeblks->fb_dblks[i]) == 0)
 			continue;
 		bsize = blksize(fs, &tip, i);
-		ffs_blkfree(fs, devvp, bn, bsize, tip.i_number);
+		ffs_blkfree(&tip, bn, bsize);
 		fs->fs_pendingblocks -= btodb(bsize);
 		blocksreleased += btodb(bsize);
 	}
@@ -2606,7 +2620,7 @@ indir_trunc(ip, dbn, level, lbn, countp)
 			     level - 1, lbn + (i * lbnadd), countp)) != 0)
 				allerror = error;
 		}
-		ffs_blkfree(fs, ip->i_devvp, nb, fs->fs_bsize, ip->i_number);
+		ffs_blkfree(ip, nb, fs->fs_bsize);
 		fs->fs_pendingblocks -= nblocks;
 		*countp += nblocks;
 	}
@@ -3237,13 +3251,6 @@ softdep_releasefile(ip)
 	if (ip->i_flag & IN_SPACECOUNTED)
 		return;
 	/*
-	 * We have to deactivate a snapshot otherwise copyonwrites may
-	 * add blocks and the cleanup may remove blocks after we have
-	 * tried to account for them.
-	 */
-	if ((ip->i_flags & SF_SNAPSHOT) != 0)
-		ffs_snapremove(ITOV(ip));
-	/*
 	 * If we are tracking an nlinkdelta, we have to also remember
 	 * whether we accounted for the freed space yet.
 	 */
@@ -3362,9 +3369,12 @@ static void
 handle_workitem_freefile(freefile)
 	struct freefile *freefile;
 {
+	struct vnode vp;
+	struct inode tip;
 #ifdef DEBUG
 	struct inodedep *idp;
 #endif
+	struct vop_vfree_args args;
 	int error;
 
 #ifdef DEBUG
@@ -3373,9 +3383,17 @@ handle_workitem_freefile(freefile)
 		panic("handle_workitem_freefile: inodedep survived");
 	FREE_LOCK(&lk);
 #endif
+	tip.i_devvp = freefile->fx_devvp;
+	tip.i_dev = freefile->fx_devvp->v_rdev;
+	tip.i_fs = freefile->fx_fs;
 	freefile->fx_fs->fs_pendinginodes -= 1;
-	if ((error = ffs_freefile(freefile->fx_fs, freefile->fx_devvp,
-	    freefile->fx_oldinum, freefile->fx_mode)) != 0)
+	vp.v_data = &tip;
+	vp.v_mount = freefile->fx_devvp->v_specmountpoint;
+	tip.i_vnode = &vp;
+	args.a_pvp = &vp;
+	args.a_ino = freefile->fx_oldinum;
+	args.a_mode = freefile->fx_mode;
+	if ((error = ffs_freefile(&args)) != 0)
 		softdep_error("handle_workitem_freefile", error);
 	WORKITEM_FREE(freefile, D_FREEFILE);
 }
@@ -3623,7 +3641,7 @@ initiate_write_inodeblock_ufs1(inodedep, bp)
 	     lastadp = adp, adp = TAILQ_NEXT(adp, ad_next)) {
 		if (adp->ad_lbn >= NDADDR)
 			break;
-		dp->di_db[adp->ad_lbn] = ufs_rw32((u_int32_t)adp->ad_oldblkno,
+		dp->di_db[adp->ad_lbn] = ufs_rw32((int32_t)adp->ad_oldblkno,
 		    needswap);
 		/* keep going until hitting a rollback to a frag */
 		if (adp->ad_oldsize == 0 || adp->ad_oldsize == fs->fs_bsize)
@@ -4220,7 +4238,7 @@ handle_written_inodeblock(inodedep, bp)
 						     needswap),
 					    adp->ad_oldblkno);
 				dp1->di_db[adp->ad_lbn] =
-				    ufs_rw32((u_int32_t)adp->ad_newblkno,
+				    ufs_rw32((int32_t)adp->ad_newblkno,
 					     needswap);
 			} else {
 				if (dp1->di_ib[adp->ad_lbn - NDADDR] != 0)
@@ -4232,7 +4250,7 @@ handle_written_inodeblock(inodedep, bp)
 								- NDADDR],
 						     needswap));
 				dp1->di_ib[adp->ad_lbn - NDADDR] =
-				    ufs_rw32((u_int32_t)adp->ad_newblkno,
+				    ufs_rw32((int32_t)adp->ad_newblkno,
 					     needswap);
 			}
 		} else {

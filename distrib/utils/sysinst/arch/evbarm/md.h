@@ -1,4 +1,4 @@
-/*	$NetBSD: md.h,v 1.12 2004/06/06 06:06:59 christos Exp $	*/
+/*	$NetBSD: md.h,v 1.11 2004/01/29 08:48:24 lukem Exp $	*/
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -71,7 +71,7 @@
  * Default fileystem type for floppy disks.
  * On evbarm, that is msdos.
  */
-const char *fdtype;
+EXTERN const char *fdtype INIT("msdos");
 
 /*
  *  prototypes for MD code.

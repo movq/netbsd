@@ -1,5 +1,3 @@
-/*	$NetBSD: tok822_resolve.c,v 1.1.1.2 2004/05/31 00:24:36 heas Exp $	*/
-
 /*++
 /* NAME
 /*	tok822_resolve 3

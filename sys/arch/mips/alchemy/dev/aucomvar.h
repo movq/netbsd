@@ -1,4 +1,4 @@
-/* $NetBSD: aucomvar.h,v 1.2 2004/05/01 19:04:00 thorpej Exp $ */
+/* $NetBSD: aucomvar.h,v 1.1 2002/07/29 15:42:42 simonb Exp $ */
 
 /* copyright */
 
@@ -26,4 +26,4 @@
 #undef COM_MPLOCK	/* just in case... */
 #undef COM_DEBUG
 #undef COM_HAYESP
-#undef COM_16650
+#undef COM16650

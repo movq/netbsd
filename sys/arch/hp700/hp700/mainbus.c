@@ -1,4 +1,4 @@
-/*	$NetBSD: mainbus.c,v 1.22 2004/12/14 02:32:02 chs Exp $	*/
+/*	$NetBSD: mainbus.c,v 1.17 2004/02/20 20:22:10 jkunz Exp $	*/
 
 /*-
  * Copyright (c) 2001, 2002 The NetBSD Foundation, Inc.
@@ -70,9 +70,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mainbus.c,v 1.22 2004/12/14 02:32:02 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mainbus.c,v 1.17 2004/02/20 20:22:10 jkunz Exp $");
 
-#include "locators.h"
+#undef BTLBDEBUG
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -107,8 +107,6 @@ CFATTACH_DECL(mainbus, sizeof(struct mainbus_softc),
     mbmatch, mbattach, NULL, NULL);
 
 extern struct cfdriver mainbus_cd;
-
-static int mb_attached;
 
 /* from machdep.c */
 extern struct extent *hp700_io_extent;
@@ -160,7 +158,6 @@ int mbus_alloc(void *, bus_addr_t, bus_addr_t, bus_size_t, bus_size_t, bus_size_
 void mbus_free(void *, bus_space_handle_t, bus_size_t);
 int mbus_subregion(void *, bus_space_handle_t, bus_size_t, bus_size_t, bus_space_handle_t *);
 void mbus_barrier(void *, bus_space_handle_t, bus_size_t, bus_size_t, int);
-void *mbus_vaddr(void *, bus_space_handle_t);
 
 int mbus_dmamap_create(void *, bus_size_t, int, bus_size_t, bus_size_t, int, bus_dmamap_t *);
 void mbus_dmamap_destroy(void *, bus_dmamap_t);
@@ -441,16 +438,6 @@ void
 mbus_barrier(void *v, bus_space_handle_t h, bus_size_t o, bus_size_t l, int op)
 {
 	sync_caches();
-}
-
-void*
-mbus_vaddr(void *v, bus_space_handle_t h)
-{
-	/*
-	 * We must only be called with addresses in I/O space.
-	 */
-	KASSERT(h >= HPPA_IOSPACE);
-	return (void*)h;
 }
 
 u_int8_t
@@ -759,7 +746,7 @@ const struct hppa_bus_space_tag hppa_bustag = {
 	NULL,
 
 	mbus_map, mbus_unmap, mbus_subregion, mbus_alloc, mbus_free,
-	mbus_barrier, mbus_vaddr,
+	mbus_barrier,
 	mbus_r1,    mbus_r2,   mbus_r4,   mbus_r8,
 	mbus_w1,    mbus_w2,   mbus_w4,   mbus_w8,
 	mbus_rm_1,  mbus_rm_2, mbus_rm_4, mbus_rm_8,
@@ -896,8 +883,6 @@ mbus_dmamap_load_mbuf(void *v, bus_dmamap_t map, struct mbuf *m0,
 	seg = 0;
 	error = 0;
 	for (m = m0; m != NULL && error == 0; m = m->m_next) {
-		if (m->m_len == 0)
-			continue;
 		error = _bus_dmamap_load_buffer(NULL, map, m->m_data, m->m_len,
 		    NULL, flags, &lastaddr, &seg, first);
 		first = 0;
@@ -1429,7 +1414,7 @@ mbmatch(parent, cf, aux)
 {
 
 	/* there will be only one */
-	if (mb_attached)
+	if (cf->cf_unit)
 		return 0;
 
 	return 1;
@@ -1445,6 +1430,13 @@ mb_module_callback(struct device *self, struct confargs *ca)
 }
 
 static void
+mb_monarch_cpu_callback(struct device *self, struct confargs *ca)
+{
+	if (ca->ca_hpa == pdc_hpa.hpa)
+		config_found_sm(self, ca, mbprint, mbsubmatch);
+}
+
+static void
 mb_cpu_mem_callback(struct device *self, struct confargs *ca)
 {
 	if ((ca->ca_type.iodc_type == HPPA_TYPE_NPROC ||
@@ -1457,15 +1449,10 @@ void
 mbattach(struct device *parent, struct device *self, void *aux)
 {
 	struct mainbus_softc *sc = (struct mainbus_softc *)self;
-	struct device_path path PDC_ALIGNMENT;
-	struct pdc_iodc_read pdc_iodc_read PDC_ALIGNMENT;
 	struct pdc_system_map_find_mod pdc_find_mod PDC_ALIGNMENT;
-	struct pdc_memmap pdc_memmap PDC_ALIGNMENT;
+	struct device_path path PDC_ALIGNMENT;
 	struct confargs nca;
 	bus_space_handle_t ioh;
-	int i;
-
-	mb_attached = 1;
 
 	/* fetch the "default" cpu hpa */
 	if (pdc_call((iodcio_t)pdc, 0, PDC_HPA, PDC_HPA_DFLT, &pdc_hpa) < 0)
@@ -1491,7 +1478,7 @@ mbattach(struct device *parent, struct device *self, void *aux)
 		(void *)((pdc_hpa.hpa & FLEX_MASK) | DMA_ENABLE);
 
 	sc->sc_hpa = pdc_hpa.hpa;
-	aprint_normal(" [flex %lx]\n", pdc_hpa.hpa & FLEX_MASK);
+	printf (" [flex %lx]\n", pdc_hpa.hpa & FLEX_MASK);
 
 	/* PDC first */
 	memset(&nca, 0, sizeof(nca));
@@ -1502,69 +1489,28 @@ mbattach(struct device *parent, struct device *self, void *aux)
 	config_found(self, &nca, mbprint);
 
 	/*
-	 * Scan mainbus for monarch CPU and attach it.
-	 *
 	 * How to do device scaning? Try to use PDC_SYSTEM_MAP.
 	 * We are on a "new" system if it succedes, so use PDC_SYSTEM_MAP.
 	 * Otherwise we must be on an "old" system, so use PDC_MEMMAP.
 	 */
-	memset(&nca, 0, sizeof(nca));
 	if (pdc_call((iodcio_t)pdc, 0, PDC_SYSTEM_MAP, PDC_SYSTEM_MAP_FIND_MOD,
 	    &pdc_find_mod, &path, 0) == 0) {
 	        pdc_scanbus = pdc_scanbus_system_map;
-		for (i = 0; i <= 64; i++) {
-			nca.ca_dp.dp_bc[0] = nca.ca_dp.dp_bc[1] = 
-			    nca.ca_dp.dp_bc[2] = nca.ca_dp.dp_bc[3] = 
-			    nca.ca_dp.dp_bc[4] = nca.ca_dp.dp_bc[5] = -1;
-			nca.ca_dp.dp_mod = i;
-			if (pdc_call((iodcio_t)pdc, 0, PDC_SYSTEM_MAP,
-			    PDC_SYSTEM_MAP_TRANS_PATH, &pdc_find_mod, 
-			    &nca.ca_dp) != 0)
-				continue;
-			nca.ca_hpa = pdc_find_mod.hpa;
-			nca.ca_hpasz = pdc_find_mod.size << PGSHIFT;
-			if (pdc_hpa.hpa == pdc_find_mod.hpa)
-				break;
-		}
 	} else {
 	        pdc_scanbus = pdc_scanbus_memory_map;
-		for (i = 0; i < 16; i++) {
-			nca.ca_dp.dp_bc[0] = nca.ca_dp.dp_bc[1] = 
-			    nca.ca_dp.dp_bc[2] = nca.ca_dp.dp_bc[3] = 
-			    nca.ca_dp.dp_bc[4] = nca.ca_dp.dp_bc[5] = -1;
-			nca.ca_dp.dp_mod = i;
-			if (pdc_call((iodcio_t)pdc, 0, PDC_MEMMAP, 
-			    PDC_MEMMAP_HPA, &pdc_memmap, &nca.ca_dp) < 0)
-				continue;
-			nca.ca_hpa = pdc_memmap.hpa;
-			if (pdc_hpa.hpa == pdc_memmap.hpa)
-				break;
-		}
 	}
-	if ((i = pdc_call((iodcio_t)pdc, 0, PDC_IODC, PDC_IODC_READ, 
-	    &pdc_iodc_read, pdc_hpa.hpa, IODC_DATA, &nca.ca_type, 
-	    sizeof(nca.ca_type))) != 0) {
-		aprint_normal("mbattach: PDC_IODC_READ monarch CPU HPA "
-		    "faild err=%d\n", i);
-		nca.ca_name = "PA-RISC";
-	} else {
-		nca.ca_pdc_iodc_read = &pdc_iodc_read;
-		nca.ca_name = hppa_mod_info(nca.ca_type.iodc_type,
-		    nca.ca_type.iodc_sv_model);
-	}
-	if (nca.ca_hpa != pdc_hpa.hpa) {
-		/* Didn't find the CPU in the device tree. Attach hard. */
-		nca.ca_hpa = pdc_hpa.hpa;
-		nca.ca_dp.dp_bc[0] = nca.ca_dp.dp_bc[1] = 
-		    nca.ca_dp.dp_bc[2] = nca.ca_dp.dp_bc[3] = 
-		    nca.ca_dp.dp_bc[4] = nca.ca_dp.dp_bc[5] = -1;
-		nca.ca_dp.dp_mod = -1;
-	}
-	nca.ca_mod = nca.ca_dp.dp_mod;
+
+	/* Search and attach monarch CPU. */
+	memset(&nca, 0, sizeof(nca));
+	nca.ca_name = "mainbus";
+	nca.ca_hpa = 0;
+	nca.ca_irq = HP700CF_IRQ_UNDEF;
 	nca.ca_iot = &hppa_bustag;
 	nca.ca_dmatag = &hppa_dmatag;
-	nca.ca_irq = 31;
-	config_found(self, &nca, mbprint);
+	nca.ca_dp.dp_bc[0] = nca.ca_dp.dp_bc[1] = nca.ca_dp.dp_bc[2] =
+	nca.ca_dp.dp_bc[3] = nca.ca_dp.dp_bc[4] = nca.ca_dp.dp_bc[5] = -1;
+	nca.ca_dp.dp_mod = -1;
+	pdc_scanbus(self, &nca, mb_monarch_cpu_callback);
 
 	/* Search and attach additional CPUs and memory controller. */
 	memset(&nca, 0, sizeof(nca));
@@ -1616,10 +1562,10 @@ mbprint(void *aux, const char *pnp)
 	if (ca->ca_hpa) {
 		aprint_normal(" hpa 0x%lx path ", ca->ca_hpa);
 		for (n = 0 ; n < 6 ; n++) {
-			if ( ca->ca_dp.dp_bc[n] >= 0)
+			if ( ca->ca_dp.dp_bc[n] > 0)
 				printf( "%d/", ca->ca_dp.dp_bc[n]);
 		}
-		aprint_normal( "%d", ca->ca_dp.dp_mod);
+		printf( "%d", ca->ca_dp.dp_mod);
 		if (!pnp && ca->ca_irq >= 0) {
 			aprint_normal(" irq %d", ca->ca_irq);
 			if (ca->ca_type.iodc_type != HPPA_TYPE_BHA)

@@ -1,4 +1,4 @@
-/*	$NetBSD: ext2fs_bmap.c,v 1.17 2004/12/15 07:11:51 mycroft Exp $	*/
+/*	$NetBSD: ext2fs_bmap.c,v 1.15 2004/03/22 19:23:08 bouyer Exp $	*/
 
 /*
  * Copyright (c) 1989, 1991, 1993
@@ -70,7 +70,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ext2fs_bmap.c,v 1.17 2004/12/15 07:11:51 mycroft Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ext2fs_bmap.c,v 1.15 2004/03/22 19:23:08 bouyer Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -157,7 +157,7 @@ ext2fs_bmaparray(vp, bn, bnp, ap, nump, runp)
 
 	ip = VTOI(vp);
 	mp = vp->v_mount;
-	ump = ip->i_ump;
+	ump = VFSTOUFS(mp);
 #ifdef DIAGNOSTIC
 	if ((ap != NULL && nump == NULL) || (ap == NULL && nump != NULL))
 		panic("ext2fs_bmaparray: invalid arguments");
@@ -176,7 +176,7 @@ ext2fs_bmaparray(vp, bn, bnp, ap, nump, runp)
 
 	if (bn >= 0 && bn < NDADDR) {
 		/* XXX ondisk32 */
-		*bnp = blkptrtodb(ump, fs2h32(ip->i_e2fs_blocks[bn]));
+		*bnp = blkptrtodb(ump, (daddr_t)fs2h32(ip->i_e2fs_blocks[bn]));
 		if (*bnp == 0)
 			*bnp = -1;
 		else if (runp)

@@ -1,4 +1,4 @@
-/*	$NetBSD: grfconfig.c,v 1.11 2004/11/13 14:32:14 he Exp $	*/
+/*	$NetBSD: grfconfig.c,v 1.10 2001/01/22 21:11:23 is Exp $	*/
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -43,7 +43,7 @@ __COPYRIGHT("@(#) Copyright (c) 1997 The NetBSD Foundation, Inc.\n\
 #endif /* not lint */
 
 #ifndef lint
-__RCSID("$NetBSD: grfconfig.c,v 1.11 2004/11/13 14:32:14 he Exp $");
+__RCSID("$NetBSD: grfconfig.c,v 1.10 2001/01/22 21:11:23 is Exp $");
 #endif /* not lint */
 
 #include <sys/file.h>
@@ -142,11 +142,11 @@ main(ac, av)
 			 * check for end-of-section, comments, strip off trailing
 			 * spaces and newline character.
 			 */
-			for (p = buf; isspace((unsigned char)*p); ++p)
+			for (p = buf; isspace(*p); ++p)
 				continue;
 			if (*p == '\0' || *p == '#')
 				continue;
-			for (p = strchr(buf, '\0'); isspace((unsigned char)*--p);)
+			for (p = strchr(buf, '\0'); isspace(*--p);)
 				continue;
 			*++p = '\0';
 
@@ -157,8 +157,8 @@ main(ac, av)
 					*tbuf2 = '\0';
 					break;
 				}
-				if (isupper((unsigned char)*tbuf2)) {
-					*tbuf2 = tolower((unsigned char)*tbuf2);
+				if (isupper(*tbuf2)) {
+					*tbuf2 = tolower(*tbuf2);
 				}
 				obuf++;
 				tbuf2++;

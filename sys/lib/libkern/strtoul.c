@@ -1,4 +1,4 @@
-/*	$NetBSD: strtoul.c,v 1.8 2004/07/01 19:04:14 christos Exp $	*/
+/*	$NetBSD: strtoul.c,v 1.7 2003/08/07 16:32:12 agc Exp $	*/
 
 /*
  * Copyright (c) 1990, 1993
@@ -35,7 +35,7 @@
 #if 0
 static char sccsid[] = "@(#)strtoul.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: strtoul.c,v 1.8 2004/07/01 19:04:14 christos Exp $");
+__RCSID("$NetBSD: strtoul.c,v 1.7 2003/08/07 16:32:12 agc Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -121,7 +121,7 @@ strtoul(nptr, endptr, base)
 		if (acc > cutoff || (acc == cutoff && c > cutlim)) {
 #if defined(_KERNEL) || defined(_STANDALONE)
 			if (endptr)
-				*endptr = __UNCONST(nptr);
+				*endptr = (char *) nptr;
 			return ULONG_MAX;
 #else
 			any = -1;
@@ -138,6 +138,6 @@ strtoul(nptr, endptr, base)
 		acc = -acc;
 	if (endptr != NULL)
 		/* LINTED interface specification */
-		*endptr = __UNCONST(any ? s - 1 : nptr);
+		*endptr = (char *)(any ? s - 1 : nptr);
 	return (acc);
 }

@@ -1,5 +1,5 @@
 #!/bin/sh -
-#	$NetBSD: MAKEDEV.tmpl,v 1.33 2004/12/01 23:09:04 christos Exp $
+#	$NetBSD: MAKEDEV.tmpl,v 1.23.2.3 2004/11/12 04:52:26 jmc Exp $
 #
 # Copyright (c) 2003 The NetBSD Foundation, Inc.
 # All rights reserved.
@@ -164,7 +164,6 @@
 #	dn*	UNIBUS DN11 and emulations (e.g. Able Quadracall)
 #
 # Pseudo terminals:
-#	ptm	pty multiplexor device.
 #	pty*	set of 16 master and slave pseudo terminals
 #	opty	first 16 ptys, to save inodes on install media
 #	ipty	first 2 ptys, for install media use only
@@ -219,7 +218,7 @@
 #	audio*	audio devices
 #	bell*	OPM bell device (x68k)
 #	bktr	Brooktree 848/849/878/879 based TV cards
-#	bpf	packet filter
+#	bpf*	packet filter
 #	cfs*	Coda file system device
 #	ch*	SCSI media changer
 #	cir*	Consumer IR
@@ -249,7 +248,7 @@
 #	nsmb*	SMB requester
 #	openfirm OpenFirmware accessor
 #	pci*	PCI bus access devices
-#	pf	PF packet filter
+#	pf	PF packet filter (not in tree)
 #	pow*	power management device (x68k)
 #	px*	PixelStamp Xserver access
 #	radio*	radio devices
@@ -421,19 +420,18 @@ case $i in
 
 all)
 	makedev all_md
-	makedev std fd ptm pty0 pty1 pty2 pty3
+	makedev std fd pty0 pty1 pty2 pty3
 	makedev ccd0 ccd1 ccd2 ccd3
 	makedev cgd0 cgd1 cgd2 cgd3
 	makedev fss0 fss1 fss2 fss3
 	makedev md0 md1
 	makedev raid0 raid1 raid2 raid3 raid4 raid5 raid6 raid7
 	makedev vnd0 vnd1 vnd2 vnd3
-	makedev bpf
+	makedev bpf0 bpf1 bpf2 bpf3 bpf4 bpf5 bpf6 bpf7
 	makedev tun0 tun1 tun2 tun3
 	makedev ipl crypto random systrace
 	makedev lkm clockctl
 	makedev local
-	makedev atabus0 atabus1 atabus2 atabus3
 	;;
 
 init)
@@ -858,14 +856,17 @@ lpt*|lpa*)
 	mkdev lpt${unit}ctl c $chr $(($unit + 256))
 	;;
 
-bpf)
-	mkdev bpf	c %bpf_chr% 0
+bpf*|tun*)
+	case $i in
+	bpf*) name=bpf;	unit=${i#bpf};	chr=%bpf_chr%;;
+	tun*) name=tun;	unit=${i#tun};	chr=%tun_chr%;;
+	esac
+	mkdev $name$unit c $chr $unit
 	;;
 
-tun*|joy*)
+joy*)
 	case $i in
 	joy*) name=joy;	unit=${i#joy};	chr=%joy_chr%;;
-	tun*) name=tun;	unit=${i#tun};	chr=%tun_chr%;;
 	esac
 	mkdev $name$unit c $chr $unit
 	;;
@@ -1238,11 +1239,6 @@ ipty)
 	mkdev ptyp1 c %ptc_chr% 1 666
 	;;
 
-ptm)
-	mkdev ptmx c %ptm_chr% 0 666
-	mkdev ptm c %ptm_chr% 1 666
-	;;
-
 grf*)
 	unit=${i#grf}
 	mkdev grf$unit c %grf_chr% $unit 666
@@ -1394,19 +1390,6 @@ clcd*)
 	done
 	;;
 
-spif*)
-	unit=${i#spif}
-	if [ 0$unit -gt 3 ]; then
-		warn "bad unit for $i: $unit"
-		break
-	fi
-	for j in 0 1 2 3 4 5 6 7; do
-		mkdev ttyS$unit$j c 102 $(($unit * 64 + $j)) "" "" $u_uucp
-	done
-	mkdev bppS${unit}0 c 103 $(($unit * 64 + 0))
-	mkdev bppS${unit}1 c 103 $(($unit * 64 + 1))
-	;;
-
 bpp*)
 	unit=${i#bpp}
 	mkdev bpp$unit c %bpp_chr% $(($unit + 0))
@@ -1448,15 +1431,6 @@ ttyS*)
 	unit=${i#ttyS}
 	mkdev ttyS$unit c %sacom_chr% $(($unit + $dialin )) "" "" $u_uucp
 	mkdev dtyS$unit c %sacom_chr% $(($unit + $dialout)) "" "" $u_uucp
-	;;
-
-atabus*)
-	unit=${i#atabus}
-	mkdev atabus$unit c %atabus_chr% $unit 644
-	;;
-
-drvctl)
-	mkdev drvctl c %drvctl_chr% 0 644
 	;;
 
 midevend)

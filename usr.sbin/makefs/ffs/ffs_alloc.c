@@ -1,4 +1,4 @@
-/*	$NetBSD: ffs_alloc.c,v 1.14 2004/06/20 22:20:18 jmc Exp $	*/
+/*	$NetBSD: ffs_alloc.c,v 1.13.2.1 2004/06/22 07:18:49 tron Exp $	*/
 /* From: NetBSD: ffs_alloc.c,v 1.50 2001/09/06 02:16:01 lukem Exp */
 
 /*
@@ -47,7 +47,7 @@
 
 #include <sys/cdefs.h>
 #if defined(__RCSID) && !defined(__lint)
-__RCSID("$NetBSD: ffs_alloc.c,v 1.14 2004/06/20 22:20:18 jmc Exp $");
+__RCSID("$NetBSD: ffs_alloc.c,v 1.13.2.1 2004/06/22 07:18:49 tron Exp $");
 #endif	/* !__lint */
 
 #include <sys/param.h>

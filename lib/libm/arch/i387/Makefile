@@ -1,4 +1,4 @@
-#  $NetBSD: Makefile,v 1.5 2004/07/01 17:30:48 drochner Exp $
+#  $NetBSD: Makefile,v 1.4 2002/08/19 14:55:16 lukem Exp $
 #
 
 NOLINT=		# defined
@@ -13,7 +13,6 @@ SRCS=e_acos.S e_asin.S e_atan2.S e_exp.S e_expf.S e_fmod.S e_log.S \
      s_finite.S s_finitef.S s_floor.S s_floorf.S s_ilogb.S s_ilogbf.S \
      s_log1p.S s_log1pf.S s_logb.S s_logbf.S s_rint.S s_rintf.S \
      s_scalbn.S s_scalbnf.S s_significand.S s_significandf.S s_sin.S \
-     s_sinf.S s_tan.S s_tanf.S \
-     lrint.S
+     s_sinf.S s_tan.S s_tanf.S
 
 .include <bsd.lib.mk>

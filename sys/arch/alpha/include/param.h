@@ -1,4 +1,4 @@
-/* $NetBSD: param.h,v 1.34 2004/04/06 14:56:13 simonb Exp $ */
+/* $NetBSD: param.h,v 1.33.2.1 2004/07/14 09:11:33 tron Exp $ */
 
 /*
  * Copyright (c) 1992, 1993

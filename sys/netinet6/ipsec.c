@@ -1,4 +1,4 @@
-/*	$NetBSD: ipsec.c,v 1.99 2004/10/27 23:16:56 itojun Exp $	*/
+/*	$NetBSD: ipsec.c,v 1.95.2.1 2004/05/28 07:24:28 tron Exp $	*/
 /*	$KAME: ipsec.c,v 1.136 2002/05/19 00:36:39 itojun Exp $	*/
 
 /*
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ipsec.c,v 1.99 2004/10/27 23:16:56 itojun Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ipsec.c,v 1.95.2.1 2004/05/28 07:24:28 tron Exp $");
 
 #include "opt_inet.h"
 #include "opt_ipsec.h"
@@ -66,6 +66,7 @@ __KERNEL_RCSID(0, "$NetBSD: ipsec.c,v 1.99 2004/10/27 23:16:56 itojun Exp $");
 #include <netinet/udp_var.h>
 #include <netinet/ip_ecn.h>
 #include <netinet/tcp.h>
+#include <netinet/udp.h>
 
 #include <netinet/ip6.h>
 #ifdef INET6
@@ -1681,7 +1682,6 @@ ipsec_get_reqlevel(isr, af)
 				level = ah_net_deflev;
 			else
 				level = ah_trans_deflev;
-			break;
 		case IPPROTO_IPCOMP:
 			/*
 			 * we don't really care, as IPcomp document says that

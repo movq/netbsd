@@ -1,4 +1,4 @@
-#	$NetBSD: files.hp700,v 1.12 2004/08/26 16:48:06 jkunz Exp $
+#	$NetBSD: files.hp700,v 1.9 2004/03/13 17:31:33 bjh21 Exp $
 #
 #	$OpenBSD: files.hp700,v 1.31 2001/06/26 02:41:25 mickey Exp $
 #
@@ -18,36 +18,21 @@ defflag 			USELEDS
 include "dev/wscons/files.wscons"
 include "dev/wsfont/files.wsfont"
 
-include "dev/pckbport/files.pckbport"
-
 #
 # Machine-independent SCSI drivers
 #
 include "dev/scsipi/files.scsipi"
 
-#
-# Machine-independent ATA drivers
-#
-include	"dev/ata/files.ata"
-
-#
-# Machine-independent I2O drivers
-#
+# I2O
 include "dev/i2o/files.i2o"
 
 #
-# Machine-independent USB drivers
+# MI ATAPI drivers
 #
-include	"dev/usb/files.usb"
+#include "dev/atapiscsi/files.atapiscsi"
+#include "dev/ata/files.ata"
 
-#
-# Machine-independent IEEE1394 drivers
-#
-include	"dev/ieee1394/files.ieee1394"
-#
-# PCI Bus support
-#
-include "dev/pci/files.pci"
+include "dev/pckbport/files.pckbport"
 
 #
 # ISA Bus support
@@ -59,6 +44,10 @@ include "dev/isa/files.isa"
 #
 include "dev/eisa/files.eisa"
 
+#
+# PCI Bus support
+#
+include "dev/pci/files.pci"
 
 #
 # Gonzo System Connect Bus
@@ -108,27 +97,21 @@ attach	asp at mainbus
 file	arch/hp700/dev/asp.c		asp
 
 # 1FT4-0001, ASIC used on gecko cards
-device	wax: gscbus
-attach	wax at mainbus with wax_mainbus
-attach	wax at phantomas with wax_phantomas
+device	wax: gscbus, isabus, eisabus
+attach	wax at mainbus
 file	arch/hp700/dev/wax.c		wax
 
 device	mongoose: isabus, eisabus
 attach	mongoose at mainbus
 file	arch/hp700/dev/mongoose.c	mongoose
 
-# Dino, GSC to PCI bridge. Includes ps/2, serial, and flying toaster interfaces
-# Cujo is a 64-bit data path Dino
-device	dino { }: pcibus
-attach	dino at phantomas
+device	dino: pcibus
+attach	dino at mainbus
 file	arch/hp700/dev/dino.c		dino
 
-attach	com at dino with com_dino
-file	arch/hp700/dev/com_dino.c	com_dino
-
+device	sti: wsemuldisplaydev
 attach	sti at mainbus with sti_sgc
-attach	sti at phantomas with sti_phantomas
-file	arch/hp700/dev/sti_sgc.c		sti_sgc | sti_phantomas
+file	arch/hp700/dev/sti_sgc.c		sti_sgc
 
 ###
 
@@ -181,9 +164,8 @@ device	hil: tty
 attach	hil at gsc
 file	arch/hp700/gsc/hil.c		hil
 
-device	gsckbc: pckbport
-attach	gsckbc at gsc
-file	arch/hp700/gsc/gsckbc.c		gsckbc
+attach	pckbc at gsc with pckbc_gsc
+file	arch/hp700/gsc/pckbc_gsc.c	pckbc_gsc
 
 # PSB 2160-N based 8bit mono audio (705, 710, 745i/*, 747i/*)
 device	aone: audiobus, mulaw, auconv
@@ -216,6 +198,12 @@ file	arch/hp700/gsc/com_harmony.c	com_harmony
 #device	myri: ether
 #attach	myri at pci
 #file	dev/pci/myri.c			myri
+
+#
+# PC Keyboard controller (ps2)
+#
+
+#include "dev/pckbc/files.pckbc"
 
 #
 # Non-device files

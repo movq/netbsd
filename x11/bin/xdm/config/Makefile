@@ -1,45 +1,33 @@
-#	$NetBSD: Makefile,v 1.11 2004/11/29 16:49:18 skrll Exp $
+#	$NetBSD: Makefile,v 1.5.2.2 2004/06/27 13:15:00 he Exp $
 
 .include <bsd.own.mk>
 
 CPPSCRIPTS=	Xresources Xservers.ws xdm-config 
 
-CPPSCRIPTFLAGS_Xresources=	-DXPM -DBITMAPDIR=${X11INCDIR}/X11/pixmaps \
-				-DXDM_PIXMAP=NetBSD.xpm \
-				-DXDM_BWPIXMAP=NetBSDbw.xpm
+CPPSCRIPTFLAGS_Xresources=	-DXPM -DBITMAPDIR=${X11LIBDIR}/xdm/pixmaps \
+				-DXDM_PIXMAP=XFree86.xpm \
+				-DXDM_BWPIXMAP=XFree86bw.xpm
 
 # native only gives DEFAULTVT for i386 and amd64.
-.if ${MACHINE} == "i386" || ${MACHINE} == "amd64" || ${MACHINE} == "cats"
+.if ${MACHINE} == "i386" || ${MACHINE} == "amd64"
 DEFAULTVT=vt05
 .else
 DEFAULTVT=	# defined empty
 .endif
 
 CPPSCRIPTFLAGS_Xservers.ws=	-DBINDIR=${X11BINDIR} -DDEFAULTVT=${DEFAULTVT}
-CPPSCRIPTFLAGS_xdm-config=	-DXDMDIR=${XDMDIR} \
-				-DXDMAUTHDIR=${XDMVARDIR} \
-				-DXDMLOGDIR=${XDMLOGDIR} \
-				-DXDMPIDDIR=${XDMPIDDIR} \
-				-DSU="su -m"
+CPPSCRIPTFLAGS_xdm-config=	-DXDMDIR=${X11LIBDIR}/xdm -DXDMLOGDIR=/var/log \
+				-DXDMAUTHDIR=${X11LIBDIR}/xdm \
+				-DXDMPIDDIR=/var/run -DSU="su -m"
 
-CONFIGFILES=		GiveConsole TakeConsole \
+FILES=			GiveConsole TakeConsole XFree86.xpm XFree86bw.xpm \
 			Xaccess Xservers.fs Xsession Xsetup_0 Xwilling \
 			${CPPSCRIPTS} 
-FILES=			NetBSD.xpm NetBSDbw.xpm NetBSDinv.xpm		\
-			XFree86.xpm XFree86bw.xpm 
-FILESDIR=		${XDMDIR}
-FILESDIR_NetBSD.xpm=	${X11INCDIR}/X11/pixmaps
-FILESDIR_NetBSDbw.xpm=	${X11INCDIR}/X11/pixmaps
-FILESDIR_NetBSDinv.xpm=	${X11INCDIR}/X11/pixmaps
-FILESDIR_XFree86.xpm=	${X11INCDIR}/X11/pixmaps
-FILESDIR_XFree86bw.xpm=	${X11INCDIR}/X11/pixmaps
-FILESMODE_GiveConsole=	${BINMODE}
-FILESMODE_TakeConsole=	${BINMODE}
-FILESMODE_Xsetup_0=	${BINMODE}
-FILESMODE_Xsession=	${BINMODE}
-FILESMODE_Xwilling=	${BINMODE}
+FILESDIR=		${X11LIBDIR}/xdm
+FILESDIR_XFree86.xpm=	${X11LIBDIR}/xdm/pixmaps
+FILESDIR_XFree86bw.xpm=	${X11LIBDIR}/xdm/pixmaps
 
-CONFIGSYMLINKS=		Xservers.ws ${XDMDIR}/Xservers
+SYMLINKS=	Xservers.ws ${X11LIBDIR}/xdm/Xservers
 
 BUILDSYMLINKS=	Xres.cpp Xresources.cpp \
 		Xserv.ws.cpp Xservers.ws.cpp \
@@ -49,7 +37,7 @@ BUILDSYMLINKS=	Xres.cpp Xresources.cpp \
 
 .include "../Makefile.xdm"
 
-CPPSCRIPTFLAGS_xdm-config+=	-DCHOOSERPATH=${XDMCHOOSERPATH}
+CPPSCRIPTFLAGS_xdm-config+=	-DCHOOSERPATH=${CHOOSERPATH}
 
 .include <bsd.x11.mk>
 .include <bsd.prog.mk>

@@ -1,4 +1,4 @@
-/*	$NetBSD: install.c,v 1.40 2004/06/05 21:18:59 dsl Exp $	*/
+/*	$NetBSD: install.c,v 1.38.2.2 2004/06/07 10:21:22 tron Exp $	*/
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.

@@ -1,9 +1,9 @@
-# $NetBSD: AMIGA,v 1.70 2004/11/10 17:25:21 christos Exp $
+# $NetBSD: AMIGA,v 1.66.2.3 2004/07/15 20:41:32 he Exp $
 #
 # This file was automatically created.
 # Changes will be lost when make is run in this directory.
 #
-# Created from: # NetBSD: GENERIC.in,v 1.23 2004/06/28 21:07:47 bouyer Exp $
+# Created from: # NetBSD$
 #
 # GENERIC machine description file
 #
@@ -28,7 +28,7 @@ include "arch/amiga/conf/std.amiga"
 
 options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
-#ident 		"GENERIC-$Revision: 1.70 $"
+#ident 		"GENERIC-$Revision: 1.66.2.3 $"
 
 
 maxusers	8
@@ -67,7 +67,6 @@ options 	INET6		# IPV6
 #options 	DIRECTED_BROADCAST	# Broadcast across subnets
 
 #options 	MROUTING	# Multicast routing
-#options 	PIM		# Protocol Independent Multicast
 options 	NS		# XNS
 #options 	NSIP		# XNS tunneling over IP
 options 	ISO,TPIP	# OSI
@@ -149,7 +148,6 @@ options 	COMPAT_NOMID	# allow nonvalid machine id executables
 
 options 	EXEC_AOUT	# 32-bit aout executables (NetBSD-1.5.x)
 options 	COMPAT_AOUT_M68K # actually make some system calls work.
-options		COMPAT_BSDPTY	# /dev/[pt]ty?? ptys.
 
 #
 # Support for System V IPC facilities.
@@ -463,8 +461,6 @@ pseudo-device	gif		4	# IPv[46] over IPv[46] tunnel (RFC1933)
 pseudo-device	vlan			# IEEE 802.1q encapsulation
 pseudo-device	bridge			# simple inter-network bridging
 #options	BRIDGE_IPF		# bridge uses IP/IPv6 pfil hooks too
-#pseudo-device	pf			# PF packet filter
-#pseudo-device	pflog			# PF log if
 
 pseudo-device	view		4	# views (needed for grfcc)
 pseudo-device	pty			# pseudo-terminals

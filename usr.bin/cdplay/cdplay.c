@@ -1,4 +1,4 @@
-/* 	$NetBSD: cdplay.c,v 1.29 2004/10/30 17:08:12 dsl Exp $	*/
+/* 	$NetBSD: cdplay.c,v 1.27 2003/09/12 00:39:38 christos Exp $	*/
 
 /*
  * Copyright (c) 1999, 2000, 2001 Andrew Doran.
@@ -40,7 +40,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: cdplay.c,v 1.29 2004/10/30 17:08:12 dsl Exp $");
+__RCSID("$NetBSD: cdplay.c,v 1.27 2003/09/12 00:39:38 christos Exp $");
 #endif /* not lint */
 
 #include <sys/types.h>
@@ -199,6 +199,7 @@ main(int argc, char **argv)
 	}
 
 	opencd();
+	srandom(time(NULL));
 	
 	if (argc > 0) {
 		interactive = 0;
@@ -285,7 +286,7 @@ help(void)
 	mc = cmdtab + sizeof(cmdtab) / sizeof(cmdtab[0]);
 	for (c = cmdtab; c < mc; c++) {
 		for (i = c->min, s = c->name; *s != '\0'; s++, i--) {
-			n = (i > 0 ? toupper((unsigned char)*s) : *s);
+			n = (i > 0 ? toupper(*s) : *s);
 			putchar(n);
 		}
 		if (c->args != NULL)
@@ -364,7 +365,7 @@ run(int cmd, const char *arg)
 		break;
 
 	case CMD_PLAY:
-		while (isspace((unsigned char)*arg))
+		while (isspace(*arg))
 			arg++;
 		rv = play(arg, 1);
 		break;
@@ -711,7 +712,7 @@ skip(int dir, int fromuser)
 		if (fromuser || (rv != CD_AS_PLAY_IN_PROGRESS &&
 		    rv != CD_AS_PLAY_PAUSED))
 			trk = h.starting_track +
-			    arc4random() % (h.ending_track - h.starting_track + 1);
+			    random() % (h.ending_track - h.starting_track + 1);
 		else
 			return (0);
 	} else {
@@ -1023,15 +1024,15 @@ parse(char *buf, int *cmd)
 	char *p, *q;
 	int len;
 
-	for (p = buf; isspace((unsigned char)*p); p++)
+	for (p = buf; isspace(*p); p++)
 		continue;
 
-	if (isdigit((unsigned char)*p) || (p[0] == '#' && isdigit((unsigned char)p[1]))) {
+	if (isdigit(*p) || (p[0] == '#' && isdigit(p[1]))) {
 		*cmd = CMD_PLAY;
 		return (p);
 	}
 
-	for (buf = p; *p != '\0' && !isspace((unsigned char)*p); p++)
+	for (buf = p; *p != '\0' && !isspace(*p); p++)
 		continue;
 
 	if ((len = p - buf) == 0)
@@ -1068,7 +1069,7 @@ parse(char *buf, int *cmd)
 		return (0);
 	}
 
-	while (isspace((unsigned char)*p))
+	while (isspace(*p))
 		p++;
 	return (p);
 }

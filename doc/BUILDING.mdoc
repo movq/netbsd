@@ -1,4 +1,4 @@
-.\"	$NetBSD: BUILDING.mdoc,v 1.37 2004/10/12 04:07:09 jmc Exp $
+.\"	$NetBSD: BUILDING.mdoc,v 1.35 2004/03/19 12:34:40 wiz Exp $
 .\"
 .\" Copyright (c) 2001-2004 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -471,14 +471,14 @@ for details.
 .YorN
 Indicates whether an unprivileged install will occur.
 The user, group, permissions, and file flags, will not be set on
-the installed items; instead the information will be appended to
+the installed item; instead the information will be appended to
 a file called
 .Pa METALOG
 in
 .Sy DESTDIR .
 The contents of
 .Pa METALOG
-are used during the generation of the distribution tar files to ensure
+is used during the generation of the distribution tar files to ensure
 that the appropriate file ownership is stored.
 .DFLTn
 .
@@ -665,7 +665,7 @@ mode
 .Sh BUILDING
 .
 .Ss \*qmake\*q command line options
-This is not a summary of all the options available to
+This is only a summary of options available to
 .Xr make 1 ;
 only the options used most frequently with
 .Nx
@@ -678,7 +678,7 @@ Run up to
 .Ar njob
 .Xr make 1 
 subjobs in parallel.
-Makefiles should use .WAIT or have explicit dependencies 
+Makefiles should use .WAIT or have explicit dependancies 
 as necessary to enforce build ordering.
 If you see build failures with -j, please save complete build logs 
 so the failures can be analyzed.
@@ -847,7 +847,7 @@ to
 (which defaults to the root directory).
 Ensures that
 .Sy INSTALLWORLDDIR
-is not the root directory if cross compiling.
+is the not root directory if cross compiling.
 .Pp
 .Em Note :
 It is highly recommended that you upgrade your kernel and reboot
@@ -1028,6 +1028,8 @@ Perform
 .El
 .
 .Pp
+The following command line options alter the behaviour of the above
+operations:
 The following command line options alter the behaviour of the
 .Sy build.sh
 operations described above:
@@ -1070,9 +1072,6 @@ does not have to be set when building as a non-root user.
 .Em Note :
 It is highly recommended that you know what you are doing when
 you use this option.
-.
-.It Fl h
-Print a help message.
 .
 .It Fl j Ar njob
 Passed through to 

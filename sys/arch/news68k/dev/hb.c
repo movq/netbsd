@@ -1,4 +1,4 @@
-/*	$NetBSD: hb.c,v 1.14 2004/09/04 13:43:11 tsutsui Exp $	*/
+/*	$NetBSD: hb.c,v 1.12 2003/07/15 02:59:26 lukem Exp $	*/
 
 /*-
  * Copyright (C) 1999 Izumi Tsutsui.  All rights reserved.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: hb.c,v 1.14 2004/09/04 13:43:11 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: hb.c,v 1.12 2003/07/15 02:59:26 lukem Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -40,8 +40,6 @@ __KERNEL_RCSID(0, "$NetBSD: hb.c,v 1.14 2004/09/04 13:43:11 tsutsui Exp $");
 #include <news68k/news68k/isr.h>
 #include <news68k/dev/hbvar.h>
 
-#include "ioconf.h"
-
 static int  hb_match(struct device *, struct cfdata *, void *);
 static void hb_attach(struct device *, struct device *, void *);
 static int  hb_search(struct device *, struct cfdata *, void *);
@@ -50,8 +48,13 @@ static int  hb_print(void *, const char *);
 CFATTACH_DECL(hb, sizeof(struct device),
     hb_match, hb_attach, NULL, NULL);
 
+extern struct cfdriver hb_cd;
+
 static int
-hb_match(struct device *parent, struct cfdata *cf, void *aux)
+hb_match(parent, cf, aux)
+	struct device *parent;
+	struct cfdata *cf;
+	void *aux;
 {
 	struct mainbus_attach_args *ma = aux;
 
@@ -65,7 +68,10 @@ hb_match(struct device *parent, struct cfdata *cf, void *aux)
 }
 
 static void
-hb_attach(struct device *parent, struct device *self, void *aux)
+hb_attach(parent, self, aux)
+	struct device *parent;
+	struct device *self;
+	void *aux;
 {
 	struct hb_attach_args ha;
 
@@ -76,7 +82,10 @@ hb_attach(struct device *parent, struct device *self, void *aux)
 }
 
 static int
-hb_search(struct device *parent, struct cfdata *cf, void *aux)
+hb_search(parent, cf, aux)
+	struct device *parent;
+	struct cfdata *cf;
+	void *aux;
 {
 	struct hb_attach_args *ha = aux;
 
@@ -100,7 +109,9 @@ hb_search(struct device *parent, struct cfdata *cf, void *aux)
  * when there was no match found by config_found().
  */
 static int
-hb_print(void *args, const char *name)
+hb_print(args, name)
+	void *args;
+	const char *name;
 {
 	struct hb_attach_args *ha = args;
 
@@ -114,14 +125,17 @@ hb_print(void *args, const char *name)
 		aprint_normal (" vect %d", ha->ha_vect);
 	}
 
-	return QUIET;
+	return (QUIET);
 }
 
 /*
  * hb_intr_establish: establish hb interrupt
  */
 void
-hb_intr_establish(int hbvect, int (*hand)(void *), int ipl, void *arg)
+hb_intr_establish(hbvect, hand, ipl, arg)
+	int hbvect;
+	int (*hand)(void *), ipl;
+	void *arg;
 {
 
 	if ((ipl < 1) || (ipl > 7)) {
@@ -138,7 +152,8 @@ hb_intr_establish(int hbvect, int (*hand)(void *), int ipl, void *arg)
 }
 
 void
-hb_intr_disestablish(int hbvect)
+hb_intr_disestablish(hbvect)
+	int hbvect;
 {
 
 	if ((hbvect < 0) || (hbvect > 255)) {

@@ -32,7 +32,7 @@
  */
 
 /* $Heimdal: hdb_locl.h,v 1.18.4.1 2003/09/10 22:04:39 lha Exp $
-   $NetBSD: hdb_locl.h,v 1.1.1.7 2004/04/02 14:47:43 lha Exp $ */
+   $NetBSD: hdb_locl.h,v 1.1.1.6.2.1 2004/04/21 04:55:41 jmc Exp $ */
 
 #ifndef __HDB_LOCL_H__
 #define __HDB_LOCL_H__

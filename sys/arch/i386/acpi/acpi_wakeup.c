@@ -1,4 +1,4 @@
-/*	$NetBSD: acpi_wakeup.c,v 1.13 2004/08/27 03:51:34 thorpej Exp $	*/
+/*	$NetBSD: acpi_wakeup.c,v 1.10 2003/11/03 18:07:10 mycroft Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: acpi_wakeup.c,v 1.13 2004/08/27 03:51:34 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: acpi_wakeup.c,v 1.10 2003/11/03 18:07:10 mycroft Exp $");
 
 /*-
  * Copyright (c) 2001 Takanori Watanabe <takawata@jp.freebsd.org>
@@ -90,8 +90,6 @@ __KERNEL_RCSID(0, "$NetBSD: acpi_wakeup.c,v 1.13 2004/08/27 03:51:34 thorpej Exp
 #include <dev/acpi/acpivar.h>
 #define ACPI_MACHDEP_PRIVATE
 #include <machine/acpi_machdep.h>
-#include <machine/cpu.h>
-#include <machine/npx.h>
 
 #include "acpi_wakecode.h"
 
@@ -203,8 +201,6 @@ __asm__("							\
 	.type acpi_restorecpu, @function;			\
 acpi_restorecpu:						\
 	.align 4;						\
-	movl	r_cr3,%eax;					\
-	movl	%eax,%cr3;					\
 	movl	r_eax,%eax;					\
 	movl	r_ebx,%ebx;					\
 	movl	r_ecx,%ecx;					\
@@ -319,26 +315,14 @@ acpi_md_sleep(int state)
 	disable_intr();
 	if (acpi_savecpu()) {
 		/* Execute Sleep */
-
-		/* load proc 0 PTD */
-		__asm__( "movl %0,%%cr3;" : : "a" (PDPpaddr) );
-
 		p_gdt = (struct region_descriptor *)(phys_wakeup+physical_gdt);
 		p_gdt->rd_limit = r_gdt.rd_limit;
 		p_gdt->rd_base = vtophys(r_gdt.rd_base);
 
 		WAKECODE_FIXUP(previous_cr0, u_int32_t, r_cr0);
 		WAKECODE_FIXUP(previous_cr2, u_int32_t, r_cr2);
+		WAKECODE_FIXUP(previous_cr3, u_int32_t, r_cr3);
 		WAKECODE_FIXUP(previous_cr4, u_int32_t, r_cr4);
-
-		/*
-		 * Make sure the wake code to temporarily use the proc 0 PTD.
-		 * The PTD keeps the identical mapping for the page of
-		 * the trampoline code, which is required just after
-		 * entering to protect mode.  The current PTD will be restored
-		 * in acpi_restorecpu().
-		 */
-		WAKECODE_FIXUP(previous_cr3, u_int32_t, PDPpaddr);
 
 		WAKECODE_FIXUP(previous_tr,  u_int16_t, r_tr);
 		WAKECODE_BCOPY(previous_gdt, struct region_descriptor, r_gdt);
@@ -352,20 +336,6 @@ acpi_md_sleep(int state)
 		WAKECODE_FIXUP(previous_fs,  u_int16_t, r_fs);
 		WAKECODE_FIXUP(previous_gs,  u_int16_t, r_gs);
 		WAKECODE_FIXUP(previous_ss,  u_int16_t, r_ss);
-
-		/*
-		 * XXX: restore curproc's PTD here -
-		 *
-		 * AcpiEnterSleepState() may switch the context.
-		 * (ltsleep() may probably be called from Osd.)
-		 * Such context switching may causes the kernel
-		 * to crash under the inconsistent PTD.
-		 * Curproc's PTD must be restored to prevent the crash.
-		 * Anyway, leaving the inconsistent PTD is unpreferable,
-		 * although the context switching during sleep
-		 * process is also unpreferable.
-		 */
-		__asm__( "movl %0,%%cr3;" : : "a" (r_cr3) );
 
 #ifdef ACPI_PRINT_REG
 		acpi_printcpu();
@@ -390,7 +360,6 @@ acpi_md_sleep(int state)
 	} else {
 		/* Execute Wakeup */
 
-		npxinit(&cpu_info_primary);
 		i8259_reinit();
 #if NIOAPIC > 0
 		ioapic_enable();

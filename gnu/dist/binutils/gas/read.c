@@ -32,7 +32,7 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
    grow when we do 4361 style flonums.  */
 #define MAXIMUM_NUMBER_OF_CHARS_FOR_FLOAT (16)
 
-/* Routines that read assembler source text to build spaghetti in memory.
+/* Routines that read assembler source text to build spagetti in memory.
    Another group of these functions is in the expr.c module.  */
 
 #include "as.h"
@@ -43,7 +43,6 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
 #include "obstack.h"
 #include "listing.h"
 #include "ecoff.h"
-#include "dw2gencfi.h"
 
 #ifndef TC_START_LABEL
 #define TC_START_LABEL(x,y) (x == ':')
@@ -51,17 +50,17 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
 
 /* Set by the object-format or the target.  */
 #ifndef TC_IMPLICIT_LCOMM_ALIGNMENT
-#define TC_IMPLICIT_LCOMM_ALIGNMENT(SIZE, P2VAR)		\
+#define TC_IMPLICIT_LCOMM_ALIGNMENT(SIZE, P2VAR)        	\
   do								\
-    {								\
-      if ((SIZE) >= 8)						\
-	(P2VAR) = 3;						\
-      else if ((SIZE) >= 4)					\
-	(P2VAR) = 2;						\
-      else if ((SIZE) >= 2)					\
-	(P2VAR) = 1;						\
-      else							\
-	(P2VAR) = 0;						\
+    {                                                   	\
+      if ((SIZE) >= 8)                                      	\
+	(P2VAR) = 3;                                        	\
+      else if ((SIZE) >= 4)                                 	\
+	(P2VAR) = 2;                                        	\
+      else if ((SIZE) >= 2)                                 	\
+	(P2VAR) = 1;                                        	\
+      else                                                  	\
+	(P2VAR) = 0;                                        	\
     }								\
   while (0)
 #endif
@@ -155,7 +154,7 @@ char is_end_of_line[256] = {
   0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0	/* */
 };
 
-#ifndef TC_CASE_SENSITIVE
+#ifdef  IGNORE_OPCODE_CASE
 char original_case_string[128];
 #endif
 
@@ -214,16 +213,29 @@ static int dwarf_file_string;
 #endif
 #endif
 
-static void do_align (int, char *, int, int);
-static void s_align (int, int);
-static int hex_float (int, char *);
-static segT get_known_segmented_expression (expressionS * expP);
-static void pobegin (void);
-static int get_line_sb (sb *);
-static void generate_file_debug (void);
+static void cons_worker PARAMS ((int, int));
+static int scrub_from_string PARAMS ((char *, int));
+static void do_align PARAMS ((int, char *, int, int));
+static void s_align PARAMS ((int, int));
+static void s_lcomm_internal PARAMS ((int, int));
+static int hex_float PARAMS ((int, char *));
+static inline int sizeof_sleb128 PARAMS ((offsetT));
+static inline int sizeof_uleb128 PARAMS ((valueT));
+static inline int output_sleb128 PARAMS ((char *, offsetT));
+static inline int output_uleb128 PARAMS ((char *, valueT));
+static inline int output_big_sleb128 PARAMS ((char *, LITTLENUM_TYPE *, int));
+static inline int output_big_uleb128 PARAMS ((char *, LITTLENUM_TYPE *, int));
+static int output_big_leb128 PARAMS ((char *, LITTLENUM_TYPE *, int, int));
+static void do_org PARAMS ((segT, expressionS *, int));
+char *demand_copy_string PARAMS ((int *lenP));
+static segT get_segmented_expression PARAMS ((expressionS *expP));
+static segT get_known_segmented_expression PARAMS ((expressionS * expP));
+static void pobegin PARAMS ((void));
+static int get_line_sb PARAMS ((sb *));
+static void generate_file_debug PARAMS ((void));
 
 void
-read_begin (void)
+read_begin ()
 {
   const char *p;
 
@@ -417,7 +429,8 @@ static int pop_override_ok = 0;
 static const char *pop_table_name;
 
 void
-pop_insert (const pseudo_typeS *table)
+pop_insert (table)
+     const pseudo_typeS *table;
 {
   const char *errtxt;
   const pseudo_typeS *pop;
@@ -438,12 +451,8 @@ pop_insert (const pseudo_typeS *table)
 #define obj_pop_insert()	pop_insert(obj_pseudo_table)
 #endif
 
-#ifndef cfi_pop_insert
-#define cfi_pop_insert()	pop_insert(cfi_pseudo_table)
-#endif
-
 static void
-pobegin (void)
+pobegin ()
 {
   po_hash = hash_new ();
 
@@ -459,12 +468,6 @@ pobegin (void)
   /* Now portable ones.  Skip any that we've seen already.  */
   pop_table_name = "standard";
   pop_insert (potable);
-
-#ifdef TARGET_USE_CFIPOP
-  pop_table_name = "cfi";
-  pop_override_ok = 1;
-  cfi_pop_insert ();
-#endif
 }
 
 #define HANDLE_CONDITIONAL_ASSEMBLY()					\
@@ -483,7 +486,9 @@ static char *scrub_string;
 static char *scrub_string_end;
 
 static int
-scrub_from_string (char *buf, int buflen)
+scrub_from_string (buf, buflen)
+     char *buf;
+     int buflen;
 {
   int copy;
 
@@ -498,7 +503,8 @@ scrub_from_string (char *buf, int buflen)
 /* We read the file, putting things into a web that represents what we
    have been reading.  */
 void
-read_a_source_file (char *name)
+read_a_source_file (name)
+     char *name;
 {
   register char c;
   register char *s;		/* String of symbol, '\0' appended.  */
@@ -584,8 +590,8 @@ read_a_source_file (char *name)
 			}
 
 		      /* In MRI mode, we need to handle the MACRO
-			 pseudo-op specially: we don't want to put the
-			 symbol in the symbol table.  */
+                         pseudo-op specially: we don't want to put the
+                         symbol in the symbol table.  */
 		      if (!mri_line_macro
 #ifdef TC_START_LABEL_WITHOUT_COLON
 			  && TC_START_LABEL_WITHOUT_COLON(c,
@@ -606,7 +612,7 @@ read_a_source_file (char *name)
 		}
 	    }
 
-	  /* We are at the beginning of a line, or similar place.
+	  /* We are at the begining of a line, or similar place.
 	     We expect a well-formed assembler statement.
 	     A "symbol-name:" is a statement.
 
@@ -668,10 +674,10 @@ read_a_source_file (char *name)
 	      c = get_symbol_end ();	/* name's delimiter.  */
 
 	      /* C is character after symbol.
-		 That character's place in the input line is now '\0'.
-		 S points to the beginning of the symbol.
-		   [In case of pseudo-op, s->'.'.]
-		 Input_line_pointer->'\0' where c was.  */
+	         That character's place in the input line is now '\0'.
+	         S points to the beginning of the symbol.
+	           [In case of pseudo-op, s->'.'.]
+	         Input_line_pointer->'\0' where c was.  */
 	      if (TC_START_LABEL (c, input_line_pointer))
 		{
 		  if (flag_m68k_mri)
@@ -698,9 +704,6 @@ read_a_source_file (char *name)
 		  line_label = colon (s);	/* User-defined label.  */
 		  /* Put ':' back for error messages' sake.  */
 		  *input_line_pointer++ = ':';
-#ifdef tc_check_label
-		  tc_check_label (line_label);
-#endif
 		  /* Input_line_pointer->after ':'.  */
 		  SKIP_WHITESPACE ();
 		}
@@ -720,7 +723,7 @@ read_a_source_file (char *name)
 		  /* Expect pseudo-op or machine instruction.  */
 		  pop = NULL;
 
-#ifndef TC_CASE_SENSITIVE
+#ifdef IGNORE_OPCODE_CASE
 		  {
 		    char *s2 = s;
 
@@ -737,7 +740,7 @@ read_a_source_file (char *name)
 		  if (NO_PSEUDO_DOT || flag_m68k_mri)
 		    {
 		      /* The MRI assembler and the m88k use pseudo-ops
-			 without a period.  */
+                         without a period.  */
 		      pop = (pseudo_typeS *) hash_find (po_hash, s);
 		      if (pop != NULL && pop->poc_handler == NULL)
 			pop = NULL;
@@ -748,18 +751,16 @@ read_a_source_file (char *name)
 		    {
 		      /* PSEUDO - OP.
 
-			 WARNING: c has next char, which may be end-of-line.
-			 We lookup the pseudo-op table with s+1 because we
-			 already know that the pseudo-op begins with a '.'.  */
+		         WARNING: c has next char, which may be end-of-line.
+		         We lookup the pseudo-op table with s+1 because we
+		         already know that the pseudo-op begins with a '.'.  */
 
 		      if (pop == NULL)
 			pop = (pseudo_typeS *) hash_find (po_hash, s + 1);
-		      if (pop && !pop->poc_handler)
-			pop = NULL;
 
 		      /* In MRI mode, we may need to insert an
-			 automatic alignment directive.  What a hack
-			 this is.  */
+                         automatic alignment directive.  What a hack
+                         this is.  */
 		      if (mri_pending_align
 			  && (pop == NULL
 			      || !((pop->poc_handler == cons
@@ -806,8 +807,8 @@ read_a_source_file (char *name)
 			input_line_pointer++;
 
 		      /* Input_line is restored.
-			 Input_line_pointer->1st non-blank char
-			 after pseudo-operation.  */
+		         Input_line_pointer->1st non-blank char
+		         after pseudo-operation.  */
 		      (*pop->poc_handler) (pop->poc_val);
 
 		      /* If that was .end, just get out now.  */
@@ -967,7 +968,7 @@ read_a_source_file (char *name)
 		  /* The end of the #APP wasn't in this buffer.  We
 		     keep reading in buffers until we find the #NO_APP
 		     that goes with this #APP  There is one.  The specs
-		     guarantee it...  */
+		     guarentee it...  */
 		  tmp_len = buffer_limit - s;
 		  tmp_buf = xmalloc (tmp_len + 1);
 		  memcpy (tmp_buf, s, tmp_len);
@@ -1053,7 +1054,7 @@ read_a_source_file (char *name)
 #endif
 	  input_line_pointer--;
 	  /* Report unknown char as ignored.  */
-	  demand_empty_rest_of_line ();
+	  ignore_rest_of_line ();
 	}
 
 #ifdef md_after_pass_hook
@@ -1086,7 +1087,8 @@ read_a_source_file (char *name)
    for the m68k MRI assembler.  */
 
 char *
-mri_comment_field (char *stopcp)
+mri_comment_field (stopcp)
+     char *stopcp;
 {
   char *s;
 #ifdef TC_M68K
@@ -1117,7 +1119,9 @@ mri_comment_field (char *stopcp)
 /* Skip to the end of an MRI comment field.  */
 
 void
-mri_comment_end (char *stop, int stopc)
+mri_comment_end (stop, stopc)
+     char *stop;
+     int stopc;
 {
   know (flag_mri);
 
@@ -1128,7 +1132,8 @@ mri_comment_end (char *stop, int stopc)
 }
 
 void
-s_abort (int ignore ATTRIBUTE_UNUSED)
+s_abort (ignore)
+     int ignore ATTRIBUTE_UNUSED;
 {
   as_fatal (_(".abort detected.  Abandoning ship."));
 }
@@ -1140,7 +1145,11 @@ s_abort (int ignore ATTRIBUTE_UNUSED)
    or 0 if there is no maximum.  */
 
 static void
-do_align (int n, char *fill, int len, int max)
+do_align (n, fill, len, max)
+     int n;
+     char *fill;
+     int len;
+     int max;
 {
   if (now_seg == absolute_section)
     {
@@ -1188,7 +1197,9 @@ do_align (int n, char *fill, int len, int max)
    interpreted as the byte boundary, rather than the power of 2.  */
 
 static void
-s_align (int arg, int bytes_p)
+s_align (arg, bytes_p)
+     int arg;
+     int bytes_p;
 {
   register unsigned int align;
   char *stop = NULL;
@@ -1303,7 +1314,8 @@ s_align (int arg, int bytes_p)
    align to a 4 byte boundary.  */
 
 void
-s_align_bytes (int arg)
+s_align_bytes (arg)
+     int arg;
 {
   s_align (arg, 1);
 }
@@ -1312,23 +1324,23 @@ s_align_bytes (int arg)
    to a 2**4 boundary.  */
 
 void
-s_align_ptwo (int arg)
+s_align_ptwo (arg)
+     int arg;
 {
   s_align (arg, 0);
 }
 
-symbolS *
-s_comm_internal (int param,
-		 symbolS *(*comm_parse_extra) (int, symbolS *, addressT))
+void
+s_comm (ignore)
+     int ignore ATTRIBUTE_UNUSED;
 {
-  char *name;
-  char c;
-  char *p;
-  offsetT temp, size;
-  symbolS *symbolP = NULL;
+  register char *name;
+  register char c;
+  register char *p;
+  offsetT temp;
+  register symbolS *symbolP;
   char *stop = NULL;
   char stopc;
-  expressionS exp;
 
   if (flag_mri)
     stop = mri_comment_field (&stopc);
@@ -1343,90 +1355,82 @@ s_comm_internal (int param,
     {
       as_bad (_("expected symbol name"));
       discard_rest_of_line ();
-      goto out;
+      return;
     }
 
   SKIP_WHITESPACE ();
 
-  /* Accept an optional comma after the name.  The comma used to be
-     required, but Irix 5 cc does not generate it for .lcomm.  */
-  if (*input_line_pointer == ',')
-    input_line_pointer++;
+  if (*input_line_pointer != ',')
+    {
+      *p = 0;
+      as_bad (_("expected comma after \"%s\""), name);
+      *p = c;
+      ignore_rest_of_line ();
+      if (flag_mri)
+	mri_comment_end (stop, stopc);
+      return;
+    }
+
+  input_line_pointer++;		/* skip ',' */
+
+  if ((temp = get_absolute_expression ()) < 0)
+    {
+      as_warn (_(".COMMon length (%ld) < 0 ignored"), (long) temp);
+      ignore_rest_of_line ();
+      if (flag_mri)
+	mri_comment_end (stop, stopc);
+      return;
+    }
 
   *p = 0;
-  temp = get_absolute_expr (&exp);
-  size = temp;
-#ifdef BFD_ASSEMBLER
-  size &= ((offsetT) 2 << (stdoutput->arch_info->bits_per_address - 1)) - 1;
-#endif
-  if (exp.X_op == O_absent)
-    {
-      as_bad (_("missing size expression"));
-      *p = c;
-      ignore_rest_of_line ();
-      goto out;
-    }
-  else if (temp != size || !exp.X_unsigned)
-    {
-      as_warn (_("size (%ld) out of range, ignored"), (long) temp);
-      *p = c;
-      ignore_rest_of_line ();
-      goto out;
-    }
-
   symbolP = symbol_find_or_make (name);
+  *p = c;
+
   if (S_IS_DEFINED (symbolP) && !S_IS_COMMON (symbolP))
     {
-      symbolP = NULL;
-      as_bad (_("symbol `%s' is already defined"), name);
-      *p = c;
+      as_bad (_("symbol `%s' is already defined"),
+	      S_GET_NAME (symbolP));
       ignore_rest_of_line ();
-      goto out;
+      if (flag_mri)
+	mri_comment_end (stop, stopc);
+      return;
     }
 
-  size = S_GET_VALUE (symbolP);
-  if (size == 0)
-    size = temp;
-  else if (size != temp)
-    as_warn (_("size of \"%s\" is already %ld; not changing to %ld"),
-	     name, (long) size, (long) temp);
-
-  *p = c;
-  if (comm_parse_extra != NULL)
-    symbolP = (*comm_parse_extra) (param, symbolP, size);
+  if (S_GET_VALUE (symbolP))
+    {
+      if (S_GET_VALUE (symbolP) != (valueT) temp)
+	as_bad (_("length of .comm \"%s\" is already %ld; not changing to %ld"),
+		S_GET_NAME (symbolP),
+		(long) S_GET_VALUE (symbolP),
+		(long) temp);
+    }
   else
     {
-      S_SET_VALUE (symbolP, (valueT) size);
+      S_SET_VALUE (symbolP, (valueT) temp);
       S_SET_EXTERNAL (symbolP);
-#ifdef OBJ_VMS
-      {
-	extern int flag_one;
-	if (size == 0 || !flag_one)
-	  S_GET_OTHER (symbolP) = const_flag;
-      }
-#endif
     }
+#ifdef OBJ_VMS
+  {
+    extern int flag_one;
+    if (!temp || !flag_one)
+      S_GET_OTHER(symbolP) = const_flag;
+  }
+#endif /* not OBJ_VMS */
+  know (symbolP->sy_frag == &zero_address_frag);
 
-  know (symbolP == NULL || symbolP->sy_frag == &zero_address_frag);
   demand_empty_rest_of_line ();
- out:
+
   if (flag_mri)
     mri_comment_end (stop, stopc);
-  return symbolP;
-}
-
-void
-s_comm (int ignore)
-{
-  s_comm_internal (ignore, NULL);
-}
+}				/* s_comm() */
 
 /* The MRI COMMON pseudo-op.  We handle this by creating a common
    symbol with the appropriate name.  We make s_space do the right
    thing by increasing the size.  */
 
 void
-s_mri_common (int small ATTRIBUTE_UNUSED)
+s_mri_common (small)
+     int small ATTRIBUTE_UNUSED;
 {
   char *name;
   char c;
@@ -1525,7 +1529,8 @@ s_mri_common (int small ATTRIBUTE_UNUSED)
 }
 
 void
-s_data (int ignore ATTRIBUTE_UNUSED)
+s_data (ignore)
+     int ignore ATTRIBUTE_UNUSED;
 {
   segT section;
   register int temp;
@@ -1555,7 +1560,8 @@ s_data (int ignore ATTRIBUTE_UNUSED)
    .file.  */
 
 void
-s_app_file_string (char *file)
+s_app_file_string (file)
+     char *file;
 {
 #ifdef LISTING
   if (listing)
@@ -1568,7 +1574,8 @@ s_app_file_string (char *file)
 }
 
 void
-s_app_file (int appfile)
+s_app_file (appfile)
+     int appfile;
 {
   register char *s;
   int length;
@@ -1583,7 +1590,7 @@ s_app_file (int appfile)
 	= (!new_logical_line (s, appfile ? -2 : -1) && appfile);
 
       /* In MRI mode, the preprocessor may have inserted an extraneous
-	 backquote.  */
+         backquote.  */
       if (flag_m68k_mri
 	  && *input_line_pointer == '\''
 	  && is_end_of_line[(unsigned char) input_line_pointer[1]])
@@ -1601,7 +1608,8 @@ s_app_file (int appfile)
    pseudo-ops.  */
 
 void
-s_app_line (int ignore ATTRIBUTE_UNUSED)
+s_app_line (ignore)
+     int ignore ATTRIBUTE_UNUSED;
 {
   int l;
 
@@ -1627,12 +1635,13 @@ s_app_line (int ignore ATTRIBUTE_UNUSED)
    read_a_source_file.  */
 
 void
-s_end (int ignore ATTRIBUTE_UNUSED)
+s_end (ignore)
+     int ignore ATTRIBUTE_UNUSED;
 {
   if (flag_mri)
     {
       /* The MRI assembler permits the start symbol to follow .end,
-	 but we don't support that.  */
+         but we don't support that.  */
       SKIP_WHITESPACE ();
       if (!is_end_of_line[(unsigned char) *input_line_pointer]
 	  && *input_line_pointer != '*'
@@ -1644,7 +1653,8 @@ s_end (int ignore ATTRIBUTE_UNUSED)
 /* Handle the .err pseudo-op.  */
 
 void
-s_err (int ignore ATTRIBUTE_UNUSED)
+s_err (ignore)
+     int ignore ATTRIBUTE_UNUSED;
 {
   as_bad (_(".err encountered"));
   demand_empty_rest_of_line ();
@@ -1653,7 +1663,8 @@ s_err (int ignore ATTRIBUTE_UNUSED)
 /* Handle the MRI fail pseudo-op.  */
 
 void
-s_fail (int ignore ATTRIBUTE_UNUSED)
+s_fail (ignore)
+     int ignore ATTRIBUTE_UNUSED;
 {
   offsetT temp;
   char *stop = NULL;
@@ -1675,7 +1686,8 @@ s_fail (int ignore ATTRIBUTE_UNUSED)
 }
 
 void
-s_fill (int ignore ATTRIBUTE_UNUSED)
+s_fill (ignore)
+     int ignore ATTRIBUTE_UNUSED;
 {
   expressionS rep_exp;
   long size = 1;
@@ -1755,25 +1767,26 @@ s_fill (int ignore ATTRIBUTE_UNUSED)
       memset (p, 0, (unsigned int) size);
 
       /* The magic number BSD_FILL_SIZE_CROCK_4 is from BSD 4.2 VAX
-	 flavoured AS.  The following bizarre behaviour is to be
-	 compatible with above.  I guess they tried to take up to 8
-	 bytes from a 4-byte expression and they forgot to sign
-	 extend.  */
+         flavoured AS.  The following bizarre behaviour is to be
+         compatible with above.  I guess they tried to take up to 8
+         bytes from a 4-byte expression and they forgot to sign
+         extend.  */
 #define BSD_FILL_SIZE_CROCK_4 (4)
       md_number_to_chars (p, (valueT) fill,
 			  (size > BSD_FILL_SIZE_CROCK_4
 			   ? BSD_FILL_SIZE_CROCK_4
 			   : (int) size));
       /* Note: .fill (),0 emits no frag (since we are asked to .fill 0 bytes)
-	 but emits no error message because it seems a legal thing to do.
-	 It is a degenerate case of .fill but could be emitted by a
+         but emits no error message because it seems a legal thing to do.
+         It is a degenerate case of .fill but could be emitted by a
 	 compiler.  */
     }
   demand_empty_rest_of_line ();
 }
 
 void
-s_globl (int ignore ATTRIBUTE_UNUSED)
+s_globl (ignore)
+     int ignore ATTRIBUTE_UNUSED;
 {
   char *name;
   int c;
@@ -1813,7 +1826,8 @@ s_globl (int ignore ATTRIBUTE_UNUSED)
 /* Handle the MRI IRP and IRPC pseudo-ops.  */
 
 void
-s_irp (int irpc)
+s_irp (irpc)
+     int irpc;
 {
   char *file;
   unsigned int line;
@@ -1846,7 +1860,8 @@ s_irp (int irpc)
    which is what to do about duplicates.  */
 
 void
-s_linkonce (int ignore ATTRIBUTE_UNUSED)
+s_linkonce (ignore)
+     int ignore ATTRIBUTE_UNUSED;
 {
   enum linkonce_type type;
 
@@ -1916,20 +1931,67 @@ s_linkonce (int ignore ATTRIBUTE_UNUSED)
   demand_empty_rest_of_line ();
 }
 
-void
-bss_alloc (symbolS *symbolP, addressT size, int align)
+static void
+s_lcomm_internal (needs_align, bytes_p)
+     /* 1 if this was a ".bss" directive, which may require a 3rd argument
+	(alignment); 0 if it was an ".lcomm" (2 args only).  */
+     int needs_align;
+     /* 1 if the alignment value should be interpreted as the byte boundary,
+	rather than the power of 2.  */
+     int bytes_p;
 {
-  char *pfrag;
+  register char *name;
+  register char c;
+  register char *p;
+  register int temp;
+  register symbolS *symbolP;
   segT current_seg = now_seg;
   subsegT current_subseg = now_subseg;
+  const int max_alignment = 15;
+  int align = 0;
   segT bss_seg = bss_section;
+
+  name = input_line_pointer;
+  c = get_symbol_end ();
+  p = input_line_pointer;
+  *p = c;
+
+  if (name == p)
+    {
+      as_bad (_("expected symbol name"));
+      discard_rest_of_line ();
+      return;
+    }
+
+  SKIP_WHITESPACE ();
+
+  /* Accept an optional comma after the name.  The comma used to be
+     required, but Irix 5 cc does not generate it.  */
+  if (*input_line_pointer == ',')
+    {
+      ++input_line_pointer;
+      SKIP_WHITESPACE ();
+    }
+
+  if (is_end_of_line[(unsigned char) *input_line_pointer])
+    {
+      as_bad (_("missing size expression"));
+      return;
+    }
+
+  if ((temp = get_absolute_expression ()) < 0)
+    {
+      as_warn (_("BSS length (%d) < 0 ignored"), temp);
+      ignore_rest_of_line ();
+      return;
+    }
 
 #if defined (TC_MIPS) || defined (TC_ALPHA)
   if (OUTPUT_FLAVOR == bfd_target_ecoff_flavour
       || OUTPUT_FLAVOR == bfd_target_elf_flavour)
     {
       /* For MIPS and Alpha ECOFF or ELF, small objects are put in .sbss.  */
-      if (size <= bfd_get_gp_size (stdoutput))
+      if ((unsigned) temp <= bfd_get_gp_size (stdoutput))
 	{
 	  bss_seg = subseg_new (".sbss", 1);
 	  seg_info (bss_seg)->bss = 1;
@@ -1941,122 +2003,154 @@ bss_alloc (symbolS *symbolP, addressT size, int align)
 	}
     }
 #endif
-  subseg_set (bss_seg, 1);
 
-  if (align)
+  if (!needs_align)
     {
-      record_alignment (bss_seg, align);
-      frag_align (align, 0, 0);
+      TC_IMPLICIT_LCOMM_ALIGNMENT (temp, align);
+
+      /* Still zero unless TC_IMPLICIT_LCOMM_ALIGNMENT set it.  */
+      if (align)
+	record_alignment (bss_seg, align);
     }
-
-  /* Detach from old frag.  */
-  if (S_GET_SEGMENT (symbolP) == bss_seg)
-    symbol_get_frag (symbolP)->fr_symbol = NULL;
-
-  symbol_set_frag (symbolP, frag_now);
-  pfrag = frag_var (rs_org, 1, 1, 0, symbolP, size, NULL);
-  *pfrag = 0;
-
-#ifdef S_SET_SIZE
-  S_SET_SIZE (symbolP, size);
-#endif
-  S_SET_SEGMENT (symbolP, bss_seg);
-
-#ifdef OBJ_COFF
-  /* The symbol may already have been created with a preceding
-     ".globl" directive -- be careful not to step on storage class
-     in that case.  Otherwise, set it to static.  */
-  if (S_GET_STORAGE_CLASS (symbolP) != C_EXT)
-    S_SET_STORAGE_CLASS (symbolP, C_STAT);
-#endif /* OBJ_COFF */
-
-  subseg_set (current_seg, current_subseg);
-}
-
-offsetT
-parse_align (int align_bytes)
-{
-  expressionS exp;
-  addressT align;
-
-  SKIP_WHITESPACE ();
-  if (*input_line_pointer != ',')
-    {
-    no_align:
-      as_bad (_("expected alignment after size"));
-      ignore_rest_of_line ();
-      return -1;
-    }
-
-  input_line_pointer++;
-  SKIP_WHITESPACE ();
-
-  align = get_absolute_expr (&exp);
-  if (exp.X_op == O_absent)
-    goto no_align;
-
-  if (!exp.X_unsigned)
-    {
-      as_warn (_("alignment negative; 0 assumed"));
-      align = 0;
-    }
-
-  if (align_bytes && align != 0)
-    {
-      /* convert to a power of 2 alignment */
-      unsigned int alignp2 = 0;
-      while ((align & 1) == 0)
-	align >>= 1, ++alignp2;
-      if (align != 1)
-	{
-	  as_bad (_("alignment not a power of 2"));
-	  ignore_rest_of_line ();
-	  return -1;
-	}
-      align = alignp2;
-    }
-  return align;
-}
-
-/* Called from s_comm_internal after symbol name and size have been
-   parsed.  NEEDS_ALIGN is 0 if it was an ".lcomm" (2 args only),
-   1 if this was a ".bss" directive which has a 3rd argument
-   (alignment as a power of 2), or 2 if this was a ".bss" directive
-   with alignment in bytes.  */
-
-symbolS *
-s_lcomm_internal (int needs_align, symbolS *symbolP, addressT size)
-{
-  addressT align = 0;
 
   if (needs_align)
     {
-      align = parse_align (needs_align - 1);
-      if (align == (addressT) -1)
-	return NULL;
+      align = 0;
+      SKIP_WHITESPACE ();
+
+      if (*input_line_pointer != ',')
+	{
+	  as_bad (_("expected comma after size"));
+	  ignore_rest_of_line ();
+	  return;
+	}
+
+      input_line_pointer++;
+      SKIP_WHITESPACE ();
+
+      if (is_end_of_line[(unsigned char) *input_line_pointer])
+	{
+	  as_bad (_("missing alignment"));
+	  return;
+	}
+
+      align = get_absolute_expression ();
+
+      if (bytes_p)
+	{
+	  /* Convert to a power of 2.  */
+	  if (align != 0)
+	    {
+	      unsigned int i;
+
+	      for (i = 0; (align & 1) == 0; align >>= 1, ++i)
+		;
+	      if (align != 1)
+		as_bad (_("alignment not a power of 2"));
+	      align = i;
+	    }
+	}
+
+      if (align > max_alignment)
+	{
+	  align = max_alignment;
+	  as_warn (_("alignment too large; %d assumed"), align);
+	}
+      else if (align < 0)
+	{
+	  align = 0;
+	  as_warn (_("alignment negative; 0 assumed"));
+	}
+
+      record_alignment (bss_seg, align);
     }
   else
-    /* Assume some objects may require alignment on some systems.  */
-    TC_IMPLICIT_LCOMM_ALIGNMENT (size, align);
+    {
+      /* Assume some objects may require alignment on some systems.  */
+#if defined (TC_ALPHA) && ! defined (VMS)
+      if (temp > 1)
+	{
+	  align = ffs (temp) - 1;
+	  if (temp % (1 << align))
+	    abort ();
+	}
+#endif
+    }
 
-  bss_alloc (symbolP, size, align);
-  return symbolP;
+  *p = 0;
+  symbolP = symbol_find_or_make (name);
+  *p = c;
+
+  if (
+#if (defined (OBJ_AOUT) || defined (OBJ_MAYBE_AOUT) \
+     || defined (OBJ_BOUT) || defined (OBJ_MAYBE_BOUT))
+#ifdef BFD_ASSEMBLER
+      (OUTPUT_FLAVOR != bfd_target_aout_flavour
+       || (S_GET_OTHER (symbolP) == 0 && S_GET_DESC (symbolP) == 0)) &&
+#else
+      (S_GET_OTHER (symbolP) == 0 && S_GET_DESC (symbolP) == 0) &&
+#endif
+#endif
+      (S_GET_SEGMENT (symbolP) == bss_seg
+       || (!S_IS_DEFINED (symbolP) && S_GET_VALUE (symbolP) == 0)))
+    {
+      char *pfrag;
+
+      subseg_set (bss_seg, 1);
+
+      if (align)
+	frag_align (align, 0, 0);
+
+      /* Detach from old frag.  */
+      if (S_GET_SEGMENT (symbolP) == bss_seg)
+	symbol_get_frag (symbolP)->fr_symbol = NULL;
+
+      symbol_set_frag (symbolP, frag_now);
+      pfrag = frag_var (rs_org, 1, 1, (relax_substateT) 0, symbolP,
+			(offsetT) temp, (char *) 0);
+      *pfrag = 0;
+
+      S_SET_SEGMENT (symbolP, bss_seg);
+
+#ifdef OBJ_COFF
+      /* The symbol may already have been created with a preceding
+         ".globl" directive -- be careful not to step on storage class
+         in that case.  Otherwise, set it to static.  */
+      if (S_GET_STORAGE_CLASS (symbolP) != C_EXT)
+	{
+	  S_SET_STORAGE_CLASS (symbolP, C_STAT);
+	}
+#endif /* OBJ_COFF */
+
+#ifdef S_SET_SIZE
+      S_SET_SIZE (symbolP, temp);
+#endif
+    }
+  else
+    as_bad (_("symbol `%s' is already defined"), S_GET_NAME (symbolP));
+
+  subseg_set (current_seg, current_subseg);
+
+  demand_empty_rest_of_line ();
 }
 
 void
-s_lcomm (int needs_align)
+s_lcomm (needs_align)
+     int needs_align;
 {
-  s_comm_internal (needs_align, s_lcomm_internal);
+  s_lcomm_internal (needs_align, 0);
 }
 
 void
-s_lcomm_bytes (int needs_align)
+s_lcomm_bytes (needs_align)
+     int needs_align;
 {
-  s_comm_internal (needs_align * 2, s_lcomm_internal);
+  s_lcomm_internal (needs_align, 1);
 }
 
 void
-s_lsym (int ignore ATTRIBUTE_UNUSED)
+s_lsym (ignore)
+     int ignore ATTRIBUTE_UNUSED;
 {
   register char *name;
   register char c;
@@ -2133,7 +2227,8 @@ s_lsym (int ignore ATTRIBUTE_UNUSED)
    or zero if there are no more lines.  */
 
 static int
-get_line_sb (sb *line)
+get_line_sb (line)
+     sb *line;
 {
   char quote1, quote2, inquote;
   unsigned char c;
@@ -2192,7 +2287,8 @@ get_line_sb (sb *line)
 /* Define a macro.  This is an interface to macro.c.  */
 
 void
-s_macro (int ignore ATTRIBUTE_UNUSED)
+s_macro (ignore)
+     int ignore ATTRIBUTE_UNUSED;
 {
   char *file;
   unsigned int line;
@@ -2239,7 +2335,8 @@ s_macro (int ignore ATTRIBUTE_UNUSED)
    expansion.  */
 
 void
-s_mexit (int ignore ATTRIBUTE_UNUSED)
+s_mexit (ignore)
+     int ignore ATTRIBUTE_UNUSED;
 {
   cond_exit_macro (macro_nest);
   buffer_limit = input_scrub_next_buffer (&input_line_pointer);
@@ -2248,7 +2345,8 @@ s_mexit (int ignore ATTRIBUTE_UNUSED)
 /* Switch in and out of MRI mode.  */
 
 void
-s_mri (int ignore ATTRIBUTE_UNUSED)
+s_mri (ignore)
+     int ignore ATTRIBUTE_UNUSED;
 {
   int on, old_flag;
 
@@ -2286,7 +2384,10 @@ s_mri (int ignore ATTRIBUTE_UNUSED)
 /* Handle changing the location counter.  */
 
 static void
-do_org (segT segment, expressionS *exp, int fill)
+do_org (segment, exp, fill)
+     segT segment;
+     expressionS *exp;
+     int fill;
 {
   if (segment != now_seg && segment != absolute_section)
     as_bad (_("invalid segment \"%s\""), segment_name (segment));
@@ -2321,7 +2422,8 @@ do_org (segT segment, expressionS *exp, int fill)
 }
 
 void
-s_org (int ignore ATTRIBUTE_UNUSED)
+s_org (ignore)
+     int ignore ATTRIBUTE_UNUSED;
 {
   register segT segment;
   expressionS exp;
@@ -2376,7 +2478,8 @@ s_org (int ignore ATTRIBUTE_UNUSED)
    flags will be set in the section.  */
 
 void
-s_mri_sect (char *type ATTRIBUTE_UNUSED)
+s_mri_sect (type)
+     char *type ATTRIBUTE_UNUSED;
 {
 #ifdef TC_M68K
 
@@ -2540,21 +2643,22 @@ s_mri_sect (char *type ATTRIBUTE_UNUSED)
 /* Handle the .print pseudo-op.  */
 
 void
-s_print (int ignore ATTRIBUTE_UNUSED)
+s_print (ignore)
+     int ignore ATTRIBUTE_UNUSED;
 {
   char *s;
   int len;
 
   s = demand_copy_C_string (&len);
-  if (s != NULL)
-    printf ("%s\n", s);
+  printf ("%s\n", s);
   demand_empty_rest_of_line ();
 }
 
 /* Handle the .purgem pseudo-op.  */
 
 void
-s_purgem (int ignore ATTRIBUTE_UNUSED)
+s_purgem (ignore)
+     int ignore ATTRIBUTE_UNUSED;
 {
   if (is_it_end_of_statement ())
     {
@@ -2583,7 +2687,8 @@ s_purgem (int ignore ATTRIBUTE_UNUSED)
 /* Handle the .rept pseudo-op.  */
 
 void
-s_bad_endr (int ignore ATTRIBUTE_UNUSED)
+s_bad_endr (ignore)
+     int ignore ATTRIBUTE_UNUSED;
 {
   as_warn (_(".endr encountered without preceeding .rept, .irc, or .irp"));
   demand_empty_rest_of_line ();
@@ -2592,7 +2697,8 @@ s_bad_endr (int ignore ATTRIBUTE_UNUSED)
 /* Handle the .rept pseudo-op.  */
 
 void
-s_rept (int ignore ATTRIBUTE_UNUSED)
+s_rept (ignore)
+     int ignore ATTRIBUTE_UNUSED;
 {
   int count;
 
@@ -2605,7 +2711,10 @@ s_rept (int ignore ATTRIBUTE_UNUSED)
    different directives to be used as the start/end keys.  */
 
 void
-do_repeat (int count, const char *start, const char *end)
+do_repeat (count, start, end)
+     int count;
+     const char *start;
+     const char *end;
 {
   sb one;
   sb many;
@@ -2637,7 +2746,8 @@ do_repeat (int count, const char *start, const char *end)
    such as line substitutions.  */
 
 void
-end_repeat (int extra)
+end_repeat (extra)
+     int extra;
 {
   cond_exit_macro (macro_nest);
   while (extra-- >= 0)
@@ -2649,7 +2759,8 @@ end_repeat (int extra)
    defined.  */
 
 void
-s_set (int equiv)
+s_set (equiv)
+     int equiv;
 {
   register char *name;
   register char delim;
@@ -2706,7 +2817,7 @@ s_set (int equiv)
 #ifndef NO_LISTING
       /* When doing symbol listings, play games with dummy fragments living
 	 outside the normal fragment chain to record the file and line info
-	 for this symbol.  */
+         for this symbol.  */
       if (listing & LISTING_SYMBOLS)
 	{
 	  extern struct list_info_struct *listing_tail;
@@ -2741,7 +2852,8 @@ s_set (int equiv)
 }
 
 void
-s_space (int mult)
+s_space (mult)
+     int mult;
 {
   expressionS exp;
   expressionS val;
@@ -2913,7 +3025,8 @@ s_space (int mult)
    friends.  */
 
 void
-s_float_space (int float_type)
+s_float_space (float_type)
+     int float_type;
 {
   offsetT count;
   int flen;
@@ -2993,7 +3106,8 @@ s_float_space (int float_type)
 /* Handle the .struct pseudo-op, as found in MIPS assemblers.  */
 
 void
-s_struct (int ignore ATTRIBUTE_UNUSED)
+s_struct (ignore)
+     int ignore ATTRIBUTE_UNUSED;
 {
   char *stop = NULL;
   char stopc;
@@ -3008,7 +3122,8 @@ s_struct (int ignore ATTRIBUTE_UNUSED)
 }
 
 void
-s_text (int ignore ATTRIBUTE_UNUSED)
+s_text (ignore)
+     int ignore ATTRIBUTE_UNUSED;
 {
   register int temp;
 
@@ -3020,40 +3135,35 @@ s_text (int ignore ATTRIBUTE_UNUSED)
 #endif
 }
 
-
-/* Verify that we are at the end of a line.  If not, issue an error and
-   skip to EOL.  */
-
 void
-demand_empty_rest_of_line (void)
+demand_empty_rest_of_line ()
 {
   SKIP_WHITESPACE ();
   if (is_end_of_line[(unsigned char) *input_line_pointer])
     input_line_pointer++;
   else
-    {
-      if (ISPRINT (*input_line_pointer))
-	as_bad (_("junk at end of line, first unrecognized character is `%c'"),
-		 *input_line_pointer);
-      else
-	as_bad (_("junk at end of line, first unrecognized character valued 0x%x"),
-		 *input_line_pointer);
-      ignore_rest_of_line ();
-    }
-  
-  /* Return pointing just after end-of-line.  */
-  know (is_end_of_line[(unsigned char) input_line_pointer[-1]]);
+    ignore_rest_of_line ();
+
+  /* Return having already swallowed end-of-line.  */
 }
 
-/* Silently advance to the end of line.  Use this after already having
-   issued an error about something bad.  */
-
 void
-ignore_rest_of_line (void)
+ignore_rest_of_line ()
 {
-  while (input_line_pointer < buffer_limit
-	 && !is_end_of_line[(unsigned char) *input_line_pointer])
-    input_line_pointer++;
+  /* For suspect lines: gives warning.  */
+  if (!is_end_of_line[(unsigned char) *input_line_pointer])
+    {
+      if (ISPRINT (*input_line_pointer))
+	as_warn (_("rest of line ignored; first ignored character is `%c'"),
+		 *input_line_pointer);
+      else
+	as_warn (_("rest of line ignored; first ignored character valued 0x%x"),
+		 *input_line_pointer);
+
+      while (input_line_pointer < buffer_limit
+	     && !is_end_of_line[(unsigned char) *input_line_pointer])
+	input_line_pointer++;
+    }
 
   input_line_pointer++;
 
@@ -3062,7 +3172,7 @@ ignore_rest_of_line (void)
 }
 
 void
-discard_rest_of_line (void)
+discard_rest_of_line ()
 {
   while (input_line_pointer < buffer_limit
 	 && !is_end_of_line[(unsigned char) *input_line_pointer])
@@ -3075,14 +3185,15 @@ discard_rest_of_line (void)
 }
 
 /* In:	Pointer to a symbol.
-	Input_line_pointer->expression.
+  	Input_line_pointer->expression.
 
    Out:	Input_line_pointer->just after any whitespace after expression.
-	Tried to set symbol to value of expression.
-	Will change symbols type, value, and frag;  */
+  	Tried to set symbol to value of expression.
+  	Will change symbols type, value, and frag;  */
 
 void
-pseudo_set (symbolS *symbolP)
+pseudo_set (symbolP)
+     symbolS *symbolP;
 {
   expressionS exp;
 #if (defined (OBJ_AOUT) || defined (OBJ_BOUT)) && ! defined (BFD_ASSEMBLER)
@@ -3175,7 +3286,7 @@ pseudo_set (symbolS *symbolP)
     }
 }
 
-/*			cons()
+/*  			cons()
 
    CONStruct more frag of .bytes, or .words etc.
    Should need_pass_2 be 1 then emit no frag(s).
@@ -3200,19 +3311,19 @@ pseudo_set (symbolS *symbolP)
 
 #ifdef TC_M68K
 static void
-parse_mri_cons (expressionS *exp, unsigned int nbytes);
+parse_mri_cons PARAMS ((expressionS *exp, unsigned int nbytes));
 #endif
 
 #ifndef TC_PARSE_CONS_EXPRESSION
 #ifdef BITFIELD_CONS_EXPRESSIONS
 #define TC_PARSE_CONS_EXPRESSION(EXP, NBYTES) parse_bitfield_cons (EXP, NBYTES)
 static void
-parse_bitfield_cons (expressionS *exp, unsigned int nbytes);
+parse_bitfield_cons PARAMS ((expressionS *exp, unsigned int nbytes));
 #endif
 #ifdef REPEAT_CONS_EXPRESSIONS
 #define TC_PARSE_CONS_EXPRESSION(EXP, NBYTES) parse_repeat_cons (EXP, NBYTES)
 static void
-parse_repeat_cons (expressionS *exp, unsigned int nbytes);
+parse_repeat_cons PARAMS ((expressionS *exp, unsigned int nbytes));
 #endif
 
 /* If we haven't gotten one yet, just call expression.  */
@@ -3221,20 +3332,13 @@ parse_repeat_cons (expressionS *exp, unsigned int nbytes);
 #endif
 #endif
 
-void
-do_parse_cons_expression (expressionS *exp,
-			  int nbytes ATTRIBUTE_UNUSED)
-{
-  TC_PARSE_CONS_EXPRESSION (exp, nbytes);
-}
-
-
 /* Worker to do .byte etc statements.
    Clobbers input_line_pointer and checks end-of-line.  */
 
 static void
-cons_worker (register int nbytes,	/* 1=.byte, 2=.word, 4=.long.  */
-	     int rva)
+cons_worker (nbytes, rva)
+     register int nbytes;	/* 1=.byte, 2=.word, 4=.long.  */
+     int rva;
 {
   int c;
   expressionS exp;
@@ -3297,13 +3401,15 @@ cons_worker (register int nbytes,	/* 1=.byte, 2=.word, 4=.long.  */
 }
 
 void
-cons (int size)
+cons (size)
+     int size;
 {
   cons_worker (size, 0);
 }
 
 void
-s_rva (int size)
+s_rva (size)
+     int size;
 {
   cons_worker (size, 1);
 }
@@ -3312,7 +3418,9 @@ s_rva (int size)
    NBYTES bytes.  If need_pass_2 is 1, this does nothing.  */
 
 void
-emit_expr (expressionS *exp, unsigned int nbytes)
+emit_expr (exp, nbytes)
+     expressionS *exp;
+     unsigned int nbytes;
 {
   operatorT op;
   register char *p;
@@ -3321,8 +3429,6 @@ emit_expr (expressionS *exp, unsigned int nbytes)
   /* Don't do anything if we are going to make another pass.  */
   if (need_pass_2)
     return;
-
-  dot_value = frag_now_fix ();
 
 #ifndef NO_LISTING
 #ifdef OBJ_ELF
@@ -3668,7 +3774,7 @@ emit_expr (expressionS *exp, unsigned int nbytes)
    them in words, longs, etc. and we'll pack them in target byte order
    for you.
 
-   The rules are: pack least significant bit first, if a field doesn't
+   The rules are: pack least significat bit first, if a field doesn't
    entirely fit, put it in the next unit.  Overflowing the bitfield is
    explicitly *not* even a warning.  The bitwidth should be considered
    a "mask".
@@ -3902,7 +4008,9 @@ parse_repeat_cons (exp, nbytes)
    point number.  */
 
 static int
-hex_float (int float_type, char *bytes)
+hex_float (float_type, bytes)
+     int float_type;
+     char *bytes;
 {
   int length;
   int i;
@@ -3986,7 +4094,7 @@ hex_float (int float_type, char *bytes)
   return length;
 }
 
-/*			float_cons()
+/*  			float_cons()
 
    CONStruct some more frag chars of .floats .ffloats etc.
    Makes 0 or more new frags.
@@ -3997,15 +4105,16 @@ hex_float (int float_type, char *bytes)
    by 0d 0f 0g or 0h. After observing the STRANGE way my BSD AS does its
    reading, I decided to be incompatible. This always tries to give you
    rounded bits to the precision of the pseudo-op. Former AS did premature
-   truncation, restored noisy bits instead of trailing 0s AND gave you
+   truncatation, restored noisy bits instead of trailing 0s AND gave you
    a choice of 2 flavours of noise according to which of 2 floating-point
    scanners you directed AS to use.
 
    In:	input_line_pointer->whitespace before, or '0' of flonum.  */
 
 void
-float_cons (/* Clobbers input_line-pointer, checks end-of-line.  */
-	    register int float_type	/* 'f':.ffloat ... 'F':.float ...  */)
+float_cons (float_type)
+     /* Clobbers input_line-pointer, checks end-of-line.  */
+     register int float_type;	/* 'f':.ffloat ... 'F':.float ...  */
 {
   register char *p;
   int length;			/* Number of chars in an object.  */
@@ -4028,15 +4137,15 @@ float_cons (/* Clobbers input_line-pointer, checks end-of-line.  */
       SKIP_WHITESPACE ();
 
       /* Skip any 0{letter} that may be present. Don't even check if the
-	 letter is legal. Someone may invent a "z" format and this routine
-	 has no use for such information. Lusers beware: you get
-	 diagnostics if your input is ill-conditioned.  */
+         letter is legal. Someone may invent a "z" format and this routine
+         has no use for such information. Lusers beware: you get
+         diagnostics if your input is ill-conditioned.  */
       if (input_line_pointer[0] == '0'
 	  && ISALPHA (input_line_pointer[1]))
 	input_line_pointer += 2;
 
       /* Accept :xxxx, where the x's are hex digits, for a floating
-	 point with the exact digits specified.  */
+         point with the exact digits specified.  */
       if (input_line_pointer[0] == ':')
 	{
 	  ++input_line_pointer;
@@ -4100,7 +4209,8 @@ float_cons (/* Clobbers input_line-pointer, checks end-of-line.  */
 /* Return the size of a LEB128 value.  */
 
 static inline int
-sizeof_sleb128 (offsetT value)
+sizeof_sleb128 (value)
+     offsetT value;
 {
   register int size = 0;
   register unsigned byte;
@@ -4121,7 +4231,8 @@ sizeof_sleb128 (offsetT value)
 }
 
 static inline int
-sizeof_uleb128 (valueT value)
+sizeof_uleb128 (value)
+     valueT value;
 {
   register int size = 0;
   register unsigned byte;
@@ -4138,7 +4249,9 @@ sizeof_uleb128 (valueT value)
 }
 
 int
-sizeof_leb128 (valueT value, int sign)
+sizeof_leb128 (value, sign)
+     valueT value;
+     int sign;
 {
   if (sign)
     return sizeof_sleb128 ((offsetT) value);
@@ -4149,7 +4262,9 @@ sizeof_leb128 (valueT value, int sign)
 /* Output a LEB128 value.  */
 
 static inline int
-output_sleb128 (char *p, offsetT value)
+output_sleb128 (p, value)
+     char *p;
+     offsetT value;
 {
   register char *orig = p;
   register int more;
@@ -4176,7 +4291,9 @@ output_sleb128 (char *p, offsetT value)
 }
 
 static inline int
-output_uleb128 (char *p, valueT value)
+output_uleb128 (p, value)
+     char *p;
+     valueT value;
 {
   char *orig = p;
 
@@ -4196,7 +4313,10 @@ output_uleb128 (char *p, valueT value)
 }
 
 int
-output_leb128 (char *p, valueT value, int sign)
+output_leb128 (p, value, sign)
+     char *p;
+     valueT value;
+     int sign;
 {
   if (sign)
     return output_sleb128 (p, (offsetT) value);
@@ -4209,7 +4329,10 @@ output_leb128 (char *p, valueT value, int sign)
    for "normal" values that this be streamlined.  */
 
 static inline int
-output_big_sleb128 (char *p, LITTLENUM_TYPE *bignum, int size)
+output_big_sleb128 (p, bignum, size)
+     char *p;
+     LITTLENUM_TYPE *bignum;
+     int size;
 {
   char *orig = p;
   valueT val = 0;
@@ -4252,7 +4375,10 @@ output_big_sleb128 (char *p, LITTLENUM_TYPE *bignum, int size)
 }
 
 static inline int
-output_big_uleb128 (char *p, LITTLENUM_TYPE *bignum, int size)
+output_big_uleb128 (p, bignum, size)
+     char *p;
+     LITTLENUM_TYPE *bignum;
+     int size;
 {
   char *orig = p;
   valueT val = 0;
@@ -4291,7 +4417,10 @@ output_big_uleb128 (char *p, LITTLENUM_TYPE *bignum, int size)
 }
 
 static int
-output_big_leb128 (char *p, LITTLENUM_TYPE *bignum, int size, int sign)
+output_big_leb128 (p, bignum, size, sign)
+     char *p;
+     LITTLENUM_TYPE *bignum;
+     int size, sign;
 {
   if (sign)
     return output_big_sleb128 (p, bignum, size);
@@ -4303,7 +4432,9 @@ output_big_leb128 (char *p, LITTLENUM_TYPE *bignum, int size, int sign)
    leb128 value.  */
 
 void
-emit_leb128_expr (expressionS *exp, int sign)
+emit_leb128_expr (exp, sign)
+     expressionS *exp;
+     int sign;
 {
   operatorT op = exp->X_op;
   int nbytes;
@@ -4373,17 +4504,10 @@ emit_leb128_expr (expressionS *exp, int sign)
 /* Parse the .sleb128 and .uleb128 pseudos.  */
 
 void
-s_leb128 (int sign)
+s_leb128 (sign)
+     int sign;
 {
   expressionS exp;
-
-#ifdef md_flush_pending_output
-  md_flush_pending_output ();
-#endif
-
-#ifdef md_flush_pending_output
-  md_flush_pending_output ();
-#endif
 
   do
     {
@@ -4401,9 +4525,9 @@ s_leb128 (int sign)
    check it.  */
 
 void
-stringer (/* Worker to do .ascii etc statements.  */
-	  /* Checks end-of-line.  */
-	  register int append_zero	/* 0: don't append '\0', else 1.  */)
+stringer (append_zero)		/* Worker to do .ascii etc statements.  */
+     /* Checks end-of-line.  */
+     register int append_zero;	/* 0: don't append '\0', else 1.  */
 {
   register unsigned int c;
   char *start;
@@ -4434,7 +4558,7 @@ stringer (/* Worker to do .ascii etc statements.  */
       c = 0;
       ignore_rest_of_line ();
     }
-
+  
   while (c == ',' || c == '<' || c == '"')
     {
       SKIP_WHITESPACE ();
@@ -4456,11 +4580,11 @@ stringer (/* Worker to do .ascii etc statements.  */
 #ifndef NO_LISTING
 #ifdef OBJ_ELF
 	  /* In ELF, when gcc is emitting DWARF 1 debugging output, it
-	     will emit .string with a filename in the .debug section
-	     after a sequence of constants.  See the comment in
-	     emit_expr for the sequence.  emit_expr will set
-	     dwarf_file_string to non-zero if this string might be a
-	     source file name.  */
+             will emit .string with a filename in the .debug section
+             after a sequence of constants.  See the comment in
+             emit_expr for the sequence.  emit_expr will set
+             dwarf_file_string to non-zero if this string might be a
+             source file name.  */
 	  if (strcmp (segment_name (now_seg), ".debug") != 0)
 	    dwarf_file_string = 0;
 	  else if (dwarf_file_string)
@@ -4501,7 +4625,7 @@ stringer (/* Worker to do .ascii etc statements.  */
     returning values bigger than 1 byte.  xoxorich.  */
 
 unsigned int
-next_char_of_string (void)
+next_char_of_string ()
 {
   register unsigned int c;
 
@@ -4623,7 +4747,8 @@ next_char_of_string (void)
 }
 
 static segT
-get_segmented_expression (register expressionS *expP)
+get_segmented_expression (expP)
+     register expressionS *expP;
 {
   register segT retval;
 
@@ -4641,7 +4766,8 @@ get_segmented_expression (register expressionS *expP)
 }
 
 static segT
-get_known_segmented_expression (register expressionS *expP)
+get_known_segmented_expression (expP)
+     register expressionS *expP;
 {
   register segT retval;
 
@@ -4664,7 +4790,8 @@ get_known_segmented_expression (register expressionS *expP)
 }
 
 offsetT
-get_absolute_expr (expressionS *exp)
+get_absolute_expr (exp)
+     expressionS *exp;
 {
   expression (exp);
   if (exp->X_op != O_constant)
@@ -4677,7 +4804,7 @@ get_absolute_expr (expressionS *exp)
 }
 
 offsetT
-get_absolute_expression (void)
+get_absolute_expression ()
 {
   expressionS exp;
 
@@ -4685,7 +4812,8 @@ get_absolute_expression (void)
 }
 
 char				/* Return terminator.  */
-get_absolute_expression_and_terminator (long *val_pointer /* Return value of expression.  */)
+get_absolute_expression_and_terminator (val_pointer)
+     long *val_pointer;		/* Return value of expression.  */
 {
   /* FIXME: val_pointer should probably be offsetT *.  */
   *val_pointer = (long) get_absolute_expression ();
@@ -4696,7 +4824,8 @@ get_absolute_expression_and_terminator (long *val_pointer /* Return value of exp
    Give a warning if that happens.  */
 
 char *
-demand_copy_C_string (int *len_pointer)
+demand_copy_C_string (len_pointer)
+     int *len_pointer;
 {
   register char *s;
 
@@ -4723,7 +4852,8 @@ demand_copy_C_string (int *len_pointer)
    Return NULL if we can't read a string here.  */
 
 char *
-demand_copy_string (int *lenP)
+demand_copy_string (lenP)
+     int *lenP;
 {
   register unsigned int c;
   register int len;
@@ -4747,7 +4877,7 @@ demand_copy_string (int *lenP)
     }
   else
     {
-      as_bad (_("missing string"));
+      as_warn (_("missing string"));
       retval = NULL;
       ignore_rest_of_line ();
     }
@@ -4762,14 +4892,16 @@ demand_copy_string (int *lenP)
    Out:	1 if input_line_pointer->end-of-line.  */
 
 int
-is_it_end_of_statement (void)
+is_it_end_of_statement ()
 {
   SKIP_WHITESPACE ();
   return (is_end_of_line[(unsigned char) *input_line_pointer]);
 }
 
 void
-equals (char *sym_name, int reassign)
+equals (sym_name, reassign)
+     char *sym_name;
+     int reassign;
 {
   register symbolS *symbolP;	/* Symbol we are working with.  */
   char *stop = NULL;
@@ -4823,7 +4955,7 @@ equals (char *sym_name, int reassign)
   if (flag_mri)
     {
       /* Check garbage after the expression.  */
-      demand_empty_rest_of_line ();
+      ignore_rest_of_line ();
       mri_comment_end (stop, stopc);
     }
 }
@@ -4831,7 +4963,8 @@ equals (char *sym_name, int reassign)
 /* .incbin -- include a file verbatim at the current location.  */
 
 void
-s_incbin (int x ATTRIBUTE_UNUSED)
+s_incbin (x)
+     int x ATTRIBUTE_UNUSED;
 {
   FILE * binfile;
   char * path;
@@ -4947,7 +5080,8 @@ done:
 /* .include -- include a file at this point.  */
 
 void
-s_include (int arg ATTRIBUTE_UNUSED)
+s_include (arg)
+     int arg ATTRIBUTE_UNUSED;
 {
   char *filename;
   int i;
@@ -4960,7 +5094,7 @@ s_include (int arg ATTRIBUTE_UNUSED)
       if (filename == NULL)
 	{
 	  /* demand_copy_string has already printed an error and
-	     called ignore_rest_of_line.  */
+             called ignore_rest_of_line.  */
 	  return;
 	}
     }
@@ -5007,7 +5141,8 @@ gotit:
 }
 
 void
-add_include_dir (char *path)
+add_include_dir (path)
+     char *path;
 {
   int i;
 
@@ -5035,7 +5170,7 @@ add_include_dir (char *path)
 /* Output debugging information to denote the source file.  */
 
 static void
-generate_file_debug (void)
+generate_file_debug ()
 {
   if (debug_type == DEBUG_STABS)
     stabs_generate_asm_file ();
@@ -5044,7 +5179,7 @@ generate_file_debug (void)
 /* Output line number debugging information for the current source line.  */
 
 void
-generate_lineno_debug (void)
+generate_lineno_debug ()
 {
   switch (debug_type)
     {
@@ -5071,7 +5206,8 @@ generate_lineno_debug (void)
    END_P is zero for .func, and non-zero for .endfunc.  */
 
 void
-s_func (int end_p)
+s_func (end_p)
+     int end_p;
 {
   do_s_func (end_p, NULL);
 }
@@ -5080,7 +5216,9 @@ s_func (int end_p)
    If DEFAULT_PREFIX is NULL, use the target's "leading char".  */
 
 void
-do_s_func (int end_p, const char *default_prefix)
+do_s_func (end_p, default_prefix)
+     int end_p;
+     const char *default_prefix;
 {
   /* Record the current function so that we can issue an error message for
      misplaced .func,.endfunc, and also so that .endfunc needs no
@@ -5158,7 +5296,8 @@ do_s_func (int end_p, const char *default_prefix)
 }
 
 void
-s_ignore (int arg ATTRIBUTE_UNUSED)
+s_ignore (arg)
+     int arg ATTRIBUTE_UNUSED;
 {
   while (!is_end_of_line[(unsigned char) *input_line_pointer])
     {
@@ -5168,7 +5307,8 @@ s_ignore (int arg ATTRIBUTE_UNUSED)
 }
 
 void
-read_print_statistics (FILE *file)
+read_print_statistics (file)
+     FILE *file;
 {
   hash_print_statistics (file, "pseudo-op table", po_hash);
 }
@@ -5178,12 +5318,13 @@ read_print_statistics (FILE *file)
    This call avoids macro/conditionals nesting checking, since the contents of
    the line are assumed to replace the contents of a line already scanned.
 
-   An appropriate use of this function would be substitution of input lines when
+   An appropriate use of this function would be substition of input lines when
    called by md_start_line_hook().  The given line is assumed to already be
    properly scrubbed.  */
 
 void
-input_scrub_insert_line (const char *line)
+input_scrub_insert_line (line)
+     const char *line;
 {
   sb newline;
   sb_new (&newline);
@@ -5197,7 +5338,8 @@ input_scrub_insert_line (const char *line)
    file; no include path searching or dependency registering is performed.  */
 
 void
-input_scrub_insert_file (char *path)
+input_scrub_insert_file (path)
+     char *path;
 {
   input_scrub_include_file (path, input_line_pointer);
   buffer_limit = input_scrub_next_buffer (&input_line_pointer);

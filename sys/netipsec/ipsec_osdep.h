@@ -1,4 +1,4 @@
-/*	$NetBSD: ipsec_osdep.h,v 1.10 2004/04/30 04:12:29 jonathan Exp $	*/
+/*	$NetBSD: ipsec_osdep.h,v 1.9.2.1 2004/05/10 15:06:08 tron Exp $	*/
 /*	$FreeBSD: /repoman/r/ncvs/src/sys/netipsec/ipsec_osdep.h,v 1.1 2003/09/29 22:47:45 sam Exp $	*/
 
 /*

@@ -1,4 +1,4 @@
-/*	$NetBSD: auconv.h,v 1.3 2004/07/19 19:15:05 mycroft Exp $	*/
+/*	$NetBSD: auconv.h,v 1.2.2.1 2004/07/23 18:05:56 tron Exp $	*/
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.

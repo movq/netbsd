@@ -1,4 +1,4 @@
-.\" $NetBSD: tar.1,v 1.20 2004/10/20 23:48:01 wiz Exp $
+.\" $NetBSD: tar.1,v 1.13.2.2 2004/09/16 03:28:45 jmc Exp $
 .\"
 .\" Copyright (c) 1996 SigmaSoft, Th. Lockert
 .\" All rights reserved.
@@ -25,7 +25,7 @@
 .\"
 .\"	OpenBSD: tar.1,v 1.28 2000/11/09 23:58:56 aaron Exp
 .\"
-.Dd October 17, 2004
+.Dd May 4, 2004
 .Dt TAR 1
 .Os
 .Sh NAME
@@ -34,7 +34,7 @@
 .Sh SYNOPSIS
 .Nm tar
 .Sm off
-.Oo \&- Oc {crtux} Op Fl befhjklmopqvwzHOPSXZ014578
+.Oo \&- Oc {crtux} Op Fl befhjklmopqvwzHLOPXZ014578
 .Sm on
 .Op Ar archive
 .Op Ar blocksize
@@ -145,10 +145,6 @@ No more than one archive member is matched for each
 .Ar pattern .
 When members of type directory are matched, the file hierarchy rooted at that
 directory is also matched.
-.It Fl S , -sparse
-This flag has no effect as
-.Nm
-always generates sparse files.
 .It Fl s Ar replstr
 Modify the file or archive member names specified by the
 .Ar pattern
@@ -235,14 +231,6 @@ Compress archive using compress.
 Do not enable GNU tar extensions such as long filenames and long link names.
 .It Fl -atime-preserve
 Preserve file access times.
-.It Fl -chroot
-.Fn chroot
-to the current directory before extracting files.
-Use with
-.Fl x
-and
-.Fl h
-to make absolute symlinks relative to the current directory.
 .It Fl -unlink
 Ignored, only accepted for compatibility with other
 .Nm

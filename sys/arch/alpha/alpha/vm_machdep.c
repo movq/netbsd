@@ -1,4 +1,4 @@
-/* $NetBSD: vm_machdep.c,v 1.84 2004/09/17 14:11:20 skrll Exp $ */
+/* $NetBSD: vm_machdep.c,v 1.82 2004/01/05 23:51:19 nathanw Exp $ */
 
 /*
  * Copyright (c) 1994, 1995, 1996 Carnegie-Mellon University.
@@ -29,7 +29,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: vm_machdep.c,v 1.84 2004/09/17 14:11:20 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vm_machdep.c,v 1.82 2004/01/05 23:51:19 nathanw Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -58,6 +58,7 @@ cpu_coredump(struct lwp *l, struct vnode *vp, struct ucred *cred,
 	int error;
 	struct md_coredump cpustate;
 	struct coreseg cseg;
+	struct proc *p = l->l_proc;
 
 	CORE_SETMAGIC(*chdr, COREMAGIC, MID_MACHINE, 0);
 	chdr->c_hdrsize = ALIGN(sizeof(*chdr));
@@ -79,13 +80,13 @@ cpu_coredump(struct lwp *l, struct vnode *vp, struct ucred *cred,
 
 	error = vn_rdwr(UIO_WRITE, vp, (caddr_t)&cseg, chdr->c_seghdrsize,
 	    (off_t)chdr->c_hdrsize, UIO_SYSSPACE,
-	    IO_NODELOCKED|IO_UNIT, cred, NULL, NULL);
+	    IO_NODELOCKED|IO_UNIT, cred, NULL, p);
 	if (error)
 		return error;
 
 	error = vn_rdwr(UIO_WRITE, vp, (caddr_t)&cpustate, sizeof(cpustate),
 	    (off_t)(chdr->c_hdrsize + chdr->c_seghdrsize), UIO_SYSSPACE,
-	    IO_NODELOCKED|IO_UNIT, cred, NULL, NULL);
+	    IO_NODELOCKED|IO_UNIT, cred, NULL, p);
 
 	if (!error)
 		chdr->c_nseg++;
@@ -266,6 +267,46 @@ cpu_swapout(struct lwp *l)
 
 	if (l->l_addr->u_pcb.pcb_fpcpu != NULL)
 		fpusave_proc(l, 1);
+}
+
+/*
+ * Move pages from one kernel virtual address to another.
+ * Both addresses are assumed to have valid page table pages.
+ * and size must be a multiple of PAGE_SIZE.
+ *
+ * Note that since all kernel page table pages are pre-allocated
+ * and mapped in, we can use the Virtual Page Table.
+ */
+void
+pagemove(caddr_t from, caddr_t to, size_t size)
+{
+	long fidx, tidx;
+	ssize_t todo;
+	PMAP_TLB_SHOOTDOWN_CPUSET_DECL
+
+	if (size % PAGE_SIZE)
+		panic("pagemove");
+
+	todo = size;			/* if testing > 0, need sign... */
+	while (todo > 0) {
+		fidx = VPT_INDEX(from);
+		tidx = VPT_INDEX(to);
+
+		VPT[tidx] = VPT[fidx];
+		VPT[fidx] = 0;
+
+		ALPHA_TBIS((vaddr_t)from);
+		ALPHA_TBIS((vaddr_t)to);
+
+		PMAP_TLB_SHOOTDOWN(pmap_kernel(), (vaddr_t)from, PG_ASM);
+		PMAP_TLB_SHOOTDOWN(pmap_kernel(), (vaddr_t)to, PG_ASM);
+
+		todo -= PAGE_SIZE;
+		from += PAGE_SIZE;
+		to += PAGE_SIZE;
+	}
+
+	PMAP_TLB_SHOOTNOW();
 }
 
 /*

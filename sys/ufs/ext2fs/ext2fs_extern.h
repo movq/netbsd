@@ -1,4 +1,4 @@
-/*	$NetBSD: ext2fs_extern.h,v 1.24 2004/05/20 06:34:32 atatat Exp $	*/
+/*	$NetBSD: ext2fs_extern.h,v 1.22.2.1 2004/05/23 10:46:17 tron Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993, 1994
@@ -74,7 +74,7 @@ struct inode;
 struct mount;
 struct nameidata;
 struct proc;
-struct statvfs;
+struct statfs;
 struct timeval;
 struct ucred;
 struct ufsmount;
@@ -142,7 +142,7 @@ int ext2fs_reload __P((struct mount *, struct ucred *, struct proc *));
 int ext2fs_mountfs __P((struct vnode *, struct mount *, struct proc *));
 int ext2fs_unmount __P((struct mount *, int, struct proc *));
 int ext2fs_flushfiles __P((struct mount *, int, struct proc *));
-int ext2fs_statvfs __P((struct mount *, struct statvfs *, struct proc *));
+int ext2fs_statfs __P((struct mount *, struct statfs *, struct proc *));
 int ext2fs_sync __P((struct mount *, int, struct ucred *, struct proc *));
 int ext2fs_vget __P((struct mount *, ino_t, struct vnode **));
 int ext2fs_fhtovp __P((struct mount *, struct fid *, struct vnode **));

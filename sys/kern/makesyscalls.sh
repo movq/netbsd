@@ -1,5 +1,5 @@
 #! /bin/sh -
-#	$NetBSD: makesyscalls.sh,v 1.57 2004/09/12 11:24:15 jdolecek Exp $
+#	$NetBSD: makesyscalls.sh,v 1.55 2003/09/30 20:34:28 christos Exp $
 #
 # Copyright (c) 1994, 1996, 2000 Christopher G. Demetriou
 # All rights reserved.
@@ -55,7 +55,7 @@ esac
 #	sys_nosys	[optional] name of function called for unsupported
 #			syscalls, if not sys_nosys()
 #
-# NOTE THAT THIS makesyscalls.sh DOES NOT SUPPORT 'SYSLIBCOMPAT'.
+# NOTE THAT THIS makesyscalls.sh DOES NOT SUPPORT 'LIBCOMPAT'.
 
 # source the config file.
 sys_nosys="sys_nosys"	# default is sys_nosys(), if not specified otherwise
@@ -74,12 +74,12 @@ trap "rm $sysdcl $sysprotos $sysent $sysnamesbottom" 0
 # Use "awk" at Berkeley, "nawk" or "gawk" elsewhere.
 awk=${AWK:-awk}
 
-# Does this awk have a "toupper" function?
-have_toupper=`$awk 'BEGIN { print toupper("true"); exit; }' 2>/dev/null`
+# Does this awk have a "toupper" function? (i.e. is it GNU awk)
+isgawk=`$awk 'BEGIN { print toupper("true"); exit; }' 2>/dev/null`
 
 # If this awk does not define "toupper" then define our own.
-if [ "$have_toupper" = TRUE ] ; then
-	# Used awk (GNU awk or nawk) provides it
+if [ "$isgawk" = TRUE ] ; then
+	# GNU awk provides it.
 	toupper=
 else
 	# Provide our own toupper()

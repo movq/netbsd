@@ -1,4 +1,4 @@
-/*	$NetBSD: icp.c,v 1.13 2004/09/13 12:55:47 drochner Exp $	*/
+/*	$NetBSD: icp.c,v 1.12 2003/10/29 00:48:15 mycroft Exp $	*/
 
 /*-
  * Copyright (c) 2002, 2003 The NetBSD Foundation, Inc.
@@ -83,7 +83,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: icp.c,v 1.13 2004/09/13 12:55:47 drochner Exp $");
+__KERNEL_RCSID(0, "$NetBSD: icp.c,v 1.12 2003/10/29 00:48:15 mycroft Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -111,14 +111,11 @@ __KERNEL_RCSID(0, "$NetBSD: icp.c,v 1.13 2004/09/13 12:55:47 drochner Exp $");
 #include <dev/scsipi/scsipi_all.h>
 #include <dev/scsipi/scsiconf.h>
 
-#include "locators.h"
-
 int	icp_async_event(struct icp_softc *, int);
 void	icp_ccb_submit(struct icp_softc *icp, struct icp_ccb *ic);
 void	icp_chain(struct icp_softc *);
 int	icp_print(void *, const char *);
-int	icp_submatch(struct device *, struct cfdata *,
-		     const locdesc_t *, void *);
+int	icp_submatch(struct device *, struct cfdata *, void *);
 void	icp_watchdog(void *);
 void	icp_ucmd_intr(struct icp_ccb *);
 void	icp_recompute_openings(struct icp_softc *);
@@ -141,8 +138,6 @@ icp_init(struct icp_softc *icp, const char *intrstr)
 	struct icp_ccb *ic;
 	u_int16_t cdev_cnt;
 	int i, j, state, feat, nsegs, rv;
-	int help[2];
-	locdesc_t *ldesc = (void *)help; /* XXX */
 
 	state = 0;
 
@@ -384,13 +379,9 @@ icp_init(struct icp_softc *icp, const char *intrstr)
 				icp->icp_bus_id[j] = ICP_MAXID_FC;
 
 			icpa.icpa_unit = j + ICPA_UNIT_SCSI;
-
-			ldesc->len = 1;
-			ldesc->locs[ICPCF_UNIT] = j + ICPA_UNIT_SCSI;
-
 			icp->icp_children[icpa.icpa_unit] =
-				config_found_sm_loc(&icp->icp_dv, "icp", ldesc,
-					&icpa, icp_print, icp_submatch);
+			    config_found_sm(&icp->icp_dv, &icpa, icp_print,
+			    icp_submatch);
 		}
 	}
 
@@ -403,13 +394,9 @@ icp_init(struct icp_softc *icp, const char *intrstr)
 				continue;
 		
 			icpa.icpa_unit = j;
-
-			ldesc->len = 1;
-			ldesc->locs[ICPCF_UNIT] = j;
-
 			icp->icp_children[icpa.icpa_unit] =
-			    config_found_sm_loc(&icp->icp_dv, "icp", ldesc,
-				&icpa, icp_print, icp_submatch);
+			    config_found_sm(&icp->icp_dv, &icpa, icp_print,
+			    icp_submatch);
 		}
 	}
 
@@ -457,8 +444,6 @@ icp_rescan(struct icp_softc *icp, int unit)
 {
 	struct icp_attach_args icpa;
 	u_int newsize, newtype;
-	int help[2];
-	locdesc_t *ldesc = (void *)help; /* XXX */
 
 	/*
 	 * NOTE: It is very important that the queue be frozen and not
@@ -530,12 +515,8 @@ icp_rescan(struct icp_softc *icp, int unit)
 			    DETACH_FORCE);
 
 		icpa.icpa_unit = unit;
-
-		ldesc->len = 1;
-		ldesc->locs[ICPCF_UNIT] = unit;
-
-		icp->icp_children[unit] = config_found_sm_loc(&icp->icp_dv,
-			"icp", ldesc, &icpa, icp_print, icp_submatch);
+		icp->icp_children[unit] = config_found_sm(&icp->icp_dv, &icpa,
+		    icp_print, icp_submatch);
 	}
 
 	icp_recompute_openings(icp);
@@ -648,12 +629,14 @@ icp_print(void *aux, const char *pnp)
 }
 
 int
-icp_submatch(struct device *parent, struct cfdata *cf,
-	     const locdesc_t *ldesc, void *aux)
+icp_submatch(struct device *parent, struct cfdata *cf, void *aux)
 {
+	struct icp_attach_args *icpa;
 
-	if (cf->cf_loc[ICPCF_UNIT] != ICPCF_UNIT_DEFAULT &&
-	    cf->cf_loc[ICPCF_UNIT] != ldesc->locs[ICPCF_UNIT])
+	icpa = (struct icp_attach_args *)aux;
+
+	if (cf->icpacf_unit != ICPCF_UNIT_DEFAULT &&
+	    cf->icpacf_unit != icpa->icpa_unit)
 		return (0);
 
 	return (config_match(parent, cf, aux));

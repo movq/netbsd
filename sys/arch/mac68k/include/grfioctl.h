@@ -1,4 +1,4 @@
-/*	$NetBSD: grfioctl.h,v 1.11 2004/04/29 04:18:27 fredb Exp $	*/
+/*	$NetBSD: grfioctl.h,v 1.10 2003/08/07 16:28:20 agc Exp $	*/
 
 /*
  * Copyright (c) 1990 The Regents of the University of California.
@@ -76,9 +76,6 @@
  *	@(#)grfioctl.h	7.2 (Berkeley) 11/4/90
  */
 
-#ifndef _MAC68K_GRFIOCTL_H_
-#define _MAC68K_GRFIOCTL_H_
-
 struct grfmode {
 	u_int8_t	mode_id;	/* Identifier for mode              */
 	u_int8_t	pad0;
@@ -139,5 +136,3 @@ struct	grfinfo {
 	int	gd_pad[6];		/* for future expansion */
 };
 #endif /* GRF_COMPAT || (NGRF > 0) */
-
-#endif /* _MAC68K_GRFIOCTL_H_ */

@@ -1,4 +1,4 @@
-/* $NetBSD: esa.c,v 1.26 2004/10/29 12:57:18 yamt Exp $ */
+/* $NetBSD: esa.c,v 1.22.2.1 2004/09/22 20:58:34 jmc Exp $ */
 
 /*
  * Copyright (c) 2001, 2002 Jared D. McNeill <jmcneill@invisible.ca>
@@ -39,7 +39,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: esa.c,v 1.26 2004/10/29 12:57:18 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: esa.c,v 1.22.2.1 2004/09/22 20:58:34 jmc Exp $");
 
 #include <sys/types.h>
 #include <sys/errno.h>
@@ -182,7 +182,7 @@ static audio_encoding_t esa_encoding[] = {
 
 #define ESA_NENCODINGS 8
 
-const struct audio_hw_if esa_hw_if = {
+struct audio_hw_if esa_hw_if = {
 	esa_open,
 	esa_close,
 	NULL,			/* drain */
@@ -394,8 +394,14 @@ esa_commit_settings(void *hdl)
 int
 esa_round_blocksize(void *hdl, int bs)
 {
+	struct esa_voice *vc = hdl;
 
-	return (bs & ~0x20);	/* Be conservative; align to 32 bytes */
+	/*
+	 * Surely there has to be a better solution...
+	 */
+	vc->play.blksize = vc->rec.blksize = 4096;
+
+	return (vc->play.blksize);
 }
 
 int
@@ -556,8 +562,14 @@ esa_query_devinfo(void *hdl, mixer_devinfo_t *di)
 size_t
 esa_round_buffersize(void *hdl, int direction, size_t bufsize)
 {
+	struct esa_voice *vc = hdl;
 
-	return (bufsize);
+	/*
+	 * We must be able to do better than this...
+	 */
+	vc->play.bufsize = vc->rec.bufsize = 65536;
+
+	return (vc->play.bufsize);
 }
 
 int
@@ -609,8 +621,7 @@ esa_trigger_output(void *hdl, void *start, void *end, int blksize,
 	vc->play.pos = 0;
 	vc->play.count = 0;
 	vc->play.buf = start;
-	vc->play.bufsize = size = (size_t)(((caddr_t)end - (caddr_t)start));
-	vc->play.blksize = blksize;
+	size = (size_t)(((caddr_t)end - (caddr_t)start));
 	bufaddr = DMAADDR(p);
 	vc->play.start = bufaddr;
 
@@ -749,8 +760,7 @@ esa_trigger_input(void *hdl, void *start, void *end, int blksize,
 	vc->rec.pos = 0;
 	vc->rec.count = 0;
 	vc->rec.buf = start;
-	vc->rec.bufsize = size = (size_t)(((caddr_t)end - (caddr_t)start));
-	vc->rec.blksize = blksize;
+	size = (size_t)(((caddr_t)end - (caddr_t)start));
 	bufaddr = DMAADDR(p);
 	vc->rec.start = bufaddr;
 
@@ -843,10 +853,11 @@ esa_intr(void *hdl)
 	struct esa_voice *vc;
 	bus_space_tag_t iot = sc->sc_iot;
 	bus_space_handle_t ioh = sc->sc_ioh;
-	u_int8_t status;
+	u_int8_t status, ctl;
 	u_int32_t pos;
 	u_int32_t diff;
-	u_int32_t blksize;
+	u_int32_t play_blksize, play_bufsize;
+	u_int32_t rec_blksize, rec_bufsize;
 	int i;
 
 	status = bus_space_read_1(iot, ioh, ESA_HOST_INT_STATUS);
@@ -876,46 +887,46 @@ esa_intr(void *hdl)
 		bus_space_write_1(iot, ioh, ESA_HW_VOL_COUNTER_MASTER, 0x88);
 	}
 
-	if ((status & ESA_ASSP_INT_PENDING) == 0 ||
-	    (bus_space_read_1(iot, ioh,
-	     ESA_ASSP_CONTROL_B) & ESA_STOP_ASSP_CLOCK) != 0 ||
-	    (bus_space_read_1(iot, ioh,
-	     ESA_ASSP_HOST_INT_STATUS) & ESA_DSP2HOST_REQ_TIMER) == 0)
-		return (1);
-
-	bus_space_write_1(iot, ioh, ESA_ASSP_HOST_INT_STATUS,
-	    ESA_DSP2HOST_REQ_TIMER);
-
-	for (i = 0; i < ESA_NUM_VOICES; i++) {
-		vc = &sc->voice[i];
-
-		if (vc->play.active) {
-			pos = esa_get_pointer(sc, &vc->play) % vc->play.bufsize;
-			diff = (vc->play.bufsize + pos - vc->play.pos) %
-			    vc->play.bufsize;
-
-			vc->play.pos = pos;
-			vc->play.count += diff;
-			blksize = vc->play.blksize;
-
-			while(vc->play.count >= blksize) {
-				vc->play.count -= blksize;
-				(*vc->play.intr)(vc->play.arg);
-			}
-		}
-
-		if (vc->rec.active) {
-			pos = esa_get_pointer(sc, &vc->rec) % vc->rec.bufsize;
-			diff = (vc->rec.bufsize + pos - vc->rec.pos) %
-			    vc->rec.bufsize;
-
-			vc->rec.pos = pos;
-			vc->rec.count += diff;
-			blksize = vc->rec.blksize;
-
-			while(vc->rec.count >= blksize) {
-				vc->rec.count -= blksize;
-				(*vc->rec.intr)(vc->rec.arg);
+	if (status & ESA_ASSP_INT_PENDING) {
+		ctl = bus_space_read_1(iot, ioh, ESA_ASSP_CONTROL_B);
+		if (!(ctl & ESA_STOP_ASSP_CLOCK)) {
+			ctl = bus_space_read_1(iot, ioh,
+					       ESA_ASSP_HOST_INT_STATUS);
+			if (ctl & ESA_DSP2HOST_REQ_TIMER) {
+				bus_space_write_1(iot, ioh,
+				    ESA_ASSP_HOST_INT_STATUS,
+				    ESA_DSP2HOST_REQ_TIMER);
+				for (i = 0; i < ESA_NUM_VOICES; i++) {
+					vc = &sc->voice[i];
+					if (vc->play.active) {
+						play_blksize = vc->play.blksize;
+						play_bufsize = vc->play.bufsize;
+						pos = esa_get_pointer(sc, &vc->play)
+						    % play_bufsize;
+						diff = (play_bufsize + pos - vc->play.pos)
+						    % play_bufsize;
+						vc->play.pos = pos;
+						vc->play.count += diff;
+						while(vc->play.count >= play_blksize) {
+							vc->play.count -= play_blksize;
+							(*vc->play.intr)(vc->play.arg);
+						}
+					}
+					if (vc->rec.active) {
+						rec_blksize = vc->rec.blksize;
+						rec_bufsize = vc->rec.bufsize;
+						pos = esa_get_pointer(sc, &vc->rec)
+						    % rec_bufsize;
+						diff = (rec_bufsize + pos - vc->rec.pos)
+						    % rec_bufsize;
+						vc->rec.pos = pos;
+						vc->rec.count += diff;
+						while(vc->rec.count >= rec_blksize) {
+							vc->rec.count -= rec_blksize;
+							(*vc->rec.intr)(vc->rec.arg);
+						}
+					}
+				}
 			}
 		}
 	}
@@ -1014,7 +1025,7 @@ esa_attach(struct device *parent, struct device *self, void *aux)
 
 	aprint_naive(": Audio controller\n");
 
-	pci_devinfo(pa->pa_id, pa->pa_class, 0, devinfo, sizeof(devinfo));
+	pci_devinfo(pa->pa_id, pa->pa_class, 0, devinfo);
 	revision = PCI_REVISION(pa->pa_class);
 	aprint_normal(": %s (rev. 0x%02x)\n", devinfo, revision);
 

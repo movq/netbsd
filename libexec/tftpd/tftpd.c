@@ -1,4 +1,4 @@
-/*	$NetBSD: tftpd.c,v 1.29 2004/11/05 22:03:26 dsl Exp $	*/
+/*	$NetBSD: tftpd.c,v 1.27.2.1 2004/05/10 14:31:38 tron Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -36,7 +36,7 @@ __COPYRIGHT("@(#) Copyright (c) 1983, 1993\n\
 #if 0
 static char sccsid[] = "@(#)tftpd.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: tftpd.c,v 1.29 2004/11/05 22:03:26 dsl Exp $");
+__RCSID("$NetBSD: tftpd.c,v 1.27.2.1 2004/05/10 14:31:38 tron Exp $");
 #endif
 #endif /* not lint */
 
@@ -561,7 +561,7 @@ get_options(struct tftphdr *tp, char *cp, int size, char *ackb,
 	while (cp < endp) {
 		option = cp;
 		while (*cp && cp < endp) {
-			*cp = tolower((unsigned char)*cp);
+			*cp = tolower(*cp);
 			cp++;
 		}
 		if (*cp) {
@@ -629,7 +629,8 @@ again:
 		goto again;
 	}
 	for (cp = mode; *cp; cp++)
-		*cp = tolower((unsigned char)*cp);
+		if (isupper(*cp))
+			*cp = tolower(*cp);
 	for (pf = formats; pf->f_mode; pf++)
 		if (strcmp(pf->f_mode, mode) == 0)
 			break;

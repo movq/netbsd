@@ -1,4 +1,4 @@
-/*	$NetBSD: ydsvar.h,v 1.4 2004/11/13 15:00:48 kent Exp $	*/
+/*	$NetBSD: ydsvar.h,v 1.2 2001/12/25 16:55:50 someya Exp $	*/
 
 /*
  * Copyright (c) 2000, 2001 Kazuki Sakamoto and Minoura Makoto.
@@ -76,9 +76,9 @@ struct yds_softc {
 	struct {
 		void		(*intr)(void *); /* rint/pint */
 		void		*intr_arg;	/* arg for intr */
-		u_int		offset;		/* filled up to here */
-		u_int		blksize;
-		u_int		factor;		/* byte per sample */
+		u_int	 	offset;		/* filled up to here */
+		u_int	 	blksize;
+		u_int	 	factor;		/* byte per sample */
 		u_int		length;		/* ring buffer length */
 		struct yds_dma	*dma;		/* DMA handle for ring buf */
 	} sc_play, sc_rec;
@@ -109,8 +109,6 @@ struct yds_softc {
 	bus_space_handle_t	sc_opl_ioh;
 	struct device		*sc_mpu;
 	bus_space_handle_t	sc_mpu_ioh;
-
-	struct audio_encoding_set *sc_encodings;
 };
 #define sc_opl_iot	sc_legacy_iot
 #define sc_mpu_iot	sc_legacy_iot

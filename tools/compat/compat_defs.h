@@ -1,4 +1,4 @@
-/*	$NetBSD: compat_defs.h,v 1.45 2004/12/11 09:34:08 jmc Exp $	*/
+/*	$NetBSD: compat_defs.h,v 1.31.2.5 2004/06/23 17:40:25 jmc Exp $	*/
 
 #ifndef	__NETBSD_COMPAT_DEFS_H__
 #define	__NETBSD_COMPAT_DEFS_H__
@@ -61,16 +61,6 @@
 #if HAVE_STDDEF_H
 #include <stddef.h>
 #endif
-
-#ifdef _NETBSD_SOURCE
-#error _NETBSD_SOURCE is *not* to be defined.
-#endif
-
-/* Need this since we can't depend on NetBSD's version to be around */
-#ifdef __UNCONST
-#undef __UNCONST
-#endif
-#define __UNCONST(a)   ((void *)(unsigned long)(const void *)(a))
 
 /* We don't include <pwd.h> here, so that "compat_pwd.h" works. */
 struct passwd;
@@ -304,12 +294,6 @@ int gettemp(char *, int *, int);
 ssize_t pread(int, void *, size_t, off_t);
 #endif
 
-#if !HAVE_HEAPSORT
-int heapsort (void *, size_t, size_t, int (*)(const void *, const void *));
-#endif
-/* Make them use our version */
-#  define heapsort __nbcompat_heapsort
-
 #if !HAVE_PWCACHE_USERDB
 int uid_from_user(const char *, uid_t *);
 int pwcache_userdb(int (*)(int), void (*)(void),
@@ -531,10 +515,10 @@ char *alloca ();
 
 char	*cgetcap(char *, const char *, int);
 int	 cgetclose(void);
-int	 cgetent(char **, const char * const *, const char *);
-int	 cgetfirst(char **, const char * const *);
+int	 cgetent(char **, char **, const char *);
+int	 cgetfirst(char **, char **);
 int	 cgetmatch(const char *, const char *);
-int	 cgetnext(char **, const char * const *);
+int	 cgetnext(char **, char **);
 int	 cgetnum(char *, const char *, long *);
 int	 cgetset(const char *);
 int	 cgetstr(char *, const char *, char **);

@@ -1,4 +1,4 @@
-/*	$NetBSD: font.c,v 1.1.1.2 2004/07/30 14:45:08 wiz Exp $	*/
+/*	$NetBSD: font.c,v 1.1.1.1 2001/04/19 12:52:33 wiz Exp $	*/
 
 /*
  * font.c
@@ -11,16 +11,10 @@
 #include <X11/StringDefs.h>
 #include <stdio.h>
 #include <ctype.h>
-#include <stdlib.h>
 #include "DviP.h"
 #include "XFontName.h"
 
-static void DisposeFontSizes();
-void DestroyFontMap();
-
-/* XFontName.c */
-extern Bool XParseFontName();
-extern Bool XFormatFontName();
+static DisposeFontSizes();
 
 static char *
 savestr (s)
@@ -123,7 +117,7 @@ SkipFontNameElement (n)
 # define SizePosition		8
 # define EncodingPosition	13
 
-static int
+static
 ConvertFontNameToSize (n)
 	char	*n;
 {
@@ -199,7 +193,7 @@ InstallFontSizes (dw, x_name, scalablep)
 	return sizes;
 }
 
-static void
+static
 DisposeFontSizes (dw, fs)
 	DviWidget	dw;
 	DviFontSizeList	*fs;
@@ -271,7 +265,6 @@ InstallFont (dw, position, dvi_name, x_name)
 	return f;
 }
 
-void
 ForgetFonts (dw)
 	DviWidget dw;
 {
@@ -331,7 +324,6 @@ MapXNameToDviName (dw, x_name)
 }
 #endif
 
-void
 ParseFontMap (dw)
 	DviWidget	dw;
 {
@@ -367,7 +359,6 @@ ParseFontMap (dw)
 	dw->dvi.font_map = fm;
 }
 
-void
 DestroyFontMap (font_map)
 	DviFontMap	*font_map;
 {
@@ -385,7 +376,6 @@ DestroyFontMap (font_map)
 
 /* ARGSUSED */
 
-void
 SetFontPosition (dw, position, dvi_name, extra)
 	DviWidget	dw;
 	int		position;

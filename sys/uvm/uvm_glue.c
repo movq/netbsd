@@ -1,4 +1,4 @@
-/*	$NetBSD: uvm_glue.c,v 1.81 2004/05/12 20:09:51 yamt Exp $	*/
+/*	$NetBSD: uvm_glue.c,v 1.78 2004/03/24 07:50:48 junyoung Exp $	*/
 
 /*
  * Copyright (c) 1997 Charles D. Cranor and Washington University.
@@ -67,7 +67,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uvm_glue.c,v 1.81 2004/05/12 20:09:51 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uvm_glue.c,v 1.78 2004/03/24 07:50:48 junyoung Exp $");
 
 #include "opt_kgdb.h"
 #include "opt_kstack.h"
@@ -297,74 +297,6 @@ uvm_lwp_fork(l1, l2, stack, stacksize, func, arg)
 }
 
 /*
- * uvm_uarea_alloc: allocate a u-area
- */
-
-boolean_t
-uvm_uarea_alloc(vaddr_t *uaddrp)
-{
-	vaddr_t uaddr;
-
-#ifndef USPACE_ALIGN
-#define USPACE_ALIGN    0
-#endif
-
-	simple_lock(&uvm_uareas_slock);
-	if (uvm_nuarea > 0) {
-		uaddr = (vaddr_t)uvm_uareas;
-		uvm_uareas = *(void **)uvm_uareas;
-		uvm_nuarea--;
-		simple_unlock(&uvm_uareas_slock);
-		*uaddrp = uaddr;
-		return TRUE;
-	} else {
-		simple_unlock(&uvm_uareas_slock);
-		*uaddrp = uvm_km_valloc_align(kernel_map, USPACE, USPACE_ALIGN);
-		return FALSE;
-	}
-}
-
-/*
- * uvm_uarea_free: free a u-area; never blocks
- */
-
-static __inline__ void
-uvm_uarea_free(vaddr_t uaddr)
-{
-	simple_lock(&uvm_uareas_slock);
-	*(void **)uaddr = uvm_uareas;
-	uvm_uareas = (void *)uaddr;
-	uvm_nuarea++;
-	simple_unlock(&uvm_uareas_slock);
-}
-
-/*
- * uvm_uarea_drain: return memory of u-areas over limit
- * back to system
- */
-
-void
-uvm_uarea_drain(boolean_t empty)
-{
-	int leave = empty ? 0 : UVM_NUAREA_MAX;
-	vaddr_t uaddr;
-
-	if (uvm_nuarea <= leave)
-		return;
-
-	simple_lock(&uvm_uareas_slock);
-	while(uvm_nuarea > leave) {
-		uaddr = (vaddr_t)uvm_uareas;
-		uvm_uareas = *(void **)uvm_uareas;
-		uvm_nuarea--;
-		simple_unlock(&uvm_uareas_slock);
-		uvm_km_free(kernel_map, uaddr, USPACE);
-		simple_lock(&uvm_uareas_slock);
-	}
-	simple_unlock(&uvm_uareas_slock);
-}
-
-/*
  * uvm_exit: exit a virtual address space
  *
  * - the process passed to us is a dead (pre-zombie) process; we
@@ -404,6 +336,74 @@ uvm_lwp_exit(struct lwp *l)
 }
 
 /*
+ * uvm_uarea_alloc: allocate a u-area
+ */
+
+boolean_t
+uvm_uarea_alloc(vaddr_t *uaddrp)
+{
+	vaddr_t uaddr;
+
+#ifndef USPACE_ALIGN
+#define USPACE_ALIGN    0
+#endif
+
+	simple_lock(&uvm_uareas_slock);
+	if (uvm_nuarea > 0) {
+		uaddr = (vaddr_t)uvm_uareas;
+		uvm_uareas = *(void **)uvm_uareas;
+		uvm_nuarea--;
+		simple_unlock(&uvm_uareas_slock);
+		*uaddrp = uaddr;
+		return TRUE;
+	} else {
+		simple_unlock(&uvm_uareas_slock);
+		*uaddrp = uvm_km_valloc_align(kernel_map, USPACE, USPACE_ALIGN);
+		return FALSE;
+	}
+}
+
+/*
+ * uvm_uarea_free: free a u-area; never blocks
+ */
+
+static void
+uvm_uarea_free(vaddr_t uaddr)
+{
+	simple_lock(&uvm_uareas_slock);
+	*(void **)uaddr = uvm_uareas;
+	uvm_uareas = (void *)uaddr;
+	uvm_nuarea++;
+	simple_unlock(&uvm_uareas_slock);
+}
+
+/*
+ * uvm_uarea_drain: return memory of u-areas over limit
+ * back to system
+ */
+
+void
+uvm_uarea_drain(boolean_t empty)
+{
+	int leave = empty ? 0 : UVM_NUAREA_MAX;
+	vaddr_t uaddr;
+
+	if (uvm_nuarea <= leave)
+		return;
+
+	simple_lock(&uvm_uareas_slock);
+	while(uvm_nuarea > leave) {
+		uaddr = (vaddr_t)uvm_uareas;
+		uvm_uareas = *(void **)uvm_uareas;
+		uvm_nuarea--;
+		simple_unlock(&uvm_uareas_slock);
+		uvm_km_free(kernel_map, uaddr, USPACE);
+		simple_lock(&uvm_uareas_slock);
+	}
+	simple_unlock(&uvm_uareas_slock);
+}
+
+/*
  * uvm_init_limit: init per-process VM limits
  *
  * - called for process 0 and then inherited by all others.
@@ -422,9 +422,9 @@ uvm_init_limits(p)
 	 */
 
 	p->p_rlimit[RLIMIT_STACK].rlim_cur = DFLSSIZ;
-	p->p_rlimit[RLIMIT_STACK].rlim_max = maxsmap;
+	p->p_rlimit[RLIMIT_STACK].rlim_max = MAXSSIZ;
 	p->p_rlimit[RLIMIT_DATA].rlim_cur = DFLDSIZ;
-	p->p_rlimit[RLIMIT_DATA].rlim_max = maxdmap;
+	p->p_rlimit[RLIMIT_DATA].rlim_max = MAXDSIZ;
 	p->p_rlimit[RLIMIT_RSS].rlim_cur = ptoa(uvmexp.free);
 }
 
@@ -598,7 +598,6 @@ uvm_swapout_threads()
 	outpri = outpri2 = 0;
 	proclist_lock_read();
 	LIST_FOREACH(l, &alllwp, l_list) {
-		KASSERT(l->l_proc != NULL);
 		if (!swappable(l))
 			continue;
 		switch (l->l_stat) {

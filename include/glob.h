@@ -1,4 +1,4 @@
-/*	$NetBSD: glob.h,v 1.18 2004/06/20 22:20:14 jmc Exp $	*/
+/*	$NetBSD: glob.h,v 1.17.2.1 2004/06/22 07:21:53 tron Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993

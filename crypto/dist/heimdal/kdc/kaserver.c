@@ -34,7 +34,7 @@
 #include "kdc_locl.h"
 
 __RCSID("$Heimdal: kaserver.c,v 1.21.2.1 2003/10/06 21:02:35 lha Exp $"
-        "$NetBSD: kaserver.c,v 1.5 2004/04/02 14:59:47 lha Exp $");
+        "$NetBSD: kaserver.c,v 1.4.2.1 2004/04/21 04:55:39 jmc Exp $");
 
 
 #include <rx.h>

@@ -34,7 +34,7 @@
 #ifdef HAVE_CONFIG_H
 #include <config.h>
 __RCSID("$Heimdal: verify.c,v 1.25.12.1 2004/09/08 09:14:26 joda Exp $"
-        "$NetBSD: verify.c,v 1.1.1.6 2004/09/14 07:46:57 lha Exp $");
+        "$NetBSD: verify.c,v 1.1.1.5.2.1 2004/09/17 04:36:09 jmc Exp $");
 #endif
 #include <unistd.h>
 #include <sys/types.h>

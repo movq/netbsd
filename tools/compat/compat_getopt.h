@@ -1,4 +1,4 @@
-/*      $NetBSD: compat_getopt.h,v 1.1 2004/06/20 22:20:15 jmc Exp $ */
+/*      $NetBSD: compat_getopt.h,v 1.1.2.2 2004/06/22 07:31:16 tron Exp $ */
 
 /* We unconditionally use the NetBSD getopt.h in libnbcompat. */
 

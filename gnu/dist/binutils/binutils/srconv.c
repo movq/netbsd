@@ -1,5 +1,5 @@
 /* srconv.c -- Sysroff conversion program
-   Copyright 1994, 1995, 1996, 1998, 1999, 2000, 2001, 2002, 2003
+   Copyright 1994, 1995, 1996, 1998, 1999, 2000, 2001, 2002
    Free Software Foundation, Inc.
 
    This file is part of GNU Binutils.
@@ -42,52 +42,61 @@ static int addrsize;
 static char *toolname;
 static char **rnames;
 
-static int get_member_id (int);
-static int get_ordinary_id (int);
-static char *section_translate (char *);
-static char *strip_suffix (char *);
-static void checksum (FILE *, char *, int, int);
-static void writeINT (int, char *, int *, int, FILE *);
-static void writeBITS (int, char *, int *, int);
-static void writeBARRAY (barray, char *, int *, int, FILE *);
-static void writeCHARS (char *, char *, int *, int, FILE *);
-static void wr_tr (void);
-static void wr_un (struct coff_ofile *, struct coff_sfile *, int, int);
-static void wr_hd (struct coff_ofile *);
-static void wr_sh (struct coff_ofile *, struct coff_section *);
-static void wr_ob (struct coff_ofile *, struct coff_section *);
-static void wr_rl (struct coff_ofile *, struct coff_section *);
-static void wr_object_body (struct coff_ofile *);
+static int get_member_id PARAMS ((int));
+static int get_ordinary_id PARAMS ((int));
+static char *section_translate PARAMS ((char *));
+static char *strip_suffix PARAMS ((char *));
+static void checksum PARAMS ((FILE *, char *, int, int));
+static void writeINT PARAMS ((int, char *, int *, int, FILE *));
+static void writeBITS PARAMS ((int, char *, int *, int));
+static void writeBARRAY PARAMS ((barray, char *, int *, int, FILE *));
+static void writeCHARS PARAMS ((char *, char *, int *, int, FILE *));
+static void wr_tr PARAMS ((void));
+static void wr_un PARAMS ((struct coff_ofile *, struct coff_sfile *, int, int));
+static void wr_hd PARAMS ((struct coff_ofile *));
+static void wr_sh PARAMS ((struct coff_ofile *, struct coff_section *));
+static void wr_ob PARAMS ((struct coff_ofile *, struct coff_section *));
+static void wr_rl PARAMS ((struct coff_ofile *, struct coff_section *));
+static void wr_object_body PARAMS ((struct coff_ofile *));
 static void wr_dps_start
-  (struct coff_sfile *, struct coff_section *, struct coff_scope *, int, int);
-static void wr_dps_end (struct coff_section *, struct coff_scope *, int);
-static int *nints (int);
+  PARAMS ((struct coff_sfile *, struct coff_section *, struct coff_scope *,
+	   int, int));
+static void wr_dps_end
+  PARAMS ((struct coff_section *, struct coff_scope *, int));
+static int *nints PARAMS ((int));
 static void walk_tree_type_1
-  (struct coff_sfile *, struct coff_symbol *, struct coff_type *, int);
+  PARAMS ((struct coff_sfile *, struct coff_symbol *, struct coff_type *,
+	   int));
 static void walk_tree_type
-  (struct coff_sfile *, struct coff_symbol *, struct coff_type *, int);
+  PARAMS ((struct coff_sfile *, struct coff_symbol *, struct coff_type *,
+	   int));
 static void walk_tree_symbol
-  (struct coff_sfile *, struct coff_section *, struct coff_symbol *, int);
+  PARAMS ((struct coff_sfile *, struct coff_section *,
+	   struct coff_symbol *, int));
 static void walk_tree_scope
-  (struct coff_section *, struct coff_sfile *, struct coff_scope *, int, int);
-static void walk_tree_sfile (struct coff_section *, struct coff_sfile *);
-static void wr_program_structure (struct coff_ofile *, struct coff_sfile *);
-static void wr_du (struct coff_ofile *, struct coff_sfile *, int);
-static void wr_dus (struct coff_ofile *, struct coff_sfile *);
-static int find_base (struct coff_sfile *, struct coff_section *);
-static void wr_dln (struct coff_ofile *, struct coff_sfile *, int);
-static void wr_globals (struct coff_ofile *, struct coff_sfile *, int);
-static void wr_debug (struct coff_ofile *);
-static void wr_cs (void);
-static int wr_sc (struct coff_ofile *, struct coff_sfile *);
-static void wr_er (struct coff_ofile *, struct coff_sfile *, int);
-static void wr_ed (struct coff_ofile *, struct coff_sfile *, int);
-static void wr_unit_info (struct coff_ofile *);
-static void wr_module (struct coff_ofile *);
-static int align (int);
-static void prescan (struct coff_ofile *);
-static void show_usage (FILE *, int);
-extern int main (int, char **);
+  PARAMS ((struct coff_section *, struct coff_sfile *, struct coff_scope *,
+	   int, int));
+static void walk_tree_sfile
+  PARAMS ((struct coff_section *, struct coff_sfile *));
+static void wr_program_structure
+  PARAMS ((struct coff_ofile *, struct coff_sfile *));
+static void wr_du PARAMS ((struct coff_ofile *, struct coff_sfile *, int));
+static void wr_dus PARAMS ((struct coff_ofile *, struct coff_sfile *));
+static int find_base PARAMS ((struct coff_sfile *, struct coff_section *));
+static void wr_dln PARAMS ((struct coff_ofile *, struct coff_sfile *, int));
+static void wr_globals
+  PARAMS ((struct coff_ofile *, struct coff_sfile *, int));
+static void wr_debug PARAMS ((struct coff_ofile *));
+static void wr_cs PARAMS ((void));
+static int wr_sc PARAMS ((struct coff_ofile *, struct coff_sfile *));
+static void wr_er PARAMS ((struct coff_ofile *, struct coff_sfile *, int));
+static void wr_ed PARAMS ((struct coff_ofile *, struct coff_sfile *, int));
+static void wr_unit_info PARAMS ((struct coff_ofile *));
+static void wr_module PARAMS ((struct coff_ofile *));
+static int align PARAMS ((int));
+static void prescan PARAMS ((struct coff_ofile *));
+static void show_usage PARAMS ((FILE *, int));
+extern int main PARAMS ((int, char **));
 
 static FILE *file;
 static bfd *abfd;
@@ -109,7 +118,8 @@ static int base1 = 0x18;
 static int base2 = 0x2018;
 
 static int
-get_member_id (int x)
+get_member_id (x)
+     int x;
 {
   if (ids2[x])
     return ids2[x];
@@ -119,7 +129,8 @@ get_member_id (int x)
 }
 
 static int
-get_ordinary_id (int x)
+get_ordinary_id (x)
+     int x;
 {
   if (ids1[x])
     return ids1[x];
@@ -128,7 +139,8 @@ get_ordinary_id (int x)
   return ids1[x];
 }
 static char *
-section_translate (char *n)
+section_translate (n)
+     char *n;
 {
   if (strcmp (n, ".text") == 0)
     return "P";
@@ -143,7 +155,8 @@ section_translate (char *n)
 
 static
 char *
-strip_suffix (char *name)
+strip_suffix (name)
+     char *name;
 {
   int i;
   char *res;
@@ -158,7 +171,11 @@ strip_suffix (char *name)
 
 /* IT LEN stuff CS */
 static void
-checksum (FILE *file, char *ptr, int size, int code)
+checksum (file, ptr, size, code)
+     FILE *file;
+     char *ptr;
+     int size;
+     int code;
 {
   int j;
   int last;
@@ -181,7 +198,12 @@ checksum (FILE *file, char *ptr, int size, int code)
 
 
 static void
-writeINT (int n, char *ptr, int *idx, int size, FILE *file)
+writeINT (n, ptr, idx, size, file)
+     int n;
+     char *ptr;
+     int *idx;
+     int size;
+     FILE *file;
 {
   int byte = *idx / 8;
 
@@ -222,7 +244,11 @@ writeINT (int n, char *ptr, int *idx, int size, FILE *file)
 }
 
 static void
-writeBITS (int val, char *ptr, int *idx, int size)
+writeBITS (val, ptr, idx, size)
+     int val;
+     char *ptr;
+     int *idx;
+     int size;
 {
   int byte = *idx / 8;
   int bit = *idx % 8;
@@ -239,8 +265,12 @@ writeBITS (int val, char *ptr, int *idx, int size)
 }
 
 static void
-writeBARRAY (barray data, char *ptr, int *idx, int size ATTRIBUTE_UNUSED,
-	     FILE *file)
+writeBARRAY (data, ptr, idx, size, file)
+     barray data;
+     char *ptr;
+     int *idx;
+     int size ATTRIBUTE_UNUSED;
+     FILE *file;
 {
   int i;
 
@@ -250,7 +280,12 @@ writeBARRAY (barray data, char *ptr, int *idx, int size ATTRIBUTE_UNUSED,
 }
 
 static void
-writeCHARS (char *string, char *ptr, int *idx, int size, FILE *file)
+writeCHARS (string, ptr, idx, size, file)
+     char *string;
+     char *ptr;
+     int *idx;
+     int size;
+     FILE *file;
 {
   int i = *idx / 8;
 
@@ -289,7 +324,7 @@ static char *rname_h8300[] =
 };
 
 static void
-wr_tr (void)
+wr_tr ()
 {
   /* The TR block is not normal - it doesn't have any contents.  */
 
@@ -303,8 +338,11 @@ wr_tr (void)
 }
 
 static void
-wr_un (struct coff_ofile *ptr, struct coff_sfile *sfile, int first,
-       int nsecs ATTRIBUTE_UNUSED)
+wr_un (ptr, sfile, first, nsecs)
+     struct coff_ofile *ptr;
+     struct coff_sfile *sfile;
+     int first;
+     int nsecs ATTRIBUTE_UNUSED;
 {
   struct IT_un un;
   struct coff_symbol *s;
@@ -349,7 +387,8 @@ wr_un (struct coff_ofile *ptr, struct coff_sfile *sfile, int first,
 }
 
 static void
-wr_hd (struct coff_ofile *p)
+wr_hd (p)
+     struct coff_ofile *p;
 {
   struct IT_hd hd;
 
@@ -436,7 +475,9 @@ wr_hd (struct coff_ofile *p)
 
 
 static void
-wr_sh (struct coff_ofile *p ATTRIBUTE_UNUSED, struct coff_section *sec)
+wr_sh (p, sec)
+     struct coff_ofile *p ATTRIBUTE_UNUSED;
+     struct coff_section *sec;
 {
   struct IT_sh sh;
   sh.unit = 0;
@@ -449,7 +490,9 @@ wr_sh (struct coff_ofile *p ATTRIBUTE_UNUSED, struct coff_section *sec)
 
 
 static void
-wr_ob (struct coff_ofile *p ATTRIBUTE_UNUSED, struct coff_section *section)
+wr_ob (p, section)
+     struct coff_ofile *p ATTRIBUTE_UNUSED;
+     struct coff_section *section;
 {
   bfd_size_type i;
   int first = 1;
@@ -510,7 +553,9 @@ wr_ob (struct coff_ofile *p ATTRIBUTE_UNUSED, struct coff_section *section)
 }
 
 static void
-wr_rl (struct coff_ofile *ptr ATTRIBUTE_UNUSED, struct coff_section *sec)
+wr_rl (ptr, sec)
+     struct coff_ofile *ptr ATTRIBUTE_UNUSED;
+     struct coff_section *sec;
 {
   int nr = sec->nrelocs;
   int i;
@@ -568,7 +613,8 @@ wr_rl (struct coff_ofile *ptr ATTRIBUTE_UNUSED, struct coff_section *sec)
 }
 
 static void
-wr_object_body (struct coff_ofile *p)
+wr_object_body (p)
+     struct coff_ofile *p;
 {
   int i;
 
@@ -581,9 +627,12 @@ wr_object_body (struct coff_ofile *p)
 }
 
 static void
-wr_dps_start (struct coff_sfile *sfile,
-	      struct coff_section *section ATTRIBUTE_UNUSED,
-	      struct coff_scope *scope, int type, int nest)
+wr_dps_start (sfile, section, scope, type, nest)
+     struct coff_sfile *sfile;
+     struct coff_section *section ATTRIBUTE_UNUSED;
+     struct coff_scope *scope;
+     int type;
+     int nest;
 {
   struct IT_dps dps;
 
@@ -618,8 +667,10 @@ wr_dps_start (struct coff_sfile *sfile,
 }
 
 static void
-wr_dps_end (struct coff_section *section ATTRIBUTE_UNUSED,
-	    struct coff_scope *scope ATTRIBUTE_UNUSED, int type)
+wr_dps_end (section, scope, type)
+     struct coff_section *section ATTRIBUTE_UNUSED;
+     struct coff_scope *scope ATTRIBUTE_UNUSED;
+     int type;
 {
   struct IT_dps dps;
 
@@ -629,14 +680,18 @@ wr_dps_end (struct coff_section *section ATTRIBUTE_UNUSED,
 }
 
 static int *
-nints (int x)
+nints (x)
+     int x;
 {
   return (int *) (xcalloc (sizeof (int), x));
 }
 
 static void
-walk_tree_type_1 (struct coff_sfile *sfile, struct coff_symbol *symbol,
-		  struct coff_type *type, int nest)
+walk_tree_type_1 (sfile, symbol, type, nest)
+     struct coff_sfile *sfile;
+     struct coff_symbol *symbol;
+     struct coff_type *type;
+     int nest;
 {
   switch (type->type)
     {
@@ -907,8 +962,11 @@ walk_tree_type_1 (struct coff_sfile *sfile, struct coff_symbol *symbol,
  */
 
 static void
-walk_tree_type (struct coff_sfile *sfile, struct coff_symbol *symbol,
-		struct coff_type *type, int nest)
+walk_tree_type (sfile, symbol, type, nest)
+     struct coff_sfile *sfile;
+     struct coff_symbol *symbol;
+     struct coff_type *type;
+     int nest;
 {
   if (symbol->type->type == coff_function_type)
     {
@@ -954,7 +1012,11 @@ walk_tree_type (struct coff_sfile *sfile, struct coff_symbol *symbol,
 }
 
 static void
-walk_tree_symbol (struct coff_sfile *sfile, struct coff_section *section ATTRIBUTE_UNUSED, struct coff_symbol *symbol, int nest)
+walk_tree_symbol (sfile, section, symbol, nest)
+     struct coff_sfile *sfile;
+     struct coff_section *section ATTRIBUTE_UNUSED;
+     struct coff_symbol *symbol;
+     int nest;
 {
   struct IT_dsy dsy;
 
@@ -1168,7 +1230,12 @@ walk_tree_symbol (struct coff_sfile *sfile, struct coff_section *section ATTRIBU
 }
 
 static void
-walk_tree_scope (struct coff_section *section, struct coff_sfile *sfile, struct coff_scope *scope, int nest, int type)
+walk_tree_scope (section, sfile, scope, nest, type)
+     struct coff_section *section;
+     struct coff_sfile *sfile;
+     struct coff_scope *scope;
+     int nest;
+     int type;
 {
   struct coff_symbol *vars;
   struct coff_scope *child;
@@ -1192,19 +1259,26 @@ walk_tree_scope (struct coff_section *section, struct coff_sfile *sfile, struct 
 }
 
 static void
-walk_tree_sfile (struct coff_section *section, struct coff_sfile *sfile)
+walk_tree_sfile (section, sfile)
+     struct coff_section *section;
+     struct coff_sfile *sfile;
 {
   walk_tree_scope (section, sfile, sfile->scope, 0, BLOCK_TYPE_COMPUNIT);
 }
 
 static void
-wr_program_structure (struct coff_ofile *p, struct coff_sfile *sfile)
+wr_program_structure (p, sfile)
+     struct coff_ofile *p;
+     struct coff_sfile *sfile;
 {
   walk_tree_sfile (p->sections + 4, sfile);
 }
 
 static void
-wr_du (struct coff_ofile *p, struct coff_sfile *sfile, int n)
+wr_du (p, sfile, n)
+     struct coff_ofile *p;
+     struct coff_sfile *sfile;
+     int n;
 {
   struct IT_du du;
   int lim;
@@ -1317,7 +1391,9 @@ wr_du (struct coff_ofile *p, struct coff_sfile *sfile, int n)
 }
 
 static void
-wr_dus (struct coff_ofile *p ATTRIBUTE_UNUSED, struct coff_sfile *sfile)
+wr_dus (p, sfile)
+     struct coff_ofile *p ATTRIBUTE_UNUSED;
+     struct coff_sfile *sfile;
 {
   struct IT_dus dus;
 
@@ -1353,14 +1429,19 @@ wr_dus (struct coff_ofile *p ATTRIBUTE_UNUSED, struct coff_sfile *sfile)
    .text section for the output file.  */
 
 static int
-find_base (struct coff_sfile *sfile, struct coff_section *section)
+find_base (sfile, section)
+     struct coff_sfile *sfile;
+     struct coff_section *section;
 {
   return sfile->section[section->number].low;
 }
 
 static void
-wr_dln (struct coff_ofile *p ATTRIBUTE_UNUSED, struct coff_sfile *sfile,
-	int n ATTRIBUTE_UNUSED)
+wr_dln (p, sfile, n)
+     struct coff_ofile *p ATTRIBUTE_UNUSED;
+     struct coff_sfile *sfile;
+     int n ATTRIBUTE_UNUSED;
+
 {
 #if 0
   if (n == 0)
@@ -1497,8 +1578,10 @@ wr_dln (struct coff_ofile *p ATTRIBUTE_UNUSED, struct coff_sfile *sfile,
 /* Write the global symbols out to the debug info.  */
 
 static void
-wr_globals (struct coff_ofile *p, struct coff_sfile *sfile,
-	    int n ATTRIBUTE_UNUSED)
+wr_globals (p, sfile, n)
+     struct coff_ofile *p;
+     struct coff_sfile *sfile;
+     int n ATTRIBUTE_UNUSED;
 {
   struct coff_symbol *sy;
 
@@ -1518,7 +1601,8 @@ wr_globals (struct coff_ofile *p, struct coff_sfile *sfile,
 }
 
 static void
-wr_debug (struct coff_ofile *p)
+wr_debug (p)
+     struct coff_ofile *p;
 {
   struct coff_sfile *sfile;
   int n = 0;
@@ -1539,7 +1623,7 @@ wr_debug (struct coff_ofile *p)
 }
 
 static void
-wr_cs (void)
+wr_cs ()
 {
   /* It seems that the CS struct is not normal - the size is wrong
      heres one I prepared earlier.  */
@@ -1587,7 +1671,9 @@ wr_cs (void)
    if there isn't an equivalent one on the input.  */
 
 static int
-wr_sc (struct coff_ofile *ptr, struct coff_sfile *sfile)
+wr_sc (ptr, sfile)
+     struct coff_ofile *ptr;
+     struct coff_sfile *sfile;
 {
   int i;
   int scount = 0;
@@ -1709,8 +1795,10 @@ wr_sc (struct coff_ofile *ptr, struct coff_sfile *sfile)
 /* Write out the ER records for a unit.  */
 
 static void
-wr_er (struct coff_ofile *ptr, struct coff_sfile *sfile ATTRIBUTE_UNUSED,
-       int first)
+wr_er (ptr, sfile, first)
+     struct coff_ofile *ptr;
+     struct coff_sfile *sfile ATTRIBUTE_UNUSED;
+     int first;
 {
   int idx = 0;
   struct coff_symbol *sym;
@@ -1736,8 +1824,10 @@ wr_er (struct coff_ofile *ptr, struct coff_sfile *sfile ATTRIBUTE_UNUSED,
 /* Write out the ED records for a unit.  */
 
 static void
-wr_ed (struct coff_ofile *ptr, struct coff_sfile *sfile ATTRIBUTE_UNUSED,
-       int first)
+wr_ed (ptr, sfile, first)
+     struct coff_ofile *ptr;
+     struct coff_sfile *sfile ATTRIBUTE_UNUSED;
+     int first;
 {
   struct coff_symbol *s;
 
@@ -1776,7 +1866,8 @@ wr_ed (struct coff_ofile *ptr, struct coff_sfile *sfile ATTRIBUTE_UNUSED,
 }
 
 static void
-wr_unit_info (struct coff_ofile *ptr)
+wr_unit_info (ptr)
+     struct coff_ofile *ptr;
 {
   struct coff_sfile *sfile;
   int first = 1;
@@ -1803,7 +1894,8 @@ wr_unit_info (struct coff_ofile *ptr)
 }
 
 static void
-wr_module (struct coff_ofile *p)
+wr_module (p)
+     struct coff_ofile *p;
 {
   wr_cs ();
   wr_hd (p);
@@ -1814,7 +1906,8 @@ wr_module (struct coff_ofile *p)
 }
 
 static int
-align (int x)
+align (x)
+     int x;
 {
   return (x + 3) & ~3;
 }
@@ -1823,7 +1916,8 @@ align (int x)
    ordinary defs - dunno why, but thats what hitachi does with 'em.  */
 
 static void
-prescan (struct coff_ofile *tree)
+prescan (tree)
+     struct coff_ofile *tree;
 {
   struct coff_symbol *s;
   struct coff_section *common_section;
@@ -1851,7 +1945,9 @@ prescan (struct coff_ofile *tree)
 char *program_name;
 
 static void
-show_usage (FILE *file, int status)
+show_usage (file, status)
+     FILE *file;
+     int status;
 {
   fprintf (file, _("Usage: %s [option(s)] in-file [out-file]\n"), program_name);
   fprintf (file, _("Convert a COFF object file into a SYSROFF object file\n"));
@@ -1868,7 +1964,9 @@ show_usage (FILE *file, int status)
 }
 
 int
-main (int ac, char **av)
+main (ac, av)
+     int ac;
+     char *av[];
 {
   int opt;
   static struct option long_options[] =

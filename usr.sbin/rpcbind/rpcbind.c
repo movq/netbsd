@@ -1,4 +1,4 @@
-/*	$NetBSD: rpcbind.c,v 1.7 2004/05/20 12:22:23 martin Exp $	*/
+/*	$NetBSD: rpcbind.c,v 1.6.2.1 2004/05/30 07:18:59 tron Exp $	*/
 
 /*
  * Sun RPC is a product of Sun Microsystems, Inc. and is provided for

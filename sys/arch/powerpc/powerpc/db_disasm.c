@@ -1,8 +1,8 @@
-/*	$NetBSD: db_disasm.c,v 1.18 2004/06/09 19:19:05 kleink Exp $	*/
+/*	$NetBSD: db_disasm.c,v 1.17 2003/08/17 18:23:17 chs Exp $	*/
 /*	$OpenBSD: db_disasm.c,v 1.2 1996/12/28 06:21:48 rahnds Exp $	*/
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: db_disasm.c,v 1.18 2004/06/09 19:19:05 kleink Exp $");
+__KERNEL_RCSID(0, "$NetBSD: db_disasm.c,v 1.17 2003/08/17 18:23:17 chs Exp $");
 
 #include <sys/param.h>
 #include <sys/proc.h>
@@ -414,11 +414,7 @@ const struct specialreg sprregs[] = {
 	{ 0x019, "sdr1" },
 	{ 0x01a, "srr0" },
 	{ 0x01b, "srr1" },
-#ifdef PPC_IBM4XX
 	{ 0x100, "usprg0" },
-#else
-	{ 0x100, "vrsave" },
-#endif
 	{ 0x110, "sprg0" },
 	{ 0x111, "sprg1" },
 	{ 0x112, "sprg2" },

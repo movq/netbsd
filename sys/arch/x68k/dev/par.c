@@ -1,4 +1,4 @@
-/*	$NetBSD: par.c,v 1.22 2004/12/13 02:14:14 chs Exp $	*/
+/*	$NetBSD: par.c,v 1.21 2003/11/01 12:53:33 jdolecek Exp $	*/
 
 /*
  * Copyright (c) 1982, 1990 The Regents of the University of California.
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: par.c,v 1.22 2004/12/13 02:14:14 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: par.c,v 1.21 2003/11/01 12:53:33 jdolecek Exp $");
 
 #include <sys/param.h>
 #include <sys/errno.h>
@@ -116,8 +116,6 @@ CFATTACH_DECL(par, sizeof(struct par_softc),
 
 extern struct cfdriver par_cd;
 
-static int par_attached;
-
 dev_type_open(paropen);
 dev_type_close(parclose);
 dev_type_write(parwrite);
@@ -137,7 +135,7 @@ parmatch(pdp, cfp, aux)
 	struct intio_attach_args *ia = aux;
 
 	/* X680x0 has only one parallel port */
-	if (strcmp(ia->ia_name, "par") || par_attached)
+	if (strcmp(ia->ia_name, "par") || cfp->cf_unit > 0)
 		return 0;
 
 	if (ia->ia_addr == INTIOCF_ADDR_DEFAULT)
@@ -164,8 +162,6 @@ parattach(pdp, dp, aux)
 	struct intio_attach_args *ia = aux;
 	int r;
 	
-	par_attached = 1;
-
 	sc->sc_flags = PARF_ALIVE;
 	printf(": parallel port (write only, interrupt)\n");
 	ia->ia_size = 0x2000;
@@ -203,8 +199,10 @@ paropen(dev, flags, mode, p)
 	int unit = UNIT(dev);
 	struct par_softc *sc;
 	
-	sc = device_lookup(&par_cd, unit);
-	if (sc == NULL || !(sc->sc_flags & PARF_ALIVE))
+	if (unit != 0)
+		return(ENXIO);
+	sc = par_cd.cd_devs[unit];
+	if (!(sc->sc_flags & PARF_ALIVE))
 		return(ENXIO);
 	if (sc->sc_flags & PARF_OPEN)
 		return(EBUSY);

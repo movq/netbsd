@@ -1,4 +1,4 @@
-/*	$NetBSD: assert.h,v 1.17 2004/07/01 22:31:28 kleink Exp $	*/
+/*	$NetBSD: assert.h,v 1.15.2.2 2004/07/02 18:13:28 he Exp $	*/
 
 /*-
  * Copyright (c) 1992, 1993

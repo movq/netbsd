@@ -1,4 +1,4 @@
-/*	$NetBSD: vis.c,v 1.11 2004/07/23 13:44:17 wiz Exp $	*/
+/*	$NetBSD: vis.c,v 1.9 2004/01/05 23:23:37 jmmv Exp $	*/
 
 /*-
  * Copyright (c) 1989, 1993
@@ -39,7 +39,7 @@ __COPYRIGHT("@(#) Copyright (c) 1989, 1993\n\
 #if 0
 static char sccsid[] = "@(#)vis.c	8.1 (Berkeley) 6/6/93";
 #endif
-__RCSID("$NetBSD: vis.c,v 1.11 2004/07/23 13:44:17 wiz Exp $");
+__RCSID("$NetBSD: vis.c,v 1.9 2004/01/05 23:23:37 jmmv Exp $");
 #endif /* not lint */
 
 #include <stdio.h>
@@ -65,7 +65,7 @@ main(argc, argv)
 	int ch;
 	int rval;
 
-	while ((ch = getopt(argc, argv, "bcfhlnostwe:F:d")) != -1)
+	while ((ch = getopt(argc, argv, "nwctsobe:fF:ld")) != -1)
 		switch((char)ch) {
 		case 'n':
 			none++;
@@ -84,9 +84,6 @@ main(argc, argv)
 			break;
 		case 'o':
 			eflags |= VIS_OCTAL;
-			break;
-		case 'h':
-			eflags |= VIS_HTTPSTYLE;
 			break;
 		case 'b':
 			eflags |= VIS_NOSLASH;
@@ -114,8 +111,7 @@ main(argc, argv)
 		case '?':
 		default:
 			fprintf(stderr, 
-			    "usage: %s [-bcfhlnostw] [-e extra] [-F foldwidth]"
-			    " [file ...]\n", getprogname());
+		    "usage: vis [-nwctsobf] [-e extra] [-F foldwidth]\n");
 			exit(1);
 		}
 	argc -= optind;

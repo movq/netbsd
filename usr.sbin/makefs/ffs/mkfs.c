@@ -1,4 +1,4 @@
-/*	$NetBSD: mkfs.c,v 1.20 2004/06/24 22:30:13 lukem Exp $	*/
+/*	$NetBSD: mkfs.c,v 1.18.2.2 2004/06/25 02:34:40 jmc Exp $	*/
 
 /*
  * Copyright (c) 2002 Networks Associates Technology, Inc.
@@ -48,7 +48,7 @@
 static char sccsid[] = "@(#)mkfs.c	8.11 (Berkeley) 5/3/95";
 #else
 #ifdef __RCSID
-__RCSID("$NetBSD: mkfs.c,v 1.20 2004/06/24 22:30:13 lukem Exp $");
+__RCSID("$NetBSD: mkfs.c,v 1.18.2.2 2004/06/25 02:34:40 jmc Exp $");
 #endif
 #endif
 #endif /* not lint */

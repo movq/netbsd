@@ -1,4 +1,4 @@
-/*	$NetBSD: int_fmtio.h,v 1.6 2004/05/22 14:16:59 kleink Exp $	*/
+/*	$NetBSD: int_fmtio.h,v 1.4.4.2 2004/05/22 18:03:52 he Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.

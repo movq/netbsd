@@ -1,4 +1,4 @@
-/*	$NetBSD: intio_dmac.c,v 1.20 2004/12/13 02:14:13 chs Exp $	*/
+/*	$NetBSD: intio_dmac.c,v 1.19 2003/07/15 01:44:51 lukem Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.
@@ -41,7 +41,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: intio_dmac.c,v 1.20 2004/12/13 02:14:13 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: intio_dmac.c,v 1.19 2003/07/15 01:44:51 lukem Exp $");
 
 #include "opt_m680x0.h"
 
@@ -87,8 +87,6 @@ static void dmac_attach __P((struct device *, struct device *, void *));
 CFATTACH_DECL(dmac, sizeof(struct dmac_softc),
     dmac_match, dmac_attach, NULL, NULL);
 
-static int dmac_attached;
-
 static int
 dmac_match(parent, cf, aux)
 	struct device *parent;
@@ -99,7 +97,7 @@ dmac_match(parent, cf, aux)
 
 	if (strcmp (ia->ia_name, "dmac") != 0)
 		return (0);
-	if (dmac_attached)
+	if (cf->cf_unit != 0)
 		return (0);
 
 	if (ia->ia_addr == INTIOCF_ADDR_DEFAULT)
@@ -122,8 +120,6 @@ dmac_attach(parent, self, aux)
 	struct dmac_softc *sc = (struct dmac_softc *)self;
 	struct intio_attach_args *ia = aux;
 	int r;
-
-	dmac_attached = 1;
 
 	ia->ia_size = DMAC_CHAN_SIZE * DMAC_NCHAN;
 	r = intio_map_allocate_region (parent, ia, INTIO_MAP_ALLOCATE);

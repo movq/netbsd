@@ -1,5 +1,3 @@
-/*	$NetBSD: dict_dbm.c,v 1.1.1.5 2004/05/31 00:24:57 heas Exp $	*/
-
 /*++
 /* NAME
 /*	dict_dbm 3
@@ -257,7 +255,7 @@ static int dict_dbm_delete(DICT *dict, const char *name)
 
 /* traverse the dictionary */
 
-static int dict_dbm_sequence(DICT *dict, int function,
+static int dict_dbm_sequence(DICT *dict, const int function,
 			             const char **key, const char **value)
 {
     char   *myname = "dict_dbm_sequence";

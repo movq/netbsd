@@ -1,4 +1,4 @@
-/*	$NetBSD: print.c,v 1.91 2004/11/16 04:58:14 christos Exp $	*/
+/*	$NetBSD: print.c,v 1.89 2004/03/27 14:55:24 simonb Exp $	*/
 
 /*
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -70,7 +70,7 @@
 #if 0
 static char sccsid[] = "@(#)print.c	8.6 (Berkeley) 4/16/94";
 #else
-__RCSID("$NetBSD: print.c,v 1.91 2004/11/16 04:58:14 christos Exp $");
+__RCSID("$NetBSD: print.c,v 1.89 2004/03/27 14:55:24 simonb Exp $");
 #endif
 #endif /* not lint */
 
@@ -169,7 +169,7 @@ printheader(void)
 }
 
 /*
- * Return 1 if the command name in the argument vector (u-area) does
+ * Return 1 if the the command name in the argument vector (u-area) does
  * not match the command name (p_comm)
  */
 static int
@@ -687,7 +687,7 @@ tdev(void *arg, VARENT *ve, int mode)
 	dev = k->p_tdev;
 	if (dev == NODEV) {
 		if (mode == PRINTMODE)
-			(void)printf("%*s", v->width, "?");
+			(void)printf("%*s", v->width, "??");
 		else
 			if (v->width < 2)
 				v->width = 2;
@@ -712,11 +712,14 @@ tname(void *arg, VARENT *ve, int mode)
 	dev = k->p_tdev;
 	if (dev == NODEV || (ttname = devname(dev, S_IFCHR)) == NULL) {
 		if (mode == PRINTMODE)
-			(void)printf("%-*s", v->width, "?");
+			(void)printf("%-*s", v->width, "??");
 		else
 			if (v->width < 2)
 				v->width = 2;
 	} else {
+		if (strncmp(ttname, "tty", 3) == 0 ||
+		    strncmp(ttname, "dty", 3) == 0)
+			ttname += 3;
 		noctty = !(k->p_eflag & EPROC_CTTY) ? 1 : 0;
 		if (mode == WIDTHMODE) {
 			int fmtlen;
@@ -746,7 +749,7 @@ longtname(void *arg, VARENT *ve, int mode)
 	dev = k->p_tdev;
 	if (dev == NODEV || (ttname = devname(dev, S_IFCHR)) == NULL) {
 		if (mode == PRINTMODE)
-			(void)printf("%-*s", v->width, "?");
+			(void)printf("%-*s", v->width, "??");
 		else
 			if (v->width < 2)
 				v->width = 2;

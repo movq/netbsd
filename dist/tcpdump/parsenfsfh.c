@@ -1,4 +1,4 @@
-/*	$NetBSD: parsenfsfh.c,v 1.5 2004/09/27 23:04:24 dyoung Exp $	*/
+/*	$NetBSD: parsenfsfh.c,v 1.4 2002/05/31 09:45:44 itojun Exp $	*/
 
 /*
  * Copyright (c) 1993, 1994 Jeffrey C. Mogul, Digital Equipment Corporation,
@@ -45,10 +45,10 @@
 #include <sys/cdefs.h>
 #ifndef lint
 #if 0
-static const char rcsid[] _U_ =
-    "@(#) Header: /tcpdump/master/tcpdump/parsenfsfh.c,v 1.25.2.2 2003/11/16 08:51:07 guy Exp (LBL)";
+static const char rcsid[] =
+    "@(#) Header: /tcpdump/master/tcpdump/parsenfsfh.c,v 1.24 2002/04/24 06:27:06 guy Exp (LBL)";
 #else
-__RCSID("$NetBSD: parsenfsfh.c,v 1.5 2004/09/27 23:04:24 dyoung Exp $");
+__RCSID("$NetBSD: parsenfsfh.c,v 1.4 2002/05/31 09:45:44 itojun Exp $");
 #endif
 #endif
 
@@ -56,8 +56,10 @@ __RCSID("$NetBSD: parsenfsfh.c,v 1.5 2004/09/27 23:04:24 dyoung Exp $");
 #include "config.h"
 #endif
 
-#include <tcpdump-stdinc.h>
+#include <sys/types.h>
+#include <sys/time.h>
 
+#include <ctype.h>
 #include <stdio.h>
 #include <string.h>
 

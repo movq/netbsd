@@ -1,4 +1,4 @@
-/*	$NetBSD: pfkeyv2.h,v 1.17 2004/12/06 08:05:26 itojun Exp $	*/
+/*	$NetBSD: pfkeyv2.h,v 1.15 2003/08/15 03:42:00 jonathan Exp $	*/
 /*	$KAME: pfkeyv2.h,v 1.36 2003/07/25 09:33:37 itojun Exp $	*/
 
 /*
@@ -214,7 +214,7 @@ struct sadb_x_sa2 {
   u_int8_t sadb_x_sa2_reserved1;
   u_int16_t sadb_x_sa2_reserved2;
   u_int32_t sadb_x_sa2_sequence;
-  u_int32_t sadb_x_sa2_reqid;		/* topmost 16bits are always 0 */
+  u_int32_t sadb_x_sa2_reqid;
 };
 
 /* XXX Policy Extension */
@@ -286,8 +286,7 @@ struct sadb_x_ipsecrequest {
 #define SADB_SATYPE_MIP		8
 #define SADB_X_SATYPE_IPCOMP	9
 /*#define SADB_X_SATYPE_POLICY	10	obsolete, do not reuse */
-#define SADB_X_SATYPE_TCPSIGNATURE	11
-#define SADB_SATYPE_MAX		12
+#define SADB_SATYPE_MAX		11
 
 #define SADB_SASTATE_LARVAL   0
 #define SADB_SASTATE_MATURE   1
@@ -312,7 +311,6 @@ struct sadb_x_ipsecrequest {
 #define SADB_X_AALG_MD5		249	/* Keyed MD5 */
 #define SADB_X_AALG_SHA		250	/* Keyed SHA */
 #define SADB_X_AALG_NULL	251	/* null authentication */
-#define SADB_X_AALG_TCP_MD5	252	/* Keyed TCP-MD5 (RFC2385) */
 
 /* RFC2367 numbers - meets RFC2407 */
 #define SADB_EALG_NONE		0

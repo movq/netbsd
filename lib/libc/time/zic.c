@@ -1,9 +1,9 @@
-/*	$NetBSD: zic.c,v 1.23 2004/05/27 20:39:49 kleink Exp $	*/
+/*	$NetBSD: zic.c,v 1.22.2.1 2004/06/15 22:02:14 he Exp $	*/
 
 #include <sys/cdefs.h>
 #ifndef lint
 #ifndef NOID
-__RCSID("$NetBSD: zic.c,v 1.23 2004/05/27 20:39:49 kleink Exp $");
+__RCSID("$NetBSD: zic.c,v 1.22.2.1 2004/06/15 22:02:14 he Exp $");
 #endif /* !defined NOID */
 #endif /* !defined lint */
 

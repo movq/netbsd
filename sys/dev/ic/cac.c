@@ -1,4 +1,4 @@
-/*	$NetBSD: cac.c,v 1.28 2004/09/13 12:55:47 drochner Exp $	*/
+/*	$NetBSD: cac.c,v 1.26 2003/12/05 10:23:00 pk Exp $	*/
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -41,7 +41,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cac.c,v 1.28 2004/09/13 12:55:47 drochner Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cac.c,v 1.26 2003/12/05 10:23:00 pk Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -62,23 +62,20 @@ __KERNEL_RCSID(0, "$NetBSD: cac.c,v 1.28 2004/09/13 12:55:47 drochner Exp $");
 #include <dev/ic/cacreg.h>
 #include <dev/ic/cacvar.h>
 
-#include "locators.h"
+struct	cac_ccb *cac_ccb_alloc(struct cac_softc *, int);
+void	cac_ccb_done(struct cac_softc *, struct cac_ccb *);
+void	cac_ccb_free(struct cac_softc *, struct cac_ccb *);
+int	cac_ccb_poll(struct cac_softc *, struct cac_ccb *, int);
+int	cac_ccb_start(struct cac_softc *, struct cac_ccb *);
+int	cac_print(void *, const char *);
+void	cac_shutdown(void *);
+int	cac_submatch(struct device *, struct cfdata *, void *);
 
-static struct	cac_ccb *cac_ccb_alloc(struct cac_softc *, int);
-static void	cac_ccb_done(struct cac_softc *, struct cac_ccb *);
-static void	cac_ccb_free(struct cac_softc *, struct cac_ccb *);
-static int	cac_ccb_poll(struct cac_softc *, struct cac_ccb *, int);
-static int	cac_ccb_start(struct cac_softc *, struct cac_ccb *);
-static int	cac_print(void *, const char *);
-static void	cac_shutdown(void *);
-static int	cac_submatch(struct device *, struct cfdata *,
-			     const locdesc_t *, void *);
-
-static struct	cac_ccb *cac_l0_completed(struct cac_softc *);
-static int	cac_l0_fifo_full(struct cac_softc *);
-static void	cac_l0_intr_enable(struct cac_softc *, int);
-static int	cac_l0_intr_pending(struct cac_softc *);
-static void	cac_l0_submit(struct cac_softc *, struct cac_ccb *);
+struct	cac_ccb *cac_l0_completed(struct cac_softc *);
+int	cac_l0_fifo_full(struct cac_softc *);
+void	cac_l0_intr_enable(struct cac_softc *, int);
+int	cac_l0_intr_pending(struct cac_softc *);
+void	cac_l0_submit(struct cac_softc *, struct cac_ccb *);
 
 static void	*cac_sdh;	/* shutdown hook */
 
@@ -101,8 +98,6 @@ cac_init(struct cac_softc *sc, const char *intrstr, int startfw)
 	int error, rseg, size, i;
 	bus_dma_segment_t seg;
 	struct cac_ccb *ccb;
-	int help[2];
-	locdesc_t *ldesc = (void *)help; /* XXX */
 	
 	if (intrstr != NULL)
 		aprint_normal("%s: interrupting at %s\n", sc->sc_dv.dv_xname,
@@ -184,12 +179,7 @@ cac_init(struct cac_softc *sc, const char *intrstr, int startfw)
 	sc->sc_nunits = cinfo.num_drvs;
 	for (i = 0; i < cinfo.num_drvs; i++) {
 		caca.caca_unit = i;
-
-		ldesc->len = 1;
-		ldesc->locs[CACCF_UNIT] = i;
-
-		config_found_sm_loc(&sc->sc_dv, "cac", ldesc, &caca,
-				    cac_print, cac_submatch);
+		config_found_sm(&sc->sc_dv, &caca, cac_print, cac_submatch);
 	}
 
 	/* Set our `shutdownhook' before we start any device activity. */
@@ -203,7 +193,7 @@ cac_init(struct cac_softc *sc, const char *intrstr, int startfw)
 /*
  * Shut down all `cac' controllers.
  */
-static void
+void
 cac_shutdown(void *cookie)
 {
 	extern struct cfdriver cac_cd;
@@ -224,7 +214,7 @@ cac_shutdown(void *cookie)
 /*
  * Print autoconfiguration message for a sub-device.
  */
-static int
+int
 cac_print(void *aux, const char *pnp)
 {
 	struct cac_attach_args *caca;
@@ -240,13 +230,15 @@ cac_print(void *aux, const char *pnp)
 /*
  * Match a sub-device.
  */
-static int
-cac_submatch(struct device *parent, struct cfdata *cf,
-	     const locdesc_t *ldesc, void *aux)
+int
+cac_submatch(struct device *parent, struct cfdata *cf, void *aux)
 {
+	struct cac_attach_args *caca;
 
-	if (cf->cf_loc[CACCF_UNIT] != CACCF_UNIT_DEFAULT &&
-	    cf->cf_loc[CACCF_UNIT] != ldesc->locs[CACCF_UNIT])
+	caca = (struct cac_attach_args *)aux;
+
+	if (cf->cacacf_unit != CACCF_UNIT_DEFAULT &&
+	    cf->cacacf_unit != caca->caca_unit)
 		return (0);
 
 	return (config_match(parent, cf, aux));
@@ -364,7 +356,7 @@ cac_cmd(struct cac_softc *sc, int command, void *data, int datasize,
 /*
  * Wait for the specified CCB to complete.  Must be called at splbio.
  */
-static int
+int
 cac_ccb_poll(struct cac_softc *sc, struct cac_ccb *wantccb, int timo)
 {
 	struct cac_ccb *ccb;
@@ -393,7 +385,7 @@ cac_ccb_poll(struct cac_softc *sc, struct cac_ccb *wantccb, int timo)
  * Enqueue the specified command (if any) and attempt to start all enqueued 
  * commands.  Must be called at splbio.
  */
-static int
+int
 cac_ccb_start(struct cac_softc *sc, struct cac_ccb *ccb)
 {
 
@@ -416,7 +408,7 @@ cac_ccb_start(struct cac_softc *sc, struct cac_ccb *ccb)
 /*
  * Process a finished CCB.
  */
-static void
+void
 cac_ccb_done(struct cac_softc *sc, struct cac_ccb *ccb)
 {
 	struct device *dv;
@@ -460,7 +452,7 @@ cac_ccb_done(struct cac_softc *sc, struct cac_ccb *ccb)
 /*
  * Allocate a CCB.
  */
-static struct cac_ccb *
+struct cac_ccb *
 cac_ccb_alloc(struct cac_softc *sc, int nosleep)
 {
 	struct cac_ccb *ccb;
@@ -487,7 +479,7 @@ cac_ccb_alloc(struct cac_softc *sc, int nosleep)
 /*
  * Put a CCB onto the freelist.
  */
-static void
+void
 cac_ccb_free(struct cac_softc *sc, struct cac_ccb *ccb)
 {
 	int s;
@@ -504,14 +496,14 @@ cac_ccb_free(struct cac_softc *sc, struct cac_ccb *ccb)
  * Board specific linkage shared between multiple bus types.
  */
 
-static int
+int
 cac_l0_fifo_full(struct cac_softc *sc)
 {
 
 	return (cac_inl(sc, CAC_REG_CMD_FIFO) == 0);
 }
 
-static void
+void
 cac_l0_submit(struct cac_softc *sc, struct cac_ccb *ccb)
 {
 
@@ -520,7 +512,7 @@ cac_l0_submit(struct cac_softc *sc, struct cac_ccb *ccb)
 	cac_outl(sc, CAC_REG_CMD_FIFO, ccb->ccb_paddr);
 }
 
-static struct cac_ccb *
+struct cac_ccb *
 cac_l0_completed(struct cac_softc *sc)
 {
 	struct cac_ccb *ccb;
@@ -542,14 +534,14 @@ cac_l0_completed(struct cac_softc *sc)
 	return (ccb);
 }
 
-static int
+int
 cac_l0_intr_pending(struct cac_softc *sc)
 {
 
 	return (cac_inl(sc, CAC_REG_INTR_PENDING) & CAC_INTR_ENABLE);
 }
 
-static void
+void
 cac_l0_intr_enable(struct cac_softc *sc, int state)
 {
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: init_main.c,v 1.242 2004/10/15 07:22:02 thorpej Exp $	*/
+/*	$NetBSD: init_main.c,v 1.235 2004/03/28 22:43:56 matt Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1989, 1991, 1992, 1993
@@ -71,7 +71,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: init_main.c,v 1.242 2004/10/15 07:22:02 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: init_main.c,v 1.235 2004/03/28 22:43:56 matt Exp $");
 
 #include "fs_nfs.h"
 #include "opt_nfsserver.h"
@@ -108,6 +108,7 @@ __KERNEL_RCSID(0, "$NetBSD: init_main.c,v 1.242 2004/10/15 07:22:02 thorpej Exp 
 #include <sys/disklabel.h>
 #include <sys/buf.h>
 #include <sys/device.h>
+#include <sys/disk.h>
 #include <sys/exec.h>
 #include <sys/socketvar.h>
 #include <sys/protosw.h>
@@ -193,7 +194,6 @@ struct	vnode *rootvp, *swapdev_vp;
 int	boothowto;
 int	cold = 1;			/* still working on startup */
 struct	timeval boottime;
-time_t	rootfstime;			/* recorded root fs time, if known */
 
 __volatile int start_init_exec;		/* semaphore for start_init() */
 
@@ -251,9 +251,6 @@ main(void)
 	/* Do machine-dependent initialization. */
 	cpu_startup();
 
-	/* Initialise pools. */
-	link_pool_init();
-
 	/* Initialize callouts. */
 	callout_startup();
 
@@ -265,6 +262,9 @@ main(void)
 	 * allocate mbufs or mbuf clusters during autoconfiguration.
 	 */
 	mbinit();
+
+	/* Initialize kqueues. */
+	kqueue_init();
 
 	/* Initialize sockets. */
 	soinit();
@@ -278,6 +278,7 @@ main(void)
 	 * The following things must be done before autoconfiguration.
 	 */
 	evcnt_init();		/* initialize event counters */
+	disk_init();		/* initialize disk list */
 	tty_init();		/* initialize tty list */
 #if NRND > 0
 	rnd_init();		/* initialize RNG */
@@ -289,7 +290,9 @@ main(void)
 	/* Initialize the sysctl subsystem. */
 	sysctl_init();
 
-	/* Initialize process and pgrp structures. */
+	/*
+	 * Initialize process and pgrp structures.
+	 */
 	procinit();
 
 #ifdef LKM
@@ -330,6 +333,7 @@ main(void)
 	p->p_ucred->cr_ngroups = 1;	/* group 0 */
 
 	/* Create the file descriptor table. */
+	finit();
 	p->p_fd = &filedesc0.fd_fd;
 	fdinit1(&filedesc0);
 
@@ -337,11 +341,9 @@ main(void)
 	p->p_cwdi = &cwdi0;
 	cwdi0.cwdi_cmask = cmask;
 	cwdi0.cwdi_refcnt = 1;
-	simple_lock_init(&cwdi0.cwdi_slock);
 
 	/* Create the limits structures. */
 	p->p_limit = &limit0;
-	simple_lock_init(&limit0.p_slock);
 	for (i = 0; i < sizeof(p->p_rlimit)/sizeof(p->p_rlimit[0]); i++)
 		limit0.pl_rlimit[i].rlim_cur =
 		    limit0.pl_rlimit[i].rlim_max = RLIM_INFINITY;
@@ -521,13 +523,6 @@ main(void)
 	} while (error != 0);
 	mountroothook_destroy();
 
-	/*
-	 * Initialise the time-of-day clock, passing the time recorded
-	 * in the root filesystem (if any) for use by systems that
-	 * don't have a non-volatile time-of-day device.
-	 */
-	inittodr(rootfstime);
-
 	CIRCLEQ_FIRST(&mountlist)->mnt_flag |= MNT_ROOTFS;
 	CIRCLEQ_FIRST(&mountlist)->mnt_op->vfs_refcount++;
 
@@ -559,7 +554,6 @@ main(void)
 	proclist_lock_read();
 	s = splsched();
 	LIST_FOREACH(p, &allproc, p_list) {
-		KASSERT((p->p_flag & P_MARKER) == 0);
 		p->p_stats->p_start = mono_time = boottime = time;
 		LIST_FOREACH(l, &p->p_lwps, l_sibling) {
 			if (l->l_cpu != NULL)
@@ -592,6 +586,11 @@ main(void)
 	/* Initialize exec structures */
 	exec_init(1);
 
+#ifndef PIPE_SOCKETPAIR
+	/* Initialize pipe structures */
+	pipe_init();
+#endif
+
 	/*
 	 * Okay, now we can let init(8) exec!  It's off to userland!
 	 */
@@ -601,12 +600,6 @@ main(void)
 	/* The scheduler is an infinite loop. */
 	uvm_scheduler();
 	/* NOTREACHED */
-}
-
-void
-setrootfstime(time_t t)
-{
-	rootfstime = t;
 }
 
 static void

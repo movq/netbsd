@@ -2,7 +2,7 @@
 	.section	.data.exit,"aw"
 data:
 	.globl text
-	.section	.text.exit,"ax"
+	.section	.text.exit,"aw"
 text:
 	.text
 	.globl _start

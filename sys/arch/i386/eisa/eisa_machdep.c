@@ -1,4 +1,4 @@
-/*	$NetBSD: eisa_machdep.c,v 1.22 2004/04/22 00:34:52 itojun Exp $	*/
+/*	$NetBSD: eisa_machdep.c,v 1.21 2003/10/30 21:19:54 fvdl Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.
@@ -72,7 +72,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: eisa_machdep.c,v 1.22 2004/04/22 00:34:52 itojun Exp $");
+__KERNEL_RCSID(0, "$NetBSD: eisa_machdep.c,v 1.21 2003/10/30 21:19:54 fvdl Exp $");
 
 #include "ioapic.h"
 
@@ -192,14 +192,14 @@ eisa_intr_string(ec, ih)
 
 #if NIOAPIC > 0
 	if (ih & APIC_INT_VIA_APIC)
-		snprintf(irqstr, sizeof(irqstr), "apic %d int %d (irq %d)",
+		sprintf(irqstr, "apic %d int %d (irq %d)",
 		    APIC_IRQ_APIC(ih),
 		    APIC_IRQ_PIN(ih),
 		    ih&0xff);
 	else
-		snprintf(irqstr, sizeof(irqstr), "irq %d", ih&0xff);
+		sprintf(irqstr, "irq %d", ih&0xff);
 #else
-	snprintf(irqstr, sizeof(irqstr), "irq %d", ih);
+	sprintf(irqstr, "irq %d", ih);
 #endif
 	return (irqstr);
 	

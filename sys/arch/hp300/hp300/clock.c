@@ -1,4 +1,4 @@
-/*	$NetBSD: clock.c,v 1.31 2004/08/28 19:11:19 thorpej Exp $	*/
+/*	$NetBSD: clock.c,v 1.30 2003/11/17 14:37:59 tsutsui Exp $	*/
 
 /*
  * Copyright (c) 1982, 1990, 1993
@@ -85,7 +85,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: clock.c,v 1.31 2004/08/28 19:11:19 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: clock.c,v 1.30 2003/11/17 14:37:59 tsutsui Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -103,11 +103,11 @@ __KERNEL_RCSID(0, "$NetBSD: clock.c,v 1.31 2004/08/28 19:11:19 thorpej Exp $");
 #include <sys/gmon.h>
 #endif
 
-void	statintr(struct clockframe *);
+void	statintr __P((struct clockframe *));
 
 static todr_chip_handle_t todr_handle;
 
-static int clkstd[1];
+int    clkstd[1];
 static int clkint;		/* clock interval, as loaded */
 /*
  * Statistics clock interval and variance, in usec.  Variance must be a
@@ -132,6 +132,7 @@ todr_attach(todr_chip_handle_t handle)
 	todr_handle = handle;
 }
 
+
 /*
  * Machine-dependent clock routines.
  *
@@ -150,7 +151,7 @@ todr_attach(todr_chip_handle_t handle)
  * mvme68k delay calibration algorithm.
  */
 void
-hp300_calibrate_delay(void)
+hp300_calibrate_delay()
 {
 	extern int delay_divisor;
 	volatile struct clkreg *clk;
@@ -230,7 +231,7 @@ hp300_calibrate_delay(void)
  * no alternative timer is available.
  */
 void
-cpu_initclocks(void)
+cpu_initclocks()
 {
 	volatile struct clkreg *clk;
 	int intvl, statint, profint, minint;
@@ -302,7 +303,8 @@ cpu_initclocks(void)
  * but that would be a drag.
  */
 void
-setstatclockrate(int newhz)
+setstatclockrate(newhz)
+	int newhz;
 {
 
 	if (newhz == stathz)
@@ -318,7 +320,8 @@ setstatclockrate(int newhz)
  * DO THIS INLINE IN locore.s?
  */
 void
-statintr(struct clockframe *fp)
+statintr(fp)
+	struct clockframe *fp;
 {
 	volatile struct clkreg *clk;
 	int newint, r, var;
@@ -349,7 +352,8 @@ statintr(struct clockframe *fp)
  * Return the best possible estimate of the current time.
  */
 void
-microtime(struct timeval *tvp)
+microtime(tvp)
+	struct timeval *tvp;
 {
 	volatile struct clkreg *clk;
 	int s, u, t, u2, s2;
@@ -388,7 +392,8 @@ microtime(struct timeval *tvp)
  * from a filesystem.
  */
 void
-inittodr(time_t base)
+inittodr(base)
+	time_t base;
 {
 	int badbase = 0, waszero = (base == 0);
 
@@ -435,7 +440,7 @@ inittodr(time_t base)
  * when crashing during autoconfig.
  */
 void
-resettodr(void)
+resettodr()
 {
 	if (time.tv_sec == 0)
 		return;

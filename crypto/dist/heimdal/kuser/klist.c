@@ -35,7 +35,7 @@
 #include "rtbl.h"
 
 __RCSID("$Heimdal: klist.c,v 1.68.2.2 2003/10/13 15:13:39 joda Exp $"
-        "$NetBSD: klist.c,v 1.8 2004/04/02 14:59:47 lha Exp $");
+        "$NetBSD: klist.c,v 1.7.2.1 2004/04/21 04:55:39 jmc Exp $");
 
 static char*
 printable_time(time_t t)

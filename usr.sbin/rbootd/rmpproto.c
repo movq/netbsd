@@ -1,4 +1,4 @@
-/*	$NetBSD: rmpproto.c,v 1.14 2004/07/06 13:05:25 mycroft Exp $	*/
+/*	$NetBSD: rmpproto.c,v 1.13.2.1 2004/07/10 12:37:54 tron Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -89,7 +89,7 @@
 #if 0
 static char sccsid[] = "@(#)rmpproto.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: rmpproto.c,v 1.14 2004/07/06 13:05:25 mycroft Exp $");
+__RCSID("$NetBSD: rmpproto.c,v 1.13.2.1 2004/07/10 12:37:54 tron Exp $");
 #endif
 #endif /* not lint */
 

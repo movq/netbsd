@@ -1,4 +1,4 @@
-/*	$NetBSD: buf.c,v 1.12 2004/06/20 22:20:18 jmc Exp $	*/
+/*	$NetBSD: buf.c,v 1.11.2.1 2004/06/22 07:16:55 tron Exp $	*/
 
 /*
  * Copyright (c) 2001 Wasabi Systems, Inc.
@@ -41,7 +41,7 @@
 
 #include <sys/cdefs.h>
 #if defined(__RCSID) && !defined(__lint)
-__RCSID("$NetBSD: buf.c,v 1.12 2004/06/20 22:20:18 jmc Exp $");
+__RCSID("$NetBSD: buf.c,v 1.11.2.1 2004/06/22 07:16:55 tron Exp $");
 #endif	/* !__lint */
 
 #include <sys/param.h>

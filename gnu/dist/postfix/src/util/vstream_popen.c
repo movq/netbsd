@@ -1,5 +1,3 @@
-/*	$NetBSD: vstream_popen.c,v 1.1.1.3 2004/11/13 05:06:04 heas Exp $	*/
-
 /*++
 /* NAME
 /*	vstream_popen 3
@@ -215,8 +213,6 @@ VSTREAM *vstream_popen(int flags,...)
 
     switch (pid = fork()) {
     case -1:					/* error */
-	(void) close(sockfd[0]);
-	(void) close(sockfd[1]);
 	return (0);
     case 0:					/* child */
 	if (close(sockfd[1]))

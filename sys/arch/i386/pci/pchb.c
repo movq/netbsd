@@ -1,4 +1,4 @@
-/*	$NetBSD: pchb.c,v 1.54 2004/08/30 15:05:17 drochner Exp $	*/
+/*	$NetBSD: pchb.c,v 1.49.2.2 2004/07/06 05:47:40 he Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1998, 2000 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pchb.c,v 1.54 2004/08/30 15:05:17 drochner Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pchb.c,v 1.49.2.2 2004/07/06 05:47:40 he Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -81,6 +81,9 @@ __KERNEL_RCSID(0, "$NetBSD: pchb.c,v 1.54 2004/08/30 15:05:17 drochner Exp $");
 int	pchbmatch __P((struct device *, struct cfdata *, void *));
 void	pchbattach __P((struct device *, struct device *, void *));
 
+int	pchb_print __P((void *, const char *));
+int	agp_print __P((void *, const char *));
+
 CFATTACH_DECL(pchb, sizeof(struct pchb_softc),
     pchbmatch, pchbattach, NULL, NULL);
 
@@ -122,7 +125,7 @@ pchbattach(struct device *parent, struct device *self, void *aux)
 	 * have auxiliary PCI buses.
 	 */
 
-	pci_devinfo(pa->pa_id, pa->pa_class, 0, devinfo, sizeof(devinfo));
+	pci_devinfo(pa->pa_id, pa->pa_class, 0, devinfo);
 	printf("%s: %s (rev. 0x%02x)\n", self->dv_xname, devinfo,
 	    PCI_REVISION(pa->pa_class));
 	switch (PCI_VENDOR(pa->pa_id)) {
@@ -137,23 +140,6 @@ pchbattach(struct device *parent, struct device *self, void *aux)
 		 * Configure it.
 		 */
 		switch (PCI_PRODUCT(pa->pa_id)) {
-		case PCI_PRODUCT_SERVERWORKS_CSB5:
-		case PCI_PRODUCT_SERVERWORKS_CSB6:
-			/* These devices show up as host bridges, but are
-			   really southbridges. */
-			break;
-		case PCI_PRODUCT_SERVERWORKS_CMIC_HE:
-		case PCI_PRODUCT_SERVERWORKS_CMIC_LE:
-		case PCI_PRODUCT_SERVERWORKS_CMIC_SL:
-			/* CNBs and CIOBs are connected to these using a
-			   private bus.  The bus number register is that of
-			   the first PCI bus hanging off the CIOB.  We let
-			   the CIOB attachment handle configuring the PCI
-			   buses. */
-			break;
-		default:
-			printf("%s: unknown ServerWorks chip ID 0x%04x; trying to attach PCI buses behind it\n", self->dv_xname, PCI_PRODUCT(pa->pa_id));
-			/* FALLTHROUGH */
 		case PCI_PRODUCT_SERVERWORKS_CNB20_LE_AGP:
 		case PCI_PRODUCT_SERVERWORKS_CNB30_LE_PCI:
 		case PCI_PRODUCT_SERVERWORKS_CNB20_LE_PCI:
@@ -164,17 +150,11 @@ pchbattach(struct device *parent, struct device *self, void *aux)
 		case PCI_PRODUCT_SERVERWORKS_CNB20_HE_PCI2:
 		case PCI_PRODUCT_SERVERWORKS_CIOB_X2:
 		case PCI_PRODUCT_SERVERWORKS_CIOB_E:
-			switch (attachflags & (PCI_FLAGS_IO_ENABLED | PCI_FLAGS_MEM_ENABLED)) {
-			case 0:
-				/* Doesn't smell like there's anything there. */
-				break;
-			case PCI_FLAGS_MEM_ENABLED:
+			doattach = 1;
+			if ((attachflags &
+			    (PCI_FLAGS_IO_ENABLED | PCI_FLAGS_MEM_ENABLED)) ==
+			    PCI_FLAGS_MEM_ENABLED)
 				attachflags |= PCI_FLAGS_IO_ENABLED;
-				/* FALLTHROUGH */
-			default:
-				doattach = 1;
-				break;
-			}
 			break;
 		}
 		break;
@@ -328,11 +308,13 @@ pchbattach(struct device *parent, struct device *self, void *aux)
 	if (has_agp ||
 	    pci_get_capability(pa->pa_pc, pa->pa_tag, PCI_CAP_AGP,
 			       NULL, NULL) != 0) {
+		apa.apa_busname = "agp";
 		apa.apa_pci_args = *pa;
-		config_found_ia(self, "agpbus", &apa, agpbusprint);
+		config_found(self, &apa, agp_print);
 	}
 
 	if (doattach) {
+		pba.pba_busname = "pci";
 		pba.pba_iot = pa->pa_iot;
 		pba.pba_memt = pa->pa_memt;
 		pba.pba_dmat = pa->pa_dmat;
@@ -344,6 +326,27 @@ pchbattach(struct device *parent, struct device *self, void *aux)
 		pba.pba_pc = pa->pa_pc;
 		pba.pba_intrswiz = 0;
 		memset(&pba.pba_intrtag, 0, sizeof(pba.pba_intrtag));
-		config_found_ia(self, "pcibus", &pba, pcibusprint);
+		config_found(self, &pba, pchb_print);
 	}
+}
+
+int
+pchb_print(void *aux, const char *pnp)
+{
+	struct pcibus_attach_args *pba = aux;
+
+	if (pnp != NULL)
+		aprint_normal("%s at %s", pba->pba_busname, pnp);
+	aprint_normal(" bus %d", pba->pba_bus);
+	return (UNCONF);
+}
+
+int
+agp_print(void *aux, const char *pnp)
+{
+	struct agpbus_attach_args *apa = aux;
+
+	if (pnp != NULL)
+		aprint_normal("%s at %s", apa->apa_busname, pnp);
+	return (UNCONF);
 }

@@ -46,8 +46,6 @@ SECTIONS
     }
   .rel.got       : { *(.rel.got)		}
   .rela.got      : { *(.rela.got)		}
-  .rel.toc       : { *(.rel.toc)		}
-  .rela.toc      : { *(.rela.toc)		}
   .rel.ctors     : { *(.rel.ctors)	}
   .rela.ctors    : { *(.rela.ctors)	}
   .rel.dtors     : { *(.rel.dtors)	}
@@ -113,7 +111,6 @@ SECTIONS
     KEEP (*(.dtors))
   }
   .got           : { *(.got.plt) *(.got) }
-  .toc           : { *(.toc) }
   .dynamic       : { *(.dynamic) }
   /* We want the small data sections together, so single-instruction offsets
      can access them all, and initialized data all before uninitialized, so

@@ -1,4 +1,4 @@
-/*	$NetBSD: if_strip.c,v 1.57 2004/12/06 02:59:23 christos Exp $	*/
+/*	$NetBSD: if_strip.c,v 1.51 2004/01/19 16:12:51 atatat Exp $	*/
 /*	from: NetBSD: if_sl.c,v 1.38 1996/02/13 22:00:23 christos Exp $	*/
 
 /*
@@ -87,7 +87,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_strip.c,v 1.57 2004/12/06 02:59:23 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_strip.c,v 1.51 2004/01/19 16:12:51 atatat Exp $");
+
+#include "strip.h"
 
 #include "opt_inet.h"
 #include "bpfilter.h"
@@ -123,6 +125,8 @@ __KERNEL_RCSID(0, "$NetBSD: if_strip.c,v 1.57 2004/12/06 02:59:23 christos Exp $
 #include <netinet/in_systm.h>
 #include <netinet/in_var.h>
 #include <netinet/ip.h>
+#else
+#error Starmode Radio IP configured without configuring inet?
 #endif
 
 #include <net/slcompress.h>
@@ -210,13 +214,7 @@ typedef char ttychar_t;
 #define	ABT_COUNT	3	/* count of escapes for abort */
 #define	ABT_WINDOW	(ABT_COUNT*2+2)	/* in seconds - time to count */
 
-static int		strip_clone_create(struct if_clone *, int);
-static int		strip_clone_destroy(struct ifnet *);
-
-static LIST_HEAD(, strip_softc) strip_softc_list;
-
-struct if_clone strip_cloner =
-    IF_CLONE_INITIALIZER("strip", strip_clone_create, strip_clone_destroy);
+struct strip_softc strip_softc[NSTRIP];
 
 #define STRIP_FRAME_END		0x0D		/* carriage return */
 
@@ -332,64 +330,41 @@ void	strip_timeout __P((void *x));
 
 
 
+/*
+ * Called from boot code to establish sl interfaces.
+ */
 void
-stripattach(void)
-{
-	LIST_INIT(&strip_softc_list);
-	if_clone_attach(&strip_cloner);
-}
-
-static int
-strip_clone_create(struct if_clone *ifc, int unit)
+stripattach(n)
+	int n;
 {
 	struct strip_softc *sc;
+	int i = 0;
 
-	MALLOC(sc, struct strip_softc *, sizeof(*sc), M_DEVBUF, M_WAIT|M_ZERO);
-	sc->sc_unit = unit;
-	(void)snprintf(sc->sc_if.if_xname, sizeof(sc->sc_if.if_xname),
-	    "%s%d", ifc->ifc_name, unit);
-	callout_init(&sc->sc_timo_ch);
-	sc->sc_if.if_softc = sc;
-	sc->sc_if.if_mtu = SLMTU;
-	sc->sc_if.if_flags = 0;
-	sc->sc_if.if_type = IFT_OTHER;
+	for (sc = strip_softc; i < NSTRIP; sc++) {
+		sc->sc_unit = i;		/* XXX */
+		sprintf(sc->sc_if.if_xname, "strip%d", i++);
+		callout_init(&sc->sc_timo_ch);
+		sc->sc_if.if_softc = sc;
+		sc->sc_if.if_mtu = SLMTU;
+		sc->sc_if.if_flags = 0;
+		sc->sc_if.if_type = IFT_OTHER;
 #if 0
-	sc->sc_if.if_flags |= SC_AUTOCOMP /* | IFF_POINTOPOINT | IFF_MULTICAST*/;
+		sc->sc_if.if_flags |= SC_AUTOCOMP /* | IFF_POINTOPOINT | IFF_MULTICAST*/;
 #endif
-	sc->sc_if.if_type = IFT_SLIP;
-	sc->sc_if.if_ioctl = stripioctl;
-	sc->sc_if.if_output = stripoutput;
-	sc->sc_if.if_dlt = DLT_SLIP;
-	sc->sc_fastq.ifq_maxlen = 32;
-	IFQ_SET_READY(&sc->sc_if.if_snd);
+		sc->sc_if.if_type = IFT_SLIP;
+		sc->sc_if.if_ioctl = stripioctl;
+		sc->sc_if.if_output = stripoutput;
+		sc->sc_if.if_dlt = DLT_SLIP;
+		sc->sc_fastq.ifq_maxlen = 32;
+		IFQ_SET_READY(&sc->sc_if.if_snd);
 
-	sc->sc_if.if_watchdog = strip_watchdog;
-	if_attach(&sc->sc_if);
-	if_alloc_sadl(&sc->sc_if);
+		sc->sc_if.if_watchdog = strip_watchdog;
+		if_attach(&sc->sc_if);
+		if_alloc_sadl(&sc->sc_if);
 #if NBPFILTER > 0
-	bpfattach(&sc->sc_if, DLT_SLIP, SLIP_HDRLEN);
+		bpfattach(&sc->sc_if, DLT_SLIP, SLIP_HDRLEN);
 #endif
-	LIST_INSERT_HEAD(&strip_softc_list, sc, sc_iflist);
-	return 0;
-}
-
-static int
-strip_clone_destroy(struct ifnet *ifp)
-{
-	struct strip_softc *sc = (struct strip_softc *)ifp->if_softc;
-
-	if (sc->sc_ttyp != NULL)
-		return EBUSY;	/* Not removing it */
-
-	LIST_REMOVE(sc, sc_iflist);
-
-#if NBPFILTER > 0
-	bpfdetach(ifp);
-#endif
-	if_detach(ifp);
-
-	FREE(sc, M_DEVBUF);
-	return 0;
+	}
 }
 
 static int
@@ -434,9 +409,7 @@ stripinit(sc)
 		}
 	}
 
-#ifdef INET
 	sl_compress_init(&sc->sc_comp);
-#endif
 
 	/* Initialize radio probe/reset state machine */
 	sc->sc_state = ST_DEAD;		/* assumet the worst. */
@@ -457,6 +430,7 @@ stripopen(dev, tp)
 {
 	struct proc *p = curproc;		/* XXX */
 	struct strip_softc *sc;
+	int nstrip;
 	int error;
 #ifdef __NetBSD__
 	int s;
@@ -468,7 +442,7 @@ stripopen(dev, tp)
 	if (tp->t_linesw->l_no == STRIPDISC)
 		return (0);
 
-	LIST_FOREACH(sc, &strip_softc_list, sc_iflist) {
+	for (nstrip = NSTRIP, sc = strip_softc; --nstrip >= 0; sc++) {
 		if (sc->sc_ttyp == NULL) {
 #ifdef __HAVE_GENERIC_SOFT_INTERRUPTS
 			sc->sc_si = softintr_establish(IPL_SOFTNET,
@@ -801,7 +775,6 @@ stripoutput(ifp, m, dst, rt)
 	}
 	
 	ip = mtod(m, struct ip *);
-#ifdef INET
 	if (sc->sc_if.if_flags & SC_NOICMP && ip->ip_p == IPPROTO_ICMP) {
 		m_freem(m);
 		return (ENETRESET);		/* XXX ? */
@@ -813,7 +786,6 @@ stripoutput(ifp, m, dst, rt)
 	    )
 		ifq = &sc->sc_fastq;
 	else
-#endif
 		ifq = NULL;
 
 	/*
@@ -1092,8 +1064,10 @@ void
 stripnetisr(void)
 {
 	struct strip_softc *sc;
+	int i;
 
-	LIST_FOREACH(sc, &strip_softc_list, sc_iflist) {
+	for (i = 0; i < NSTRIP; i++) {
+		sc = &strip_softc[i];
 		if (sc->sc_ttyp == NULL)
 			continue;
 		stripintr(sc);
@@ -1108,10 +1082,7 @@ stripintr(void *arg)
 	struct tty *tp = sc->sc_ttyp;
 	struct mbuf *m;
 	int s, len;
-	u_char *pktstart;
-#ifdef INET
-	u_char c;
-#endif
+	u_char *pktstart, c;
 #if NBPFILTER > 0
 	u_char chdr[CHDR_LEN];
 #endif
@@ -1122,9 +1093,7 @@ stripintr(void *arg)
 	 * Output processing loop.
 	 */
 	for (;;) {
-#ifdef INET
 		struct ip *ip;
-#endif
 #if NBPFILTER > 0
 		struct mbuf *bpf_m;
 #endif
@@ -1180,18 +1149,38 @@ stripintr(void *arg)
 		} else
 			bpf_m = NULL;
 #endif
-#ifdef INET
 		if ((ip = mtod(m, struct ip *))->ip_p == IPPROTO_TCP) {
 			if (sc->sc_if.if_flags & SC_COMPRESS)
 				*mtod(m, u_char *) |=
 				    sl_compress_tcp(m, ip,
 				    &sc->sc_comp, 1);
 		}
-#endif
 #if NBPFILTER > 0
-		if (sc->sc_if.if_bpf && bpf_m != NULL)
-			bpf_mtap_sl_out(sc->sc_if.if_bpf, mtod(m, u_char *),
-			    bpf_m);
+		if (sc->sc_if.if_bpf && bpf_m != NULL) {
+			/*
+			 * Put the SLIP pseudo-"link header" in
+			 * place.  The compressed header is now
+			 * at the beginning of the mbuf.
+			 */
+			struct mbuf n;
+			u_char *hp;
+
+			n.m_flags = 0;
+			n.m_next = bpf_m;
+			n.m_data = n.m_dat;
+			n.m_len = SLIP_HDRLEN;
+
+			hp = mtod(&n, u_char *);
+
+			hp[SLX_DIR] = SLIPDIR_OUT;
+			memcpy(&hp[SLX_CHDR], mtod(m, caddr_t),
+			    CHDR_LEN);
+
+			s = splnet();
+			bpf_mtap(sc->sc_if.if_bpf, &n);
+			splx(s);
+			m_freem(bpf_m);
+		}
 #endif
 		sc->sc_lastpacket = time;
 
@@ -1231,7 +1220,6 @@ stripintr(void *arg)
 			memcpy(chdr, pktstart, CHDR_LEN);
 		}
 #endif /* NBPFILTER > 0 */
-#ifdef INET
 		if ((c = (*pktstart & 0xf0)) != (IPVERSION << 4)) {
 			if (c & 0x80)
 				c = TYPE_COMPRESSED_TCP;
@@ -1267,14 +1255,31 @@ stripintr(void *arg)
 				continue;
 			}
 		}
-#endif
 		m->m_data = (caddr_t) pktstart;
 		m->m_pkthdr.len = m->m_len = len;
 #if NPBFILTER > 0
 		if (sc->sc_if.if_bpf) {
-			bpf_mtap_sl_in(sc->sc_if.if_bpf, chdr, &m);
+			/*
+			 * Put the SLIP pseudo-"link header" in place.
+			 * Note this M_PREPEND() should never fail,
+			 * swince we know we always have enough space
+			 * in the input buffer.
+			 */
+			u_char *hp;
+
+			M_PREPEND(m, SLIP_HDRLEN, M_DONTWAIT);
 			if (m == NULL)
 				continue;
+
+			hp = mtod(m, u_char *);
+			hp[SLX_DIR] = SLIPDIR_IN;
+			memcpy(&hp[SLX_CHDR], chdr, CHDR_LEN);
+
+			s = splnet();
+			bpf_mtap(sc->sc_if.if_bpf, m);
+			splx(s);
+
+			m_adj(m, SLIP_HDRLEN);
 		}
 #endif
 		/*
@@ -1297,7 +1302,6 @@ stripintr(void *arg)
 		sc->sc_if.if_ipackets++;
 		sc->sc_lastpacket = time;
 
-#ifdef INET
 		s = splnet();
 		if (IF_QFULL(&ipintrq)) {
 			IF_DROP(&ipintrq);
@@ -1309,7 +1313,6 @@ stripintr(void *arg)
 			schednetisr(NETISR_IP);
 		}
 		splx(s);
-#endif
 	}
 }
 
@@ -1962,9 +1965,8 @@ RecvErr(msg, sc)
 		} else if (*ptr >= 32 && *ptr <= 126)
 			*p++ = *ptr;
 		else {
-			snprintf(p, sizeof(pkt_text) - (p - pkt_text),
-			    "\\%02x", *ptr);
-			p += 3;
+			sprintf(p, "\\%02x", *ptr);
+			p+= 3;
 		}
 		ptr++;
 	}

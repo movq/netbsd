@@ -1,4 +1,4 @@
-/* $NetBSD: crt0.c,v 1.12 2004/08/26 21:18:36 thorpej Exp $ */
+/* $NetBSD: crt0.c,v 1.11 2003/07/26 19:24:30 salo Exp $ */
 
 /*
  * Copyright (c) 1998 Christos Zoulas
@@ -37,8 +37,8 @@
 
 #include "common.h"
 
-void ___start(int, char **, char **, void (*cleanup)(void),
-    const Obj_Entry *, struct ps_strings *);
+void ___start __P((int, char **, char **, void (*cleanup) __P((void)),
+    const Obj_Entry *, struct ps_strings *));
 
 __asm("	.text\n\
 	.align	4\n\
@@ -61,10 +61,13 @@ _start:\n\
 ");
 
 void
-___start(int argc, char **argv, char **envp,
-    void (*cleanup)(void),			/* from shared loader */
-    const Obj_Entry *obj,			/* from shared loader */
-    struct ps_strings *ps_strings)
+___start(argc, argv, envp, cleanup, obj, ps_strings)
+	int argc;
+	char **argv;
+	char **envp;
+	void (*cleanup) __P((void));		/* from shared loader */
+	const Obj_Entry *obj;			/* from shared loader */
+	struct ps_strings *ps_strings;
 {
 	environ = envp;
 
@@ -98,7 +101,7 @@ ___start(int argc, char **argv, char **envp,
  * NOTE: Leave the RCS ID _after_ __start(), in case it gets placed in .text.
  */
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: crt0.c,v 1.12 2004/08/26 21:18:36 thorpej Exp $");
+__RCSID("$NetBSD: crt0.c,v 1.11 2003/07/26 19:24:30 salo Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include "common.c"

@@ -1,4 +1,4 @@
-/* $NetBSD: npx_acpi.c,v 1.9 2004/05/01 12:05:01 kochi Exp $ */
+/* $NetBSD: npx_acpi.c,v 1.5 2003/11/03 18:07:10 mycroft Exp $ */
 
 /*
  * Copyright (c) 2002 Jared D. McNeill <jmcneill@invisible.ca>
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: npx_acpi.c,v 1.9 2004/05/01 12:05:01 kochi Exp $");
+__KERNEL_RCSID(0, "$NetBSD: npx_acpi.c,v 1.5 2003/11/03 18:07:10 mycroft Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -46,8 +46,8 @@ __KERNEL_RCSID(0, "$NetBSD: npx_acpi.c,v 1.9 2004/05/01 12:05:01 kochi Exp $");
 
 #include <i386/isa/npxvar.h>
 
-static int	npx_acpi_match(struct device *, struct cfdata *, void *);
-static void	npx_acpi_attach(struct device *, struct device *, void *);
+int	npx_acpi_match(struct device *, struct cfdata *, void *);
+void	npx_acpi_attach(struct device *, struct device *, void *);
 
 CFATTACH_DECL(npx_acpi, sizeof(struct npx_softc), npx_acpi_match,
     npx_acpi_attach, NULL, NULL);
@@ -64,7 +64,7 @@ static const char * const npx_acpi_ids[] = {
 /*
  * npx_acpi_match: autoconf(9) match routine
  */
-static int
+int
 npx_acpi_match(struct device *parent, struct cfdata *match, void *aux)
 {
 	struct acpi_attach_args *aa = aux;
@@ -78,7 +78,7 @@ npx_acpi_match(struct device *parent, struct cfdata *match, void *aux)
 /*
  * npx_acpi_attach: autoconf(9) attach routine
  */
-static void
+void
 npx_acpi_attach(struct device *parent, struct device *self, void *aux)
 {
 	struct npx_softc *sc = (struct npx_softc *)self;
@@ -91,8 +91,8 @@ npx_acpi_attach(struct device *parent, struct device *self, void *aux)
 	printf("\n");
 
 	/* parse resources */
-	rv = acpi_resource_parse(&sc->sc_dev, aa->aa_node->ad_handle, "_CRS",
-	    &res, &acpi_resource_parse_ops_default);
+	rv = acpi_resource_parse(&sc->sc_dev, aa->aa_node, &res,
+	    &acpi_resource_parse_ops_default);
 	if (ACPI_FAILURE(rv))
 		return;
 
@@ -101,7 +101,7 @@ npx_acpi_attach(struct device *parent, struct device *self, void *aux)
 	if (io == NULL) {
 		printf("%s: unable to find i/o register resource\n",
 		    sc->sc_dev.dv_xname);
-		goto out;
+		return;
 	}
 
 	/* find our IRQ */
@@ -109,14 +109,14 @@ npx_acpi_attach(struct device *parent, struct device *self, void *aux)
 	if (irq == NULL) {
 		printf("%s: unable to find irq resource\n",
 		    sc->sc_dev.dv_xname);
-		goto out;
+		return;
 	}
 
 	sc->sc_iot = aa->aa_iot;
 	if (bus_space_map(sc->sc_iot, io->ar_base, io->ar_length,
 		    0, &sc->sc_ioh)) {
 		printf("%s: can't map i/o space\n", sc->sc_dev.dv_xname);
-		goto out;
+		return;
 	}
 
 	sc->sc_type = npxprobe1(sc->sc_iot, sc->sc_ioh, irq->ar_irq);
@@ -135,13 +135,10 @@ npx_acpi_attach(struct device *parent, struct device *self, void *aux)
 		printf("%s: error reporting broken; not using\n",
 		    sc->sc_dev.dv_xname);
 		sc->sc_type = NPX_NONE;
-		goto out;
+		return;
 	case NPX_NONE:
 		panic("npx_acpi_attach");
 	}
-
+	
 	npxattach(sc);
-
- out:
-	acpi_resource_cleanup(&res);
 }

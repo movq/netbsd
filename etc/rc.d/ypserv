@@ -1,12 +1,12 @@
 #!/bin/sh
 #
-# $NetBSD: ypserv,v 1.8 2004/10/12 14:51:03 lukem Exp $
+# $NetBSD: ypserv,v 1.5 2000/09/19 13:04:39 lukem Exp $
 #
 
 # PROVIDE: ypserv
 # REQUIRE: rpcbind
 
-$_rc_subr_loaded . /etc/rc.subr
+. /etc/rc.subr
 
 name="ypserv"
 rcvar=$name
@@ -16,7 +16,7 @@ start_precmd="ypserv_precmd"
 
 ypserv_precmd()
 {
-	_domain=$(domainname)
+	_domain=`domainname`
 	if [ -z "$_domain" ]; then
 		warn "domainname(1) is not set."
 		return 1
@@ -29,5 +29,4 @@ ypserv_precmd()
 }
 
 load_rc_config $name
-load_rc_config_var rpcbind rpcbind
 run_rc_command "$1"

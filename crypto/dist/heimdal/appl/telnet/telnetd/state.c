@@ -30,7 +30,7 @@
 #include "telnetd.h"
 
 __RCSID("$Heimdal: state.c,v 1.14.12.1 2004/06/21 08:21:58 lha Exp $"
-        "$NetBSD: state.c,v 1.3 2004/09/14 08:08:20 lha Exp $");
+        "$NetBSD: state.c,v 1.2.2.1 2004/09/17 04:35:29 jmc Exp $");
 
 unsigned char	doopt[] = { IAC, DO, '%', 'c', 0 };
 unsigned char	dont[] = { IAC, DONT, '%', 'c', 0 };

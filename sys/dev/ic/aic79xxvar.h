@@ -1,5 +1,5 @@
 /*
- * Core definitions and data structures sharable across OS platforms.
+ * Core definitions and data structures shareable across OS platforms.
  *
  * Copyright (c) 1994-2002 Justin T. Gibbs.
  * Copyright (c) 2000-2002 Adaptec Inc.
@@ -859,8 +859,8 @@ struct seeprom_config {
  * BIOS Control Bits
  */
 	uint16_t bios_control;		/* word 16 */
-#define		CFSUPREM	0x0001	/* support all removable drives */
-#define		CFSUPREMB	0x0002	/* support removable boot drives */
+#define		CFSUPREM	0x0001	/* support all removeable drives */
+#define		CFSUPREMB	0x0002	/* support removeable boot drives */
 #define		CFBIOSSTATE	0x000C	/* BIOS Action State */
 #define		    CFBS_DISABLED	0x00
 #define		    CFBS_ENABLED	0x04
@@ -1371,7 +1371,7 @@ int			ahd_match_scb(struct ahd_softc *, struct scb *,
 /****************************** Initialization ********************************/
 /*struct ahd_softc	*ahd_alloc(void *, char *);*/
 int			 ahd_softc_init(struct ahd_softc *);
-void			 ahd_controller_info(struct ahd_softc *, char *, size_t);
+void			 ahd_controller_info(struct ahd_softc *, char *);
 int			 ahd_init(struct ahd_softc *);
 int			 ahd_default_config(struct ahd_softc *);
 int			 ahd_parse_vpddata(struct ahd_softc *,

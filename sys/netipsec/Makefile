@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 2004/05/07 00:55:14 jonathan Exp $
+#	$NetBSD: Makefile,v 1.1.2.2 2004/05/10 15:00:38 tron Exp $
 
 INCSDIR= /usr/include/netipsec
 

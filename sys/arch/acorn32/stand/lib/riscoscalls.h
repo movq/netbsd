@@ -1,4 +1,4 @@
-/*	$NetBSD: riscoscalls.h,v 1.3 2004/05/18 23:29:30 gavan Exp $	*/
+/*	$NetBSD: riscoscalls.h,v 1.2.2.1 2004/05/22 17:00:08 he Exp $	*/
 
 /*-
  * Copyright (c) 2001 Ben Harris

@@ -1,4 +1,4 @@
-/*	$NetBSD: cpu.h,v 1.116 2004/09/22 11:32:02 yamt Exp $	*/
+/*	$NetBSD: cpu.h,v 1.113 2004/02/20 17:35:01 yamt Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -56,8 +56,7 @@
 
 #include <sys/device.h>
 #include <sys/lock.h>			/* will also get LOCKDEBUG */
-#include <sys/cpu_data.h>
-#include <sys/cc_microtime.h>
+#include <sys/sched.h>
 
 #include <lib/libkern/libkern.h>	/* offsetof */
 
@@ -73,6 +72,7 @@ struct cpu_info {
 	struct cpu_info *ci_self;	/* self-pointer */
 	void	*ci_tlog_base;		/* Trap log base */
 	int32_t ci_tlog_offset;		/* Trap log current offset */
+	struct schedstate_percpu ci_schedstate; /* scheduler state */
 	struct cpu_info *ci_next;	/* next cpu */
 
 	/*
@@ -82,8 +82,8 @@ struct cpu_info {
 	struct simplelock ci_slock;	/* lock on this data structure */
 	cpuid_t ci_cpuid;		/* our CPU ID */
 	u_int ci_apicid;		/* our APIC ID */
-	struct cpu_data ci_data;	/* MI per-cpu data */
-	struct cc_microtime_state ci_cc;/* cc_microtime state */
+	u_long ci_spin_locks;		/* # of spin locks held */
+	u_long ci_simple_locks;		/* # of simple locks held */
 
 	/*
 	 * Private members.
@@ -118,8 +118,7 @@ struct cpu_info {
 
 	int32_t		ci_cpuid_level;
 	u_int32_t	ci_signature;	 /* X86 cpuid type */
-	u_int32_t	ci_feature_flags;/* X86 %edx CPUID feature bits */
-	u_int32_t	ci_feature2_flags;/* X86 %ecx CPUID feature bits */
+	u_int32_t	ci_feature_flags;/* X86 CPUID feature bits */
 	u_int32_t	ci_cpu_class;	 /* CPU class */
 	u_int32_t	ci_brand_id;	 /* Intel brand id */
 	u_int32_t	ci_vendor[4];	 /* vendor string */
@@ -137,6 +136,14 @@ struct cpu_info {
 
 	u_int ci_cflush_lsize;	/* CFLUSH insn line size */
 	struct x86_cache_info ci_cinfo[CAI_COUNT];
+
+	/*
+	 * Variables used by cc_microtime().
+	 */
+	struct timeval ci_cc_time;
+	int64_t ci_cc_cc;
+	int64_t ci_cc_ms_delta;
+	int64_t ci_cc_denom;
 
 	union descriptor *ci_gdt;
 
@@ -199,7 +206,7 @@ curcpu()
 	__asm __volatile("movl %%fs:%1, %0" :
 	    "=r" (ci) :
 	    "m"
-	    (*(struct cpu_info * const *)offsetof(struct cpu_info, ci_self)));
+	    (*(struct cpuinfo * const *)offsetof(struct cpu_info, ci_self)));
 	return ci;
 }
 
@@ -331,10 +338,8 @@ struct cpu_cpuid_nameclass {
 extern int biosbasemem;
 extern int biosextmem;
 extern unsigned int cpu_feature;
-extern unsigned int cpu_feature2;
 extern int cpu;
 extern int cpu_class;
-extern char cpu_brand_string[];
 extern const struct cpu_nocpuid_nameclass i386_nocpuid_cpus[];
 extern const struct cpu_cpuid_nameclass i386_cpuid_cpus[];
 
@@ -379,6 +384,12 @@ void	i8254_delay(int);
 void	i8254_microtime(struct timeval *);
 void	i8254_initclocks(void);
 
+/* kern_microtime.c */
+
+extern struct timeval cc_microset_time;
+void	cc_microtime(struct timeval *);
+void	cc_microset(struct cpu_info *);
+
 /* cpu.c */
 
 void	cpu_probe_features(struct cpu_info *);
@@ -418,9 +429,6 @@ void x86_bus_space_init(void);
 void x86_bus_space_mallocok(void);
 
 #include <machine/psl.h>	/* Must be after struct cpu_info declaration */
-
-/* est.c */
-void	est_init(struct cpu_info *);
 
 #endif /* _KERNEL */
 

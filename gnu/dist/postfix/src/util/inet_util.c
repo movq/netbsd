@@ -1,5 +1,3 @@
-/*	$NetBSD: inet_util.c,v 1.1.1.2 2004/05/31 00:24:59 heas Exp $	*/
-
 /*++
 /* NAME
 /*	inet_util 3

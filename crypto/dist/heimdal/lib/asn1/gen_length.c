@@ -35,7 +35,7 @@
 
 #ifdef __RCSID
 __RCSID("$Heimdal: gen_length.c,v 1.11 2001/09/25 13:39:26 assar Exp $"
-        "$NetBSD: gen_length.c,v 1.3 2004/04/02 14:59:47 lha Exp $");
+        "$NetBSD: gen_length.c,v 1.2.2.1 2004/04/21 04:55:40 jmc Exp $");
 #endif
 
 static void

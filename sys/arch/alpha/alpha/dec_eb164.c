@@ -1,4 +1,4 @@
-/* $NetBSD: dec_eb164.c,v 1.50 2004/06/28 03:53:40 mycroft Exp $ */
+/* $NetBSD: dec_eb164.c,v 1.49 2003/12/14 05:15:53 thorpej Exp $ */
 
 /*
  * Copyright (c) 1995, 1996, 1997 Carnegie-Mellon University.
@@ -34,7 +34,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: dec_eb164.c,v 1.50 2004/06/28 03:53:40 mycroft Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dec_eb164.c,v 1.49 2003/12/14 05:15:53 thorpej Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -180,8 +180,8 @@ dec_eb164_device_register(dev, aux)
 	struct device *dev;
 	void *aux;
 {
-	static int found, initted, diskboot, netboot;
-	static struct device *pcidev, *ctrlrdev;
+	static int found, initted, scsiboot, ideboot, netboot;
+	static struct device *pcidev, *scsipidev;
 	struct bootdev_data *b = bootdev_data;
 	struct device *parent = dev->dv_parent;
 	struct cfdata *cf = dev->dv_cfdata;
@@ -191,12 +191,17 @@ dec_eb164_device_register(dev, aux)
 		return;
 
 	if (!initted) {
-		diskboot = (strcasecmp(b->protocol, "SCSI") == 0) ||
-		    (strcasecmp(b->protocol, "IDE") == 0);
-		netboot = (strcasecmp(b->protocol, "BOOTP") == 0) ||
-		    (strcasecmp(b->protocol, "MOP") == 0);
-		DR_VERBOSE(printf("diskboot = %d, netboot = %d\n", diskboot,
-		    netboot));
+		scsiboot = (strcmp(b->protocol, "SCSI") == 0);
+		netboot = (strcmp(b->protocol, "BOOTP") == 0) ||
+		    (strcmp(b->protocol, "MOP") == 0);
+		/*
+		 * Add an extra check to boot from ide drives:
+		 * Newer SRM firmware use the protocol identifier IDE,
+		 * older SRM firmware use the protocol identifier SCSI.
+		 */
+		ideboot = (strcmp(b->protocol, "IDE") == 0);
+		DR_VERBOSE(printf("scsiboot = %d, ideboot = %d, netboot = %d\n",
+		    scsiboot, ideboot, netboot));
 		initted = 1;
 	}
 
@@ -210,71 +215,80 @@ dec_eb164_device_register(dev, aux)
 				return;
 	
 			pcidev = dev;
-			DR_VERBOSE(printf("\npcidev = %s\n", dev->dv_xname));
+			DR_VERBOSE(printf("\npcidev = %s\n",
+			    pcidev->dv_xname));
 			return;
 		}
 	}
 
-	if (ctrlrdev == NULL) {
+	if ((ideboot || scsiboot) && (scsipidev == NULL)) {
 		if (parent != pcidev)
 			return;
 		else {
 			struct pci_attach_args *pa = aux;
-			int slot;
 
-			slot = pa->pa_bus * 1000 + pa->pa_function * 100 +
-			    pa->pa_device;
-			if (b->slot != slot)
+			if (b->slot % 1000 / 100 != pa->pa_function)
+				return;
+			if (b->slot % 100 != pa->pa_device)
 				return;
 	
-			if (netboot) {
-				booted_device = dev;
-				DR_VERBOSE(printf("\nbooted_device = %s\n",
-				    dev->dv_xname));
-				found = 1;
-			} else {
-				ctrlrdev = dev;
-				DR_VERBOSE(printf("\nctrlrdev = %s\n",
-				    dev->dv_xname));
-			}
+			scsipidev = dev;
+			DR_VERBOSE(printf("\nscsipidev = %s\n",
+			    scsipidev->dv_xname));
 			return;
 		}
 	}
 
-	if (!diskboot)
-		return;
-
-	if (!strcmp(name, "sd") || !strcmp(name, "st") || !strcmp(name, "cd")) {
+	if ((ideboot || scsiboot) &&
+	    (!strcmp(name, "sd") ||
+	     !strcmp(name, "st") ||
+	     !strcmp(name, "cd"))) {
 		struct scsipibus_attach_args *sa = aux;
-		struct scsipi_periph *periph = sa->sa_periph;
-		int unit;
 
-		if (parent->dv_parent != ctrlrdev)
+		if (parent->dv_parent != scsipidev)
 			return;
 
-		unit = periph->periph_target * 100 + periph->periph_lun;
-		if (b->unit != unit)
+		if ((sa->sa_periph->periph_channel->chan_bustype->bustype_type
+		     == SCSIPI_BUSTYPE_SCSI ||
+		     sa->sa_periph->periph_channel->chan_bustype->bustype_type
+		     == SCSIPI_BUSTYPE_ATAPI)
+		    && b->unit / 100 != sa->sa_periph->periph_target)
 			return;
-		if (b->channel != periph->periph_channel->chan_channel)
+
+		/* XXX LUN! */
+
+		switch (b->boot_dev_type) {
+		case 0:
+			if (strcmp(name, "sd") &&
+			    strcmp(name, "cd"))
+				return;
+			break;
+		case 1:
+			if (strcmp(name, "st"))
+				return;
+			break;
+		default:
 			return;
+		}
 
 		/* we've found it! */
 		booted_device = dev;
-		DR_VERBOSE(printf("\nbooted_device = %s\n", dev->dv_xname));
+		DR_VERBOSE(printf("\nbooted_device = %s\n",
+		    booted_device->dv_xname));
 		found = 1;
 	}
 
 	/*
 	 * Support to boot from IDE drives.
 	 */
-	if (!strcmp(name, "wd")) {
+	if ((ideboot || scsiboot) && !strcmp(name, "wd")) {
 		struct ata_device *adev = aux;
-
-		if (strcmp("atabus", parent->dv_cfdata->cf_name))
+		if ((strncmp("atabus", parent->dv_xname, 6) != 0)) {
 			return;
-		if (parent->dv_parent != ctrlrdev)
-			return;
-
+		} else {
+			if (parent->dv_parent != scsipidev)
+				return;
+		}
 		DR_VERBOSE(printf("\nAtapi info: drive: %d, channel %d\n",
 		    adev->adev_drv_data->drive, adev->adev_channel));
 		DR_VERBOSE(printf("Bootdev info: unit: %d, channel: %d\n",
@@ -285,7 +299,27 @@ dec_eb164_device_register(dev, aux)
 
 		/* we've found it! */
 		booted_device = dev;
-		DR_VERBOSE(printf("booted_device = %s\n", dev->dv_xname));
+		DR_VERBOSE(printf("booted_device = %s\n",
+		    booted_device->dv_xname));
 		found = 1;
+	}
+
+	if (netboot) {
+		if (parent != pcidev)
+			return;
+		else {
+			struct pci_attach_args *pa = aux;
+
+			if ((b->slot % 1000) != pa->pa_device)
+				return;
+
+			/* XXX function? */
+	
+			booted_device = dev;
+			DR_VERBOSE(printf("\nbooted_device = %s\n",
+			    booted_device->dv_xname));
+			found = 1;
+			return;
+		}
 	}
 }

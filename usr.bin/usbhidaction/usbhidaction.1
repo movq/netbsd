@@ -1,4 +1,4 @@
-.\" $NetBSD: usbhidaction.1,v 1.14 2004/10/20 23:52:04 wiz Exp $
+.\" $NetBSD: usbhidaction.1,v 1.8 2003/02/25 10:35:59 wiz Exp $
 .\"
 .\" Copyright (c) 2000 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -34,7 +34,7 @@
 .\" ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 .\" POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd October 20, 2004
+.Dd December 29, 2000
 .Dt USBHIDACTION 1
 .Os
 .Sh NAME
@@ -46,9 +46,8 @@
 .Op Fl d
 .Op Fl i
 .Fl f Ar device
-.Op Fl t Ar table
 .Op Fl v
-.Op Ar arg ...
+.Ar arg ...
 .Sh DESCRIPTION
 .Nm
 can be used to execute commands when certain values appear on HID controls.
@@ -61,12 +60,10 @@ The options are as follows:
 .Bl -tag -width Ds
 .It Fl c Ar config-file
 Specify a path name for the config file.
-When running as a daemon this needs to be an absolute path for the HUP
-signal to work.
 .It Fl d
 Toggle the daemon flag.
 .It Fl i
-Ignore HID items in the config file that do not exist in the device.
+Ignore HID items in the config file that does not exist in the device.
 .It Fl f Ar device
 Specify a path name for the device to operate on.
 If
@@ -76,8 +73,6 @@ If it is a relative
 path, it is taken to be the name of the device under
 .Pa /dev .
 An absolute path is taken to be the literal device pathname.
-.It Fl t Ar table
-Specify a path name for the HID usage table file.
 .It Fl v
 Be verbose, and do not become a daemon.
 .El
@@ -96,13 +91,7 @@ There must be whitespace between the parts.
 .Pp
 The item names are similar to those used by
 .Xr usbhidctl 1 ,
-but each part must be prefixed by its page name
-(use the
-.Fl v
-flag to
-.Xr usbhidctl 1
-to see the page name).
-Replace spaces in the item name by underscores.
+but each part must be prefixed by its page name.
 .Pp
 The value is simply a numeric value.
 When the item reports this value
@@ -126,44 +115,20 @@ of Philips USB speakers with the HID controls on the speakers.
 .Bd -literal -offset indent
 # Configuration for various Philips USB speakers
 Consumer:Consumer_Control.Consumer:Volume_Up			   1
-	mixerctl -f $1 -n -w outputs.master++
+	mixerctl -f $1 -n -w fea8-i7-master++
 Consumer:Consumer_Control.Consumer:Volume_Down			   1
-	mixerctl -f $1 -n -w outputs.master--
+	mixerctl -f $1 -n -w fea8-i7-master--
 Consumer:Consumer_Control.Consumer:Mute				   1
-	mixerctl -f $1 -n -w outputs.mute++
+	mixerctl -f $1 -n -w fea8-i7-mute++
 Consumer:Consumer_Control.Consumer:Channel_Top.Microsoft:Base_Up   1
-	mixerctl -f $1 -n -w outputs.bass++
+	mixerctl -f $1 -n -w fea8-i7-bass++
 Consumer:Consumer_Control.Consumer:Channel_Top.Microsoft:Base_Down 1
-	mixerctl -f $1 -n -w outputs.bass--
+	mixerctl -f $1 -n -w fea8-i7-bass--
 .Ed
 .Pp
 A sample invocation using this configuration would be
 .Bd -literal -offset indent
 usbhidaction -f /dev/uhid1 -c conf /dev/mixer1
-.Ed
-.Pp
-This configuration file can be used for various keyboards with extra keys:
-.Bd -literal -offset indent
-# Configuration for extra keyboard keys
-Consumer:Consumer_Control.Consumer:Volume_Up			1
-	mixerctl -n -w outputs.master++
-Consumer:Consumer_Control.Consumer:Volume_Down			1
-	mixerctl -n -w outputs.master--
-Consumer:Consumer_Control.Consumer:Mute				1
-	mixerctl -n -w outputs.mute++
-Consumer:Consumer_Control.Consumer:Pause/Play			1
-	xmms -p
-Consumer:Consumer_Control.Consumer:Stop				1
-	xmms -s
-Consumer:Consumer_Control.Consumer:Scan_Previous_Track		1
-	xmms -r
-Consumer:Consumer_Control.Consumer:Scan_Next_Track		1
-	xmms -f
-.Ed
-.Pp
-And this configuration can be used with, e.g.,
-.Bd -literal -offset indent
-usbhidaction -f /dev/uhid0 -c conf -i
 .Ed
 .Sh SEE ALSO
 .Xr usbhidctl 1 ,

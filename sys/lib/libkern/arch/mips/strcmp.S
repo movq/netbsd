@@ -1,14 +1,6 @@
-/*	$NetBSD: strcmp.S,v 1.2 2004/09/29 04:45:26 sekiya Exp $	*/
+/*	$NetBSD: strcmp.S,v 1.1 1999/01/15 08:44:27 castor Exp $	*/
 #include <machine/cdefs.h>
 #include <mips/asm.h>
-
-#if defined(_LP64)
-#define ADDU    daddu
-#define SUBU    dsubu
-#else   
-#define ADDU    addu    
-#define SUBU    subu
-#endif 
 
 	.set noreorder
 
@@ -26,13 +18,13 @@ LEAF(strcmp)
 	lbu	t0, 1(a0)		# unroll loop
 	lbu	t1, 1(a1)
 	beq	t0, zero, LessOrEq	# end of first string?
-	ADDU	a0, a0, 2
+	addu	a0, a0, 2
 	beq	t0, t1, 1b
-	ADDU	a1, a1, 2
+	addu	a1, a1, 2
 NotEq:
 	j	ra
-	SUBU	v0, t0, t1
+	subu	v0, t0, t1
 LessOrEq:
 	j	ra
-	SUBU	v0, zero, t1
+	subu	v0, zero, t1
 END(strcmp)

@@ -1,4 +1,4 @@
-/*	$NetBSD: eject.c,v 1.19 2004/10/30 17:20:01 dsl Exp $	*/
+/*	$NetBSD: eject.c,v 1.17 2004/01/05 23:23:34 jmmv Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -43,7 +43,7 @@ __COPYRIGHT("@(#) Copyright (c) 1999 The NetBSD Foundation, Inc.\n\
 #endif				/* not lint */
 
 #ifndef lint
-__RCSID("$NetBSD: eject.c,v 1.19 2004/10/30 17:20:01 dsl Exp $");
+__RCSID("$NetBSD: eject.c,v 1.17 2004/01/05 23:23:34 jmmv Exp $");
 #endif				/* not lint */
 
 #include <sys/types.h>
@@ -323,7 +323,7 @@ nick2rdev(char *nn)
 void
 unmount_dev(char *name)
 {
-	struct statvfs *mounts;
+	struct statfs *mounts;
 	int i, nmnts, len;
 	char *dn;
 
@@ -338,9 +338,9 @@ unmount_dev(char *name)
 
 	/* Set len to strip off the partition name: */
 	len = strlen(dn);
-	if (!isdigit((unsigned char)dn[len - 1]))
+	if (!isdigit(dn[len - 1]))
 		len--;
-	if (!isdigit((unsigned char)dn[len - 1])) {
+	if (!isdigit(dn[len - 1])) {
 		errx(1, "Can't figure out base name for dev name %s", dn);
 	}
 	for (i = 0; i < nmnts; i++) {

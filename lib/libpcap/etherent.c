@@ -1,4 +1,4 @@
-/*	$NetBSD: etherent.c,v 1.5 2004/09/27 23:02:53 dyoung Exp $	*/
+/*	$NetBSD: etherent.c,v 1.4 1997/10/03 15:53:03 christos Exp $	*/
 
 /*
  * Copyright (c) 1990, 1993, 1994, 1995, 1996
@@ -25,14 +25,10 @@
 #ifndef lint
 #if 0
 static const char rcsid[] =
-    "@(#) Header: /tcpdump/master/libpcap/etherent.c,v 1.21.6.1 2003/11/15 23:26:38 guy Exp  (LBL)";
+    "@(#) Header: etherent.c,v 1.20 96/09/26 23:28:00 leres Exp  (LBL)";
 #else
-__RCSID("$NetBSD: etherent.c,v 1.5 2004/09/27 23:02:53 dyoung Exp $");
+__RCSID("$NetBSD: etherent.c,v 1.4 1997/10/03 15:53:03 christos Exp $");
 #endif
-#endif
-
-#ifdef HAVE_CONFIG_H
-#include "config.h"
 #endif
 
 #include <sys/types.h>
@@ -46,16 +42,17 @@ __RCSID("$NetBSD: etherent.c,v 1.5 2004/09/27 23:02:53 dyoung Exp $");
 
 #include <pcap-namedb.h>
 
+#include "gnuc.h"
 #ifdef HAVE_OS_PROTO_H
 #include "os-proto.h"
 #endif
 
-static __inline int xdtoi(int);
-static __inline int skip_space(FILE *);
-static __inline int skip_line(FILE *);
+static inline int xdtoi(int);
+static inline int skip_space(FILE *);
+static inline int skip_line(FILE *);
 
 /* Hex digit to integer. */
-static __inline int
+static inline int
 xdtoi(c)
 	register int c;
 {
@@ -67,7 +64,7 @@ xdtoi(c)
 		return c - 'A' + 10;
 }
 
-static __inline int
+static inline int
 skip_space(f)
 	FILE *f;
 {
@@ -80,7 +77,7 @@ skip_space(f)
 	return c;
 }
 
-static __inline int
+static inline int
 skip_line(f)
 	FILE *f;
 {

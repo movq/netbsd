@@ -1,5 +1,3 @@
-/*	$NetBSD: bounce.c,v 1.1.1.7 2004/07/28 22:49:14 heas Exp $	*/
-
 /*++
 /* NAME
 /*	bounce 3
@@ -8,24 +6,22 @@
 /* SYNOPSIS
 /*	#include <bounce.h>
 /*
-/*	int	bounce_append(flags, id, orig_rcpt, recipient, offset, relay,
+/*	int	bounce_append(flags, id, orig_rcpt, recipient, relay,
 /*				entry, format, ...)
 /*	int	flags;
 /*	const char *id;
 /*	const char *orig_rcpt;
 /*	const char *recipient;
-/*	long	offset;
 /*	const char *relay;
 /*	time_t	entry;
 /*	const char *format;
 /*
-/*	int	vbounce_append(flags, id, orig_rcpt, recipient, offset, relay,
+/*	int	vbounce_append(flags, id, orig_rcpt, recipient, relay,
 /*				entry, format, ap)
 /*	int	flags;
 /*	const char *id;
 /*	const char *orig_rcpt;
 /*	const char *recipient;
-/*	long	offset;
 /*	const char *relay;
 /*	time_t	entry;
 /*	const char *format;
@@ -39,21 +35,19 @@
 /*	const char *sender;
 /*
 /*	int	bounce_one(flags, queue, id, encoding, sender, orig_rcpt,
-/*				recipient, offset, relay, entry, format, ...)
+/*				recipient, relay, entry, format, ...)
 /*	int	flags;
 /*	const char *queue;
 /*	const char *id;
 /*	const char *encoding;
 /*	const char *sender;
-/*	const char *orig_rcpt;
 /*	const char *recipient;
-/*	long	offset;
 /*	const char *relay;
 /*	time_t	entry;
 /*	const char *format;
 /*
 /*	int	vbounce_one(flags, queue, id, encoding, sender, orig_rcpt,
-/*				recipient, offset, relay, entry, format, ap)
+/*				recipient, relay, entry, format, ap)
 /*	int	flags;
 /*	const char *queue;
 /*	const char *id;
@@ -61,7 +55,6 @@
 /*	const char *sender;
 /*	const char *orig_rcpt;
 /*	const char *recipient;
-/*	long	offset;
 /*	const char *relay;
 /*	time_t	entry;
 /*	const char *format;
@@ -72,10 +65,7 @@
 /*	records with recipients that were bounced, and the reason why.
 /*
 /*	bounce_append() appends a reason for non-delivery to the
-/*	bounce log for the named recipient, updates the address
-/*	verification service, or updates a message delivery record
-/*	on request by the sender. The flags argument determines
-/*	the action.
+/*	bounce log for the named recipient.
 /*
 /*	vbounce_append() implements an alternative interface.
 /*
@@ -100,15 +90,6 @@
 /* .IP BOUNCE_FLAG_CLEAN
 /*	Delete the bounce log in case of an error (as in: pretend
 /*	that we never even tried to bounce this message).
-/* .IP DEL_REQ_FLAG_VERIFY
-/*	The message is an address verification probe. Update the
-/*	address verification database instead of bouncing mail.
-/* .IP DEL_REQ_FLAG_EXPAND
-/*	The message is an address expansion probe. Update the
-/*	message delivery record instead of bouncing mail.
-/* .IP DEL_REQ_FLAG_RECORD
-/*	This is a normal message with logged delivery. Update the
-/*	message delivery record and bounce the mail.
 /* .RE
 /* .IP queue
 /*	The message queue name of the original message file.
@@ -130,8 +111,6 @@
 /* .IP recipient
 /*	Recipient address that the message could not be delivered to.
 /*	This information is used for syslogging only.
-/* .IP offset
-/*	Queue file offset of recipient record.
 /* .IP format
 /*	The reason for non-delivery.
 /* .IP ap
@@ -159,6 +138,7 @@
 
 #include <sys_defs.h>
 #include <stdlib.h>			/* 44BSD stdarg.h uses abort() */
+#include <time.h>
 #include <stdarg.h>
 #include <string.h>
 
@@ -173,18 +153,15 @@
 
 /* Global library. */
 
-#include <mail_params.h>
-#include <mail_proto.h>
-#include <log_adhoc.h>
-#include <verify.h>
-#include <defer.h>
-#include <trace.h>
-#include <bounce.h>
+#include "mail_params.h"
+#include "mail_proto.h"
+#include "defer.h"
+#include "bounce.h"
 
 /* bounce_append - append reason to per-message bounce log */
 
 int     bounce_append(int flags, const char *id, const char *orig_rcpt,
-	              const char *recipient, long offset, const char *relay,
+		              const char *recipient, const char *relay,
 		              time_t entry, const char *fmt,...)
 {
     va_list ap;
@@ -192,7 +169,7 @@ int     bounce_append(int flags, const char *id, const char *orig_rcpt,
 
     va_start(ap, fmt);
     status = vbounce_append(flags, id, orig_rcpt, recipient,
-			    offset, relay, entry, fmt, ap);
+			    relay, entry, fmt, ap);
     va_end(ap);
     return (status);
 }
@@ -200,81 +177,56 @@ int     bounce_append(int flags, const char *id, const char *orig_rcpt,
 /* vbounce_append - append bounce reason to per-message log */
 
 int     vbounce_append(int flags, const char *id, const char *orig_rcpt,
-	              const char *recipient, long offset, const char *relay,
+		               const char *recipient, const char *relay,
 		               time_t entry, const char *fmt, va_list ap)
 {
+    VSTRING *why;
     int     status;
+    int     delay;
 
     /*
-     * MTA-requested address verification information is stored in the verify
-     * service database.
+     * When we're pretending that we can't bounce, don't create a defer log
+     * file when we wouldn't keep the bounce log file. That's a lot of
+     * negatives in one sentence.
      */
-    if (flags & DEL_REQ_FLAG_VERIFY) {
-	status = vverify_append(id, orig_rcpt, recipient, relay, entry,
-			    "undeliverable", DEL_RCPT_STAT_BOUNCE, fmt, ap);
-	return (status);
-    }
-
-    /*
-     * User-requested address verification information is logged and mailed
-     * to the requesting user.
-     */
-    if (flags & DEL_REQ_FLAG_EXPAND) {
-	status = vtrace_append(flags, id, orig_rcpt, recipient, relay,
-			       entry, "5.0.0", "undeliverable", fmt, ap);
-	return (status);
-    }
-
-    /*
-     * Normal (well almost) delivery. When we're pretending that we can't
-     * bounce, don't create a defer log file when we wouldn't keep the bounce
-     * log file. That's a lot of negatives in one sentence.
-     */
-    else if (var_soft_bounce && (flags & BOUNCE_FLAG_CLEAN)) {
+    if (var_soft_bounce && (flags & BOUNCE_FLAG_CLEAN))
 	return (-1);
-    }
 
-    /*
-     * Normal mail delivery. May also send a delivery record to the user.
-     */
-    else {
-	VSTRING *why = vstring_alloc(100);
-	char   *dsn_code = var_soft_bounce ? "4.0.0" : "5.0.0";
-	char   *dsn_action = var_soft_bounce ? "delayed" : "failed";
-	char   *log_status = var_soft_bounce ? "SOFTBOUNCE" : "bounced";
-
-	vstring_vsprintf(why, fmt, ap);
-	if (orig_rcpt == 0)
-	    orig_rcpt = "";
-	if (mail_command_client(MAIL_CLASS_PRIVATE, var_soft_bounce ?
-				var_defer_service : var_bounce_service,
-			   ATTR_TYPE_NUM, MAIL_ATTR_NREQ, BOUNCE_CMD_APPEND,
-				ATTR_TYPE_NUM, MAIL_ATTR_FLAGS, flags,
-				ATTR_TYPE_STR, MAIL_ATTR_QUEUEID, id,
-				ATTR_TYPE_STR, MAIL_ATTR_ORCPT, orig_rcpt,
-				ATTR_TYPE_STR, MAIL_ATTR_RECIP, recipient,
-				ATTR_TYPE_LONG, MAIL_ATTR_OFFSET, offset,
-				ATTR_TYPE_STR, MAIL_ATTR_STATUS, dsn_code,
-				ATTR_TYPE_STR, MAIL_ATTR_ACTION, dsn_action,
-			     ATTR_TYPE_STR, MAIL_ATTR_WHY, vstring_str(why),
-				ATTR_TYPE_END) == 0
-	    && ((flags & DEL_REQ_FLAG_RECORD) == 0
-		|| trace_append(flags, id, orig_rcpt, recipient, relay,
-				entry, dsn_code, dsn_action,
-				"%s", vstring_str(why)) == 0)) {
-	    log_adhoc(id, orig_rcpt, recipient, relay,
-		      entry, log_status, "%s", vstring_str(why));
-	    status = (var_soft_bounce ? -1 : 0);
-	} else if ((flags & BOUNCE_FLAG_CLEAN) == 0) {
-	    status = defer_append(flags, id, orig_rcpt, recipient, offset,
-				  relay, entry, "%s or %s service failure",
-				  var_bounce_service, var_trace_service);
-	} else {
-	    status = -1;
-	}
-	vstring_free(why);
-	return (status);
+    why = vstring_alloc(100);
+    delay = time((time_t *) 0) - entry;
+    vstring_vsprintf(why, fmt, ap);
+    if (orig_rcpt == 0)
+	orig_rcpt = "";
+    if (mail_command_client(MAIL_CLASS_PRIVATE, var_soft_bounce ?
+			    var_defer_service : var_bounce_service,
+			    ATTR_TYPE_NUM, MAIL_ATTR_NREQ, BOUNCE_CMD_APPEND,
+			    ATTR_TYPE_NUM, MAIL_ATTR_FLAGS, flags,
+			    ATTR_TYPE_STR, MAIL_ATTR_QUEUEID, id,
+			    ATTR_TYPE_STR, MAIL_ATTR_ORCPT, orig_rcpt,
+			    ATTR_TYPE_STR, MAIL_ATTR_RECIP, recipient,
+			    ATTR_TYPE_STR, MAIL_ATTR_WHY, vstring_str(why),
+			    ATTR_TYPE_END) == 0) {
+	if (*orig_rcpt && strcasecmp(recipient, orig_rcpt) != 0)
+	    msg_info("%s: to=<%s>, orig_to=<%s>, relay=%s, delay=%d, status=%s (%s%s)",
+		     id, recipient, orig_rcpt, relay, delay,
+		     var_soft_bounce ? "deferred" : "bounced",
+		     var_soft_bounce ? "SOFT BOUNCE - " : "",
+		     vstring_str(why));
+	else
+	    msg_info("%s: to=<%s>, relay=%s, delay=%d, status=%s (%s%s)",
+		     id, recipient, relay, delay,
+		     var_soft_bounce ? "deferred" : "bounced",
+		     var_soft_bounce ? "SOFT BOUNCE - " : "",
+		     vstring_str(why));
+	status = (var_soft_bounce ? -1 : 0);
+    } else if ((flags & BOUNCE_FLAG_CLEAN) == 0) {
+	status = defer_append(flags, id, orig_rcpt, recipient, "bounce", entry,
+			      "bounce failed");
+    } else {
+	status = -1;
     }
+    vstring_free(why);
+    return (status);
 }
 
 /* bounce_flush - flush the bounce log and deliver to the sender */
@@ -311,7 +263,7 @@ int     bounce_flush(int flags, const char *queue, const char *id,
 int     bounce_one(int flags, const char *queue, const char *id,
 		           const char *encoding, const char *sender,
 		           const char *orig_rcpt, const char *recipient,
-		           long offset, const char *relay, time_t entry,
+		           const char *relay, time_t entry,
 		           const char *fmt,...)
 {
     va_list ap;
@@ -319,7 +271,7 @@ int     bounce_one(int flags, const char *queue, const char *id,
 
     va_start(ap, fmt);
     status = vbounce_one(flags, queue, id, encoding, sender, orig_rcpt,
-			 recipient, offset, relay, entry, fmt, ap);
+			 recipient, relay, entry, fmt, ap);
     va_end(ap);
     return (status);
 }
@@ -329,78 +281,50 @@ int     bounce_one(int flags, const char *queue, const char *id,
 int     vbounce_one(int flags, const char *queue, const char *id,
 		            const char *encoding, const char *sender,
 		            const char *orig_rcpt, const char *recipient,
-		            long offset, const char *relay, time_t entry,
+		            const char *relay, time_t entry,
 		            const char *fmt, va_list ap)
 {
+    VSTRING *why;
     int     status;
+    int     delay;
 
     /*
-     * MTA-requested address verification information is stored in the verify
-     * service database.
+     * When we're not bouncing, then use the standard logfile based
+     * procedure.
      */
-    if (flags & DEL_REQ_FLAG_VERIFY) {
-	status = vverify_append(id, orig_rcpt, recipient, relay, entry,
-			    "undeliverable", DEL_RCPT_STAT_BOUNCE, fmt, ap);
-	return (status);
-    }
-
-    /*
-     * User-requested address verification information is logged and mailed
-     * to the requesting user.
-     */
-    if (flags & DEL_REQ_FLAG_EXPAND) {
-	status = vtrace_append(flags, id, orig_rcpt, recipient, relay,
-			       entry, "5.0.0", "undeliverable", fmt, ap);
-	return (status);
-    }
-
-    /*
-     * When we're not bouncing, then use the standard multi-recipient logfile
-     * based procedure.
-     */
-    else if (var_soft_bounce) {
+    if (var_soft_bounce)
 	return (vbounce_append(flags, id, orig_rcpt, recipient,
-			       offset, relay, entry, fmt, ap));
-    }
+			       relay, entry, fmt, ap));
 
-    /*
-     * Normal mail delivery. May also send a delivery record to the user.
-     */
-    else {
-	VSTRING *why = vstring_alloc(100);
-
-	vstring_vsprintf(why, fmt, ap);
-	if (orig_rcpt == 0)
-	    orig_rcpt = "";
-	if (mail_command_client(MAIL_CLASS_PRIVATE, var_bounce_service,
-			      ATTR_TYPE_NUM, MAIL_ATTR_NREQ, BOUNCE_CMD_ONE,
-				ATTR_TYPE_NUM, MAIL_ATTR_FLAGS, flags,
-				ATTR_TYPE_STR, MAIL_ATTR_QUEUE, queue,
-				ATTR_TYPE_STR, MAIL_ATTR_QUEUEID, id,
-				ATTR_TYPE_STR, MAIL_ATTR_ENCODING, encoding,
-				ATTR_TYPE_STR, MAIL_ATTR_SENDER, sender,
-				ATTR_TYPE_STR, MAIL_ATTR_ORCPT, orig_rcpt,
-				ATTR_TYPE_STR, MAIL_ATTR_RECIP, recipient,
-				ATTR_TYPE_LONG, MAIL_ATTR_OFFSET, offset,
-				ATTR_TYPE_STR, MAIL_ATTR_STATUS, "5.0.0",
-				ATTR_TYPE_STR, MAIL_ATTR_ACTION, "failed",
-			     ATTR_TYPE_STR, MAIL_ATTR_WHY, vstring_str(why),
-				ATTR_TYPE_END) == 0
-	    && ((flags & DEL_REQ_FLAG_RECORD) == 0
-		|| trace_append(flags, id, orig_rcpt, recipient, relay,
-				entry, "5.0.0", "failed",
-				"%s", vstring_str(why)) == 0)) {
-	    log_adhoc(id, orig_rcpt, recipient, relay,
-		      entry, "bounced", "%s", vstring_str(why));
-	    status = 0;
-	} else if ((flags & BOUNCE_FLAG_CLEAN) == 0) {
-	    status = defer_append(flags, id, orig_rcpt, recipient, offset,
-				  relay, entry, "%s or %s service failure",
-				  var_bounce_service, var_trace_service);
-	} else {
-	    status = -1;
-	}
-	vstring_free(why);
-	return (status);
+    why = vstring_alloc(100);
+    delay = time((time_t *) 0) - entry;
+    vstring_vsprintf(why, fmt, ap);
+    if (orig_rcpt == 0)
+	orig_rcpt = "";
+    if (mail_command_client(MAIL_CLASS_PRIVATE, var_bounce_service,
+			    ATTR_TYPE_NUM, MAIL_ATTR_NREQ, BOUNCE_CMD_ONE,
+			    ATTR_TYPE_NUM, MAIL_ATTR_FLAGS, flags,
+			    ATTR_TYPE_STR, MAIL_ATTR_QUEUE, queue,
+			    ATTR_TYPE_STR, MAIL_ATTR_QUEUEID, id,
+			    ATTR_TYPE_STR, MAIL_ATTR_ENCODING, encoding,
+			    ATTR_TYPE_STR, MAIL_ATTR_SENDER, sender,
+			    ATTR_TYPE_STR, MAIL_ATTR_ORCPT, orig_rcpt,
+			    ATTR_TYPE_STR, MAIL_ATTR_RECIP, recipient,
+			    ATTR_TYPE_STR, MAIL_ATTR_WHY, vstring_str(why),
+			    ATTR_TYPE_END) == 0) {
+	if (*orig_rcpt && strcasecmp(recipient, orig_rcpt) != 0)
+	    msg_info("%s: to=<%s>, orig_to=<%s>, relay=%s, delay=%d, status=bounced (%s)",
+		  id, recipient, orig_rcpt, relay, delay, vstring_str(why));
+	else
+	    msg_info("%s: to=<%s>, relay=%s, delay=%d, status=bounced (%s)",
+		     id, recipient, relay, delay, vstring_str(why));
+	status = 0;
+    } else if ((flags & BOUNCE_FLAG_CLEAN) == 0) {
+	status = defer_append(flags, id, orig_rcpt, recipient, "bounce", entry,
+			      "bounce failed");
+    } else {
+	status = -1;
     }
+    vstring_free(why);
+    return (status);
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.46 2004/11/05 21:52:07 dsl Exp $	*/
+/*	$NetBSD: main.c,v 1.45 2003/08/07 09:46:42 agc Exp $	*/
 
 /*-
  * Copyright (c) 1980, 1993
@@ -40,7 +40,7 @@ __COPYRIGHT("@(#) Copyright (c) 1980, 1993\n\
 #if 0
 static char sccsid[] = "from: @(#)main.c	8.1 (Berkeley) 6/20/93";
 #else
-__RCSID("$NetBSD: main.c,v 1.46 2004/11/05 21:52:07 dsl Exp $");
+__RCSID("$NetBSD: main.c,v 1.45 2003/08/07 09:46:42 agc Exp $");
 #endif
 #endif /* not lint */
 
@@ -370,11 +370,11 @@ main(int argc, char *argv[])
 			char *q = name;
 
 			while (*p && q < &name[sizeof name - 1]) {
-				if (isupper((unsigned char)*p))
+				if (isupper(*p))
 					upper = 1;
-				else if (islower((unsigned char)*p))
+				else if (islower(*p))
 					lower = 1;
-				else if (isdigit((unsigned char)*p))
+				else if (isdigit(*p))
 					digit++;
 				*q++ = *p++;
 			}
@@ -557,7 +557,8 @@ getname(void)
 		crmod = 1;
 	if ((upper && !lower && !LC) || UC)
 		for (np = name; *np; np++)
-			*np = tolower((unsigned char)*np);
+			if (isupper(*np))
+				*np = tolower(*np);
 	return (1 + ppp_connection);
 }
 
@@ -567,13 +568,13 @@ putpad(const char *s)
 	int pad = 0;
 	speed_t ospeed = cfgetospeed(&tmode);
 
-	if (isdigit((unsigned char)*s)) {
-		while (isdigit((unsigned char)*s)) {
+	if (isdigit(*s)) {
+		while (isdigit(*s)) {
 			pad *= 10;
 			pad += *s++ - '0';
 		}
 		pad *= 10;
-		if (*s == '.' && isdigit((unsigned char)s[1])) {
+		if (*s == '.' && isdigit(s[1])) {
 			pad += s[1] - '0';
 			s += 2;
 		}

@@ -1,4 +1,4 @@
-@c $Id: ack.texi,v 1.1.1.6 2004/04/02 14:47:36 lha Exp $
+@c $Id: ack.texi,v 1.1.1.5.2.1 2004/04/21 04:55:38 jmc Exp $
 
 @node  Acknowledgments, , Migration, Top
 @comment  node-name,  next,  previous,  up

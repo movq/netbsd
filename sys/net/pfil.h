@@ -1,4 +1,4 @@
-/*	$NetBSD: pfil.h,v 1.24 2004/07/27 12:22:59 yamt Exp $	*/
+/*	$NetBSD: pfil.h,v 1.22 2003/06/23 12:57:08 martin Exp $	*/
 
 /*
  * Copyright (c) 1996 Matthew R. Green
@@ -55,14 +55,8 @@ struct packet_filter_hook {
 
 #define PFIL_IN		0x00000001
 #define PFIL_OUT	0x00000002
-#define PFIL_ALL	(PFIL_IN|PFIL_OUT)
 #define PFIL_WAITOK	0x00000004
-#define PFIL_IFADDR	0x00000008
-#define PFIL_IFNET	0x00000010
-
-/* events notified by PFIL_IFNET */
-#define	PFIL_IFNET_ATTACH	0
-#define	PFIL_IFNET_DETACH	1
+#define PFIL_ALL	(PFIL_IN|PFIL_OUT)
 
 typedef	TAILQ_HEAD(pfil_list, packet_filter_hook) pfil_list_t;
 
@@ -72,8 +66,6 @@ typedef	TAILQ_HEAD(pfil_list, packet_filter_hook) pfil_list_t;
 struct pfil_head {
 	pfil_list_t	ph_in;
 	pfil_list_t	ph_out;
-	pfil_list_t	ph_ifaddr;
-	pfil_list_t	ph_ifnetevent; /* XXX naming collision */
 	int		ph_type;
 	union {
 		u_long		phu_val;
@@ -106,10 +98,6 @@ pfil_hook_get(int dir, struct pfil_head *ph)
 		return (TAILQ_FIRST(&ph->ph_in));
 	else if (dir == PFIL_OUT)
 		return (TAILQ_FIRST(&ph->ph_out));
-	else if (dir == PFIL_IFADDR)
-		return (TAILQ_FIRST(&ph->ph_ifaddr));
-	else if (dir == PFIL_IFNET)
-		return (TAILQ_FIRST(&ph->ph_ifnetevent));
 	else
 		return (NULL);
 }
@@ -125,10 +113,5 @@ pfil_hook_get(int dir, struct pfil_head *ph)
 #endif
 #define PFIL_HOOKS
 #endif /* NIPFILTER */
-
-#ifdef _KERNEL
-/* in sys/net/if.c */
-extern struct pfil_head if_pfil; /* packet filtering hook for interfaces */
-#endif
 
 #endif /* _NET_PFIL_H_ */

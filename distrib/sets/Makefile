@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.46 2004/05/12 16:56:41 cl Exp $
+#	$NetBSD: Makefile,v 1.44.2.1 2004/04/21 03:22:33 jmc Exp $
 
 # The `all' target must appear before bsd.own.mk is pulled in.
 all:
@@ -59,7 +59,7 @@ makeflist: .PHONY .PRECIOUS check_DESTDIR
 # SET BUILDING TARGETS
 #
 
-TARDIR=		${RELEASEDIR}/${RELEASEMACHINEDIR}/binary/sets
+TARDIR=		${RELEASEDIR}/${MACHINE}/binary/sets
 SOURCETARDIR=	${RELEASEDIR}/source/sets
 
 .if ${MKUNPRIVED} == "no"

@@ -1,7 +1,6 @@
 #!/bin/sh
 # Bug where whitespace after @menu caused confusion.
 
-unset TEXINFO_OUTPUT
 : ${srcdir=.}
 input=`basename $0`.txi
 

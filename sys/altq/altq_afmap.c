@@ -1,4 +1,4 @@
-/*	$NetBSD: altq_afmap.c,v 1.7 2004/04/21 18:40:37 itojun Exp $	*/
+/*	$NetBSD: altq_afmap.c,v 1.6 2003/11/09 22:11:12 christos Exp $	*/
 /*	$KAME: altq_afmap.c,v 1.7 2000/12/14 08:12:45 thorpej Exp $	*/
 
 /*
@@ -36,12 +36,18 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: altq_afmap.c,v 1.7 2004/04/21 18:40:37 itojun Exp $");
+__KERNEL_RCSID(0, "$NetBSD: altq_afmap.c,v 1.6 2003/11/09 22:11:12 christos Exp $");
 
-#ifdef _KERNEL_OPT
+#if defined(__FreeBSD__) || defined(__NetBSD__)
 #include "opt_altq.h"
+#if (__FreeBSD__ != 2)
 #include "opt_inet.h"
+#ifdef __FreeBSD__
+#include "opt_inet6.h"
 #endif
+#endif
+#endif /* __FreeBSD__ || __NetBSD__ */
+#ifdef ALTQ_AFMAP
 
 #include <sys/param.h>
 #include <sys/malloc.h>
@@ -405,3 +411,5 @@ afmioctl(dev, cmd, addr, flag, p)
 
 	return error;
 }
+
+#endif /* ALTQ_AFMAP */

@@ -1,5 +1,5 @@
 '\" t
-.\" $NetBSD: ksh.Man,v 1.18 2004/07/07 19:20:09 mycroft Exp $
+.\" $NetBSD: ksh.Man,v 1.16 2004/02/13 11:36:08 wiz Exp $
 .\"{{{}}}
 .\"{{{  Notes about man page
 .\"     - use the pseudo-macros .sh( and .sh) to begin and end sh-specific
@@ -2158,12 +2158,6 @@ T}
 Enable BRL emacs-like command line editing (interactive shells only);
 see Emacs Editing Mode.
 T}
-	emacs-usemeta	T{
-In emacs command-line editing, use the 8th bit
-as meta (^[) prefix.  This is the default if 
-LC_CTYPE is unset or POSIX respectively C.
-8 
-T}
 	gmacs	T{
 Enable gmacs-like (Gosling emacs) command line editing (interactive shells
 only);
@@ -2597,8 +2591,8 @@ Exported functions are not implemented yet.
 T}
 .TE
 .\"}}}
-.\"{{{  ulimit [-abcdfHlmnpsStvw] [value]
-.IP "\fBulimit\fP [\fB\-abcdfHlmnpsStvw\fP] [\fIvalue\fP]"
+.\"{{{  ulimit [-acdfHlmnpsStvw] [value]
+.IP "\fBulimit\fP [\fB\-acdfHlmnpsStvw\fP] [\fIvalue\fP]"
 Display or set process limits.
 If no options are used, the file size limit (\fB\-f\fP) is assumed.
 \fBvalue\fP, if specified, may be either be an arithmetic expression or the
@@ -2616,8 +2610,6 @@ Displays all limits; unless \fB\-H\fP is used, soft limits are displayed.
 Set the hard limit only (default is to set both hard and soft limits).
 .IP \fB\-S\fP
 Set the soft limit only (default is to set both hard and soft limits).
-.IP \fB\-b\fP
-Impose a size limit of \fIn\fP bytes on the size of socket buffers.
 .IP \fB\-c\fP
 Impose a size limit of \fIn\fP blocks on the size of core dumps.
 .IP \fB\-d\fP

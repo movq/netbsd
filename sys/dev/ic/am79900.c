@@ -1,4 +1,4 @@
-/*	$NetBSD: am79900.c,v 1.14 2004/08/24 00:53:29 thorpej Exp $	*/
+/*	$NetBSD: am79900.c,v 1.13 2004/03/24 18:22:47 thorpej Exp $	*/
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -110,7 +110,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: am79900.c,v 1.14 2004/08/24 00:53:29 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: am79900.c,v 1.13 2004/03/24 18:22:47 thorpej Exp $");
 
 #include "bpfilter.h"
 #include "rnd.h"
@@ -143,22 +143,34 @@ __KERNEL_RCSID(0, "$NetBSD: am79900.c,v 1.14 2004/08/24 00:53:29 thorpej Exp $")
 #include <dev/ic/am79900reg.h>
 #include <dev/ic/am79900var.h>
 
-static void	am79900_meminit(struct lance_softc *);
-static void	am79900_start(struct ifnet *);
+void am79900_meminit __P((struct lance_softc *));
+void am79900_start __P((struct ifnet *));
 
 #if defined(_KERNEL_OPT)
 #include "opt_ddb.h"
 #endif
 
+#ifdef DDB
+#define	integrate
+#define hide
+#else
+#define	integrate	static __inline
+#define hide		static
+#endif
+
+integrate void am79900_rint __P((struct lance_softc *));
+integrate void am79900_tint __P((struct lance_softc *));
+
 #ifdef LEDEBUG
-static void	am79900_recv_print(struct lance_softc *, int);
-static void	am79900_xmit_print(struct lance_softc *, int);
+void am79900_recv_print __P((struct lance_softc *, int));
+void am79900_xmit_print __P((struct lance_softc *, int));
 #endif
 
 #define	ifp	(&sc->sc_ethercom.ec_if)
 
 void
-am79900_config(struct am79900_softc *sc)
+am79900_config(sc)
+	struct am79900_softc *sc;
 {
 	int mem, i;
 
@@ -186,8 +198,9 @@ am79900_config(struct am79900_softc *sc)
 /*
  * Set up the initialization block and the descriptor rings.
  */
-static void
-am79900_meminit(struct lance_softc *sc)
+void
+am79900_meminit(sc)
+	struct lance_softc *sc;
 {
 	u_long a;
 	int bix;
@@ -258,8 +271,9 @@ am79900_meminit(struct lance_softc *sc)
 	}
 }
 
-static __inline void
-am79900_rint(struct lance_softc *sc)
+integrate void
+am79900_rint(sc)
+	struct lance_softc *sc;
 {
 	int bix;
 	int rp;
@@ -330,8 +344,9 @@ am79900_rint(struct lance_softc *sc)
 	sc->sc_last_rd = bix;
 }
 
-static __inline void
-am79900_tint(struct lance_softc *sc)
+integrate void
+am79900_tint(sc)
+	struct lance_softc *sc;
 {
 	int bix;
 	struct letmd tmd;
@@ -412,7 +427,8 @@ am79900_tint(struct lance_softc *sc)
  * Controller interrupt.
  */
 int
-am79900_intr(void *arg)
+am79900_intr(arg)
+	void *arg;
 {
 	struct lance_softc *sc = arg;
 	u_int16_t isr;
@@ -495,8 +511,9 @@ am79900_intr(void *arg)
  * interface before starting the output.
  * Called only at splnet or interrupt level.
  */
-static void
-am79900_start(struct ifnet *ifp)
+void
+am79900_start(ifp)
+	struct ifnet *ifp;
 {
 	struct lance_softc *sc = ifp->if_softc;
 	int bix;
@@ -575,8 +592,10 @@ am79900_start(struct ifnet *ifp)
 }
 
 #ifdef LEDEBUG
-static void
-am79900_recv_print(struct lance_softc *sc, int no)
+void
+am79900_recv_print(sc, no)
+	struct lance_softc *sc;
+	int no;
 {
 	struct lermd rmd;
 	u_int16_t len;
@@ -599,8 +618,10 @@ am79900_recv_print(struct lance_softc *sc, int no)
 	}
 }
 
-static void
-am79900_xmit_print(struct lance_softc *sc, int no)
+void
+am79900_xmit_print(sc, no)
+	struct lance_softc *sc;
+	int no;
 {
 	struct letmd tmd;
 	u_int16_t len;

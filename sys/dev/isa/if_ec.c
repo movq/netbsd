@@ -1,4 +1,4 @@
-/*	$NetBSD: if_ec.c,v 1.22 2004/09/14 20:20:47 drochner Exp $	*/
+/*	$NetBSD: if_ec.c,v 1.20 2003/01/15 22:20:07 bouyer Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.
@@ -55,7 +55,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_ec.c,v 1.22 2004/09/14 20:20:47 drochner Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_ec.c,v 1.20 2003/01/15 22:20:07 bouyer Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -121,8 +121,8 @@ static const int ec_iobase[] = {
 #define	NEC_IOBASE	(sizeof(ec_iobase) / sizeof(ec_iobase[0]))
 
 static const int ec_membase[] = {
-	-1, -1, -1, -1,
-	0xc8000, 0xcc000, 0xd8000, 0xdc000,
+	ISACF_IOMEM_DEFAULT, ISACF_IOMEM_DEFAULT, ISACF_IOMEM_DEFAULT,
+	ISACF_IOMEM_DEFAULT, 0xc8000, 0xcc000, 0xd8000, 0xdc000,
 };
 #define	NEC_MEMBASE	(sizeof(ec_membase) / sizeof(ec_membase[0]))
 
@@ -162,11 +162,11 @@ ec_probe(parent, match, aux)
 		return (0);
 
 	/* Disallow wildcarded i/o addresses. */
-	if (ia->ia_io[0].ir_addr == ISA_UNKNOWN_PORT)
+	if (ia->ia_io[0].ir_addr == ISACF_PORT_DEFAULT)
 		return (0);
 
 	/* Disallow wildcarded mem address. */
-	if (ia->ia_iomem[0].ir_addr == ISA_UNKNOWN_IOMEM)
+	if (ia->ia_iomem[0].ir_addr == ISACF_IOMEM_DEFAULT)
 		return (0);
 
 	/* Validate the i/o base. */
@@ -178,7 +178,7 @@ ec_probe(parent, match, aux)
 
 	/* Validate the mem base. */
 	for (i = 0; i < NEC_MEMBASE; i++) {
-		if (ec_membase[i] == -1)
+		if (ec_membase[i] == ISACF_IOMEM_DEFAULT)
 			continue;
 		if (ia->ia_iomem[0].ir_addr == ec_membase[i])
 			break;
@@ -466,7 +466,7 @@ ec_attach(parent, self, aux)
 	case 5:	tmp = ELINK2_IDCFR_IRQ5; break;
 		break;
 
-	case ISA_UNKNOWN_IRQ:
+	case ISACF_IRQ_DEFAULT:
 		printf("%s: wildcarded IRQ is not allowed\n",
 		    sc->sc_dev.dv_xname);
 		return;
@@ -489,7 +489,7 @@ ec_attach(parent, self, aux)
 	/*
 	 * Intialize "Vector Pointer" registers.  These gawd-awful things
 	 * are compared to 20 bits of the address on the ISA, and if they
-	 * match, the shared memory is disabled.  We set them to 0xffff0...
+	 * match, the shared memory is disabled.  We se them to 0xffff0...
 	 * allegedly the reset vector.
 	 */
 	bus_space_write_1(asict, asich, ELINK2_VPTR2, 0xff);

@@ -1,4 +1,4 @@
-/*	$NetBSD: tcp_subr.c,v 1.174 2004/12/15 04:25:20 thorpej Exp $	*/
+/*	$NetBSD: tcp_subr.c,v 1.160.2.5 2004/09/19 15:38:01 he Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.
@@ -98,7 +98,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tcp_subr.c,v 1.174 2004/12/15 04:25:20 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tcp_subr.c,v 1.160.2.5 2004/09/19 15:38:01 he Exp $");
 
 #include "opt_inet.h"
 #include "opt_ipsec.h"
@@ -155,16 +155,13 @@ __KERNEL_RCSID(0, "$NetBSD: tcp_subr.c,v 1.174 2004/12/15 04:25:20 thorpej Exp $
 
 #ifdef IPSEC
 #include <netinet6/ipsec.h>
-#include <netkey/key.h>
 #endif /*IPSEC*/
 
 #ifdef FAST_IPSEC
 #include <netipsec/ipsec.h>
-#include <netipsec/xform.h>
 #ifdef INET6
 #include <netipsec/ipsec6.h>
 #endif
- #include <netipsec/key.h>
 #endif	/* FAST_IPSEC*/
 
 
@@ -200,7 +197,6 @@ int	tcp_compat_42 = 0;
 #endif
 int	tcp_rst_ppslim = 100;	/* 100pps */
 int	tcp_ackdrop_ppslim = 100;	/* 100pps */
-int	tcp_do_loopback_cksum = 0;
 
 /* tcb hash */
 #ifndef TCBHASHSIZE
@@ -230,7 +226,7 @@ void	tcp_mtudisc __P((struct inpcb *, int));
 void	tcp6_mtudisc __P((struct in6pcb *, int));
 #endif
 
-POOL_INIT(tcpcb_pool, sizeof(struct tcpcb), 0, 0, 0, "tcpcbpl", NULL);
+struct pool tcpcb_pool;
 
 #ifdef TCP_CSUM_COUNTERS
 #include <sys/device.h>
@@ -243,13 +239,7 @@ struct evcnt tcp_hwcsum_data = EVCNT_INITIALIZER(EVCNT_TYPE_MISC,
     NULL, "tcp", "hwcsum data");
 struct evcnt tcp_swcsum = EVCNT_INITIALIZER(EVCNT_TYPE_MISC,
     NULL, "tcp", "swcsum");
-
-EVCNT_ATTACH_STATIC(tcp_hwcsum_bad);
-EVCNT_ATTACH_STATIC(tcp_hwcsum_ok);
-EVCNT_ATTACH_STATIC(tcp_hwcsum_data);
-EVCNT_ATTACH_STATIC(tcp_swcsum);
 #endif /* TCP_CSUM_COUNTERS */
-
 
 #ifdef TCP_OUTPUT_COUNTERS
 #include <sys/device.h>
@@ -266,14 +256,6 @@ struct evcnt tcp_output_copybig = EVCNT_INITIALIZER(EVCNT_TYPE_MISC,
     NULL, "tcp", "output copy big");
 struct evcnt tcp_output_refbig = EVCNT_INITIALIZER(EVCNT_TYPE_MISC,
     NULL, "tcp", "output reference big");
-
-EVCNT_ATTACH_STATIC(tcp_output_bigheader);
-EVCNT_ATTACH_STATIC(tcp_output_predict_hit);
-EVCNT_ATTACH_STATIC(tcp_output_predict_miss);
-EVCNT_ATTACH_STATIC(tcp_output_copysmall);
-EVCNT_ATTACH_STATIC(tcp_output_copybig);
-EVCNT_ATTACH_STATIC(tcp_output_refbig);
-
 #endif /* TCP_OUTPUT_COUNTERS */
 
 #ifdef TCP_REASS_COUNTERS
@@ -314,27 +296,6 @@ struct evcnt tcp_reass_segdup = EVCNT_INITIALIZER(EVCNT_TYPE_MISC,
 struct evcnt tcp_reass_fragdup = EVCNT_INITIALIZER(EVCNT_TYPE_MISC,
     &tcp_reass_, "tcp_reass", "duplicate fragment");
 
-EVCNT_ATTACH_STATIC(tcp_reass_);
-EVCNT_ATTACH_STATIC(tcp_reass_empty);
-EVCNT_ATTACH_STATIC2(tcp_reass_iteration, 0);
-EVCNT_ATTACH_STATIC2(tcp_reass_iteration, 1);
-EVCNT_ATTACH_STATIC2(tcp_reass_iteration, 2);
-EVCNT_ATTACH_STATIC2(tcp_reass_iteration, 3);
-EVCNT_ATTACH_STATIC2(tcp_reass_iteration, 4);
-EVCNT_ATTACH_STATIC2(tcp_reass_iteration, 5);
-EVCNT_ATTACH_STATIC2(tcp_reass_iteration, 6);
-EVCNT_ATTACH_STATIC2(tcp_reass_iteration, 7);
-EVCNT_ATTACH_STATIC(tcp_reass_prependfirst);
-EVCNT_ATTACH_STATIC(tcp_reass_prepend);
-EVCNT_ATTACH_STATIC(tcp_reass_insert);
-EVCNT_ATTACH_STATIC(tcp_reass_inserttail);
-EVCNT_ATTACH_STATIC(tcp_reass_append);
-EVCNT_ATTACH_STATIC(tcp_reass_appendtail);
-EVCNT_ATTACH_STATIC(tcp_reass_overlaptail);
-EVCNT_ATTACH_STATIC(tcp_reass_overlapfront);
-EVCNT_ATTACH_STATIC(tcp_reass_segdup);
-EVCNT_ATTACH_STATIC(tcp_reass_fragdup);
-
 #endif /* TCP_REASS_COUNTERS */
 
 #ifdef MBUFTRACE
@@ -354,7 +315,12 @@ tcp_init()
 	/* Initialize the TCPCB template. */
 	tcp_tcpcb_template();
 
+	pool_init(&tcpcb_pool, sizeof(struct tcpcb), 0, 0, 0, "tcpcbpl",
+	    NULL);
 	in_pcbinit(&tcbtable, tcbhashsize, tcbhashsize);
+
+	pool_init(&tcpipqent_pool, sizeof(struct ipqent), 0, 0, 0, "tcpipqepl",
+	    NULL);
 
 	hlen = sizeof(struct ip) + sizeof(struct tcphdr);
 #ifdef INET6
@@ -378,6 +344,45 @@ tcp_init()
 
 	/* Initialize the compressed state engine. */
 	syn_cache_init();
+
+#ifdef TCP_CSUM_COUNTERS
+	evcnt_attach_static(&tcp_hwcsum_bad);
+	evcnt_attach_static(&tcp_hwcsum_ok);
+	evcnt_attach_static(&tcp_hwcsum_data);
+	evcnt_attach_static(&tcp_swcsum);
+#endif /* TCP_CSUM_COUNTERS */
+
+#ifdef TCP_OUTPUT_COUNTERS
+	evcnt_attach_static(&tcp_output_bigheader);
+	evcnt_attach_static(&tcp_output_predict_hit);
+	evcnt_attach_static(&tcp_output_predict_miss);
+	evcnt_attach_static(&tcp_output_copysmall);
+	evcnt_attach_static(&tcp_output_copybig);
+	evcnt_attach_static(&tcp_output_refbig);
+#endif /* TCP_OUTPUT_COUNTERS */
+
+#ifdef TCP_REASS_COUNTERS
+	evcnt_attach_static(&tcp_reass_);
+	evcnt_attach_static(&tcp_reass_empty);
+	evcnt_attach_static(&tcp_reass_iteration[0]);
+	evcnt_attach_static(&tcp_reass_iteration[1]);
+	evcnt_attach_static(&tcp_reass_iteration[2]);
+	evcnt_attach_static(&tcp_reass_iteration[3]);
+	evcnt_attach_static(&tcp_reass_iteration[4]);
+	evcnt_attach_static(&tcp_reass_iteration[5]);
+	evcnt_attach_static(&tcp_reass_iteration[6]);
+	evcnt_attach_static(&tcp_reass_iteration[7]);
+	evcnt_attach_static(&tcp_reass_prependfirst);
+	evcnt_attach_static(&tcp_reass_prepend);
+	evcnt_attach_static(&tcp_reass_insert);
+	evcnt_attach_static(&tcp_reass_inserttail);
+	evcnt_attach_static(&tcp_reass_append);
+	evcnt_attach_static(&tcp_reass_appendtail);
+	evcnt_attach_static(&tcp_reass_overlaptail);
+	evcnt_attach_static(&tcp_reass_overlapfront);
+	evcnt_attach_static(&tcp_reass_segdup);
+	evcnt_attach_static(&tcp_reass_fragdup);
+#endif /* TCP_REASS_COUNTERS */
 
 	MOWNER_ATTACH(&tcp_tx_mowner);
 	MOWNER_ATTACH(&tcp_rx_mowner);
@@ -1881,7 +1886,7 @@ tcp_mss_from_peer(tp, offer)
 		bufsize = roundup(bufsize, mss);
 		if (bufsize > sb_max)
 			bufsize = sb_max;
-		(void) sbreserve(&so->so_snd, bufsize, so);
+		(void) sbreserve(&so->so_snd, bufsize);
 	}
 	tp->t_segsz = mss;
 
@@ -1947,7 +1952,7 @@ tcp_established(tp)
 		bufsize = roundup(bufsize, tp->t_ourmss);
 		if (bufsize > sb_max)
 			bufsize = sb_max;
-		(void) sbreserve(&so->so_rcv, bufsize, so);
+		(void) sbreserve(&so->so_rcv, bufsize);
 	}
 }
 
@@ -2216,20 +2221,9 @@ u_int
 tcp_optlen(tp)
 	struct tcpcb *tp;
 {
-	u_int optlen;
-
-	optlen = 0;
 	if ((tp->t_flags & (TF_REQ_TSTMP|TF_RCVD_TSTMP|TF_NOOPT)) ==
 	    (TF_REQ_TSTMP | TF_RCVD_TSTMP))
-		optlen += TCPOLEN_TSTAMP_APPA;
-
-#ifdef TCP_SIGNATURE
-#if defined(INET6) && defined(FAST_IPSEC)
-	if (tp->t_family == AF_INET) 
-#endif
-	if (tp->t_flags & TF_SIGNATURE)
-		optlen += TCPOLEN_SIGNATURE + 2;
-#endif /* TCP_SIGNATURE */
-
-	return optlen;
+		return TCPOLEN_TSTAMP_APPA;
+	else
+		return 0;
 }

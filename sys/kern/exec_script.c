@@ -1,4 +1,4 @@
-/*	$NetBSD: exec_script.c,v 1.38 2004/11/04 23:55:28 matt Exp $	*/
+/*	$NetBSD: exec_script.c,v 1.36 2003/06/29 22:31:16 fvdl Exp $	*/
 
 /*
  * Copyright (c) 1993, 1994, 1996 Christopher G. Demetriou
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: exec_script.c,v 1.38 2004/11/04 23:55:28 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: exec_script.c,v 1.36 2003/06/29 22:31:16 fvdl Exp $");
 
 #if defined(SETUIDSCRIPTS) && !defined(FDSCRIPTS)
 #define FDSCRIPTS		/* Need this for safe set-id scripts. */
@@ -52,7 +52,6 @@ __KERNEL_RCSID(0, "$NetBSD: exec_script.c,v 1.38 2004/11/04 23:55:28 matt Exp $"
 #include <sys/resourcevar.h>
 
 #include <sys/exec_script.h>
-#include <sys/exec_elf.h>
 
 /*
  * exec_script_makecmds(): Check if it's an executable shell script.
@@ -106,13 +105,6 @@ exec_script_makecmds(struct proc *p, struct exec_package *epp)
 		}
 	}
 	if (cp >= hdrstr + hdrlinelen)
-		return ENOEXEC;
-
-	/*
-	 * If the script has an ELF header, don't exec it.
-	 */
-	if (epp->ep_hdrvalid >= sizeof(ELFMAG)-1 &&
-	    memcmp(hdrstr, ELFMAG, sizeof(ELFMAG)-1) == 0)
 		return ENOEXEC;
 
 	shellname = NULL;
@@ -231,7 +223,7 @@ check_shell:
 #endif
 #ifdef FDSCRIPTS
 	} else
-		snprintf(*tmpsap++, MAXPATHLEN, "/dev/fd/%d", epp->ep_fd);
+		sprintf(*tmpsap++, "/dev/fd/%d", epp->ep_fd);
 #endif
 	*tmpsap = NULL;
 

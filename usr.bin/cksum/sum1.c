@@ -1,4 +1,4 @@
-/*	$NetBSD: sum1.c,v 1.11 2004/06/20 22:20:15 jmc Exp $	*/
+/*	$NetBSD: sum1.c,v 1.10.2.1 2004/06/22 07:16:34 tron Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -38,7 +38,7 @@
 #if 0
 static char sccsid[] = "@(#)sum1.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: sum1.c,v 1.11 2004/06/20 22:20:15 jmc Exp $");
+__RCSID("$NetBSD: sum1.c,v 1.10.2.1 2004/06/22 07:16:34 tron Exp $");
 #endif
 #endif /* not lint */
 

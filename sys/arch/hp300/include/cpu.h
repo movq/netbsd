@@ -1,4 +1,4 @@
-/*	$NetBSD: cpu.h,v 1.46 2004/09/26 21:44:26 yamt Exp $	*/
+/*	$NetBSD: cpu.h,v 1.43 2004/01/04 11:33:30 jdolecek Exp $	*/
 
 /*
  * Copyright (c) 1982, 1990, 1993
@@ -79,8 +79,6 @@
 #ifndef _HP300_CPU_H_
 #define	_HP300_CPU_H_
 
-#if defined(_KERNEL)
-
 #if defined(_KERNEL_OPT)
 #include "opt_lockdebug.h"
 #endif
@@ -100,11 +98,16 @@
  */
 #include <machine/intr.h>
 
-#include <sys/cpu_data.h>
+#include <sys/sched.h>
 struct cpu_info {
-	struct cpu_data ci_data;	/* MI per-cpu data */
+	struct schedstate_percpu ci_schedstate; /* scheduler state */
+#if defined(DIAGNOSTIC) || defined(LOCKDEBUG)
+	u_long ci_spin_locks;		/* # of spin locks held */
+	u_long ci_simple_locks;		/* # of simple locks held */
+#endif
 };
 
+#ifdef _KERNEL
 extern struct cpu_info cpu_info_store;
 
 #define	curcpu()	(&cpu_info_store)
@@ -185,40 +188,41 @@ extern int astpending;		/* need to trap before returning to user mode */
 
 #ifdef _KERNEL
 extern	char *intiobase, *intiolimit;
-extern	void (*vectab[])(void);
+extern	void (*vectab[]) __P((void));
 
 struct frame;
 struct fpframe;
 struct pcb;
 
 /* locore.s functions */
-void	m68881_save(struct fpframe *);
-void	m68881_restore(struct fpframe *);
-int	suline(caddr_t, caddr_t);
-void	savectx(struct pcb *);
-void	switch_exit(struct lwp *);
-void	switch_lwp_exit(struct lwp *);
-void	proc_trampoline(void);
-void	loadustp(int);
+void	m68881_save __P((struct fpframe *));
+void	m68881_restore __P((struct fpframe *));
+int	suline __P((caddr_t, caddr_t));
+void	savectx __P((struct pcb *));
+void	switch_exit __P((struct lwp *));
+void	switch_lwp_exit __P((struct lwp *));
+void	proc_trampoline __P((void));
+void	loadustp __P((int));
 
-void	doboot(void) __attribute__((__noreturn__));
-void	ecacheon(void);
-void	ecacheoff(void);
+void	doboot __P((void))
+	__attribute__((__noreturn__));
+void	ecacheon __P((void));
+void	ecacheoff __P((void));
 
 /* clock.c functions */
-void	hp300_calibrate_delay(void);
+void	hp300_calibrate_delay __P((void));
 
 /* machdep.c functions */
-int	badaddr(caddr_t);
-int	badbaddr(caddr_t);
+int	badaddr __P((caddr_t));
+int	badbaddr __P((caddr_t));
 
 /* sys_machdep.c functions */
-int	cachectl1(unsigned long, vaddr_t, size_t, struct proc *);
+int	cachectl1 __P((unsigned long, vaddr_t, size_t, struct proc *));
 
 /* vm_machdep.c functions */
-void	physaccess(caddr_t, caddr_t, int, int);
-void	physunaccess(caddr_t, int);
-int	kvtop(caddr_t);
+void	physaccess __P((caddr_t, caddr_t, int, int));
+void	physunaccess __P((caddr_t, int));
+int	kvtop __P((caddr_t));
 
 /* what is this supposed to do? i.e. how is it different than startrtclock? */
 #define	enablertclock()

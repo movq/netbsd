@@ -1,4 +1,4 @@
-/*	$NetBSD: ufs_bmap.c,v 1.14 2004/06/20 22:20:18 jmc Exp $	*/
+/*	$NetBSD: ufs_bmap.c,v 1.13.2.1 2004/06/22 07:18:49 tron Exp $	*/
 /* From: NetBSD: ufs_bmap.c,v 1.14 2001/11/08 05:00:51 chs Exp */
 
 /*
@@ -43,7 +43,7 @@
 
 #include <sys/cdefs.h>
 #if defined(__RCSID) && !defined(__lint)
-__RCSID("$NetBSD: ufs_bmap.c,v 1.14 2004/06/20 22:20:18 jmc Exp $");
+__RCSID("$NetBSD: ufs_bmap.c,v 1.13.2.1 2004/06/22 07:18:49 tron Exp $");
 #endif	/* !__lint */
 
 #include <sys/param.h>

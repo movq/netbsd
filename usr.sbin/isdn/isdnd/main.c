@@ -27,7 +27,7 @@
  *	i4b daemon - main program entry
  *	-------------------------------
  *
- *	$Id: main.c,v 1.9 2004/10/30 08:19:30 dsl Exp $ 
+ *	$Id: main.c,v 1.8 2003/10/06 09:43:27 itojun Exp $ 
  *
  * $FreeBSD$
  *
@@ -182,7 +182,7 @@ main(int argc, char **argv)
 			break;
 
 		case 's':
-			if (isdigit((unsigned char)*optarg))
+			if (isdigit(*optarg))
 			{
 				int facility;
 				logfacility = strtoul(optarg, NULL, 10);
@@ -210,7 +210,7 @@ main(int argc, char **argv)
 			break;
 
 		case 'u':
-			if (isdigit((unsigned char)*optarg))
+			if (isdigit(*optarg))
 			{
 				unit_length = strtoul(optarg, NULL, 10);
 				if (unit_length < ULSRC_CMDLMIN)

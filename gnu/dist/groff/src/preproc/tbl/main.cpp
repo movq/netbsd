@@ -1,7 +1,7 @@
-/*	$NetBSD: main.cpp,v 1.1.1.2 2004/07/30 14:44:57 wiz Exp $	*/
+/*	$NetBSD: main.cpp,v 1.1.1.1 2003/06/30 17:52:10 wiz Exp $	*/
 
 // -*- C++ -*-
-/* Copyright (C) 1989, 1990, 1991, 1992, 2000, 2001, 2002, 2003, 2004
+/* Copyright (C) 1989, 1990, 1991, 1992, 2000, 2001, 2002, 2003
    Free Software Foundation, Inc.
      Written by James Clark (jjc@jclark.com)
 
@@ -575,11 +575,6 @@ void entry_format::debug_print() const
     put_string(font, stderr);
     putc(' ', stderr);
   }
-  if (!macro.empty()) {
-    putc('m', stderr);
-    put_string(macro, stderr);
-    putc(' ', stderr);
-  }
   switch (vertical_alignment) {
   case entry_modifier::CENTER:
     break;
@@ -893,40 +888,6 @@ format *process_format(table_input &in, options *opt,
 	  }
 	}
 	break;
-      case 'x':
-      case 'X':
-	do {
-	  c = in.get();
-	} while (c == ' ' || c == '\t');
-	if (c == EOF) {
-	  error("missing macro name");
-	  break;
-	}
-	if (c == '(') {
-	  for (;;) {
-	    c = in.get();
-	    if (c == EOF || c == ' ' || c == '\t') {
-	      error("missing `)'");
-	      break;
-	    }
-	    if (c == ')') {
-	      c = in.get();
-	      break;
-	    }
-	    list->macro += char(c);
-	  }
-	}
-	else {
-	  list->macro = c;
-	  char cc = c;
-	  c = in.get();
-	  if (!csdigit(cc)
-	      && c != EOF && c != ' ' && c != '\t' && c != '.' && c != '\n') {
-	    list->macro += char(c);
-	    c = in.get();
-	  }
-	}
-	break;
       case 'v':
       case 'V':
 	c = in.get();
@@ -1225,9 +1186,9 @@ table *process_data(table_input &in, format *f, options *opt)
 	  format_index = f->nrows - 1;
 	// A format row that is all lines doesn't use up a data line.
 	while (format_index < f->nrows - 1) {
-	  int cnt;
-	  for (cnt = 0; cnt < ncolumns; cnt++) {
-	    entry_format *e = f->entry[format_index] + cnt;
+	  int c;
+	  for (c = 0; c < ncolumns; c++) {
+	    entry_format *e = f->entry[format_index] + c;
 	    if (e->type != FORMAT_HLINE
 		&& e->type != FORMAT_DOUBLE_HLINE
 		// Unfortunately tbl treats a span as needing data.
@@ -1235,11 +1196,11 @@ table *process_data(table_input &in, format *f, options *opt)
 		)
 	      break;
 	  }
-	  if (cnt < ncolumns)
+	  if (c < ncolumns)
 	    break;
-	  for (cnt = 0; cnt < ncolumns; cnt++)
-	    tbl->add_entry(current_row, cnt, input_entry,
-			   f->entry[format_index] + cnt, current_filename,
+	  for (c = 0; c < ncolumns; c++)
+	    tbl->add_entry(current_row, c, input_entry,
+			   f->entry[format_index] + c, current_filename,
 			   current_lineno);
 	  tbl->add_vlines(current_row, f->vline[format_index]);
 	  format_index++;

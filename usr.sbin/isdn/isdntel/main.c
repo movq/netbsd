@@ -27,7 +27,7 @@
  *	isdntel - isdn4bsd telephone answering machine support
  *      ======================================================
  *
- *      $Id: main.c,v 1.6 2004/10/30 08:31:39 dsl Exp $ 
+ *      $Id: main.c,v 1.5 2003/10/06 09:43:27 itojun Exp $ 
  *
  * $FreeBSD$
  *
@@ -57,7 +57,6 @@ main(int argc, char **argv)
         int i;
 	int kchar;
 	struct pollfd set[1];
-	char *ncp;
 	
 	char *aliasfile = ALIASFILE;
 	int rrtimeout = REREADTIMEOUT;
@@ -83,9 +82,14 @@ main(int argc, char **argv)
 				break;
 
 			case 't':
-				rrtimeout = strtoul(optarg, &ncp, 10);
-				if (*ncp)
+				if (isdigit(*optarg))
+				{
+					rrtimeout = strtoul(optarg, NULL, 10);
+				}
+				else
+				{
 					usage();
+				}
 				break;
 
 			case '?':

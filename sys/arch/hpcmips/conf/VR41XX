@@ -1,4 +1,4 @@
-# $NetBSD: VR41XX,v 1.22 2004/11/10 17:54:04 christos Exp $
+# $NetBSD: VR41XX,v 1.16.2.2 2004/07/15 20:17:31 he Exp $
 #
 # GENERIC machine description file
 # 
@@ -20,7 +20,7 @@
 
 include		"arch/hpcmips/conf/std.hpcmips"
 include		"arch/hpcmips/conf/std.hpcmips.vr41"
-#ident 		"GENERIC-$Revision: 1.22 $"
+#ident 		"GENERIC-$Revision: 1.16.2.2 $"
 
 #options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
@@ -97,7 +97,6 @@ options 	INET6		# IPV6
 #options 	IPSEC_ESP	# IP security (encryption part; define w/ IPSEC)
 #options 	IPSEC_DEBUG	# debug for IP security
 #options 	MROUTING	# Multicast routing support
-#options 	PIM		# Protocol Independent Multicast
 #options 	ISO		# OSI networking
 #options 	TPIP		# TPIP
 #options 	EON		# OSI tunneling over IP
@@ -105,7 +104,6 @@ options 	INET6		# IPV6
 
 # NetBSD backwards compatibility
 options 	COMPAT_43
-options		COMPAT_BSDPTY	# /dev/[pt]ty?? ptys.
 
 options 	NFS_BOOT_DHCP
 
@@ -240,7 +238,6 @@ pwctl1 at vrgiu? platform NEC_MCCS id PWCTL_LCDLIGHT port 45
 pwctl2 at vrgiu? platform NEC_MCR_3XX id PWCTL_LCD port 10
 pwctl2 at vrgiu? platform NEC_MCR_500 id PWCTL_LCD port 10
 pwctl2 at vrgiu? platform NEC_MCCS id PWCTL_LCD port 10
-ewctl3 at vrgiu? platform NEC_MCCS id PWCTL_SPEAKER port 12
 pwctl3 at vrgiu? platform NEC_MCR_3XX id PWCTL_SPEAKER port 12
 pwctl3 at vrgiu? platform NEC_MCR_430 id PWCTL_SPEAKER port 44
 pwctl3 at vrgiu? platform NEC_MCR_500 id PWCTL_SPEAKER port 12
@@ -456,9 +453,9 @@ umidi* at uhub? port ? configuration ?
 
 # USB Ethernet adapters
 aue*	at uhub? port ?		# ADMtek AN986 Pegasus based adapters
-axe*	at uhub? port ?		# ASIX AX88172 based adapters
 cue*	at uhub? port ?		# CATC USB-EL1201A based adapters
 kue*	at uhub? port ?		# Kawasaki LSI KL5KUSB101B based adapters
+uax*	at uhub? port ?		# ASIX AX88172 based adapters
 url*	at uhub? port ?		# Realtek RTL8150L based adapters
 
 # Prolofic PL2301/PL2302 host-to-host adapter

@@ -1,4 +1,4 @@
-#	$NetBSD: files,v 1.702 2004/12/05 05:43:04 christos Exp $
+#	$NetBSD: files,v 1.662.2.9 2004/08/30 09:24:33 tron Exp $
 
 #	@(#)files.newconf	7.5 (Berkeley) 5/10/93
 
@@ -21,15 +21,10 @@ defflag				KTRACE
 defflag				SYSTRACE
 defparam			MAXUPRC
 defparam			RTC_OFFSET
-defparam			HZ
 defparam			DEFCORENAME
 defflag	opt_pipe.h		PIPE_SOCKETPAIR PIPE_NODIRECT
 
-#defflag				BUFQ_DISKSORT
-#defflag				BUFQ_FCFS
-defflag				BUFQ_PRIOCSCAN
-defflag				BUFQ_READPRIO
-defflag				NEW_BUFQ_STRATEGY	# same as BUFQ_READPRIO
+defflag	opt_bufq.h		NEW_BUFQ_STRATEGY
 
 defparam			SOMAXKVA
 defflag	opt_sock_counters.h	SOSEND_COUNTERS
@@ -49,8 +44,6 @@ defparam opt_sysvparam.h	SHMMAXPGS SEMMNI SEMMNS SEMUME SEMMNU
 
 defflag	opt_ntp.h		PPS_SYNC NTP
 
-defflag	opt_ptm.h		NO_DEV_PTM COMPAT_BSDPTY
-
 defparam opt_kmempages.h	NKMEMPAGES KMEMPAGES_MIN NKMEMPAGES_MAX
 defflag	opt_malloclog.h		MALLOCLOG
 defparam opt_malloclog.h	MALLOCLOGSIZE
@@ -63,11 +56,6 @@ defflag	opt_revcache.h		NAMECACHE_ENTER_REVERSE
 defflag	opt_execfmt.h		EXEC_AOUT EXEC_COFF EXEC_ECOFF EXEC_ELF32
 				EXEC_ELF64 EXEC_MACHO EXEC_SCRIPT
 				EXEC_ELF_NOTELESS
-
-defflag	opt_dkwedge.h		DKWEDGE_AUTODISCOVER
-				DKWEDGE_METHOD_BSDLABEL
-				DKWEDGE_METHOD_GPT
-				DKWEDGE_METHOD_MBR
 
 # compatibility options
 #
@@ -82,6 +70,7 @@ defflag				COMPAT_SUNOS
 defflag	opt_compat_svr4.h	COMPAT_SVR4 COMPAT_SVR4_32 SVR4_COMPAT_SOLARIS2
 defflag				COMPAT_ULTRIX
 defflag				COMPAT_NETBSD32
+defflag				COMPAT_AOUT
 defflag				COMPAT_AOUT_M68K
 defflag				COMPAT_M68K4K
 defflag				COMPAT_MACH
@@ -89,8 +78,7 @@ defflag				COMPAT_DARWIN
 defflag				COMPAT_VAX1K
 defflag				COMPAT_43
 defflag				COMPAT_PECOFF
-defflag	opt_compat_netbsd.h	COMPAT_20
-defflag	opt_compat_netbsd.h	COMPAT_16: COMPAT_20
+defflag	opt_compat_netbsd.h	COMPAT_16
 defflag	opt_compat_netbsd.h	COMPAT_15: COMPAT_16
 defflag	opt_compat_netbsd.h	COMPAT_14: COMPAT_15
 defflag	opt_compat_netbsd.h	COMPAT_13: COMPAT_14
@@ -136,7 +124,6 @@ include "netiso/files.netiso"
 include "netnatm/files.netnatm"
 include "netns/files.netns"
 include "netsmb/files.netsmb"
-include "net/files.pf"
 
 defflag				IPX		# IPX network stack
 defflag				PFIL_HOOKS	# pfil(9)
@@ -162,7 +149,6 @@ defflag	opt_uvm.h		USE_TOPDOWN_VM UVMMAP_NOCOUNTERS
 defflag				SOFTDEP			# XXX files.ufs?
 defflag				QUOTA			# XXX files.ufs?
 defflag				VNODE_OP_NOINLINE
-defflag				VNODE_LOCKDEBUG
 
 # buffer cache size options
 #
@@ -218,7 +204,6 @@ define	audiobus	{ }
 define	midibus		{ }
 define	midisyn
 define	ata	        {[channel = -1]}
-define	sata
 define	scsi_core
 define	scsi		{[channel = -1]}: scsi_core
 define	ata_hl		{[drive = -1]}
@@ -233,6 +218,7 @@ define	pckbport_machdep_cnattach
 define	mulaw
 define	auconv
 define	aurateconv
+file	dev/aurateconv.c	aurateconv	needs-flag
 
 # audio and midi devices, attaches to audio hardware driver
 #
@@ -509,13 +495,6 @@ file	../contrib/sys/dev/ic/athhal_osdep.c		ath
 device	atw: arp, wlan, ifnet, smc93cx6
 file	dev/ic/atw.c			atw
 
-# Realtek RTL8180 802.11
-#
-device rtw: arp, wlan, ifnet, smc93cx6
-file	dev/ic/rtw.c			rtw
-file	dev/ic/rtwphy.c			rtw
-file	dev/ic/rtwphyio.c		rtw
-
 # 3Com Etherlink-III Ethernet controller
 #
 device	ep: arp, ether, ifnet, mii, mii_bitbang
@@ -612,10 +591,6 @@ define	ncr53c9x
 device	esp: scsi, ncr53c9x
 file	dev/ic/ncr53c9x.c		ncr53c9x
 
-# Fujitsu MB87030/MB89352 SCSI Protocol Controller
-device	spc: scsi
-file	dev/ic/mb89352.c		spc
-
 # Hitachi HD44780 LCD panel controller
 define	hd44780
 file	dev/ic/hd44780_subr.c		hd44780
@@ -692,10 +667,9 @@ device	ne: ether, ifnet, arp, dp8390nic, mii
 file	dev/ic/ne2000.c			ne | ipkdb_ne
 
 # 8250/16[45]50-based "com" ports
-#
-defflag	opt_com.h		COM_DEBUG COM_MPLOCK
 # XXX In a perfect world, this would be done with attributes
-defflag	opt_com.h		COM_16650 COM_HAYESP COM_PXA2X0
+#
+defflag	opt_com.h		COM16650 COM_HAYESP COM_DEBUG COM_MPLOCK
 device	com { } : tty
 file	dev/ic/com.c			com			needs-flag
 
@@ -786,12 +760,11 @@ device	re: ether, ifnet, arp, mii
 
 # Common code for ESDI/IDE/etc. controllers
 #
-define	wdc_common
-device	wdc: ata, wdc_common
+device	wdc: ata
 
 device	atabus: atapi,ata_hl
 attach	atabus at ata
-file	dev/ic/wdc.c			atabus & wdc_common
+file	dev/ic/wdc.c			atabus
 
 # CHIPS and Technologies 82C7[12][01] Universal Peripheral Controller
 #
@@ -908,10 +881,6 @@ file	dev/ic/vga_common.c	vga | vga_rasterconsole
 device	igsfb: wsemuldisplaydev, wsrasteremulops, rasops8
 file	dev/ic/igsfb.c			igsfb			needs-flag
 file	dev/ic/igsfb_subr.c		igsfb
-
-# STI (hp graphics)
-device	sti: wsemuldisplaydev
-file	dev/ic/sti.c		sti & (sti_pci | sti_sgc | sti_phantom)
 
 # Attributes which machine-independent bus support can be attached to.
 # These should be defined here, because some of these busses can have
@@ -1097,22 +1066,14 @@ file	dev/verified_exec.c		verifiedexec		needs-flag
 # isochronous pseudo device for IEEE 1394, i.LINK or FireWire
 defpseudo fwiso:	ieee1394
 
-# driver attach / detach user interface
-defpseudo drvctl
-file	kern/kern_drvctl.c		drvctl
-
 #
 # File systems
 #
-include "coda/files.coda"
 include "fs/adosfs/files.adosfs"
-include "fs/cd9660/files.cd9660"
+include "coda/files.coda"
 include "fs/filecorefs/files.filecorefs"
-include "fs/msdosfs/files.msdosfs"
-include "fs/ntfs/files.ntfs"
-include "fs/ptyfs/files.ptyfs"
 include "fs/smbfs/files.smbfs"
-include "fs/union/files.union"
+include "fs/cd9660/files.cd9660"
 include "miscfs/fdesc/files.fdesc"
 include "miscfs/kernfs/files.kernfs"
 include "miscfs/nullfs/files.nullfs"
@@ -1120,7 +1081,10 @@ include "miscfs/overlay/files.overlay"
 include "miscfs/portal/files.portal"
 include "miscfs/procfs/files.procfs"
 include "miscfs/umapfs/files.umapfs"
+include "fs/union/files.union"
+include "fs/msdosfs/files.msdosfs"
 include "nfs/files.nfs"
+include "fs/ntfs/files.ntfs"
 include "ufs/files.ufs"
 
 #
@@ -1146,33 +1110,24 @@ file	ddb/db_xxx.c			ddb
 file	dev/auconv.c			auconv
 file	dev/audio.c			audio | midi | midibus	needs-flag
 file	dev/audiobell.c			audiobell
-file	dev/aurateconv.c		aurateconv		needs-flag
 file	dev/ccd.c			ccd			needs-flag
 file	dev/cgd.c			cgd			needs-flag
 file	dev/cgd_crypto.c		cgd
 file	dev/clock_subr.c
 file	dev/clockctl.c			clockctl		needs-flag
 file	dev/dksubr.c			cgd | xbd
-file	dev/dkwedge/dk.c
-file	dev/dkwedge/dkwedge_bsdlabel.c	dkwedge_method_bsdlabel
-file	dev/dkwedge/dkwedge_gpt.c	dkwedge_method_gpt
-file	dev/dkwedge/dkwedge_mbr.c	dkwedge_method_mbr
 file	dev/fss.c			fss			needs-count
 file	dev/md.c			md			needs-count
 file	dev/midi.c			midi | midibus		needs-flag
 file	dev/midisyn.c			midisyn
 file	dev/mm.c
-file	dev/mulaw.c			mulaw			needs-flag
+file	dev/mulaw.c			mulaw
 file	dev/nullcons_subr.c		nullcons		needs-flag
 file	dev/radio.c			radio			needs-flag
 file	dev/rnd.c			rnd			needs-flag
 file	dev/rndpool.c			rnd			needs-flag
 file	dev/sequencer.c			sequencer		needs-flag
 file	dev/vnd.c			vnd			needs-flag
-file	kern/bufq_disksort.c		#bufq_disksort
-file	kern/bufq_fcfs.c		#bufq_fcfs
-file	kern/bufq_priocscan.c		bufq_priocscan
-file	kern/bufq_readprio.c		bufq_readprio | new_bufq_strategy
 file	kern/core_elf32.c		exec_elf32
 file	kern/core_elf64.c		exec_elf64
 file	kern/core_netbsd.c
@@ -1245,9 +1200,7 @@ file	kern/sysv_sem.c			sysvsem
 file	kern/sysv_shm.c			sysvshm
 file	kern/tty.c
 file	kern/tty_conf.c
-file	kern/tty_bsdpty.c		compat_bsdpty
-file	kern/tty_pty.c			pty 			needs-flag
-file	kern/tty_ptm.c			pty
+file	kern/tty_pty.c			pty			needs-flag
 file	kern/tty_subr.c
 file	kern/tty_tb.c			tb			needs-count
 file	kern/tty_tty.c
@@ -1279,7 +1232,7 @@ file	miscfs/genfs/layer_vnops.c	nullfs | overlay | umapfs | lkm
 file	miscfs/specfs/spec_vnops.c
 file	miscfs/syncfs/sync_subr.c
 file	miscfs/syncfs/sync_vnops.c
-file	net/bpf.c			bpfilter		needs-flag
+file	net/bpf.c			bpfilter		needs-count
 file	net/bpf_filter.c		bpf_filter
 file	net/bsd-comp.c			ppp & ppp_bsdcomp
 file	net/if.c
@@ -1296,13 +1249,13 @@ file	net/if_gif.c			gif			needs-flag
 file	net/if_gre.c			gre			needs-flag
 file	net/if_hippisubr.c		hippi			needs-flag
 file	net/if_ieee1394subr.c		ieee1394
-file	net/if_loop.c			loop			needs-flag
+file	net/if_loop.c			loop			needs-count
 file	net/if_media.c
-file	net/if_ppp.c			ppp			needs-flag
+file	net/if_ppp.c			ppp			needs-count
 file	net/if_stf.c			stf & inet & inet6	needs-flag
-file	net/if_sl.c			sl			needs-flag
+file	net/if_sl.c			sl			needs-count
 file	net/if_spppsubr.c		sppp
-file	net/if_strip.c			strip			needs-flag
+file	net/if_strip.c			strip			needs-count
 file	net/if_tokensubr.c		token			needs-flag
 file	net/if_tun.c			tun			needs-flag
 file	net/if_vlan.c			vlan			needs-flag

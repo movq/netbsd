@@ -1,4 +1,4 @@
-/*	$NetBSD: sparkcrc.c,v 1.2 2004/11/10 03:57:23 jmc Exp $	*/
+/*	$NetBSD: sparkcrc.c,v 1.1.2.2 2004/06/17 08:03:09 tron Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -35,10 +35,6 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-
-#if HAVE_NBTOOL_CONFIG_H
-#include "nbtool_config.h"
-#endif
 
 #include <err.h>
 #include <stdio.h>

@@ -32,7 +32,7 @@
  */
 
 /* $Heimdal: arcfour.h,v 1.3.2.2 2003/09/19 15:14:14 lha Exp $
-   $NetBSD: arcfour.h,v 1.1.1.1 2004/04/02 14:47:44 lha Exp $ */
+   $NetBSD: arcfour.h,v 1.1.1.1.2.2 2004/04/21 04:55:40 jmc Exp $ */
 
 #ifndef GSSAPI_ARCFOUR_H_
 #define GSSAPI_ARCFOUR_H_ 1

@@ -1,4 +1,4 @@
-/*	$NetBSD: md.h,v 1.15 2004/06/06 06:06:59 christos Exp $	*/
+/*	$NetBSD: md.h,v 1.14 2004/01/29 08:48:23 lukem Exp $	*/
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -74,7 +74,7 @@
  * Default fileystem type for floppy disks.
  * On acorn32, that is  msdos.
  */
-const char *fdtype;
+EXTERN const char *fdtype INIT("msdos");
 
 /*
  *  prototypes for MD code.

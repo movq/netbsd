@@ -1,4 +1,4 @@
-/*	$NetBSD: cs4280.c,v 1.32 2004/11/09 16:28:14 kent Exp $	*/
+/*	$NetBSD: cs4280.c,v 1.26.4.1 2004/09/22 20:58:18 jmc Exp $	*/
 
 /*
  * Copyright (c) 1999, 2000 Tatoku Ogaito.  All rights reserved.
@@ -52,7 +52,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cs4280.c,v 1.32 2004/11/09 16:28:14 kent Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cs4280.c,v 1.26.4.1 2004/09/22 20:58:18 jmc Exp $");
 
 #include "midi.h"
 
@@ -123,7 +123,7 @@ int  cs4280_check_images(struct cs428x_softc *);
 int  cs4280_checkimage(struct cs428x_softc *, u_int32_t *, u_int32_t, u_int32_t);
 #endif
 
-const struct audio_hw_if cs4280_hw_if = {
+struct audio_hw_if cs4280_hw_if = {
 	cs428x_open,
 	cs428x_close,
 	NULL,
@@ -161,7 +161,7 @@ void cs4280_midi_close(void*);
 int  cs4280_midi_output(void *, int);
 void cs4280_midi_getinfo(void *, struct midi_info *);
 
-const struct midi_hw_if cs4280_midi_hw_if = {
+struct midi_hw_if cs4280_midi_hw_if = {
 	cs4280_midi_open,
 	cs4280_midi_close,
 	cs4280_midi_output,
@@ -212,12 +212,13 @@ cs4280_attach(parent, self, aux)
 	pci_intr_handle_t ih;
 	pcireg_t reg;
 	char devinfo[256];
+	mixer_ctrl_t ctl;
 	u_int32_t mem;
 	int pci_pwrmgmt_cap_reg, pci_pwrmgmt_csr_reg;
 
 	aprint_naive(": Audio controller\n");
 
-	pci_devinfo(pa->pa_id, pa->pa_class, 0, devinfo, sizeof(devinfo));
+	pci_devinfo(pa->pa_id, pa->pa_class, 0, devinfo);
 	aprint_normal(": %s (rev. 0x%02x)\n", devinfo,
 	    PCI_REVISION(pa->pa_class));
 
@@ -308,6 +309,22 @@ cs4280_attach(parent, self, aux)
 		return;
 	}
 
+	/* Turn mute off of DAC, CD and master volumes by default */
+	ctl.type = AUDIO_MIXER_ENUM;
+	ctl.un.ord = 0;	 /* off */
+
+	ctl.dev = cs4280_get_portnum_by_name(sc, AudioCoutputs,
+					     AudioNmaster, AudioNmute);
+	cs428x_mixer_set_port(sc, &ctl);
+
+	ctl.dev = cs4280_get_portnum_by_name(sc, AudioCinputs,
+					     AudioNdac, AudioNmute);
+	cs428x_mixer_set_port(sc, &ctl);
+
+	ctl.dev = cs4280_get_portnum_by_name(sc, AudioCinputs,
+					     AudioNcd, AudioNmute);
+	cs428x_mixer_set_port(sc, &ctl);
+	
 	audio_attach_mi(&cs4280_hw_if, sc, &sc->sc_dev);
 
 #if NMIDI > 0
@@ -359,7 +376,7 @@ cs4280_intr(p)
 		handled = 1;
 		mem = BA1READ4(sc, CS4280_PFIE);
 		BA1WRITE4(sc, CS4280_PFIE, (mem & ~PFIE_PI_MASK) | PFIE_PI_DISABLE);
-		if (sc->sc_prun) {
+		if (sc->sc_pintr) {
 			if ((sc->sc_pi%sc->sc_pcount) == 0)
 				sc->sc_pintr(sc->sc_parg);
 		} else {
@@ -403,30 +420,23 @@ cs4280_intr(p)
 			break;
 		case CF_16BIT_MONO:
 			for (i = 0; i < 512; i++) {
-				rdata  = *((int16_t *)empty_dma)>>1;
-				empty_dma += 2;
-				rdata += *((int16_t *)empty_dma)>>1;
-				empty_dma += 2;
-				*((int16_t *)sc->sc_rn) = rdata;
-				sc->sc_rn += 2;
+				rdata  = *((int16_t *)empty_dma)++>>1;
+				rdata += *((int16_t *)empty_dma)++>>1;
+				*((int16_t *)sc->sc_rn)++ = rdata;
 			}
 			break;
 		case CF_8BIT_STEREO:
 			for (i = 0; i < 512; i++) {
-				rdata = *((int16_t*)empty_dma);
-				empty_dma += 2;
+				rdata = *((int16_t*)empty_dma)++;
 				*sc->sc_rn++ = rdata >> 8;
-				rdata = *((int16_t*)empty_dma);
-				empty_dma += 2;
+				rdata = *((int16_t*)empty_dma)++;
 				*sc->sc_rn++ = rdata >> 8;
 			}
 			break;
 		case CF_8BIT_MONO:
 			for (i = 0; i < 512; i++) {
-				rdata =	 *((int16_t*)empty_dma) >>1;
-				empty_dma += 2;
-				rdata += *((int16_t*)empty_dma) >>1;
-				empty_dma += 2;
+				rdata =	 *((int16_t*)empty_dma)++ >>1;
+				rdata += *((int16_t*)empty_dma)++ >>1;
 				*sc->sc_rn++ = rdata >>8;
 			}
 			break;
@@ -437,7 +447,7 @@ cs4280_intr(p)
 		if (sc->sc_rn >= sc->sc_re)
 			sc->sc_rn = sc->sc_rs;
 		BA1WRITE4(sc, CS4280_CIE, mem);
-		if (sc->sc_rrun) {
+		if (sc->sc_rintr) {
 			if ((sc->sc_ri%(sc->sc_rcount)) == 0)
 				sc->sc_rintr(sc->sc_rarg);
 		} else {

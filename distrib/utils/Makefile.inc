@@ -1,4 +1,4 @@
-# $NetBSD: Makefile.inc,v 1.11 2004/06/09 16:03:37 abs Exp $
+# $NetBSD: Makefile.inc,v 1.10.2.1 2004/06/17 08:30:26 tron Exp $
 # utils one might want in a crunched binary
 
 .if !defined(NOTINCRUNCHED)

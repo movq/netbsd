@@ -1,4 +1,4 @@
-/*	$NetBSD: eval.c,v 1.80 2004/10/30 19:29:27 christos Exp $	*/
+/*	$NetBSD: eval.c,v 1.75 2003/11/14 10:27:10 dsl Exp $	*/
 
 /*-
  * Copyright (c) 1993
@@ -37,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)eval.c	8.9 (Berkeley) 6/8/95";
 #else
-__RCSID("$NetBSD: eval.c,v 1.80 2004/10/30 19:29:27 christos Exp $");
+__RCSID("$NetBSD: eval.c,v 1.75 2003/11/14 10:27:10 dsl Exp $");
 #endif
 #endif /* not lint */
 
@@ -45,7 +45,6 @@ __RCSID("$NetBSD: eval.c,v 1.80 2004/10/30 19:29:27 christos Exp $");
 #include <signal.h>
 #include <stdio.h>
 #include <unistd.h>
-#include <sys/fcntl.h>
 #include <sys/times.h>
 #include <sys/param.h>
 #include <sys/types.h>
@@ -126,31 +125,6 @@ SHELLPROC {
 }
 #endif
 
-static int
-sh_pipe(int fds[2])
-{
-	int nfd;
-
-	if (pipe(fds))
-		return -1;
-
-	if (fds[0] < 3) {
-		nfd = fcntl(fds[0], F_DUPFD, 3);
-		if (nfd != -1) {
-			close(fds[0]);
-			fds[0] = nfd;
-		}
-	}
-
-	if (fds[1] < 3) {
-		nfd = fcntl(fds[1], F_DUPFD, 3);
-		if (nfd != -1) {
-			close(fds[1]);
-			fds[1] = nfd;
-		}
-	}
-	return 0;
-}
 
 
 /*
@@ -237,13 +211,13 @@ evaltree(union node *n, int flags)
 		evaltree(n->nbinary.ch1, EV_TESTED);
 		if (evalskip || exitstatus != 0)
 			goto out;
-		evaltree(n->nbinary.ch2, flags);
+		evaltree(n->nbinary.ch2, flags | EV_TESTED);
 		break;
 	case NOR:
 		evaltree(n->nbinary.ch1, EV_TESTED);
 		if (evalskip || exitstatus == 0)
 			goto out;
-		evaltree(n->nbinary.ch2, flags);
+		evaltree(n->nbinary.ch2, flags | EV_TESTED);
 		break;
 	case NREDIR:
 		expredir(n->nredir.redirect);
@@ -354,7 +328,7 @@ evalfor(union node *n, int flags)
 	setstackmark(&smark);
 	arglist.lastp = &arglist.list;
 	for (argp = n->nfor.args ; argp ; argp = argp->narg.next) {
-		expandarg(argp, &arglist, EXP_FULL | EXP_TILDE);
+		expandarg(argp, &arglist, EXP_FULL | EXP_TILDE | EXP_RECORD);
 		if (evalskip)
 			goto out;
 	}
@@ -502,7 +476,7 @@ evalpipe(union node *n)
 		prehash(lp->n);
 		pip[1] = -1;
 		if (lp->next) {
-			if (sh_pipe(pip) < 0) {
+			if (pipe(pip) < 0) {
 				close(prevfd);
 				error("Pipe call failed");
 			}
@@ -574,7 +548,7 @@ evalbackcmd(union node *n, struct backcmd *result)
 #endif
 	{
 		INTOFF;
-		if (sh_pipe(pip) < 0)
+		if (pipe(pip) < 0)
 			error("Pipe call failed");
 		jp = makejob(n, 1);
 		if (forkshell(jp, n, FORK_NOJOB) == 0) {
@@ -605,7 +579,6 @@ syspath(void)
 {
 	static char *sys_path = NULL;
 	static int mib[] = {CTL_USER, USER_CS_PATH};
-	static char def_path[] = "PATH=/usr/bin:/bin:/usr/sbin:/sbin";
 	size_t len;
 
 	if (sys_path == NULL) {
@@ -616,7 +589,7 @@ syspath(void)
 		} else {
 			ckfree(sys_path);
 			/* something to keep things happy */
-			sys_path = def_path;
+			sys_path = "PATH=/usr/bin:/bin:/usr/sbin:/sbin";
 		}
 	}
 	return sys_path;
@@ -703,7 +676,6 @@ evalcommand(union node *cmd, int flags, struct backcmd *backcmd)
 
 	arglist.lastp = &arglist.list;
 	varflag = 1;
-	/* Expand arguments, ignoring the initial 'name=value' ones */
 	for (argp = cmd->ncmd.args ; argp ; argp = argp->narg.next) {
 		char *p = argp->narg.text;
 		if (varflag && is_name(*p)) {
@@ -720,7 +692,6 @@ evalcommand(union node *cmd, int flags, struct backcmd *backcmd)
 
 	expredir(cmd->ncmd.redirect);
 
-	/* Now do the initial 'name=value' ones we skipped above */
 	varlist.lastp = &varlist.list;
 	for (argp = cmd->ncmd.args ; argp ; argp = argp->narg.next) {
 		char *p = argp->narg.text;
@@ -829,7 +800,7 @@ evalcommand(union node *cmd, int flags, struct backcmd *backcmd)
 		mode = cmd->ncmd.backgnd;
 		if (flags & EV_BACKCMD) {
 			mode = FORK_NOJOB;
-			if (sh_pipe(pip) < 0)
+			if (pipe(pip) < 0)
 				error("Pipe call failed");
 		}
 #ifdef DO_SHAREDVFORK

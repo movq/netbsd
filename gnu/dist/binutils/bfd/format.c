@@ -86,7 +86,9 @@ DESCRIPTION
 */
 
 bfd_boolean
-bfd_check_format (bfd *abfd, bfd_format format)
+bfd_check_format (abfd, format)
+     bfd *abfd;
+     bfd_format format;
 {
   return bfd_check_format_matches (abfd, format, NULL);
 }
@@ -96,8 +98,8 @@ FUNCTION
 	bfd_check_format_matches
 
 SYNOPSIS
-	bfd_boolean bfd_check_format_matches
-	  (bfd *abfd, bfd_format format, char ***matching);
+	bfd_boolean bfd_check_format_matches (bfd *abfd, bfd_format format,
+					      char ***matching);
 
 DESCRIPTION
 	Like <<bfd_check_format>>, except when it returns FALSE with
@@ -112,7 +114,10 @@ DESCRIPTION
 */
 
 bfd_boolean
-bfd_check_format_matches (bfd *abfd, bfd_format format, char ***matching)
+bfd_check_format_matches (abfd, format, matching)
+     bfd *abfd;
+     bfd_format format;
+     char ***matching;
 {
   extern const bfd_target binary_vec;
   const bfd_target * const *target;
@@ -145,7 +150,7 @@ bfd_check_format_matches (bfd *abfd, bfd_format format, char ***matching)
 
       *matching = NULL;
       amt = sizeof (*matching_vector) * 2 * _bfd_target_vector_entries;
-      matching_vector = bfd_malloc (amt);
+      matching_vector = (const bfd_target **) bfd_malloc (amt);
       if (!matching_vector)
 	return FALSE;
     }
@@ -162,7 +167,7 @@ bfd_check_format_matches (bfd *abfd, bfd_format format, char ***matching)
       if (bfd_seek (abfd, (file_ptr) 0, SEEK_SET) != 0)	/* rewind! */
 	{
 	  if (matching)
-	    free (matching_vector);
+	    free ((PTR) matching_vector);
 	  return FALSE;
 	}
 
@@ -173,7 +178,7 @@ bfd_check_format_matches (bfd *abfd, bfd_format format, char ***matching)
 	  abfd->xvec = right_targ;	/* Set the target as returned.  */
 
 	  if (matching)
-	    free (matching_vector);
+	    free ((PTR) matching_vector);
 
 	  return TRUE;			/* File position has moved, BTW.  */
 	}
@@ -196,7 +201,7 @@ bfd_check_format_matches (bfd *abfd, bfd_format format, char ***matching)
 	  abfd->format = bfd_unknown;
 
 	  if (matching)
-	    free (matching_vector);
+	    free ((PTR) matching_vector);
 
 	  bfd_set_error (bfd_error_file_not_recognized);
 
@@ -217,7 +222,7 @@ bfd_check_format_matches (bfd *abfd, bfd_format format, char ***matching)
       if (bfd_seek (abfd, (file_ptr) 0, SEEK_SET) != 0)
 	{
 	  if (matching)
-	    free (matching_vector);
+	    free ((PTR) matching_vector);
 	  return FALSE;
 	}
 
@@ -276,7 +281,7 @@ bfd_check_format_matches (bfd *abfd, bfd_format format, char ***matching)
 	  abfd->format = bfd_unknown;
 
 	  if (matching)
-	    free (matching_vector);
+	    free ((PTR) matching_vector);
 
 	  return FALSE;
 	}
@@ -329,7 +334,7 @@ bfd_check_format_matches (bfd *abfd, bfd_format format, char ***matching)
       abfd->xvec = right_targ;		/* Change BFD's target permanently.  */
 
       if (matching)
-	free (matching_vector);
+	free ((PTR) matching_vector);
 
       return TRUE;			/* File position has moved, BTW.  */
     }
@@ -342,7 +347,7 @@ bfd_check_format_matches (bfd *abfd, bfd_format format, char ***matching)
       bfd_set_error (bfd_error_file_not_recognized);
 
       if (matching)
-	free (matching_vector);
+	free ((PTR) matching_vector);
     }
   else
     {
@@ -380,7 +385,9 @@ DESCRIPTION
 */
 
 bfd_boolean
-bfd_set_format (bfd *abfd, bfd_format format)
+bfd_set_format (abfd, format)
+     bfd *abfd;
+     bfd_format format;
 {
   unsigned int tmp;
 
@@ -421,16 +428,19 @@ DESCRIPTION
 */
 
 const char *
-bfd_format_string (bfd_format format)
+bfd_format_string (format)
+     bfd_format format;
 {
-  if (((int) format < (int) bfd_unknown)
-      || ((int) format >= (int) bfd_type_end))
+  int tmp;
+
+  if (((tmp = format) <(int) bfd_unknown)
+      || ((int)format >=(int) bfd_type_end))
     return "invalid";
 
   switch (format)
     {
     case bfd_object:
-      return "object";		/* Linker/assembler/compiler output.  */
+      return "object";		/* Linker/assember/compiler output.  */
     case bfd_archive:
       return "archive";		/* Object archive file.  */
     case bfd_core:

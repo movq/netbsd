@@ -1,4 +1,4 @@
-/*	$NetBSD: arcbiosvar.h,v 1.4 2004/04/10 19:32:53 pooka Exp $	*/
+/*	$NetBSD: arcbiosvar.h,v 1.3.26.1 2004/07/23 06:57:24 tron Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.

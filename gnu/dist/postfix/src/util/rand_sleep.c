@@ -1,5 +1,3 @@
-/*	$NetBSD: rand_sleep.c,v 1.1.1.5 2004/05/31 00:25:00 heas Exp $	*/
-
 /*++
 /* NAME
 /*	rand_sleep 3
@@ -39,6 +37,10 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <time.h>
+
+#ifndef RAND_MAX
+#define RAND_MAX 0x7fffffff
+#endif
 
 /* Utility library. */
 

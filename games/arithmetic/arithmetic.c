@@ -1,4 +1,4 @@
-/*	$NetBSD: arithmetic.c,v 1.21 2004/11/05 21:30:31 dsl Exp $	*/
+/*	$NetBSD: arithmetic.c,v 1.20 2004/01/27 20:30:28 jsm Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -42,7 +42,7 @@ __COPYRIGHT("@(#) Copyright (c) 1989, 1993\n\
 #if 0
 static char sccsid[] = "@(#)arithmetic.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: arithmetic.c,v 1.21 2004/11/05 21:30:31 dsl Exp $");
+__RCSID("$NetBSD: arithmetic.c,v 1.20 2004/01/27 20:30:28 jsm Exp $");
 #endif
 #endif /* not lint */
 
@@ -246,8 +246,8 @@ retry:
 			(void)printf("\n");
 			return(EOF);
 		}
-		for (p = line; *p && isspace((unsigned char)*p); ++p);
-		if (!isdigit((unsigned char)*p)) {
+		for (p = line; *p && isspace(*p); ++p);
+		if (!isdigit(*p)) {
 			(void)printf("Please type a number.\n");
 			continue;
 		}

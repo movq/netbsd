@@ -22,7 +22,7 @@ SOFTWARE.
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: readfile.c,v 1.13 2004/10/29 20:33:06 dsl Exp $");
+__RCSID("$NetBSD: readfile.c,v 1.12 2003/07/14 06:08:05 itojun Exp $");
 #endif
 
 
@@ -908,7 +908,7 @@ eval_symbol(char **symbol, struct host *hp)
 		if (optype == OP_ADDITION) {
 			value = 0L;			/* Assume an illegal value */
 			eat_whitespace(symbol);
-			if (isdigit((unsigned char)**symbol)) {
+			if (isdigit(**symbol)) {
 				value = get_u_long(symbol);
 			} else {
 				len = sizeof(tmpstr);
@@ -995,7 +995,7 @@ eval_symbol(char **symbol, struct host *hp)
 				} else if (!strncmp(*symbol, "cmu", 3)) {
 					bcopy(vm_cmu, hp->vm_cookie, 4);
 				} else {
-					if (!isdigit((unsigned char)**symbol))
+					if (!isdigit(**symbol))
 						return E_BAD_IPADDR;
 					if (prs_inetaddr(symbol, &value) < 0)
 						return E_BAD_IPADDR;
@@ -1181,7 +1181,7 @@ get_string(char **src, char *dest, unsigned int *length)
 	/*
 	 * Remove that troublesome trailing whitespace. . .
 	 */
-	while ((n > 0) && isspace((unsigned char)dest[-1])) {
+	while ((n > 0) && isspace(dest[-1])) {
 		dest--;
 		n--;
 	}
@@ -1296,16 +1296,16 @@ PRIVATE boolean
 goodname(char *hostname)
 {
 	do {
-		if (!isalpha((unsigned char)*hostname++)) {	/* First character must be a letter */
+		if (!isalpha(*hostname++)) {	/* First character must be a letter */
 			return FALSE;
 		}
-		while (isalnum((unsigned char)*hostname) ||
+		while (isalnum(*hostname) ||
 			   (*hostname == '-') ||
 			   (*hostname == '_') )
 		{
 			hostname++;			/* Alphanumeric or a hyphen */
 		}
-		if (!isalnum((unsigned char)hostname[-1])) {	/* Last must be alphanumeric */
+		if (!isalnum(hostname[-1])) {	/* Last must be alphanumeric */
 			return FALSE;
 		}
 		if (*hostname == '\0') {/* Done? */
@@ -1533,7 +1533,7 @@ eat_whitespace(char **s)
 	char *t;
 
 	t = *s;
-	while (*t && isspace((unsigned char)*t)) {
+	while (*t && isspace(*t)) {
 		t++;
 	}
 	*s = t;
@@ -1549,8 +1549,8 @@ PRIVATE void
 makelower(char *s)
 {
 	while (*s) {
-		if (isupper((unsigned char)*s)) {
-			*s = tolower((unsigned char)*s);
+		if (isupper(*s)) {
+			*s = tolower(*s);
 		}
 		s++;
 	}
@@ -1595,7 +1595,7 @@ get_addresses(char **src)
 
 	address1 = tmpaddrlist;
 	for (addrcount = 0; addrcount < MAXINADDRS; addrcount++) {
-		while (isspace((unsigned char)**src) || (**src == ',')) {
+		while (isspace(**src) || (**src == ',')) {
 			(*src)++;
 		}
 		if (!**src) {			/* Quit if nothing more */
@@ -1652,11 +1652,11 @@ prs_inetaddr(char **src, u_int32 *result)
 
 #if 1	/* XXX - experimental */
 	/* Leading alpha char causes IP addr lookup. */
-	if (isalpha((unsigned char)**src)) {
+	if (isalpha(**src)) {
 		/* Lookup IP address. */
 		s = *src;
 		t = tmpstr;
-		while ((isalnum((unsigned char)*s) || (*s == '.') ||
+		while ((isalnum(*s) || (*s == '.') ||
 				(*s == '-') || (*s == '_') ) &&
 			   (t < &tmpstr[MAXSTRINGLEN - 1]) )
 			*t++ = *s++;
@@ -1679,7 +1679,7 @@ prs_inetaddr(char **src, u_int32 *result)
 	pp = parts;
   loop:
 	/* If it's not a digit, return error. */
-	if (!isdigit((unsigned char)**src))
+	if (!isdigit(**src))
 		return -1;
 	*pp++ = get_u_long(src);
 	if (**src == '.') {
@@ -1691,7 +1691,7 @@ prs_inetaddr(char **src, u_int32 *result)
 	}
 #if 0
 	/* This is handled by the caller. */
-	if (**src && !((unsigned char)isspace(**src) || (**src == ':'))) {
+	if (**src && !(isspace(**src) || (**src == ':'))) {
 		return (-1);
 	}
 #endif
@@ -1806,7 +1806,7 @@ interp_byte(char **src, byte *retbyte)
 		 (*src)[1] == 'X')) {
 		(*src) += 2;			/* allow 0x for hex, but don't require it */
 	}
-	if (!isxdigit((unsigned char)(*src)[0]) || !isxdigit((unsigned char)(*src)[1])) {
+	if (!isxdigit((*src)[0]) || !isxdigit((*src)[1])) {
 		return -1;
 	}
 	if (sscanf(*src, "%2x", &v) != 1) {
@@ -1847,12 +1847,12 @@ get_u_long(char **src)
 		(*src)++;
 	}
 	while ((c = **src)) {
-		if (isdigit((unsigned char)c)) {
+		if (isdigit(c)) {
 			value = (value * base) + (c - '0');
 			(*src)++;
 			continue;
 		}
-		if (base == 16 && isxdigit((unsigned char)c)) {
+		if (base == 16 && isxdigit(c)) {
 			value = (value << 4) + ((c & ~32) + 10 - 'A');
 			(*src)++;
 			continue;

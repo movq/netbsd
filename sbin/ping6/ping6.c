@@ -1,4 +1,4 @@
-/*	$NetBSD: ping6.c,v 1.61 2004/10/29 19:20:36 dsl Exp $	*/
+/*	$NetBSD: ping6.c,v 1.57 2003/08/07 10:04:36 agc Exp $	*/
 /*	$KAME: ping6.c,v 1.164 2002/11/16 14:05:37 itojun Exp $	*/
 
 /*
@@ -77,7 +77,7 @@ static char sccsid[] = "@(#)ping.c	8.1 (Berkeley) 6/5/93";
 #else
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: ping6.c,v 1.61 2004/10/29 19:20:36 dsl Exp $");
+__RCSID("$NetBSD: ping6.c,v 1.57 2003/08/07 10:04:36 agc Exp $");
 #endif
 #endif
 
@@ -710,7 +710,7 @@ main(argc, argv)
 		for (i = ICMP6ECHOLEN; i < packlen; ++i)
 			*datap++ = i;
 
-	ident = arc4random() & 0xFFFF;
+	ident = getpid() & 0xFFFF;
 	memset(nonce, 0, sizeof(nonce));
 	for (i = 0; i < sizeof(nonce); i += sizeof(u_int32_t))
 		*((u_int32_t *)&nonce[i]) = arc4random();
@@ -2583,7 +2583,7 @@ fill(bp, patp)
 	char *cp;
 
 	for (cp = patp; *cp; cp++)
-		if (!isxdigit((unsigned char)*cp))
+		if (!isxdigit(*cp))
 			errx(1, "patterns must be specified as hex digits");
 	ii = sscanf(patp,
 	    "%2x%2x%2x%2x%2x%2x%2x%2x%2x%2x%2x%2x%2x%2x%2x%2x",
@@ -2698,6 +2698,6 @@ usage()
 	    "] [-a [aAclsg]] [-b sockbufsiz] [-c count] \n"
             "\t[-I interface] [-i wait] [-l preload] [-p pattern] "
 	    "[-S sourceaddr]\n"
-            "\t[-s packetsize] [-h hoplimit] [-g gateway] [hops...] host\n");
+            "\t[-s packetsize] [-h hoplimit] [hops...] [-g gateway] host\n");
 	exit(1);
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: nfsdiskless.h,v 1.23 2004/05/22 22:52:16 jonathan Exp $	*/
+/*	$NetBSD: nfsdiskless.h,v 1.21 2004/03/11 21:48:43 cl Exp $	*/
 
 /*-
  * Copyright (c) 1995, 1997 The NetBSD Foundation, Inc.
@@ -77,17 +77,17 @@ int nfs_boot_deladdress __P((struct ifnet *, struct proc *, u_int32_t));
 void nfs_boot_flushrt __P((struct ifnet *));
 int nfs_boot_setrecvtimo __P((struct socket *));
 int nfs_boot_enbroadcast __P((struct socket *));
-int nfs_boot_sobind_ipport __P((struct socket *, u_int16_t, struct proc *));
+int nfs_boot_sobind_ipport __P((struct socket *, u_int16_t));
 int nfs_boot_sendrecv __P((struct socket *, struct mbuf *,
 			   int (*)(struct mbuf*, void*, int), struct mbuf*,
 			   int (*)(struct mbuf*, void*), struct mbuf**,
-			   struct mbuf**, void*, struct proc *));
+			   struct mbuf**, void*));
 
 int nfs_bootdhcp  __P((struct nfs_diskless *, struct proc *));
 int nfs_bootparam __P((struct nfs_diskless *, struct proc *));
 int nfs_bootstatic __P((struct nfs_diskless *, struct proc *));
 
-extern int (*nfs_bootstatic_callback)(struct nfs_diskless *);
+int (*nfs_bootstatic_callback)(struct nfs_diskless *);
 
 #define	NFS_BOOTSTATIC_HAS_MYIP		0x01
 #define	NFS_BOOTSTATIC_HAS_GWIP		0x02

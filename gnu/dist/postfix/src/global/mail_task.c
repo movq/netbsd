@@ -1,5 +1,3 @@
-/*	$NetBSD: mail_task.c,v 1.1.1.4 2004/05/31 00:24:32 heas Exp $	*/
-
 /*++
 /* NAME
 /*	mail_task 3
@@ -56,7 +54,7 @@ const char *mail_task(const char *argv0)
 
     if (canon_name == 0)
 	canon_name = vstring_alloc(10);
-    if ((slash = strrchr(argv0, '/')) != 0 && slash[1])
+    if ((slash = strrchr(argv0, '/')) != 0)
 	argv0 = slash + 1;
     if ((tag = safe_getenv(CONF_ENV_LOGTAG)) == 0)
 	tag = DEF_SYSLOG_NAME;

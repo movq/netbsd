@@ -1,12 +1,12 @@
 #!/bin/sh
 #
-# $NetBSD: nfsd,v 1.7 2004/10/12 14:51:03 lukem Exp $
+# $NetBSD: nfsd,v 1.4 2001/06/16 06:13:10 lukem Exp $
 #
 
 # PROVIDE: nfsd
-# REQUIRE: rpcbind mountd
+# REQUIRE: mountd
 
-$_rc_subr_loaded . /etc/rc.subr
+. /etc/rc.subr
 
 name="nfsd"
 rcvar="nfs_server"
@@ -14,6 +14,4 @@ command="/usr/sbin/${name}"
 required_vars="mountd rpcbind"
 
 load_rc_config $name
-load_rc_config_var rpcbind rpcbind
-load_rc_config_var mountd mountd
 run_rc_command "$1"

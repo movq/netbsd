@@ -1,20 +1,16 @@
-#	$NetBSD: Makefile,v 1.3 2004/05/16 10:25:14 lukem Exp $
+#	$NetBSD: Makefile,v 1.2 2003/09/13 20:18:08 lukem Exp $
 
 .include <bsd.own.mk>
 
 PROG=	proxymngr
 SRCS=	main.c pmdb.c config.c
 
-PROXYMANAGERDIR=	${X11ETCDIR}/proxymngr
-
-CPPFLAGS.main.c=	-DCONFIG_FILE=\"${PROXYMANAGERDIR}/pmconfig\"
-
-X11EXTRAMANDEFS+=	-DPROXYMANAGERDIR=${PROXYMANAGERDIR}
+CPPFLAGS.main.c=-DCONFIG_FILE=\"${X11LIBDIR}/proxymngr/pmconfig\"
 
 CPPSCRIPTS=	pmconfig
 CPPSCRIPTFLAGS=	-DLBXPROXY=${X11BINDIR}/lbxproxy
-CONFIGFILES=	pmconfig
-FILESDIR=	${PROXYMANAGERDIR}
+FILES=		pmconfig
+FILESDIR=	${X11LIBDIR}/proxymngr
 
 INCS=	PM.h PMproto.h
 INCSDIR=${X11INCDIR}/X11/PM

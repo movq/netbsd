@@ -1,4 +1,4 @@
-/*	$NetBSD: parser.c,v 1.57 2004/06/27 10:27:57 dsl Exp $	*/
+/*	$NetBSD: parser.c,v 1.55 2003/08/07 09:05:37 agc Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -37,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)parser.c	8.7 (Berkeley) 5/16/95";
 #else
-__RCSID("$NetBSD: parser.c,v 1.57 2004/06/27 10:27:57 dsl Exp $");
+__RCSID("$NetBSD: parser.c,v 1.55 2003/08/07 09:05:37 agc Exp $");
 #endif
 #endif /* not lint */
 
@@ -961,7 +961,7 @@ readtoken1(int firstc, char const *syntax, char *eofmark, int striptabs)
 #endif
 		CHECKEND();	/* set c to PEOF if at end of here document */
 		for (;;) {	/* until end of line or end of word */
-			CHECKSTRSPACE(4, out);	/* permit 4 calls to USTPUTC */
+			CHECKSTRSPACE(3, out);	/* permit 3 calls to USTPUTC */
 			switch(syntax[c]) {
 			case CNL:	/* '\n' */
 				if (syntax == BASESYNTAX)
@@ -987,84 +987,57 @@ readtoken1(int firstc, char const *syntax, char *eofmark, int striptabs)
 				if (c == PEOF) {
 					USTPUTC('\\', out);
 					pungetc();
-					break;
-				}
-				if (c == '\n') {
+				} else if (c == '\n') {
 					if (doprompt)
 						setprompt(2);
 					else
 						setprompt(0);
-					break;
-				}
-				quotef = 1;
-				if (ISDBLQUOTE() && c != '\\' &&
-				    c != '`' && c != '$' &&
-				    (c != '"' || eofmark != NULL))
-					USTPUTC('\\', out);
-				if (SQSYNTAX[c] == CCTL)
-					USTPUTC(CTLESC, out);
-				else if (eofmark == NULL) {
-					USTPUTC(CTLQUOTEMARK, out);
+				} else {
+					if (ISDBLQUOTE() && c != '\\' &&
+					    c != '`' && c != '$' &&
+					    (c != '"' || eofmark != NULL))
+						USTPUTC('\\', out);
+					if (SQSYNTAX[c] == CCTL)
+						USTPUTC(CTLESC, out);
+					else if (eofmark == NULL)
+						USTPUTC(CTLQUOTEMARK, out);
 					USTPUTC(c, out);
-					if (varnest != 0)
-						USTPUTC(CTLQUOTEEND, out);
-					break;
+					quotef++;
 				}
-				USTPUTC(c, out);
 				break;
 			case CSQUOTE:
 				if (syntax != SQSYNTAX) {
-					if (eofmark == NULL)
-						USTPUTC(CTLQUOTEMARK, out);
-					quotef = 1;
-					syntax = SQSYNTAX;
-					break;
+				    if (eofmark == NULL)
+					    USTPUTC(CTLQUOTEMARK, out);
+				    syntax = SQSYNTAX;
+				    break;
 				}
-				if (eofmark != NULL && arinest == 0 &&
-				    varnest == 0) {
-					/* Ignore inside quoted here document */
-					USTPUTC(c, out);
-					break;
-				}
-				/* End of single quotes... */
-				if (arinest)
-					syntax = ARISYNTAX;
-				else {
-					syntax = BASESYNTAX;
-					if (varnest != 0)
-						USTPUTC(CTLQUOTEEND, out);
-				}
-				break;
+				/* FALLTHROUGH */
 			case CDQUOTE:
 				if (eofmark != NULL && arinest == 0 &&
 				    varnest == 0) {
-					/* Ignore inside here document */
 					USTPUTC(c, out);
-					break;
-				}
-				quotef = 1;
-				if (arinest) {
-					if (ISDBLQUOTE()) {
-						syntax = ARISYNTAX;
-						CLRDBLQUOTE();
-					} else {
-						syntax = DQSYNTAX;
-						SETDBLQUOTE();
-						USTPUTC(CTLQUOTEMARK, out);
-					}
-					break;
-				}
-				if (eofmark != NULL)
-					break;
-				if (ISDBLQUOTE()) {
-					if (varnest != 0)
-						USTPUTC(CTLQUOTEEND, out);
-					syntax = BASESYNTAX;
-					CLRDBLQUOTE();
 				} else {
-					syntax = DQSYNTAX;
-					SETDBLQUOTE();
-					USTPUTC(CTLQUOTEMARK, out);
+					if (arinest) {
+						if (c != '"' || ISDBLQUOTE()) {
+							syntax = ARISYNTAX;
+							CLRDBLQUOTE();
+						} else {
+							syntax = DQSYNTAX;
+							SETDBLQUOTE();
+							USTPUTC(CTLQUOTEMARK, out);
+						}
+					} else if (eofmark == NULL) {
+						if (c != '"' || ISDBLQUOTE()) {
+							syntax = BASESYNTAX;
+							CLRDBLQUOTE();
+						} else {
+							syntax = DQSYNTAX;
+							SETDBLQUOTE();
+							USTPUTC(CTLQUOTEMARK, out);
+						}
+					}
+					quotef++;
 				}
 				break;
 			case CVAR:	/* '$' */

@@ -1,4 +1,4 @@
-/*	$NetBSD: usb_quirks.c,v 1.50 2004/06/23 02:30:52 mycroft Exp $	*/
+/*	$NetBSD: usb_quirks.c,v 1.49.2.1 2004/07/02 17:22:28 he Exp $	*/
 /*	$FreeBSD: src/sys/dev/usb/usb_quirks.c,v 1.30 2003/01/02 04:15:55 imp Exp $	*/
 
 /*
@@ -39,7 +39,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: usb_quirks.c,v 1.50 2004/06/23 02:30:52 mycroft Exp $");
+__KERNEL_RCSID(0, "$NetBSD: usb_quirks.c,v 1.49.2.1 2004/07/02 17:22:28 he Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

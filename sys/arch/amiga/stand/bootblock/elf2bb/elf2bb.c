@@ -1,4 +1,4 @@
-/*	$NetBSD: elf2bb.c,v 1.10 2004/12/04 16:23:31 chs Exp $	*/
+/*	$NetBSD: elf2bb.c,v 1.8 2003/10/26 20:57:37 mhitch Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -36,10 +36,6 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#if HAVE_NBTOOL_CONFIG_H
-#include "nbtool_config.h"
-#endif
-
 #include <sys/types.h>
 
 #include <err.h>
@@ -50,9 +46,9 @@
 #include <unistd.h>
 
 #include <sys/mman.h>		/* of the machine we're running on */
-#include <sys/endian.h>		/* of the machine we're running on */
+#include <machine/endian.h>	/* of the machine we're running on */
 
-#include <sys/exec_elf.h>	/* TARGET */
+#include <elf.h>		/* TARGET */
 #ifndef R_68K_32		/* XXX host not m68k XXX */
 #define	R_68K_32	1
 #define	R_68K_PC32	4
@@ -113,8 +109,7 @@ main(int argc, char *argv[])
 	int c;
 	u_int32_t *sect_offset;
 	int undefsyms;
-	uint32_t tmp32;
-	uint16_t tmp16;
+	
 
 	progname = argv[0];
 
@@ -317,16 +312,14 @@ main(int argc, char *argv[])
 			    htobe32(ra->r_addend), value));
 			switch (ELF32_R_TYPE(htobe32(ra->r_info))) {
 			case R_68K_32:
-				tmp32 = htobe32(value);
-				memcpy(base + htobe32(ra->r_offset), &tmp32,
-				       sizeof(tmp32));
+				*((u_int32_t *)(base + htobe32(ra->r_offset))) =
+				    htobe32(value);
 				relbuf[r32sz++] = (base - buffer) + htobe32(ra->r_offset);
 				break;
 			case R_68K_PC32:
 				++pcrelsz;
-				tmp32 = htobe32(value - htobe32(ra->r_offset));
-				memcpy(base + htobe32(ra->r_offset), &tmp32,
-				       sizeof(tmp32));
+				*((int32_t *)(base + htobe32(ra->r_offset))) =
+				    htobe32(value - htobe32(ra->r_offset));
 				break;
 			case R_68K_PC16:
 				++pcrelsz;
@@ -334,9 +327,8 @@ main(int argc, char *argv[])
 				if (value < -0x8000 || value > 0x7fff)
 					errx(1,  "PC-relative offset out of range: %x\n",
 					    value);
-				tmp16 = htobe16(value);
-				memcpy(base + htobe32(ra->r_offset), &tmp16,
-				       sizeof(tmp16));
+				*((int16_t *)(base + htobe32(ra->r_offset))) =
+				    htobe16(value);
 				break;
 			default:
 				errx(1, "Relocation type %d not supported",

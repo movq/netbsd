@@ -1,4 +1,4 @@
-/*	$NetBSD: version.h,v 1.17 2004/09/14 20:30:57 lha Exp $	*/
+/*	$NetBSD: version.h,v 1.14.2.3 2004/09/17 04:36:41 jmc Exp $	*/
 
 #if defined(__KRB5_VERSION) && !defined(__NO_KRB4_VERSION)
 #define	heimdal_long_version	__heimdal_long_version

@@ -1,5 +1,3 @@
-/*	$NetBSD: smtpd_token.c,v 1.1.1.3 2004/05/31 00:24:50 heas Exp $	*/
-
 /*++
 /* NAME
 /*	smtpd_token 3

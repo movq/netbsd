@@ -1,4 +1,4 @@
-/*	 $NetBSD: nfsnode.h,v 1.51 2004/12/14 09:15:23 yamt Exp $	*/
+/*	 $NetBSD: nfsnode.h,v 1.46.2.2 2004/09/18 19:22:41 he Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -80,6 +80,7 @@ struct nfsdircache {
 	off_t		dc_blkcookie;		/* Offset of block we're in */
 	LIST_ENTRY(nfsdircache) dc_hash;	/* Hash chain */
 	TAILQ_ENTRY(nfsdircache) dc_chain;	/* Least recently entered chn */
+	daddr_t		dc_blkno;		/* Number of block we're in */
 	u_int32_t	dc_cookie32;		/* Key for 64<->32 xlate case */
 	int		dc_entry;		/* Entry number within block */
 	int		dc_refcnt;		/* Reference count */
@@ -88,10 +89,6 @@ struct nfsdircache {
 
 #define	NFSDC_INVALID	1
 
-/*
- * NFSDC_BLKNO: get buffer cache index
- */
-#define	NFSDC_BLKNO(ndp)	((daddr_t)(ndp)->dc_blkcookie)
 
 /*
  * The nfsnode is the nfs equivalent to ufs's inode. Any similarity
@@ -119,6 +116,7 @@ struct nfsnode_reg {
 struct nfsnode_dir {
 	off_t ndir_direof;		/* EOF offset cache */
 	nfsuint64 ndir_cookieverf;	/* Cookie verifier */
+	daddr_t ndir_dblkno;		/* faked dir blkno */
 	struct nfsdirhashhead *ndir_dircache; /* offset -> cache hash heads */
 	struct nfsdirchainhead ndir_dirchain; /* Chain of dir cookies */
 	struct timespec ndir_nctime;	/* Last neg cache entry */
@@ -148,6 +146,7 @@ struct nfsnode {
 
 #define n_direofoffset	n_un1.nu_dir.ndir_direof
 #define n_cookieverf	n_un1.nu_dir.ndir_cookieverf
+#define	n_dblkno	n_un1.nu_dir.ndir_dblkno
 #define n_dircache	n_un1.nu_dir.ndir_dircache
 #define	n_dirchain	n_un1.nu_dir.ndir_dirchain
 #define	n_nctime	n_un1.nu_dir.ndir_nctime
@@ -267,13 +266,20 @@ int	nfs_readlink	__P((void *));
 int	nfs_inactive	__P((void *));
 int	nfs_reclaim	__P((void *));
 #define nfs_lock	genfs_lock
-int	nfs_unlock	__P((void *));
+int nfs_unlock	__P((void *));
 #define nfs_islocked	genfs_islocked
 int	nfs_bmap	__P((void *));
 int	nfs_strategy	__P((void *));
 int	nfs_print	__P((void *));
 int	nfs_pathconf	__P((void *));
 int	nfs_advlock	__P((void *));
+#define	nfs_blkatoff	genfs_eopnotsupp
+int	nfs_bwrite	__P((void *));
+#define	nfs_valloc	genfs_eopnotsupp
+#define nfs_reallocblks	genfs_eopnotsupp
+#define	nfs_vfree	genfs_nullop
+int	nfs_truncate	__P((void *));
+int	nfs_update	__P((void *));
 int	nfs_getpages	__P((void *));
 int	nfs_putpages	__P((void *));
 int	nfs_gop_write(struct vnode *, struct vm_page **, int, int);

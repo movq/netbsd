@@ -1,4 +1,4 @@
-/*	$NetBSD: savecore.c,v 1.65 2004/10/16 03:48:15 dsainty Exp $	*/
+/*	$NetBSD: savecore.c,v 1.61.2.3 2004/07/14 11:38:02 tron Exp $	*/
 
 /*-
  * Copyright (c) 1986, 1992, 1993
@@ -39,7 +39,7 @@ __COPYRIGHT("@(#) Copyright (c) 1986, 1992, 1993\n\
 #if 0
 static char sccsid[] = "@(#)savecore.c	8.5 (Berkeley) 4/28/95";
 #else
-__RCSID("$NetBSD: savecore.c,v 1.65 2004/10/16 03:48:15 dsainty Exp $");
+__RCSID("$NetBSD: savecore.c,v 1.61.2.3 2004/07/14 11:38:02 tron Exp $");
 #endif
 #endif /* not lint */
 
@@ -149,18 +149,17 @@ void	Write(int, void *, int);
 int
 main(int argc, char *argv[])
 {
-	int ch, level, testonly;
+	int ch, level;
 	char *ep;
 
 	dirname = NULL;
 	kernel = NULL;
 	level = 1;		/* default to fastest gzip compression */
-	testonly = 0;
 	gzmode[0] = 'w';
 
 	openlog("savecore", LOG_PERROR, LOG_DAEMON);
 
-	while ((ch = getopt(argc, argv, "cdfnN:vzZ:")) != -1)
+	while ((ch = getopt(argc, argv, "cdfN:vzZ:")) != -1)
 		switch(ch) {
 		case 'c':
 			clear = 1;
@@ -171,9 +170,6 @@ main(int argc, char *argv[])
 			break;
 		case 'f':
 			force = 1;
-			break;
-		case 'n':
-			testonly = 1;
 			break;
 		case 'N':
 			kernel = optarg;
@@ -196,7 +192,7 @@ main(int argc, char *argv[])
 	argc -= optind;
 	argv += optind;
 
-	if (argc != ((clear || testonly) ? 0 : 1))
+	if (argc != (clear ? 0 : 1))
 		usage();
 
 	gzmode[1] = level + '0';
@@ -210,17 +206,13 @@ main(int argc, char *argv[])
 	(void)time(&now);
 	kmem_setup();
 
-	if (clear && !testonly) {
+	if (clear) {
 		clear_dump();
 		exit(0);
 	}
 
 	if (!dump_exists() && !force)
 		exit(1);
-
-	if (testonly)
-		/* If -n was passed and there was a dump, exit at level 0 */
-		exit(0);
 
 	check_kmem();
 
@@ -693,7 +685,7 @@ get_crashtime(void)
 		return (0);
 	}
 	(void)printf("savecore: system went down at %s", ctime(&dumptime));
-#define	LEEWAY	(60 * SECSPERDAY)
+#define	LEEWAY	(7 * SECSPERDAY)
 	if (dumptime < now - LEEWAY || dumptime > now + LEEWAY) {
 		(void)printf("dump time is unreasonable\n");
 		return (0);
@@ -707,7 +699,7 @@ check_space(void)
 	FILE *fp;
 	off_t minfree, spacefree, kernelsize, needed;
 	struct stat st;
-	struct statvfs fsbuf;
+	struct statfs fsbuf;
 	char mbuf[100], path[MAXPATHLEN];
 
 #ifdef __GNUC__
@@ -719,12 +711,12 @@ check_space(void)
 		exit(1);
 	}
 	kernelsize = st.st_blocks * S_BLKSIZE;
-	if (statvfs(dirname, &fsbuf) < 0) {
+	if (statfs(dirname, &fsbuf) < 0) {
 		syslog(LOG_ERR, "%s: %m", dirname);
 		exit(1);
 	}
 	spacefree = fsbuf.f_bavail;
-	spacefree *= fsbuf.f_frsize;
+	spacefree *= fsbuf.f_bsize;
 	spacefree /= 1024;
 
 	(void)snprintf(path, sizeof(path), "%s/minfree", dirname);
@@ -802,6 +794,6 @@ void
 usage(void)
 {
 	(void)syslog(LOG_ERR,
-	    "usage: savecore [-cfnvz] [-N system] [-Z level] directory");
+	    "usage: savecore [-cfvz] [-N system] [-Z level] directory");
 	exit(1);
 }

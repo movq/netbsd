@@ -1,4 +1,4 @@
-/* $NetBSD: i82596.c,v 1.4 2004/10/30 23:52:22 thorpej Exp $ */
+/* $NetBSD: i82596.c,v 1.1 2004/03/12 11:37:17 jkunz Exp $ */
 
 /*
  * Copyright (c) 2003 Jochen Kunz.
@@ -39,7 +39,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: i82596.c,v 1.4 2004/10/30 23:52:22 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: i82596.c,v 1.1 2004/03/12 11:37:17 jkunz Exp $");
 
 /* autoconfig and device stuff */
 #include <sys/param.h>
@@ -202,9 +202,12 @@ iee_intr(void *intarg)
 	    BUS_DMASYNC_POSTREAD);
 	scb_status = SC_SCB->scb_status;
 	scb_cmd = SC_SCB->scb_cmd;
+	n = 0;
 	rfd = SC_RFD(sc->sc_rx_done);
-	while ((rfd->rfd_status & IEE_RFD_C) != 0) {
+	while ((scb_status & IEE_SCB_STAT_FR) != 0
+	    && (rfd->rfd_status & IEE_RFD_B) == 0 && rfd->rfd_status != 0) {
 		/* At least one packet was received. */
+		n = 1;
 		rbd = SC_RBD(sc->sc_rx_done);
 		rx_map = sc->sc_rx_map[sc->sc_rx_done];
 		rx_mbuf = sc->sc_rx_mbuf[sc->sc_rx_done];
@@ -286,10 +289,13 @@ iee_intr(void *intarg)
 		(sc->sc_iee_cmd)(sc, IEE_SCB_RUC_ST);
 		printf("%s: iee_intr: receive ring buffer overrun\n", 
 		    sc->sc_dev.dv_xname);
-	}
+	} else
+		if (n != 0)
+			bus_dmamap_sync(sc->sc_dmat, sc->sc_shmem_map, 
+			    IEE_RFD_OFF, IEE_RFD_LIST_SZ + IEE_RBD_LIST_SZ, 
+			    BUS_DMASYNC_PREWRITE);
 
-	if (sc->sc_next_cb != 0 
-	    && (SC_CB(sc->sc_next_cb - 1)->cb_status & IEE_CB_C) != 0) {
+	if (sc->sc_next_cb != 0 && (scb_status & IEE_SCB_CUS_ACT) == 0) { 
 		/* CMD list finished */
 		ifp->if_timer = 0;
 		if (sc->sc_next_tbd != 0) {
@@ -311,7 +317,8 @@ iee_intr(void *intarg)
 		for (n = 0 ; n < sc->sc_next_cb ; n++) {
 			/* Check if a CMD failed, but ignore TX errors. */
 			if ((SC_CB(n)->cb_cmd & IEE_CB_CMD) != IEE_CB_CMD_TR
-			    && ((SC_CB(n)->cb_status & IEE_CB_OK) == 0))
+			    && ((SC_CB(n)->cb_status & IEE_CB_C) == 0 
+			    || (SC_CB(n)->cb_status & IEE_CB_OK) == 0))
 				printf("%s: iee_intr: scb_status=0x%x " 
 				    "scb_cmd=0x%x failed command %d: "
 				    "cb_status[%d]=0x%.4x cb_cmd[%d]=0x%.4x\n", 
@@ -358,8 +365,6 @@ iee_intr(void *intarg)
 		printf("%s: iee_intr: short_fr_err=%d\n", sc->sc_dev.dv_xname, 
 		    sc->sc_short_fr_err);
 	}
-	bus_dmamap_sync(sc->sc_dmat, sc->sc_shmem_map, 0, IEE_SHMEM_MAX, 
-	    BUS_DMASYNC_PREREAD | BUS_DMASYNC_PREWRITE);
 	(sc->sc_iee_cmd)(sc, IEE_SCB_ACK);
 	return(1);
 }
@@ -703,29 +708,29 @@ iee_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 	int err;
 
 	s = splnet();
-	switch (cmd) {
-	case SIOCSIFMEDIA:
-	case SIOCGIFMEDIA:
-		err = ifmedia_ioctl(ifp, (struct ifreq *) data,
-		    &sc->sc_ifmedia, cmd);
-		break;
-
-	default:
+	if (cmd == SIOCSIFMEDIA || cmd == SIOCGIFMEDIA)
+		return(ifmedia_ioctl(ifp, (struct ifreq *) data, 
+		    &sc->sc_ifmedia, cmd));
+	else {
 		err = ether_ioctl(ifp, cmd, data);
-		if (err == ENETRESET) {
-			/*
-			 * Multicast list as changed; set the hardware filter
-			 * accordingly.
-			 */
-			if (ifp->if_flags & IFF_RUNNING) {
-				iee_cb_setup(sc, IEE_CB_CMD_MCS | IEE_CB_S |
-				    IEE_CB_EL | IEE_CB_I);
-				if ((sc->sc_flags & IEE_WANT_MCAST) == 0)
-					(*sc->sc_iee_cmd)(sc, IEE_SCB_CUC_EXE);
-			}
+		if (err == ENETRESET || 
+		    ((ifp->if_flags & IFF_PROMISC) != 0 
+		    && (sc->sc_cf[8] & IEE_CF_8_PRM) == 0)
+		    || ((ifp->if_flags & IFF_PROMISC) == 0 
+		    && (sc->sc_cf[8] & IEE_CF_8_PRM) != 0)) {
+			/* Do multicast setup / toggle promisc mode. */
+			if ((ifp->if_flags & IFF_PROMISC) != 0)
+				sc->sc_cf[8] |= IEE_CF_8_PRM;
+			else
+				sc->sc_cf[8] &= ~IEE_CF_8_PRM;
+			/* Put new multicast list into the hardware filter. */
+			iee_cb_setup(sc, IEE_CB_CMD_MCS | IEE_CB_S | IEE_CB_EL 
+			    | IEE_CB_I);
+			if ((sc->sc_flags & IEE_WANT_MCAST) == 0)
+				/* Mcast setup is not defered. */
+				(sc->sc_iee_cmd)(sc, IEE_SCB_CUC_EXE);
 			err = 0;
 		}
-		break;
 	}
 	splx(s);
 	return(err);

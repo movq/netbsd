@@ -1,4 +1,4 @@
-/* $NetBSD: inftrees.c,v 1.8 2004/06/30 15:44:55 christos Exp $ */
+/* $NetBSD: inftrees.c,v 1.7 2003/08/31 22:40:49 fvdl Exp $ */
 
 /* inftrees.c -- generate Huffman trees for efficient decoding
  * Copyright (C) 1995-2002 Mark Adler
@@ -308,10 +308,10 @@ z_streamp z;            /* for messages */
   r = huft_build(c, 19, 19, (uIntf*)Z_NULL, (uIntf*)Z_NULL,
                  tb, bb, hp, &hn, v);
   if (r == Z_DATA_ERROR)
-    z->msg = _ZERROR(_ZERR_OVERSUB_DBIT);
+    z->msg = (char*)"oversubscribed dynamic bit lengths tree";
   else if (r == Z_BUF_ERROR || *bb == 0)
   {
-    z->msg = _ZERROR(_ZERR_INCOMPLETE_DBIT);
+    z->msg = (char*)"incomplete dynamic bit lengths tree";
     r = Z_DATA_ERROR;
   }
   ZFREE(z, v);
@@ -343,10 +343,10 @@ z_streamp z;            /* for messages */
   if (r != Z_OK || *bl == 0)
   {
     if (r == Z_DATA_ERROR)
-      z->msg = _ZERROR(_ZERR_OVERSUB_LIT);
+      z->msg = (char*)"oversubscribed literal/length tree";
     else if (r != Z_MEM_ERROR)
     {
-      z->msg = _ZERROR(_ZERR_INCOMPLETE_LIT);
+      z->msg = (char*)"incomplete literal/length tree";
       r = Z_DATA_ERROR;
     }
     ZFREE(z, v);
@@ -358,18 +358,18 @@ z_streamp z;            /* for messages */
   if (r != Z_OK || (*bd == 0 && nl > 257))
   {
     if (r == Z_DATA_ERROR)
-      z->msg = _ZERROR(_ZERR_OVERSUB_DIST);
+      z->msg = (char*)"oversubscribed distance tree";
     else if (r == Z_BUF_ERROR) {
 #ifdef PKZIP_BUG_WORKAROUND
       r = Z_OK;
     }
 #else
-      z->msg = _ZERROR(_ZERR_INCOMPLETE_DIST);
+      z->msg = (char*)"incomplete distance tree";
       r = Z_DATA_ERROR;
     }
     else if (r != Z_MEM_ERROR)
     {
-      z->msg = _ZERROR(_ZERR_EMPTY_DIST);
+      z->msg = (char*)"empty distance tree with lengths";
       r = Z_DATA_ERROR;
     }
     ZFREE(z, v);

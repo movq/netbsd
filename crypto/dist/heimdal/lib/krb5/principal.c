@@ -42,7 +42,7 @@
 #include "resolve.h"
 
 __RCSID("$Heimdal: principal.c,v 1.82.2.1 2003/08/15 14:30:07 lha Exp $"
-        "$NetBSD: principal.c,v 1.9 2004/04/02 14:59:48 lha Exp $");
+        "$NetBSD: principal.c,v 1.8.2.1 2004/04/21 04:55:41 jmc Exp $");
 
 #define princ_num_comp(P) ((P)->name.name_string.len)
 #define princ_type(P) ((P)->name.name_type)

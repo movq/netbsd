@@ -1,8 +1,8 @@
-/*      $NetBSD: sa1111_kbc.c,v 1.6 2004/04/06 01:32:17 bsh Exp $ */
+/*      $NetBSD: sa1111_kbc.c,v 1.4 2004/03/24 17:06:58 drochner Exp $ */
 
 /*
  * Copyright (c) 2004  Ben Harris.
- * Copyright (c) 2002, 2004  Genetec Corporation.  All rights reserved.
+ * Copyright (c) 2002  Genetec Corporation.  All rights reserved.
  * Written by Hiroyuki Bessho for Genetec Corporation.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -57,7 +57,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sa1111_kbc.c,v 1.6 2004/04/06 01:32:17 bsh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sa1111_kbc.c,v 1.4 2004/03/24 17:06:58 drochner Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -90,15 +90,11 @@ struct sackbc_softc {
 
 	void	*ih_rx;			/* receive interrupt */
 	int	intr;			/* interrupt number */
-	int	slot;		/* KBD_SLOT or AUX_SLOT */
 
 	int	polling;	/* don't process data in interrupt handler */
 	int	poll_stat;	/* data read from inr handler if polling */
 	int	poll_data;	/* status read from intr handler if polling */
 
-#if NRND > 0
-	rndsource_element_t	rnd_source;
-#endif
 	pckbport_tag_t pt;
 };
 
@@ -141,7 +137,7 @@ sackbc_match(struct device *parent, struct cfdata *cf, void *aux)
 {
 	struct sa1111_attach_args *aa = (struct sa1111_attach_args *)aux;
 
-	switch (aa->sa_addr) {
+	switch( aa->sa_addr ){
 	case SACC_KBD0: case SACC_KBD1:
 		return 1;
 	}
@@ -150,37 +146,33 @@ sackbc_match(struct device *parent, struct cfdata *cf, void *aux)
 
 #if 0
 static int
-sackbc_txint(void *cookie)
+sackbc_txint( void *cookie )
 {
 	struct sackbc_softc *sc = cookie;
 
-	bus_space_read_4(sc->iot, sc->ioh, SACCKBD_STAT);
+	bus_space_read_4( sc->iot, sc->ioh, SACCKBD_STAT );
 
 	return 0;
 }
 #endif
 
 static int
-sackbc_rxint(void *cookie)
+sackbc_rxint( void *cookie )
 {
 	struct sackbc_softc *sc = cookie;
 	int stat, code=-1;
 
-	stat = bus_space_read_4(sc->iot, sc->ioh, SACCKBD_STAT);
-	DPRINTF(("sackbc_rxint stat=%x\n", stat));
-	if (stat & KBDSTAT_RXF) {
-		code = bus_space_read_4(sc->iot, sc->ioh, SACCKBD_DATA);
+	stat = bus_space_read_4( sc->iot, sc->ioh, SACCKBD_STAT );
+	DPRINTF(( "sackbc_rxint stat=%x\n", stat ));
+	if( stat & KBDSTAT_RXF ){
+		code = bus_space_read_4( sc->iot, sc->ioh, SACCKBD_DATA );
 
-#if NRND > 0
-		rnd_add_uint32(&sc->rnd_source, (stat<<8)|data);
-#endif
-
-		if (sc->polling) {
+		if( sc->polling ){
 			sc->poll_data = code;
 			sc->poll_stat = stat;
 		}
 		else
-			pckbportintr(sc->pt, sc->slot, code);
+			pckbportintr(sc->pt, PCKBPORT_KBD_SLOT, code);
 		return 1;
 	}
 
@@ -192,24 +184,24 @@ sackbc_intr_establish(void *cookie, pckbport_slot_t slot)
 {
 	struct sackbc_softc *sc = cookie;
 
-	if (!(sc->polling) && sc->ih_rx==NULL) {
-		sc->ih_rx = sacc_intr_establish(
+	if( !(sc->polling) && sc->ih_rx==NULL ){
+		sc->ih_rx = sacc_intr_establish( 
 			(sacc_chipset_tag_t *)(sc->dev.dv_parent), 
-			sc->intr+1, IST_EDGE_RAISE, IPL_TTY, sackbc_rxint, sc);
-		if (sc->ih_rx == NULL) {
-			printf("%s: can't establish interrupt\n",
-			    sc->dev.dv_xname);
+			sc->intr+1, IST_EDGE_RAISE, IPL_TTY, sackbc_rxint, sc );
+		if( sc->ih_rx == NULL ){
+			printf( "%s: can't establish interrupt\n",
+			    sc->dev.dv_xname );
 		}
 	}
 }
 
 static void
-sackbc_disable_intrhandler(struct sackbc_softc *sc)
+sackbc_disable_intrhandler( struct sackbc_softc *sc )
 {
-	if (sc->polling && sc->ih_rx) {
-		sacc_intr_disestablish(
+	if( sc->polling && sc->ih_rx ){
+		sacc_intr_disestablish( 
 			(sacc_chipset_tag_t *)(sc->dev.dv_parent),
-			sc->ih_rx);
+			sc->ih_rx );
 		sc->ih_rx = NULL;
 	}
 }
@@ -222,44 +214,44 @@ sackbc_attach(struct device *parent, struct device *self, void *aux)
 	struct sa1111_attach_args *aa = (struct sa1111_attach_args *)aux;
 	struct device *child;
 	uint32_t tmp, clock_bit;
-	int intr, slot;
+	int intr;
 
-	switch (aa->sa_addr) {
+	switch( aa->sa_addr ){
 	case SACC_KBD0: clock_bit = (1<<6); intr = 21; break;
 	case SACC_KBD1: clock_bit = (1<<5); intr = 18; break;
 	default:
 		return;
 	}
 
-	if (aa->sa_size <= 0)
+	if( aa->sa_size <= 0 )
 		aa->sa_size = SACCKBD_SIZE;
-	if (aa->sa_intr == SACCCF_INTR_DEFAULT)
+	if( aa->sa_intr == SACCCF_INTR_DEFAULT )
 		aa->sa_intr = intr;
 
 	sc->iot = psc->sc_iot;
-	if (bus_space_subregion(psc->sc_iot, psc->sc_ioh,
-	    aa->sa_addr, aa->sa_size, &sc->ioh)) {
-		printf(": can't map subregion\n");
+	if( bus_space_subregion( psc->sc_iot, psc->sc_ioh, 
+	    aa->sa_addr, aa->sa_size, &sc->ioh ) ){
+		printf( ": can't map subregion\n" );
 		return;
 	}
 
 	/* enable clock for PS/2 kbd or mouse */
-	tmp = bus_space_read_4(psc->sc_iot, psc->sc_ioh, SACCSC_SKPCR);
-	bus_space_write_4(psc->sc_iot, psc->sc_ioh, SACCSC_SKPCR,
-	    tmp | clock_bit);
+	tmp = bus_space_read_4( psc->sc_iot, psc->sc_ioh, SACCSC_SKPCR );
+	bus_space_write_4( psc->sc_iot, psc->sc_ioh, SACCSC_SKPCR,
+	    tmp | clock_bit );
 
 	sc->ih_rx = NULL;
 	sc->intr = aa->sa_intr;
 	sc->polling = 0;
 
-	tmp = bus_space_read_4(sc->iot, sc->ioh, SACCKBD_CR);
-	bus_space_write_4(sc->iot, sc->ioh, SACCKBD_CR, tmp | KBDCR_ENA);
+	tmp = bus_space_read_4( sc->iot, sc->ioh, SACCKBD_CR );
+	bus_space_write_4( sc->iot, sc->ioh, SACCKBD_CR, tmp | KBDCR_ENA );
 
 	/* XXX: this is necessary to get keyboard working. but I don't know why */
-	bus_space_write_4(sc->iot, sc->ioh, SACCKBD_CLKDIV, 2);
+	bus_space_write_4( sc->iot, sc->ioh, SACCKBD_CLKDIV, 2 );
 
-	tmp = bus_space_read_4(sc->iot, sc->ioh, SACCKBD_STAT);
-	if ((tmp & KBDSTAT_ENA) == 0) {
+	tmp = bus_space_read_4( sc->iot, sc->ioh, SACCKBD_STAT );
+	if( (tmp & KBDSTAT_ENA) == 0 ){
 		printf("??? can't enable KBD controller\n");
 		return;
 	}
@@ -268,42 +260,32 @@ sackbc_attach(struct device *parent, struct device *self, void *aux)
 
 	sc->pt = pckbport_attach(sc, &sackbc_ops);
 
-	/*
-	 * Although there is no such thing as SLOT for SA1111 kbd
-	 * controller, pckbd and pms drivers require it.
-	 */
-	for (slot=PCKBPORT_KBD_SLOT; slot <= PCKBPORT_AUX_SLOT; ++slot) {
-		child = pckbport_attach_slot(self, sc->pt, slot);
+	child = pckbport_attach_slot(self, sc->pt, PCKBPORT_KBD_SLOT);
 
-		if (child == NULL)
-			continue;
-		sc->slot = slot;
-#if NRND > 0
-		rnd_attach_source(&sc->rnd_source, child->dv_xname,
-		    RND_TYPE_TTY, 0);
+#if 0 && NRND > 0			/* XXX: not yet */
+	    if (child != NULL && (t->t_slotdata[slot] != NULL))
+		    rnd_attach_source(&t->t_slotdata[slot]->rnd_source,
+			child->dv_xname, RND_TYPE_TTY, 0);
 #endif
-		/* only one of KBD_SLOT or AUX_SLOT is used. */
-		break;			
-	}
 }
 
 
 static inline int
-sackbc_wait_output(struct sackbc_softc *sc)
+sackbc_wait_output( struct sackbc_softc *sc )
 {
 	u_int i, stat;
 
 	for (i = 100000; i; i--){
 		stat = bus_space_read_4(sc->iot, sc->ioh, SACCKBD_STAT);
 		delay(100);
-		if (stat & KBDSTAT_TXE)
+		if( stat & KBDSTAT_TXE) 
 			return 1;
 	}
 	return 0;
 }
 
 static int
-sackbc_poll_data1(void *cookie, pckbport_slot_t slot)
+sackbc_poll_data1( void *cookie, pckbport_slot_t slot )
 {
 	struct sackbc_softc *sc = cookie;
 	int i, s, stat, c = -1;
@@ -315,8 +297,8 @@ sackbc_poll_data1(void *cookie, pckbport_slot_t slot)
 		c	= sc->poll_data;
 		sc->poll_data = -1;
 		sc->poll_stat = -1;
-		if (stat >= 0 &&
-		    (stat & (KBDSTAT_RXF|KBDSTAT_STP)) == KBDSTAT_RXF) {
+		if( stat >= 0 &&
+		    (stat & (KBDSTAT_RXF|KBDSTAT_STP)) == KBDSTAT_RXF ){
 			splx(s);
 			return c;
 		}
@@ -325,7 +307,7 @@ sackbc_poll_data1(void *cookie, pckbport_slot_t slot)
 	/* if 1 port read takes 1us (?), this polls for 100ms */
 	for (i = 100000; i; i--) {
 		stat = bus_space_read_4(sc->iot, sc->ioh, SACCKBD_STAT);
-		if ((stat & (KBDSTAT_RXF|KBDSTAT_STP)) == KBDSTAT_RXF) {
+		if( (stat & (KBDSTAT_RXF|KBDSTAT_STP)) == KBDSTAT_RXF ){
 			KBD_DELAY;
 			c = bus_space_read_4(sc->iot, sc->ioh, SACCKBD_DATA);
 			break;	
@@ -337,13 +319,13 @@ sackbc_poll_data1(void *cookie, pckbport_slot_t slot)
 }
 
 static int
-sackbc_send_cmd(void *cookie, pckbport_slot_t slot, u_char val)
+sackbc_send_cmd( void *cookie, pckbport_slot_t slot, u_char val )
 {
 	struct sackbc_softc *sc = cookie;
 
-	if (!sackbc_wait_output(sc))
+	if ( !sackbc_wait_output(sc) )
 		return (0);
-	bus_space_write_1(sc->iot, sc->ioh, SACCKBD_DATA, val);
+	bus_space_write_1( sc->iot, sc->ioh, SACCKBD_DATA, val );
 	return (1);
 }
 
@@ -373,7 +355,7 @@ sackbc_slot_enable(void *self, pckbport_slot_t slot, int on)
 	int cmd;
 
 	cmd = on ? KBC_KBDENABLE : KBC_KBDDISABLE;
-	if (!sackbc_send_cmd(sc, cmd))
+	if ( !sackbc_send_cmd(sc, cmd ) )
 		printf("sackbc_slot_enable(%d) failed\n", on);
 #endif
 }
@@ -387,11 +369,11 @@ sackbc_set_poll(void *self, pckbport_slot_t slot, int on)
 
 	s = spltty();
 
-	if (sc->polling != on) {
+	if( sc->polling != on ){
 
 		sc->polling = on;
 
-		if (on) {
+		if( on ){
 			sc->poll_data = sc->poll_stat = -1;
 			sackbc_disable_intrhandler(sc);
 		}
@@ -404,7 +386,7 @@ sackbc_set_poll(void *self, pckbport_slot_t slot, int on)
 			 * further interrupts.
 			 */
 			sackbc_rxint(sc);
-			sackbc_intr_establish(sc, sc->slot);
+			sackbc_intr_establish(sc, PCKBPORT_KBD_SLOT);
 		}
 	}
 	splx(s);

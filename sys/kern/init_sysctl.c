@@ -1,4 +1,4 @@
-/*	$NetBSD: init_sysctl.c,v 1.32 2004/10/01 16:30:52 yamt Exp $ */
+/*	$NetBSD: init_sysctl.c,v 1.24.2.5 2004/07/28 11:03:51 tron Exp $ */
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: init_sysctl.c,v 1.32 2004/10/01 16:30:52 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: init_sysctl.c,v 1.24.2.5 2004/07/28 11:03:51 tron Exp $");
 
 #include "opt_sysv.h"
 #include "opt_multiprocessor.h"
@@ -1228,8 +1228,8 @@ sysctl_kern_autonice(SYSCTLFN_ARGS)
 
 /*
  * sysctl helper routine for kern.msgbufsize and kern.msgbuf.  for the
- * former it merely checks the message buffer is set up.  for the latter,
- * it also copies out the data if necessary.
+ * former it merely checks the the message buffer is set up.  for the
+ * latter, it also copies out the data if necessary.
  */
 static int
 sysctl_msgbuf(SYSCTLFN_ARGS)
@@ -1893,7 +1893,7 @@ sysctl_doeproc(SYSCTLFN_ARGS)
 
 	pd = proclists;
 again:
-	PROCLIST_FOREACH(p, pd->pd_list) {
+	for (p = LIST_FIRST(pd->pd_list); p != NULL; p = LIST_NEXT(p, p_list)) {
 		/*
 		 * Skip embryonic processes.
 		 */
@@ -2136,7 +2136,7 @@ sysctl_kern_proc_args(SYSCTLFN_ARGS)
 	default:
 		return (EINVAL);
 	}
-	auio.uio_offset = (off_t)(unsigned long)tmp;
+	auio.uio_offset = (off_t)(long)tmp;
 	aiov.iov_base = &argv;
 	aiov.iov_len = sizeof(argv);
 	auio.uio_iov = &aiov;

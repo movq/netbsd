@@ -22,9 +22,7 @@ HDRS=\
   refid.h \
   search.h \
   searchpath.h \
-  stringclass.h \
-  symbol.h \
-  unicode.h
+  stringclass.h
 GENHDRS=defs.h
 
 all depend: $(GENHDRS)

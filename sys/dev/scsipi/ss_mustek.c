@@ -1,4 +1,4 @@
-/*	$NetBSD: ss_mustek.c,v 1.27 2004/10/28 07:07:45 yamt Exp $	*/
+/*	$NetBSD: ss_mustek.c,v 1.18.18.1 2004/09/11 12:57:10 he Exp $	*/
 
 /*
  * Copyright (c) 1995 Joachim Koenig-Baltes.  All rights reserved.
@@ -46,7 +46,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ss_mustek.c,v 1.27 2004/10/28 07:07:45 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ss_mustek.c,v 1.18.18.1 2004/09/11 12:57:10 he Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
@@ -56,38 +56,37 @@ __KERNEL_RCSID(0, "$NetBSD: ss_mustek.c,v 1.27 2004/10/28 07:07:45 yamt Exp $");
 #include <sys/ioctl.h>
 #include <sys/malloc.h>
 #include <sys/buf.h>
-#include <sys/bufq.h>
 #include <sys/proc.h>
 #include <sys/user.h>
 #include <sys/device.h>
 #include <sys/conf.h>		/* for cdevsw */
 #include <sys/scanio.h>
 
-#include <dev/scsipi/scsipi_all.h>
 #include <dev/scsipi/scsi_all.h>
+#include <dev/scsipi/scsipi_all.h>
 #include <dev/scsipi/scsi_scanner.h>
-#include <dev/scsipi/scsipiconf.h>
+#include <dev/scsipi/scsiconf.h>
 #include <dev/scsipi/scsipi_base.h>
 #include <dev/scsipi/ssvar.h>
 #include <dev/scsipi/ss_mustek.h>
 
 #define MUSTEK_RETRIES 4
 
-static int	mustek_get_params(struct ss_softc *);
-static int	mustek_set_params(struct ss_softc *, struct scan_io *);
-static int	mustek_trigger_scanner(struct ss_softc *);
-static void	mustek_minphys(struct ss_softc *, struct buf *);
-static int	mustek_read(struct ss_softc *, struct buf *);
-static int	mustek_rewind_scanner(struct ss_softc *);
+int mustek_get_params __P((struct ss_softc *));
+int mustek_set_params __P((struct ss_softc *, struct scan_io *));
+int mustek_trigger_scanner __P((struct ss_softc *));
+void mustek_minphys __P((struct ss_softc *, struct buf *));
+int mustek_read __P((struct ss_softc *, struct buf *));
+int mustek_rewind_scanner __P((struct ss_softc *));
 
 /* only used internally */
-static int	mustek_get_status(struct ss_softc *, int, int);
-static void	mustek_compute_sizes(struct ss_softc *);
+int mustek_get_status __P((struct ss_softc *, int, int));
+void mustek_compute_sizes __P((struct ss_softc *));
 
 /*
  * structure for the special handlers
  */
-static struct ss_special mustek_special = {
+struct ss_special mustek_special = {
 	mustek_set_params,
 	mustek_trigger_scanner,
 	mustek_get_params,
@@ -102,7 +101,9 @@ static struct ss_special mustek_special = {
  * mustek_attach: attach special functions to ss
  */
 void
-mustek_attach(struct ss_softc *ss, struct scsipibus_attach_args *sa)
+mustek_attach(ss, sa)
+	struct ss_softc *ss;
+	struct scsipibus_attach_args *sa;
 {
 #ifdef SCSIPI_DEBUG
 	struct scsipi_periph *periph = sa->sa_periph;
@@ -147,8 +148,9 @@ mustek_attach(struct ss_softc *ss, struct scsipibus_attach_args *sa)
 	mustek_compute_sizes(ss);
 }
 
-static int
-mustek_get_params (struct ss_softc *ss)
+int
+mustek_get_params (ss)
+	struct ss_softc *ss;
 {
 
 	return (0);
@@ -159,8 +161,10 @@ mustek_get_params (struct ss_softc *ss)
  * but don't send the command to the scanner in case the user wants
  * to change parameters by more than one call
  */
-static int
-mustek_set_params(struct ss_softc *ss, struct scan_io *sio)
+int
+mustek_set_params(ss, sio)
+	struct ss_softc *ss;
+	struct scan_io *sio;
 {
 	int error;
 
@@ -251,18 +255,20 @@ mustek_set_params(struct ss_softc *ss, struct scan_io *sio)
  * because the mustek cannot disconnect. It will be calculated by the
  * resolution, the velocity and the number of bytes per line.
  */
-static void
-mustek_minphys(struct ss_softc *ss, struct buf *bp)
+void
+mustek_minphys(ss, bp)
+	struct ss_softc *ss;
+	struct buf *bp;
 {
 #ifdef SCSIPI_DEBUG
 	struct scsipi_periph *periph = ss->sc_periph;
 #endif
 
-	SC_DEBUG(periph, SCSIPI_DB1, ("mustek_minphys: before: %d\n",
+	SC_DEBUG(periph, SCSIPI_DB1, ("mustek_minphys: before: %ld\n",
 	    bp->b_bcount));
 	bp->b_bcount -= bp->b_bcount %
 	    ((ss->sio.scan_pixels_per_line * ss->sio.scan_bits_per_pixel) / 8);
-	SC_DEBUG(periph, SCSIPI_DB1, ("mustek_minphys: after:  %d\n",
+	SC_DEBUG(periph, SCSIPI_DB1, ("mustek_minphys: after:  %ld\n",
 	    bp->b_bcount));
 }
 
@@ -271,8 +277,9 @@ mustek_minphys(struct ss_softc *ss, struct buf *bp)
  * this includes sending the mode- and window-data, starting the scanner
  * and getting the image size info
  */
-static int
-mustek_trigger_scanner(struct ss_softc *ss)
+int
+mustek_trigger_scanner(ss)
+	struct ss_softc *ss;
 {
 	struct mustek_mode_select_cmd mode_cmd;
 	struct mustek_mode_select_data mode_data;
@@ -322,8 +329,9 @@ mustek_trigger_scanner(struct ss_softc *ss)
 
 	/* send the set window command to the scanner */
 	SC_DEBUG(periph, SCSIPI_DB1, ("mustek_set_parms: set_window\n"));
-	error = scsipi_command(periph, (void *)&window_cmd, sizeof(window_cmd),
-	    (void *)&window_data, sizeof(window_data),
+	error = scsipi_command(periph, NULL,
+	    (struct scsipi_generic *) &window_cmd,
+	    sizeof(window_cmd), (u_char *) &window_data, sizeof(window_data),
 	    MUSTEK_RETRIES, 5000, NULL, XS_CTL_DATA_OUT | XS_CTL_DATA_ONSTACK);
 	if (error)
 		return (error);
@@ -361,8 +369,9 @@ mustek_trigger_scanner(struct ss_softc *ss)
 
 	SC_DEBUG(periph, SCSIPI_DB1, ("mustek_trigger_scanner: mode_select\n"));
 	/* send the command to the scanner */
-	error = scsipi_command(periph, (void *)&mode_cmd, sizeof(mode_cmd),
-	    (void *)&mode_data, sizeof(mode_data),
+	error = scsipi_command(periph, NULL,
+	    (struct scsipi_generic *) &mode_cmd,
+	    sizeof(mode_cmd), (u_char *) &mode_data, sizeof(mode_data),
 	    MUSTEK_RETRIES, 5000, NULL, XS_CTL_DATA_OUT | XS_CTL_DATA_ONSTACK);
 	if (error)
 		return (error);
@@ -398,9 +407,9 @@ mustek_trigger_scanner(struct ss_softc *ss)
 
 	/* send the command to the scanner */
 	SC_DEBUG(periph, SCSIPI_DB1, ("mustek_trigger_scanner: start_scan\n"));
-	error = scsipi_command(periph,
-	    (void *)&start_scan_cmd, sizeof(start_scan_cmd),
-	    NULL, 0,
+	error = scsipi_command(periph, NULL,
+	    (struct scsipi_generic *) &start_scan_cmd,
+	    sizeof(start_scan_cmd), NULL, 0,
 	    MUSTEK_RETRIES, 5000, NULL, 0);
 	if (error)
 		return (error);
@@ -422,8 +431,9 @@ mustek_trigger_scanner(struct ss_softc *ss)
 /*
  * stop a scan operation in progress
  */
-static int
-mustek_rewind_scanner(struct ss_softc *ss)
+int
+mustek_rewind_scanner(ss)
+	struct ss_softc *ss;
 {
 	struct mustek_start_scan_cmd cmd;
 	struct scsipi_periph *periph = ss->sc_periph;
@@ -441,10 +451,9 @@ mustek_rewind_scanner(struct ss_softc *ss)
 		/* send the command to the scanner */
 		SC_DEBUG(periph, SCSIPI_DB1,
 		    ("mustek_rewind_scanner: stop_scan\n"));
-		error = scsipi_command(periph,
-		    (void *)&cmd, sizeof(cmd),
-		    NULL, 0,
-		    MUSTEK_RETRIES, 5000, NULL, 0);
+		error = scsipi_command(periph, NULL,
+		    (struct scsipi_generic *) &cmd,
+		    sizeof(cmd), NULL, 0, MUSTEK_RETRIES, 5000, NULL, 0);
 		if (error)
 			return (error);
 	}
@@ -457,8 +466,10 @@ mustek_rewind_scanner(struct ss_softc *ss)
 /*
  * read the requested number of bytes/lines from the scanner
  */
-static int
-mustek_read(struct ss_softc *ss, struct buf *bp)
+int
+mustek_read(ss, bp)
+	struct ss_softc *ss;
+	struct buf *bp;
 {
 	struct mustek_read_cmd cmd;
 	struct scsipi_xfer *xs;
@@ -501,7 +512,10 @@ mustek_read(struct ss_softc *ss, struct buf *bp)
 #else
 	BUFQ_GET(&ss->buf_queue);
 #endif
-	error = scsipi_execute_xs(xs);
+	error = scsipi_command(periph, xs,
+	    (struct scsipi_generic *) &cmd, sizeof(cmd),
+	    (u_char *) bp->b_data, bp->b_bcount, MUSTEK_RETRIES, 10000, bp,
+	    XS_CTL_NOSLEEP | XS_CTL_ASYNC | XS_CTL_DATA_IN);
 	/* with a scsipi_xfer preallocated, scsipi_command can't fail */
 	KASSERT(error == 0);
 	ss->sio.scan_lines -= lines_to_read;
@@ -520,8 +534,10 @@ mustek_read(struct ss_softc *ss, struct buf *bp)
  *
  *   returns EBUSY if scanner not ready
  */
-static int
-mustek_get_status(struct ss_softc *ss, int timeout, int update)
+int
+mustek_get_status(ss, timeout, update)
+	struct ss_softc *ss;
+	int timeout, update;
 {
 	struct mustek_get_status_cmd cmd;
 	struct mustek_get_status_data data;
@@ -534,9 +550,10 @@ mustek_get_status(struct ss_softc *ss, int timeout, int update)
 
 	while (1) {
 		SC_DEBUG(periph, SCSIPI_DB1, ("mustek_get_status: stat_cmd\n"));
-		error = scsipi_command(periph, (void *)&cmd, sizeof(cmd),
-		    (void *)&data, sizeof(data),
-		    MUSTEK_RETRIES, 5000, NULL, XS_CTL_DATA_IN | XS_CTL_DATA_ONSTACK);
+		error = scsipi_command(periph, NULL,
+		    (struct scsipi_generic *) &cmd, sizeof(cmd),
+		    (u_char *) &data, sizeof(data), MUSTEK_RETRIES,
+		    5000, NULL, XS_CTL_DATA_IN | XS_CTL_DATA_ONSTACK);
 		if (error)
 			return (error);
 		if ((data.ready_busy == MUSTEK_READY) ||
@@ -579,8 +596,9 @@ mustek_get_status(struct ss_softc *ss, int timeout, int update)
  * mustek_compute_sizes: compute window_size and lines for the picture
  *   this function is called from different places in the code
  */
-static void
-mustek_compute_sizes(struct ss_softc *ss)
+void
+mustek_compute_sizes(ss)
+	struct ss_softc *ss;
 {
 
 	switch (ss->sio.scan_image_mode) {

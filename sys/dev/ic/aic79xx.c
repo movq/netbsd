@@ -1,4 +1,4 @@
-/*	$NetBSD: aic79xx.c,v 1.28 2004/04/21 18:03:13 itojun Exp $	*/
+/*	$NetBSD: aic79xx.c,v 1.27 2004/02/13 11:36:21 wiz Exp $	*/
 
 /*
  * Core routines and tables shareable across OS platforms.
@@ -49,7 +49,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: aic79xx.c,v 1.28 2004/04/21 18:03:13 itojun Exp $");
+__KERNEL_RCSID(0, "$NetBSD: aic79xx.c,v 1.27 2004/02/13 11:36:21 wiz Exp $");
 
 #include <dev/ic/aic79xx_osm.h>
 #include <dev/ic/aic79xx_inline.h>
@@ -5952,17 +5952,13 @@ ahd_alloc_scbs(struct ahd_softc *ahd)
 }
 
 void
-ahd_controller_info(struct ahd_softc *ahd, char *buf, size_t l)
+ahd_controller_info(struct ahd_softc *ahd, char *buf)
 {
 	const char *speed;
 	const char *type;
 	int len;
-	char *ep;
 
-	ep = buf + l;
-
-	len = snprintf(buf, ep - buf, "%s: ",
-	    ahd_chip_names[ahd->chip & AHD_CHIPID_MASK]);
+	len = sprintf(buf, "%s: ", ahd_chip_names[ahd->chip & AHD_CHIPID_MASK]);
 	buf += len;
 
 	speed = "Ultra320 ";
@@ -5971,11 +5967,11 @@ ahd_controller_info(struct ahd_softc *ahd, char *buf, size_t l)
 	} else {
 		type = "Single ";
 	}
-	len = snprintf(buf, ep - buf, "%s%sChannel %c, SCSI Id=%d, ",
+	len = sprintf(buf, "%s%sChannel %c, SCSI Id=%d, ",
 		      speed, type, ahd->channel, ahd->our_id);
 	buf += len;
 
-	snprintf(buf, ep - buf, "%s, %d SCBs", ahd->bus_description,
+	sprintf(buf, "%s, %d SCBs", ahd->bus_description,
 		ahd->scb_data.maxhscbs);
 }
 

@@ -33,7 +33,7 @@
 
 #include "kuser_locl.h"
 __RCSID("$Heimdal: kinit.c,v 1.90.4.5 2004/06/21 08:17:06 lha Exp $"
-        "$NetBSD: kinit.c,v 1.11 2004/09/14 08:08:20 lha Exp $");
+        "$NetBSD: kinit.c,v 1.9.2.2 2004/09/17 04:35:58 jmc Exp $");
 
 int forwardable_flag	= -1;
 int proxiable_flag	= -1;

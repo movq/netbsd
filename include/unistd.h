@@ -1,4 +1,4 @@
-/*	$NetBSD: unistd.h,v 1.99 2004/06/01 16:10:29 kleink Exp $	*/
+/*	$NetBSD: unistd.h,v 1.95 2003/11/18 00:56:56 thorpej Exp $	*/
 
 /*-
  * Copyright (c) 1998, 1999 The NetBSD Foundation, Inc.
@@ -258,7 +258,7 @@ int	 lchown __P((const char *, uid_t, gid_t)) __RENAME(__posix_lchown);
 int	 lchown __P((const char *, uid_t, gid_t));
 #endif
 int	 lockf __P((int, int, off_t));
-ssize_t	 readlink __P((const char * __restrict, char * __restrict, size_t));
+int	 readlink __P((const char *, char *, size_t));
 void	*sbrk __P((intptr_t));
 /* XXX prototype wrong! */
 int	 setpgrp __P((pid_t, pid_t));		/* obsoleted by setpgid() */
@@ -302,7 +302,6 @@ ssize_t	 pwrite __P((int, const void *, size_t, off_t));
  */
 #if defined(_NETBSD_SOURCE)
 int	 acct __P((const char *));
-int	 closefrom __P((int));
 int	 des_cipher __P((const char *, char *, long, int));
 int	 des_setkey __P((const char *));
 void	 endusershell __P((void));

@@ -41,7 +41,7 @@
 
 #line 1 "nlmheader.y"
 /* nlmheader.y - parse NLM header specification keywords.
-     Copyright 1993, 1994, 1995, 1997, 1998, 2001, 2002, 2003
+     Copyright 1993, 1994, 1995, 1997, 1998, 2001, 2002
      Free Software Foundation, Inc.
 
 This file is part of GNU Binutils.
@@ -133,24 +133,25 @@ static char *symbol_prefix;
 #define yyerror(msg) nlmheader_error (msg);
 
 /* Local functions.  */
-static int yylex (void);
-static void nlmlex_file_push (const char *);
-static bfd_boolean nlmlex_file_open (const char *);
-static int nlmlex_buf_init (void);
-static char nlmlex_buf_add (int);
-static long nlmlex_get_number (const char *);
-static void nlmheader_identify (void);
-static void nlmheader_warn (const char *, int);
-static void nlmheader_error (const char *);
-static struct string_list * string_list_cons (char *, struct string_list *);
-static struct string_list * string_list_append (struct string_list *,
-						struct string_list *);
-static struct string_list * string_list_append1 (struct string_list *,
-						 char *);
-static char *xstrdup (const char *);
+static int yylex PARAMS ((void));
+static void nlmlex_file_push PARAMS ((const char *));
+static bfd_boolean nlmlex_file_open PARAMS ((const char *));
+static int nlmlex_buf_init PARAMS ((void));
+static char nlmlex_buf_add PARAMS ((int));
+static long nlmlex_get_number PARAMS ((const char *));
+static void nlmheader_identify PARAMS ((void));
+static void nlmheader_warn PARAMS ((const char *, int));
+static void nlmheader_error PARAMS ((const char *));
+static struct string_list * string_list_cons PARAMS ((char *,
+						      struct string_list *));
+static struct string_list * string_list_append PARAMS ((struct string_list *,
+							struct string_list *));
+static struct string_list * string_list_append1 PARAMS ((struct string_list *,
+							 char *));
+static char *xstrdup PARAMS ((const char *));
 
 
-#line 112 "nlmheader.y"
+#line 113 "nlmheader.y"
 #ifndef YYSTYPE
 typedef union
 {
@@ -242,12 +243,12 @@ static const short yyrhs[] =
 /* YYRLINE[YYN] -- source line where rule number YYN was defined. */
 static const short yyrline[] =
 {
-       0,   143,   149,   151,   156,   161,   166,   183,   187,   205,
-     209,   225,   229,   229,   237,   242,   247,   252,   257,   261,
-     261,   269,   273,   277,   281,   285,   289,   293,   297,   304,
-     308,   312,   328,   332,   337,   341,   345,   361,   366,   370,
-     394,   410,   418,   423,   433,   438,   442,   446,   454,   465,
-     481,   486
+       0,   144,   150,   152,   157,   162,   167,   184,   188,   206,
+     210,   226,   230,   230,   238,   243,   248,   253,   258,   262,
+     262,   270,   274,   278,   282,   286,   290,   294,   298,   305,
+     309,   313,   329,   333,   338,   342,   346,   362,   367,   371,
+     395,   411,   419,   424,   434,   439,   443,   447,   455,   466,
+     482,   487
 };
 #endif
 
@@ -1065,20 +1066,20 @@ yyreduce:
   switch (yyn) {
 
 case 4:
-#line 158 "nlmheader.y"
+#line 159 "nlmheader.y"
 {
 	    check_procedure = yyvsp[0].string;
 	  }
     break;
 case 5:
-#line 162 "nlmheader.y"
+#line 163 "nlmheader.y"
 {
 	    nlmheader_warn (_("CODESTART is not implemented; sorry"), -1);
 	    free (yyvsp[0].string);
 	  }
     break;
 case 6:
-#line 167 "nlmheader.y"
+#line 168 "nlmheader.y"
 {
 	    int len;
 
@@ -1097,13 +1098,13 @@ case 6:
 	  }
     break;
 case 7:
-#line 184 "nlmheader.y"
+#line 185 "nlmheader.y"
 {
 	    custom_file = yyvsp[0].string;
 	  }
     break;
 case 8:
-#line 188 "nlmheader.y"
+#line 189 "nlmheader.y"
 {
 	    /* We don't set the version stamp here, because we use the
 	       version stamp to detect whether the required VERSION
@@ -1123,13 +1124,13 @@ case 8:
 	  }
     break;
 case 9:
-#line 206 "nlmheader.y"
+#line 207 "nlmheader.y"
 {
 	    debug_info = TRUE;
 	  }
     break;
 case 10:
-#line 210 "nlmheader.y"
+#line 211 "nlmheader.y"
 {
 	    int len;
 
@@ -1147,113 +1148,113 @@ case 10:
 	  }
     break;
 case 11:
-#line 226 "nlmheader.y"
+#line 227 "nlmheader.y"
 {
 	    exit_procedure = yyvsp[0].string;
 	  }
     break;
 case 12:
-#line 230 "nlmheader.y"
+#line 231 "nlmheader.y"
 {
 	    symbol_prefix = NULL;
 	  }
     break;
 case 13:
-#line 234 "nlmheader.y"
+#line 235 "nlmheader.y"
 {
 	    export_symbols = string_list_append (export_symbols, yyvsp[0].list);
 	  }
     break;
 case 14:
-#line 238 "nlmheader.y"
+#line 239 "nlmheader.y"
 {
 	    fixed_hdr->flags |= nlmlex_get_number (yyvsp[0].string);
 	    free (yyvsp[0].string);
 	  }
     break;
 case 15:
-#line 243 "nlmheader.y"
+#line 244 "nlmheader.y"
 {
 	    fixed_hdr->flags &=~ nlmlex_get_number (yyvsp[0].string);
 	    free (yyvsp[0].string);
 	  }
     break;
 case 16:
-#line 248 "nlmheader.y"
+#line 249 "nlmheader.y"
 {
 	    map_file = "";
 	    full_map = TRUE;
 	  }
     break;
 case 17:
-#line 253 "nlmheader.y"
+#line 254 "nlmheader.y"
 {
 	    map_file = yyvsp[0].string;
 	    full_map = TRUE;
 	  }
     break;
 case 18:
-#line 258 "nlmheader.y"
+#line 259 "nlmheader.y"
 {
 	    help_file = yyvsp[0].string;
 	  }
     break;
 case 19:
-#line 262 "nlmheader.y"
+#line 263 "nlmheader.y"
 {
 	    symbol_prefix = NULL;
 	  }
     break;
 case 20:
-#line 266 "nlmheader.y"
+#line 267 "nlmheader.y"
 {
 	    import_symbols = string_list_append (import_symbols, yyvsp[0].list);
 	  }
     break;
 case 21:
-#line 270 "nlmheader.y"
+#line 271 "nlmheader.y"
 {
 	    input_files = string_list_append (input_files, yyvsp[0].list);
 	  }
     break;
 case 22:
-#line 274 "nlmheader.y"
+#line 275 "nlmheader.y"
 {
 	    map_file = "";
 	  }
     break;
 case 23:
-#line 278 "nlmheader.y"
+#line 279 "nlmheader.y"
 {
 	    map_file = yyvsp[0].string;
 	  }
     break;
 case 24:
-#line 282 "nlmheader.y"
+#line 283 "nlmheader.y"
 {
 	    message_file = yyvsp[0].string;
 	  }
     break;
 case 25:
-#line 286 "nlmheader.y"
+#line 287 "nlmheader.y"
 {
 	    modules = string_list_append (modules, yyvsp[0].list);
 	  }
     break;
 case 26:
-#line 290 "nlmheader.y"
+#line 291 "nlmheader.y"
 {
 	    fixed_hdr->flags |= 0x2;
 	  }
     break;
 case 27:
-#line 294 "nlmheader.y"
+#line 295 "nlmheader.y"
 {
 	    fixed_hdr->flags |= 0x10;
 	  }
     break;
 case 28:
-#line 298 "nlmheader.y"
+#line 299 "nlmheader.y"
 {
 	    if (output_file == NULL)
 	      output_file = yyvsp[0].string;
@@ -1262,19 +1263,19 @@ case 28:
 	  }
     break;
 case 29:
-#line 305 "nlmheader.y"
+#line 306 "nlmheader.y"
 {
 	    fixed_hdr->flags |= 0x8;
 	  }
     break;
 case 30:
-#line 309 "nlmheader.y"
+#line 310 "nlmheader.y"
 {
 	    fixed_hdr->flags |= 0x1;
 	  }
     break;
 case 31:
-#line 313 "nlmheader.y"
+#line 314 "nlmheader.y"
 {
 	    int len;
 
@@ -1292,32 +1293,32 @@ case 31:
 	  }
     break;
 case 32:
-#line 329 "nlmheader.y"
+#line 330 "nlmheader.y"
 {
 	    sharelib_file = yyvsp[0].string;
 	  }
     break;
 case 33:
-#line 333 "nlmheader.y"
+#line 334 "nlmheader.y"
 {
 	    var_hdr->stackSize = nlmlex_get_number (yyvsp[0].string);
 	    free (yyvsp[0].string);
 	  }
     break;
 case 34:
-#line 338 "nlmheader.y"
+#line 339 "nlmheader.y"
 {
 	    start_procedure = yyvsp[0].string;
 	  }
     break;
 case 35:
-#line 342 "nlmheader.y"
+#line 343 "nlmheader.y"
 {
 	    fixed_hdr->flags |= 0x4;
 	  }
     break;
 case 36:
-#line 346 "nlmheader.y"
+#line 347 "nlmheader.y"
 {
 	    int len;
 
@@ -1335,20 +1336,20 @@ case 36:
 	  }
     break;
 case 37:
-#line 362 "nlmheader.y"
+#line 363 "nlmheader.y"
 {
 	    fixed_hdr->moduleType = nlmlex_get_number (yyvsp[0].string);
 	    free (yyvsp[0].string);
 	  }
     break;
 case 38:
-#line 367 "nlmheader.y"
+#line 368 "nlmheader.y"
 {
 	    verbose = TRUE;
 	  }
     break;
 case 39:
-#line 371 "nlmheader.y"
+#line 372 "nlmheader.y"
 {
 	    long val;
 
@@ -1374,7 +1375,7 @@ case 39:
 	  }
     break;
 case 40:
-#line 395 "nlmheader.y"
+#line 396 "nlmheader.y"
 {
 	    long val;
 
@@ -1392,49 +1393,49 @@ case 40:
 	  }
     break;
 case 41:
-#line 411 "nlmheader.y"
+#line 412 "nlmheader.y"
 {
 	    rpc_file = yyvsp[0].string;
 	  }
     break;
 case 42:
-#line 420 "nlmheader.y"
+#line 421 "nlmheader.y"
 {
 	    yyval.list = NULL;
 	  }
     break;
 case 43:
-#line 424 "nlmheader.y"
+#line 425 "nlmheader.y"
 {
 	    yyval.list = yyvsp[0].list;
 	  }
     break;
 case 44:
-#line 435 "nlmheader.y"
+#line 436 "nlmheader.y"
 {
 	    yyval.list = string_list_cons (yyvsp[0].string, NULL);
 	  }
     break;
 case 45:
-#line 439 "nlmheader.y"
+#line 440 "nlmheader.y"
 {
 	    yyval.list = NULL;
 	  }
     break;
 case 46:
-#line 443 "nlmheader.y"
+#line 444 "nlmheader.y"
 {
 	    yyval.list = string_list_append1 (yyvsp[-1].list, yyvsp[0].string);
 	  }
     break;
 case 47:
-#line 447 "nlmheader.y"
+#line 448 "nlmheader.y"
 {
 	    yyval.list = yyvsp[-1].list;
 	  }
     break;
 case 48:
-#line 456 "nlmheader.y"
+#line 457 "nlmheader.y"
 {
 	    if (symbol_prefix != NULL)
 	      free (symbol_prefix);
@@ -1442,7 +1443,7 @@ case 48:
 	  }
     break;
 case 49:
-#line 467 "nlmheader.y"
+#line 468 "nlmheader.y"
 {
 	    if (symbol_prefix == NULL)
 	      yyval.string = yyvsp[0].string;
@@ -1455,13 +1456,13 @@ case 49:
 	  }
     break;
 case 50:
-#line 483 "nlmheader.y"
+#line 484 "nlmheader.y"
 {
 	    yyval.list = NULL;
 	  }
     break;
 case 51:
-#line 487 "nlmheader.y"
+#line 488 "nlmheader.y"
 {
 	    yyval.list = string_list_cons (yyvsp[-1].string, yyvsp[0].list);
 	  }
@@ -1699,7 +1700,7 @@ yyreturn:
 #endif
   return yyresult;
 }
-#line 492 "nlmheader.y"
+#line 493 "nlmheader.y"
 
 
 /* If strerror is just a macro, we want to use the one from libiberty
@@ -1747,7 +1748,8 @@ static struct input current;
 /* Start the lexer going on the main input file.  */
 
 bfd_boolean
-nlmlex_file (const char *name)
+nlmlex_file (name)
+     const char *name;
 {
   current.next = NULL;
   return nlmlex_file_open (name);
@@ -1756,7 +1758,8 @@ nlmlex_file (const char *name)
 /* Start the lexer going on a subsidiary input file.  */
 
 static void
-nlmlex_file_push (const char *name)
+nlmlex_file_push (name)
+     const char *name;
 {
   struct input *push;
 
@@ -1774,7 +1777,8 @@ nlmlex_file_push (const char *name)
 /* Start lexing from a file.  */
 
 static bfd_boolean
-nlmlex_file_open (const char *name)
+nlmlex_file_open (name)
+     const char *name;
 {
   current.file = fopen (name, "r");
   if (current.file == NULL)
@@ -1847,7 +1851,7 @@ static int lex_pos;
   ((void) (lex_buf != NULL ? lex_pos = 0 : nlmlex_buf_init ()))
 
 static int
-nlmlex_buf_init (void)
+nlmlex_buf_init ()
 {
   lex_size = 10;
   lex_buf = xmalloc (lex_size + 1);
@@ -1865,7 +1869,8 @@ nlmlex_buf_init (void)
 	   : nlmlex_buf_add (c)))
 
 static char
-nlmlex_buf_add (int c)
+nlmlex_buf_add (c)
+     int c;
 {
   if (lex_pos >= lex_size)
     {
@@ -1880,7 +1885,7 @@ nlmlex_buf_add (int c)
    code.  */
 
 static int
-yylex (void)
+yylex ()
 {
   int c;
 
@@ -2063,7 +2068,8 @@ tail_recurse:
 /* Get a number from a string.  */
 
 static long
-nlmlex_get_number (const char *s)
+nlmlex_get_number (s)
+     const char *s;
 {
   long ret;
   char *send;
@@ -2080,7 +2086,7 @@ nlmlex_get_number (const char *s)
    number.  */
 
 static void
-nlmheader_identify (void)
+nlmheader_identify ()
 {
   static int done;
 
@@ -2095,7 +2101,9 @@ nlmheader_identify (void)
 /* Issue a warning.  */
 
 static void
-nlmheader_warn (const char *s, int imax)
+nlmheader_warn (s, imax)
+     const char *s;
+     int imax;
 {
   nlmheader_identify ();
   fprintf (stderr, "%s:%d: %s", current.name, current.lineno, s);
@@ -2107,7 +2115,8 @@ nlmheader_warn (const char *s, int imax)
 /* Report an error.  */
 
 static void
-nlmheader_error (const char *s)
+nlmheader_error (s)
+     const char *s;
 {
   nlmheader_warn (s, -1);
   ++parse_errors;
@@ -2116,7 +2125,9 @@ nlmheader_error (const char *s)
 /* Add a string to a string list.  */
 
 static struct string_list *
-string_list_cons (char *s, struct string_list *l)
+string_list_cons (s, l)
+     char *s;
+     struct string_list *l;
 {
   struct string_list *ret;
 
@@ -2129,7 +2140,9 @@ string_list_cons (char *s, struct string_list *l)
 /* Append a string list to another string list.  */
 
 static struct string_list *
-string_list_append (struct string_list *l1, struct string_list *l2)
+string_list_append (l1, l2)
+     struct string_list *l1;
+     struct string_list *l2;
 {
   register struct string_list **pp;
 
@@ -2142,7 +2155,9 @@ string_list_append (struct string_list *l1, struct string_list *l2)
 /* Append a string to a string list.  */
 
 static struct string_list *
-string_list_append1 (struct string_list *l, char *s)
+string_list_append1 (l, s)
+     struct string_list *l;
+     char *s;
 {
   struct string_list *n;
   register struct string_list **pp;
@@ -2159,7 +2174,8 @@ string_list_append1 (struct string_list *l, char *s)
 /* Duplicate a string in memory.  */
 
 static char *
-xstrdup (const char *s)
+xstrdup (s)
+     const char *s;
 {
   unsigned long len;
   char *ret;

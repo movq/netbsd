@@ -1,4 +1,4 @@
-/*	$NetBSD: acpi_acad.c,v 1.16 2004/05/03 07:44:36 kochi Exp $	*/
+/*	$NetBSD: acpi_acad.c,v 1.13 2004/03/24 11:32:09 kanaoka Exp $	*/
 
 /*
  * Copyright 2001 Wasabi Systems, Inc.
@@ -44,7 +44,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: acpi_acad.c,v 1.16 2004/05/03 07:44:36 kochi Exp $");
+__KERNEL_RCSID(0, "$NetBSD: acpi_acad.c,v 1.13 2004/03/24 11:32:09 kanaoka Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -68,14 +68,13 @@ struct acpiacad_softc {
 	int sc_flags;			/* see below */
 
 	struct sysmon_envsys sc_sysmon;
-	struct sysmon_pswitch sc_smpsw;	/* our sysmon glue */
 	struct envsys_basic_info sc_info[ACPIACAD_NSENSORS];
 	struct envsys_tre_data sc_data[ACPIACAD_NSENSORS];
 
 	struct simplelock sc_lock;
 };
 
-static const struct envsys_range acpiacad_range[] = {
+const struct envsys_range acpiacad_range[] = {
 	{ 0, 2,		ENVSYS_INDICATOR },
 	{ 1, 0, 	-1},
 };
@@ -136,15 +135,15 @@ static int acpiacad_streinfo(struct sysmon_envsys *, struct envsys_basic_info *)
  *
  *	Autoconfiguration `match' routine.
  */
-static int
+int
 acpiacad_match(struct device *parent, struct cfdata *match, void *aux)
 {
 	struct acpi_attach_args *aa = aux;
 
 	if (aa->aa_node->ad_type != ACPI_TYPE_DEVICE)
-		return 0;
+		return (0);
 
-	return acpi_match_hid(aa->aa_node->ad_devinfo, acad_hid);
+	return (acpi_match_hid(aa->aa_node->ad_devinfo, acad_hid));
 }
 
 /*
@@ -152,7 +151,7 @@ acpiacad_match(struct device *parent, struct cfdata *match, void *aux)
  *
  *	Autoconfiguration `attach' routine.
  */
-static void
+void
 acpiacad_attach(struct device *parent, struct device *self, void *aux)
 {
 	struct acpiacad_softc *sc = (void *) self;
@@ -163,14 +162,6 @@ acpiacad_attach(struct device *parent, struct device *self, void *aux)
 
 	sc->sc_node = aa->aa_node;
 	simple_lock_init(&sc->sc_lock);
-
-	sc->sc_smpsw.smpsw_name = sc->sc_dev.dv_xname;
-	sc->sc_smpsw.smpsw_type = PSWITCH_TYPE_ACADAPTER;
-	if (sysmon_pswitch_register(&sc->sc_smpsw) != 0) {
-		printf("%s: unable to register with sysmon\n",
-		       sc->sc_dev.dv_xname);
-		return;
-	}
 
 	rv = AcpiInstallNotifyHandler(sc->sc_node->ad_handle,
 	    ACPI_DEVICE_NOTIFY, acpiacad_notify_handler, sc);
@@ -202,7 +193,7 @@ acpiacad_attach(struct device *parent, struct device *self, void *aux)
  *
  *	Get, and possibly display, the current AC line status.
  */
-static void
+void
 acpiacad_get_status(void *arg)
 {
 	struct acpiacad_softc *sc = arg;
@@ -220,14 +211,6 @@ acpiacad_get_status(void *arg)
 	AACAD_SET(sc, AACAD_F_AVAILABLE);
 	AACAD_UNLOCK(sc, s);
 
-	/*
-	 * PSWITCH_EVENT_RELEASED : AC offline
-	 * PSWITCH_EVENT_PRESSED  : AC online
-	 */
-
-	sysmon_pswitch_event(&sc->sc_smpsw, status == 0 ?
-	    PSWITCH_EVENT_RELEASED : PSWITCH_EVENT_PRESSED);
-
 	if (AACAD_ISSET(sc, AACAD_F_VERBOSE))
 		printf("%s: AC adapter %sconnected\n",
 		    sc->sc_dev.dv_xname, status == 0 ? "not " : "");
@@ -236,7 +219,7 @@ acpiacad_get_status(void *arg)
 /*
  * Clear status
  */
-static void
+void
 acpiacad_clear_status(struct acpiacad_softc *sc)
 {
 
@@ -252,7 +235,7 @@ acpiacad_clear_status(struct acpiacad_softc *sc)
  *
  *	Callback from ACPI interrupt handler to notify us of an event.
  */
-static void
+void
 acpiacad_notify_handler(ACPI_HANDLE handle, UINT32 notify, void *context)
 {
 	struct acpiacad_softc *sc = context;
@@ -286,7 +269,7 @@ acpiacad_notify_handler(ACPI_HANDLE handle, UINT32 notify, void *context)
 	}
 }
 
-static void
+void
 acpiacad_init_envsys(struct acpiacad_softc *sc)
 {
 	int i;
@@ -322,7 +305,7 @@ acpiacad_init_envsys(struct acpiacad_softc *sc)
 		    sc->sc_dev.dv_xname);
 }
 
-static int
+int
 acpiacad_gtredata(struct sysmon_envsys *sme, struct envsys_tre_data *tred)
 {
 	struct acpiacad_softc *sc = sme->sme_cookie;
@@ -334,16 +317,16 @@ acpiacad_gtredata(struct sysmon_envsys *sme, struct envsys_tre_data *tred)
 	*tred = sc->sc_data[tred->sensor];
 	/* XXX locking */
 
-	return 0;
+	return (0);
 }
 
 
-static int
+int
 acpiacad_streinfo(struct sysmon_envsys *sme, struct envsys_basic_info *binfo)
 {
 
 	/* XXX Not implemented */
 	binfo->validflags = 0;
 
-	return 0;
+	return (0);
 }

@@ -1,4 +1,4 @@
-/* $NetBSD: if_pppoe.c,v 1.57 2004/12/08 07:43:29 martin Exp $ */
+/* $NetBSD: if_pppoe.c,v 1.51 2003/11/28 08:56:48 keihan Exp $ */
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -37,11 +37,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_pppoe.c,v 1.57 2004/12/08 07:43:29 martin Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_pppoe.c,v 1.51 2003/11/28 08:56:48 keihan Exp $");
 
 #include "pppoe.h"
 #include "bpfilter.h"
-#include "opt_pfil_hooks.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -176,7 +175,6 @@ static int pppoe_ioctl(struct ifnet *, unsigned long, caddr_t);
 static void pppoe_tls(struct sppp *);
 static void pppoe_tlf(struct sppp *);
 static void pppoe_start(struct ifnet *);
-static void pppoe_clear_softc(struct pppoe_softc *, const char *);
 
 /* internal timeout handling */
 static void pppoe_timeout(void *);
@@ -198,14 +196,10 @@ static struct pppoe_softc * pppoe_find_softc_by_session(u_int, struct ifnet *);
 static struct pppoe_softc * pppoe_find_softc_by_hunique(u_int8_t *, size_t, struct ifnet *);
 static struct mbuf *pppoe_get_mbuf(size_t len);
 
-#ifdef PFIL_HOOKS
-static int pppoe_ifattach_hook(void *, struct mbuf **, struct ifnet *, int);
-#endif
-
 LIST_HEAD(pppoe_softc_head, pppoe_softc) pppoe_softc_list;
 
 int	pppoe_clone_create __P((struct if_clone *, int));
-int	pppoe_clone_destroy __P((struct ifnet *));
+void	pppoe_clone_destroy __P((struct ifnet *));
 
 struct if_clone pppoe_cloner =
     IF_CLONE_INITIALIZER("pppoe", pppoe_clone_create, pppoe_clone_destroy);
@@ -236,8 +230,7 @@ pppoe_clone_create(ifc, unit)
 	sc = malloc(sizeof(struct pppoe_softc), M_DEVBUF, M_WAITOK);
 	memset(sc, 0, sizeof(struct pppoe_softc));
 
-	snprintf(sc->sc_sppp.pp_if.if_xname, sizeof(sc->sc_sppp.pp_if.if_xname),
-	    "pppoe%d", unit);
+	sprintf(sc->sc_sppp.pp_if.if_xname, "pppoe%d", unit);
 	sc->sc_sppp.pp_if.if_softc = sc;
 	sc->sc_sppp.pp_if.if_mtu = PPPOE_MAXMTU;
 	sc->sc_sppp.pp_if.if_flags = IFF_SIMPLEX|IFF_POINTOPOINT|IFF_MULTICAST;
@@ -266,27 +259,17 @@ pppoe_clone_create(ifc, unit)
 #if NBPFILTER > 0
 	bpfattach(&sc->sc_sppp.pp_if, DLT_PPP_ETHER, 0);
 #endif
-#ifdef PFIL_HOOKS
-	if (LIST_EMPTY(&pppoe_softc_list))
-		pfil_add_hook(pppoe_ifattach_hook, NULL,
-		    PFIL_IFNET|PFIL_WAITOK, &if_pfil);
-#endif
 	LIST_INSERT_HEAD(&pppoe_softc_list, sc, sc_list);
 	return 0;
 }
 
-int
+void
 pppoe_clone_destroy(ifp)
 	struct ifnet *ifp;
 {
 	struct pppoe_softc * sc = ifp->if_softc;
 
 	LIST_REMOVE(sc, sc_list);
-#ifdef PFIL_HOOKS
-	if (LIST_EMPTY(&pppoe_softc_list))
-		pfil_remove_hook(pppoe_ifattach_hook, NULL,
-		    PFIL_IFNET|PFIL_WAITOK, &if_pfil);
-#endif
 #if NBPFILTER > 0
 	bpfdetach(ifp);
 #endif
@@ -299,8 +282,6 @@ pppoe_clone_destroy(ifp)
 	if (sc->sc_ac_cookie)
 		free(sc->sc_ac_cookie, M_DEVBUF);
 	free(sc, M_DEVBUF);
-
-	return (0);
 }
 
 /*
@@ -688,7 +669,22 @@ breakbreak:;
 	case PPPOE_CODE_PADT:
 		if (sc == NULL)
 			goto done;
-		pppoe_clear_softc(sc, "received PADT");
+		/* stop timer (we might be about to transmit a PADT ourself) */
+		callout_stop(&sc->sc_timeout);
+		if (sc->sc_sppp.pp_if.if_flags & IFF_DEBUG)
+			printf("%s: session 0x%x terminated, received PADT\n",
+			    sc->sc_sppp.pp_if.if_xname, session);
+		/* clean up softc */
+		sc->sc_state = PPPOE_STATE_INITIAL;
+		memcpy(&sc->sc_dest, etherbroadcastaddr, sizeof(sc->sc_dest));
+		if (sc->sc_ac_cookie) {
+			free(sc->sc_ac_cookie, M_DEVBUF);
+			sc->sc_ac_cookie = NULL;
+		}
+		sc->sc_ac_cookie_len = 0;
+		sc->sc_session = 0;
+		/* signal upper layer */
+		sc->sc_sppp.pp_down(&sc->sc_sppp);
 		break;
 	default:
 		printf("%s: unknown code (0x%04x) session = 0x%04x\n",
@@ -811,10 +807,8 @@ pppoe_output(struct pppoe_softc *sc, struct mbuf *m)
 	struct ether_header *eh;
 	u_int16_t etype;
 
-	if (sc->sc_eth_if == NULL) {
-		m_freem(m);
+	if (sc->sc_eth_if == NULL)
 		return EIO;
-	}
 
 	memset(&dst, 0, sizeof dst);
 	dst.sa_family = AF_UNSPEC;
@@ -1415,58 +1409,4 @@ pppoe_start(struct ifnet *ifp)
 
 		pppoe_output(sc, m);
 	}
-}
-
-
-#ifdef PFIL_HOOKS
-static int
-pppoe_ifattach_hook(void *arg, struct mbuf **mp, struct ifnet *ifp, int dir)
-{
-	struct pppoe_softc *sc;
-	int s;
-
-	if (mp != (struct mbuf **)PFIL_IFNET_DETACH)
-		return 0;
-
-	s = splnet();
-	LIST_FOREACH(sc, &pppoe_softc_list, sc_list) {
-		if (sc->sc_eth_if != ifp)
-			continue;
-		if (sc->sc_sppp.pp_if.if_flags & IFF_UP) {
-			sc->sc_sppp.pp_if.if_flags &= ~(IFF_UP|IFF_RUNNING);
-			printf("%s: ethernet interface detached, going down\n",
-			    sc->sc_sppp.pp_if.if_xname);
-		}
-		sc->sc_eth_if = NULL;
-		pppoe_clear_softc(sc, "ethernet interface detached");
-	}
-	splx(s);
-
-	return 0;
-}
-#endif
-
-static void
-pppoe_clear_softc(struct pppoe_softc *sc, const char *message)
-{
-	/* stop timer (we might be about to transmit a PADT ourself) */	
-	callout_stop(&sc->sc_timeout);
-	if (sc->sc_sppp.pp_if.if_flags & IFF_DEBUG)
-		printf("%s: session 0x%x terminated, %s\n",
-		    sc->sc_sppp.pp_if.if_xname, sc->sc_session, message);
-
-	/* fix our state */
-	sc->sc_state = PPPOE_STATE_INITIAL;
-
-	/* signal upper layer */
-	sc->sc_sppp.pp_down(&sc->sc_sppp);
-
-	/* clean up softc */
-	memcpy(&sc->sc_dest, etherbroadcastaddr, sizeof(sc->sc_dest));
-	if (sc->sc_ac_cookie) {
-		free(sc->sc_ac_cookie, M_DEVBUF);
-		sc->sc_ac_cookie = NULL;
-	}
-	sc->sc_ac_cookie_len = 0;
-	sc->sc_session = 0;
 }

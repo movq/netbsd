@@ -1,4 +1,4 @@
-/* $NetBSD: func.c,v 1.29 2004/05/13 15:25:58 christos Exp $ */
+/* $NetBSD: func.c,v 1.27 2003/12/17 17:32:16 christos Exp $ */
 
 /*-
  * Copyright (c) 1980, 1991, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)func.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: func.c,v 1.29 2004/05/13 15:25:58 christos Exp $");
+__RCSID("$NetBSD: func.c,v 1.27 2003/12/17 17:32:16 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -593,7 +593,6 @@ search(int type, int level, Char *goal)
     Char wordbuf[BUFSIZE];
     Char *aword, *cp;
     struct whyle *wp;
-    int wlevel = 0;
 
     aword = wordbuf;
     Stype = type;
@@ -631,17 +630,14 @@ search(int type, int level, Char *goal)
 	    break;
 	case T_END:
 	    if (type == T_BRKSW) {
-		if (wlevel == 0) {
-		    wp = whyles;
-		    if (wp) {
+		wp = whyles;
+		if (wp) {
 			whyles = wp->w_next;
 			wpfree(wp);
-		    }
 		}
 	    }
 	    if (type == T_BREAK)
 		level--;
-	    wlevel--;
 	    break;
 	case T_ENDIF:
 	    if (type == T_IF || type == T_ELSE)
@@ -668,7 +664,6 @@ search(int type, int level, Char *goal)
 	    break;
 	case T_FOREACH: 
 	case T_WHILE:
-	    wlevel++;
 	    if (type == T_BREAK)
 		level++;
 	    break;	    
@@ -1104,7 +1099,6 @@ static const struct limits {
     { RLIMIT_MEMLOCK,	"memorylocked",	1024,	"kbytes" },
     { RLIMIT_NPROC,	"maxproc",	1,	"" },
     { RLIMIT_NOFILE,	"openfiles",	1,	"" },
-    { RLIMIT_SBSIZE,	"sbsize",	1,	"bytes" },
     { -1,		NULL,		0,	NULL }
 };
 
@@ -1248,7 +1242,7 @@ plim(const struct limits *lp, Char hard)
     struct rlimit rlim;
     RLIM_TYPE limit;
 
-    (void)fprintf(cshout, "%-13.13s", lp->limname);
+    (void)fprintf(cshout, "%s \t", lp->limname);
 
     (void)getrlimit(lp->limconst, &rlim);
     limit = hard ? rlim.rlim_max : rlim.rlim_cur;

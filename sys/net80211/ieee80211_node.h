@@ -1,4 +1,4 @@
-/*	$NetBSD: ieee80211_node.h,v 1.14 2004/08/10 00:57:22 dyoung Exp $	*/
+/*	$NetBSD: ieee80211_node.h,v 1.8.2.1 2004/08/03 16:54:47 jmc Exp $	*/
 /*-
  * Copyright (c) 2001 Atsushi Onoe
  * Copyright (c) 2002, 2003 Sam Leffler, Errno Consulting
@@ -30,23 +30,20 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
- * $FreeBSD: src/sys/net80211/ieee80211_node.h,v 1.10 2004/04/05 22:10:26 sam Exp $
+ * $FreeBSD: src/sys/net80211/ieee80211_node.h,v 1.7 2003/10/17 21:41:52 sam Exp $
  */
 #ifndef _NET80211_IEEE80211_NODE_H_
 #define _NET80211_IEEE80211_NODE_H_
 
-#ifdef _KERNEL
 #define	IEEE80211_PSCAN_WAIT 	5		/* passive scan wait */
 #define	IEEE80211_TRANS_WAIT 	5		/* transition wait */
 #define	IEEE80211_INACT_WAIT	5		/* inactivity timer interval */
 #define	IEEE80211_INACT_MAX	(300/IEEE80211_INACT_WAIT)
-#define	IEEE80211_CACHE_SIZE	100
 
 #define	IEEE80211_NODE_HASHSIZE	32
 /* simple hash is enough for variation of macaddr */
 #define	IEEE80211_NODE_HASH(addr)	\
 	(((u_int8_t *)(addr))[IEEE80211_ADDR_LEN - 1] % IEEE80211_NODE_HASHSIZE)
-#endif /* _KERNEL */
 
 #define	IEEE80211_RATE_SIZE	8		/* 802.11 standard */
 #define	IEEE80211_RATE_MAXSIZE	15		/* max rates we'll handle */
@@ -56,24 +53,6 @@ struct ieee80211_rateset {
 	u_int8_t		rs_rates[IEEE80211_RATE_MAXSIZE];
 };
 
-enum ieee80211_node_state {
-	IEEE80211_STA_CACHE,	/* cached node */
-	IEEE80211_STA_BSS,	/* ic->ic_bss, the network we joined */
-	IEEE80211_STA_AUTH,	/* successfully authenticated */
-	IEEE80211_STA_ASSOC,	/* successfully associated */
-	IEEE80211_STA_COLLECT	/* This node remains in the cache while
-				 * the driver sends a de-auth message;
-				 * afterward it should be freed to make room
-				 * for a new node.
-				 */
-};
-
-#define	ieee80211_node_newstate(__ni, __state)	\
-	do {					\
-		(__ni)->ni_state = (__state);	\
-	} while (0)
-
-#ifdef _KERNEL
 /*
  * Node specific information.  Note that drivers are expected
  * to derive from this structure to add device-specific per-node
@@ -129,7 +108,6 @@ struct ieee80211_node {
 	int			ni_fails;	/* failure count to associate */
 	int			ni_inact;	/* inactivity mark count */
 	int			ni_txrate;	/* index to ni_rates[] */
-	int			ni_state;
 	u_int32_t		*ni_challenge;	/* shared-key challenge */
 };
 
@@ -178,21 +156,23 @@ ieee80211_unref_node(struct ieee80211_node **ni)
 	*ni = NULL;			/* guard against use */
 }
 
+#define	IEEE80211_NODE_LOCK_INIT(_ic, _name) \
+	mtx_init(&(_ic)->ic_nodelock, _name, "802.11 node table", MTX_DEF)
+#define	IEEE80211_NODE_LOCK_DESTROY(_ic)	mtx_destroy(&(_ic)->ic_nodelock)
+#define	IEEE80211_NODE_LOCK(_ic)		mtx_lock(&(_ic)->ic_nodelock)
+#define	IEEE80211_NODE_UNLOCK(_ic)		mtx_unlock(&(_ic)->ic_nodelock)
+#define	IEEE80211_NODE_LOCK_ASSERT(_ic) \
+	mtx_assert(&(_ic)->ic_nodelock, MA_OWNED)
+
 struct ieee80211com;
 
-#ifdef MALLOC_DECLARE
-MALLOC_DECLARE(M_80211_NODE);
-#endif
+extern	void ieee80211_node_attach(struct ifnet *);
+extern	void ieee80211_node_lateattach(struct ifnet *);
+extern	void ieee80211_node_detach(struct ifnet *);
 
-extern	void ieee80211_node_attach(struct ieee80211com *);
-extern	void ieee80211_node_lateattach(struct ieee80211com *);
-extern	void ieee80211_node_detach(struct ieee80211com *);
-
-extern	void ieee80211_begin_scan(struct ieee80211com *);
-extern	void ieee80211_next_scan(struct ieee80211com *);
-extern	void ieee80211_create_ibss(struct ieee80211com *,
-		struct ieee80211_channel *);
-extern	void ieee80211_end_scan(struct ieee80211com *);
+extern	void ieee80211_begin_scan(struct ifnet *);
+extern	void ieee80211_next_scan(struct ifnet *);
+extern	void ieee80211_end_scan(struct ifnet *);
 extern	struct ieee80211_node *ieee80211_alloc_node(struct ieee80211com *,
 		u_int8_t *);
 extern	struct ieee80211_node *ieee80211_dup_bss(struct ieee80211com *,
@@ -203,23 +183,20 @@ extern	struct ieee80211_node *ieee80211_find_rxnode(struct ieee80211com *,
 		struct ieee80211_frame *);
 extern	struct ieee80211_node *ieee80211_find_txnode(struct ieee80211com *,
 		u_int8_t *);
-extern	struct ieee80211_node *ieee80211_find_node_for_beacon(
-		struct ieee80211com *, u_int8_t *macaddr,
-		struct ieee80211_channel *, char *ssid);
-extern	void ieee80211_release_node(struct ieee80211com *,
+extern	struct ieee80211_node * ieee80211_lookup_node(struct ieee80211com *,
+		u_int8_t *macaddr, struct ieee80211_channel *);
+extern	struct ieee80211_node * ieee80211_lookup_node_for_beacon(struct ieee80211com *,
+		u_int8_t *macaddr, struct ieee80211_channel *, char *);
+extern	void ieee80211_free_node(struct ieee80211com *,
 		struct ieee80211_node *);
 extern	void ieee80211_free_allnodes(struct ieee80211com *);
-
 typedef void ieee80211_iter_func(void *, struct ieee80211_node *);
 extern	void ieee80211_iterate_nodes(struct ieee80211com *ic,
 		ieee80211_iter_func *, void *);
-extern	void ieee80211_clean_nodes(struct ieee80211com *);
+extern	void ieee80211_timeout_nodes(struct ieee80211com *);
 
-extern	void ieee80211_node_join(struct ieee80211com *,
-		struct ieee80211_node *, int);
-extern	void ieee80211_node_leave(struct ieee80211com *,
+extern	int ieee80211_match_bss(struct ieee80211com *,
 		struct ieee80211_node *);
-
-extern	int ieee80211_match_bss(struct ieee80211com *, struct ieee80211_node *);
-#endif /* _KERNEL */
+extern	void ieee80211_create_ibss(struct ieee80211com* ,
+		struct ieee80211_channel *);
 #endif /* _NET80211_IEEE80211_NODE_H_ */

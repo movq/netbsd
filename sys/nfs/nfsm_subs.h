@@ -1,4 +1,4 @@
-/*	$NetBSD: nfsm_subs.h,v 1.38 2004/09/29 11:24:28 yamt Exp $	*/
+/*	$NetBSD: nfsm_subs.h,v 1.34.2.2 2004/07/10 14:30:15 tron Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -50,6 +50,13 @@
  */
 
 #define	M_HASCL(m)	((m)->m_flags & M_EXT)
+#define	NFSMINOFF(m) \
+		if (M_HASCL(m)) \
+			(m)->m_data = (m)->m_ext.ext_buf; \
+		else if ((m)->m_flags & M_PKTHDR) \
+			(m)->m_data = (m)->m_pktdat; \
+		else \
+			(m)->m_data = (m)->m_dat
 #define	NFSMADV(m, s)	(m)->m_data += (s)
 #define	NFSMSIZ(m)	((M_HASCL(m)) ? (m)->m_ext.ext_size : \
 				(((m)->m_flags & M_PKTHDR) ? MHLEN : MLEN))
@@ -388,16 +395,14 @@
 #define nfsm_rndup(a)	(((a)+3)&(~0x3))
 #define nfsm_padlen(a)	(nfsm_rndup(a) - (a))
 
-#define	nfsm_request1(v, t, p, c, rexmitp)	\
+#define	nfsm_request(v, t, p, c)	\
 		if ((error = nfs_request((v), mreq, (t), (p), \
-		   (c), &mrep, &md, &dpos, (rexmitp))) != 0) { \
+		   (c), &mrep, &md, &dpos)) != 0) { \
 			if (error & NFSERR_RETERR) \
 				error &= ~NFSERR_RETERR; \
 			else \
 				goto nfsmout; \
 		}
-
-#define	nfsm_request(v, t, p, c)	nfsm_request1((v), (t), (p), (c), NULL)
 
 #define	nfsm_strtom(a,s,m) \
 		if ((s) > (m)) { \

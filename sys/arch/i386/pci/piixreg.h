@@ -1,4 +1,4 @@
-/*	$NetBSD: piixreg.h,v 1.2 2004/04/04 16:06:09 kochi Exp $	*/
+/*	$NetBSD: piixreg.h,v 1.1.36.1 2004/04/28 05:19:18 jmc Exp $	*/
 
 /*
  * Copyright (c) 1999, by UCHIYAMA Yasushi

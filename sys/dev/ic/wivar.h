@@ -1,4 +1,4 @@
-/*	$NetBSD: wivar.h,v 1.53 2004/12/13 17:55:28 dyoung Exp $	*/
+/*	$NetBSD: wivar.h,v 1.43.2.1 2004/07/23 23:27:11 he Exp $	*/
 
 /*
  * Copyright (c) 1997, 1998, 1999
@@ -37,8 +37,8 @@
 #define WI_RX_RADIOTAP_PRESENT	((1 << IEEE80211_RADIOTAP_FLAGS) | \
 				 (1 << IEEE80211_RADIOTAP_RATE) | \
 				 (1 << IEEE80211_RADIOTAP_CHANNEL) | \
-				 (1 << IEEE80211_RADIOTAP_DB_ANTSIGNAL) | \
-				 (1 << IEEE80211_RADIOTAP_DB_ANTNOISE))
+				 (1 << IEEE80211_RADIOTAP_DBM_ANTSIGNAL) | \
+				 (1 << IEEE80211_RADIOTAP_DBM_ANTNOISE))
 
 struct wi_rx_radiotap_header {
 	struct ieee80211_radiotap_header	wr_ihdr;
@@ -132,10 +132,6 @@ struct wi_softc	{
 	int			sc_txqueued;	/* FIDs currently queued */
 	int			sc_txstart;	/* next FID to start */
 	int			sc_txstarted;	/* FIDs currently started */
-	int			sc_txcmds;
-
-	int			sc_status;
-
 	struct wi_rssdesc 	sc_rssd[WI_NTXRSS];
 	wi_rssdescq_t		sc_rssdfree;
 	int			sc_tx_timer;
@@ -148,7 +144,6 @@ struct wi_softc	{
 	struct wi_apinfo	sc_aps[MAXAPINFO];
 	int 			sc_naps;
 
-	struct timeval		sc_last_syn;
 	int			sc_false_syns;
 	int			sc_alt_retry;
 
@@ -176,12 +171,14 @@ struct wi_node {
 	struct ieee80211_rssadapt	wn_rssadapt;
 };
 
-/* maximum false change-of-BSSID indications per second */
+/* maximum consecutive false change-of-BSSID indications */
 #define	WI_MAX_FALSE_SYNS		10	
 
 #define	WI_PRISM_DBM_OFFSET	100	/* XXX */
 
 #define	WI_LUCENT_DBM_OFFSET	149
+
+#define	WI_RSSI_TO_DBM(sc, rssi) ((rssi) - (sc)->sc_dbm_offset)
 
 #define	WI_SCAN_INQWAIT			3	/* wait sec before inquire */
 #define	WI_SCAN_WAIT			5	/* maximum scan wait */
@@ -278,7 +275,7 @@ struct wi_card_ident {
 			(sc->sc_pci? reg * 2: reg), buf, count)
 
 
-int	wi_attach(struct wi_softc *, const u_int8_t *);
+int	wi_attach(struct wi_softc *);
 int	wi_detach(struct wi_softc *);
 int	wi_activate(struct device *, enum devact);
 int	wi_intr(void *arg);

@@ -1,4 +1,4 @@
-/*	$NetBSD: in_pcb.c,v 1.96 2004/09/29 21:30:00 christos Exp $	*/
+/*	$NetBSD: in_pcb.c,v 1.94 2004/03/02 02:26:28 thorpej Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.
@@ -98,7 +98,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: in_pcb.c,v 1.96 2004/09/29 21:30:00 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: in_pcb.c,v 1.94 2004/03/02 02:26:28 thorpej Exp $");
 
 #include "opt_inet.h"
 #include "opt_ipsec.h"
@@ -157,13 +157,20 @@ int	anonportmax = IPPORT_ANONMAX;
 int	lowportmin  = IPPORT_RESERVEDMIN;
 int	lowportmax  = IPPORT_RESERVEDMAX;
 
-POOL_INIT(inpcb_pool, sizeof(struct inpcb), 0, 0, 0, "inpcbpl", NULL);
+struct pool inpcb_pool;
 
 void
 in_pcbinit(table, bindhashsize, connecthashsize)
 	struct inpcbtable *table;
 	int bindhashsize, connecthashsize;
 {
+	static int inpcb_pool_initialized;
+
+	if (inpcb_pool_initialized == 0) {
+		pool_init(&inpcb_pool, sizeof(struct inpcb), 0, 0, 0,
+		    "inpcbpl", NULL);
+		inpcb_pool_initialized = 1;
+	}
 
 	CIRCLEQ_INIT(&table->inpt_queue);
 	table->inpt_porthashtbl = hashinit(bindhashsize, HASH_LIST, M_PCB,
@@ -447,6 +454,7 @@ in_pcbconnect(v, nam)
 			if (error == EAGAIN)
 				return (error);
 		}
+		inp->inp_laddr = ia->ia_addr.sin_addr;
 		inp->inp_laddr = ifaddr->sin_addr;
 	}
 	inp->inp_faddr = sin->sin_addr;

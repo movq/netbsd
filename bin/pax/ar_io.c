@@ -1,4 +1,4 @@
-/*	$NetBSD: ar_io.c,v 1.44 2004/08/02 10:20:48 yamt Exp $	*/
+/*	$NetBSD: ar_io.c,v 1.39.2.1 2004/06/22 07:29:43 tron Exp $	*/
 
 /*-
  * Copyright (c) 1992 Keith Muller.
@@ -42,7 +42,7 @@
 #if 0
 static char sccsid[] = "@(#)ar_io.c	8.2 (Berkeley) 4/18/94";
 #else
-__RCSID("$NetBSD: ar_io.c,v 1.44 2004/08/02 10:20:48 yamt Exp $");
+__RCSID("$NetBSD: ar_io.c,v 1.39.2.1 2004/06/22 07:29:43 tron Exp $");
 #endif
 #endif /* not lint */
 
@@ -77,9 +77,8 @@ __RCSID("$NetBSD: ar_io.c,v 1.44 2004/08/02 10:20:48 yamt Exp $");
 #define EXT_MODE	O_RDONLY	/* open mode for list/extract */
 #define AR_MODE		(O_WRONLY | O_CREAT | O_TRUNC)	/* mode for archive */
 #define APP_MODE	O_RDWR		/* mode for append */
-static char STDO[] =	"<STDOUT>";	/* pseudo name for stdout */
-static char STDN[] =	"<STDIN>";	/* pseudo name for stdin */
-static char NONE[] =	"<NONE>";	/* pseudo name for none */
+#define STDO		"<STDOUT>"	/* pseudo name for stdout */
+#define STDN		"<STDIN>"	/* pseudo name for stdin */
 static int arfd = -1;			/* archive file descriptor */
 static int artyp = ISREG;		/* archive type: file/FIFO/tape */
 static int arvol = 1;			/* archive volume number */
@@ -100,7 +99,7 @@ int force_one_volume;			/* 1 if we ignore volume changes */
 static int get_phys(void);
 extern sigset_t s_mask;
 static void ar_start_gzip(int, const char *, int);
-static const char *timefmt(char *, size_t, off_t, time_t, const char *);
+static const char *timefmt(char *, size_t, off_t, time_t);
 static const char *sizefmt(char *, size_t, off_t);
 
 #ifdef SUPPORT_RMT
@@ -184,7 +183,7 @@ ar_open(const char *name)
 		/*
 		 * arfd not used in COPY mode
 		 */
-		arcname = NONE;
+		arcname = "<NONE>";
 		lstrval = 1;
 		return(0);
 	}
@@ -192,10 +191,8 @@ ar_open(const char *name)
 		return(-1);
 
 	if (chdname != NULL)
-		if (chdir(chdname) != 0) {
+		if (chdir(chdname) != 0)
 			syswarn(1, errno, "Failed chdir to %s", chdname);
-			return(-1);
-		}
 	/*
 	 * set up is based on device type
 	 */
@@ -1403,7 +1400,7 @@ int
 ar_next(void)
 {
 	char buf[PAXPATHLEN+2];
-	static char *arcfree = NULL;
+	static int freeit = 0;
 	sigset_t o_mask;
 
 	/*
@@ -1532,17 +1529,17 @@ ar_next(void)
 		 * try to open new archive
 		 */
 		if (ar_open(buf) >= 0) {
-			if (arcfree) {
-				(void)free(arcfree);
-				arcfree = NULL;
+			if (freeit) {
+				(void)free((char *)arcname);
+				freeit = 0;
 			}
-			if ((arcfree = strdup(buf)) == NULL) {
+			if ((arcname = strdup(buf)) == NULL) {
 				done = 1;
 				lstrval = -1;
 				tty_warn(0, "Cannot save archive name.");
 				return(-1);
 			}
-			arcname = arcfree;
+			freeit = 1;
 			break;
 		}
 		tty_prnt("Cannot open %s, try again\n", buf);
@@ -1596,15 +1593,14 @@ ar_start_gzip(int fd, const char *gzp, int wr)
 }
 
 static const char *
-timefmt(buf, size, sz, tm, unitstr)
+timefmt(buf, size, sz, tm)
 	char *buf;
 	size_t size;
 	off_t sz;
 	time_t tm;
-	const char *unitstr;
 {
-	(void)snprintf(buf, size, "%lu secs (" OFFT_F " %s/sec)",
-	    (unsigned long)tm, (OFFT_T)(sz / tm), unitstr);
+	(void)snprintf(buf, size, "%lu secs (" OFFT_F " bytes/sec)",
+	    (unsigned long)tm, (OFFT_T)(sz / tm));
 	return buf;
 }
 
@@ -1647,11 +1643,11 @@ ar_summary(int n)
 	 * we have skipped over looking for a header to id. there is no way we
 	 * could have written anything yet.
 	 */
-	if (frmt == NULL && act != COPY) {
+	if (frmt == NULL) {
 		len = snprintf(buf, sizeof(buf),
 		    "unknown format, %s skipped in %s\n",
 		    sizefmt(s1buf, sizeof(s1buf), rdcnt),
-		    timefmt(tbuf, sizeof(tbuf), rdcnt, secs, "bytes"));
+		    timefmt(tbuf, sizeof(tbuf), rdcnt, secs));
 		if (n == 0)
 			(void)fprintf(outf, "%s: %s", argv0, buf);
 		else
@@ -1667,19 +1663,12 @@ ar_summary(int n)
 	}
 
 
-	if (act == COPY) {
-		len = snprintf(buf, sizeof(buf),
-		    "%lu files in %s\n",
-		    (unsigned long)flcnt,
-		    timefmt(tbuf, sizeof(tbuf), flcnt, secs, "files"));
-	} else {
-		len = snprintf(buf, sizeof(buf),
-		    "%s vol %d, %lu files, %s read, %s written in %s\n",
-		    frmt->name, arvol-1, (unsigned long)flcnt,
-		    sizefmt(s1buf, sizeof(s1buf), rdcnt),
-		    sizefmt(s2buf, sizeof(s2buf), wrcnt),
-		    timefmt(tbuf, sizeof(tbuf), rdcnt + wrcnt, secs, "bytes"));
-	}
+	len = snprintf(buf, sizeof(buf),
+	    "%s vol %d, %lu files, %s read, %s written in %s\n",
+	    frmt->name, arvol-1, (unsigned long)flcnt,
+	    sizefmt(s1buf, sizeof(s1buf), rdcnt),
+	    sizefmt(s2buf, sizeof(s2buf), wrcnt),
+	    timefmt(tbuf, sizeof(tbuf), rdcnt + wrcnt, secs));
 	if (n == 0)
 		(void)fprintf(outf, "%s: %s", argv0, buf);
 	else

@@ -1,4 +1,4 @@
-#	$NetBSD: files.hpcsh,v 1.39 2004/07/06 13:09:19 uch Exp $
+#	$NetBSD: files.hpcsh,v 1.36 2004/03/25 15:26:35 wiz Exp $
 #
 maxpartitions 8
 
@@ -18,7 +18,7 @@ file	arch/hpcsh/hpcsh/bus_space.c
 #file	arch/hpcsh/hpcsh/bus_dma.c
 file	arch/hpcsh/hpcsh/clock_machdep.c
 
-file	dev/kloader.c
+file	arch/hpc/hpc/kloader.c
 file	arch/hpcsh/hpcsh/kloader_machdep.c
 defflag	debug_kloader.h			KLOADER_DEBUG
 defparam opt_kloader_kernel_path.h	KLOADER_KERNEL_PATH
@@ -36,14 +36,6 @@ include "dev/hpc/files.hpcfb"
 
 include "arch/hpc/conf/files.debug"
 file	arch/hpcsh/hpcsh/debug.c
-#
-# power management
-#
-include "dev/hpc/apm/files.apm"
-device hpcapm: apmdevif
-attach hpcapm at mainbus
-file	dev/hpc/hpcapm.c		hpcapm
-
 
 #
 # Machine-independent SCSI drivers
@@ -78,10 +70,9 @@ device	j6x0pwr
 attach	j6x0pwr at adc
 file	arch/hpcsh/dev/j6x0pwr.c		j6x0pwr
 
-include	"dev/wscons/files.wscons"
 include "dev/hpc/files.hpctp"
 
-device	j6x0tp: hpctpanel, wsmousedev, wskbddev
+device	j6x0tp: tpcalib, wsmousedev, wskbddev
 attach	j6x0tp at adc
 file	arch/hpcsh/dev/j6x0tp.c			j6x0tp
 defflag	opt_j6x0tp.h		J6X0TP_DEBUG
@@ -139,6 +130,7 @@ file	arch/hpcsh/dev/hd6446x/hd6446x_subr.S	hd64461if | hd64465if
 file	arch/hpcsh/dev/hd6446x/hd6446xintc.c	hd64461if | hd64465if
 
 #include "dev/usb/files.usb"
+include	"dev/wscons/files.wscons"
 
 #
 # Machine-independent PCMCIA drivers

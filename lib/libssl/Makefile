@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.11 2004/08/05 01:24:02 lukem Exp $
+#	$NetBSD: Makefile,v 1.7 2003/07/24 14:28:57 itojun Exp $
 
 # RCSid:
 #	Id: Makefile,v 1.33 1998/11/11 11:53:53 sjg Exp
@@ -30,8 +30,6 @@ CRYPTODIST=	${NETBSDSRCDIR}/crypto/dist
 .PATH: ${OPENSSLSRC}
 
 .include "srcs.inc"
-
-LIBDPLIBS=crypto ${.CURDIR}/../libcrypto
 
 # XXX
 .if ${OBJECT_FMT} == "ELF"

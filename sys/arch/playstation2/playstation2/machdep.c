@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.13 2004/07/06 13:09:18 uch Exp $	*/
+/*	$NetBSD: machdep.c,v 1.11 2003/12/30 12:33:18 pk Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -34,10 +34,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.13 2004/07/06 13:09:18 uch Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.11 2003/12/30 12:33:18 pk Exp $");
 
 #include "opt_ddb.h"
-#include "opt_kloader.h"
 #include "opt_kloader_kernel_path.h"
 
 #include <sys/param.h>
@@ -69,12 +68,8 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.13 2004/07/06 13:09:18 uch Exp $");
 #include <machine/intr.h>/* hardintr_init */
 #include <playstation2/playstation2/sifbios.h>
 #include <playstation2/playstation2/interrupt.h>
-
-#if defined KLOADER_KERNEL_PATH && !defined KLOADER
-#error "define KLOADER"
-#endif
-#ifdef KLOADER
-#include <machine/kloader.h>
+#ifdef KLOADER_KERNEL_PATH
+#include <playstation2/playstation2/kloader.h>
 #endif
 
 /* For sysctl_hw */
@@ -190,7 +185,7 @@ cpu_startup()
 	printf(version);
 	printf("%s\n", cpu_model);
 	format_bytes(pbuf, sizeof(pbuf), ctob(physmem));
-	printf("total memory = %s\n", pbuf);
+	printf("%s memory", pbuf);
 
 	minaddr = 0;
 	/*
@@ -212,15 +207,12 @@ cpu_startup()
 	 */
 
 	format_bytes(pbuf, sizeof(pbuf), ptoa(uvmexp.free));
-	printf("avail memory = %s\n", pbuf);
+	printf(", %s free", pbuf);
 }
 
 void
 cpu_reboot(int howto, char *bootstr)
 {
-#ifdef KLOADER
-	struct kloader_bootinfo kbi;
-#endif
 	static int waittime = -1;
 
 	/* Take a snapshot before clobbering any registers. */
@@ -237,12 +229,7 @@ cpu_reboot(int howto, char *bootstr)
 		howto |= RB_HALT;
 	}
 
-#ifdef KLOADER
-	/* No bootinfo is required. */
-	kloader_bootinfo_set(&kbi, 0, NULL, NULL, TRUE);
-#ifndef KLOADER_KERNEL_PATH
-#define	KLOADER_KERNEL_PATH	"/netbsd"
-#endif
+#ifdef KLOADER_KERNEL_PATH
 	if ((howto & RB_HALT) == 0)
 		kloader_reboot_setup(KLOADER_KERNEL_PATH);
 #endif
@@ -272,7 +259,7 @@ cpu_reboot(int howto, char *bootstr)
 	else if (howto & RB_HALT)
 		sifbios_halt(1); /* halt */
 	else {
-#ifdef KLOADER
+#ifdef KLOADER_KERNEL_PATH
 		kloader_reboot();
 		/* NOTREACHED */
 #endif

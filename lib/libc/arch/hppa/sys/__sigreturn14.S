@@ -1,4 +1,4 @@
-/*	$NetBSD: __sigreturn14.S,v 1.4 2004/05/17 14:14:18 chs Exp $	*/
+/*	$NetBSD: __sigreturn14.S,v 1.3 2003/10/06 05:30:21 matt Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -36,7 +36,11 @@
 #include "SYS.h"
 
 #if defined(LIBC_SCCS) && !defined(lint)
-	RCSID("$NetBSD: __sigreturn14.S,v 1.4 2004/05/17 14:14:18 chs Exp $")
+	RCSID("$NetBSD: __sigreturn14.S,v 1.3 2003/10/06 05:30:21 matt Exp $")
 #endif /* LIBC_SCCS and not lint */
 
-PSEUDO(__sigreturn14,compat_16___sigreturn14)
+ENTRY(__sigreturn14,0)
+	SYSCALL(__sigreturn14)
+	bv	%r0(%rp)
+	nop
+EXIT(__sigreturn14)

@@ -1,4 +1,4 @@
-/*	$NetBSD: draw.c,v 1.1.1.3 2004/07/30 14:45:08 wiz Exp $	*/
+/*	$NetBSD: draw.c,v 1.1.1.2 2003/06/30 17:52:18 wiz Exp $	*/
 
 /*
  * draw.c
@@ -27,10 +27,6 @@
 
 static int FakeCharacter();
 
-/* font.c */
-extern int MaxFontPosition();
-
-void
 HorizontalMove(dw, delta)
 	DviWidget	dw;
 	int		delta;
@@ -38,7 +34,6 @@ HorizontalMove(dw, delta)
 	dw->dvi.state->x += delta;
 }
 
-void
 HorizontalGoto(dw, NewPosition)
 	DviWidget	dw;
 	int		NewPosition;
@@ -46,7 +41,6 @@ HorizontalGoto(dw, NewPosition)
 	dw->dvi.state->x = NewPosition;
 }
 
-void
 VerticalMove(dw, delta)
 	DviWidget	dw;
 	int		delta;
@@ -54,7 +48,6 @@ VerticalMove(dw, delta)
 	dw->dvi.state->y += delta;
 }
 
-void
 VerticalGoto(dw, NewPosition)
 	DviWidget	dw;
 	int		NewPosition;
@@ -62,7 +55,6 @@ VerticalGoto(dw, NewPosition)
 	dw->dvi.state->y = NewPosition;
 }
 
-void
 AdjustCacheDeltas (dw)
 	DviWidget	dw;
 {
@@ -104,7 +96,6 @@ AdjustCacheDeltas (dw)
 		}
 }
 
-void
 FlushCharCache (dw)
 	DviWidget	dw;
 {
@@ -126,7 +117,6 @@ FlushCharCache (dw)
 	dw->dvi.cache.start_y = dw->dvi.cache.y = YPos (dw);
 }
 
-void
 Newline (dw)
 	DviWidget	dw;
 {
@@ -135,7 +125,6 @@ Newline (dw)
 	dw->dvi.word_flag = 0;
 }
 
-void
 Word (dw)
 	DviWidget	dw;
 {
@@ -165,7 +154,7 @@ int charExists (fi, c)
 		|| p->ascent != 0 || p->descent != 0 || p->attributes != 0);
 }
 
-static void
+static
 DoCharacter (dw, c, wid)
 	DviWidget dw;
 	int c;
@@ -362,7 +351,6 @@ int FakeCharacter (dw, buf, wid)
 	return 1;
 }
 
-void
 PutNumberedCharacter (dw, c)
 	DviWidget dw;
 	int c;
@@ -405,14 +393,13 @@ PutNumberedCharacter (dw, c)
 	}
 }
 
-void
 ClearPage (dw)
 	DviWidget	dw;
 {
 	XClearWindow (XtDisplay (dw), XtWindow (dw));
 }
 
-static void
+static
 setGC (dw)
 	DviWidget	dw;
 {
@@ -436,7 +423,7 @@ setGC (dw)
 	}
 }
 
-static void
+static
 setFillGC (dw)
 	DviWidget	dw;
 {
@@ -463,7 +450,6 @@ setFillGC (dw)
 	}
 }
 
-void
 DrawLine (dw, x, y)
 	DviWidget	dw;
 	int		x, y;
@@ -479,7 +465,6 @@ DrawLine (dw, x, y)
 		   xp + DeviceToX (dw, x), yp + DeviceToX (dw, y));
 }
 
-void
 DrawCircle (dw, diam)
 	DviWidget	dw;
 	int		diam;
@@ -494,7 +479,6 @@ DrawCircle (dw, diam)
 		  d, d, 0, 64*360);
 }
 
-void
 DrawFilledCircle (dw, diam)
 	DviWidget	dw;
 	int		diam;
@@ -512,7 +496,6 @@ DrawFilledCircle (dw, diam)
 		  d, d, 0, 64*360);
 }
 
-void
 DrawEllipse (dw, a, b)
 	DviWidget	dw;
 	int		a, b;
@@ -524,7 +507,6 @@ DrawEllipse (dw, a, b)
 		  DeviceToX (dw, a), DeviceToX (dw, b), 0, 64*360);
 }
 
-void
 DrawFilledEllipse (dw, a, b)
 	DviWidget	dw;
 	int		a, b;
@@ -539,7 +521,6 @@ DrawFilledEllipse (dw, a, b)
 		  DeviceToX (dw, a), DeviceToX (dw, b), 0, 64*360);
 }
 
-void
 DrawArc (dw, x0, y0, x1, y1)
 	DviWidget	dw;
 	int		x0, y0, x1, y1;
@@ -566,7 +547,6 @@ DrawArc (dw, x0, y0, x1, y1)
 		  rad*2, rad*2, angle1, angle2);
 }
 
-void
 DrawPolygon (dw, v, n)
 	DviWidget	dw;
 	int		*v;
@@ -598,7 +578,7 @@ DrawPolygon (dw, v, n)
 	XtFree((char *)p);
 }
 
-void
+
 DrawFilledPolygon (dw, v, n)
 	DviWidget	dw;
 	int		*v;
@@ -634,7 +614,7 @@ DrawFilledPolygon (dw, v, n)
 
 #define POINTS_MAX 10000
 
-static void
+static
 appendPoint(points, pointi, x, y)
 	XPoint	*points;
 	int	*pointi;
@@ -649,7 +629,7 @@ appendPoint(points, pointi, x, y)
 
 #define FLATNESS 1
 
-static void
+static
 flattenCurve(points, pointi, x2, y2, x3, y3, x4, y4)
 	XPoint	*points;
 	int	*pointi;
@@ -685,7 +665,7 @@ flattenCurve(points, pointi, x2, y2, x3, y3, x4, y4)
 	}
 }
 
-void
+
 DrawSpline (dw, v, n)
 	DviWidget	dw;
 	int		*v;

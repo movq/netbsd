@@ -1,4 +1,4 @@
-/*	$NetBSD: ffs_inode.c,v 1.71 2004/08/15 19:01:16 mycroft Exp $	*/
+/*	$NetBSD: ffs_inode.c,v 1.62 2004/01/25 18:06:49 hannken Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1989, 1993
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ffs_inode.c,v 1.71 2004/08/15 19:01:16 mycroft Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ffs_inode.c,v 1.62 2004/01/25 18:06:49 hannken Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_ffs.h"
@@ -99,10 +99,7 @@ ffs_update(v)
 	FFS_ITIMES(ip,
 	    ap->a_access ? ap->a_access : &ts,
 	    ap->a_modify ? ap->a_modify : &ts, &ts);
-	if (ap->a_flags & UPDATE_CLOSE)
-		flags = ip->i_flag & (IN_MODIFIED | IN_ACCESSED);
-	else
-		flags = ip->i_flag & IN_MODIFIED;
+	flags = ip->i_flag & (IN_MODIFIED | IN_ACCESSED);
 	if (flags == 0)
 		return (0);
 	fs = ip->i_fs;
@@ -186,9 +183,9 @@ ffs_truncate(v)
 	struct vnode *ovp = ap->a_vp;
 	struct genfs_node *gp = VTOG(ovp);
 	daddr_t lastblock;
-	struct inode *oip = VTOI(ovp);
+	struct inode *oip;
 	daddr_t bn, lastiblock[NIADDR], indir_lbn[NIADDR];
-	daddr_t blks[NDADDR + NIADDR];
+	daddr_t oldblks[NDADDR + NIADDR], newblks[NDADDR + NIADDR];
 	off_t length = ap->a_length;
 	struct fs *fs;
 	int offset, size, level;
@@ -196,21 +193,20 @@ ffs_truncate(v)
 	int i, ioflag, aflag, nblocks;
 	int error, allerror = 0;
 	off_t osize;
-	int sync;
-	struct ufsmount *ump = oip->i_ump;
 
 	if (length < 0)
 		return (EINVAL);
-
+	oip = VTOI(ovp);
 	if (ovp->v_type == VLNK &&
-	    (oip->i_size < ump->um_maxsymlinklen ||
-	     (ump->um_maxsymlinklen == 0 && DIP(oip, blocks) == 0))) {
+	    (oip->i_size < ovp->v_mount->mnt_maxsymlinklen ||
+	     (ovp->v_mount->mnt_maxsymlinklen == 0 &&
+	      DIP(oip, blocks) == 0))) {
 		KDASSERT(length == 0);
 		memset(SHORTLINK(oip), 0, (size_t)oip->i_size);
 		oip->i_size = 0;
 		DIP_ASSIGN(oip, size, 0);
 		oip->i_flag |= IN_CHANGE | IN_UPDATE;
-		return (VOP_UPDATE(ovp, NULL, NULL, 0));
+		return (VOP_UPDATE(ovp, NULL, NULL, UPDATE_WAIT));
 	}
 	if (oip->i_size == length) {
 		oip->i_flag |= IN_CHANGE | IN_UPDATE;
@@ -221,11 +217,8 @@ ffs_truncate(v)
 		return (error);
 #endif
 	fs = oip->i_fs;
-	if (length > ump->um_maxfilesize)
+	if (length > fs->fs_maxfilesize)
 		return (EFBIG);
-
-	if ((oip->i_flags & SF_SNAPSHOT) != 0)
-		ffs_snapremove(ovp);
 
 	osize = oip->i_size;
 	ioflag = ap->a_flags;
@@ -241,19 +234,18 @@ ffs_truncate(v)
 		if (lblkno(fs, osize) < NDADDR &&
 		    lblkno(fs, osize) != lblkno(fs, length) &&
 		    blkroundup(fs, osize) != osize) {
-			off_t eob;
-
-			eob = blkroundup(fs, osize);
-			error = ufs_balloc_range(ovp, osize, eob - osize,
-			    ap->a_cred, aflag);
-			if (error)
+			error = ufs_balloc_range(ovp, osize,
+			    blkroundup(fs, osize) - osize, ap->a_cred, aflag);
+			if (error) {
 				return error;
+			}
 			if (ioflag & IO_SYNC) {
-				ovp->v_size = eob;
+				ovp->v_size = blkroundup(fs, osize);
 				simple_lock(&ovp->v_interlock);
 				VOP_PUTPAGES(ovp,
-				    trunc_page(osize & fs->fs_bmask),
-				    round_page(eob), PGO_CLEANIT | PGO_SYNCIO);
+				    trunc_page(osize & ~(fs->fs_bsize - 1)),
+				    round_page(ovp->v_size),
+				    PGO_CLEANIT | PGO_SYNCIO);
 			}
 		}
 		error = ufs_balloc_range(ovp, length - 1, 1, ap->a_cred,
@@ -261,12 +253,12 @@ ffs_truncate(v)
 		if (error) {
 			(void) VOP_TRUNCATE(ovp, osize, ioflag & IO_SYNC,
 			    ap->a_cred, ap->a_p);
-			return (error);
+			return error;
 		}
 		uvm_vnp_setsize(ovp, length);
 		oip->i_flag |= IN_CHANGE | IN_UPDATE;
 		KASSERT(ovp->v_size == oip->i_size);
-		return (VOP_UPDATE(ovp, NULL, NULL, 0));
+		return (VOP_UPDATE(ovp, NULL, NULL, 1));
 	}
 
 	/*
@@ -282,26 +274,22 @@ ffs_truncate(v)
 	 */
 
 	offset = blkoff(fs, length);
-	if (ovp->v_type == VREG && offset != 0 && osize > length) {
-		daddr_t lbn;
+	if (ovp->v_type == VREG && length < osize && offset != 0) {
 		voff_t eoz;
 
 		error = ufs_balloc_range(ovp, length - 1, 1, ap->a_cred,
 		    aflag);
-		if (error)
+		if (error) {
 			return error;
-		lbn = lblkno(fs, length);
-		size = blksize(fs, oip, lbn);
-		eoz = MIN(lblktosize(fs, lbn) + size, osize);
+		}
+		size = blksize(fs, oip, lblkno(fs, length));
+		eoz = MIN(lblktosize(fs, lblkno(fs, length)) + size, osize);
 		uvm_vnp_zerorange(ovp, length, eoz - length);
-		if (round_page(eoz) > round_page(length)) {
-			simple_lock(&ovp->v_interlock);
-			error = VOP_PUTPAGES(ovp, round_page(length),
-			    round_page(eoz),
-			    PGO_CLEANIT | PGO_DEACTIVATE |
-			    ((ioflag & IO_SYNC) ? PGO_SYNCIO : 0));
-			if (error)
-				return error;
+		simple_lock(&ovp->v_interlock);
+		error = VOP_PUTPAGES(ovp, trunc_page(length), round_page(eoz),
+		    PGO_CLEANIT | PGO_DEACTIVATE | PGO_SYNCIO);
+		if (error) {
+			return error;
 		}
 	}
 
@@ -357,28 +345,22 @@ ffs_truncate(v)
 	 * will be returned to the free list.  lastiblock values are also
 	 * normalized to -1 for calls to ffs_indirtrunc below.
 	 */
-	sync = 0;
 	for (level = TRIPLE; level >= SINGLE; level--) {
-		blks[NDADDR + level] = DIP(oip, ib[level]);
-		if (lastiblock[level] < 0 && blks[NDADDR + level] != 0) {
-			sync = 1;
+		oldblks[NDADDR + level] = DIP(oip, ib[level]);
+		if (lastiblock[level] < 0) {
 			DIP_ASSIGN(oip, ib[level], 0);
 			lastiblock[level] = -1;
 		}
 	}
 	for (i = 0; i < NDADDR; i++) {
-		blks[i] = DIP(oip, db[i]);
-		if (i > lastblock && blks[i] != 0) {
-			sync = 1;
+		oldblks[i] = DIP(oip, db[i]);
+		if (i > lastblock)
 			DIP_ASSIGN(oip, db[i], 0);
-		}
 	}
 	oip->i_flag |= IN_CHANGE | IN_UPDATE;
-	if (sync) {
-		error = VOP_UPDATE(ovp, NULL, NULL, UPDATE_WAIT);
-		if (error && !allerror)
-			allerror = error;
-	}
+	error = VOP_UPDATE(ovp, NULL, NULL, UPDATE_WAIT);
+	if (error && !allerror)
+		allerror = error;
 
 	/*
 	 * Having written the new inode to disk, save its new configuration
@@ -387,14 +369,12 @@ ffs_truncate(v)
 	 * when we are done.
 	 */
 	for (i = 0; i < NDADDR; i++) {
-		bn = DIP(oip, db[i]);
-		DIP_ASSIGN(oip, db[i], blks[i]);
-		blks[i] = bn;
+		newblks[i] = DIP(oip, db[i]);
+		DIP_ASSIGN(oip, db[i], oldblks[i]);
 	}
 	for (i = 0; i < NIADDR; i++) {
-		bn = DIP(oip, ib[i]);
-		DIP_ASSIGN(oip, ib[i], blks[NDADDR + i]);
-		blks[NDADDR + i] = bn;
+		newblks[NDADDR + i] = DIP(oip, ib[i]);
+		DIP_ASSIGN(oip, ib[i], oldblks[NDADDR + i]);
 	}
 
 	oip->i_size = osize;
@@ -422,8 +402,7 @@ ffs_truncate(v)
 			blocksreleased += count;
 			if (lastiblock[level] < 0) {
 				DIP_ASSIGN(oip, ib[level], 0);
-				ffs_blkfree(fs, oip->i_devvp, bn, fs->fs_bsize,
-				    oip->i_number);
+				ffs_blkfree(oip, bn, fs->fs_bsize);
 				blocksreleased += nblocks;
 			}
 		}
@@ -445,7 +424,7 @@ ffs_truncate(v)
 			continue;
 		DIP_ASSIGN(oip, db[i], 0);
 		bsize = blksize(fs, oip, i);
-		ffs_blkfree(fs, oip->i_devvp, bn, bsize, oip->i_number);
+		ffs_blkfree(oip, bn, bsize);
 		blocksreleased += btodb(bsize);
 	}
 	if (lastblock < 0)
@@ -479,8 +458,7 @@ ffs_truncate(v)
 			 * required for the storage we're keeping.
 			 */
 			bn += numfrags(fs, newspace);
-			ffs_blkfree(fs, oip->i_devvp, bn, oldspace - newspace,
-			    oip->i_number);
+			ffs_blkfree(oip, bn, oldspace - newspace);
 			blocksreleased += btodb(oldspace - newspace);
 		}
 	}
@@ -488,10 +466,10 @@ ffs_truncate(v)
 done:
 #ifdef DIAGNOSTIC
 	for (level = SINGLE; level <= TRIPLE; level++)
-		if (blks[NDADDR + level] != DIP(oip, ib[level]))
+		if (newblks[NDADDR + level] != DIP(oip, ib[level]))
 			panic("itrunc1");
 	for (i = 0; i < NDADDR; i++)
-		if (blks[i] != DIP(oip, db[i]))
+		if (newblks[i] != DIP(oip, db[i]))
 			panic("itrunc2");
 	if (length == 0 &&
 	    (!LIST_EMPTY(&ovp->v_cleanblkhd) || !LIST_EMPTY(&ovp->v_dirtyblkhd)))
@@ -629,7 +607,7 @@ ffs_indirtrunc(ip, lbn, dbn, lastbn, level, countp)
 				allerror = error;
 			blocksreleased += blkcount;
 		}
-		ffs_blkfree(fs, ip->i_devvp, nb, fs->fs_bsize, ip->i_number);
+		ffs_blkfree(ip, nb, fs->fs_bsize);
 		blocksreleased += nblocks;
 	}
 

@@ -17,28 +17,22 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
 
-void ppc64_elf_init_stub_bfd
-  (bfd *, struct bfd_link_info *);
 bfd_boolean ppc64_elf_mark_entry_syms
-  (struct bfd_link_info *);
+  PARAMS ((struct bfd_link_info *));
 bfd_boolean ppc64_elf_edit_opd
-  (bfd *, struct bfd_link_info *);
-asection *ppc64_elf_tls_setup
-  (bfd *, struct bfd_link_info *);
+  PARAMS ((bfd *, struct bfd_link_info *));
+bfd_boolean ppc64_elf_tls_setup
+  PARAMS ((bfd *, struct bfd_link_info *));
 bfd_boolean ppc64_elf_tls_optimize
-  (bfd *, struct bfd_link_info *);
+  PARAMS ((bfd *, struct bfd_link_info *));
 bfd_vma ppc64_elf_toc
-  (bfd *);
+  PARAMS ((bfd *));
 int ppc64_elf_setup_section_lists
-  (bfd *, struct bfd_link_info *);
-void ppc64_elf_next_toc_section
-  (struct bfd_link_info *, asection *);
-void ppc64_elf_reinit_toc
-  (bfd *, struct bfd_link_info *);
-bfd_boolean ppc64_elf_next_input_section
-  (struct bfd_link_info *, asection *);
+  PARAMS ((bfd *, struct bfd_link_info *));
+void ppc64_elf_next_input_section
+  PARAMS ((struct bfd_link_info *, asection *));
 bfd_boolean ppc64_elf_size_stubs
-  (bfd *, struct bfd_link_info *, bfd_signed_vma,
-   asection *(*) (const char *, asection *), void (*) (void));
+  PARAMS ((bfd *, bfd *, struct bfd_link_info *, bfd_signed_vma,
+	   asection *(*) (const char *, asection *), void (*) (void)));
 bfd_boolean ppc64_elf_build_stubs
-  (bfd_boolean, struct bfd_link_info *, char **);
+  PARAMS ((struct bfd_link_info *));

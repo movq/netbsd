@@ -1,4 +1,4 @@
-/*	$NetBSD: if_xennetvar.h,v 1.3 2004/09/15 04:55:21 tls Exp $	*/
+/*	$NetBSD: if_xennetvar.h,v 1.1.2.2 2004/09/16 03:19:03 jmc Exp $	*/
 
 /*
  *

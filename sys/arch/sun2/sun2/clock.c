@@ -1,4 +1,4 @@
-/*	$NetBSD: clock.c,v 1.8 2004/12/13 02:14:13 chs Exp $	*/
+/*	$NetBSD: clock.c,v 1.7 2003/08/07 16:29:53 agc Exp $	*/
 
 /*
  * Copyright (c) 1982, 1990, 1993
@@ -85,7 +85,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: clock.c,v 1.8 2004/12/13 02:14:13 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: clock.c,v 1.7 2003/08/07 16:29:53 agc Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -138,8 +138,6 @@ static void clock_attach __P((struct device *, struct device *, void *));
 CFATTACH_DECL(clock, sizeof(struct device),
     clock_match, clock_attach, NULL, NULL);
 
-static int clock_attached;
-
 static int
 clock_match(parent, cf, args)
     struct device *parent;
@@ -151,7 +149,7 @@ clock_match(parent, cf, args)
 	int matched;
 
 	/* This driver only supports one unit. */
-	if (clock_attached)
+	if (cf->cf_unit != 0)
 		return (0);
 
 	/* Make sure there is something there... */
@@ -178,8 +176,6 @@ clock_attach(parent, self, args)
 {
 	struct obio_attach_args *oba = args;
 	bus_space_handle_t bh;
-
-	clock_attached = 1;
 
 	printf("\n");
 

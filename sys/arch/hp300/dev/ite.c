@@ -1,4 +1,4 @@
-/*	$NetBSD: ite.c,v 1.65 2004/08/28 17:37:01 thorpej Exp $	*/
+/*	$NetBSD: ite.c,v 1.62.2.1 2004/06/01 04:37:34 jmc Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997 The NetBSD Foundation, Inc.
@@ -119,7 +119,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ite.c,v 1.65 2004/08/28 17:37:01 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ite.c,v 1.62.2.1 2004/06/01 04:37:34 jmc Exp $");
 
 #include "hil.h"
 
@@ -155,8 +155,8 @@ __KERNEL_RCSID(0, "$NetBSD: ite.c,v 1.65 2004/08/28 17:37:01 thorpej Exp $");
  */
 int	iteburst = 64;
 
-static int	itematch(struct device *, struct cfdata *, void *);
-static void	iteattach(struct device *, struct device *, void *);
+int	itematch __P((struct device *, struct cfdata *, void *));
+void	iteattach __P((struct device *, struct device *, void *));
 
 CFATTACH_DECL(ite, sizeof(struct ite_softc),
     itematch, iteattach, NULL, NULL);
@@ -166,13 +166,13 @@ static struct kbdmap *ite_km;
 
 extern struct cfdriver ite_cd;
 
-static dev_type_open(iteopen);
-static dev_type_close(iteclose);
-static dev_type_read(iteread);
-static dev_type_write(itewrite);
-static dev_type_ioctl(iteioctl);
-static dev_type_tty(itetty);
-static dev_type_poll(itepoll);
+dev_type_open(iteopen);
+dev_type_close(iteclose);
+dev_type_read(iteread);
+dev_type_write(itewrite);
+dev_type_ioctl(iteioctl);
+dev_type_tty(itetty);
+dev_type_poll(itepoll);
 
 const struct cdevsw ite_cdevsw = {
 	iteopen, iteclose, iteread, itewrite, iteioctl,
@@ -205,23 +205,23 @@ static int console_display_attached;
 static struct ite_kbdops *console_kbdops;
 static struct ite_kbdmap *console_kbdmap;
 
-static void	iteinit(struct ite_data *);
-static void	iteputchar(int, struct ite_data *);
-static void	itecheckwrap(struct ite_data *, struct itesw *);
-static void	ite_dchar(struct ite_data *, struct itesw *);
-static void	ite_ichar(struct ite_data *, struct itesw *);
-static void	ite_dline(struct ite_data *, struct itesw *);
-static void	ite_iline(struct ite_data *, struct itesw *);
-static void	ite_clrtoeol(struct ite_data *, struct itesw *, int, int);
-static void	ite_clrtoeos(struct ite_data *, struct itesw *);
-static void	itestart(struct tty *);
+void	iteinit __P((struct ite_data *));
+void	iteputchar __P((int, struct ite_data *));
+void	itecheckwrap __P((struct ite_data *, struct itesw *));
+void	ite_dchar __P((struct ite_data *, struct itesw *));
+void	ite_ichar __P((struct ite_data *, struct itesw *));
+void	ite_dline __P((struct ite_data *, struct itesw *));
+void	ite_iline __P((struct ite_data *, struct itesw *));
+void	ite_clrtoeol __P((struct ite_data *, struct itesw *, int, int));
+void	ite_clrtoeos __P((struct ite_data *, struct itesw *));
+void	itestart __P((struct tty *));
 
 /*
  * Primary attribute buffer to be used by the first bitmapped console
  * found. Secondary displays alloc the attribute buffer as needed.
  * Size is based on a 68x128 display, which is currently our largest.
  */
-static u_char  ite_console_attributes[0x2200];
+u_char  ite_console_attributes[0x2200];
 
 #define ite_erasecursor(ip, sp)	{ \
 	if ((ip)->flags & ITE_CURSORON) \
@@ -236,15 +236,20 @@ static u_char  ite_console_attributes[0x2200];
 		(*(sp)->ite_cursor)((ip), MOVE_CURSOR); \
 }
 
-static int
-itematch(struct device *parent, struct cfdata *match, void *aux)
+int
+itematch(parent, match, aux)
+	struct device *parent;
+	struct cfdata *match;
+	void *aux;
 {
 
 	return (1);
 }
 
-static void
-iteattach(struct device *parent, struct device *self, void *aux)
+void
+iteattach(parent, self, aux)
+	struct device *parent, *self;
+	void *aux;
 {
 	struct ite_softc *ite = (struct ite_softc *)self;
 	struct grf_softc *grf = (struct grf_softc *)parent;
@@ -282,7 +287,8 @@ iteattach(struct device *parent, struct device *self, void *aux)
 }
 
 void
-iteinstallkeymap(void *v)
+iteinstallkeymap(v)
+	void *v;
 {
 	ite_km = (struct kbdmap *)v;
 }
@@ -291,7 +297,9 @@ iteinstallkeymap(void *v)
  * Perform functions necessary to setup device as a terminal emulator.
  */
 int
-iteon(struct ite_data *ip, int flag)
+iteon(ip, flag)
+	struct ite_data *ip;
+	int flag;
 {
 
 	if ((ip->flags & ITE_ALIVE) == 0)
@@ -321,8 +329,9 @@ iteon(struct ite_data *ip, int flag)
 	return(0);
 }
 
-static void
-iteinit(struct ite_data *ip)
+void
+iteinit(ip)
+	struct ite_data *ip;
 {
 
 	if (ip->flags & ITE_INITED)
@@ -353,7 +362,9 @@ iteinit(struct ite_data *ip)
  * screen when processing /etc/rc.
  */
 void
-iteoff(struct ite_data *ip, int flag)
+iteoff(ip, flag)
+	struct ite_data *ip;
+	int flag;
 {
 
 	if (flag & 2) {
@@ -378,8 +389,11 @@ iteoff(struct ite_data *ip, int flag)
 }
 
 /* ARGSUSED */
-static int
-iteopen(dev_t dev, int mode, int devtype, struct proc *p)
+int
+iteopen(dev, mode, devtype, p)
+	dev_t dev;
+	int mode, devtype;
+	struct proc *p;
 {
 	int unit = ITEUNIT(dev);
 	struct tty *tp;
@@ -430,8 +444,11 @@ iteopen(dev_t dev, int mode, int devtype, struct proc *p)
 }
 
 /*ARGSUSED*/
-static int
-iteclose(dev_t dev, int flag, int mode, struct proc *p)
+int
+iteclose(dev, flag, mode, p)
+	dev_t dev;
+	int flag, mode;
+	struct proc *p;
 {
 	struct ite_softc *sc = ite_cd.cd_devs[ITEUNIT(dev)];
 	struct ite_data *ip = sc->sc_data;
@@ -448,8 +465,11 @@ iteclose(dev_t dev, int flag, int mode, struct proc *p)
 	return(0);
 }
 
-static int
-iteread(dev_t dev, struct uio *uio, int flag)
+int
+iteread(dev, uio, flag)
+	dev_t dev;
+	struct uio *uio;
+	int flag;
 {
 	struct ite_softc *sc = ite_cd.cd_devs[ITEUNIT(dev)];
 	struct tty *tp = sc->sc_data->tty;
@@ -458,7 +478,10 @@ iteread(dev_t dev, struct uio *uio, int flag)
 }
 
 int
-itewrite(dev_t dev, struct uio *uio, int flag)
+itewrite(dev, uio, flag)
+	dev_t dev;
+	struct uio *uio;
+	int flag;
 {
 	struct ite_softc *sc = ite_cd.cd_devs[ITEUNIT(dev)];
 	struct tty *tp = sc->sc_data->tty;
@@ -467,7 +490,10 @@ itewrite(dev_t dev, struct uio *uio, int flag)
 }
 
 int
-itepoll(dev_t dev, int events, struct proc *p)
+itepoll(dev, events, p)
+	dev_t dev;
+	int events;
+	struct proc *p;
 {
 	struct ite_softc *sc = ite_cd.cd_devs[ITEUNIT(dev)];
 	struct tty *tp = sc->sc_data->tty;
@@ -476,7 +502,8 @@ itepoll(dev_t dev, int events, struct proc *p)
 }
 
 struct tty *
-itetty(dev_t dev)
+itetty(dev)
+	dev_t dev;
 {
 	struct ite_softc *sc = ite_cd.cd_devs[ITEUNIT(dev)];
 
@@ -484,7 +511,12 @@ itetty(dev_t dev)
 }
 
 int
-iteioctl(dev_t dev, u_long cmd, caddr_t addr, int flag, struct proc *p)
+iteioctl(dev, cmd, addr, flag, p)
+	dev_t dev;
+	u_long cmd;
+	caddr_t addr;
+	int flag;
+	struct proc *p;
 {
 	struct ite_softc *sc = ite_cd.cd_devs[ITEUNIT(dev)];
 	struct ite_data *ip = sc->sc_data;
@@ -497,8 +529,9 @@ iteioctl(dev_t dev, u_long cmd, caddr_t addr, int flag, struct proc *p)
 	return ttioctl(tp, cmd, addr, flag, p);
 }
 
-static void
-itestart(struct tty *tp)
+void
+itestart(tp)
+	struct tty *tp;
 {
 	int cc, s;
 	int hiwat = 0, hadcursor = 0;
@@ -561,7 +594,8 @@ itestart(struct tty *tp)
 }
 
 void
-itefilter(char stat, char c)
+itefilter(stat, c)
+	char stat, c;
 {
 	static int capsmode = 0;
 	static int metamode = 0;
@@ -613,7 +647,7 @@ itefilter(char stat, char c)
 		break;
         }
 
-	if (code == '\0' && (str = ite_km->kbd_stringmap[(int)c]) != NULL) {
+	if (code == '\0' && (str = ite_km->kbd_stringmap[(int)c]) != '\0') {
 		while (*str)
 			(*kbd_tty->t_linesw->l_rint)(*str++, kbd_tty);
 	} else {
@@ -623,8 +657,10 @@ itefilter(char stat, char c)
 	}
 }
 
-static void
-iteputchar(int c, struct ite_data *ip)
+void
+iteputchar(c, ip)
+	int c;
+	struct ite_data *ip;
 {
 	struct itesw *sp = ip->isw;
 	int n;
@@ -890,8 +926,10 @@ ignore:
 	}
 }
 
-static void
-itecheckwrap(struct ite_data *ip, struct itesw *sp)
+void
+itecheckwrap(ip, sp)
+     struct ite_data *ip;
+     struct itesw *sp;
 {
 	if (++ip->curx == ip->cols) {
 		ip->curx = 0;
@@ -907,8 +945,10 @@ itecheckwrap(struct ite_data *ip, struct itesw *sp)
 	ite_movecursor(ip, sp);
 }
 
-static void
-ite_dchar(struct ite_data *ip, struct itesw *sp)
+void
+ite_dchar(ip, sp)
+     struct ite_data *ip;
+     struct itesw *sp;
 {
 	if (ip->curx < ip->cols - 1) {
 		ite_erasecursor(ip, sp);
@@ -921,8 +961,10 @@ ite_dchar(struct ite_data *ip, struct itesw *sp)
 	ite_drawcursor(ip, sp);
 }
 
-static void
-ite_ichar(struct ite_data *ip, struct itesw *sp)
+void
+ite_ichar(ip, sp)
+     struct ite_data *ip;
+     struct itesw *sp;
 {
 	if (ip->curx < ip->cols - 1) {
 		ite_erasecursor(ip, sp);
@@ -935,8 +977,10 @@ ite_ichar(struct ite_data *ip, struct itesw *sp)
 	ite_drawcursor(ip, sp);
 }
 
-static void
-ite_dline(struct ite_data *ip, struct itesw *sp)
+void
+ite_dline(ip, sp)
+     struct ite_data *ip;
+     struct itesw *sp;
 {
 	if (ip->cury < ip->rows - 1) {
 		ite_erasecursor(ip, sp);
@@ -947,8 +991,10 @@ ite_dline(struct ite_data *ip, struct itesw *sp)
 	ite_clrtoeol(ip, sp, ip->rows - 1, 0);
 }
 
-static void
-ite_iline(struct ite_data *ip, struct itesw *sp)
+void
+ite_iline(ip, sp)
+     struct ite_data *ip;
+     struct itesw *sp;
 {
 	if (ip->cury < ip->rows - 1) {
 		ite_erasecursor(ip, sp);
@@ -959,8 +1005,11 @@ ite_iline(struct ite_data *ip, struct itesw *sp)
 	ite_clrtoeol(ip, sp, ip->cury, 0);
 }
 
-static void
-ite_clrtoeol(struct ite_data *ip, struct itesw *sp, int y, int x)
+void
+ite_clrtoeol(ip, sp, y, x)
+     struct ite_data *ip;
+     struct itesw *sp;
+     int y, x;
 {
 	(*sp->ite_clear)(ip, y, x, 1, ip->cols - x);
 	attrclr(ip, y, x, 1, ip->cols - x);
@@ -968,7 +1017,9 @@ ite_clrtoeol(struct ite_data *ip, struct itesw *sp, int y, int x)
 }
 
 void
-ite_clrtoeos(struct ite_data *ip, struct itesw *sp)
+ite_clrtoeos(ip, sp)
+     struct ite_data *ip;
+     struct itesw *sp;
 {
 	(*sp->ite_clear)(ip, ip->cury, 0, ip->rows - ip->cury, ip->cols);
 	attrclr(ip, ip->cury, 0, ip->rows - ip->cury, ip->cols);
@@ -983,7 +1034,9 @@ ite_clrtoeos(struct ite_data *ip, struct itesw *sp)
  */
 
 void
-itedisplaycnattach(struct grf_data *gp, struct itesw *isw)
+itedisplaycnattach(gp, isw)
+	struct grf_data *gp;
+	struct itesw *isw;
 {
 	struct ite_data *ip = &ite_cn;
 
@@ -1002,7 +1055,9 @@ itedisplaycnattach(struct grf_data *gp, struct itesw *isw)
 }
 
 void
-itekbdcnattach(struct ite_kbdops *ops, struct ite_kbdmap *map)
+itekbdcnattach(ops, map)
+	struct ite_kbdops *ops;
+	struct ite_kbdmap *map;
 {
 
 	console_kbdops = ops;
@@ -1023,7 +1078,8 @@ itecninit(void)
 
 /*ARGSUSED*/
 int
-itecngetc(dev_t dev)
+itecngetc(dev)
+	dev_t dev;
 {
 	int c = 0;
 	int stat;
@@ -1051,7 +1107,9 @@ itecngetc(dev_t dev)
 
 /* ARGSUSED */
 void
-itecnputc(dev_t dev, int c)
+itecnputc(dev, c)
+	dev_t dev;
+	int c;
 {
 	static int paniced = 0;
 	struct ite_data *ip = &ite_cn;

@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.38 2004/11/04 07:18:47 dsl Exp $	*/
+/*	$NetBSD: main.c,v 1.35 2003/08/07 11:15:59 agc Exp $	*/
 
 /*-
  * Copyright (c) 1980, 1992, 1993
@@ -36,7 +36,7 @@ __COPYRIGHT("@(#) Copyright (c) 1980, 1992, 1993\n\
 #if 0
 static char sccsid[] = "@(#)main.c	8.1 (Berkeley) 6/6/93";
 #endif
-__RCSID("$NetBSD: main.c,v 1.38 2004/11/04 07:18:47 dsl Exp $");
+__RCSID("$NetBSD: main.c,v 1.35 2003/08/07 11:15:59 agc Exp $");
 #endif /* not lint */
 
 #include <sys/param.h>
@@ -136,7 +136,7 @@ main(int argc, char **argv)
 		struct mode *p;
 		int modefound = 0;
 
-		if (isdigit((unsigned char)argv[0][0])) {
+		if (isdigit(argv[0][0])) {
 			naptime = atoi(argv[0]);
 			if (naptime <= 0)
 				naptime = 5;
@@ -192,6 +192,7 @@ main(int argc, char **argv)
 	signal(SIGINT, die);
 	signal(SIGQUIT, die);
 	signal(SIGTERM, die);
+	signal(SIGWINCH, redraw);
 	sv_stop_handler = signal(SIGTSTP, stop);
 
 	/*
@@ -228,6 +229,7 @@ main(int argc, char **argv)
 
 	dellave = 0.0;
 
+	signal(SIGALRM, display);
 	display(0);
 	noecho();
 	cbreak();
@@ -263,7 +265,12 @@ void
 display(int signo)
 {
 	int j;
+	sigset_t set;
 	struct mode *p;
+
+	sigemptyset(&set);
+	sigaddset(&set, SIGALRM);
+	sigprocmask(SIG_BLOCK, &set, NULL);
 
 	/* Get the load average over the last minute. */
 	(void)getloadavg(avenrun, sizeof(avenrun) / sizeof(avenrun[0]));
@@ -305,16 +312,28 @@ display(int signo)
 			allcounter++;
        }
 
-	timeout(naptime * 1000);
+	sigprocmask(SIG_UNBLOCK, &set, NULL);
+	alarm(naptime);
 }
 
 void
 redraw(int signo)
 {
-	resizeterm(LINES, COLS);
-	CMDLINE = LINES - 1;
-	labels();
+	sigset_t set;
+	struct winsize win;
 
+	sigemptyset(&set);
+	sigaddset(&set, SIGALRM);
+	sigprocmask(SIG_BLOCK, &set, NULL);
+
+	if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &win) != -1 &&
+	    (win.ws_row != LINES || win.ws_col != COLS)) {
+		resizeterm(win.ws_row, win.ws_col);
+		CMDLINE = LINES - 1;
+		labels();
+	}
+
+	sigprocmask(SIG_UNBLOCK, &set, NULL);
 	display(0);
 }
 

@@ -1,5 +1,3 @@
-/*	$NetBSD: dict_proxy.c,v 1.1.1.3 2004/05/31 00:24:30 heas Exp $	*/
-
 /*++
 /* NAME
 /*	dict_proxy 3
@@ -19,8 +17,7 @@
 /*	The \fIopen_flags\fR argument must specify O_RDONLY.
 /*
 /*	The connection to the Postfix proxymap server is automatically
-/*	closed after $ipc_idle seconds of idle time, or after $ipc_ttl
-/*	seconds of activity.
+/*	closed after $ipc_idle seconds of idle time.
 /* SECURITY
 /*      The proxy map server is not meant to be a trusted process. Proxy
 /*	maps must not be used to look up security sensitive information
@@ -176,11 +173,9 @@ DICT   *dict_proxy_open(const char *map, int open_flags, int dict_flags)
      * Sanity checks.
      */
     if (dict_flags & DICT_FLAG_NO_PROXY)
-	msg_fatal("%s: %s map is not allowed for security sensitive data",
-		  map, DICT_TYPE_PROXY);
+	msg_fatal("%s: proxy map must not be used with this map type", map);
     if (open_flags != O_RDONLY)
-	msg_fatal("%s: %s map open requires O_RDONLY access mode",
-		  map, DICT_TYPE_PROXY);
+	msg_fatal("%s: proxy map open requires O_RDONLY access mode", map);
 
     /*
      * Local initialization.
@@ -205,8 +200,7 @@ DICT   *dict_proxy_open(const char *map, int open_flags, int dict_flags)
 					  MAIL_CLASS_PRIVATE, (char *) 0);
 	proxy_stream = clnt_stream_create(prefix,
 					  MAIL_SERVICE_PROXYMAP,
-					  var_ipc_idle_limit,
-					  var_ipc_ttl_limit);
+					  var_ipc_idle_limit);
 	if (kludge)
 	    myfree(kludge);
     }

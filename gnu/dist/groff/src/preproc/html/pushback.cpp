@@ -1,7 +1,7 @@
-/*	$NetBSD: pushback.cpp,v 1.1.1.2 2004/07/30 14:45:03 wiz Exp $	*/
+/*	$NetBSD: pushback.cpp,v 1.1.1.1 2003/06/30 17:52:15 wiz Exp $	*/
 
 // -*- C++ -*-
-/* Copyright (C) 2000, 2001, 2003, 2004 Free Software Foundation, Inc.
+/* Copyright (C) 2000, 2001, 2003 Free Software Foundation, Inc.
      Written by Gaius Mulley (gaius@glam.ac.uk).
 
 This file is part of groff.
@@ -276,15 +276,15 @@ int pushBackBuffer::readInt (void)
  *  convertToFloat - converts integers, a and b into a.b
  */
 
-static double convertToFloat (int a, int b)
+static float convertToFloat (int a, int b)
 {
   int c=10;
-  double f;
+  float f;
 
   while (b>c) {
     c *= 10;
   }
-  f = ((double)a) + (((double)b)/((double)c));
+  f = ((float)a) + (((float)b)/((float)c));
   return( f );
 }
 
@@ -292,7 +292,7 @@ static double convertToFloat (int a, int b)
  *  readNumber - returns a float representing the word just read.
  */
 
-double pushBackBuffer::readNumber (void)
+float pushBackBuffer::readNumber (void)
 {
   int i;
   char ch;
@@ -302,7 +302,7 @@ double pushBackBuffer::readNumber (void)
     return convertToFloat(i, readInt());
   }
   putPB(ch);
-  return (double)i;
+  return (float)i;
 }
 
 /*
@@ -314,7 +314,7 @@ double pushBackBuffer::readNumber (void)
 char *pushBackBuffer::readString (void)
 {
   char  buffer[MAXPUSHBACKSTACK];
-  char *str = 0;
+  char *string = 0;
   int   i=0;
   char ch=getPB();
 
@@ -328,8 +328,8 @@ char *pushBackBuffer::readString (void)
   }
   if (i < MAXPUSHBACKSTACK) {
     buffer[i] = (char)0;
-    str = (char *)malloc(strlen(buffer)+1);
-    strcpy(str, buffer);
+    string = (char *)malloc(strlen(buffer)+1);
+    strcpy(string, buffer);
   }
-  return( str );
+  return( string );
 }

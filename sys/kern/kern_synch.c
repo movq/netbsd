@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_synch.c,v 1.146 2004/12/09 21:52:24 matt Exp $	*/
+/*	$NetBSD: kern_synch.c,v 1.142 2004/03/14 01:08:47 cl Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2000 The NetBSD Foundation, Inc.
@@ -74,7 +74,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_synch.c,v 1.146 2004/12/09 21:52:24 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_synch.c,v 1.142 2004/03/14 01:08:47 cl Exp $");
 
 #include "opt_ddb.h"
 #include "opt_ktrace.h"
@@ -125,7 +125,7 @@ void endtsleep(void *);
 __inline void sa_awaken(struct lwp *);
 __inline void awaken(struct lwp *);
 
-struct callout schedcpu_ch = CALLOUT_INITIALIZER_SETFUNC(schedcpu, NULL);
+struct callout schedcpu_ch = CALLOUT_INITIALIZER;
 
 
 
@@ -255,7 +255,7 @@ schedcpu(void *arg)
 	int clkhz;
 
 	proclist_lock_read();
-	PROCLIST_FOREACH(p, &allproc) {
+	LIST_FOREACH(p, &allproc, p_list) {
 		/*
 		 * Increment time in/out of memory and sleep time
 		 * (if sleeping).  We ignore overflow; with 16-bit int's
@@ -317,7 +317,7 @@ schedcpu(void *arg)
 	proclist_unlock_read();
 	uvm_meter();
 	wakeup((caddr_t)&lbolt);
-	callout_schedule(&schedcpu_ch, hz);
+	callout_reset(&schedcpu_ch, hz, schedcpu, NULL);
 }
 
 /*
@@ -840,18 +840,23 @@ mi_switch(struct lwp *l, struct lwp *newl)
 	struct rlimit *rlim;
 	long s, u;
 	struct timeval tv;
-	int hold_count;
+#if defined(MULTIPROCESSOR)
+	int hold_count = 0;	/* XXX: gcc */
+#endif
 	struct proc *p = l->l_proc;
 	int retval;
 
 	SCHED_ASSERT_LOCKED();
 
+#if defined(MULTIPROCESSOR)
 	/*
 	 * Release the kernel_lock, as we are about to yield the CPU.
 	 * The scheduler lock is still held until cpu_switch()
 	 * selects a new process and removes it from the run queue.
 	 */
-	hold_count = KERNEL_LOCK_RELEASE_ALL();
+	if (l->l_flag & L_BIGLOCK)
+		hold_count = spinlock_release_all(&kernel_lock);
+#endif
 
 	KDASSERT(l->l_cpu != NULL);
 	KDASSERT(l->l_cpu == curcpu());
@@ -962,12 +967,15 @@ mi_switch(struct lwp *l, struct lwp *newl)
 	KDASSERT(l->l_cpu == curcpu());
 	microtime(&l->l_cpu->ci_schedstate.spc_runtime);
 
+#if defined(MULTIPROCESSOR)
 	/*
 	 * Reacquire the kernel_lock now.  We do this after we've
 	 * released the scheduler lock to avoid deadlock, and before
 	 * we reacquire the interlock.
 	 */
-	KERNEL_LOCK_ACQUIRE_COUNT(hold_count);
+	if (l->l_flag & L_BIGLOCK)
+		spinlock_acquire_count(&kernel_lock, hold_count);
+#endif
 
 	return retval;
 }
@@ -1202,65 +1210,6 @@ suspendsched()
  * available queues.
  */
 
-#ifdef RQDEBUG
-static void
-checkrunqueue(int whichq, struct lwp *l)
-{
-	const struct prochd * const rq = &sched_qs[whichq];
-	struct lwp *l2;
-	int found = 0;
-	int die = 0;
-	int empty = 1;
-	for (l2 = rq->ph_link; l2 != (void*) rq; l2 = l2->l_forw) {
-		if (l2->l_stat != LSRUN) {
-			printf("checkrunqueue[%d]: lwp %p state (%d) "
-			    " != LSRUN\n", whichq, l2, l2->l_stat);
-		}
-		if (l2->l_back->l_forw != l2) {
-			printf("checkrunqueue[%d]: lwp %p back-qptr (%p) "
-			    "corrupt %p\n", whichq, l2, l2->l_back,
-			    l2->l_back->l_forw);
-			die = 1;
-		}
-		if (l2->l_forw->l_back != l2) {
-			printf("checkrunqueue[%d]: lwp %p forw-qptr (%p) "
-			    "corrupt %p\n", whichq, l2, l2->l_forw,
-			    l2->l_forw->l_back);
-			die = 1;
-		}
-		if (l2 == l)
-			found = 1;
-		empty = 0;
-	}
-	if (empty && (sched_whichqs & RQMASK(whichq)) != 0) {
-		printf("checkrunqueue[%d]: bit set for empty run-queue %p\n",
-		    whichq, rq);
-		die = 1;
-	} else if (!empty && (sched_whichqs & RQMASK(whichq)) == 0) {
-		printf("checkrunqueue[%d]: bit clear for non-empty "
-		    "run-queue %p\n", whichq, rq);
-		die = 1;
-	}
-	if (l != NULL && (sched_whichqs & RQMASK(whichq)) == 0) {
-		printf("checkrunqueue[%d]: bit clear for active lwp %p\n",
-		    whichq, l);
-		die = 1;
-	}
-	if (l != NULL && empty) {
-		printf("checkrunqueue[%d]: empty run-queue %p with "
-		    "active lwp %p\n", whichq, rq, l);
-		die = 1;
-	}
-	if (l != NULL && !found) {
-		printf("checkrunqueue[%d]: lwp %p not in runqueue %p!",
-		    whichq, l, rq);
-		die = 1;
-	}
-	if (die)
-		panic("checkrunqueue: inconsistency found");
-}
-#endif /* RQDEBUG */
-
 void
 setrunqueue(struct lwp *l)
 {
@@ -1268,9 +1217,6 @@ setrunqueue(struct lwp *l)
 	struct lwp *prev;
 	const int whichq = l->l_priority / 4;
 
-#ifdef RQDEBUG
-	checkrunqueue(whichq, NULL);
-#endif
 #ifdef DIAGNOSTIC
 	if (l->l_back != NULL || l->l_wchan != NULL || l->l_stat != LSRUN)
 		panic("setrunqueue");
@@ -1282,9 +1228,6 @@ setrunqueue(struct lwp *l)
 	rq->ph_rlink = l;
 	prev->l_forw = l;
 	l->l_back = prev;
-#ifdef RQDEBUG
-	checkrunqueue(whichq, l);
-#endif
 }
 
 void
@@ -1292,12 +1235,9 @@ remrunqueue(struct lwp *l)
 {
 	struct lwp *prev, *next;
 	const int whichq = l->l_priority / 4;
-#ifdef RQDEBUG
-	checkrunqueue(whichq, l);
-#endif
 #ifdef DIAGNOSTIC
 	if (((sched_whichqs & RQMASK(whichq)) == 0))
-		panic("remrunqueue: bit %d not set", whichq);
+		panic("remrunqueue");
 #endif
 	prev = l->l_back;
 	l->l_back = NULL;
@@ -1306,9 +1246,6 @@ remrunqueue(struct lwp *l)
 	next->l_back = prev;
 	if (prev == next)
 		sched_whichqs &= ~RQMASK(whichq);
-#ifdef RQDEBUG
-	checkrunqueue(whichq, NULL);
-#endif
 }
 
 #undef RQMASK

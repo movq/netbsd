@@ -1,5 +1,5 @@
 #
-# 	$NetBSD: RC3230,v 1.18 2004/11/10 17:54:05 christos Exp $
+# 	$NetBSD: RC3230,v 1.15.2.1 2004/07/15 20:15:09 he Exp $
 #
 include		"arch/mipsco/conf/std.mipsco"
 
@@ -45,7 +45,6 @@ options 	COMPAT_16		# NetBSD 1.6 binary compatibility
 #options 	EXEC_AOUT		# exec a.out binaries
 #options 	EXEC_ECOFF		# exec ecoff binaries
 #options 	TCP_COMPAT_42	# 4.2BSD TCP/IP bug compat. Not recommended.
-options		COMPAT_BSDPTY	# /dev/[pt]ty?? ptys.
 
 # Filesystem options
 file-system	FFS		# Berkeley Fast Filesystem
@@ -73,7 +72,6 @@ options 	IPSEC		# Internet protocols
 options 	IPSEC_ESP	# Internet protocols
 #options 	GATEWAY		# IP packet forwarding
 #options 	MROUTING	# packet forwarding of multicast packets
-#options 	PIM		# Protocol Independent Multicast
 #options 	NS		# Xerox NS networking
 #options 	NSIP		# Xerox NS tunneling over IP
 #options 	ISO,TPIP	# OSI networking

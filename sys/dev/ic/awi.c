@@ -1,4 +1,4 @@
-/*	$NetBSD: awi.c,v 1.66 2004/10/30 18:08:36 thorpej Exp $	*/
+/*	$NetBSD: awi.c,v 1.62 2004/01/16 14:13:15 onoe Exp $	*/
 
 /*-
  * Copyright (c) 1999,2000,2001 The NetBSD Foundation, Inc.
@@ -86,7 +86,7 @@
 
 #include <sys/cdefs.h>
 #ifdef __NetBSD__
-__KERNEL_RCSID(0, "$NetBSD: awi.c,v 1.66 2004/10/30 18:08:36 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: awi.c,v 1.62 2004/01/16 14:13:15 onoe Exp $");
 #endif
 #ifdef __FreeBSD__
 __FBSDID("$FreeBSD: src/sys/dev/awi/awi.c,v 1.30 2004/01/15 13:30:06 onoe Exp $");
@@ -524,7 +524,7 @@ awi_intr(void *arg)
 		if (status & AWI_INT_SCAN_CMPLT) {
 			if (sc->sc_ic.ic_state == IEEE80211_S_SCAN &&
 			    sc->sc_substate == AWI_ST_NONE)
-				ieee80211_next_scan(&sc->sc_ic);
+				ieee80211_next_scan(&sc->sc_ic.ic_if);
 		}
 	}
 	sc->sc_cansleep = ocansleep;
@@ -678,7 +678,7 @@ awi_init(struct ifnet *ifp)
 			memset(ni->ni_bssid, 0, IEEE80211_ADDR_LEN);
 			ni->ni_esslen = 0;
 		}
-		if (ic->ic_flags & IEEE80211_F_PRIVACY)
+		if (ic->ic_flags & IEEE80211_F_WEPON)
 			ni->ni_capinfo |= IEEE80211_CAPINFO_PRIVACY;
 		if (ic->ic_opmode != IEEE80211_M_AHDEMO)
 			ic->ic_flags |= IEEE80211_F_SIBSS;
@@ -776,7 +776,7 @@ awi_start(struct ifnet *ifp)
 			if (!(ifp->if_flags & IFF_LINK0) && !sc->sc_adhoc_ap)
 				len += sizeof(struct llc) -
 				    sizeof(struct ether_header);
-			if (ic->ic_flags & IEEE80211_F_PRIVACY) {
+			if (ic->ic_flags & IEEE80211_F_WEPON) {
 				dowep = 1;
 				len += IEEE80211_WEP_IVLEN +
 				    IEEE80211_WEP_KIDLEN + IEEE80211_WEP_CRCLEN;
@@ -799,8 +799,8 @@ awi_start(struct ifnet *ifp)
 				ifp->if_oerrors++;
 				continue;
 			}
-			if (ni != NULL)
-				ieee80211_release_node(ic, ni);
+			if (ni != NULL && ni != ic->ic_bss)
+				ieee80211_free_node(ic, ni);
 			wh = mtod(m0, struct ieee80211_frame *);
 			if (!IEEE80211_IS_MULTICAST(wh->i_addr1) &&
 			    (ic->ic_opmode == IEEE80211_M_HOSTAP ||
@@ -947,7 +947,7 @@ awi_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 #endif
 		if (error == ENETRESET) {
 			/* do not rescan */
-			if (ifp->if_flags & IFF_RUNNING)
+			if (sc->sc_enabled)
 				error = awi_mode_init(sc);
 			else
 				error = 0;
@@ -1148,7 +1148,7 @@ awi_mode_init(struct awi_softc *sc)
 	else
 		ifp->if_flags |= IFF_ALLMULTI;
 	sc->sc_mib_mgt.Wep_Required =
-	    (sc->sc_ic.ic_flags & IEEE80211_F_PRIVACY) ? AWI_WEP_ON : AWI_WEP_OFF;
+	    (sc->sc_ic.ic_flags & IEEE80211_F_WEPON) ? AWI_WEP_ON : AWI_WEP_OFF;
 
 	if ((error = awi_mib(sc, AWI_CMD_SET_MIB, AWI_MIB_LOCAL, AWI_WAIT)) ||
 	    (error = awi_mib(sc, AWI_CMD_SET_MIB, AWI_MIB_ADDR, AWI_WAIT)) ||
@@ -1217,16 +1217,30 @@ awi_rx_int(struct awi_softc *sc)
 					goto rx_next;
 				}
 				wh = mtod(m, struct ieee80211_frame *);
+#ifdef __NetBSD__
 				ni = ieee80211_find_rxnode(ic, wh);
+#else
+				if (ic->ic_opmode != IEEE80211_M_STA) {
+					ni = ieee80211_find_node(ic,
+					    wh->i_addr2);
+					if (ni == NULL)
+						ni = ieee80211_ref_node(
+						    ic->ic_bss);
+				} else
+					ni = ieee80211_ref_node(ic->ic_bss);
+#endif
 				ieee80211_input(ifp, m, ni, rssi, rstamp);
 				/*
 				 * The frame may have caused the
 				 * node to be marked for reclamation
 				 * (e.g. in response to a DEAUTH
-				 * message) so use release_node here
+				 * message) so use free_node here
 				 * instead of unref_node.
 				 */
-				ieee80211_release_node(ic, ni);
+				if (ni == ic->ic_bss)
+					ieee80211_unref_node(&ni);
+				else
+					ieee80211_free_node(ic, ni);
 			} else
 				sc->sc_rxpend = m;
   rx_next:
@@ -1913,7 +1927,7 @@ awi_newstate(struct ieee80211com *ic, enum ieee80211_state nstate, int arg)
 			case IEEE80211_S_AUTH:
 			case IEEE80211_S_ASSOC:
 			case IEEE80211_S_INIT:
-				ieee80211_begin_scan(ic);
+				ieee80211_begin_scan(ifp);
 				/* FALLTHRU */
 			case IEEE80211_S_SCAN:
 				/* scan next */

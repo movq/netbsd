@@ -1,4 +1,4 @@
-.\"	$NetBSD: hier.7,v 1.68 2004/11/21 09:17:13 jmmv Exp $
+.\"	$NetBSD: hier.7,v 1.62 2004/02/13 21:06:03 snj Exp $
 .\"
 .\" Copyright (c) 1990, 1993, 1994
 .\"	The Regents of the University of California.  All rights reserved.
@@ -29,7 +29,7 @@
 .\"
 .\"	@(#)hier.7	8.5 (Berkeley) 6/1/94
 .\"
-.Dd November 21, 2004
+.Dd February 13, 2004
 .Dt HIER 7
 .Os
 .Sh NAME
@@ -59,9 +59,9 @@ distributions.
 user filesystems
 .It Sy /altroot/
 alternate root filesystem, in case of disaster
-.\" .It Sy /amd/
-.\" home directories mount point; see
-.\" .Xr amd 8
+.It Sy /amd/
+home directories mount point; see
+.Xr amd 8
 .It Sy /bin/
 utilities used in both single and multi-user environments
 .It Sy /boot*
@@ -113,10 +113,10 @@ process' controlling terminal device; see
 the zero device; see
 .Xr zero 4
 .El
-.\" .It Sy /dump/
-.\" online
-.\" .Xr dump 8
-.\" repository
+.It Sy /dump/
+online
+.Xr dump 8
+repository
 .It Sy /etc/
 system configuration files and scripts
 .Pp
@@ -504,10 +504,10 @@ build descriptions ("packages") for the
 .Nx
 packages system.
 .Pp
-.Bl -tag -width "distfilesX" -compact
-.It Sy distfiles/
+.Bl -tag -width "distfiles" -compact
+.It Sy distfiles
 Where unchanged source archives are fetched to/stored
-.It Sy packages/
+.It Sy packages
 Where compiled binary packages are stored
 .El
 .Pp
@@ -554,16 +554,8 @@ from the
 association)
 .It Sy games/
 text files used by various games
-.It Sy i18n/
-internationalization databases; see
-.Xr iconv 3
 .It Sy lkm/
 documentation on the loadable kernel modules interface
-.It Sy locale/
-locale databases and gettext message catalogs; see
-.Xr setlocale 3
-and
-.Xr gettext 3
 .It Sy man/
 formatted manual pages
 .It Sy me/
@@ -587,9 +579,6 @@ include files for
 macros for use with the
 .Xr ms 7
 macro package
-.It Sy nls/
-message catalogs; see
-.Xr catgets 3
 .It Sy skel/
 sample initialization files for new user accounts
 .It Sy tabset/
@@ -723,7 +712,7 @@ PowerPC based evaluation board
 SH3 based evaluation boards
 .It Sy hp300/
 Hewlett-Packard 9000/300 680x0-based workstations
-.It Sy hpcarm/
+.It Sy hparm/
 StrongARM based WinCE hand-held devices
 .It Sy hpcmips/
 MIPS based WinCE hand-held devices
@@ -731,8 +720,6 @@ MIPS based WinCE hand-held devices
 Hitachi SH3/4 based WinCE hand-held devices
 .It Sy i386/
 Intel 386/486/Pentium/etc. workstations
-.It Sy iyonix/
-Castle Technology Intel xscale based workstations
 .It Sy luna68k/
 Omron LUNA 68000-based workstations
 .It Sy m68k/
@@ -882,10 +869,7 @@ file system; see
 .It Sy ntfs/
 NTFS filesystem support; see
 .Xr mount_ntfs 8
-.It Sy ptyfs/
-pseudo-terminal device filesystem; see
-.Xr mount_ptyfs 8
-.It Sy smbfs/
+.It Sy smbfs
 SMB/CIFS filesystem support; see
 .Xr mount_smbfs 8
 .It Sy union/

@@ -1,8 +1,7 @@
-.\" $NetBSD: wsdisplay.4,v 1.25 2004/07/30 14:00:18 jmmv Exp $
+.\" $NetBSD: wsdisplay.4,v 1.20 2004/01/20 18:31:18 heas Exp $
 .\"
 .\" Copyright (c) 1999 Matthias Drochner.
 .\" Copyright (c) 2002 Ben Harris.
-.\" Copyright (c) 2004 Julio M. Merino Vidal.
 .\" All rights reserved.
 .\"
 .\" Redistribution and use in source and binary forms, with or without
@@ -26,7 +25,7 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.Dd July 30, 2004
+.Dd June 22, 2002
 .Os
 .Dt WSDISPLAY 4
 .Sh NAME
@@ -50,11 +49,8 @@
 .Cd "wsdisplay0 at smg0"
 (VAXstation small monochrome display)
 .Cd "wsdisplay* at ... kbdmux N"
-.Cd options WSDISPLAY_BORDER_COLOR=WSCOL_XXX
-.Cd options WSDISPLAY_CHARFUNCS
-.Cd options WSDISPLAY_CUSTOM_BORDER
-.Cd options WSDISPLAY_CUSTOM_OUTPUT
 .Cd options WSDISPLAY_DEFAULTSCREENS=N
+.Cd options WSDISPLAY_CHARFUNCS
 .Sh DESCRIPTION
 The
 .Nm
@@ -128,52 +124,7 @@ will also create (at autoconfiguration time)
 .Ar n
 initial screens of the display driver's default type with
 the system's default terminal emulator.
-.Ss Kernel options
-The following kernel options are available to configure the behavior of the
-.Nm
-driver:
-.Bl -tag -width xxxxxxxx
-.It Cd options WSDISPLAY_BORDER_COLOR=WSCOL_XXX
-Sets the border color at boot time.
-Possible values are defined in
-.Pa src/sys/dev/wscons/wsdisplayvar.h .
-Defaults to
-.Sq WSCOL_BLACK .
-.It Cd options WSDISPLAY_CHARFUNCS
-Enables the
-.Dv WSDISPLAYIO_GETWSCHAR
-and
-.Dv WSDISPLAYIO_PUTWSCHAR
-ioctls.
-These are mainly used by the
-.Sq selection
-mode of
-.Xr wsmoused 8 .
-.It Cd options WSDISPLAY_CUSTOM_BORDER
-Enables the
-.Dv WSDISPLAYIO_GBORDER
-and
-.Dv WSDISPLAYIO_SBORDER
-ioctls, which allow the customization of the border color from userland
-(after boot).
-See
-.Xr wsconsctl 8 .
-.It Cd options WSDISPLAY_CUSTOM_OUTPUT
-Enables the
-.Dv WSDISPLAYIO_GMSGATTRS
-and
-.Dv WSDISPLAYIO_SMSGATTRS
-ioctls, which allow the customization of the console output and kernel
-messages from userland (after boot).
-See
-.Xr wsconsctl 8 .
-.It Cd options WSDISPLAY_DEFAULTSCREENS=N
-Sets the number of virtual screens to allocate at boot time.
-Useful for small root filesystems where the
-.Xr wsconscfg 8
-utility is not wanted.
-.El
-.Ss Ioctls
+.Sh IOCTLS
 The following
 .Xr ioctl 2
 calls are provided by the
@@ -439,94 +390,12 @@ Possible results include:
 The display is in emulating (text) mode.
 .It Dv WSDISPLAYIO_MODE_MAPPED
 The display is in mapped (graphics) mode.
-.It Dv WSDISPLAYIO_MODE_DUMBFB
-The display is in mapped (frame buffer) mode.
 .El
 .Pp
 .It Dv WSDISPLAYIO_SMODE Pq Li u_int
 Set the current mode of the display.
 For possible arguments, see
 .Dv WSDISPLAYIO_GMODE .
-.Pp
-.It Dv WSDISPLAYIO_LINEBYTES Pq Li u_int
-Get the number of bytes per row, which may be the same as the number of pixels.
-.It Dv WSDISPLAYIO_GMSGATTRS Pq Li struct wsdisplay_msgattrs
-Get the attributes (colors and flags) used to print console messages, including
-separate fields for default output and kernel output.
-The returned structure is as follows:
-.Bd -literal -offset indent
-struct wsdisplay_msgattrs {
-	int default_attrs, default_bg, default_fg;
-	int kernel_attrs, kernel_bg, kernel_fg;
-};
-.Ed
-.Pp
-The
-.Va default_attrs
-and
-.Va kernel_attrs
-variables are a combination of
-.Va WSATTR_*
-bits, and specify the attribues used to draw messages.
-The
-.Va default_bg ,
-.Va default_fg ,
-.Va kernel_bg
-and
-.Va kernel_fg
-variables specify the colors used to print messages, being
-.Sq _bg
-for the background and
-.Sq _fg
-for the foreground; their values are one of all the
-.Va WSCOL_*
-macros available.
-.It Dv WSDISPLAYIO_SMSGATTRS Pq Li struct wsdisplay_msgattrs
-Set the attributes (colors and flags) used to print console messages, including
-separate fields for default output and kernel output.
-The argument structure is the same as for
-.Dv WSDISPLAYIO_GMSGATTRS .
-.It Dv WSDISPLAYIO_GBORDER Pq Li u_int
-Retrieve the color of the screen border.
-This number corresponds to an ANSI standard color.
-.It Dv WSDISPLAYIO_SBORDER Pq Li u_int
-Set the color of the screen border, if applicable.
-This number corresponds to an ANSI standard color.
-Not all drivers support this feature.
-.It Dv WSDISPLAYIO_GETWSCHAR Pq Li struct wsdisplay_char
-Gets a single character from the screen, specified by its position.
-The structure used is as follows:
-.Bd -literal -offset indent
-struct wsdisplay_char {
-	int row, col;
-	uint16_t letter;
-	uint8_t background, foreground;
-	char flags;
-};
-.Ed
-.Pp
-The
-.Va row
-and
-.Va col
-parameters are used as input; the rest of the structure is filled by the
-ioctl and is returned to you.
-.Va letter
-is the ASCII code of the letter found at the specified position,
-.Va background
-and
-.Va foreground
-are its colors and
-.Va flags
-is a combination of
-.Sq WSDISPLAY_CHAR_BRIGHT
-and/or
-.Sq WSDISPLAY_CHAR_BLINK .
-.It Dv WSDISPLAYIO_PUTWSCHAR Pq Li struct wsdisplay_char
-Puts a character on the screen.
-The structure has the same meaning as described in
-.Dv WSDISPLAY_GETWSCHAR ,
-although all of its fields are treated as input.
 .El
 .Sh FILES
 .Bl -item

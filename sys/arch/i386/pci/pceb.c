@@ -1,4 +1,4 @@
-/*	$NetBSD: pceb.c,v 1.14 2004/08/30 15:05:17 drochner Exp $	*/
+/*	$NetBSD: pceb.c,v 1.12 2003/02/26 22:23:07 fvdl Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1998 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pceb.c,v 1.14 2004/08/30 15:05:17 drochner Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pceb.c,v 1.12 2003/02/26 22:23:07 fvdl Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -64,6 +64,7 @@ CFATTACH_DECL(pceb, sizeof(struct device),
     pcebmatch, pcebattach, NULL, NULL);
 
 void	pceb_callback __P((struct device *));
+int	pceb_print __P((void *, const char *));
 
 union pceb_attach_args {
 	const char *ea_name;			/* XXX should be common */
@@ -117,7 +118,7 @@ pcebattach(parent, self, aux)
 	 * Just print out a description and defer configuration
 	 * until all PCI devices have been attached.
 	 */
-	pci_devinfo(pa->pa_id, pa->pa_class, 0, devinfo, sizeof(devinfo));
+	pci_devinfo(pa->pa_id, pa->pa_class, 0, devinfo);
 	printf("%s: %s (rev. 0x%02x)\n", self->dv_xname, devinfo,
 	    PCI_REVISION(pa->pa_class));
 
@@ -134,21 +135,35 @@ pceb_callback(self)
 	 * Attach the EISA bus behind this bridge.
 	 */
 	memset(&ea, 0, sizeof(ea));
+	ea.ea_eba.eba_busname = "eisa";
 	ea.ea_eba.eba_iot = X86_BUS_SPACE_IO;
 	ea.ea_eba.eba_memt = X86_BUS_SPACE_MEM;
 #if NEISA > 0
 	ea.ea_eba.eba_dmat = &eisa_bus_dma_tag;
 #endif
-	config_found_ia(self, "eisabus", &ea.ea_eba, eisabusprint);
+	config_found(self, &ea.ea_eba, pceb_print);
 
 	/*
 	 * Attach the ISA bus behind this bridge.
 	 */
 	memset(&ea, 0, sizeof(ea));
+	ea.ea_iba.iba_busname = "isa";
 	ea.ea_iba.iba_iot = X86_BUS_SPACE_IO;
 	ea.ea_iba.iba_memt = X86_BUS_SPACE_MEM;
 #if NISA > 0
 	ea.ea_iba.iba_dmat = &isa_bus_dma_tag;
 #endif
-	config_found_ia(self, "isabus", &ea.ea_iba, isabusprint);
+	config_found(self, &ea.ea_iba, pceb_print);
+}
+
+int
+pceb_print(aux, pnp)
+	void *aux;
+	const char *pnp;
+{
+	union pceb_attach_args *ea = aux;
+
+	if (pnp)
+		aprint_normal("%s at %s", ea->ea_name, pnp);
+	return (UNCONF);
 }

@@ -1,11 +1,11 @@
-/*	$NetBSD: main.c,v 1.33 2004/12/10 21:49:31 erh Exp $	*/
+/*	$NetBSD: main.c,v 1.32 2003/12/20 02:19:21 grant Exp $	*/
 
 #include <sys/cdefs.h>
 #ifndef lint
 #if 0
 static char *rcsid = "from FreeBSD Id: main.c,v 1.16 1997/10/08 07:45:43 charnier Exp";
 #else
-__RCSID("$NetBSD: main.c,v 1.33 2004/12/10 21:49:31 erh Exp $");
+__RCSID("$NetBSD: main.c,v 1.32 2003/12/20 02:19:21 grant Exp $");
 #endif
 #endif
 
@@ -53,7 +53,7 @@ char   *PkgName = NULL;
 char   *Directory = NULL;
 char    FirstPen[FILENAME_MAX];
 add_mode_t AddMode = NORMAL;
-int     Replace = 0;
+Boolean	Replace = FALSE;
 
 static void
 usage(void)
@@ -122,7 +122,7 @@ main(int argc, char **argv)
 			break;
 
 		case 'u':
-			Replace++;
+			Replace = 1;
 			break;
 
 		case 'V':
@@ -166,14 +166,12 @@ main(int argc, char **argv)
 
 			TAILQ_INSERT_TAIL(&pkgs, lpp, lp_link);
 		}
-
-		if (!ch)
-			/* If no packages, yelp */
-			warnx("missing package name(s)"), usage();
-		else if (ch > 1 && AddMode == MASTER)
-			warnx("only one package name may be specified with master mode"),
-				usage();
-	}
+	} else if (!ch)
+		/* If no packages, yelp */
+		warnx("missing package name(s)"), usage();
+	else if (ch > 1 && AddMode == MASTER)
+		warnx("only one package name may be specified with master mode"),
+		    usage();
 	
 	/* Increase # of max. open file descriptors as high as possible */
 	rc = getrlimit(RLIMIT_NOFILE, &rlim);

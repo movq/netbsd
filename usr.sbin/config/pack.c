@@ -1,4 +1,4 @@
-/*	$NetBSD: pack.c,v 1.16 2004/06/20 22:20:17 jmc Exp $	*/
+/*	$NetBSD: pack.c,v 1.15.2.1 2004/06/22 07:20:18 tron Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993

@@ -1,5 +1,5 @@
 #! /usr/bin/env sh
-#	$NetBSD: build.sh,v 1.134 2004/10/13 23:28:34 gavan Exp $
+#	$NetBSD: build.sh,v 1.127.2.1 2004/08/22 13:35:06 tron Exp $
 #
 # Copyright (c) 2001-2004 The NetBSD Foundation, Inc.
 # All rights reserved.
@@ -147,7 +147,7 @@ getarch()
 	#
 	case "${MACHINE}" in
 
-	acorn26|acorn32|cats|evbarm|hpcarm|iyonix|netwinder|shark)
+	acorn26|acorn32|cats|evbarm|hpcarm|netwinder|shark)
 		MACHINE_ARCH=arm
 		;;
 
@@ -210,19 +210,6 @@ getarch()
 		;;
 	amd64)
 		MACHINE_ARCH=x86_64
-		;;
-
-	xen-*)
-		setmakeenv XEN_BUILD "${MACHINE##*-}"
-		setmakeenv KERNARCHDIR "arch/xen"
-		setmakeenv RELEASEMACHINE "xen"
-		setmakeenv RELEASEMACHINEDIR "${MACHINE}"
-		makewrappermachine=${MACHINE}
-		MACHINE=${MACHINE##*-}
-		getarch
-		;;
-
-	xen)			# no default MACHINE_ARCH
 		;;
 
 	alpha|i386|sparc|sparc64|vax)
@@ -390,7 +377,6 @@ Usage: ${progname} [-EnorUux] [-a arch] [-B buildid] [-D dest] [-j njob]
     -D dest     Set DESTDIR to dest.  [Default: destdir.MACHINE]
     -E          Set "expert" mode; disables various safety checks.
                 Should not be used without expert knowledge of the build system.
-    -h          Print this help message.
     -j njob     Run up to njob jobs in parallel; see make(1) -j.
     -M obj      Set obj root directory to obj; sets MAKEOBJDIRPREFIX.
                 Unsets MAKEOBJDIR.
@@ -861,9 +847,9 @@ createmakewrapper()
 	eval cat <<EOF ${makewrapout}
 #! /bin/sh
 # Set proper variables to allow easy "make" building of a NetBSD subtree.
-# Generated from:  \$NetBSD: build.sh,v 1.134 2004/10/13 23:28:34 gavan Exp $
-# with these arguments: ${_args}
+# Generated from:  \$NetBSD: build.sh,v 1.127.2.1 2004/08/22 13:35:06 tron Exp $
 #
+
 EOF
 	for f in ${makeenv}; do
 		if eval "[ -z \"\${$f}\" -a \"\${${f}-X}\" = \"X\" ]"; then
@@ -1002,7 +988,6 @@ installworld()
 main()
 {
 	initdefaults
-	_args=$@
 	parseoptions "$@"
 
 	build_start=$(date)

@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_prot.c,v 1.84 2004/05/04 21:27:28 pk Exp $	*/
+/*	$NetBSD: kern_prot.c,v 1.80 2003/08/07 16:31:47 agc Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1989, 1990, 1991, 1993
@@ -41,7 +41,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_prot.c,v 1.84 2004/05/04 21:27:28 pk Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_prot.c,v 1.80 2003/08/07 16:31:47 agc Exp $");
 
 #include "opt_compat_43.h"
 
@@ -52,16 +52,14 @@ __KERNEL_RCSID(0, "$NetBSD: kern_prot.c,v 1.84 2004/05/04 21:27:28 pk Exp $");
 #include <sys/proc.h>
 #include <sys/timeb.h>
 #include <sys/times.h>
-#include <sys/pool.h>
+#include <sys/malloc.h>
 #include <sys/syslog.h>
-#include <sys/resourcevar.h>
 
 #include <sys/mount.h>
 #include <sys/sa.h>
 #include <sys/syscallargs.h>
 
-POOL_INIT(cred_pool, sizeof(struct ucred), 0, 0, 0, "credpl",
-    &pool_allocator_nointr);
+MALLOC_DEFINE(M_CRED, "cred", "credentials");
 
 int	sys_getpid(struct lwp *, void *, register_t *);
 int	sys_getpid_with_ppid(struct lwp *, void *, register_t *);
@@ -618,9 +616,8 @@ crget(void)
 {
 	struct ucred *cr;
 
-	cr = pool_get(&cred_pool, PR_WAITOK);
-	memset(cr, 0, sizeof(*cr));
-	simple_lock_init(&cr->cr_lock);
+	MALLOC(cr, struct ucred *, sizeof(*cr), M_CRED, M_WAITOK);
+	memset((caddr_t)cr, 0, sizeof(*cr));
 	cr->cr_ref = 1;
 	return (cr);
 }
@@ -632,13 +629,9 @@ crget(void)
 void
 crfree(struct ucred *cr)
 {
-	int n;
 
-	simple_lock(&cr->cr_lock);
-	n = --cr->cr_ref;
-	simple_unlock(&cr->cr_lock);
-	if (n == 0)
-		pool_put(&cred_pool, cr);
+	if (--cr->cr_ref == 0)
+		FREE((caddr_t)cr, M_CRED);
 }
 
 /*
@@ -663,11 +656,10 @@ crcopy(struct ucred *cr)
 
 	if (cr->cr_ref == 1)
 		return (cr);
-
 	newcr = crget();
-	memcpy(&newcr->cr_startcopy, &cr->cr_startcopy,
-		sizeof(struct ucred) - offsetof(struct ucred, cr_startcopy));
+	*newcr = *cr;
 	crfree(cr);
+	newcr->cr_ref = 1;
 	return (newcr);
 }
 
@@ -680,8 +672,8 @@ crdup(const struct ucred *cr)
 	struct ucred *newcr;
 
 	newcr = crget();
-	memcpy(&newcr->cr_startcopy, &cr->cr_startcopy,
-		sizeof(struct ucred) - offsetof(struct ucred, cr_startcopy));
+	*newcr = *cr;
+	newcr->cr_ref = 1;
 	return (newcr);
 }
 

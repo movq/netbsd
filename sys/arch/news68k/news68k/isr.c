@@ -1,4 +1,4 @@
-/*	$NetBSD: isr.c,v 1.11 2004/09/04 13:43:11 tsutsui Exp $	*/
+/*	$NetBSD: isr.c,v 1.10 2003/07/15 02:59:27 lukem Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -46,7 +46,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: isr.c,v 1.11 2004/09/04 13:43:11 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: isr.c,v 1.10 2003/07/15 02:59:27 lukem Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -67,7 +67,7 @@ void set_vector_entry(int, void *);
 void *get_vector_entry(int);
 
 void
-isrinit(void)
+isrinit()
 {
 	int i;
 
@@ -82,7 +82,11 @@ isrinit(void)
  * Called by driver attach functions.
  */
 void
-isrlink_autovec(int (*func)(void *), void *arg, int ipl, int priority)
+isrlink_autovec(func, arg, ipl, priority)
+	int (*func)(void *);
+	void *arg;
+	int ipl;
+	int priority;
 {
 	struct isr_autovec *newisr, *curisr;
 	isr_autovec_list_t *list;
@@ -153,7 +157,10 @@ isrlink_autovec(int (*func)(void *), void *arg, int ipl, int priority)
  * Called by bus interrupt establish functions.
  */
 void
-isrlink_vectored(int (*func)(void *), void *arg, int ipl, int vec)
+isrlink_vectored(func, arg, ipl, vec)
+	int (*func)(void *);
+	void *arg;
+	int ipl, vec;
 {
 	struct isr_vectored *isr;
 
@@ -180,7 +187,8 @@ isrlink_vectored(int (*func)(void *), void *arg, int ipl, int vec)
  * Unhook a vectored interrupt.
  */
 void
-isrunlink_vectored(int vec)
+isrunlink_vectored(vec)
+	int vec;
 {
 
 	if ((vec < ISRVECTORED) || (vec >= ISRVECTORED + NISRVECTORED))
@@ -199,7 +207,8 @@ isrunlink_vectored(int vec)
  * assembly language autovectored interrupt routine.
  */
 void
-isrdispatch_autovec(int evec)
+isrdispatch_autovec(evec)
+	int evec;		/* format | vector offset */
 {
 	struct isr_autovec *isr;
 	isr_autovec_list_t *list;
@@ -239,7 +248,9 @@ isrdispatch_autovec(int evec)
  * assembly language vectored interrupt routine.
  */
 void
-isrdispatch_vectored(int pc, int evec, void *frame)
+isrdispatch_vectored(pc, evec, frame)
+	int pc, evec;
+	void *frame;
 {
 	struct isr_vectored *isr;
 	int ipl, vec;
@@ -268,9 +279,10 @@ isrdispatch_vectored(int pc, int evec, void *frame)
 }
 
 void
-isrlink_custom(int level, void *handler)
+isrlink_custom(level, handler)
+	int level;
+	void *handler;
 {
-
 	set_vector_entry(ISRAUTOVEC + level, handler);
 }
 
@@ -278,25 +290,26 @@ isrlink_custom(int level, void *handler)
  * XXX - could just kill these... [from sun3]
  */
 void
-set_vector_entry(int entry, void *handler)
+set_vector_entry(entry, handler)
+	int entry;
+	void *handler;
 {
-
 	if ((entry < 0) || (entry >= NVECTORS))
 		panic("set_vector_entry: setting vector too high or low");
 	vectab[entry] = handler;
 }
 
 void *
-get_vector_entry(int entry)
+get_vector_entry(entry)
+	int entry;
 {
-
 	if ((entry < 0) || (entry >= NVECTORS))
 		panic("get_vector_entry: setting vector too high or low");
-	return (void *)vectab[entry];
+	return ((void *) vectab[entry]);
 }
 
 void
-netintr(void)
+netintr()
 {
 	int s, isr;
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: sys_pipe.c,v 1.62 2004/11/30 04:25:44 christos Exp $	*/
+/*	$NetBSD: sys_pipe.c,v 1.55.2.2 2004/07/23 15:49:46 tron Exp $	*/
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -83,7 +83,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sys_pipe.c,v 1.62 2004/11/30 04:25:44 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sys_pipe.c,v 1.55.2.2 2004/07/23 15:49:46 tron Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -135,13 +135,15 @@ static int pipe_write(struct file *fp, off_t *offset, struct uio *uio,
 		struct ucred *cred, int flags);
 static int pipe_close(struct file *fp, struct proc *p);
 static int pipe_poll(struct file *fp, int events, struct proc *p);
+static int pipe_fcntl(struct file *fp, u_int com, void *data,
+		struct proc *p);
 static int pipe_kqfilter(struct file *fp, struct knote *kn);
 static int pipe_stat(struct file *fp, struct stat *sb, struct proc *p);
 static int pipe_ioctl(struct file *fp, u_long cmd, void *data,
 		struct proc *p);
 
-static const struct fileops pipeops = {
-	pipe_read, pipe_write, pipe_ioctl, fnullop_fcntl, pipe_poll,
+static struct fileops pipeops = {
+	pipe_read, pipe_write, pipe_ioctl, pipe_fcntl, pipe_poll,
 	pipe_stat, pipe_close, pipe_kqfilter
 };
 
@@ -200,8 +202,7 @@ static int pipe_loan_alloc(struct pipe *, int);
 static void pipe_loan_free(struct pipe *);
 #endif /* PIPE_NODIRECT */
 
-static POOL_INIT(pipe_pool, sizeof(struct pipe), 0, 0, 0, "pipepl",
-    &pool_allocator_nointr);
+static struct pool pipe_pool;
 
 /*
  * The pipe system call for the DTYPE_PIPE type of pipes
@@ -726,7 +727,7 @@ pipe_direct_write(fp, wpipe, uio)
 			 pgs, UVM_LOAN_TOPAGE);
 	if (error) {
 		pipe_loan_free(wpipe);
-		return (ENOMEM); /* so that caller fallback to ordinary write */
+		return (error);
 	}
 
 	/* Enter the loaned pages to kva */
@@ -1139,38 +1140,6 @@ pipe_ioctl(fp, cmd, data, p)
 		PIPE_UNLOCK(pipe);
 		return (0);
 
-	case FIONWRITE:
-		/* Look at other side */
-		pipe = pipe->pipe_peer;
-		PIPE_LOCK(pipe);
-#ifndef PIPE_NODIRECT
-		if (pipe->pipe_state & PIPE_DIRECTW)
-			*(int *)data = pipe->pipe_map.cnt;
-		else
-#endif
-			*(int *)data = pipe->pipe_buffer.cnt;
-		PIPE_UNLOCK(pipe);
-		return (0);
-
-	case FIONSPACE:
-		/* Look at other side */
-		pipe = pipe->pipe_peer;
-		PIPE_LOCK(pipe);
-#ifndef PIPE_NODIRECT
-		/*
-		 * If we're in direct-mode, we don't really have a
-		 * send queue, and any other write will block. Thus
-		 * zero seems like the best answer.
-		 */
-		if (pipe->pipe_state & PIPE_DIRECTW)
-			*(int *)data = 0;
-		else
-#endif
-			*(int *)data = pipe->pipe_buffer.size -
-					pipe->pipe_buffer.cnt;
-		PIPE_UNLOCK(pipe);
-		return (0);
-
 	case TIOCSPGRP:
 	case FIOSETOWN:
 		return fsetown(p, &pipe->pipe_pgid, cmd, data);
@@ -1256,7 +1225,7 @@ pipe_stat(fp, ub, td)
 	ub->st_blksize = pipe->pipe_buffer.size;
 	ub->st_size = pipe->pipe_buffer.cnt;
 	ub->st_blocks = (ub->st_size) ? 1 : 0;
-	TIMEVAL_TO_TIMESPEC(&pipe->pipe_atime, &ub->st_atimespec);
+	TIMEVAL_TO_TIMESPEC(&pipe->pipe_atime, &ub->st_atimespec)
 	TIMEVAL_TO_TIMESPEC(&pipe->pipe_mtime, &ub->st_mtimespec);
 	TIMEVAL_TO_TIMESPEC(&pipe->pipe_ctime, &ub->st_ctimespec);
 	ub->st_uid = fp->f_cred->cr_uid;
@@ -1482,6 +1451,19 @@ pipe_kqfilter(struct file *fp, struct knote *kn)
 	return (0);
 }
 
+static int
+pipe_fcntl(fp, cmd, data, p)
+	struct file *fp;
+	u_int cmd;
+	void *data;
+	struct proc *p;
+{
+	if (cmd == F_SETFL)
+		return (0);
+	else
+		return (EOPNOTSUPP);
+}
+
 /*
  * Handle pipe sysctls.
  */
@@ -1532,4 +1514,15 @@ SYSCTL_SETUP(sysctl_kern_pipe_setup, "sysctl kern.pipe subtree setup")
 				    "buffers"),
 		       NULL, 0, &amountpipekva, 0,
 		       CTL_KERN, KERN_PIPE, KERN_PIPE_KVASIZE, CTL_EOL);
+}
+
+/*
+ * Initialize pipe structs.
+ */
+void
+pipe_init(void)
+{
+
+	pool_init(&pipe_pool, sizeof(struct pipe), 0, 0, 0, "pipepl",
+	    &pool_allocator_nointr);
 }

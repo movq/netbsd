@@ -32,7 +32,7 @@
 #endif
 
 #ifdef TRACE
-static void flonum_print (const FLONUM_TYPE *);
+static void flonum_print PARAMS ((const FLONUM_TYPE *));
 #endif
 
 #define ASSUME_DECIMAL_MARK_IS_DOT
@@ -75,12 +75,16 @@ static void flonum_print (const FLONUM_TYPE *);
   */
 
 int
-atof_generic (/* return pointer to just AFTER number we read.  */
-	      char **address_of_string_pointer,
-	      /* At most one per number.  */
-	      const char *string_of_decimal_marks,
-	      const char *string_of_decimal_exponent_marks,
-	      FLONUM_TYPE *address_of_generic_floating_point_number)
+atof_generic (address_of_string_pointer,
+	      string_of_decimal_marks,
+	      string_of_decimal_exponent_marks,
+	      address_of_generic_floating_point_number)
+     /* return pointer to just AFTER number we read.  */
+     char **address_of_string_pointer;
+     /* At most one per number.  */
+     const char *string_of_decimal_marks;
+     const char *string_of_decimal_exponent_marks;
+     FLONUM_TYPE *address_of_generic_floating_point_number;
 {
   int return_value;		/* 0 means OK.  */
   char *first_digit;
@@ -468,7 +472,7 @@ atof_generic (/* return pointer to just AFTER number we read.  */
       {
 	/*
 	 * Compute the mantssa (& exponent) of the power of 10.
-	 * If successful, then multiply the power of 10 by the digits
+	 * If sucessful, then multiply the power of 10 by the digits
 	 * giving return_binary_mantissa and return_binary_exponent.
 	 */
 

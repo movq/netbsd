@@ -1,4 +1,4 @@
-/*	$NetBSD: pchb.c,v 1.7 2004/04/24 15:49:00 kleink Exp $	*/
+/*	$NetBSD: pchb.c,v 1.6 2003/07/15 01:37:34 lukem Exp $	*/
 
 /*
  * Copyright 2002 Wasabi Systems, Inc.
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pchb.c,v 1.7 2004/04/24 15:49:00 kleink Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pchb.c,v 1.6 2003/07/15 01:37:34 lukem Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -101,8 +101,7 @@ pchb_attach(struct device *parent, struct device *self, void *aux)
 		    "Galileo Technology GT-64120%s System Controller",
 		    PCI_REVISION(pa->pa_class) >= 0x10 ? "A" : "");
 	} else {
-		pci_devinfo(pa->pa_id, pa->pa_class, 0, devinfo,
-		    sizeof(devinfo));
+		pci_devinfo(pa->pa_id, pa->pa_class, 0, devinfo);
 	}
 	printf("%s: %s (rev. 0x%02x)\n", self->dv_xname, devinfo,
 	    PCI_REVISION(pa->pa_class));

@@ -1,4 +1,4 @@
-/*	$NetBSD: aucc.c,v 1.35 2004/10/29 12:57:15 yamt Exp $ */
+/*	$NetBSD: aucc.c,v 1.34 2003/05/03 18:10:43 wiz Exp $ */
 
 /*
  * Copyright (c) 1999 Bernardo Innocenti
@@ -53,7 +53,7 @@
 #if NAUCC > 0
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: aucc.c,v 1.35 2004/10/29 12:57:15 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: aucc.c,v 1.34 2003/05/03 18:10:43 wiz Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -234,7 +234,7 @@ static void aucc_decode_slinear16sw_4ch(u_char **, u_char *, int);
 
 
 
-const struct audio_hw_if sa_hw_if = {
+struct audio_hw_if sa_hw_if = {
 	aucc_open,
 	aucc_close,
 	NULL,

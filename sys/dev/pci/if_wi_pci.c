@@ -1,4 +1,4 @@
-/*      $NetBSD: if_wi_pci.c,v 1.35 2004/08/21 22:48:18 thorpej Exp $  */
+/*      $NetBSD: if_wi_pci.c,v 1.31 2004/03/28 09:44:59 nakayama Exp $  */
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -43,7 +43,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_wi_pci.c,v 1.35 2004/08/21 22:48:18 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_wi_pci.c,v 1.31 2004/03/28 09:44:59 nakayama Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -96,48 +96,50 @@ struct wi_pci_softc {
 	void *sc_powerhook;		/* power hook descriptor */
 };
 
-static int	wi_pci_match(struct device *, struct cfdata *, void *);
-static void	wi_pci_attach(struct device *, struct device *, void *);
-static int	wi_pci_enable(struct wi_softc *);
-static void	wi_pci_disable(struct wi_softc *);
-static void	wi_pci_reset(struct wi_softc *);
-static void	wi_pci_powerhook(int, void *);
+static int	wi_pci_match __P((struct device *, struct cfdata *, void *));
+static void	wi_pci_attach __P((struct device *, struct device *, void *));
+static int	wi_pci_enable __P((struct wi_softc *));
+static void	wi_pci_disable __P((struct wi_softc *));
+static void	wi_pci_reset __P((struct wi_softc *));
+static void	wi_pci_powerhook __P((int, void *));
 
 static const struct wi_pci_product
-	*wi_pci_lookup(struct pci_attach_args *);
+	*wi_pci_lookup __P((struct pci_attach_args *));
 
 CFATTACH_DECL(wi_pci, sizeof(struct wi_pci_softc),
     wi_pci_match, wi_pci_attach, NULL, NULL);
 
-static const struct wi_pci_product {
+const struct wi_pci_product {
 	pci_vendor_id_t		wpp_vendor;	/* vendor ID */
 	pci_product_id_t	wpp_product;	/* product ID */
+	const char		*wpp_name;	/* product name */
 	int			wpp_chip;	/* uses other chip */
 } wi_pci_products[] = {
 	{ PCI_VENDOR_GLOBALSUN,		PCI_PRODUCT_GLOBALSUN_GL24110P,
-	  CHIP_PLX_OTHER },
+	  NULL, CHIP_PLX_OTHER },
 	{ PCI_VENDOR_GLOBALSUN,		PCI_PRODUCT_GLOBALSUN_GL24110P02,
-	  CHIP_PLX_OTHER },
+	  NULL, CHIP_PLX_OTHER },
 	{ PCI_VENDOR_EUMITCOM,		PCI_PRODUCT_EUMITCOM_WL11000P,
-	  CHIP_PLX_OTHER },
+	  NULL, CHIP_PLX_OTHER },
 	{ PCI_VENDOR_3COM,		PCI_PRODUCT_3COM_3CRWE777A,
-	  CHIP_PLX_OTHER },
+	  NULL, CHIP_PLX_OTHER },
 	{ PCI_VENDOR_NETGEAR,		PCI_PRODUCT_NETGEAR_MA301,
-	  CHIP_PLX_OTHER },
+	  NULL, CHIP_PLX_OTHER },
 	{ PCI_VENDOR_INTERSIL,		PCI_PRODUCT_INTERSIL_MINI_PCI_WLAN,
-	  0 },
+	  "Intersil Prism2.5", 0 },
 	{ PCI_VENDOR_NDC,		PCI_PRODUCT_NDC_NCP130,
-	  CHIP_PLX_9052 },
+	  NULL, CHIP_PLX_9052 },
 	{ PCI_VENDOR_USR2,		PCI_PRODUCT_USR2_2415,
-	  CHIP_PLX_OTHER },
+	  NULL, CHIP_PLX_OTHER },
 	{ PCI_VENDOR_NDC,		PCI_PRODUCT_NDC_NCP130A2,
-	  CHIP_TMD_7160 },
+	  NULL, CHIP_TMD_7160 },
 	{ 0,				0,
-	  0},
+	  NULL, 0},
 };
 
 static int
-wi_pci_enable(struct wi_softc *sc)
+wi_pci_enable(sc)
+	struct wi_softc *sc;
 {
 	struct wi_pci_softc *psc = (struct wi_pci_softc *)sc;
 
@@ -158,7 +160,8 @@ wi_pci_enable(struct wi_softc *sc)
 }
 
 static void
-wi_pci_disable(struct wi_softc *sc)
+wi_pci_disable(sc)
+	struct wi_softc *sc;
 {
 	struct wi_pci_softc *psc = (struct wi_pci_softc *)sc;
 
@@ -166,7 +169,8 @@ wi_pci_disable(struct wi_softc *sc)
 }
 
 static void
-wi_pci_reset(struct wi_softc *sc)
+wi_pci_reset(sc)
+	struct wi_softc		*sc;
 {
 	int i, secs, usecs;
 
@@ -199,7 +203,8 @@ wi_pci_reset(struct wi_softc *sc)
 }
 
 static const struct wi_pci_product *
-wi_pci_lookup(struct pci_attach_args *pa)
+wi_pci_lookup(pa)
+	struct pci_attach_args *pa;
 {
 	const struct wi_pci_product *wpp;
 
@@ -212,7 +217,10 @@ wi_pci_lookup(struct pci_attach_args *pa)
 }
 
 static int
-wi_pci_match(struct device *parent, struct cfdata *match, void *aux)
+wi_pci_match(parent, match, aux)
+	struct device *parent;
+	struct cfdata *match;
+	void *aux;
 {
 	struct pci_attach_args *pa = aux;
 
@@ -222,7 +230,9 @@ wi_pci_match(struct device *parent, struct cfdata *match, void *aux)
 }
 
 static void
-wi_pci_attach(struct device *parent, struct device *self, void *aux)
+wi_pci_attach(parent, self, aux)
+	struct device *parent, *self;
+	void *aux;
 {
 	struct wi_pci_softc *psc = (struct wi_pci_softc *)self;
 	struct wi_softc *sc = &psc->psc_wi;
@@ -302,10 +312,12 @@ wi_pci_attach(struct device *parent, struct device *self, void *aux)
 		break;
 	}
 
-	{
+	if (wpp->wpp_name != NULL) {
+		printf(": %s Wireless Lan\n", wpp->wpp_name);
+	} else {
 		char devinfo[256];
 
-		pci_devinfo(pa->pa_id, pa->pa_class, 0, devinfo, sizeof(devinfo));
+		pci_devinfo(pa->pa_id, pa->pa_class, 0, devinfo);
 		printf(": %s (rev. 0x%02x)\n", devinfo,
 		       PCI_REVISION(pa->pa_class));
 	}
@@ -332,7 +344,7 @@ wi_pci_attach(struct device *parent, struct device *self, void *aux)
 
 	/* Map and establish the interrupt. */
 	if (pci_intr_map(pa, &ih)) {
-		printf("%s: couldn't map interrupt\n", self->dv_xname);
+		printf("%s: couldn't map interrupt\n", sc->sc_dev.dv_xname);
 		return;
 	}
 	intrstr = pci_intr_string(pc, ih);
@@ -340,14 +352,15 @@ wi_pci_attach(struct device *parent, struct device *self, void *aux)
 	psc->psc_ih = ih;
 	sc->sc_ih = pci_intr_establish(pc, ih, IPL_NET, wi_intr, sc);
 	if (sc->sc_ih == NULL) {
-		printf("%s: couldn't establish interrupt", self->dv_xname);
+		printf("%s: couldn't establish interrupt",
+		    sc->sc_dev.dv_xname);
 		if (intrstr != NULL)
 			printf(" at %s", intrstr);
 		printf("\n");
 		return;
 	}
 
-	printf("%s: interrupting at %s\n", self->dv_xname, intrstr);
+	printf("%s: interrupting at %s\n", sc->sc_dev.dv_xname, intrstr);
 
 	switch (wpp->wpp_chip) {
 	case CHIP_PLX_OTHER:
@@ -371,10 +384,10 @@ wi_pci_attach(struct device *parent, struct device *self, void *aux)
 		break;
 	}
 
-	printf("%s:", self->dv_xname);
-
-	if (wi_attach(sc, 0) != 0) {
-		printf("%s: failed to attach controller\n", self->dv_xname);
+	printf("%s:", sc->sc_dev.dv_xname);
+	if (wi_attach(sc) != 0) {
+		printf("%s: failed to attach controller\n",
+			sc->sc_dev.dv_xname);
 		pci_intr_disestablish(pa->pa_pc, sc->sc_ih);
 		return;
 	}
@@ -385,12 +398,14 @@ wi_pci_attach(struct device *parent, struct device *self, void *aux)
 	/* Add a suspend hook to restore PCI config state */
 	psc->sc_powerhook = powerhook_establish(wi_pci_powerhook, psc);
 	if (psc->sc_powerhook == NULL)
-		printf("%s: WARNING: unable to establish pci power hook\n",
-		    self->dv_xname);
+		printf ("%s: WARNING: unable to establish pci power hook\n",
+		        sc->sc_dev.dv_xname);
 }
 
 static void
-wi_pci_powerhook(int why, void *arg)
+wi_pci_powerhook(why, arg)
+	int why;
+	void *arg;
 {
 	struct wi_pci_softc *psc = arg;
 	struct wi_softc *sc = &psc->psc_wi;

@@ -1,4 +1,4 @@
-/*	$NetBSD: var.c,v 1.36 2004/10/06 10:23:43 enami Exp $	*/
+/*	$NetBSD: var.c,v 1.34 2003/08/26 18:14:24 jmmv Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -37,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)var.c	8.3 (Berkeley) 5/4/95";
 #else
-__RCSID("$NetBSD: var.c,v 1.36 2004/10/06 10:23:43 enami Exp $");
+__RCSID("$NetBSD: var.c,v 1.34 2003/08/26 18:14:24 jmmv Exp $");
 #endif
 #endif /* not lint */
 
@@ -69,11 +69,8 @@ __RCSID("$NetBSD: var.c,v 1.36 2004/10/06 10:23:43 enami Exp $");
 #include "myhistedit.h"
 #endif
 
-#ifdef SMALL
+
 #define VTABSIZE 39
-#else
-#define VTABSIZE 517
-#endif
 
 
 struct varinit {
@@ -137,8 +134,8 @@ const struct varinit varinit[] = {
 
 struct var *vartab[VTABSIZE];
 
-STATIC int strequal(const char *, const char *);
-STATIC struct var *find_var(const char *, struct var ***, int *);
+STATIC struct var **hashvar(const char *);
+STATIC int varequal(const char *, const char *);
 
 /*
  * Initialize the varable symbol tables and import the environment
@@ -173,18 +170,20 @@ initvar(void)
 	struct var **vpp;
 
 	for (ip = varinit ; (vp = ip->var) != NULL ; ip++) {
-		if (find_var(ip->text, &vpp, &vp->name_len) != NULL)
-			continue;
-		vp->next = *vpp;
-		*vpp = vp;
-		vp->text = strdup(ip->text);
-		vp->flags = ip->flags;
-		vp->func = ip->func;
+		if ((vp->flags & VEXPORT) == 0) {
+			vpp = hashvar(ip->text);
+			vp->next = *vpp;
+			*vpp = vp;
+			vp->text = strdup(ip->text);
+			vp->flags = ip->flags;
+			vp->func = ip->func;
+		}
 	}
 	/*
 	 * PS1 depends on uid
 	 */
-	if (find_var("PS1", &vpp, &vps1.name_len) == NULL) {
+	if ((vps1.flags & VEXPORT) == 0) {
+		vpp = hashvar("PS1=");
 		vps1.next = *vpp;
 		*vpp = &vps1;
 		vps1.text = strdup(geteuid() ? "PS1=$ " : "PS1=# ");
@@ -278,36 +277,39 @@ void
 setvareq(char *s, int flags)
 {
 	struct var *vp, **vpp;
-	int nlen;
 
 	if (aflag)
 		flags |= VEXPORT;
-	vp = find_var(s, &vpp, &nlen);
-	if (vp != NULL) {
-		if (vp->flags & VREADONLY)
-			error("%.*s: is read only", vp->name_len, s);
-		if (flags & VNOSET)
+	vpp = hashvar(s);
+	for (vp = *vpp ; vp ; vp = vp->next) {
+		if (varequal(s, vp->text)) {
+			if (vp->flags & VREADONLY) {
+				size_t len = strchr(s, '=') - s;
+				error("%.*s: is read only", len, s);
+			}
+			if (flags & VNOSET)
+				return;
+			INTOFF;
+
+			if (vp->func && (flags & VNOFUNC) == 0)
+				(*vp->func)(strchr(s, '=') + 1);
+
+			if ((vp->flags & (VTEXTFIXED|VSTACK)) == 0)
+				ckfree(vp->text);
+
+			vp->flags &= ~(VTEXTFIXED|VSTACK|VUNSET);
+			vp->flags |= flags & ~VNOFUNC;
+			vp->text = s;
+
+			/*
+			 * We could roll this to a function, to handle it as
+			 * a regular variable function callback, but why bother?
+			 */
+			if (vp == &vmpath || (vp == &vmail && ! mpathset()))
+				chkmail(1);
+			INTON;
 			return;
-		INTOFF;
-
-		if (vp->func && (flags & VNOFUNC) == 0)
-			(*vp->func)(s + vp->name_len + 1);
-
-		if ((vp->flags & (VTEXTFIXED|VSTACK)) == 0)
-			ckfree(vp->text);
-
-		vp->flags &= ~(VTEXTFIXED|VSTACK|VUNSET);
-		vp->flags |= flags & ~VNOFUNC;
-		vp->text = s;
-
-		/*
-		 * We could roll this to a function, to handle it as
-		 * a regular variable function callback, but why bother?
-		 */
-		if (vp == &vmpath || (vp == &vmail && ! mpathset()))
-			chkmail(1);
-		INTON;
-		return;
+		}
 	}
 	/* not found */
 	if (flags & VNOSET)
@@ -315,7 +317,6 @@ setvareq(char *s, int flags)
 	vp = ckmalloc(sizeof (*vp));
 	vp->flags = flags & ~VNOFUNC;
 	vp->text = s;
-	vp->name_len = nlen;
 	vp->next = *vpp;
 	vp->func = NULL;
 	*vpp = vp;
@@ -358,10 +359,14 @@ lookupvar(const char *name)
 {
 	struct var *v;
 
-	v = find_var(name, NULL, NULL);
-	if (v == NULL || v->flags & VUNSET)
-		return NULL;
-	return v->text + v->name_len + 1;
+	for (v = *hashvar(name) ; v ; v = v->next) {
+		if (varequal(v->text, name)) {
+			if (v->flags & VUNSET)
+				return NULL;
+			return strchr(v->text, '=') + 1;
+		}
+	}
+	return NULL;
 }
 
 
@@ -379,15 +384,18 @@ bltinlookup(const char *name, int doall)
 	struct var *v;
 
 	for (sp = cmdenviron ; sp ; sp = sp->next) {
-		if (strequal(sp->text, name))
+		if (varequal(sp->text, name))
 			return strchr(sp->text, '=') + 1;
 	}
-
-	v = find_var(name, NULL, NULL);
-
-	if (v == NULL || v->flags & VUNSET || (!doall && !(v->flags & VEXPORT)))
-		return NULL;
-	return v->text + v->name_len + 1;
+	for (v = *hashvar(name) ; v ; v = v->next) {
+		if (varequal(v->text, name)) {
+			if ((v->flags & VUNSET)
+			 || (!doall && (v->flags & VEXPORT) == 0))
+				return NULL;
+			return strchr(v->text, '=') + 1;
+		}
+	}
+	return NULL;
 }
 
 
@@ -571,6 +579,7 @@ showvars(const char *name, int flag, int show_value)
 int
 exportcmd(int argc, char **argv)
 {
+	struct var **vpp;
 	struct var *vp;
 	char *name;
 	const char *p;
@@ -587,13 +596,16 @@ exportcmd(int argc, char **argv)
 		if ((p = strchr(name, '=')) != NULL) {
 			p++;
 		} else {
-			vp = find_var(name, NULL, NULL);
-			if (vp != NULL) {
-				vp->flags |= flag;
-				continue;
+			vpp = hashvar(name);
+			for (vp = *vpp ; vp ; vp = vp->next) {
+				if (varequal(vp->text, name)) {
+					vp->flags |= flag;
+					goto found;
+				}
 			}
 		}
 		setvar(name, p, flag);
+found:;
 	}
 	return 0;
 }
@@ -639,7 +651,8 @@ mklocal(const char *name, int flags)
 		lvp->text = memcpy(p, optlist, sizeof_optlist);
 		vp = NULL;
 	} else {
-		vp = find_var(name, &vpp, NULL);
+		vpp = hashvar(name);
+		for (vp = *vpp ; vp && ! varequal(vp->text, name) ; vp = vp->next);
 		if (vp == NULL) {
 			if (strchr(name, '='))
 				setvareq(savestr(name), VSTRFIXED|flags);
@@ -652,7 +665,7 @@ mklocal(const char *name, int flags)
 			lvp->text = vp->text;
 			lvp->flags = vp->flags;
 			vp->flags |= VSTRFIXED|VTEXTFIXED;
-			if (name[vp->name_len] == '=')
+			if (strchr(name, '='))
 				setvareq(savestr(name), flags);
 		}
 	}
@@ -684,7 +697,7 @@ poplocalvars(void)
 			(void)unsetvar(vp->text, 0);
 		} else {
 			if (vp->func && (vp->flags & VNOFUNC) == 0)
-				(*vp->func)(lvp->text + vp->name_len + 1);
+				(*vp->func)(strchr(lvp->text, '=') + 1);
 			if ((vp->flags & VTEXTFIXED) == 0)
 				ckfree(vp->text);
 			vp->flags = lvp->flags;
@@ -752,31 +765,51 @@ unsetvar(const char *s, int unexport)
 	struct var **vpp;
 	struct var *vp;
 
-	vp = find_var(s, &vpp, NULL);
-	if (vp == NULL)
-		return 1;
-
-	if (vp->flags & VREADONLY)
-		return (1);
-
-	INTOFF;
-	if (unexport) {
-		vp->flags &= ~VEXPORT;
-	} else {
-		if (vp->text[vp->name_len + 1] != '\0')
-			setvar(s, nullstr, 0);
-		vp->flags &= ~VEXPORT;
-		vp->flags |= VUNSET;
-		if ((vp->flags & VSTRFIXED) == 0) {
-			if ((vp->flags & VTEXTFIXED) == 0)
-				ckfree(vp->text);
-			*vpp = vp->next;
-			ckfree(vp);
+	vpp = hashvar(s);
+	for (vp = *vpp ; vp ; vpp = &vp->next, vp = *vpp) {
+		if (varequal(vp->text, s)) {
+			if (vp->flags & VREADONLY)
+				return (1);
+			INTOFF;
+			if (unexport) {
+				vp->flags &= ~VEXPORT;
+			} else {
+				if (*(strchr(vp->text, '=') + 1) != '\0')
+					setvar(s, nullstr, 0);
+				vp->flags &= ~VEXPORT;
+				vp->flags |= VUNSET;
+				if ((vp->flags & VSTRFIXED) == 0) {
+					if ((vp->flags & VTEXTFIXED) == 0)
+						ckfree(vp->text);
+					*vpp = vp->next;
+					ckfree(vp);
+				}
+			}
+			INTON;
+			return (0);
 		}
 	}
-	INTON;
-	return 0;
+
+	return (1);
 }
+
+
+
+/*
+ * Find the appropriate entry in the hash table from the name.
+ */
+
+STATIC struct var **
+hashvar(const char *p)
+{
+	unsigned int hashval;
+
+	hashval = ((unsigned char) *p) << 4;
+	while (*p && *p != '=')
+		hashval += (unsigned char) *p++;
+	return &vartab[hashval % VTABSIZE];
+}
+
 
 
 /*
@@ -786,7 +819,7 @@ unsetvar(const char *s, int unexport)
  */
 
 STATIC int
-strequal(const char *p, const char *q)
+varequal(const char *p, const char *q)
 {
 	while (*p == *q++) {
 		if (*p++ == '=')
@@ -795,42 +828,4 @@ strequal(const char *p, const char *q)
 	if (*p == '=' && *(q - 1) == '\0')
 		return 1;
 	return 0;
-}
-
-/*
- * Search for a variable.
- * 'name' may be terminated by '=' or a NUL.
- * vppp is set to the pointer to vp, or the list head if vp isn't found
- * lenp is set to the number of charactets in 'name'
- */
-
-STATIC struct var *
-find_var(const char *name, struct var ***vppp, int *lenp)
-{
-	unsigned int hashval;
-	int len;
-	struct var *vp, **vpp;
-	const char *p = name;
-
-	hashval = 0;
-	while (*p && *p != '=')
-		hashval = 2 * hashval + (unsigned char)*p++;
-	len = p - name;
-
-	if (lenp)
-		*lenp = len;
-	vpp = &vartab[hashval % VTABSIZE];
-	if (vppp)
-		*vppp = vpp;
-
-	for (vp = *vpp ; vp ; vpp = &vp->next, vp = *vpp) {
-		if (vp->name_len != len)
-			continue;
-		if (memcmp(vp->text, name, len) != 0)
-			continue;
-		if (vppp)
-			*vppp = vpp;
-		return vp;
-	}
-	return NULL;
 }

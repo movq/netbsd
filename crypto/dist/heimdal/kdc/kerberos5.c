@@ -34,7 +34,7 @@
 #include "kdc_locl.h"
 
 __RCSID("$Heimdal: kerberos5.c,v 1.145.2.4 2004/08/13 19:28:26 lha Exp $"
-        "$NetBSD: kerberos5.c,v 1.11 2004/09/14 08:08:20 lha Exp $");
+        "$NetBSD: kerberos5.c,v 1.9.2.2 2004/09/17 04:35:55 jmc Exp $");
 
 #define MAX_TIME ((time_t)((1U << 31) - 1))
 

@@ -26,3 +26,4 @@ Contents of section \.text:
  0000 e3fd0001                             .*
 Contents of section \.data:
  2000000000000008 20000000 00000008                    .*
+Contents of section \.sbss:

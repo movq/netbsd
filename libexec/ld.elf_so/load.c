@@ -1,4 +1,4 @@
-/*	$NetBSD: load.c,v 1.29 2004/10/22 05:39:56 skrll Exp $	 */
+/*	$NetBSD: load.c,v 1.27 2003/11/25 14:36:49 christos Exp $	 */
 
 /*
  * Copyright 1996 John D. Polstra.
@@ -37,11 +37,6 @@
  *
  * John Polstra <jdp@polstra.com>.
  */
-
-#include <sys/cdefs.h>
-#ifndef lint
-__RCSID("$NetBSD: load.c,v 1.29 2004/10/22 05:39:56 skrll Exp $");
-#endif /* not lint */
 
 #include <err.h>
 #include <errno.h>
@@ -184,7 +179,6 @@ _rtld_load_by_name(const char *name, Obj_Entry *obj, Needed_Entry **needed, int 
 	bool got = false;
 	union {
 		int i;
-		u_quad_t q;
 		char s[16];
 	} val;
 
@@ -193,24 +187,22 @@ _rtld_load_by_name(const char *name, Obj_Entry *obj, Needed_Entry **needed, int 
 		if (strcmp(x->name, name) != 0)
 			continue;
 
-		j = sizeof(val);
-		if ((i = _rtld_sysctl(x->ctlname, &val, &j)) == -1) {
-			xwarnx(_PATH_LD_HINTS ": invalid/unknown sysctl for %s (%d)",
-			    name, errno);
+		i = sizeof(val);
+
+		if (sysctl(x->ctl, x->ctlmax, &val, &i, NULL, 0) == -1) {
+			xwarnx(_PATH_LD_HINTS ": unknown sysctl for %s", name);
 			break;
 		}
 
-		switch (i) {
-		case CTLTYPE_QUAD:
-			xsnprintf(val.s, sizeof(val.s), "%" PRIu64, val.q);
-			break;
+		switch (x->ctltype[x->ctlmax - 1]) {
 		case CTLTYPE_INT:
 			xsnprintf(val.s, sizeof(val.s), "%d", val.i);
 			break;
 		case CTLTYPE_STRING:
 			break;
 		default:
-			xwarnx("unsupported sysctl type %d", (int)i);
+			xwarnx("unsupported sysctl type %d",
+			    x->ctltype[x->ctlmax - 1]);
 			break;
 		}
 

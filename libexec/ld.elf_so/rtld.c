@@ -1,4 +1,4 @@
-/*	$NetBSD: rtld.c,v 1.107 2004/10/22 05:39:57 skrll Exp $	 */
+/*	$NetBSD: rtld.c,v 1.101.2.1 2004/07/19 09:06:52 tron Exp $	 */
 
 /*
  * Copyright 1996 John D. Polstra.
@@ -37,11 +37,6 @@
  *
  * John Polstra <jdp@polstra.com>.
  */
-
-#include <sys/cdefs.h>
-#ifndef lint
-__RCSID("$NetBSD: rtld.c,v 1.107 2004/10/22 05:39:57 skrll Exp $");
-#endif /* not lint */
 
 #include <err.h>
 #include <errno.h>
@@ -137,9 +132,7 @@ _rtld_call_init_functions(Obj_Entry *first)
 /*
  * Initialize the dynamic linker.  The argument is the address at which
  * the dynamic linker has been mapped into memory.  The primary task of
- * this function is to create an Obj_Entry for the dynamic linker and
- * to resolve the PLT relocation for platforms that need it (those that
- * define __HAVE_FUNCTION_DESCRIPTORS
+ * this function is to relocate the dynamic linker.
  */
 static void
 _rtld_init(caddr_t mapbase, caddr_t relocbase)
@@ -153,19 +146,16 @@ _rtld_init(caddr_t mapbase, caddr_t relocbase)
 	_rtld_objself.relocbase = relocbase;
 	_rtld_objself.dynamic = (Elf_Dyn *) &_DYNAMIC;
 
+#ifdef RTLD_RELOCATE_SELF
+#error platform still uses RTLD_RELOCATE_SELF
+#endif
+
 	_rtld_digest_dynamic(&_rtld_objself);
-	assert(!_rtld_objself.needed);
-#if !defined(__hppa__)
-	assert(!_rtld_objself.pltrel && !_rtld_objself.pltrela);
-#else
-	_rtld_relocate_plt_objects(&_rtld_objself);
-#endif
-#if !defined(__mips__) && !defined(__hppa__)
-	assert(!_rtld_objself.pltgot);
-#endif
+	assert(!_rtld_objself.needed && !_rtld_objself.pltrel &&
+	    !_rtld_objself.pltrela);
 #if !defined(__arm__) && !defined(__mips__) && !defined(__sh__)
 	/* ARM, MIPS and SH{3,5} have a bogus DT_TEXTREL. */
-	assert(!_rtld_objself.textrel);
+	assert(!_rtld_objself.pltgot && !_rtld_objself.textrel);
 #endif
 
 	_rtld_add_paths(&_rtld_default_paths, RTLD_DEFAULT_LIBRARY_PATH);

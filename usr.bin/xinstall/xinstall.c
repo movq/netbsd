@@ -1,4 +1,4 @@
-/*	$NetBSD: xinstall.c,v 1.87 2004/06/20 22:20:16 jmc Exp $	*/
+/*	$NetBSD: xinstall.c,v 1.86.2.1 2004/06/22 07:24:55 tron Exp $	*/
 
 /*
  * Copyright (c) 1987, 1993
@@ -46,7 +46,7 @@ __COPYRIGHT("@(#) Copyright (c) 1987, 1993\n\
 #if 0
 static char sccsid[] = "@(#)xinstall.c	8.1 (Berkeley) 7/21/93";
 #else
-__RCSID("$NetBSD: xinstall.c,v 1.87 2004/06/20 22:20:16 jmc Exp $");
+__RCSID("$NetBSD: xinstall.c,v 1.86.2.1 2004/06/22 07:24:55 tron Exp $");
 #endif
 #endif /* not lint */
 

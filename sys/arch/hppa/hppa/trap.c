@@ -1,4 +1,4 @@
-/*	$NetBSD: trap.c,v 1.23 2004/08/07 21:47:05 chs Exp $	*/
+/*	$NetBSD: trap.c,v 1.16 2004/03/26 14:11:01 drochner Exp $	*/
 
 /*-
  * Copyright (c) 2001, 2002 The NetBSD Foundation, Inc.
@@ -69,7 +69,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.23 2004/08/07 21:47:05 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.16 2004/03/26 14:11:01 drochner Exp $");
 
 /* #define INTRDEBUG */
 /* #define TRAPDEBUG */
@@ -99,7 +99,6 @@ __KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.23 2004/08/07 21:47:05 chs Exp $");
 #include <sys/signal.h>
 #include <sys/device.h>
 #include <sys/pool.h>
-#include <sys/userret.h>
 
 #include <net/netisr.h>
 
@@ -118,8 +117,9 @@ __KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.23 2004/08/07 21:47:05 chs Exp $");
 
 #include <hppa/hppa/machdep.h>
 
+#if defined(INTRDEBUG) || defined(TRAPDEBUG)
 #include <ddb/db_output.h>
-#include <ddb/db_interface.h>
+#endif
 
 #if defined(DEBUG) || defined(DIAGNOSTIC)
 /*
@@ -170,22 +170,14 @@ const char *trap_type[] = {
 };
 int trap_types = sizeof(trap_type)/sizeof(trap_type[0]);
 
-uint8_t fpopmap[] = {
-	0x00, 0x00, 0x00, 0x06, 0x00, 0x00, 0x00, 0x00,
-	0x00, 0x0c, 0x00, 0x0e, 0x00, 0x00, 0x00, 0x00,
-	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-	0x00, 0x00, 0x00, 0x26, 0x00, 0x00, 0x00, 0x00,
-	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-};
-
 int want_resched;
 volatile int astpending;
 
 void pmap_hptdump(void);
 void syscall(struct trapframe *, int *);
+
+/* XXX */
+void hppa_trapsignal_hack(struct lwp *, int, u_long);
 
 #ifdef USERTRACE
 /*
@@ -199,16 +191,24 @@ u_int rctr_next_iioq;
 #endif
 
 static __inline void
-userret(struct lwp *l, register_t pc, u_quad_t oticks)
+userret (struct lwp *l, register_t pc, u_quad_t oticks)
 {
 	struct proc *p = l->l_proc;
+	int sig;
+
+	/* take pending signals */
+	while ((sig = CURSIG(l)) != 0)
+		postsig(sig);
 
 	l->l_priority = l->l_usrpri;
 	if (want_resched) {
+		/*
+		 * We're being preempted.
+		 */
 		preempt(0);
+		while ((sig = CURSIG(l)) != 0)
+			postsig(sig);
 	}
-
-	mi_userret(l);
 
 	/*
 	 * If profiling, charge recent system time to the trapped pc.
@@ -462,9 +462,6 @@ do {							\
 	}
 #undef SANITY
 	if (sanity_frame == tf) {
-		printf("insanity: tf %p lwp %p line %d sp 0x%x pc 0x%x\n",
-		       sanity_frame, sanity_lwp, sanity_checked,
-		       tf->tf_sp, tf->tf_iioq_head);
 		(void) trap_kdebug(T_IBREAK, 0, tf);
 		sanity_frame = NULL;
 		sanity_lwp = NULL;
@@ -484,8 +481,7 @@ trap(int type, struct trapframe *frame)
 	struct vmspace *vm;
 	vm_prot_t vftype;
 	pa_space_t space;
-	ksiginfo_t ksi;
-	u_int opcode, onfault;
+	u_int opcode;
 	int ret;
 	const char *tts;
 	int type_raw;
@@ -498,18 +494,16 @@ trap(int type, struct trapframe *frame)
 	if (type_raw == T_ITLBMISS || type_raw == T_ITLBMISSNA) {
 		va = frame->tf_iioq_head;
 		space = frame->tf_iisq_head;
-		vftype = VM_PROT_EXECUTE;
+		vftype = VM_PROT_READ;	/* XXX VM_PROT_EXECUTE ??? */
 	} else {
 		va = frame->tf_ior;
 		space = frame->tf_isr;
 		vftype = inst_store(opcode) ? VM_PROT_WRITE : VM_PROT_READ;
 	}
 
-	l = curlwp;
-	p = l ? l->l_proc : NULL;
-
-	tts = (type & ~T_USER) > trap_types ? "reserved" :
-		trap_type[type & ~T_USER];
+	if ((l = curlwp) == NULL)
+		l = &lwp0;
+	p = l->l_proc;
 
 #ifdef DIAGNOSTIC
 	/*
@@ -554,6 +548,11 @@ trap(int type, struct trapframe *frame)
 
 	if (frame->tf_flags & TFF_LAST)
 		l->l_md.md_regs = frame;
+
+	if ((type & ~T_USER) > trap_types)
+		tts = "reserved";
+	else
+		tts = trap_type[type & ~T_USER];
 
 #ifdef TRAPDEBUG
 	if (type_raw != T_INTERRUPT && type_raw != T_IBREAK)
@@ -616,19 +615,13 @@ trap(int type, struct trapframe *frame)
 
 	case T_EMULATION | T_USER:
 #ifdef FPEMUL
-		hppa_fpu_emulate(frame, l, opcode);
+		hppa_fpu_emulate(frame, l);
 #else  /* !FPEMUL */
 		/*
 		 * We don't have FPU emulation, so signal the
 		 * process with a SIGFPE.
 		 */
-		
-		KSI_INIT_TRAP(&ksi);
-		ksi.ksi_signo = SIGFPE;
-		ksi.ksi_code = SI_NOINFO;
-		ksi.ksi_trap = type;
-		ksi.ksi_addr = (void *)frame->tf_iioq_head;
-		trapsignal(l, &ksi);
+		hppa_trapsignal_hack(l, SIGFPE, frame->tf_iioq_head);
 #endif /* !FPEMUL */
 		break;
 
@@ -651,12 +644,7 @@ trap(int type, struct trapframe *frame)
 #ifdef DEBUG
 			user_backtrace(frame, l, type);
 #endif
-			KSI_INIT_TRAP(&ksi);
-			ksi.ksi_signo = SIGILL;
-			ksi.ksi_code = ILL_ILLTRP;
-			ksi.ksi_trap = type;
-			ksi.ksi_addr = (void *)frame->tf_iioq_head;
-			trapsignal(l, &ksi);
+			hppa_trapsignal_hack(l, SIGILL, frame->tf_iioq_head);
 			break;
 		}
 		if (trap_kdebug(type, va, frame))
@@ -672,102 +660,47 @@ trap(int type, struct trapframe *frame)
 		/* pass to user debugger */
 		break;
 
-	case T_EXCEPTION | T_USER: {	/* co-proc assist trap */
-		uint64_t *fpp;
-		uint32_t *pex, ex, inst;
-		int i;
-
-		hppa_fpu_flush(l);
-		fpp = l->l_addr->u_pcb.pcb_fpregs;
-		pex = (uint32_t *)&fpp[1];
-		for (i = 1; i < 8 && !*pex; i++, pex++)
-			;
-		KASSERT(i < 8);
-		ex = *pex;
-		*pex = 0;
-
-		/* reset the trap flag, as if there was none */
-		fpp[0] &= ~(((uint64_t)HPPA_FPU_T) << 32);
-
-		/* emulate the instruction */
-		inst = ((uint32_t)fpopmap[ex >> 26] << 26) | (ex & 0x03ffffff);
-		hppa_fpu_emulate(frame, l, inst);
-		}
+	case T_EXCEPTION | T_USER:	/* co-proc assist trap */
+		hppa_trapsignal_hack(l, SIGFPE, va);
 		break;
 
 	case T_OVERFLOW | T_USER:
-		KSI_INIT_TRAP(&ksi);
-		ksi.ksi_signo = SIGFPE;
-		ksi.ksi_code = SI_NOINFO;
-		ksi.ksi_trap = type;
-		ksi.ksi_addr = (void *)va;
-		trapsignal(l, &ksi);
+		hppa_trapsignal_hack(l, SIGFPE, va);
 		break;
 		
 	case T_CONDITION | T_USER:
-		KSI_INIT_TRAP(&ksi);
-		ksi.ksi_signo = SIGFPE;
-		ksi.ksi_code = FPE_INTDIV;
-		ksi.ksi_trap = type;
-		ksi.ksi_addr = (void *)va;
-		trapsignal(l, &ksi);
 		break;
 
 	case T_ILLEGAL | T_USER:
 #ifdef DEBUG
 		user_backtrace(frame, l, type);
 #endif
-		KSI_INIT_TRAP(&ksi);
-		ksi.ksi_signo = SIGILL;
-		ksi.ksi_code = ILL_ILLOPC;
-		ksi.ksi_trap = type;
-		ksi.ksi_addr = (void *)va;
-		trapsignal(l, &ksi);
+		hppa_trapsignal_hack(l, SIGILL, va);
 		break;
 
 	case T_PRIV_OP | T_USER:
 #ifdef DEBUG
 		user_backtrace(frame, l, type);
 #endif
-		KSI_INIT_TRAP(&ksi);
-		ksi.ksi_signo = SIGILL;
-		ksi.ksi_code = ILL_PRVOPC;
-		ksi.ksi_trap = type;
-		ksi.ksi_addr = (void *)va;
-		trapsignal(l, &ksi);
+		hppa_trapsignal_hack(l, SIGILL, va);
 		break;
 
 	case T_PRIV_REG | T_USER:
 #ifdef DEBUG
 		user_backtrace(frame, l, type);
 #endif
-		KSI_INIT_TRAP(&ksi);
-		ksi.ksi_signo = SIGILL;
-		ksi.ksi_code = ILL_PRVREG;
-		ksi.ksi_trap = type;
-		ksi.ksi_addr = (void *)va;
-		trapsignal(l, &ksi);
+		hppa_trapsignal_hack(l, SIGILL, va);
 		break;
 
 		/* these should never got here */
 	case T_HIGHERPL | T_USER:
 	case T_LOWERPL | T_USER:
-		KSI_INIT_TRAP(&ksi);
-		ksi.ksi_signo = SIGSEGV;
-		ksi.ksi_code = SEGV_ACCERR;
-		ksi.ksi_trap = type;
-		ksi.ksi_addr = (void *)va;
-		trapsignal(l, &ksi);
+		hppa_trapsignal_hack(l, SIGSEGV, va);
 		break;
 
 	case T_IPROT | T_USER:
 	case T_DPROT | T_USER:
-		KSI_INIT_TRAP(&ksi);
-		ksi.ksi_signo = SIGSEGV;
-		ksi.ksi_code = SEGV_ACCERR;
-		ksi.ksi_trap = type;
-		ksi.ksi_addr = (void *)va;
-		trapsignal(l, &ksi);
+		hppa_trapsignal_hack(l, SIGSEGV, va);
 		break;
 
 	case T_DATACC:   	case T_USER | T_DATACC:
@@ -812,10 +745,7 @@ trap(int type, struct trapframe *frame)
 		/* Never call uvm_fault in interrupt context. */
 		KASSERT(hppa_intr_depth == 0);
 
-		onfault = l->l_addr->u_pcb.pcb_onfault;
-		l->l_addr->u_pcb.pcb_onfault = 0;
 		ret = uvm_fault(map, va, 0, vftype);
-		l->l_addr->u_pcb.pcb_onfault = onfault;
 
 #ifdef TRAPDEBUG
 		printf("uvm_fault(%p, %x, %d, %d)=%d\n",
@@ -824,7 +754,6 @@ trap(int type, struct trapframe *frame)
 
 		if (map != kernel_map)
 			l->l_flag &= ~L_SA_PAGEFAULT;
-
 		/*
 		 * If this was a stack access we keep track of the maximum
 		 * accessed stack size.  Also, if uvm_fault gets a protection
@@ -843,19 +772,15 @@ trap(int type, struct trapframe *frame)
 
 		if (ret != 0) {
 			if (type & T_USER) {
+printf("trapsignal: uvm_fault(%p, %x, %d, %d)=%d\n",
+	map, (u_int)va, 0, vftype, ret);
 #ifdef DEBUG
 				user_backtrace(frame, l, type);
 #endif
-				KSI_INIT_TRAP(&ksi);
-				ksi.ksi_signo = SIGSEGV;
-				ksi.ksi_code = (ret == EACCES ?
-						SEGV_ACCERR : SEGV_MAPERR);
-				ksi.ksi_trap = type;
-				ksi.ksi_addr = (void *)va;
-				trapsignal(l, &ksi);
+				hppa_trapsignal_hack(l, SIGSEGV, frame->tf_ior);
 			} else {
-				if (l->l_addr->u_pcb.pcb_onfault) {
-#ifdef TRAPDEBUG
+				if (l && l->l_addr->u_pcb.pcb_onfault) {
+#ifdef PMAPDEBUG
 					printf("trap: copyin/out %d\n",ret);
 #endif
 					pcbp = &l->l_addr->u_pcb;
@@ -865,8 +790,13 @@ trap(int type, struct trapframe *frame)
 					pcbp->pcb_onfault = 0;
 					break;
 				}
-				panic("trap: uvm_fault(%p, %lx, %d, %d): %d",
+#if 1
+if (trap_kdebug (type, va, frame))
+	return;
+#else
+				panic("trap: uvm_fault(%p, %x, %d, %d): %d",
 				    map, va, 0, vftype, ret);
+#endif
 			}
 		}
 		break;
@@ -875,20 +805,18 @@ trap(int type, struct trapframe *frame)
 #ifdef DEBUG
 		user_backtrace(frame, l, type);
 #endif
-		KSI_INIT_TRAP(&ksi);
-		ksi.ksi_signo = SIGBUS;
-		ksi.ksi_code = BUS_ADRALN;
-		ksi.ksi_trap = type;
-		ksi.ksi_addr = (void *)va;
-		trapsignal(l, &ksi);
+		hppa_trapsignal_hack(l, SIGBUS, va);
 		break;
 
 	case T_INTERRUPT:
 	case T_INTERRUPT|T_USER:
 		hppa_intr(frame);
 		mtctl(frame->tf_eiem, CR_EIEM);
+#if 0
+if (trap_kdebug (type, va, frame))
+return;
+#endif
 		break;
-
 	case T_LOWERPL:
 	case T_DPROT:
 	case T_IPROT:
@@ -906,6 +834,10 @@ trap(int type, struct trapframe *frame)
 		}
 		/* FALLTHROUGH to unimplemented */
 	default:
+#if 1
+if (trap_kdebug (type, va, frame))
+	return;
+#endif
 		panic ("trap: unimplemented \'%s\' (%d)", tts, type);
 	}
 
@@ -1237,4 +1169,18 @@ void
 upcallret(struct lwp *l)
 {
 	userret(l, l->l_md.md_regs->tf_iioq_head, 0);
+}
+
+/*
+ * XXX for transition to SIGINFO
+ */
+void
+hppa_trapsignal_hack(struct lwp *l, int signum, u_long code)
+{
+        ksiginfo_t ksi;
+
+        KSI_INIT_TRAP(&ksi);
+        ksi.ksi_signo = signum;
+        ksi.ksi_trap = (int)code;
+        trapsignal(l, &ksi);
 }

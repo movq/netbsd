@@ -1,5 +1,5 @@
--- $Id: k5.asn1,v 1.7 2004/09/14 08:08:20 lha Exp $
--- setpw changes from: $Id: k5.asn1,v 1.7 2004/09/14 08:08:20 lha Exp $
+-- $Id: k5.asn1,v 1.5.2.2 2004/09/17 04:36:04 jmc Exp $
+-- setpw changes from: $Id: k5.asn1,v 1.5.2.2 2004/09/17 04:36:04 jmc Exp $
 
 KERBEROS5 DEFINITIONS ::=
 BEGIN

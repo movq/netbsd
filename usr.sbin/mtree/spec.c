@@ -1,4 +1,4 @@
-/*	$NetBSD: spec.c,v 1.59 2004/12/01 23:27:36 lukem Exp $	*/
+/*	$NetBSD: spec.c,v 1.54.2.1 2004/06/22 07:25:17 tron Exp $	*/
 
 /*-
  * Copyright (c) 1989, 1993
@@ -30,7 +30,7 @@
  */
 
 /*-
- * Copyright (c) 2001-2004 The NetBSD Foundation, Inc.
+ * Copyright (c) 2001-2002 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -74,7 +74,7 @@
 #if 0
 static char sccsid[] = "@(#)spec.c	8.2 (Berkeley) 4/28/95";
 #else
-__RCSID("$NetBSD: spec.c,v 1.59 2004/12/01 23:27:36 lukem Exp $");
+__RCSID("$NetBSD: spec.c,v 1.54.2.1 2004/06/22 07:25:17 tron Exp $");
 #endif
 #endif /* not lint */
 
@@ -96,15 +96,12 @@ __RCSID("$NetBSD: spec.c,v 1.59 2004/12/01 23:27:36 lukem Exp $");
 #include "pack_dev.h"
 
 size_t	mtree_lineno;			/* Current spec line number */
-int	mtree_Mflag;			/* Merge duplicate entries */
-int	mtree_Wflag;			/* Don't "whack" permissions */
+int	Wflag;				/* Don't "whack" permissions */
 
 static	dev_t	parsedev(char *);
 static	void	replacenode(NODE *, NODE *);
 static	void	set(char *, NODE *);
 static	void	unset(char *, NODE *);
-
-#define REPLACEPTR(x,v)	do { if ((x)) free((x)); (x) = (v); } while (0)
 
 NODE *
 spec(FILE *fp)
@@ -277,27 +274,6 @@ noparent:		mtree_err("no parent node");
 	return (root);
 }
 
-void
-free_nodes(NODE *root)
-{
-	NODE	*cur, *next;
-
-	if (root == NULL)
-		return;
-
-	next = NULL;
-	for (cur = root; cur != NULL; cur = next) {
-		next = cur->next;
-		free_nodes(cur->child);
-		REPLACEPTR(cur->slink, NULL);
-		REPLACEPTR(cur->md5digest, NULL);
-		REPLACEPTR(cur->rmd160digest, NULL);
-		REPLACEPTR(cur->sha1digest, NULL);
-		REPLACEPTR(cur->tags, NULL);
-		REPLACEPTR(cur, NULL);
-	}
-}
-
 /*
  * dump_nodes --
  *	dump the NODEs from `cur', based in the directory `dir'.
@@ -348,7 +324,7 @@ dump_nodes(const char *dir, NODE *root, int pathlast)
 		if (MATCHFLAG(F_NLINK))
 			printf("nlink=%d ", cur->st_nlink);
 		if (MATCHFLAG(F_SLINK))
-			printf("link=%s ", vispath(cur->slink));
+			printf("link=%s ", cur->slink);
 		if (MATCHFLAG(F_SIZE))
 			printf("size=%lld ", (long long)cur->st_size);
 		if (MATCHFLAG(F_TIME))
@@ -404,7 +380,7 @@ parsedev(char *arg)
 	int	argc;
 	pack_t	*pack;
 	dev_t	result;
-	const char *error = NULL;
+	char	*error = NULL;
 
 	if ((dev = strchr(arg, ',')) != NULL) {
 		*dev++='\0';
@@ -438,37 +414,15 @@ static void
 replacenode(NODE *cur, NODE *new)
 {
 
+	if (cur->type != new->type)
+		mtree_err("existing entry for `%s', type `%s' does not match type `%s'",
+		    cur->name, nodetype(cur->type), nodetype(new->type));
 #define REPLACE(x)	cur->x = new->x
-#define REPLACESTR(x)	REPLACEPTR(cur->x,new->x)
-
-	if (cur->type != new->type) {
-		if (mtree_Mflag) {
-				/*
-				 * merge entries with different types; we
-				 * don't want children retained in this case.
-				 */
-			REPLACE(type);
-			free_nodes(cur->child);
-			cur->child = NULL;
-		} else {
-			mtree_err(
-			    "existing entry for `%s', type `%s'"
-			    " does not match type `%s'",
-			    cur->name, nodetype(cur->type),
-			    nodetype(new->type));
-		}
-	}
+#define REPLACESTR(x)	if (cur->x) free(cur->x); cur->x = new->x
 
 	REPLACE(st_size);
 	REPLACE(st_mtimespec);
 	REPLACESTR(slink);
-	if (cur->slink != NULL) {
-		if ((cur->slink = strdup(new->slink)) == NULL)
-			mtree_err("memory allocation error");
-		if (strunvis(cur->slink, new->slink) == -1)
-			mtree_err("strunvis failed on `%s'", new->slink);
-		free(new->slink);
-	}
 	REPLACE(st_uid);
 	REPLACE(st_gid);
 	REPLACE(st_mode);
@@ -530,7 +484,7 @@ set(char *t, NODE *ip)
 				mtree_err("invalid gid `%s'", val);
 			break;
 		case F_GNAME:
-			if (mtree_Wflag)	/* don't parse if whacking */
+			if (Wflag)	/* don't parse if whacking */
 				break;
 			if (gid_from_group(val, &gid) == -1)
 				mtree_err("unknown group `%s'", val);
@@ -585,8 +539,6 @@ set(char *t, NODE *ip)
 		case F_SLINK:
 			if ((ip->slink = strdup(val)) == NULL)
 				mtree_err("memory allocation error");
-			if (strunvis(ip->slink, val) == -1)
-				mtree_err("strunvis failed on `%s'", val);
 			break;
 		case F_TAGS:
 			len = strlen(val) + 3;	/* "," + str + ",\0" */
@@ -613,7 +565,7 @@ set(char *t, NODE *ip)
 				mtree_err("invalid uid `%s'", val);
 			break;
 		case F_UNAME:
-			if (mtree_Wflag)	/* don't parse if whacking */
+			if (Wflag)	/* don't parse if whacking */
 				break;
 			if (uid_from_user(val, &uid) == -1)
 				mtree_err("unknown user `%s'", val);

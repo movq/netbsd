@@ -1,4 +1,4 @@
-/*	$NetBSD: sys_machdep.c,v 1.27 2004/11/06 23:22:43 christos Exp $	*/
+/*	$NetBSD: sys_machdep.c,v 1.25 2003/08/07 16:28:33 agc Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sys_machdep.c,v 1.27 2004/11/06 23:22:43 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sys_machdep.c,v 1.25 2003/08/07 16:28:33 agc Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -104,8 +104,7 @@ int
 mips_user_cacheflush(p, va, nbytes, whichcache)
 	struct proc *p;
 	vaddr_t va;
-	size_t nbytes;
-	int whichcache;
+	int nbytes, whichcache;
 {
 
 	/* validate the cache we're going to flush. */
@@ -126,7 +125,7 @@ mips_user_cacheflush(p, va, nbytes, whichcache)
 
 #else
 	void * uncached_physaddr;
-	size_t len;
+	u_int len;
 
 	/*
 	 * Invalidate each page in the virtual-address range,
@@ -134,12 +133,7 @@ mips_user_cacheflush(p, va, nbytes, whichcache)
 	 * invalidating the PA.
 	 */
 	for (base = (void*) addr; nbytes > 0; base += len, nbytes -= len) {
-		/*
-		 * XXX: still to be done:
-		 *   Check that base is user-space.
-		 *   Check that we have a mapping, calculate physaddr.
-		 *   Flush relevent cache(s).
-		 */
+		/* XXX vm_fault?  */
 		if (whichcache & ICACHE) {
 			MachFlushCache(uncached_physaddr, len);
 		}
@@ -158,8 +152,7 @@ int
 mips_user_cachectl(p, va, nbytes, cachectl)
 	struct proc *p;
 	vaddr_t va;
-	size_t nbytes;
-	int cachectl;
+	int nbytes, cachectl;
 {
 	/* validate the cache we're going to flush. */
 	switch (cachectl) {

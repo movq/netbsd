@@ -1,5 +1,5 @@
 %{ /* rclex.l -- lexer for Windows rc files parser  */
-/* Copyright 1997, 1998, 1999, 2001, 2002, 2003 Free Software Foundation, Inc.
+/* Copyright 1997, 1998, 1999, 2001, 2002 Free Software Foundation, Inc.
    Written by Ian Lance Taylor, Cygnus Support.
 
    This file is part of GNU Binutils.
@@ -66,9 +66,9 @@ static struct alloc_string *strings;
 
 /* Local functions.  */
 
-static void cpp_line (const char *);
-static char *handle_quotes (const char *, unsigned long *);
-static char *get_string (int);
+static void cpp_line PARAMS ((const char *));
+static char *handle_quotes PARAMS ((const char *, unsigned long *));
+static char *get_string PARAMS ((int));
 
 %}
 
@@ -236,7 +236,7 @@ static char *get_string (int);
 %%
 #ifndef yywrap
 /* This is needed for some versions of lex.  */
-int yywrap (void)
+int yywrap ()
 {
   return 1;
 }
@@ -245,7 +245,8 @@ int yywrap (void)
 /* Handle a C preprocessor line.  */
 
 static void
-cpp_line (const char *s)
+cpp_line (s)
+     const char *s;
 {
   int line;
   char *send, *fn;
@@ -300,7 +301,9 @@ cpp_line (const char *s)
    merged separated by whitespace are merged, as in C.  */
 
 static char *
-handle_quotes (const char *input, unsigned long *len)
+handle_quotes (input, len)
+     const char *input;
+     unsigned long *len;
 {
   char *ret, *s;
   const char *t;
@@ -444,7 +447,8 @@ handle_quotes (const char *input, unsigned long *len)
 /* Allocate a string of a given length.  */
 
 static char *
-get_string (int len)
+get_string (len)
+     int len;
 {
   struct alloc_string *as;
 
@@ -461,7 +465,7 @@ get_string (int len)
    when it no longer needs them.  */
 
 void
-rcparse_discard_strings (void)
+rcparse_discard_strings ()
 {
   struct alloc_string *as;
 
@@ -482,7 +486,7 @@ rcparse_discard_strings (void)
 /* Enter rcdata mode.  */
 
 void
-rcparse_rcdata (void)
+rcparse_rcdata ()
 {
   rcdata_mode = 1;
 }
@@ -490,7 +494,7 @@ rcparse_rcdata (void)
 /* Go back to normal mode from rcdata mode.  */
 
 void
-rcparse_normal (void)
+rcparse_normal ()
 {
   rcdata_mode = 0;
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: extern.h,v 1.11 2004/10/22 22:38:38 bouyer Exp $	*/
+/*	$NetBSD: extern.h,v 1.9 2003/08/07 10:04:37 agc Exp $	*/
 
 /*-
  * Copyright (c) 1992, 1993
@@ -45,8 +45,6 @@ void		 createlinks __P((void));
 long		 deletefile __P((char *, ino_t, int));
 void		 deleteino __P((ino_t));
 void		 delwhiteout __P((struct entry *));
-const struct digest_desc *
-		 digest_lookup __P((const char *));
 ino_t		 dirlookup __P((const char *));
 void		 dumpsymtable __P((char *, int32_t));
 void	 	 extractdirs __P((int));
@@ -101,8 +99,6 @@ void		 swabst __P((u_char *, u_char *));
 void	 	 treescan __P((char *, ino_t, long (*)(char *, ino_t, int)));
 ino_t		 upperbnd __P((ino_t));
 long		 verifyfile __P((char *, ino_t, int));
-void		 writemtree __P((const char *, const char *, const uid_t,
-				const gid_t, const mode_t, const u_long));
 void		 xtrnull __P((char *, long));
 
 /* From ../dump/dumprmt.c */

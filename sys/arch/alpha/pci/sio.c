@@ -1,4 +1,4 @@
-/* $NetBSD: sio.c,v 1.39 2004/09/13 18:42:59 drochner Exp $ */
+/* $NetBSD: sio.c,v 1.36 2003/01/01 00:39:20 thorpej Exp $ */
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -66,11 +66,10 @@
 #include "opt_dec_2100_a500.h"
 #include "opt_dec_2100a_a500.h"
 #include "eisa.h"
-#include "sio.h"
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: sio.c,v 1.39 2004/09/13 18:42:59 drochner Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sio.c,v 1.36 2003/01/01 00:39:20 thorpej Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -103,9 +102,7 @@ struct sio_softc {
 
 	bus_space_tag_t sc_iot, sc_memt;
 	bus_dma_tag_t	sc_parent_dmat;
-#if NPCEB > 0
 	int		sc_haseisa;
-#endif
 	int		sc_is82c693;
 
 	/* ISA chipset must persist; it's used after autoconfig. */
@@ -118,26 +115,24 @@ void	sioattach __P((struct device *, struct device *, void *));
 CFATTACH_DECL(sio, sizeof(struct sio_softc),
     siomatch, sioattach, NULL, NULL);
 
-#if NPCEB > 0
 int	pcebmatch __P((struct device *, struct cfdata *, void *));
 
 CFATTACH_DECL(pceb, sizeof(struct sio_softc),
     pcebmatch, sioattach, NULL, NULL);
-#endif
 
 union sio_attach_args {
+	const char *sa_name;			/* XXX should be common */
 	struct isabus_attach_args sa_iba;
 	struct eisabus_attach_args sa_eba;
 };
 
+int	sioprint __P((void *, const char *pnp));
 void	sio_isa_attach_hook __P((struct device *, struct device *,
 	    struct isabus_attach_args *));
-#if NPCEB > 0
 void	sio_eisa_attach_hook __P((struct device *, struct device *,
 	    struct eisabus_attach_args *));
 int	sio_eisa_maxslots __P((void *));
 int	sio_eisa_intr_map __P((void *, u_int, eisa_intr_handle_t *));
-#endif
 
 void	sio_bridge_callback __P((struct device *));
 
@@ -170,7 +165,6 @@ siomatch(parent, match, aux)
 	return (0);
 }
 
-#if NPCEB > 0
 int
 pcebmatch(parent, match, aux)
 	struct device *parent;
@@ -185,7 +179,6 @@ pcebmatch(parent, match, aux)
 
 	return (0);
 }
-#endif
 
 void
 sioattach(parent, self, aux)
@@ -196,7 +189,7 @@ sioattach(parent, self, aux)
 	struct pci_attach_args *pa = aux;
 	char devinfo[256];
 
-	pci_devinfo(pa->pa_id, pa->pa_class, 0, devinfo, sizeof(devinfo));
+	pci_devinfo(pa->pa_id, pa->pa_class, 0, devinfo);
 	printf(": %s (rev. 0x%02x)\n", devinfo,
 	    PCI_REVISION(pa->pa_class));
 
@@ -204,10 +197,8 @@ sioattach(parent, self, aux)
 	sc->sc_iot = pa->pa_iot;
 	sc->sc_memt = pa->pa_memt;
 	sc->sc_parent_dmat = pa->pa_dmat;
-#if NPCEB > 0
 	sc->sc_haseisa = (PCI_VENDOR(pa->pa_id) == PCI_VENDOR_INTEL &&
 	    PCI_PRODUCT(pa->pa_id) == PCI_PRODUCT_INTEL_PCEB);
-#endif
 	sc->sc_is82c693 = (PCI_VENDOR(pa->pa_id) == PCI_VENDOR_CONTAQ &&
 	    PCI_PRODUCT(pa->pa_id) == PCI_PRODUCT_CONTAQ_82C693);
 
@@ -219,9 +210,8 @@ sio_bridge_callback(self)
 	struct device *self;
 {
 	struct sio_softc *sc = (struct sio_softc *)self;
-	union sio_attach_args sa;
-#if NPCEB > 0
 	struct alpha_eisa_chipset ec;
+	union sio_attach_args sa;
 
 	if (sc->sc_haseisa) {
 		ec.ec_v = NULL;
@@ -247,15 +237,14 @@ sio_bridge_callback(self)
 			ec.ec_intr_disestablish = sio_intr_disestablish;
 		}
 
+		sa.sa_eba.eba_busname = "eisa";
 		sa.sa_eba.eba_iot = sc->sc_iot;
 		sa.sa_eba.eba_memt = sc->sc_memt;
 		sa.sa_eba.eba_dmat =
 		    alphabus_dma_get_tag(sc->sc_parent_dmat, ALPHA_BUS_EISA);
 		sa.sa_eba.eba_ec = &ec;
-		config_found_ia(&sc->sc_dv, "eisabus", &sa.sa_eba,
-				eisabusprint);
+		config_found(&sc->sc_dv, &sa.sa_eba, sioprint);
 	}
-#endif /* NPCEB */
 
 	/*
 	 * Deal with platforms which have Odd ISA DMA needs.
@@ -292,12 +281,25 @@ sio_bridge_callback(self)
 		sc->sc_ic->ic_intr_alloc = sio_intr_alloc;
 	}
 
+	sa.sa_iba.iba_busname = "isa";
 	sa.sa_iba.iba_iot = sc->sc_iot;
 	sa.sa_iba.iba_memt = sc->sc_memt;
 	sa.sa_iba.iba_dmat =
 	    alphabus_dma_get_tag(sc->sc_parent_dmat, ALPHA_BUS_ISA);
 	sa.sa_iba.iba_ic = sc->sc_ic;
-	config_found_ia(&sc->sc_dv, "isabus", &sa.sa_iba, isabusprint);
+	config_found(&sc->sc_dv, &sa.sa_iba, sioprint);
+}
+
+int
+sioprint(aux, pnp)
+	void *aux;
+	const char *pnp;
+{
+        register union sio_attach_args *sa = aux;
+
+        if (pnp)
+                aprint_normal("%s at %s", sa->sa_name, pnp);
+        return (UNCONF);
 }
 
 void
@@ -308,8 +310,6 @@ sio_isa_attach_hook(parent, self, iba)
 
 	/* Nothing to do. */
 }
-
-#if NPCEB > 0
 
 void
 sio_eisa_attach_hook(parent, self, eba)
@@ -352,5 +352,3 @@ sio_eisa_intr_map(v, irq, ihp)
 	*ihp = irq;
 	return 0;
 }
-
-#endif /* NPCEB */

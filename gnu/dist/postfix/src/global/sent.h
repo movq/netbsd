@@ -1,5 +1,3 @@
-/*	$NetBSD: sent.h,v 1.1.1.5 2004/05/31 00:24:30 heas Exp $	*/
-
 #ifndef _SENT_H_INCLUDED_
 #define _SENT_H_INCLUDED_
 
@@ -20,19 +18,12 @@
 #include <stdarg.h>
 
  /*
-  * Global library.
-  */
-#include <deliver_request.h>
-
- /*
   * External interface.
   */
-#define SENT_FLAG_NONE	(0)
-
-extern int PRINTFLIKE(8, 9) sent(int, const char *, const char *, const char *,
-		              long, const char *, time_t, const char *,...);
-extern int vsent(int, const char *, const char *, const char *, long,
-		         const char *, time_t, const char *, va_list);
+extern int PRINTFLIKE(6, 7) sent(const char *, const char *, const char *,
+			            const char *, time_t, const char *,...);
+extern int vsent(const char *, const char *, const char *, const char *,
+		         time_t, const char *, va_list);
 
 /* LICENSE
 /* .ad

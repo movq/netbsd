@@ -1,4 +1,4 @@
-.\"	$NetBSD: ps.1,v 1.70 2004/08/23 17:36:19 wiz Exp $
+.\"	$NetBSD: ps.1,v 1.67 2004/03/27 14:52:36 simonb Exp $
 .\"
 .\" Copyright (c) 1980, 1990, 1991, 1993, 1994
 .\"	The Regents of the University of California.  All rights reserved.
@@ -29,7 +29,7 @@
 .\"
 .\"     @(#)ps.1	8.3 (Berkeley) 4/18/94
 .\"
-.Dd August 23, 2004
+.Dd March 27, 2004
 .Dt PS 1
 .Os
 .Sh NAME
@@ -433,7 +433,7 @@ The login process traditionally adds a
 in front of the shell name to indicate a login shell.
 .Nm
 will not append parenthesized the command name if it matches with
-the name in the first argument of the argument vector, skipping
+the name in the the first argument of the argument vector, skipping
 the leading
 .Sq - .
 .It daemonname: current-activity
@@ -496,10 +496,6 @@ job control count
 tracing flags
 .It ktracep
 tracing vnode
-.It laddr
-kernel virtual address of a
-.Tn "struct lwp"
-belonging to the process.
 .It lid
 ID of the LWP
 .It lim

@@ -1,4 +1,4 @@
-/*	$NetBSD: fss.c,v 1.11 2004/10/29 15:39:38 hannken Exp $	*/
+/*	$NetBSD: fss.c,v 1.7 2004/02/24 15:12:51 wiz Exp $	*/
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -43,7 +43,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: fss.c,v 1.11 2004/10/29 15:39:38 hannken Exp $");
+__KERNEL_RCSID(0, "$NetBSD: fss.c,v 1.7 2004/02/24 15:12:51 wiz Exp $");
 
 #include "fss.h"
 
@@ -125,7 +125,7 @@ dev_type_strategy(fss_strategy);
 dev_type_dump(fss_dump);
 dev_type_size(fss_size);
 
-static int fss_copy_on_write(void *, struct buf *);
+static void fss_copy_on_write(void *, struct buf *);
 static inline void fss_error(struct fss_softc *, const char *, ...);
 static int fss_create_files(struct fss_softc *, struct fss_set *,
     off_t *, struct proc *);
@@ -141,7 +141,7 @@ static void fss_bs_thread(void *);
 static int fss_bmap(struct fss_softc *, off_t, int,
     struct vnode **, daddr_t *, int *);
 static int fss_bs_io(struct fss_softc *, fss_io_type,
-    u_int32_t, off_t, int, caddr_t);
+    u_int32_t, long, int, caddr_t);
 static u_int32_t *fss_bs_indir(struct fss_softc *, u_int32_t);
 
 const struct bdevsw fss_bdevsw = {
@@ -276,27 +276,15 @@ fss_ioctl(dev_t dev, u_long cmd, caddr_t data, int flag, struct proc *p)
 		break;
 
 	case FSSIOCGET:
-		switch (sc->sc_flags & (FSS_PERSISTENT | FSS_ACTIVE)) {
-		case FSS_ACTIVE:
+		if ((sc->sc_flags & FSS_ACTIVE) == FSS_ACTIVE) {
 			memcpy(fsg->fsg_mount, sc->sc_mntname, MNAMELEN);
 			fsg->fsg_csize = FSS_CLSIZE(sc);
 			fsg->fsg_time = sc->sc_time;
 			fsg->fsg_mount_size = sc->sc_clcount;
 			fsg->fsg_bs_size = sc->sc_clnext;
 			error = 0;
-			break;
-		case FSS_PERSISTENT | FSS_ACTIVE:
-			memcpy(fsg->fsg_mount, sc->sc_mntname, MNAMELEN);
-			fsg->fsg_csize = 0;
-			fsg->fsg_time = sc->sc_time;
-			fsg->fsg_mount_size = 0;
-			fsg->fsg_bs_size = 0;
-			error = 0;
-			break;
-		default:
+		} else
 			error = ENXIO;
-			break;
-		}
 		break;
 	}
 
@@ -460,7 +448,7 @@ fss_umount_hook(struct mount *mp, int forced)
  * A buffer is written to the snapshotted block device. Copy to
  * backing store if needed.
  */
-static int
+static void
 fss_copy_on_write(void *v, struct buf *bp)
 {
 	int s;
@@ -470,7 +458,7 @@ fss_copy_on_write(void *v, struct buf *bp)
 	FSS_LOCK(sc, s);
 	if (!FSS_ISVALID(sc)) {
 		FSS_UNLOCK(sc, s);
-		return 0;
+		return;
 	}
 
 	FSS_UNLOCK(sc, s);
@@ -482,17 +470,12 @@ fss_copy_on_write(void *v, struct buf *bp)
 
 	for (c = cl; c <= ch; c++)
 		fss_read_cluster(sc, c);
-
-	return 0;
 }
 
 /*
  * Lookup and open needed files.
  *
- * For file system internal snapshot initializes sc_mntname, sc_mount,
- * sc_bs_vp and sc_time.
- *
- * Otherwise returns dev and size of the underlying block device.
+ * Returns dev and size of the underlying block device.
  * Initializes sc_mntname, sc_mount_vp, sc_bdev, sc_bs_vp and sc_mount
  */
 static int
@@ -500,7 +483,6 @@ fss_create_files(struct fss_softc *sc, struct fss_set *fss,
     off_t *bsize, struct proc *p)
 {
 	int error, fsbsize;
-	struct timespec ts;
 	struct partinfo dpart;
 	struct vattr va;
 	struct nameidata nd;
@@ -513,58 +495,18 @@ fss_create_files(struct fss_softc *sc, struct fss_set *fss,
 	if ((error = namei(&nd)) != 0)
 		return error;
 
-	if ((nd.ni_vp->v_flag & VROOT) != VROOT) {
-		vrele(nd.ni_vp);
+	vrele(nd.ni_vp);
+
+	if ((nd.ni_vp->v_flag & VROOT) != VROOT)
 		return EINVAL;
-	}
 
 	sc->sc_mount = nd.ni_vp->v_mount;
-	memcpy(sc->sc_mntname, sc->sc_mount->mnt_stat.f_mntonname, MNAMELEN); 
-
-	vrele(nd.ni_vp);
-
-	/*
-	 * Check for file system internal snapshot.
-	 */
-
-	NDINIT(&nd, LOOKUP, FOLLOW, UIO_USERSPACE, fss->fss_bstore, p);
-	if ((error = namei(&nd)) != 0)
-		return error;
-
-	if (nd.ni_vp->v_type == VREG && nd.ni_vp->v_mount == sc->sc_mount) {
-		vrele(nd.ni_vp);
-		sc->sc_flags |= FSS_PERSISTENT;
-
-		NDINIT(&nd, LOOKUP, FOLLOW, UIO_USERSPACE, fss->fss_bstore, p);
-		if ((error = vn_open(&nd, FREAD, 0)) != 0)
-			return error;
-		sc->sc_bs_vp = nd.ni_vp;
-
-		fsbsize = sc->sc_bs_vp->v_mount->mnt_stat.f_iosize;
-		if (fsbsize & (fsbsize-1))	/* No power of two */
-			return EINVAL;
-		for (sc->sc_bs_bshift = 1; sc->sc_bs_bshift < 32;
-		    sc->sc_bs_bshift++)
-			if (FSS_FSBSIZE(sc) == fsbsize)
-				break;
-		if (sc->sc_bs_bshift >= 32)
-			return EINVAL;
-		sc->sc_bs_bmask = FSS_FSBSIZE(sc)-1;
-
-		sc->sc_clshift = 0;
-
-		error = VFS_SNAPSHOT(sc->sc_mount, sc->sc_bs_vp, &ts);
-		TIMESPEC_TO_TIMEVAL(&sc->sc_time, &ts);
-
-		VOP_UNLOCK(sc->sc_bs_vp, 0);
-
-		return error;
-	}
-	vrele(nd.ni_vp);
 
 	/*
 	 * Get the block device it is mounted on.
 	 */
+
+	memcpy(sc->sc_mntname, sc->sc_mount->mnt_stat.f_mntonname, MNAMELEN); 
 
 	NDINIT(&nd, LOOKUP, FOLLOW, UIO_SYSSPACE,
 	    sc->sc_mount->mnt_stat.f_mntfromname, p);
@@ -650,10 +592,17 @@ fss_create_snapshot(struct fss_softc *sc, struct fss_set *fss, struct proc *p)
 	if ((error = fss_create_files(sc, fss, &bsize, p)) != 0)
 		goto bad;
 
-	if (sc->sc_flags & FSS_PERSISTENT) {
-		fss_softc_alloc(sc);
-		sc->sc_flags |= FSS_ACTIVE;
-		return 0;
+	if (sc->sc_bs_vp->v_type == VREG &&
+	    sc->sc_bs_vp->v_mount == sc->sc_mount) {
+		/* XXX need persistent snapshot inside the file system:
+		 *  VFS_SNAPSHOT(sc->sc_mount, sc->sc_bs_vp);
+		 *  sc->sc_time = xtime(sc->sc_bs_vp);
+		 *  sc->sc_flags |= FSS_PERSISTENT;
+		 *  fss_softc_alloc(sc);
+		 *  sc->sc_flags |= FSS_ACTIVE;
+		 */
+		error = EDEADLK;
+		goto bad;
 	}
 
 	/*
@@ -735,12 +684,8 @@ fss_create_snapshot(struct fss_softc *sc, struct fss_set *fss, struct proc *p)
 
 bad:
 	fss_softc_free(sc);
-	if (sc->sc_bs_vp != NULL) {
-		if (sc->sc_flags & FSS_PERSISTENT)
-			vn_close(sc->sc_bs_vp, FREAD, p->p_ucred, p);
-		else
-			vn_close(sc->sc_bs_vp, FREAD|FWRITE, p->p_ucred, p);
-	}
+	if (sc->sc_bs_vp != NULL)
+		vn_close(sc->sc_bs_vp, FREAD|FWRITE, p->p_ucred, p);
 	sc->sc_bs_vp = NULL;
 
 	return error;
@@ -754,8 +699,7 @@ fss_delete_snapshot(struct fss_softc *sc, struct proc *p)
 {
 	int s;
 
-	if ((sc->sc_flags & FSS_PERSISTENT) == 0)
-		vn_cow_disestablish(sc->sc_mount_vp, fss_copy_on_write, sc);
+	vn_cow_disestablish(sc->sc_mount_vp, fss_copy_on_write, sc);
 
 	FSS_LOCK(sc, s);
 	sc->sc_flags &= ~(FSS_ACTIVE|FSS_ERROR);
@@ -764,12 +708,8 @@ fss_delete_snapshot(struct fss_softc *sc, struct proc *p)
 	FSS_UNLOCK(sc, s);
 
 	fss_softc_free(sc);
-	if (sc->sc_flags & FSS_PERSISTENT)
-		vn_close(sc->sc_bs_vp, FREAD, p->p_ucred, p);
-	else
-		vn_close(sc->sc_bs_vp, FREAD|FWRITE, p->p_ucred, p);
+	vn_close(sc->sc_bs_vp, FREAD|FWRITE, p->p_ucred, p);
 	sc->sc_bs_vp = NULL;
-	sc->sc_flags &= ~FSS_PERSISTENT;
 
 	FSS_STAT_CLEAR(sc);
 
@@ -779,7 +719,6 @@ fss_delete_snapshot(struct fss_softc *sc, struct proc *p)
 /*
  * Get the block address and number of contiguous blocks.
  * If the file contains a hole, try to allocate.
- * Backing store is locked by caller.
  */  
 static int
 fss_bmap(struct fss_softc *sc, off_t start, int len,
@@ -792,6 +731,8 @@ fss_bmap(struct fss_softc *sc, off_t start, int len,
 		bpp = &bp;
 	else
 		bpp = NULL;
+
+	vn_lock(sc->sc_bs_vp, LK_EXCLUSIVE|LK_RETRY);
 
 	error = VOP_BMAP(sc->sc_bs_vp, FSS_BTOFSB(sc, start), vpp, bnp, runp);
 	if ((error == 0 && *bnp != (daddr_t)-1) ||
@@ -831,8 +772,8 @@ fss_bmap(struct fss_softc *sc, off_t start, int len,
 
 out:
 
-	if ((sc->sc_flags & FSS_PERSISTENT) == 0 &&
-	    error == 0 && *bnp == (daddr_t)-1)
+	VOP_UNLOCK(sc->sc_bs_vp, 0);
+	if (error == 0 && *bnp == (daddr_t)-1)
 		error = ENOSPC;
 
 	return error;
@@ -994,12 +935,7 @@ fss_write_cluster(struct fss_cache *scp, u_int32_t cl)
 	addr = scp->fc_data;
 	todo = FSS_CLSIZE(sc);
 
-	vn_lock(sc->sc_bs_vp, LK_EXCLUSIVE|LK_RETRY);
-	simple_lock(&sc->sc_bs_vp->v_interlock);
-	error = VOP_PUTPAGES(sc->sc_bs_vp, trunc_page(pos),
-	    round_page(pos+todo), PGO_CLEANIT|PGO_SYNCIO|PGO_FREE);
-
-	while (error == 0 && todo > 0) {
+	while (todo > 0) {
 		error = fss_bmap(sc, pos, todo, &vp, &nbn, &nra);
 		if (error)
 			break;
@@ -1046,19 +982,15 @@ fss_write_cluster(struct fss_cache *scp, u_int32_t cl)
 		ltsleep(&scp->fc_data, PRIBIO, "bswwait", 0, &sc->sc_slock);
 	FSS_UNLOCK(sc, s);
 
-	VOP_UNLOCK(sc->sc_bs_vp, 0);
-
 	return error;
 }
 
 /*
  * Read/write clusters from/to backing store.
- * For persistent snapshots must be called with cl == 0. off is the
- * offset into the snapshot.
  */
 static int
 fss_bs_io(struct fss_softc *sc, fss_io_type rw,
-    u_int32_t cl, off_t off, int len, caddr_t data)
+    u_int32_t cl, long off, int len, caddr_t data)
 {
 	int s, error, todo, count, nra;
 	off_t pos;
@@ -1070,12 +1002,7 @@ fss_bs_io(struct fss_softc *sc, fss_io_type rw,
 	pos = FSS_CLTOB(sc, cl)+off;
 	error = 0;
 
-	vn_lock(sc->sc_bs_vp, LK_EXCLUSIVE|LK_RETRY);
-	simple_lock(&sc->sc_bs_vp->v_interlock);
-	error = VOP_PUTPAGES(sc->sc_bs_vp, trunc_page(pos),
-	    round_page(pos+todo), PGO_CLEANIT|PGO_SYNCIO|PGO_FREE);
-
-	while (error == 0 && todo > 0) {
+	while (todo > 0) {
 		error = fss_bmap(sc, pos, todo, &vp, &nbn, &nra);
 		if (error)
 			break;
@@ -1083,14 +1010,6 @@ fss_bs_io(struct fss_softc *sc, fss_io_type rw,
 		count = FSS_FSBTOB(sc, nra+1)-FSS_FSBOFF(sc, pos);
 		if (count > todo)
 			count = todo;
-
-		if (nbn == (daddr_t)-1) {
-			bzero(data, count);
-			todo -= count;
-			data += count;
-			pos += count;
-			continue;
-		}
 
 		s = splbio();
 		bp = pool_get(&bufpool, PR_WAITOK);
@@ -1129,8 +1048,6 @@ fss_bs_io(struct fss_softc *sc, fss_io_type rw,
 		data += count;
 		pos += count;
 	}
-
-	VOP_UNLOCK(sc->sc_bs_vp, 0);
 
 	return error;           
 }
@@ -1215,55 +1132,20 @@ fss_bs_thread(void *arg)
 			pool_put(&bufpool, nbp);
 			splx(s);
 #ifdef FSS_STATISTICS
-			if ((sc->sc_flags & FSS_PERSISTENT) == 0) {
-				printf("fss%d: cow called %" PRId64 " times,"
-				    " copied %" PRId64 " clusters,"
-				    " cache full %" PRId64 " times\n",
-				    sc->sc_unit,
-				    FSS_STAT_VAL(sc, cow_calls),
-				    FSS_STAT_VAL(sc, cow_copied),
-				    FSS_STAT_VAL(sc, cow_cache_full));
-				printf("fss%d: %" PRId64 " indir reads,"
-				    " %" PRId64 " indir writes\n",
-				    sc->sc_unit,
-				    FSS_STAT_VAL(sc, indir_read),
-				    FSS_STAT_VAL(sc, indir_write));
-			}
+			printf("fss%d: cow called %" PRId64 " times,"
+			    " copied %" PRId64 " clusters,"
+			    " cache full %" PRId64 " times\n",
+			    sc->sc_unit,
+			    FSS_STAT_VAL(sc, cow_calls),
+			    FSS_STAT_VAL(sc, cow_copied),
+			    FSS_STAT_VAL(sc, cow_cache_full));
+			printf("fss%d: %" PRId64 " indir reads,"
+			    " %" PRId64 " indir writes\n",
+			    sc->sc_unit,
+			    FSS_STAT_VAL(sc, indir_read),
+			    FSS_STAT_VAL(sc, indir_write));
 #endif /* FSS_STATISTICS */
 			kthread_exit(0);
-		}
-
-		/*
-		 * Process I/O requests (persistent)
-		 */
-
-		if (sc->sc_flags & FSS_PERSISTENT) {
-			nfreed = nio = 0;
-
-			if ((bp = BUFQ_GET(&sc->sc_bufq)) == NULL)
-				continue;
-
-			nio++;
-
-			if (FSS_ISVALID(sc)) {
-				FSS_UNLOCK(sc, s);
-
-				error = fss_bs_io(sc, FSS_READ, 0,
-				    dbtob(bp->b_blkno), bp->b_bcount,
-				    bp->b_data);
-
-				FSS_LOCK(sc, s);
-			} else
-				error = ENXIO;
-
-			if (error) {
-				bp->b_error = error;
-				bp->b_flags |= B_ERROR;
-				bp->b_resid = bp->b_bcount;
-			}
-			biodone(bp);
-
-			continue;
 		}
 
 		/*

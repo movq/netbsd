@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.5 2004/10/23 17:07:38 thorpej Exp $	*/
+/*	$NetBSD: autoconf.c,v 1.4 2003/07/15 01:37:33 lukem Exp $	*/
 
 /*
  * Copyright 2002 Wasabi Systems, Inc.
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.5 2004/10/23 17:07:38 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.4 2003/07/15 01:37:33 lukem Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -45,6 +45,9 @@ __KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.5 2004/10/23 17:07:38 thorpej Exp $")
 #include <sys/device.h>
 
 #include <machine/cpu.h>
+
+struct device *booted_device;
+int booted_partition;
 
 static void	findroot(void);
 

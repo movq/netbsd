@@ -1,4 +1,4 @@
-/*	$NetBSD: if_gm.c,v 1.23 2004/10/30 18:08:34 thorpej Exp $	*/
+/*	$NetBSD: if_gm.c,v 1.22 2003/08/24 18:02:00 chs Exp $	*/
 
 /*-
  * Copyright (c) 2000 Tsubai Masanari.  All rights reserved.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_gm.c,v 1.23 2004/10/30 18:08:34 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_gm.c,v 1.22 2003/08/24 18:02:00 chs Exp $");
 
 #include "opt_inet.h"
 #include "opt_ns.h"
@@ -879,10 +879,8 @@ gmac_ioctl(ifp, cmd, data)
 			 * Multicast list has changed; set the hardware filter
 			 * accordingly.
 			 */
-			if (ifp->if_flags & IFF_RUNNING) {
-				gmac_init(sc);
-				/* gmac_setladrf(sc); */
-			}
+			gmac_init(sc);
+			/* gmac_setladrf(sc); */
 			error = 0;
 		}
 		break;

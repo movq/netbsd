@@ -1,4 +1,4 @@
-/*	$NetBSD: ext2fs_vfsops.c,v 1.77 2004/11/11 01:32:12 christos Exp $	*/
+/*	$NetBSD: ext2fs_vfsops.c,v 1.66.2.1 2004/05/29 09:03:35 tron Exp $	*/
 
 /*
  * Copyright (c) 1989, 1991, 1993, 1994
@@ -65,7 +65,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ext2fs_vfsops.c,v 1.77 2004/11/11 01:32:12 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ext2fs_vfsops.c,v 1.66.2.1 2004/05/29 09:03:35 tron Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_compat_netbsd.h"
@@ -126,7 +126,7 @@ struct vfsops ext2fs_vfsops = {
 	ext2fs_unmount,
 	ufs_root,
 	ufs_quotactl,
-	ext2fs_statvfs,
+	ext2fs_statfs,
 	ext2fs_sync,
 	ext2fs_vget,
 	ext2fs_fhtovp,
@@ -137,7 +137,6 @@ struct vfsops ext2fs_vfsops = {
 	NULL,
 	ext2fs_mountroot,
 	ufs_check_export,
-	(int (*)(struct mount *, struct vnode *, struct timespec *)) eopnotsupp,
 	ext2fs_vnodeopv_descs,
 };
 
@@ -147,26 +146,23 @@ struct genfs_ops ext2fs_genfsops = {
 	genfs_gop_write,
 };
 
-/*
- * XXX Same structure as FFS inodes?  Should we share a common pool?
- */
-POOL_INIT(ext2fs_inode_pool, sizeof(struct inode), 0, 0, 0, "ext2fsinopl",
-    &pool_allocator_nointr);
-POOL_INIT(ext2fs_dinode_pool, sizeof(struct ext2fs_dinode), 0, 0, 0,
-    "ext2dinopl", &pool_allocator_nointr);
+struct pool ext2fs_inode_pool;
+struct pool ext2fs_dinode_pool;
 
 extern u_long ext2gennumber;
 
 void
 ext2fs_init()
 {
-#ifdef _LKM
+	ufs_init();
+
+	/*
+	 * XXX Same structure as FFS inodes?  Should we share a common pool?
+	 */
 	pool_init(&ext2fs_inode_pool, sizeof(struct inode), 0, 0, 0,
 	    "ext2fsinopl", &pool_allocator_nointr);
 	pool_init(&ext2fs_dinode_pool, sizeof(struct ext2fs_dinode), 0, 0, 0,
-	    "ext2dinopl", &pool_allocator_nointr); 
-#endif
-	ufs_init();
+	    "ext2dinopl", &pool_allocator_nointr);
 }
 
 void
@@ -179,10 +175,7 @@ void
 ext2fs_done()
 {
 	ufs_done();
-#ifdef _LKM
 	pool_destroy(&ext2fs_inode_pool);
-	pool_destroy(&ext2fs_dinode_pool);
-#endif
 }
 
 /*
@@ -236,9 +229,9 @@ ext2fs_mountroot()
 		(void) copystr(mp->mnt_stat.f_mntonname, fs->e2fs.e2fs_fsmnt,
 		    sizeof(fs->e2fs.e2fs_fsmnt) - 1, 0);
 	}
-	(void)ext2fs_statvfs(mp, &mp->mnt_stat, p);
+	(void)ext2fs_statfs(mp, &mp->mnt_stat, p);
 	vfs_unbusy(mp);
-	setrootfstime((time_t)fs->e2fs.e2fs_wtime);
+	inittodr(fs->e2fs.e2fs_wtime);
 	return (0);
 }
 
@@ -377,7 +370,7 @@ ext2fs_mount(mp, path, data, ndp, p)
 	}
 	ump = VFSTOUFS(mp);
 	fs = ump->um_e2fs;
-	error = set_statvfs_info(path, UIO_USERSPACE, args.fspec,
+	error = set_statfs_info(path, UIO_USERSPACE, args.fspec,
 	    UIO_USERSPACE, mp, p);
 	(void) copystr(mp->mnt_stat.f_mntonname, fs->e2fs_fsmnt,
 	    sizeof(fs->e2fs_fsmnt) - 1, &size);
@@ -650,14 +643,12 @@ ext2fs_mountfs(devvp, mp, p)
 	}
 
 	mp->mnt_data = ump;
-	mp->mnt_stat.f_fsidx.__fsid_val[0] = (long)dev;
-	mp->mnt_stat.f_fsidx.__fsid_val[1] = makefstype(MOUNT_EXT2FS);
-	mp->mnt_stat.f_fsid = mp->mnt_stat.f_fsidx.__fsid_val[0];
-	mp->mnt_stat.f_namemax = MAXNAMLEN;
+	mp->mnt_stat.f_fsid.val[0] = (long)dev;
+	mp->mnt_stat.f_fsid.val[1] = makefstype(MOUNT_EXT2FS);
+	mp->mnt_maxsymlinklen = EXT2_MAXSYMLINKLEN;
 	mp->mnt_flag |= MNT_LOCAL;
 	mp->mnt_dev_bshift = DEV_BSHIFT;	/* XXX */
 	mp->mnt_fs_bshift = m_fs->e2fs_bshift;
-	mp->mnt_iflag |= IMNT_DTYPE;
 	ump->um_flags = 0;
 	ump->um_mountp = mp;
 	ump->um_dev = dev;
@@ -666,9 +657,6 @@ ext2fs_mountfs(devvp, mp, p)
 	ump->um_lognindir = ffs(NINDIR(m_fs)) - 1;
 	ump->um_bptrtodb = m_fs->e2fs_fsbtodb;
 	ump->um_seqinc = 1; /* no frags */
-	ump->um_maxsymlinklen = EXT2_MAXSYMLINKLEN;
-	ump->um_dirblksiz = m_fs->e2fs_bsize;
-	ump->um_maxfilesize = ((u_int64_t)0x80000000 * m_fs->e2fs_bsize - 1);
 	devvp->v_specmountpoint = mp;
 	return (0);
 
@@ -748,9 +736,9 @@ ext2fs_flushfiles(mp, flags, p)
  * Get file system statistics.
  */
 int
-ext2fs_statvfs(mp, sbp, p)
+ext2fs_statfs(mp, sbp, p)
 	struct mount *mp;
-	struct statvfs *sbp;
+	struct statfs *sbp;
 	struct proc *p;
 {
 	struct ufsmount *ump;
@@ -761,7 +749,13 @@ ext2fs_statvfs(mp, sbp, p)
 	ump = VFSTOUFS(mp);
 	fs = ump->um_e2fs;
 	if (fs->e2fs.e2fs_magic != E2FS_MAGIC)
-		panic("ext2fs_statvfs");
+		panic("ext2fs_statfs");
+
+#ifdef COMPAT_09
+	sbp->f_type = 1;
+#else
+	sbp->f_type = 0;
+#endif
 
 	/*
 	 * Compute the overhead (FS structures)
@@ -783,20 +777,13 @@ ext2fs_statvfs(mp, sbp, p)
 	overhead += ngroups * (1 + fs->e2fs_ngdb);
 
 	sbp->f_bsize = fs->e2fs_bsize;
-	sbp->f_frsize = 1024 << fs->e2fs.e2fs_fsize;
 	sbp->f_iosize = fs->e2fs_bsize;
 	sbp->f_blocks = fs->e2fs.e2fs_bcount - overhead;
 	sbp->f_bfree = fs->e2fs.e2fs_fbcount;
-	sbp->f_bresvd = fs->e2fs.e2fs_rbcount;
-	if (sbp->f_bfree > sbp->f_bresvd)
-		sbp->f_bavail = sbp->f_bfree - sbp->f_bresvd;
-	else
-		sbp->f_bavail = 0;
+	sbp->f_bavail = sbp->f_bfree - fs->e2fs.e2fs_rbcount;
 	sbp->f_files =  fs->e2fs.e2fs_icount;
 	sbp->f_ffree = fs->e2fs.e2fs_ficount;
-	sbp->f_favail = fs->e2fs.e2fs_ficount;
-	sbp->f_fresvd = 0;
-	copy_statvfs_info(sbp, mp);
+	copy_statfs_info(sbp, mp);
 	return (0);
 }
 
@@ -840,9 +827,9 @@ loop:
 		simple_lock(&vp->v_interlock);
 		nvp = LIST_NEXT(vp, v_mntvnodes);
 		ip = VTOI(vp);
-		if (vp->v_type == VNON ||
+		if (waitfor == MNT_LAZY || vp->v_type == VNON ||
 		    ((ip->i_flag &
-		      (IN_CHANGE | IN_UPDATE | IN_MODIFIED)) == 0 &&
+		      (IN_ACCESS | IN_CHANGE | IN_UPDATE | IN_MODIFIED | IN_ACCESSED)) == 0 &&
 		     LIST_EMPTY(&vp->v_dirtyblkhd) &&
 		     vp->v_uobj.uo_npages == 0))
 		{   
@@ -857,12 +844,8 @@ loop:
 				goto loop;
 			continue;
 		}
-		if (vp->v_type == VREG && waitfor == MNT_LAZY)
-			error = VOP_UPDATE(vp, NULL, NULL, 0);
-		else
-			error = VOP_FSYNC(vp, cred,
-			    waitfor == MNT_WAIT ? FSYNC_WAIT : 0, 0, 0, p);
-		if (error)
+		if ((error = VOP_FSYNC(vp, cred,
+		    waitfor == MNT_WAIT ? FSYNC_WAIT : 0, 0, 0, p)) != 0)
 			allerror = error;
 		vput(vp);
 		simple_lock(&mntvnode_slock);
@@ -929,8 +912,6 @@ ext2fs_vget(mp, ino, vpp)
 			return (0);
 		}
 	} while (lockmgr(&ufs_hashlock, LK_EXCLUSIVE|LK_SLEEPFAIL, 0));
-
-	vp->v_flag |= VLOCKSWORK;
 
 	ip = pool_get(&ext2fs_inode_pool, PR_WAITOK);
 	memset(ip, 0, sizeof(struct inode));
@@ -1177,7 +1158,7 @@ ext2fs_checksb(fs, ronly)
 		}
 		if (fs2h32(fs->e2fs_features_incompat) &
 		    ~EXT2F_INCOMPAT_SUPP) {
-			printf("Ext2 fs: unsupported optional feature\n");
+			printf("Ext2 fs: unsupported optionnal feature\n");
 			return (EINVAL);      /* XXX needs translation */
 		}
 		if (!ronly && fs2h32(fs->e2fs_features_rocompat) &

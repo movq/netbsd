@@ -1,4 +1,4 @@
-/*	$NetBSD: pcmb.c,v 1.10 2004/08/30 15:05:17 drochner Exp $	*/
+/*	$NetBSD: pcmb.c,v 1.8 2003/02/26 22:23:09 fvdl Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1998 The NetBSD Foundation, Inc.
@@ -41,7 +41,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pcmb.c,v 1.10 2004/08/30 15:05:17 drochner Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pcmb.c,v 1.8 2003/02/26 22:23:09 fvdl Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -66,6 +66,12 @@ CFATTACH_DECL(pcmb, sizeof(struct device),
     pcmbmatch, pcmbattach, NULL, NULL);
 
 void	pcmb_callback __P((struct device *));
+int	pcmb_print __P((void *, const char *));
+
+union pcmb_attach_args {
+	const char *ma_name;			/* XXX should be common */
+	struct mcabus_attach_args ma_mba;
+};
 
 int
 pcmbmatch(parent, match, aux)
@@ -99,7 +105,7 @@ pcmbattach(parent, self, aux)
 	 * Just print out a description and defer configuration
 	 * until all PCI devices have been attached.
 	 */
-	pci_devinfo(pa->pa_id, pa->pa_class, 0, devinfo, sizeof(devinfo));
+	pci_devinfo(pa->pa_id, pa->pa_class, 0, devinfo);
 	printf("%s: %s (rev. 0x%02x)\n", self->dv_xname, devinfo,
 	    PCI_REVISION(pa->pa_class));
 
@@ -110,17 +116,30 @@ void
 pcmb_callback(self)
 	struct device *self;
 {
-	struct mcabus_attach_args ma;
+	union pcmb_attach_args ma;
 
 	/*
 	 * Attach MCA bus behind this bridge.
 	 */
-	ma.mba_iot = X86_BUS_SPACE_IO;
-	ma.mba_memt = X86_BUS_SPACE_MEM;
+	ma.ma_mba.mba_busname = "mca";
+	ma.ma_mba.mba_iot = X86_BUS_SPACE_IO;
+	ma.ma_mba.mba_memt = X86_BUS_SPACE_MEM;
 #if NMCA > 0
-	ma.mba_dmat = &mca_bus_dma_tag;
+	ma.ma_mba.mba_dmat = &mca_bus_dma_tag;
 #endif
-	ma.mba_mc = NULL;
-	ma.mba_bus = 0;
-	config_found_ia(self, "mcabus", &ma, mcabusprint);
+	ma.ma_mba.mba_mc = NULL;
+	ma.ma_mba.mba_bus = 0;
+	config_found(self, &ma.ma_mba, pcmb_print);
+}
+
+int
+pcmb_print(aux, pnp)
+	void *aux;
+	const char *pnp;
+{
+	union pcmb_attach_args *ma = aux;
+
+	if (pnp)
+		aprint_normal("%s at %s", ma->ma_name, pnp);
+	return (UNCONF);
 }

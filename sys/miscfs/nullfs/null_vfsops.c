@@ -1,4 +1,4 @@
-/*	$NetBSD: null_vfsops.c,v 1.52 2004/07/01 10:03:31 hannken Exp $	*/
+/*	$NetBSD: null_vfsops.c,v 1.46.2.1 2004/05/29 09:04:47 tron Exp $	*/
 
 /*
  * Copyright (c) 1999 National Aeronautics & Space Administration
@@ -74,7 +74,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: null_vfsops.c,v 1.52 2004/07/01 10:03:31 hannken Exp $");
+__KERNEL_RCSID(0, "$NetBSD: null_vfsops.c,v 1.46.2.1 2004/05/29 09:04:47 tron Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -125,7 +125,7 @@ nullfs_mount(mp, path, data, ndp, p)
 	/*
 	 * Get argument
 	 */
-	error = copyin(data, &args, sizeof(struct null_args));
+	error = copyin(data, (caddr_t)&args, sizeof(struct null_args));
 	if (error)
 		return (error);
 
@@ -159,10 +159,9 @@ nullfs_mount(mp, path, data, ndp, p)
 	 */
 	nmp = (struct null_mount *) malloc(sizeof(struct null_mount),
 	    M_UFSMNT, M_WAITOK);		/* XXX */
-	memset(nmp, 0, sizeof(struct null_mount));
+	memset((caddr_t)nmp, 0, sizeof(struct null_mount));
 
 	mp->mnt_data = nmp;
-	mp->mnt_leaf = lowerrootvp->v_mount->mnt_leaf;
 	nmp->nullm_vfs = lowerrootvp->v_mount;
 	if (nmp->nullm_vfs->mnt_flag & MNT_LOCAL)
 		mp->mnt_flag |= MNT_LOCAL;
@@ -207,7 +206,7 @@ nullfs_mount(mp, path, data, ndp, p)
 	vp->v_flag |= VROOT;
 	nmp->nullm_rootvp = vp;
 
-	error = set_statvfs_info(path, UIO_USERSPACE, args.la.target,
+	error = set_statfs_info(path, UIO_USERSPACE, args.la.target,
 	    UIO_USERSPACE, mp, p);
 #ifdef NULLFS_DIAGNOSTIC
 	printf("nullfs_mount: lower %s, alias at %s\n",
@@ -309,7 +308,7 @@ struct vfsops nullfs_vfsops = {
 	nullfs_unmount,
 	layerfs_root,
 	layerfs_quotactl,
-	layerfs_statvfs,
+	layerfs_statfs,
 	layerfs_sync,
 	layerfs_vget,
 	layerfs_fhtovp,
@@ -320,6 +319,5 @@ struct vfsops nullfs_vfsops = {
 	NULL,
 	NULL,				/* vfs_mountroot */
 	layerfs_checkexp,
-	layerfs_snapshot,
 	nullfs_vnodeopv_descs,
 };

@@ -1,5 +1,5 @@
 #! /bin/sh
-#	$NetBSD: buildmake.sh.in,v 1.5 2004/05/07 00:04:37 ross Exp $
+#	$NetBSD: buildmake.sh.in,v 1.4.2.1 2004/05/10 15:36:08 tron Exp $
 #
 # buildmake.sh.in - Autoconf-processed shell script for building make(1).
 #

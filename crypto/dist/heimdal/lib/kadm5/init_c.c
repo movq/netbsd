@@ -38,7 +38,7 @@
 #include <netdb.h>
 
 __RCSID("$Heimdal: init_c.c,v 1.45.2.1 2003/12/21 22:48:13 lha Exp $"
-        "$NetBSD: init_c.c,v 1.6 2004/04/02 14:59:48 lha Exp $");
+        "$NetBSD: init_c.c,v 1.5.2.1 2004/04/21 04:55:41 jmc Exp $");
 
 static void
 set_funcs(kadm5_client_context *c)

@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.20 2004/11/10 03:55:28 jmc Exp $
+#	$NetBSD: Makefile,v 1.10.2.9 2004/08/30 08:19:06 tron Exp $
 #
 
 .include <bsd.own.mk>
@@ -24,9 +24,7 @@ release: check_RELEASEDIR .WAIT ${ARCHIVE}
 	    ${RELEASEDIR}/${MACHINE}/installation/misc/
 
 ${ARCHIVE}: tmp/BtNetBSD
-	TOOL_MKTEMP=${TOOL_MKTEMP}; export TOOL_MKTEMP; \
-	TOOL_SPARKCRC=${TOOL_SPARKCRC}; export TOOL_SPARKCRC; \
-	TOOL_STAT=${TOOL_STAT}; export TOOL_STAT; \
+	export TOOL_SPARKCRC=${TOOL_SPARKCRC} TOOL_STAT=${TOOL_STAT}; \
 	    cd tmp/BtNetBSD && \
 	    ${HOST_SH} ${.CURDIR}/../mksparkive.sh * > ${.OBJDIR}/${ARCHIVE}
 

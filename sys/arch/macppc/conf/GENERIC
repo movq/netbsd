@@ -1,4 +1,4 @@
-# $NetBSD: GENERIC,v 1.185 2004/11/24 20:49:24 bouyer Exp $
+# $NetBSD: GENERIC,v 1.171.2.5 2004/07/15 20:19:10 he Exp $
 #
 # GENERIC machine description file
 # 
@@ -22,7 +22,7 @@ include		"arch/macppc/conf/std.macppc"
 
 options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
-#ident 		"GENERIC-$Revision: 1.185 $"
+#ident 		"GENERIC-$Revision: 1.171.2.5 $"
 
 maxusers	32
 
@@ -84,7 +84,6 @@ options 	COMPAT_LINUX	# Linux binary compatibility
 #options	DEBUG_DARWIN	# COMPAT_DARWIN debugging
 #options	DEBUG_MACH	# COMPAT_MACH debugging
 #options 	TCP_COMPAT_42	# 4.2BSD TCP/IP bug compat. Not recommended.
-options		COMPAT_BSDPTY	# /dev/[pt]ty?? ptys.
 
 # File systems
 file-system 	FFS		# UFS
@@ -102,7 +101,6 @@ file-system 	PORTAL		# portal filesystem (still experimental)
 file-system 	PROCFS		# /proc
 file-system 	UMAPFS		# NULLFS + uid and gid remapping
 file-system 	UNION		# union file system
-file-system	SMBFS		# CIFS; also needs nsmb (below)
 
 # File system options
 options 	QUOTA		# UFS quotas
@@ -123,7 +121,6 @@ options 	INET6		# IPV6
 #options 	IPSEC_ESP	# IP security (encryption part; define w/IPSEC)
 #options 	IPSEC_DEBUG	# debug for IP security
 #options 	MROUTING	# IP multicast routing
-#options 	PIM		# Protocol Independent Multicast
 #options 	NS		# XNS
 #options 	NSIP		# XNS tunneling over IP
 #options 	ISO,TPIP	# OSI
@@ -249,8 +246,6 @@ trm*	at pci? dev ? function ?	# Tekram DC-395U/UW/F, DC-315/U SCSI
 
 # Other  PCI devices
 ofb*	at pci? dev ? function ?	# Generic Open Firmware Framebuffer
-# OFB_ENABLE_CACHE speeds up the console on many machines, but should
-# not be enabled on some older machines, such as the rev. A-D iMacs.
 #options 	OFB_ENABLE_CACHE	# Speed up console
 pciide* at pci? dev ? function ? flags 0x0000	# GENERIC pciide driver
 acardide* at pci? dev ? function ?	# Acard IDE controllers
@@ -262,7 +257,6 @@ hptide* at pci? dev ? function ?	# Triones/HighPoint IDE controllers
 optiide* at pci? dev ? function ?	# Opti IDE controllers
 piixide* at pci? dev ? function ?	# Intel IDE controllers
 pdcide* at pci? dev ? function ?	# Promise IDE controllers
-pdcsata* at pci? dev ? function ?	# Promise SATA150 controllers
 satalink* at pci? dev ? function ?	# SiI SATALink controllers
 siside* at pci? dev ? function ?	# SiS IDE controllers
 slide*  at pci? dev ? function ?	# Symphony Labs IDE controllers
@@ -318,10 +312,10 @@ zsc*	at obio?
 zstty*	at zsc? channel ?
 mediabay* at obio?
 wdc*	at mediabay? flags 0
-# awacs is disabled because on most systems (7300 - 9600 PowerMacs,
-# many kinds of G4s), very heavy load can cause the machine to lock
-# up. ONLY enable this if your machine is never under heavy load, or
-# you'd rather have audio than worry about occasional lockups.
+# awacs is disabled because on some systems--e.g., a 350MHz G4 GigE--
+# it may generate interrupt storms, rendering the machine unusable.
+# If you uncomment this, you'll also want to uncomment "audio* at awacs?"
+# below.
 #awacs*	at obio?			# Apple audio device
 #ki2c*	at obio?			# Keywest I2C
 wi*	at obio?			# AirMac
@@ -419,9 +413,9 @@ radio* at udsbr?
 
 # USB Ethernet adapters
 aue*	at uhub? port ?		# ADMtek AN986 Pegasus based adapters
-axe*	at uhub? port ?		# ASIX AX88172 based adapters
 cue*	at uhub? port ?		# CATC USB-EL1201A based adapters
 kue*	at uhub? port ?		# Kawasaki LSI KL5KUSB101B based adapters
+uax*	at uhub? port ?		# ASIX AX88172 based adapters
 url*	at uhub? port ?		# Realtek RTL8150L based adapters
 udav*	at uhub? port ?		# Davicom DM9601 based adapters
 
@@ -435,9 +429,9 @@ fwohci*	at pci? dev ? function ?	# IEEE1394 Open Host Controller
 fw*	at fwbus?			# IP over 1394
 
 # IEEE1394 nodes
-fwnode* at fwbus? idhi ? idlo ?
-sbpscsi* at fwnode?
-scsibus* at sbpscsi?
+#fwnode* at fwbus? idhi ? idlo ?
+#sbpscsi* at fwnode?
+#scsibus* at sbpscsi?
 
 # Audio Devices
 
@@ -510,6 +504,3 @@ pseudo-device	openfirm		# /dev/openfirm
 pseudo-device	wsmux			# mouse and keyboard multiplexor
 pseudo-device	clockctl		# user control of clock subsystem
 pseudo-device	ksyms			# /dev/ksyms
-pseudo-device	nsmb			# SMB requester
-#pseudo-device	pf			# PF packet filter
-#pseudo-device	pflog			# PF log if

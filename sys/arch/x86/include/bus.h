@@ -1,4 +1,4 @@
-/*	$NetBSD: bus.h,v 1.7 2004/06/20 18:04:08 thorpej Exp $	*/
+/*	$NetBSD: bus.h,v 1.5 2004/01/14 11:31:55 yamt Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997, 1998, 2001 The NetBSD Foundation, Inc.
@@ -1206,6 +1206,13 @@ int	_bus_dmamem_alloc_range(bus_dma_tag_t tag, bus_size_t size,
 	    bus_dma_segment_t *segs, int nsegs, int *rsegs, int flags,
 	    paddr_t low, paddr_t high);
 
+int	_bus_dma_alloc_bouncebuf(bus_dma_tag_t t, bus_dmamap_t map,
+	    bus_size_t size, int flags);
+void	_bus_dma_free_bouncebuf(bus_dma_tag_t t, bus_dmamap_t map);
+int	_bus_dmamap_load_buffer(bus_dma_tag_t t, bus_dmamap_t map,
+	    void *buf, bus_size_t buflen, struct proc *p, int flags,
+	    paddr_t *lastaddrp, int *segp, int first);
+
 
 
 /*
@@ -1233,16 +1240,16 @@ struct x86_bus_dma_cookie {
 };
 
 /* id_flags */
-#define	X86_DMA_MIGHT_NEED_BOUNCE	0x01	/* may need bounce buffers */
-#define	X86_DMA_HAS_BOUNCE		0x02	/* has bounce buffers */
-#define	X86_DMA_IS_BOUNCING		0x04	/* is bouncing current xfer */
+#define	X86_DMA_ID_MIGHT_NEED_BOUNCE	0x01	/* may eed bounce buffers */
+#define	X86_DMA_ID_HAS_BOUNCE		0x02	/* has bounce buffers */
+#define	X86_DMA_ID_IS_BOUNCING		0x04	/* is bouncing current xfer */
 
 /* id_buftype */
-#define	X86_DMA_BUFTYPE_INVALID		0
-#define	X86_DMA_BUFTYPE_LINEAR		1
-#define	X86_DMA_BUFTYPE_MBUF		2
-#define	X86_DMA_BUFTYPE_UIO		3
-#define	X86_DMA_BUFTYPE_RAW		4
+#define	X86_DMA_ID_BUFTYPE_INVALID	0
+#define	X86_DMA_ID_BUFTYPE_LINEAR	1
+#define	X86_DMA_ID_BUFTYPE_MBUF		2
+#define	X86_DMA_ID_BUFTYPE_UIO		3
+#define	X86_DMA_ID_BUFTYPE_RAW		4
 
 #endif /* _X86_BUS_DMA_PRIVATE */
 

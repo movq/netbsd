@@ -1,4 +1,4 @@
-#as: -x --no-pushj-stubs
+#as: -x
 #objdump: -tdr
 
 .*:     file format elf64-mmix

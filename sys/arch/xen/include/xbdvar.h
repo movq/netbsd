@@ -1,4 +1,4 @@
-/* $NetBSD: xbdvar.h,v 1.6 2004/09/15 04:55:21 tls Exp $ */
+/* $NetBSD: xbdvar.h,v 1.5.2.3 2004/09/16 03:19:01 jmc Exp $ */
 
 /*
  *

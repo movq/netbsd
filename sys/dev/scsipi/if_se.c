@@ -1,4 +1,4 @@
-/*	$NetBSD: if_se.c,v 1.51 2004/10/30 18:10:06 thorpej Exp $	*/
+/*	$NetBSD: if_se.c,v 1.45.2.1 2004/09/11 12:51:35 he Exp $	*/
 
 /*
  * Copyright (c) 1997 Ian W. Dall <ian.dall@dsto.defence.gov.au>
@@ -59,7 +59,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_se.c,v 1.51 2004/10/30 18:10:06 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_se.c,v 1.45.2.1 2004/09/11 12:51:35 he Exp $");
 
 #include "opt_inet.h"
 #include "opt_atalk.h"
@@ -212,7 +212,7 @@ static void	seattach __P((struct device *, struct device *, void *));
 static void	se_ifstart __P((struct ifnet *));
 static void	sestart __P((struct scsipi_periph *));
 
-static void	sedone __P((struct scsipi_xfer *, int));
+static void	sedone __P((struct scsipi_xfer *));
 static int	se_ioctl __P((struct ifnet *, u_long, caddr_t));
 static void	sewatchdog __P((struct ifnet *));
 
@@ -356,7 +356,7 @@ seattach(parent, self, aux)
 	se_get_addr(sc, myaddr);
 
 	/* Initialize ifnet structure. */
-	strlcpy(ifp->if_xname, sc->sc_dev.dv_xname, sizeof(ifp->if_xname));
+	strcpy(ifp->if_xname, sc->sc_dev.dv_xname);
 	ifp->if_softc = sc;
 	ifp->if_start = se_ifstart;
 	ifp->if_ioctl = se_ioctl;
@@ -372,10 +372,10 @@ seattach(parent, self, aux)
 
 
 static __inline int
-se_scsipi_cmd(periph, cmd, cmdlen, data_addr, datalen,
+se_scsipi_cmd(periph, scsipi_cmd, cmdlen, data_addr, datalen,
 		       retries, timeout, bp, flags)
 	struct scsipi_periph *periph;
-	struct scsipi_generic *cmd;
+	struct scsipi_generic *scsipi_cmd;
 	int cmdlen;
 	u_char *data_addr;
 	int datalen;
@@ -387,7 +387,7 @@ se_scsipi_cmd(periph, cmd, cmdlen, data_addr, datalen,
 	int error;
 	int s = splbio();
 
-	error = scsipi_command(periph, cmd, cmdlen, data_addr,
+	error = scsipi_command(periph, NULL, scsipi_cmd, cmdlen, data_addr,
 	    datalen, retries, timeout, bp, flags);
 	splx(s);
 	return (error);
@@ -483,7 +483,7 @@ se_ifstart(ifp)
 
 	/* Send command to device. */
 	error = se_scsipi_cmd(sc->sc_periph,
-	    (void *)&send_cmd, sizeof(send_cmd),
+	    (struct scsipi_generic *)&send_cmd, sizeof(send_cmd),
 	    sc->sc_tbuf, len, SERETRIES,
 	    SETIMEOUT, NULL, XS_CTL_NOSLEEP|XS_CTL_ASYNC|XS_CTL_DATA_OUT);
 	if (error) {
@@ -504,14 +504,16 @@ se_ifstart(ifp)
  * Called from the scsibus layer via our scsi device switch.
  */
 static void
-sedone(xs, error)
+sedone(xs)
 	struct scsipi_xfer *xs;
-	int error;
 {
+	int error;
 	struct se_softc *sc = (void *)xs->xs_periph->periph_dev;
 	struct scsipi_generic *cmd = xs->cmd;
 	struct ifnet *ifp = &sc->sc_ethercom.ec_if;
 	int s;
+
+	error = !(xs->error == XS_NOERROR);
 
 	s = splnet();
 	if(IS_SEND(cmd)) {
@@ -580,7 +582,7 @@ se_recv(v)
 	PROTOCMD(ctron_ether_recv, recv_cmd);
 
 	error = se_scsipi_cmd(sc->sc_periph,
-	    (void *)&recv_cmd, sizeof(recv_cmd),
+	    (struct scsipi_generic *)&recv_cmd, sizeof(recv_cmd),
 	    sc->sc_rbuf, RBUF_LEN, SERETRIES, SETIMEOUT, NULL,
 	    XS_CTL_NOSLEEP|XS_CTL_ASYNC|XS_CTL_DATA_IN);
 	if (error)
@@ -768,7 +770,7 @@ se_add_proto(sc, proto)
 	PROTOCMD(ctron_ether_add_proto, add_proto_cmd);
 	_lto2b(sizeof(data), add_proto_cmd.length);
 	error = se_scsipi_cmd(sc->sc_periph,
-	    (void *)&add_proto_cmd, sizeof(add_proto_cmd),
+	    (struct scsipi_generic *) &add_proto_cmd, sizeof(add_proto_cmd),
 	    data, sizeof(data), SERETRIES, SETIMEOUT, NULL,
 	    XS_CTL_DATA_OUT | XS_CTL_DATA_ONSTACK);
 	return (error);
@@ -785,7 +787,7 @@ se_get_addr(sc, myaddr)
 	PROTOCMD(ctron_ether_get_addr, get_addr_cmd);
 	_lto2b(ETHER_ADDR_LEN, get_addr_cmd.length);
 	error = se_scsipi_cmd(sc->sc_periph,
-	    (void *)&get_addr_cmd, sizeof(get_addr_cmd),
+	    (struct scsipi_generic *) &get_addr_cmd, sizeof(get_addr_cmd),
 	    myaddr, ETHER_ADDR_LEN, SERETRIES, SETIMEOUT, NULL,
 	    XS_CTL_DATA_IN | XS_CTL_DATA_ONSTACK);
 	printf("%s: ethernet address %s\n", sc->sc_dev.dv_xname,
@@ -805,7 +807,7 @@ se_set_media(sc, type)
 	PROTOCMD(ctron_ether_set_media, set_media_cmd);
 	set_media_cmd.byte3 = type;
 	error = se_scsipi_cmd(sc->sc_periph,
-	    (void *)&set_media_cmd, sizeof(set_media_cmd),
+	    (struct scsipi_generic *) &set_media_cmd, sizeof(set_media_cmd),
 	    0, 0, SERETRIES, SETIMEOUT, NULL, 0);
 	return (error);
 }
@@ -823,7 +825,7 @@ se_set_mode(sc, len, mode)
 	set_mode_cmd.mode = mode;
 	_lto2b(len, set_mode_cmd.length);
 	error = se_scsipi_cmd(sc->sc_periph,
-	    (void *)&set_mode_cmd, sizeof(set_mode_cmd),
+	    (struct scsipi_generic *) &set_mode_cmd, sizeof(set_mode_cmd),
 	    0, 0, SERETRIES, SETIMEOUT, NULL, 0);
 	return (error);
 }
@@ -851,7 +853,7 @@ se_init(sc)
 	PROTOCMD(ctron_ether_set_addr, set_addr_cmd);
 	_lto2b(ETHER_ADDR_LEN, set_addr_cmd.length);
 	error = se_scsipi_cmd(sc->sc_periph,
-	    (void *)&set_addr_cmd, sizeof(set_addr_cmd),
+	    (struct scsipi_generic *) &set_addr_cmd, sizeof(set_addr_cmd),
 	    LLADDR(ifp->if_sadl), ETHER_ADDR_LEN, SERETRIES, SETIMEOUT, NULL,
 	    XS_CTL_DATA_OUT);
 	if (error != 0)
@@ -899,7 +901,7 @@ se_set_multi(sc, addr)
 	PROTOCMD(ctron_ether_set_multi, set_multi_cmd);
 	_lto2b(sizeof(addr), set_multi_cmd.length);
 	error = se_scsipi_cmd(sc->sc_periph,
-	    (void *)&set_multi_cmd, sizeof(set_multi_cmd),
+	    (struct scsipi_generic *) &set_multi_cmd, sizeof(set_multi_cmd),
 	    addr, sizeof(addr), SERETRIES, SETIMEOUT, NULL, XS_CTL_DATA_OUT);
 	return (error);
 }
@@ -919,7 +921,8 @@ se_remove_multi(sc, addr)
 	PROTOCMD(ctron_ether_remove_multi, remove_multi_cmd);
 	_lto2b(sizeof(addr), remove_multi_cmd.length);
 	error = se_scsipi_cmd(sc->sc_periph,
-	    (void *)&remove_multi_cmd, sizeof(remove_multi_cmd),
+	    (struct scsipi_generic *) &remove_multi_cmd,
+	    sizeof(remove_multi_cmd),
 	    addr, sizeof(addr), SERETRIES, SETIMEOUT, NULL, XS_CTL_DATA_OUT);
 	return (error);
 }
@@ -1090,18 +1093,24 @@ se_ioctl(ifp, cmd, data)
 		break;
 
 	case SIOCADDMULTI:
-	case SIOCDELMULTI:
-		error = (cmd == SIOCADDMULTI) ?
-		    ether_addmulti(ifr, &sc->sc_ethercom) :
-		    ether_delmulti(ifr, &sc->sc_ethercom);
-		if (error == ENETRESET) {
-			if (ifp->if_flags & IFF_RUNNING) {
-				error = (cmd == SIOCADDMULTI) ?
-				   se_set_multi(sc, ifr->ifr_addr.sa_data) :
-				   se_remove_multi(sc, ifr->ifr_addr.sa_data);
-			} else
-				error = 0;
+		if (sc->sc_enabled == 0) {
+			error = EIO;
+			break;
 		}
+		if (ether_addmulti(ifr, &sc->sc_ethercom) == ENETRESET)
+			error = se_set_multi(sc, ifr->ifr_addr.sa_data);
+		else
+			error = 0;
+		break;
+	case SIOCDELMULTI:
+		if (sc->sc_enabled == 0) {
+			error = EIO;
+			break;
+		}
+		if (ether_delmulti(ifr, &sc->sc_ethercom) == ENETRESET)
+			error = se_remove_multi(sc, ifr->ifr_addr.sa_data);
+		else
+			error = 0;
 		break;
 
 	default:

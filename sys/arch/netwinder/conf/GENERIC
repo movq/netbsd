@@ -1,4 +1,4 @@
-# $NetBSD: GENERIC,v 1.54 2004/11/10 17:54:06 christos Exp $
+# $NetBSD: GENERIC,v 1.45.2.3 2004/07/15 20:22:28 he Exp $
 #
 # GENERIC machine description file
 # 
@@ -83,7 +83,6 @@ options 	INET6		# IPV6
 #options 	IPSEC_ESP	# IP security (encryption part; define w/ IPSEC)
 #options 	IPSEC_DEBUG	# debug for IP security
 #options 	MROUTING	# IP multicast routing
-#options 	PIM		# Protocol Independent Multicast
 #options 	NS		# XNS
 #options 	NSIP		# XNS tunneling over IP
 #options 	ISO,TPIP	# OSI
@@ -127,7 +126,6 @@ options 	COMPAT_14	# NetBSD 1.4 compatibility.
 #options 	TCP_COMPAT_42	# 4.2BSD TCP/IP bug compat. Not recommended.
 
 options 	COMPAT_LINUX	# binary compatibility with Linux
-options		COMPAT_BSDPTY	# /dev/[pt]ty?? ptys.
 
 # Shared memory options
 
@@ -172,7 +170,7 @@ options 	DIAGNOSTIC	# internally consistency checks
 options 	DDB		# in-kernel debugger
 options 	DDB_HISTORY_SIZE=100	# Enable history editing in DDB
 makeoptions	DEBUG="-g"	# compile full symbol table
-options 	SYMTAB_SPACE=280000
+options 	SYMTAB_SPACE=250000
 
 config		netbsd	root on ? type ?
 
@@ -297,8 +295,6 @@ pseudo-device	pty			# pseudo-terminals
 pseudo-device	rnd			# /dev/random and in-kernel generator
 pseudo-device	clockctl		# user control of clock subsystem
 pseudo-device	ksyms			# /dev/ksyms
-#pseudo-device	pf			# PF packet filter
-#pseudo-device	pflog			# PF log if
 
 # wscons pseudo-devices
 pseudo-device	wsmux			# mouse & keyboard multiplexor

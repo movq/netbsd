@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.12 2004/08/05 01:28:48 lukem Exp $
+#	$NetBSD: Makefile,v 1.10 2004/02/09 04:30:05 lukem Exp $
 
 .include <bsd.own.mk>
 
@@ -29,10 +29,8 @@ CPPFLAGS.Error.c=	-DERRORDB=\"${X11LIBDIR}/XtErrorDB\" \
 			-DXTERROR_PREFIX=\"\" -DXTWARNING_PREFIX=\"\"
 CPPFLAGS.TMkey.c=	-DXKB
 
-LIBDPLIBS=\
-	X11	${.CURDIR}/../X11/dynamic \
-	SM	${.CURDIR}/../SM \
-	ICE	${.CURDIR}/../ICE
+LDADD+=	-lX11 -lSM -lICE
+DPADD+=	${LIBX11} ${LIBSM} ${LIBICE}
 
 .include "${NETBSDSRCDIR}/x11/tools/makestrs/Makefile.makestrs"
 

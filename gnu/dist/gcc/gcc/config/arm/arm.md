@@ -6530,22 +6530,12 @@
   }"
 )
 
-(define_insn "*call_reg_armv5"
+(define_insn "*call_reg"
   [(call (mem:SI (match_operand:SI 0 "s_register_operand" "r"))
          (match_operand 1 "" ""))
    (use (match_operand 2 "" ""))
    (clobber (reg:SI LR_REGNUM))]
-  "TARGET_ARM && arm_arch5"
-  "blx%?\\t%0"
-  [(set_attr "type" "call")]
-)
-
-(define_insn "*call_reg_arm"
-  [(call (mem:SI (match_operand:SI 0 "s_register_operand" "r"))
-         (match_operand 1 "" ""))
-   (use (match_operand 2 "" ""))
-   (clobber (reg:SI LR_REGNUM))]
-  "TARGET_ARM && !arm_arch5"
+  "TARGET_ARM"
   "*
   return output_call (operands);
   "
@@ -6567,29 +6557,35 @@
    (set_attr "type" "call")]
 )
 
-(define_insn "*call_reg_thumb_v5"
+(define_insn "*call_indirect"
   [(call (mem:SI (match_operand:SI 0 "register_operand" "l*r"))
 	 (match_operand 1 "" ""))
    (use (match_operand 2 "" ""))
    (clobber (reg:SI LR_REGNUM))]
-  "TARGET_THUMB && arm_arch5"
-  "blx\\t%0"
-  [(set_attr "length" "2")
-   (set_attr "type" "call")]
-)
-
-(define_insn "*call_reg_thumb"
-  [(call (mem:SI (match_operand:SI 0 "register_operand" "l*r"))
-	 (match_operand 1 "" ""))
-   (use (match_operand 2 "" ""))
-   (clobber (reg:SI LR_REGNUM))]
-  "TARGET_THUMB && !arm_arch5"
+  "TARGET_THUMB"
   "*
   {
     if (TARGET_CALLER_INTERWORKING)
       return \"bl\\t%__interwork_call_via_%0\";
     else
       return \"bl\\t%__call_via_%0\";
+  }"
+  [(set_attr "type" "call")]
+)
+
+(define_insn "*call_value_indirect"
+  [(set (match_operand 0 "" "=l")
+	(call (mem:SI (match_operand:SI 1 "register_operand" "l*r"))
+	      (match_operand 2 "" "")))
+   (use (match_operand 3 "" ""))
+   (clobber (reg:SI LR_REGNUM))]
+  "TARGET_THUMB"
+  "*
+  {
+    if (TARGET_CALLER_INTERWORKING)
+      return \"bl\\t%__interwork_call_via_%1\";
+    else
+      return \"bl\\t%__call_via_%1\";
   }"
   [(set_attr "type" "call")]
 )
@@ -6616,24 +6612,13 @@
   }"
 )
 
-(define_insn "*call_value_reg_armv5"
-  [(set (match_operand 0 "" "")
-        (call (mem:SI (match_operand:SI 1 "s_register_operand" "r"))
+(define_insn "*call_value_reg"
+  [(set (match_operand 0 "" "=r,f")
+        (call (mem:SI (match_operand:SI 1 "s_register_operand" "r,r"))
 	      (match_operand 2 "" "")))
    (use (match_operand 3 "" ""))
    (clobber (reg:SI LR_REGNUM))]
-  "TARGET_ARM && arm_arch5"
-  "blx%?\\t%1"
-  [(set_attr "type" "call")]
-)
-
-(define_insn "*call_value_reg_arm"
-  [(set (match_operand 0 "" "")
-        (call (mem:SI (match_operand:SI 1 "s_register_operand" "r"))
-	      (match_operand 2 "" "")))
-   (use (match_operand 3 "" ""))
-   (clobber (reg:SI LR_REGNUM))]
-  "TARGET_ARM && !arm_arch5"
+  "TARGET_ARM"
   "*
   return output_call (&operands[1]);
   "
@@ -6642,8 +6627,8 @@
 )
 
 (define_insn "*call_value_mem"
-  [(set (match_operand 0 "" "")
-	(call (mem:SI (match_operand:SI 1 "memory_operand" "m"))
+  [(set (match_operand 0 "" "=r,f")
+	(call (mem:SI (match_operand:SI 1 "memory_operand" "m,m"))
 	      (match_operand 2 "" "")))
    (use (match_operand 3 "" ""))
    (clobber (reg:SI LR_REGNUM))]
@@ -6653,35 +6638,6 @@
   "
   [(set_attr "length" "12")
    (set_attr "type" "call")]
-)
-
-(define_insn "*call_value_reg_thumb_v5"
-  [(set (match_operand 0 "" "")
-	(call (mem:SI (match_operand:SI 1 "register_operand" "l*r"))
-	      (match_operand 2 "" "")))
-   (use (match_operand 3 "" ""))
-   (clobber (reg:SI LR_REGNUM))]
-  "TARGET_THUMB && arm_arch5"
-  "blx\\t%1"
-  [(set_attr "length" "2")
-   (set_attr "type" "call")]
-)
-
-(define_insn "*call_value_reg_thumb"
-  [(set (match_operand 0 "" "")
-	(call (mem:SI (match_operand:SI 1 "register_operand" "l*r"))
-	      (match_operand 2 "" "")))
-   (use (match_operand 3 "" ""))
-   (clobber (reg:SI LR_REGNUM))]
-  "TARGET_THUMB && !arm_arch5"
-  "*
-  {
-    if (TARGET_CALLER_INTERWORKING)
-      return \"bl\\t%__interwork_call_via_%1\";
-    else
-      return \"bl\\t%__call_via_%1\";
-  }"
-  [(set_attr "type" "call")]
 )
 
 ;; Allow calls to SYMBOL_REFs specially as they are not valid general addresses
@@ -6703,8 +6659,8 @@
 )
 
 (define_insn "*call_value_symbol"
-  [(set (match_operand 0 "s_register_operand" "")
-	(call (mem:SI (match_operand:SI 1 "" "X"))
+  [(set (match_operand 0 "s_register_operand" "=r,f")
+	(call (mem:SI (match_operand:SI 1 "" "X,X"))
 	(match_operand:SI 2 "" "")))
    (use (match_operand 3 "" ""))
    (clobber (reg:SI LR_REGNUM))]
@@ -6732,7 +6688,7 @@
 )
 
 (define_insn "*call_value_insn"
-  [(set (match_operand 0 "register_operand" "")
+  [(set (match_operand 0 "register_operand" "=l")
 	(call (mem:SI (match_operand 1 "" "X"))
 	      (match_operand 2 "" "")))
    (use (match_operand 3 "" ""))
@@ -6786,8 +6742,8 @@
 )
 
 (define_insn "*sibcall_value_insn"
- [(set (match_operand 0 "s_register_operand" "")
-       (call (mem:SI (match_operand:SI 1 "" "X"))
+ [(set (match_operand 0 "s_register_operand" "=r,f")
+       (call (mem:SI (match_operand:SI 1 "" "X,X"))
 	     (match_operand 2 "" "")))
   (return)
   (use (match_operand 3 "" ""))]
@@ -6981,7 +6937,6 @@
   ""
 )
 
-;; NB Never uses BX.
 (define_insn "*arm_indirect_jump"
   [(set (pc)
 	(match_operand:SI 0 "s_register_operand" "r"))]
@@ -6990,6 +6945,8 @@
   [(set_attr "predicable" "yes")]
 )
 
+;; Although not supported by the define_expand above,
+;; cse/combine may generate this form.
 (define_insn "*load_indirect_jump"
   [(set (pc)
 	(match_operand:SI 0 "memory_operand" "m"))]
@@ -7001,7 +6958,6 @@
    (set_attr "predicable" "yes")]
 )
 
-;; NB Never uses BX.
 (define_insn "*thumb_indirect_jump"
   [(set (pc)
 	(match_operand:SI 0 "register_operand" "l*r"))]
@@ -9148,7 +9104,6 @@
   "
 )
 
-;; NB never uses BX.
 (define_insn "*thumb_tablejump"
   [(set (pc) (match_operand:SI 0 "register_operand" "l*r"))
    (use (label_ref (match_operand 1 "" "")))]

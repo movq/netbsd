@@ -1,10 +1,9 @@
-/*	$NetBSD: index.c,v 1.1.1.5 2004/07/12 23:26:50 wiz Exp $	*/
+/*	$NetBSD: index.c,v 1.1.1.4 2003/07/03 14:58:53 wiz Exp $	*/
 
 /* index.c -- indexing for Texinfo.
-   Id: index.c,v 1.22 2004/03/25 00:24:07 karl Exp
+   Id: index.c,v 1.8 2003/05/16 23:52:40 karl Exp
 
-   Copyright (C) 1998, 1999, 2002, 2003, 2004 Free Software Foundation,
-   Inc.
+   Copyright (C) 1998, 1999, 2002, 2003 Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -21,15 +20,58 @@
    Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
 
 #include "system.h"
-#include "files.h"
-#include "footnote.h"
-#include "html.h"
 #include "index.h"
 #include "lang.h"
 #include "macro.h"
-#include "sectioning.h"
 #include "toc.h"
 #include "xml.h"
+
+/* An index element... */
+typedef struct index_elt
+{
+  struct index_elt *next;
+  char *entry;                  /* The index entry itself, after expansion. */
+  char *entry_text;             /* The original, non-expanded entry text. */
+  char *node;                   /* The node from whence it came. */
+  int code;                     /* Nonzero means add `@code{...}' when
+                                   printing this element. */
+  int defining_line;            /* Line number where this entry was written. */
+  char *defining_file;          /* Source file for defining_line. */
+} INDEX_ELT;
+
+
+/* A list of short-names for each index.
+   There are two indices into the the_indices array.
+   * read_index is the index that points to the list of index
+     entries that we will find if we ask for the list of entries for
+     this name.
+   * write_index is the index that points to the list of index entries
+     that we will add new entries to.
+
+   Initially, read_index and write_index are the same, but the
+   @syncodeindex and @synindex commands can change the list we add
+   entries to.
+
+   For example, after the commands
+     @cindex foo
+     @defindex ii
+     @synindex cp ii
+     @cindex bar
+
+   the cp index will contain the entry `foo', and the new ii
+   index will contain the entry `bar'.  This is consistent with the
+   way texinfo.tex handles the same situation.
+
+   In addition, for each index, it is remembered whether that index is
+   a code index or not.  Code indices have @code{} inserted around the
+   first word when they are printed with printindex. */
+typedef struct
+{
+  char *name;
+  int read_index;   /* index entries for `name' */
+  int write_index;  /* store index entries here, @synindex can change it */
+  int code;
+} INDEX_ALIST;
 
 INDEX_ALIST **name_index_alist = NULL;
 
@@ -41,24 +83,18 @@ INDEX_ELT **the_indices = NULL;
 /* The number of defined indices. */
 int defined_indices = 0;
 
-/* This is the order of the index.  */
-int index_counter = 0;
-
 /* Stuff for defining commands on the fly. */
 COMMAND **user_command_array = NULL;
 int user_command_array_len = 0;
 
 /* How to compare index entries for sorting.  May be set to strcoll.  */
-int (*index_compare_fn) (const char *a, const char *b) = strcasecmp;
-
-/* Function to compare index entries for sorting.  (Calls
-   `index_compare_fn' above.)  */
-int index_element_compare (const void *element1, const void *element2);
+int (*index_compare_fn) () = strcasecmp;
 
 /* Find which element in the known list of indices has this name.
    Returns -1 if NAME isn't found. */
 static int
-find_index_offset (char *name)
+find_index_offset (name)
+     char *name;
 {
   int i;
   for (i = 0; i < defined_indices; i++)
@@ -69,8 +105,9 @@ find_index_offset (char *name)
 
 /* Return a pointer to the entry of (name . index) for this name.
    Return NULL if the index doesn't exist. */
-static INDEX_ALIST *
-find_index (char *name)
+INDEX_ALIST *
+find_index (name)
+     char *name;
 {
   int offset = find_index_offset (name);
   if (offset > -1)
@@ -81,8 +118,11 @@ find_index (char *name)
 
 /* User-defined commands, which happens only from user-defined indexes.
    Used to initialize the builtin indices, too.  */
-static void
-define_user_command (char *name, COMMAND_FUNCTION (*proc), int needs_braces_p)
+void
+define_user_command (name, proc, needs_braces_p)
+     char *name;
+     COMMAND_FUNCTION *proc;
+     int needs_braces_p;
 {
   int slot = user_command_array_len;
   user_command_array_len++;
@@ -101,7 +141,8 @@ define_user_command (char *name, COMMAND_FUNCTION (*proc), int needs_braces_p)
 
 /* Please release me, let me go... */
 static void
-free_index (INDEX_ELT *index)
+free_index (index)
+     INDEX_ELT *index;
 {
   INDEX_ELT *temp;
 
@@ -120,7 +161,8 @@ free_index (INDEX_ELT *index)
 /* Flush an index by name.  This will delete the list of entries that
    would be written by a @printindex command for this index. */
 static void
-undefindex (char *name)
+undefindex (name)
+     char *name;
 {
   int i;
   int which = find_index_offset (name);
@@ -140,9 +182,11 @@ undefindex (char *name)
   name_index_alist[which] = NULL;
 }
 
-/* Add the arguments to the current index command to the index NAME.  */
+/* Add the arguments to the current index command to the index NAME.
+   html fixxme generate specific html anchor */
 static void
-index_add_arg (char *name)
+index_add_arg (name)
+     char *name;
 {
   int which;
   char *index_entry;
@@ -174,50 +218,17 @@ index_add_arg (char *name)
   else
     {
       INDEX_ELT *new = xmalloc (sizeof (INDEX_ELT));
-
-      index_counter++;
-
-      /* Get output line number updated before doing anything.  */
-      if (!html && !xml)
-        flush_output ();
-
       new->next = the_indices[which];
       new->entry_text = index_entry;
       new->entry = NULL;
-      /* Since footnotes are handled at the very end of the document,
-         node name in the non-split HTML outputs always show the last
-         node.  We artificially make it ``Footnotes''.  */
-      if (html && !splitting && already_outputting_pending_notes)
-        new->node = xstrdup (_("Footnotes"));
-      else
-        new->node = current_node ? current_node : xstrdup ("");
-      if (!html && !xml && no_headers)
-        {
-          new->section = current_sectioning_number ();
-          if (strlen (new->section) == 0)
-            new->section_name = current_sectioning_name ();
-          else
-            new->section_name = "";
-        }
+      new->node = current_node ? current_node : xstrdup ("");
       new->code = tem->code;
       new->defining_line = line_number - 1;
-      new->output_line = no_headers ? output_line_number : node_line_number;
       /* We need to make a copy since input_filename may point to
          something that goes away, for example, inside a macro.
          (see the findexerr test).  */
       new->defining_file = xstrdup (input_filename);
       the_indices[which] = new;
-
-      new->entry_number = index_counter;
-
-      if (html && splitting)
-        {
-          if (current_output_filename && *current_output_filename)
-            new->output_file = filename_part (current_output_filename);
-          else
-            new->output_file = xstrdup ("");
-        }
-
 #if 0
       /* The index breaks if there are colons in the entry.
          -- This is true, but it's too painful to force changing index
@@ -229,36 +240,14 @@ index_add_arg (char *name)
         warning (_("Info cannot handle `:' in index entry `%s'"),
                  new->entry_text);
 #endif
-
-      if (html)
-        {
-          /* Anchor.  */
-          int removed_empty_elt = 0;
-
-          /* We must put the anchor outside the <dl> and <ul> blocks.  */
-          if (rollback_empty_tag ("dl"))
-            removed_empty_elt = 1;
-          else if (rollback_empty_tag ("ul"))
-            removed_empty_elt = 2;
-
-          add_word ("<a name=\"index-");
-          add_escaped_anchor_name (index_entry);
-          add_word_args ("-%d\"></a>", index_counter);
-
-          if (removed_empty_elt == 1)
-            add_html_block_elt_args ("\n<dl>");
-          else if (removed_empty_elt == 2)
-            add_html_block_elt_args ("\n<ul>");
-        }
     }
-
   if (xml)
     xml_insert_indexterm (index_entry, name);
 }
 
 /* The function which user defined index commands call. */
 static void
-gen_index (void)
+gen_index ()
 {
   char *name = xstrdup (command);
   if (strlen (name) >= strlen ("index"))
@@ -270,7 +259,9 @@ gen_index (void)
 /* Define an index known as NAME.  We assign the slot number.
    If CODE is nonzero, make this a code index. */
 static void
-defindex (char *name, int code)
+defindex (name, code)
+     char *name;
+     int code;
 {
   int i, slot;
 
@@ -310,7 +301,9 @@ defindex (char *name, int code)
 
 /* Define an index NAME, implicitly @code if CODE is nonzero.  */
 static void
-top_defindex (char *name, int code)
+top_defindex (name, code)
+     char *name;
+     int code;
 {
   char *temp;
 
@@ -323,7 +316,7 @@ top_defindex (char *name, int code)
 
 /* Set up predefined indices.  */
 void
-init_indices (void)
+init_indices ()
 {
   int i;
 
@@ -373,8 +366,9 @@ init_indices (void)
 
 /* Given an index name, return the offset in the_indices of this index,
    or -1 if there is no such index. */
-static int
-translate_index (char *name)
+int
+translate_index (name)
+     char *name;
 {
   INDEX_ALIST *which = find_index (name);
 
@@ -386,7 +380,8 @@ translate_index (char *name)
 
 /* Return the index list which belongs to NAME. */
 INDEX_ELT *
-index_list (char *name)
+index_list (name)
+     char *name;
 {
   int which = translate_index (name);
   if (which < 0)
@@ -397,7 +392,8 @@ index_list (char *name)
 
 /* Define a new index command.  Arg is name of index. */
 static void
-gen_defindex (int code)
+gen_defindex (code)
+     int code;
 {
   char *name;
   get_rest_of_line (0, &name);
@@ -419,13 +415,13 @@ gen_defindex (int code)
 }
 
 void
-cm_defindex (void)
+cm_defindex ()
 {
   gen_defindex (0);
 }
 
 void
-cm_defcodeindex (void)
+cm_defcodeindex ()
 {
   gen_defindex (1);
 }
@@ -434,7 +430,7 @@ cm_defcodeindex (void)
    Make the first one be a synonym for the second one, i.e. make the
    first one have the same index as the second one. */
 void
-cm_synindex (void)
+cm_synindex ()
 {
   int source, target;
   char *abbrev1, *abbrev2;
@@ -452,11 +448,8 @@ cm_synindex (void)
     }
   else
     {
-      if (xml && !docbook)
-        xml_synindex (abbrev1, abbrev2);
-      else
-        name_index_alist[target]->write_index
-          = name_index_alist[source]->write_index;
+      name_index_alist[target]->write_index
+        = name_index_alist[source]->write_index;
     }
 
   free (abbrev1);
@@ -464,53 +457,53 @@ cm_synindex (void)
 }
 
 void
-cm_pindex (void)                    /* Pinhead index. */
+cm_pindex ()                    /* Pinhead index. */
 {
   index_add_arg ("pg");
 }
 
 void
-cm_vindex (void)                    /* Variable index. */
+cm_vindex ()                    /* Variable index. */
 {
   index_add_arg ("vr");
 }
 
 void
-cm_kindex (void)                    /* Key index. */
+cm_kindex ()                    /* Key index. */
 {
   index_add_arg ("ky");
 }
 
 void
-cm_cindex (void)                    /* Concept index. */
+cm_cindex ()                    /* Concept index. */
 {
   index_add_arg ("cp");
 }
 
 void
-cm_findex (void)                    /* Function index. */
+cm_findex ()                    /* Function index. */
 {
   index_add_arg ("fn");
 }
 
 void
-cm_tindex (void)                    /* Data Type index. */
+cm_tindex ()                    /* Data Type index. */
 {
   index_add_arg ("tp");
 }
 
 int
-index_element_compare (const void *element1, const void *element2)
+index_element_compare (element1, element2)
+     INDEX_ELT **element1, **element2;
 {
-  INDEX_ELT **elt1 = (INDEX_ELT **) element1;
-  INDEX_ELT **elt2 = (INDEX_ELT **) element2;
-
-  return index_compare_fn ((*elt1)->entry, (*elt2)->entry);
+  return index_compare_fn ((*element1)->entry, (*element2)->entry);
 }
 
 /* Force all index entries to be unique. */
-static void
-make_index_entries_unique (INDEX_ELT **array, int count)
+void
+make_index_entries_unique (array, count)
+     INDEX_ELT **array;
+     int count;
 {
   int i, j;
   INDEX_ELT **copy;
@@ -569,8 +562,9 @@ make_index_entries_unique (INDEX_ELT **array, int count)
 /* Sort the index passed in INDEX, returning an array of pointers to
    elements.  The array is terminated with a NULL pointer.  */
 
-static INDEX_ELT **
-sort_index (INDEX_ELT *index)
+INDEX_ELT **
+sort_index (index)
+     INDEX_ELT *index;
 {
   INDEX_ELT **array;
   INDEX_ELT *temp;
@@ -649,81 +643,21 @@ sort_index (INDEX_ELT *index)
   return array;
 }
 
-static void
-insert_index_output_line_no (int line_number, int output_line_number_len)
-{
-  int last_column;
-  int str_size = output_line_number_len + strlen (_("(line )"))
-    + sizeof (NULL);
-  char *out_line_no_str = (char *) xmalloc (str_size + 1);
-
-  /* Do not translate ``(line NNN)'' below for !no_headers case (Info output),
-     because it's something like the ``* Menu'' strings.  For plaintext output
-     it should be translated though.  */
-  sprintf (out_line_no_str,
-      no_headers ? _("(line %*d)") : "(line %*d)",
-      output_line_number_len, line_number);
-
-  {
-    int i = output_paragraph_offset; 
-    while (0 < i && output_paragraph[i-1] != '\n')
-      i--;
-    last_column = output_paragraph_offset - i;
-  }
-
-  if (last_column + strlen (out_line_no_str) > fill_column)
-    {
-      insert ('\n');
-      last_column = 0;
-    }
-
-  while (last_column + strlen (out_line_no_str) < fill_column)
-    {
-      insert (' ');
-      last_column++;
-    }
-
-  insert_string (out_line_no_str);
-  insert ('\n');
-
-  free (out_line_no_str);
-}
-
 /* Nonzero means that we are in the middle of printing an index. */
 int printing_index = 0;
 
 /* Takes one arg, a short name of an index to print.
    Outputs a menu of the sorted elements of the index. */
 void
-cm_printindex (void)
+cm_printindex ()
 {
-  char *index_name;
-  get_rest_of_line (0, &index_name);
-
-  /* get_rest_of_line increments the line number by one,
-     so to make warnings/errors point to the correct line,
-     we decrement the line_number again.  */
-  if (!handling_delayed_writes)
-    line_number--;
-
   if (xml && !docbook)
     {
+      char *index_name;
+      get_rest_of_line (0, &index_name);
       xml_insert_element (PRINTINDEX, START);
       insert_string (index_name);
       xml_insert_element (PRINTINDEX, END);
-    }
-  else if (!handling_delayed_writes)
-    {
-      int command_len = sizeof ("@ ") + strlen (command) + strlen (index_name);
-      char *index_command = xmalloc (command_len + 1);
-
-      close_paragraph ();
-      if (docbook)
-        xml_begin_index ();
-
-      sprintf (index_command, "@%s %s", command, index_name);
-      register_delayed_write (index_command);
-      free (index_command);
     }
   else
     {
@@ -731,13 +665,16 @@ cm_printindex (void)
       INDEX_ELT *index;
       INDEX_ELT *last_index = 0;
       INDEX_ELT **array;
+      char *index_name;
       unsigned line_length;
       char *line;
       int saved_inhibit_paragraph_indentation = inhibit_paragraph_indentation;
       int saved_filling_enabled = filling_enabled;
       int saved_line_number = line_number;
       char *saved_input_filename = input_filename;
-      unsigned output_line_number_len;
+
+      close_paragraph ();
+      get_rest_of_line (0, &index_name);
 
       index = index_list (index_name);
       if (index == (INDEX_ELT *)-1)
@@ -761,17 +698,9 @@ cm_printindex (void)
       xml_sort_index = 0;
       close_paragraph ();
       if (html)
-        add_html_block_elt_args ("<ul class=\"index-%s\" compact>",
-                                 index_name);
+        add_word_args ("<ul class=\"index-%s\" compact>", index_name);
       else if (!no_headers && !docbook)
-        { /* Info.  Add magic cookie for info readers (to treat this
-             menu differently), and the usual start-of-menu.  */
-          add_char ('\0');
-          add_word ("\010[index");
-          add_char ('\0');
-          add_word ("\010]\n");
-          add_word ("* Menu:\n\n");
-        }
+        add_word ("* Menu:\n\n");
 
       me_inhibit_expansion++;
 
@@ -779,29 +708,11 @@ cm_printindex (void)
       line_length = 100;
       line = xmalloc (line_length);
 
-      {
-        char *max_output_line_number = (char *) xmalloc (25 * sizeof (char));
-
-        if (no_headers)
-          sprintf (max_output_line_number, "%d", output_line_number);
-        else
-          {
-            INDEX_ELT *tmp_entry = index;
-            unsigned tmp = 0;
-            for (tmp_entry = index; tmp_entry; tmp_entry = tmp_entry->next)
-              tmp = tmp_entry->output_line > tmp ? tmp_entry->output_line : tmp;
-            sprintf (max_output_line_number, "%d", tmp);
-          }
-
-        output_line_number_len = strlen (max_output_line_number);
-        free (max_output_line_number);
-      }
-
       for (item = 0; (index = array[item]); item++)
         {
           /* A pathological document might have an index entry outside of any
              node.  Don't crash; try using the section name instead.  */
-          char *index_node = index->node;
+          const char *index_node = index->node;
 
           line_number = index->defining_line;
           input_filename = index->defining_file;
@@ -814,7 +725,7 @@ cm_printindex (void)
               line_error (_("Entry for index `%s' outside of any node"),
                           index_name);
               if (html || !no_headers)
-                index_node = (char *) _("(outside of any node)");
+                index_node = _("(outside of any node)");
             }
 
           if (html)
@@ -822,25 +733,26 @@ cm_printindex (void)
            to the actual location of the indexed position (but then we
            have to find something to wrap the anchor around). */
             {
-              /* In the HTML case, the expanded index entry is not
-                 good for us, since it was expanded for non-HTML mode
-                 inside sort_index.  So we need to HTML-escape and
-                 expand the original entry text here.  */
-              char *escaped_entry = xstrdup (index->entry_text);
-              char *expanded_entry;
+              if (last_index
+                  && STREQ (last_index->entry_text, index->entry_text))
+                add_word (", ");  /* Don't repeat the previous entry. */
+              else
+                {
+                  /* In the HTML case, the expanded index entry is not
+                     good for us, since it was expanded for non-HTML mode
+                     inside sort_index.  So we need to HTML-escape and
+                     expand the original entry text here.  */
+                  char *escaped_entry = xstrdup (index->entry_text);
+                  char *expanded_entry;
 
-              /* expansion() doesn't HTML-escape the argument, so need
-                 to do it separately.  */
-              escaped_entry = escape_string (escaped_entry);
-              expanded_entry = expansion (escaped_entry, index->code);
-              add_html_block_elt_args ("\n<li><a href=\"%s#index-",
-                  (splitting ? index->output_file : ""), index_name);
-              add_escaped_anchor_name (index->entry_text);
-              add_word_args ("-%d\">%s</a>: ", index->entry_number,
-                  expanded_entry);
-              free (escaped_entry);
-              free (expanded_entry);
-
+                  /* expansion() doesn't HTML-escape the argument, so need
+                     to do it separately.  */
+                  escaped_entry = escape_string (escaped_entry);
+                  expanded_entry = expansion (escaped_entry, index->code);
+                  add_word_args ("\n<li>%s: ", expanded_entry);
+                  free (escaped_entry);
+                  free (expanded_entry);
+                }
               add_word ("<a href=\"");
               if (index->node && *index->node)
                 {
@@ -851,7 +763,6 @@ cm_printindex (void)
                   expanded_index = expansion (index_node, 0);
                   in_fixed_width_font--;
                   add_anchor_name (expanded_index, 1);
-		  expanded_index = escape_string (expanded_index);
                   add_word_args ("\">%s</a>", expanded_index);
                   free (expanded_index);
                 }
@@ -864,8 +775,6 @@ cm_printindex (void)
                 /* If we use the section instead of the (missing) node, then
                    index_node already includes all we need except the #.  */
                 add_word_args ("#%s</a>", index_node);
-
-              add_html_block_elt ("</li>");
             }
           else if (xml && docbook)
             {
@@ -899,9 +808,7 @@ cm_printindex (void)
                   insert_string (line);
                   /* Make sure any non-macros in the node name are expanded.  */
                   in_fixed_width_font++;
-                  execute_string ("%s. ", index_node);
-                  insert_index_output_line_no (index->output_line,
-                      output_line_number_len);
+                  execute_string ("%s.\n", index_node);
                   in_fixed_width_font--;
                 }
               else
@@ -910,27 +817,40 @@ cm_printindex (void)
                      there's little sense in referring to them in the
                      index.  Instead, output the number or name of the
                      section that corresponds to that node.  */
-                  sprintf (line, "%-*s ", number_sections ? 46 : 1, index->entry);
+                  char *section_name = toc_find_section_of_node (index_node);
+
+                  sprintf (line, "%-*s ", number_sections ? 50 : 1, index->entry);
                   line[strlen (index->entry)] = ':';
                   insert_string (line);
+                  if (section_name)
+                    {
+                      int idx = 0;
+                      unsigned ref_len = strlen (section_name) + 30;
 
-                  if (strlen (index->section) > 0)
-                    { /* We got your number.  */
-                      insert_string ((char *) _("See "));
-                      insert_string (index->section);
+                      if (ref_len > line_length)
+                        {
+                          line_length = ref_len;
+                          line = xrealloc (line, line_length);
+                        }
+
+                      if (number_sections)
+                        {
+                          while (section_name[idx]
+                                 && (isdigit (section_name[idx])
+                                     || (idx && section_name[idx] == '.')))
+                            idx++;
+                        }
+                      if (idx)
+                        sprintf (line, " See %.*s.\n", idx, section_name);
+                      else
+                        sprintf (line, "\n          See ``%s''.\n", section_name);
+                      insert_string (line);
                     }
                   else
-                    { /* Sigh, index in an @unnumbered. :-\  */
-                      insert_string ("\n          ");
-                      insert_string ((char *) _("See "));
-                      insert_string ("``");
-                      insert_string (expansion (index->section_name, 0));
-                      insert_string ("''");
+                    {
+                      insert_string (" "); /* force a blank */
+                      execute_string ("See node %s.\n", index_node);
                     }
-
-                  insert_string (". ");
-                  insert_index_output_line_no (index->output_line,
-                      output_line_number_len);
                 }
             }
 
@@ -941,6 +861,7 @@ cm_printindex (void)
         }
 
       free (line);
+      free (index_name);
 
       me_inhibit_expansion--;
       printing_index = 0;
@@ -952,13 +873,8 @@ cm_printindex (void)
       line_number = saved_line_number;
 
       if (html)
-        add_html_block_elt ("</ul>");
+        add_word ("</ul>");
       else if (xml && docbook)
         xml_end_index ();
     }
-
-  free (index_name);
-  /* Re-increment the line number, because get_rest_of_line
-     left us looking at the next line after the command.  */
-  line_number++;
 }

@@ -1,5 +1,5 @@
 #
-# 	$NetBSD: NULLCONF,v 1.20 2004/11/10 17:54:04 christos Exp $
+# 	$NetBSD: NULLCONF,v 1.17.8.2 2004/07/15 20:17:31 he Exp $
 #
 include		"arch/hpcmips/conf/std.hpcmips"
 
@@ -24,7 +24,6 @@ makeoptions	DEFWARNINGS="no"	# override DEFWARNINGS?=yes
 
 file-system 	FFS		# fast filesystem with user and group quotas
 options 	COMPAT_386BSD_MBRPART # recognize old partition ID
-options		COMPAT_BSDPTY	# /dev/[pt]ty?? ptys.
 
 # compile options
 #makeoptions	DEFGP="-G 18"

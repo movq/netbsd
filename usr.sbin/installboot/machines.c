@@ -1,4 +1,4 @@
-/*	$NetBSD: machines.c,v 1.25 2004/08/15 22:00:12 dsl Exp $	*/
+/*	$NetBSD: machines.c,v 1.23.2.1 2004/06/22 07:26:45 tron Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -42,7 +42,7 @@
 
 #include <sys/cdefs.h>
 #if defined(__RCSID) && !defined(__lint)
-__RCSID("$NetBSD: machines.c,v 1.25 2004/08/15 22:00:12 dsl Exp $");
+__RCSID("$NetBSD: machines.c,v 1.23.2.1 2004/06/22 07:26:45 tron Exp $");
 #endif	/* !__lint */
 
 #include <sys/types.h>
@@ -61,7 +61,7 @@ struct ib_mach machines[] = {
 		IB_APPEND },
 #endif
 	{ "i386",	i386_setboot,	no_clearboot,
-		IB_RESETVIDEO | IB_CONSOLE | IB_CONSPEED | IB_CONSADDR |
+		IB_RESETVIDEO | IB_CONSOLE | IB_CONSPEED |
 		IB_KEYMAP | IB_PASSWORD | IB_TIMEOUT },
 	{ "macppc",	macppc_setboot,	macppc_clearboot,
 		IB_STAGE2START },

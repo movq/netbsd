@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.9 2004/09/01 01:46:56 chs Exp $	*/
+/*	$NetBSD: main.c,v 1.8.2.1 2004/09/01 03:34:13 jmc Exp $	*/
 
 /*
  * Copyright (c) 1988 Mark Nudelman
@@ -42,7 +42,7 @@ __COPYRIGHT(\
 #if 0
 static char sccsid[] = "@(#)main.c	8.1 (Berkeley) 6/7/93";
 #else
-__RCSID("$NetBSD: main.c,v 1.9 2004/09/01 01:46:56 chs Exp $");
+__RCSID("$NetBSD: main.c,v 1.8.2.1 2004/09/01 03:34:13 jmc Exp $");
 #endif
 #endif /* not lint */
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: darwin_machdep.c,v 1.7 2004/07/28 22:24:06 manu Exp $ */
+/*	$NetBSD: darwin_machdep.c,v 1.5 2003/09/25 22:01:31 christos Exp $ */
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: darwin_machdep.c,v 1.7 2004/07/28 22:24:06 manu Exp $");
+__KERNEL_RCSID(0, "$NetBSD: darwin_machdep.c,v 1.5 2003/09/25 22:01:31 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -48,7 +48,6 @@ __KERNEL_RCSID(0, "$NetBSD: darwin_machdep.c,v 1.7 2004/07/28 22:24:06 manu Exp 
 #include <compat/mach/mach_types.h>
 #include <compat/mach/mach_vm.h>
 
-#include <compat/darwin/darwin_audit.h>
 #include <compat/darwin/darwin_signal.h>
 #include <compat/darwin/darwin_syscallargs.h>
 
@@ -62,7 +61,7 @@ darwin_sendsig(const ksiginfo_t *ksi, const sigset_t *mask)
 }
 
 int
-darwin_sys_sigreturn_x2(l, v, retval)
+darwin_sys_sigreturn(l, v, retval)
 	struct lwp *l;
 	void *v;
 	register_t *retval;
@@ -73,29 +72,7 @@ darwin_sys_sigreturn_x2(l, v, retval)
 	} */ *uap = v;
 
 	printf("darwin_sys_sigreturn: uctx = %p\n", SCARG(uap, uctx));
-	return 0;
-}
 
-/*
- * This is the version used starting with X.3 binaries
- */
-int
-darwin_sys_sigreturn(struct lwp *l, void *v, register_t *retval)
-{
-	struct darwin_sys_sigreturn_args /* {
-		syscallarg(struct darwin_ucontext *) uctx;
-		syscallarg(int) ucvers;
-	} */ *uap = v;
-
-	switch (SCARG(uap, ucvers)) {
-	case /* DARWIN_UCVERS_X2 */ 1:
-		return darwin_sys_sigreturn_x2(l, v, retval);
-
-	default:
-		printf("darwin_sys_sigreturn: ucvers = %d\n", 
-		    SCARG(uap, ucvers));
-		break;
-	}
 	return 0;
 }
 

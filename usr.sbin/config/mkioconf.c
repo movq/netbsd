@@ -1,4 +1,4 @@
-/*	$NetBSD: mkioconf.c,v 1.73 2004/06/20 22:20:17 jmc Exp $	*/
+/*	$NetBSD: mkioconf.c,v 1.72.2.1 2004/06/22 07:28:12 tron Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993

@@ -1,13 +1,13 @@
 #!/bin/sh
 #
-# $NetBSD: ipnat,v 1.13 2004/10/12 14:51:03 lukem Exp $
+# $NetBSD: ipnat,v 1.10 2003/08/22 08:43:26 mrg Exp $
 #
 
 # PROVIDE: ipnat
 # REQUIRE: ipfilter mountcritremote
 # BEFORE:  SERVERS
 
-$_rc_subr_loaded . /etc/rc.subr
+. /etc/rc.subr
 
 name="ipnat"
 rcvar=$name
@@ -23,7 +23,7 @@ ipnat_start()
 	if [ ! -f ${config} ]; then
 		return 0
 	fi
-	if [ "$(/sbin/sysctl -n net.inet.ip.forwarding)" = "0" ]; then
+	if [ "`/sbin/sysctl -n net.inet.ip.forwarding`" = "0" ]; then
 		logger -s -p daemon.warning -t ipnat \
 			"WARNING: net.inet.ip.forwarding is 0"
 	fi
@@ -36,5 +36,4 @@ ipnat_start()
 }
 
 load_rc_config $name
-load_rc_config_var ipfilter ipfilter
 run_rc_command "$1"

@@ -33,7 +33,7 @@
 #include "krb5_locl.h"
 
 __RCSID("$Heimdal: parse-name-test.c,v 1.3.4.1 2004/03/22 19:27:36 joda Exp $"
-        "$NetBSD: parse-name-test.c,v 1.1.1.2 2004/04/02 14:47:52 lha Exp $");
+        "$NetBSD: parse-name-test.c,v 1.1.1.1.2.1 2004/04/21 04:55:41 jmc Exp $");
 
 enum { MAX_COMPONENTS = 3 };
 

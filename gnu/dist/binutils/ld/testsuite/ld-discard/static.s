@@ -1,6 +1,6 @@
 	.section	.data.exit,"aw"
 data:
-	.section	.text.exit,"ax"
+	.section	.text.exit,"aw"
 text:
 	.text
 	.globl _start

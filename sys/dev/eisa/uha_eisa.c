@@ -1,4 +1,4 @@
-/*	$NetBSD: uha_eisa.c,v 1.22 2004/08/23 06:03:19 thorpej Exp $	*/
+/*	$NetBSD: uha_eisa.c,v 1.21 2002/10/02 16:33:48 thorpej Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uha_eisa.c,v 1.22 2004/08/23 06:03:19 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uha_eisa.c,v 1.21 2002/10/02 16:33:48 thorpej Exp $");
 
 #include "opt_ddb.h"
 
@@ -64,8 +64,8 @@ __KERNEL_RCSID(0, "$NetBSD: uha_eisa.c,v 1.22 2004/08/23 06:03:19 thorpej Exp $"
 #define	UHA_EISA_SLOT_OFFSET	0xc80
 #define	UHA_EISA_IOSIZE		0x020
 
-static int	uha_eisa_match(struct device *, struct cfdata *, void *);
-static void	uha_eisa_attach(struct device *, struct device *, void *);
+int	uha_eisa_match __P((struct device *, struct cfdata *, void *));
+void	uha_eisa_attach __P((struct device *, struct device *, void *));
 
 CFATTACH_DECL(uha_eisa, sizeof(struct uha_softc),
     uha_eisa_match, uha_eisa_attach, NULL, NULL);
@@ -74,20 +74,23 @@ CFATTACH_DECL(uha_eisa, sizeof(struct uha_softc),
 #define Debugger() panic("should call debugger here (uha_eisa.c)")
 #endif /* ! DDB */
 
-static int	u24_find(bus_space_tag_t, bus_space_handle_t,
-		    struct uha_probe_data *);
-static void	u24_start_mbox(struct uha_softc *, struct uha_mscp *);
-static int	u24_poll(struct uha_softc *, struct scsipi_xfer *, int);
-static int	u24_intr(void *);
-static void	u24_init(struct uha_softc *);
+int	u24_find __P((bus_space_tag_t, bus_space_handle_t,
+	    struct uha_probe_data *));
+void	u24_start_mbox __P((struct uha_softc *, struct uha_mscp *));
+int	u24_poll __P((struct uha_softc *, struct scsipi_xfer *, int));
+int	u24_intr __P((void *));
+void	u24_init __P((struct uha_softc *));
 
 /*
  * Check the slots looking for a board we recognise
  * If we find one, note it's address (slot) and call
  * the actual probe routine to check it out.
  */
-static int
-uha_eisa_match(struct device *parent, struct cfdata *match, void *aux)
+int
+uha_eisa_match(parent, match, aux)
+	struct device *parent;
+	struct cfdata *match;
+	void *aux;
 {
 	struct eisa_attach_args *ea = aux;
 	bus_space_tag_t iot = ea->ea_iot;
@@ -112,8 +115,10 @@ uha_eisa_match(struct device *parent, struct cfdata *match, void *aux)
 /*
  * Attach all the sub-devices we can find
  */
-static void
-uha_eisa_attach(struct device *parent, struct device *self, void *aux)
+void
+uha_eisa_attach(parent, self, aux)
+	struct device *parent, *self;
+	void *aux;
 {
 	struct eisa_attach_args *ea = aux;
 	struct uha_softc *sc = (void *)self;
@@ -169,8 +174,11 @@ uha_eisa_attach(struct device *parent, struct device *self, void *aux)
 	uha_attach(sc, &upd);
 }
 
-static int
-u24_find(bus_space_tag_t iot, bus_space_handle_t ioh, struct uha_probe_data *sc)
+int
+u24_find(iot, ioh, sc)
+	bus_space_tag_t iot;
+	bus_space_handle_t ioh;
+	struct uha_probe_data *sc;
 {
 	u_int8_t config0, config1, config2;
 	int irq, drq;
@@ -226,8 +234,10 @@ u24_find(bus_space_tag_t iot, bus_space_handle_t ioh, struct uha_probe_data *sc)
 	return (1);
 }
 
-static void
-u24_start_mbox(struct uha_softc *sc, struct uha_mscp *mscp)
+void
+u24_start_mbox(sc, mscp)
+	struct uha_softc *sc;
+	struct uha_mscp *mscp;
 {
 	bus_space_tag_t iot = sc->sc_iot;
 	bus_space_handle_t ioh = sc->sc_ioh;
@@ -257,8 +267,11 @@ u24_start_mbox(struct uha_softc *sc, struct uha_mscp *mscp)
 		    mstohz(mscp->timeout), uha_timeout, mscp);
 }
 
-static int
-u24_poll(struct uha_softc *sc, struct scsipi_xfer *xs, int count)
+int
+u24_poll(sc, xs, count)
+	struct uha_softc *sc;
+	struct scsipi_xfer *xs;
+	int count;
 {
 	bus_space_tag_t iot = sc->sc_iot;
 	bus_space_handle_t ioh = sc->sc_ioh;
@@ -278,8 +291,9 @@ u24_poll(struct uha_softc *sc, struct scsipi_xfer *xs, int count)
 	return (1);
 }
 
-static int
-u24_intr(void *arg)
+int
+u24_intr(arg)
+	void *arg;
 {
 	struct uha_softc *sc = arg;
 	bus_space_tag_t iot = sc->sc_iot;
@@ -326,8 +340,9 @@ u24_intr(void *arg)
 	}
 }
 
-static void
-u24_init(struct uha_softc *sc)
+void
+u24_init(sc)
+	struct uha_softc *sc;
 {
 	bus_space_tag_t iot = sc->sc_iot;
 	bus_space_handle_t ioh = sc->sc_ioh;

@@ -1,4 +1,4 @@
-/*	$NetBSD: if_tun.c,v 1.75 2004/12/06 02:59:23 christos Exp $	*/
+/*	$NetBSD: if_tun.c,v 1.68.2.2 2004/05/20 12:28:17 grant Exp $	*/
 
 /*
  * Copyright (c) 1988, Julian Onions <jpo@cs.nott.ac.uk>
@@ -15,7 +15,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_tun.c,v 1.75 2004/12/06 02:59:23 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_tun.c,v 1.68.2.2 2004/05/20 12:28:17 grant Exp $");
+
+#include "tun.h"
 
 #include "opt_inet.h"
 #include "opt_ns.h"
@@ -78,7 +80,7 @@ int	tun_ioctl __P((struct ifnet *, u_long, caddr_t));
 int	tun_output __P((struct ifnet *, struct mbuf *, struct sockaddr *,
 		       struct rtentry *rt));
 int	tun_clone_create __P((struct if_clone *, int));
-int	tun_clone_destroy __P((struct ifnet *));
+void	tun_clone_destroy __P((struct ifnet *));
 
 struct if_clone tun_cloner =
     IF_CLONE_INITIALIZER("tun", tun_clone_create, tun_clone_destroy);
@@ -228,7 +230,7 @@ tunattach0(tp)
 #endif
 }
 
-int
+void
 tun_clone_destroy(ifp)
 	struct ifnet *ifp;
 {
@@ -269,8 +271,6 @@ tun_clone_destroy(ifp)
 
 	if (!zombie)
 		free(tp, M_DEVBUF);
-
-	return (0);
 }
 
 /*
@@ -289,6 +289,9 @@ tunopen(dev, flag, mode, p)
 
 	if ((error = suser(p->p_ucred, &p->p_acflag)) != 0)
 		return (error);
+
+	if (NTUN < 1)
+		return (ENXIO);
 
 	s = splnet();
 	tp = tun_find_unit(dev);
@@ -491,11 +494,11 @@ tun_output(ifp, m0, dst, rt)
 	struct rtentry *rt;
 {
 	struct tun_softc *tp = ifp->if_softc;
+#ifdef INET
 	int		s;
 	int		error;
-#ifdef INET
-	int		mlen;
 #endif
+	int		mlen;
 	ALTQ_DECL(struct altq_pktattr pktattr;)
 
 	s = splnet();
@@ -517,8 +520,24 @@ tun_output(ifp, m0, dst, rt)
 	IFQ_CLASSIFY(&ifp->if_snd, m0, dst->sa_family, &pktattr);
 
 #if NBPFILTER > 0
-	if (ifp->if_bpf)
-		bpf_mtap_af(ifp->if_bpf, dst->sa_family, m0);
+	if (ifp->if_bpf) {
+		/*
+		 * We need to prepend the address family as
+		 * a four byte field.  Cons up a dummy header
+		 * to pacify bpf.  This is safe because bpf
+		 * will only read from the mbuf (i.e., it won't
+		 * try to free it or keep a pointer to it).
+		 */
+		struct mbuf m;
+		u_int32_t af = dst->sa_family;
+
+		m.m_flags = 0;
+		m.m_next = m0;
+		m.m_len = sizeof(af);
+		m.m_data = (char *)&af;
+
+		bpf_mtap(ifp->if_bpf, &m);
+	}
 #endif
 
 	switch(dst->sa_family) {
@@ -873,8 +892,24 @@ tunwrite(dev, uio, ioflag)
 	top->m_pkthdr.rcvif = ifp;
 
 #if NBPFILTER > 0
-	if (ifp->if_bpf)
-		bpf_mtap_af(ifp->if_bpf, AF_INET, top);
+	if (ifp->if_bpf) {
+		/*
+		 * We need to prepend the address family as
+		 * a four byte field.  Cons up a dummy header
+		 * to pacify bpf.  This is safe because bpf
+		 * will only read from the mbuf (i.e., it won't
+		 * try to free it or keep a pointer to it).
+		 */
+		struct mbuf m;
+		u_int32_t af = AF_INET;
+
+		m.m_flags = 0;
+		m.m_next = top;
+		m.m_len = sizeof(af);
+		m.m_data = (char *)&af;
+
+		bpf_mtap(ifp->if_bpf, &m);
+	}
 #endif
 
 	s = splnet();

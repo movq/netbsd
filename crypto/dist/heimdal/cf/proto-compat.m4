@@ -1,5 +1,5 @@
 dnl $Heimdal: proto-compat.m4,v 1.3.34.1 2004/04/01 07:27:35 joda Exp $
-dnl $NetBSD: proto-compat.m4,v 1.1.1.4 2004/04/02 14:48:06 lha Exp $
+dnl $NetBSD: proto-compat.m4,v 1.1.1.3.2.1 2004/04/21 04:55:38 jmc Exp $
 dnl
 dnl
 dnl Check if the prototype of a function is compatible with another one

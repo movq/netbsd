@@ -1,4 +1,4 @@
-#	$NetBSD: list,v 1.21 2004/04/29 20:45:07 gendalia Exp $
+#	$NetBSD: list,v 1.19.2.2 2004/04/30 03:48:28 jmc Exp $
 #
 
 SRCDIRS	usr.bin/less

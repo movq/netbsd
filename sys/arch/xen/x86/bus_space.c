@@ -1,4 +1,4 @@
-/*	$NetBSD: bus_space.c,v 1.2 2004/04/26 22:05:05 cl Exp $	*/
+/*	$NetBSD: bus_space.c,v 1.2.2.2 2004/05/22 15:57:25 he Exp $	*/
 /*	NetBSD: bus_space.c,v 1.2 2003/03/14 18:47:53 christos Exp 	*/
 
 /*-
@@ -39,7 +39,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bus_space.c,v 1.2 2004/04/26 22:05:05 cl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bus_space.c,v 1.2.2.2 2004/05/22 15:57:25 he Exp $");
 
 #include "opt_xen.h"
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_subr.c,v 1.114 2004/10/24 17:06:24 cube Exp $	*/
+/*	$NetBSD: kern_subr.c,v 1.109 2004/03/23 13:22:33 junyoung Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998, 1999, 2002 The NetBSD Foundation, Inc.
@@ -86,7 +86,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_subr.c,v 1.114 2004/10/24 17:06:24 cube Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_subr.c,v 1.109 2004/03/23 13:22:33 junyoung Exp $");
 
 #include "opt_ddb.h"
 #include "opt_md.h"
@@ -146,16 +146,6 @@ uiomove(buf, n, uio)
 	int error = 0;
 	char *cp = buf;
 	struct proc *p = uio->uio_procp;
-	int hold_count;
-
-	hold_count = KERNEL_LOCK_RELEASE_ALL();
-
-#if defined(LOCKDEBUG) || defined(DIAGNOSTIC)
-	spinlock_switchcheck();
-#endif
-#ifdef LOCKDEBUG
-	simple_lock_only_held(NULL, "uiomove");
-#endif
 
 #ifdef DIAGNOSTIC
 	if (uio->uio_rw != UIO_READ && uio->uio_rw != UIO_WRITE)
@@ -192,7 +182,7 @@ uiomove(buf, n, uio)
 					    cp, cnt);
 			}
 			if (error)
-				goto out;
+				return (error);
 			break;
 
 		case UIO_SYSSPACE:
@@ -201,7 +191,7 @@ uiomove(buf, n, uio)
 			else
 				error = kcopy(iov->iov_base, cp, cnt);
 			if (error)
-				goto out;
+				return (error);
 			break;
 		}
 		iov->iov_base = (caddr_t)iov->iov_base + cnt;
@@ -212,26 +202,7 @@ uiomove(buf, n, uio)
 		KDASSERT(cnt <= n);
 		n -= cnt;
 	}
-out:
-	KERNEL_LOCK_ACQUIRE_COUNT(hold_count);
 	return (error);
-}
-
-/*
- * Wrapper for uiomove() that validates the arguments against a known-good
- * kernel buffer.
- */
-int
-uiomove_frombuf(void *buf, size_t buflen, struct uio *uio)
-{
-	size_t offset;
-
-	if (uio->uio_offset < 0 || uio->uio_resid < 0 ||
-	    (offset = uio->uio_offset) != uio->uio_offset)
-		return (EINVAL);
-	if (offset >= buflen)
-		return (0);
-	return (uiomove((char *)buf + offset, buflen - offset, uio));
 }
 
 /*
@@ -758,23 +729,6 @@ extern int numraid;
 extern struct device *raidrootdev;
 #endif
 
-/*
- * The device and wedge that we booted from.  If booted_wedge is NULL,
- * the we might consult booted_partition.
- */
-struct device *booted_device;
-struct device *booted_wedge;
-int booted_partition;
-
-/*
- * Use partition letters if it's a disk class but not a wedge.
- * XXX Check for wedge is kinda gross.
- */
-#define	DEV_USES_PARTITIONS(dv)						\
-	((dv)->dv_class == DV_DISK &&					\
-	((dv)->dv_cfdata == NULL ||					\
-	 strcmp((dv)->dv_cfdata->cf_name, "dk") != 0))
-
 void
 setroot(bootdv, bootpartition)
 	struct device *bootdv;
@@ -802,8 +756,7 @@ setroot(bootdv, bootpartition)
 		fakemdrootdev[i].dv_cfdata = NULL;
 		fakemdrootdev[i].dv_unit   = i;
 		fakemdrootdev[i].dv_parent = NULL;
-		snprintf(fakemdrootdev[i].dv_xname,
-		    sizeof(fakemdrootdev[i].dv_xname), "md%d", i);
+		sprintf(fakemdrootdev[i].dv_xname, "md%d", i);
 	}
 #endif /* MEMORY_DISK_HOOKS */
 
@@ -856,7 +809,7 @@ setroot(bootdv, bootpartition)
 			printf("root device");
 			if (bootdv != NULL) {
 				printf(" (default %s", bootdv->dv_xname);
-				if (DEV_USES_PARTITIONS(bootdv))
+				if (bootdv->dv_class == DV_DISK)
 					printf("%c", bootpartition + 'a');
 				printf(")");
 			}
@@ -887,7 +840,7 @@ setroot(bootdv, bootpartition)
 		 * device, since we don't support dumps to the
 		 * network.
 		 */
-		if (DEV_USES_PARTITIONS(rootdv) == 0)
+		if (rootdv->dv_class == DV_IFNET)
 			defdumpdv = NULL;
 		else
 			defdumpdv = rootdv;
@@ -985,14 +938,10 @@ setroot(bootdv, bootpartition)
 		majdev = devsw_name2blk(bootdv->dv_xname, NULL, 0);
 		if (majdev >= 0) {
 			/*
-			 * Root is on a disk.  `bootpartition' is root,
-			 * unless the device does not use partitions.
+			 * Root is on a disk.  `bootpartition' is root.
 			 */
-			if (DEV_USES_PARTITIONS(bootdv))
-				rootdev = MAKEDISKDEV(majdev, bootdv->dv_unit,
-				    bootpartition);
-			else
-				rootdev = makedev(majdev, bootdv->dv_unit);
+			rootdev = MAKEDISKDEV(majdev, bootdv->dv_unit,
+			    bootpartition);
 		}
 	} else {
 
@@ -1017,8 +966,7 @@ setroot(bootdv, bootpartition)
 			goto top;
 		}
 		memset(buf, 0, sizeof(buf));
-		snprintf(buf, sizeof(buf), "%s%d", rootdevname,
-		    DISKUNIT(rootdev));
+		sprintf(buf, "%s%d", rootdevname, DISKUNIT(rootdev));
 
 		rootdv = finddevice(buf);
 		if (rootdv == NULL) {
@@ -1083,8 +1031,7 @@ setroot(bootdv, bootpartition)
 		if (dumpdevname == NULL)
 			goto nodumpdev;
 		memset(buf, 0, sizeof(buf));
-		snprintf(buf, sizeof(buf), "%s%d", dumpdevname,
-		    DISKUNIT(dumpdev));
+		sprintf(buf, "%s%d", dumpdevname, DISKUNIT(dumpdev));
 
 		dumpdv = finddevice(buf);
 		if (dumpdv == NULL) {
@@ -1094,7 +1041,7 @@ setroot(bootdv, bootpartition)
 			goto nodumpdev;
 		}
 	} else {				/* (c) */
-		if (DEV_USES_PARTITIONS(rootdv) == 0)
+		if (rootdv->dv_class == DV_IFNET)
 			goto nodumpdev;
 		else {
 			dumpdv = rootdv;
@@ -1176,11 +1123,9 @@ getdisk(str, len, defpart, devp, isdump)
 				    'a' + MAXPARTITIONS - 1);
 #endif
 		TAILQ_FOREACH(dv, &alldevs, dv_list) {
-			if (DEV_USES_PARTITIONS(dv))
+			if (dv->dv_class == DV_DISK)
 				printf(" %s[a-%c]", dv->dv_xname,
 				    'a' + MAXPARTITIONS - 1);
-			else if (dv->dv_class == DV_DISK)
-				printf(" %s", dv->dv_xname);
 			if (isdump == 0 && dv->dv_class == DV_IFNET)
 				printf(" %s", dv->dv_xname);
 		}
@@ -1243,10 +1188,7 @@ parsedisk(str, len, defpart, devp)
 			majdev = devsw_name2blk(dv->dv_xname, NULL, 0);
 			if (majdev < 0)
 				panic("parsedisk");
-			if (DEV_USES_PARTITIONS(dv))
-				*devp = MAKEDISKDEV(majdev, dv->dv_unit, part);
-			else
-				*devp = makedev(majdev, dv->dv_unit);
+			*devp = MAKEDISKDEV(majdev, dv->dv_unit, part);
 		}
 
 		if (dv->dv_class == DV_IFNET)

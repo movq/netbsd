@@ -1,4 +1,4 @@
-/*	$NetBSD: Locore.c,v 1.2 2004/06/30 15:43:57 christos Exp $	*/
+/*	$NetBSD: Locore.c,v 1.1 2002/02/10 01:58:15 thorpej Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -38,14 +38,13 @@
 #include <arm/armreg.h>
 
 #include "cache.h"
-#include "extern.h"
 #include "openfirm.h"
 
-static int (*openfirmware_entry)(void *);
-static int openfirmware(void *);
+static int (*openfirmware_entry) __P((void *));
+static int openfirmware __P((void *));
 
-void startup(int (*)(void *), char *, int);
-static void setup(void);
+void startup __P((int (*)(void *), char *, int));
+static void setup __P((void));
 
 void (*cache_syncI)(void);
 
@@ -54,8 +53,7 @@ void abort(void)
 {
 
 	/* Stupid compiler (__dead). */
-	for (;;)
-		continue;
+	for (;;) ;
 }
 
 static int
@@ -63,8 +61,7 @@ openfirmware(arg)
 	void *arg;
 {
 
-	(*openfirmware_entry)(arg);
-	return 0;
+	openfirmware_entry(arg);
 }
 
 static vaddr_t
@@ -85,7 +82,10 @@ ofw_getcleaninfo(void)
 }
 
 void
-startup(int (*openfirm)(void *), char *arg, int argl)
+startup(openfirm, arg, argl)
+	int (*openfirm)(void *);
+	char *arg;
+	int argl;
 {
 	u_int cputype = cpufunc_id() & CPU_ID_CPU_MASK;
 
@@ -120,10 +120,10 @@ of_decode_int(const u_char *p)
 }
 
 __dead void
-OF_exit(void)
+OF_exit()
 {
 	static struct {
-		const char *name;
+		char *name;
 		int nargs;
 		int nreturns;
 	} args = {
@@ -137,13 +137,14 @@ OF_exit(void)
 }
 
 int
-OF_finddevice(const char *name)
+OF_finddevice(name)
+	char *name;
 {
 	static struct {
-		const char *name;
+		char *name;
 		int nargs;
 		int nreturns;
-		const char *device;
+		char *device;
 		int phandle;
 	} args = {
 		"finddevice",
@@ -158,10 +159,11 @@ OF_finddevice(const char *name)
 }
 
 int
-OF_instance_to_package(int ihandle)
+OF_instance_to_package(ihandle)
+	int ihandle;
 {
 	static struct {
-		const char *name;
+		char *name;
 		int nargs;
 		int nreturns;
 		int ihandle;
@@ -179,14 +181,18 @@ OF_instance_to_package(int ihandle)
 }
 
 int
-OF_getprop(int handle, const char *prop, void *buf, int buflen)
+OF_getprop(handle, prop, buf, buflen)
+	int handle;
+	char *prop;
+	void *buf;
+	int buflen;
 {
 	static struct {
-		const char *name;
+		char *name;
 		int nargs;
 		int nreturns;
 		int phandle;
-		const char *prop;
+		char *prop;
 		void *buf;
 		int buflen;
 		int size;
@@ -207,14 +213,18 @@ OF_getprop(int handle, const char *prop, void *buf, int buflen)
 
 #ifdef	__notyet__	/* Has a bug on FirePower */
 int
-OF_setprop(int handle, const char *prop, void *buf, int len)
+OF_setprop(handle, prop, buf, len)
+	int handle;
+	char *prop;
+	void *buf;
+	int len;
 {
 	static struct {
-		const char *name;
+		char *name;
 		int nargs;
 		int nreturns;
 		int phandle;
-		const char *prop;
+		char *prop;
 		void *buf;
 		int len;
 		int size;
@@ -235,10 +245,11 @@ OF_setprop(int handle, const char *prop, void *buf, int len)
 #endif
 
 int
-OF_open(char *dname)
+OF_open(dname)
+	char *dname;
 {
 	static struct {
-		const char *name;
+		char *name;
 		int nargs;
 		int nreturns;
 		char *dname;
@@ -267,10 +278,11 @@ OF_open(char *dname)
 }
 
 void
-OF_close(int handle)
+OF_close(handle)
+	int handle;
 {
 	static struct {
-		const char *name;
+		char *name;
 		int nargs;
 		int nreturns;
 		int handle;
@@ -288,10 +300,13 @@ OF_close(int handle)
 }
 
 int
-OF_write(int handle, void *addr, int len)
+OF_write(handle, addr, len)
+	int handle;
+	void *addr;
+	int len;
 {
 	static struct {
-		const char *name;
+		char *name;
 		int nargs;
 		int nreturns;
 		int ihandle;
@@ -325,10 +340,13 @@ OF_write(int handle, void *addr, int len)
 }
 
 int
-OF_read(int handle, void *addr, int len)
+OF_read(handle, addr, len)
+	int handle;
+	void *addr;
+	int len;
 {
 	static struct {
-		const char *name;
+		char *name;
 		int nargs;
 		int nreturns;
 		int ihandle;
@@ -362,10 +380,12 @@ OF_read(int handle, void *addr, int len)
 }
 
 int
-OF_seek(int handle, u_quad_t pos)
+OF_seek(handle, pos)
+	int handle;
+	u_quad_t pos;
 {
 	static struct {
-		const char *name;
+		char *name;
 		int nargs;
 		int nreturns;
 		int handle;
@@ -397,10 +417,13 @@ OF_seek(int handle, u_quad_t pos)
 }
 
 void *
-OF_claim(void *virt, u_int size, u_int align)
+OF_claim(virt, size, align)
+	void *virt;
+	u_int size;
+	u_int align;
 {
 	static struct {
-		const char *name;
+		char *name;
 		int nargs;
 		int nreturns;
 		void *virt;
@@ -432,10 +455,12 @@ OF_claim(void *virt, u_int size, u_int align)
 }
 
 void
-OF_release(void *virt, u_int size)
+OF_release(virt, size)
+	void *virt;
+	u_int size;
 {
 	static struct {
-		const char *name;
+		char *name;
 		int nargs;
 		int nreturns;
 		void *virt;
@@ -455,10 +480,10 @@ OF_release(void *virt, u_int size)
 }
 
 int
-OF_milliseconds(void)
+OF_milliseconds()
 {
 	static struct {
-		const char *name;
+		char *name;
 		int nargs;
 		int nreturns;
 		int ms;
@@ -473,16 +498,20 @@ OF_milliseconds(void)
 }
 
 void
-OF_chain(void *virt, u_int size, void (*entry)(int (*)(void *), void *, u_int),
-    void *arg, u_int len)
+OF_chain(virt, size, entry, arg, len)
+	void *virt;
+	u_int size;
+	void (*entry)();
+	void *arg;
+	u_int len;
 {
 	struct {
-		const char *name;
+		char *name;
 		int nargs;
 		int nreturns;
 		void *virt;
 		u_int size;
-		void (*entry)(int (*)(void *), void *, u_int);
+		void (*entry)();
 		void *arg;
 		u_int len;
 	} args;
@@ -506,7 +535,7 @@ static int stdin;
 static int stdout;
 
 static void
-setup(void)
+setup()
 {
 	u_char buf[sizeof(int)];
 	int chosen;
@@ -524,7 +553,8 @@ setup(void)
 }
 
 void
-putchar(int c)
+putchar(c)
+	int c;
 {
 	char ch = c;
 
@@ -534,7 +564,7 @@ putchar(int c)
 }
 
 int
-getchar(void)
+getchar()
 {
 	unsigned char ch = '\0';
 	int l;

@@ -1,15 +1,10 @@
-#	$NetBSD: Makefile,v 1.7 2004/12/09 17:35:38 wiz Exp $
+#	$NetBSD: Makefile,v 1.6 2001/12/12 23:53:31 lukem Exp $
 
 NOMAN=	# defined
 
 .include "${.CURDIR}/../Makefile.inc"
 
-SCRIPTS=	rcs2log
-CLEANFILES=	${SCRIPTS}
-
-rcs2log: rcs2log.sh
-	sed -e "s/@MKTEMP_SH_FUNCTION@//" -e "s/@MKTEMP@/mktemp/" \
-		${.ALLSRC} > ${.TARGET}
+SCRIPTS=	rcs2log.sh
 
 DIST=${IDIST}/contrib
 .PATH: ${DIST}

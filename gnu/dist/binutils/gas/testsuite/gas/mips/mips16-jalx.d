@@ -1,5 +1,5 @@
 #objdump: -dr -mmips:4000 -mmips:16
-#as: -mips3 -mtune=r4000 -mips16 -mabi=o64
+#as: -mips3 -mtune=r4000 -mips16
 #name: mips16 jalx
 .*:     file format .*
 Disassembly of section .text:

@@ -1,7 +1,7 @@
-/*	$NetBSD: scsiconf.h,v 1.53 2004/09/17 23:30:22 mycroft Exp $	*/
+/*	$NetBSD: scsiconf.h,v 1.50.4.1 2004/09/11 12:52:42 he Exp $	*/
 
 /*-
- * Copyright (c) 1998, 1999, 2004 The NetBSD Foundation, Inc.
+ * Copyright (c) 1998, 1999 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -59,7 +59,7 @@
 
 #include <dev/scsipi/scsipiconf.h>
 
-int	scsiprint(void *, const char *);
+int	scsiprint __P((void *, const char *));
 
 struct scsibus_softc {
 	struct device sc_dev;
@@ -72,10 +72,11 @@ struct scsibus_softc {
 
 extern const struct scsipi_bustype scsi_bustype;
 
-int	scsi_change_def(struct scsipi_periph *, int);
-void	scsi_kill_pending(struct scsipi_periph *);
-void	scsi_print_addr(struct scsipi_periph *);
-int	scsi_probe_bus(struct scsibus_softc *, int, int);
-void	scsi_scsipi_cmd(struct scsipi_xfer *);
-
+int	scsi_change_def __P((struct scsipi_periph *, int));
+void	scsi_kill_pending __P((struct scsipi_periph *));
+void	scsi_print_addr __P((struct scsipi_periph *));
+int	scsi_probe_bus __P((struct scsibus_softc *, int, int));
+int	scsi_scsipi_cmd __P((struct scsipi_periph *, struct scsipi_xfer *,
+	    struct scsipi_generic *, int, void *, size_t,
+	    int, int, struct buf *, int));
 #endif /* _DEV_SCSIPI_SCSICONF_H_ */

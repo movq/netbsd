@@ -1,4 +1,4 @@
-#	$NetBSD: files.cats,v 1.31 2004/07/08 22:07:48 drochner Exp $
+#	$NetBSD: files.cats,v 1.29 2004/03/13 17:31:33 bjh21 Exp $
 #
 # CATS-specific configuration info
 #
@@ -39,6 +39,9 @@ file	arch/arm/footbridge/todclock.c			todclock	needs-count
 
 # ISA DMA glue
 file	arch/arm/footbridge/isa/isadma_machdep.c	isadma
+
+# Game adapter (joystick)
+file	arch/arm/footbridge/isa/joy_timer.c		joy
 
 # Memory disk driver
 file	dev/md_root.c				md & memory_disk_hooks
@@ -93,13 +96,13 @@ file	arch/cats/pci/pcib.c			pcib
 
 file	arch/cats/pci/pciide_machdep.c	pciide_common
 
+# Include USB stuff
+include "dev/usb/files.usb"
+
 # Include WSCONS stuff
 include "dev/wscons/files.wscons"
 include "dev/rasops/files.rasops"
 include "dev/wsfont/files.wsfont"
 include "dev/pckbport/files.pckbport"
-
-# Include USB stuff
-include "dev/usb/files.usb"
 
 include "arch/arm/conf/majors.arm32"

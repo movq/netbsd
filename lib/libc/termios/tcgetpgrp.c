@@ -1,4 +1,4 @@
-/*	$NetBSD: tcgetpgrp.c,v 1.9 2004/12/01 21:37:15 dsl Exp $	*/
+/*	$NetBSD: tcgetpgrp.c,v 1.8 2003/08/07 16:44:13 agc Exp $	*/
 
 /*-
  * Copyright (c) 1989, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)termios.c	8.2 (Berkeley) 2/21/94";
 #else
-__RCSID("$NetBSD: tcgetpgrp.c,v 1.9 2004/12/01 21:37:15 dsl Exp $");
+__RCSID("$NetBSD: tcgetpgrp.c,v 1.8 2003/08/07 16:44:13 agc Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -62,8 +62,5 @@ tcgetpgrp(fd)
 	if (ioctl(fd, TIOCGPGRP, &s) < 0)
 		return ((pid_t)-1);
 
-	if (s == (pid_t)-1)
-		/* SVID requires a number > 1 that isn't a valid PGID... */
-		s = (uint)(pid_t)~0u >> 1;
 	return ((pid_t)s);
 }

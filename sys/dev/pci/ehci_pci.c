@@ -1,4 +1,4 @@
-/*	$NetBSD: ehci_pci.c,v 1.16 2004/08/02 18:43:38 mycroft Exp $	*/
+/*	$NetBSD: ehci_pci.c,v 1.13 2003/01/31 00:07:41 thorpej Exp $	*/
 
 /*
  * Copyright (c) 2001, 2002 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ehci_pci.c,v 1.16 2004/08/02 18:43:38 mycroft Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ehci_pci.c,v 1.13 2003/01/31 00:07:41 thorpej Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -103,8 +103,8 @@ ehci_pci_attach(struct device *parent, struct device *self, void *aux)
 	char const *intrstr;
 	pci_intr_handle_t ih;
 	pcireg_t csr;
-	const char *vendor;
-	const char *devname = sc->sc.sc_bus.bdev.dv_xname;
+	char *vendor;
+	char *devname = sc->sc.sc_bus.bdev.dv_xname;
 	char devinfo[256];
 	usbd_status r;
 	int ncomp;
@@ -112,7 +112,7 @@ ehci_pci_attach(struct device *parent, struct device *self, void *aux)
 
 	aprint_naive(": USB controller\n");
 
-	pci_devinfo(pa->pa_id, pa->pa_class, 0, devinfo, sizeof(devinfo));
+	pci_devinfo(pa->pa_id, pa->pa_class, 0, devinfo);
 	aprint_normal(": %s (rev. 0x%02x)\n", devinfo,
 	    PCI_REVISION(pa->pa_class));
 
@@ -172,10 +172,11 @@ ehci_pci_attach(struct device *parent, struct device *self, void *aux)
 	vendor = pci_findvendor(pa->pa_id);
 	sc->sc.sc_id_vendor = PCI_VENDOR(pa->pa_id);
 	if (vendor)
-		strlcpy(sc->sc.sc_vendor, vendor, sizeof(sc->sc.sc_vendor));
+		strncpy(sc->sc.sc_vendor, vendor,
+			sizeof(sc->sc.sc_vendor) - 1);
 	else
-		snprintf(sc->sc.sc_vendor, sizeof(sc->sc.sc_vendor),
-		    "vendor 0x%04x", PCI_VENDOR(pa->pa_id));
+		sprintf(sc->sc.sc_vendor, "vendor 0x%04x",
+			PCI_VENDOR(pa->pa_id));
 	
 	/*
 	 * Find companion controllers.  According to the spec they always

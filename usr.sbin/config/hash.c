@@ -1,4 +1,4 @@
-/*	$NetBSD: hash.c,v 1.14 2004/06/20 22:20:17 jmc Exp $	*/
+/*	$NetBSD: hash.c,v 1.13.2.1 2004/06/22 07:18:49 tron Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993

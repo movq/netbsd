@@ -1,4 +1,4 @@
-/*	$NetBSD: setterm.c,v 1.39 2004/07/24 13:10:47 blymn Exp $	*/
+/*	$NetBSD: setterm.c,v 1.38.2.1 2004/07/26 12:45:47 tron Exp $	*/
 
 /*
  * Copyright (c) 1981, 1993, 1994
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)setterm.c	8.8 (Berkeley) 10/25/94";
 #else
-__RCSID("$NetBSD: setterm.c,v 1.39 2004/07/24 13:10:47 blymn Exp $");
+__RCSID("$NetBSD: setterm.c,v 1.38.2.1 2004/07/26 12:45:47 tron Exp $");
 #endif
 #endif /* not lint */
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: options.c,v 1.37 2004/10/30 19:29:27 christos Exp $	*/
+/*	$NetBSD: options.c,v 1.36 2004/01/05 23:23:32 jmmv Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -37,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)options.c	8.2 (Berkeley) 5/4/95";
 #else
-__RCSID("$NetBSD: options.c,v 1.37 2004/10/30 19:29:27 christos Exp $");
+__RCSID("$NetBSD: options.c,v 1.36 2004/01/05 23:23:32 jmmv Exp $");
 #endif
 #endif /* not lint */
 
@@ -151,7 +151,6 @@ optschanged(void)
 STATIC void
 options(int cmdline)
 {
-	static char empty[] = "";
 	char *p;
 	int val;
 	int c;
@@ -181,8 +180,7 @@ options(int cmdline)
 		}
 		while ((c = *p++) != '\0') {
 			if (c == 'c' && cmdline) {
-				/* command is after shell args*/
-				minusc = empty;
+				minusc = "";	/* command is after shell args*/
 			} else if (c == 'o') {
 				minus_o(*argptr, val);
 				if (*argptr)

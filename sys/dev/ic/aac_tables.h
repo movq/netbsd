@@ -1,4 +1,4 @@
-/*	$NetBSD: aac_tables.h,v 1.2 2004/08/23 23:17:54 thorpej Exp $	*/
+/*	$NetBSD: aac_tables.h,v 1.1 2002/04/26 02:06:16 ad Exp $	*/
 
 /*-
  * Copyright (c) 2000 Michael Smith
@@ -30,9 +30,6 @@
  * from FreeBSD: aac_tables.h,v 1.1 2000/09/13 03:20:34 msmith Exp
  * via OpenBSD: aac_tables.h,v 1.1 2000/11/10 09:39:35 niklas Exp
  */
-
-#ifndef _DEV_IC_AAC_TABLES_H_
-#define	_DEV_IC_AAC_TABLES_H_
 
 /*
  * Status codes for block read/write commands, etc.
@@ -81,7 +78,7 @@ const struct aac_code_lookup aac_command_status_table[] = {
 
 #define AAC_COMMAND_STATUS(x)	aac_describe_code(aac_command_status_table, x)
 
-static const struct aac_code_lookup aac_cpu_variant[] = {
+const struct aac_code_lookup aac_cpu_variant[] = {
 	{ "i960JX",			CPUI960_JX },
 	{ "i960CX",			CPUI960_CX },
 	{ "i960HX",			CPUI960_HX },
@@ -94,7 +91,7 @@ static const struct aac_code_lookup aac_cpu_variant[] = {
 	{ "Unknown processor",		0 }
 };
 
-static const struct aac_code_lookup aac_battery_platform[] = {
+const struct aac_code_lookup aac_battery_platform[] = {
 	{ "required battery present",		PLATFORM_BAT_REQ_PRESENT },
 	{ "REQUIRED BATTERY NOT PRESENT",	PLATFORM_BAT_REQ_NOTPRESENT },
 	{ "optional battery present",		PLATFORM_BAT_OPT_PRESENT },
@@ -121,5 +118,3 @@ const struct aac_code_lookup aac_container_types[] = {
 	{ NULL,			0 },
 	{ "unknown",		0 }
 };
-
-#endif /* _DEV_IC_AAC_TABLES_H_ */

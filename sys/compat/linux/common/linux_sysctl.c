@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_sysctl.c,v 1.16 2004/05/25 04:29:08 atatat Exp $	*/
+/*	$NetBSD: linux_sysctl.c,v 1.13.2.3 2004/05/26 20:06:30 he Exp $	*/
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -41,7 +41,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: linux_sysctl.c,v 1.16 2004/05/25 04:29:08 atatat Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux_sysctl.c,v 1.13.2.3 2004/05/26 20:06:30 he Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

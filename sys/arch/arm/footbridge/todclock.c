@@ -1,4 +1,4 @@
-/*	$NetBSD: todclock.c,v 1.6 2004/07/05 07:28:45 pk Exp $	*/
+/*	$NetBSD: todclock.c,v 1.5 2003/03/23 14:12:25 chris Exp $	*/
 
 /*
  * Copyright (c) 1994-1997 Mark Brinicombe.
@@ -44,7 +44,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: todclock.c,v 1.6 2004/07/05 07:28:45 pk Exp $");
+__KERNEL_RCSID(0, "$NetBSD: todclock.c,v 1.5 2003/03/23 14:12:25 chris Exp $");
 
 /* Include header files */
 
@@ -146,6 +146,14 @@ todclockattach(parent, self, aux)
 	todclock_sc->sc_rtc_read = ta->ta_rtc_read;
 
 	printf("\n");
+
+	/*
+	 * Initialise the time of day register.
+	 * This is normally left to the filing system to do but not all
+	 * filing systems call it e.g. cd9660
+	 */
+
+	inittodr(0);
 }
 
 static __inline int

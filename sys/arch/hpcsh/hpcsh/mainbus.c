@@ -1,7 +1,7 @@
-/*	$NetBSD: mainbus.c,v 1.13 2004/07/06 16:20:43 uch Exp $	*/
+/*	$NetBSD: mainbus.c,v 1.11 2003/07/15 02:29:39 lukem Exp $	*/
 
 /*-
- * Copyright (c) 2001, 2004 The NetBSD Foundation, Inc.
+ * Copyright (c) 2001 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mainbus.c,v 1.13 2004/07/06 16:20:43 uch Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mainbus.c,v 1.11 2003/07/15 02:29:39 lukem Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -66,16 +66,8 @@ mainbus_attach(struct device *parent, struct device *self, void *aux)
 {
 
 	printf("\n");
-	/* CPU  */
-	config_found(self, &(struct mainbus_attach_args){.ma_name = "cpu"},
-	    mainbus_print);
 
-	/* Devices */
 	config_search(mainbus_search, self, 0);
-
-	/* APM */
-	config_found(self, &(struct mainbus_attach_args){.ma_name = "hpcapm"},
-	    mainbus_print);
 }
 
 static int
@@ -88,17 +80,10 @@ mainbus_search(struct device *parent, struct cfdata *cf, void *aux)
 	    !platid_match(&platid, PLATID_DEREFP(locator)))
 		return (0);
 
-	if (strcmp(cf->cf_name, "cpu") == 0)
-		return 0;
-
-	if (strcmp(cf->cf_name, "hpcapm") == 0)
-		return 0;
-
 	maa.ma_name = cf->cf_name;
-
 	if (config_match(parent, cf, &maa))
 		config_attach(parent, cf, &maa, mainbus_print);
-
+	
 	return (0);
 }
 

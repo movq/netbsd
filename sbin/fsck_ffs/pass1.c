@@ -1,4 +1,4 @@
-/*	$NetBSD: pass1.c,v 1.32 2004/05/25 14:54:56 hannken Exp $	*/
+/*	$NetBSD: pass1.c,v 1.31 2004/01/03 10:11:41 dbj Exp $	*/
 
 /*
  * Copyright (c) 1980, 1986, 1993
@@ -34,12 +34,11 @@
 #if 0
 static char sccsid[] = "@(#)pass1.c	8.6 (Berkeley) 4/28/95";
 #else
-__RCSID("$NetBSD: pass1.c,v 1.32 2004/05/25 14:54:56 hannken Exp $");
+__RCSID("$NetBSD: pass1.c,v 1.31 2004/01/03 10:11:41 dbj Exp $");
 #endif
 #endif /* not lint */
 
 #include <sys/param.h>
-#include <sys/stat.h>
 #include <sys/time.h>
 
 #include <ufs/ufs/dinode.h>
@@ -93,6 +92,7 @@ pass1()
 	 * Find all allocated blocks.
 	 */
 	memset(&idesc, 0, sizeof(struct inodesc));
+	idesc.id_type = ADDR;
 	idesc.id_func = pass1check;
 	n_files = n_blks = 0;
 	for (c = 0; c < sblock->fs_ncg; c++) {
@@ -382,10 +382,6 @@ checkinode(inumber, idesc)
 	}
 	badblk = dupblk = 0;
 	idesc->id_number = inumber;
-	if (iswap32(DIP(dp, flags)) & SF_SNAPSHOT)
-		idesc->id_type = SNAP;
-	else
-		idesc->id_type = ADDR;
 	(void)ckinode(dp, idesc);
 	idesc->id_entryno *= btodb(sblock->fs_fsize);
 	if (is_ufs2)
@@ -431,10 +427,6 @@ pass1check(idesc)
 	struct dups *dlp;
 	struct dups *new;
 
-	if (idesc->id_type == SNAP) {
-		if (blkno == BLK_NOCOPY || blkno == BLK_SNAP)
-			return (KEEPON);
-	}
 	if ((anyout = chkrange(blkno, idesc->id_numfrags)) != 0) {
 		blkerror(idesc->id_number, "BAD", blkno);
 		if (badblk++ >= MAXBAD) {

@@ -1,5 +1,3 @@
-/*	$NetBSD: mail_copy.h,v 1.1.1.4 2004/05/31 00:24:31 heas Exp $	*/
-
 #ifndef _MAIL_COPY_H_INCLUDED_
 #define _MAIL_COPY_H_INCLUDED_
 

@@ -1,7 +1,7 @@
-/*	$NetBSD: if_cnw.c,v 1.29 2004/10/30 18:10:06 thorpej Exp $	*/
+/*	$NetBSD: if_cnw.c,v 1.25 2003/11/10 08:55:41 wiz Exp $	*/
 
 /*-
- * Copyright (c) 1998, 2004 The NetBSD Foundation, Inc.
+ * Copyright (c) 1998 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -112,7 +112,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_cnw.c,v 1.29 2004/10/30 18:10:06 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_cnw.c,v 1.25 2003/11/10 08:55:41 wiz Exp $");
 
 #include "opt_inet.h"
 #include "bpfilter.h"
@@ -516,7 +516,7 @@ cnw_attach(parent, self, aux)
 	sc->sc_pf = pa->pf;
 	pcmcia_function_init(sc->sc_pf, SIMPLEQ_FIRST(&sc->sc_pf->cfe_head));
 	if (pcmcia_function_enable(sc->sc_pf)) {
-		printf("%s: function enable failed\n", self->dv_xname);
+		printf(": function enable failed\n");
 		return;
 	}
 	sc->sc_resource |= CNW_RES_PCIC;
@@ -525,12 +525,12 @@ cnw_attach(parent, self, aux)
 #ifndef MEMORY_MAPPED
 	if (pcmcia_io_alloc(sc->sc_pf, 0, CNW_IO_SIZE, CNW_IO_SIZE,
 	    &sc->sc_pcioh) != 0) {
-		printf("%s: can't allocate i/o space\n", self->dv_xname);
+		printf(": can't allocate i/o space\n");
 		goto fail;
 	}
-	if (pcmcia_io_map(sc->sc_pf, PCMCIA_WIDTH_IO16, &sc->sc_pcioh,
-	    &sc->sc_iowin) != 0) {
-		printf("%s: can't map i/o space\n", self->dv_xname);
+	if (pcmcia_io_map(sc->sc_pf, PCMCIA_WIDTH_IO16, 0,
+	    CNW_IO_SIZE, &sc->sc_pcioh, &sc->sc_iowin) != 0) {
+		printf(": can't map i/o space\n");
 		pcmcia_io_free(sc->sc_pf, &sc->sc_pcioh);
 		goto fail;
 	}
@@ -544,19 +544,27 @@ cnw_attach(parent, self, aux)
 	memsize = CNW_MEM_SIZE + CNW_IOM_SIZE;
 #endif
 	if (pcmcia_mem_alloc(sc->sc_pf, memsize, &sc->sc_pcmemh) != 0) {
-		printf("%s: can't allocate memory\n", self->dv_xname);
+		printf(": can't allocate memory\n");
 		goto fail;
 	}
 	if (pcmcia_mem_map(sc->sc_pf, PCMCIA_WIDTH_MEM8|PCMCIA_MEM_COMMON,
 	    CNW_MEM_ADDR, memsize, &sc->sc_pcmemh, &sc->sc_memoff,
 	    &sc->sc_memwin) != 0) {
-		printf("%s: can't map memory\n", self->dv_xname);
+		printf(": can't map memory\n");
 		pcmcia_mem_free(sc->sc_pf, &sc->sc_pcmemh);
 		goto fail;
 	}
 	sc->sc_memt = sc->sc_pcmemh.memt;
 	sc->sc_memh = sc->sc_pcmemh.memh;
 	sc->sc_resource |= CNW_RES_MEM;
+	switch (pa->product) {
+	case PCMCIA_PRODUCT_XIRCOM_CNW_801:
+		printf(": %s\n", PCMCIA_STR_XIRCOM_CNW_801);
+		break;
+	case PCMCIA_PRODUCT_XIRCOM_CNW_802:
+		printf(": %s\n", PCMCIA_STR_XIRCOM_CNW_802);
+		break;
+	}
 
 	/* Finish setup of softc */
 	sc->sc_domain = cnw_domain;
@@ -1084,9 +1092,8 @@ cnw_ioctl(ifp, cmd, data)
 		error = (cmd == SIOCADDMULTI) ?
 		    ether_addmulti(ifr, &sc->sc_ethercom) :
 		    ether_delmulti(ifr, &sc->sc_ethercom);
-		if (error == ENETRESET) {
-			if (ifp->if_flags & IFF_RUNNING)
-				cnw_init(sc);
+		if (error == ENETRESET || error == 0) {
+			cnw_init(sc);
 			error = 0;
 		}
 		break;

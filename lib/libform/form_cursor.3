@@ -1,4 +1,4 @@
-.\"	$NetBSD: form_cursor.3,v 1.8 2004/11/24 12:47:20 wiz Exp $
+.\"	$NetBSD: form_cursor.3,v 1.5 2003/04/16 13:35:02 wiz Exp $
 .\"
 .\" Copyright (c) 2001
 .\"	Brett Lymn - blymn@baea.com.au, brett_lymn@yahoo.com.au
@@ -48,8 +48,9 @@ positions the screen cursor at the correct position for the form.
 This function can be used to restore the cursor state after using
 other curses routines.
 .Sh RETURN VALUES
-.Fn pos_form_cursor
-will return one of the following error values:
+Functions returning pointers will return NULL if an error is detected.
+The functions that return an int will return one of the following error
+values:
 .Pp
 .Bl -tag -width E_UNKNOWN_COMMAND -compact
 .It Er E_OK
@@ -64,8 +65,8 @@ The form is not posted to the screen.
 .Xr forms 3
 .Sh NOTES
 The header
-.Aq Pa form.h
+.Pa \*[Lt]form.h\*[Gt]
 automatically includes both
-.Aq Pa curses.h
+.Pa \*[Lt]curses.h\*[Gt]
 and
-.Aq Pa eti.h .
+.Pa \*[Lt]eti.h\*[Gt] .

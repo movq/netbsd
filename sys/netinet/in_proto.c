@@ -1,4 +1,4 @@
-/*	$NetBSD: in_proto.c,v 1.65 2004/09/04 23:30:07 manu Exp $	*/
+/*	$NetBSD: in_proto.c,v 1.62 2003/12/04 19:38:24 atatat Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.
@@ -61,7 +61,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: in_proto.c,v 1.65 2004/09/04 23:30:07 manu Exp $");
+__KERNEL_RCSID(0, "$NetBSD: in_proto.c,v 1.62 2003/12/04 19:38:24 atatat Exp $");
 
 #include "opt_mrouting.h"
 #include "opt_eon.h"			/* ISO CLNL over IP */
@@ -69,7 +69,6 @@ __KERNEL_RCSID(0, "$NetBSD: in_proto.c,v 1.65 2004/09/04 23:30:07 manu Exp $");
 #include "opt_ns.h"			/* NSIP: XNS tunneled over IP */
 #include "opt_inet.h"
 #include "opt_ipsec.h"
-#include "opt_pim.h"
 
 #include <sys/param.h>
 #include <sys/socket.h>
@@ -96,9 +95,6 @@ __KERNEL_RCSID(0, "$NetBSD: in_proto.c,v 1.65 2004/09/04 23:30:07 manu Exp $");
 #endif
 
 #include <netinet/igmp_var.h>
-#ifdef PIM
-#include <netinet/pim_var.h>
-#endif
 #include <netinet/tcp.h>
 #include <netinet/tcp_fsm.h>
 #include <netinet/tcp_seq.h>
@@ -146,7 +142,9 @@ __KERNEL_RCSID(0, "$NetBSD: in_proto.c,v 1.65 2004/09/04 23:30:07 manu Exp $");
 #include <netinet/ip_gre.h>
 #endif
 
-const struct protosw inetsw[] = {
+extern	struct domain inetdomain;
+
+struct protosw inetsw[] = {
 { 0,		&inetdomain,	0,		0,
   0,		ip_output,	0,		0,
   0,
@@ -237,15 +235,8 @@ const struct protosw inetsw[] = {
 { SOCK_RAW,	&inetdomain,	IPPROTO_IGMP,	PR_ATOMIC|PR_ADDR|PR_LASTHDR,
   igmp_input,	rip_output,	rip_ctlinput,	rip_ctloutput,
   rip_usrreq,
-  NULL,		igmp_fasttimo,	igmp_slowtimo,	0,
+  igmp_init,	igmp_fasttimo,	igmp_slowtimo,	0,
 },
-#ifdef PIM
-{ SOCK_RAW,	&inetdomain,	IPPROTO_PIM,	PR_ATOMIC|PR_ADDR|PR_LASTHDR,
-  pim_input,	rip_output,	rip_ctlinput,	rip_ctloutput,
-  rip_usrreq,
-  NULL,		0,		0,		0,
-},
-#endif /* PIM */
 #ifdef TPIP
 { SOCK_SEQPACKET,&inetdomain,	IPPROTO_TP,	PR_CONNREQUIRED|PR_WANTRCVD|PR_LISTEN|PR_LASTHDR|PR_ABRTACPTDIS,
   tpip_input,	0,		tpip_ctlinput,	tp_ctloutput,

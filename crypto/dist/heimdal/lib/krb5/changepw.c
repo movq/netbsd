@@ -34,7 +34,7 @@
 #include <krb5_locl.h>
 
 __RCSID("$Heimdal: changepw.c,v 1.38.2.1 2004/06/21 08:38:10 lha Exp $"
-        "$NetBSD: changepw.c,v 1.13 2004/09/14 08:08:20 lha Exp $");
+        "$NetBSD: changepw.c,v 1.10.2.3 2004/09/17 04:36:21 jmc Exp $");
 
 static void
 str2data (krb5_data *d,

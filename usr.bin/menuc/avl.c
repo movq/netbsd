@@ -1,4 +1,4 @@
-/*	$NetBSD: avl.c,v 1.6 2004/06/20 22:20:16 jmc Exp $	*/
+/*	$NetBSD: avl.c,v 1.5.2.1 2004/06/22 07:18:25 tron Exp $	*/
 
 /*
  * Copyright (c) 1997 Philip A. Nelson.
@@ -53,7 +53,7 @@
 #include <sys/cdefs.h>
 
 #if defined(__RCSID) && !defined(lint)
-__RCSID("$NetBSD: avl.c,v 1.6 2004/06/20 22:20:16 jmc Exp $");
+__RCSID("$NetBSD: avl.c,v 1.5.2.1 2004/06/22 07:18:25 tron Exp $");
 #endif
 
 

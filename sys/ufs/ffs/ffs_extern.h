@@ -1,4 +1,4 @@
-/*	$NetBSD: ffs_extern.h,v 1.41 2004/08/29 10:13:48 hannken Exp $	*/
+/*	$NetBSD: ffs_extern.h,v 1.36.2.1 2004/05/23 10:44:57 tron Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993, 1994
@@ -62,9 +62,8 @@ struct ufs2_dinode;
 struct mount;
 struct nameidata;
 struct proc;
-struct statvfs;
+struct statfs;
 struct timeval;
-struct timespec;
 struct ucred;
 struct ufsmount;
 struct uio;
@@ -87,10 +86,9 @@ int ffs_reallocblks __P((void *));
 int ffs_valloc __P((void *));
 daddr_t ffs_blkpref_ufs1 __P((struct inode *, daddr_t, int, int32_t *));
 daddr_t ffs_blkpref_ufs2 __P((struct inode *, daddr_t, int, int64_t *));
-void ffs_blkfree __P((struct fs *, struct vnode *, daddr_t, long, ino_t));
+void ffs_blkfree __P((struct inode *, daddr_t, long));
 int ffs_vfree __P((void *));
 void ffs_clusteracct __P((struct fs *, struct cg *, int32_t, int));
-int ffs_checkfreefile __P((struct fs *, struct vnode *, ino_t));
 
 /* ffs_balloc.c */
 int ffs_balloc __P((void *));
@@ -110,7 +108,7 @@ int ffs_truncate __P((void *));
 /* ffs_subr.c */
 void ffs_load_inode __P((struct buf *, struct inode *, struct fs *, ino_t));
 int ffs_blkatoff __P((void *));
-int ffs_freefile __P((struct fs *, struct vnode *, ino_t, int));
+int ffs_freefile __P((void *));
 void ffs_fragacct __P((struct fs *, int, int32_t[], int, int));
 #ifdef DIAGNOSTIC
 void	ffs_checkoverlap __P((struct buf *, struct inode *));
@@ -131,7 +129,7 @@ int ffs_reload __P((struct mount *, struct ucred *, struct proc *));
 int ffs_mountfs __P((struct vnode *, struct mount *, struct proc *));
 int ffs_unmount __P((struct mount *, int, struct proc *));
 int ffs_flushfiles __P((struct mount *, int, struct proc *));
-int ffs_statvfs __P((struct mount *, struct statvfs *, struct proc *));
+int ffs_statfs __P((struct mount *, struct statfs *, struct proc *));
 int ffs_sync __P((struct mount *, int, struct ucred *, struct proc *));
 int ffs_vget __P((struct mount *, ino_t, struct vnode **));
 int ffs_fhtovp __P((struct mount *, struct fid *, struct vnode **));
@@ -161,16 +159,6 @@ SYSCTL_SETUP_PROTO(sysctl_vfs_ffs_setup);
 __END_DECLS
 
  
-/*
- * Snapshot function prototypes.
- */
-int	ffs_snapblkfree(struct fs *, struct vnode *, daddr_t, long, ino_t);
-void	ffs_snapremove(struct vnode *);
-int	ffs_snapshot(struct mount *, struct vnode *, struct timespec *);
-void	ffs_snapshot_mount(struct mount *);
-void	ffs_snapshot_unmount(struct mount *);
-void	ffs_snapgone(struct inode *);
-
 /*
  * Soft dependency function prototypes.
  */

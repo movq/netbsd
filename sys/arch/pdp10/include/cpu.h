@@ -1,4 +1,4 @@
-/*	$NetBSD: cpu.h,v 1.2 2004/09/22 11:32:03 yamt Exp $	*/
+/*	$NetBSD: cpu.h,v 1.1 2003/08/19 10:53:05 ragge Exp $	*/
 /*
  * Copyright (c) 2003 Anders Magnusson (ragge@ludd.luth.se).
  * All rights reserved.
@@ -38,13 +38,18 @@
 #include <sys/cdefs.h>
 #include <sys/device.h>
 #include <sys/lock.h>
-#include <sys/cpu_data.h>
+#include <sys/sched.h>
 
 struct cpu_info {
 	/*
 	 * Public members.
 	 */
-	struct cpu_data ci_data;	/* MI per-cpu data */
+	struct schedstate_percpu ci_schedstate; /* scheduler state */
+#if defined(DIAGNOSTIC) || defined(LOCKDEBUG)
+	u_long ci_spin_locks;           /* # of spin locks held */
+	u_long ci_simple_locks;         /* # of simple locks held */
+#endif
+
 	struct proc *ci_curproc;        /* current owner of the processor */
 
 };

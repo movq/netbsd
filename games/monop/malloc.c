@@ -1,4 +1,4 @@
-/*	$NetBSD: malloc.c,v 1.4 2004/12/14 00:21:01 nathanw Exp $	*/
+/*	$NetBSD: malloc.c,v 1.3 2004/01/27 20:30:30 jsm Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)malloc.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: malloc.c,v 1.4 2004/12/14 00:21:01 nathanw Exp $");
+__RCSID("$NetBSD: malloc.c,v 1.3 2004/01/27 20:30:30 jsm Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -59,7 +59,7 @@ __RCSID("$NetBSD: malloc.c,v 1.4 2004/12/14 00:21:01 nathanw Exp $");
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include <pthread.h>
+#include <threadlib.h>
 
 
 /*
@@ -118,7 +118,7 @@ static	int pagebucket;			/* page size bucket */
 static	u_int nmalloc[NBUCKETS];
 #endif
 
-static	pthread_mutex_t malloc_mutex = PTHREAD_MUTEX_INITIALIZER;
+static	mutex_t malloc_mutex = MUTEX_INITIALIZER;
 
 static void morecore(int);
 static int findbucket(union overhead *, int);
@@ -176,7 +176,7 @@ malloc(nbytes)
   	long n;
 	unsigned amt;
 
-	pthread_mutex_lock(&malloc_mutex);
+	mutex_lock(&malloc_mutex);
 
 	/*
 	 * First time malloc is called, setup page size and
@@ -191,7 +191,7 @@ malloc(nbytes)
 			n += pagesz;
 		if (n) {
 			if (sbrk((int)n) == (void *)-1) {
-				pthread_mutex_unlock(&malloc_mutex);
+				mutex_unlock(&malloc_mutex);
 				return (NULL);
 			}
 		}
@@ -234,7 +234,7 @@ malloc(nbytes)
   	if ((op = nextf[bucket]) == NULL) {
   		morecore(bucket);
   		if ((op = nextf[bucket]) == NULL) {
-			pthread_mutex_unlock(&malloc_mutex);
+			mutex_unlock(&malloc_mutex);
   			return (NULL);
 		}
 	}
@@ -245,7 +245,7 @@ malloc(nbytes)
 #ifdef MSTATS
   	nmalloc[bucket]++;
 #endif
-	pthread_mutex_unlock(&malloc_mutex);
+	mutex_unlock(&malloc_mutex);
 #ifdef RCHECK
 	/*
 	 * Record allocated size of block and
@@ -326,13 +326,13 @@ free(cp)
 #endif
   	size = op->ov_index;
   	ASSERT(size < NBUCKETS);
-	pthread_mutex_lock(&malloc_mutex);
+	mutex_lock(&malloc_mutex);
 	op->ov_next = nextf[(unsigned int)size];/* also clobbers ov_magic */
   	nextf[(unsigned int)size] = op;
 #ifdef MSTATS
   	nmalloc[(size_t)size]--;
 #endif
-	pthread_mutex_unlock(&malloc_mutex);
+	mutex_unlock(&malloc_mutex);
 }
 
 /*
@@ -366,7 +366,7 @@ realloc(cp, nbytes)
 		return (NULL);
 	}
 	op = (union overhead *)(void *)((caddr_t)cp - sizeof (union overhead));
-	pthread_mutex_lock(&malloc_mutex);
+	mutex_lock(&malloc_mutex);
 	if (op->ov_magic == MAGIC) {
 		was_alloced++;
 		i = op->ov_index;
@@ -408,7 +408,7 @@ realloc(cp, nbytes)
 			op->ov_size = (nbytes + RSLOP - 1) & ~(RSLOP - 1);
 			*(u_short *)((caddr_t)(op + 1) + op->ov_size) = RMAGIC;
 #endif
-			pthread_mutex_unlock(&malloc_mutex);
+			mutex_unlock(&malloc_mutex);
 			return (cp);
 			
 		}
@@ -417,7 +417,7 @@ realloc(cp, nbytes)
 			free(cp);
 #endif
 	}
-	pthread_mutex_unlock(&malloc_mutex);
+	mutex_unlock(&malloc_mutex);
 	if ((res = malloc(nbytes)) == NULL) {
 #ifdef _REENT
 		free(cp);

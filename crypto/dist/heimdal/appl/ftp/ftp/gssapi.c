@@ -40,7 +40,7 @@
 #include <krb5_err.h>
 
 __RCSID("$Heimdal: gssapi.c,v 1.22.2.2 2003/08/20 16:41:24 lha Exp $"
-        "$NetBSD: gssapi.c,v 1.1.1.7 2004/04/02 14:47:34 lha Exp $");
+        "$NetBSD: gssapi.c,v 1.1.1.6.2.1 2004/04/21 04:55:36 jmc Exp $");
 
 int ftp_do_gss_bindings = 0;
 

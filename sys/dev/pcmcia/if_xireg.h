@@ -1,4 +1,4 @@
-/*	$NetBSD: if_xireg.h,v 1.7 2004/08/12 19:42:03 mycroft Exp $	*/
+/*	$NetBSD: if_xireg.h,v 1.4 2003/11/02 11:14:22 wiz Exp $	*/
 /*	OpenBSD: if_xereg.h,v 1.1 1999/05/18 19:18:21 niklas Exp	*/
 
 /*
@@ -83,14 +83,15 @@
 #define CR	0x0	/* W  - Command register */
 #define ESR	0x0	/* R  - Ethernet status register */
 #define PR	0x1	/* RW - Page register select */
-#define EDP	0x4	/* RW - Ethernet data port, 4 registers */
+#define EDP	0x2	/* RW - Ethernet data port, 4 registers */
 #define ISR0	0x6	/* R  - Ethernet interrupt status register */
 #define GIR	0x7	/* RW - Global interrupt register - dingo only */
 #define PTR	0xd	/* R  - Packets Transmitted register */
 
 /* Page 0 */
-#define TSO	0x8	/* R  - Transmit space open, 3 registers */
-#define TRS	0xa	/* W  - Transmit reservation size */
+#define TSO0	0x8	/* R  - Transmit space open, 3 registers */
+#define TSO1	0x9
+#define TSO2	0xa
 #define DO0	0xc	/* W  - Data offset, 2 registers */
 #define DO1	0xd
 #define RSR	0xc	/* R  - Rx status register */
@@ -281,7 +282,7 @@
 /* Misc. defines. */
 
 #define PAGE(sc, page)	\
-    bus_space_write_1((sc->sc_bst), (sc->sc_bsh), PR, (page))
+    bus_space_write_1((sc->sc_bst), (sc->sc_bsh), (sc->sc_offset) + PR, (page))
 
 /*
  * GP3 is connected to the MDC pin of the NS DP83840A PHY, GP4 is

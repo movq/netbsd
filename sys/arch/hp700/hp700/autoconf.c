@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.16 2004/10/23 17:07:39 thorpej Exp $	*/
+/*	$NetBSD: autoconf.c,v 1.13 2004/03/12 11:44:13 jkunz Exp $	*/
 
 /*	$OpenBSD: autoconf.c,v 1.15 2001/06/25 00:43:10 mickey Exp $	*/
 
@@ -86,7 +86,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.16 2004/10/23 17:07:39 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.13 2004/03/12 11:44:13 jkunz Exp $");
 
 #include "opt_kgdb.h"
 #include "opt_useleds.h"
@@ -108,8 +108,6 @@ __KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.16 2004/10/23 17:07:39 thorpej Exp $"
 #include <machine/iomod.h>
 #include <machine/autoconf.h>
 
-#include <dev/pci/pcivar.h>
-
 #include <dev/scsipi/scsi_all.h>
 #include <dev/scsipi/scsipi_all.h>
 #include <dev/scsipi/scsiconf.h>
@@ -117,8 +115,8 @@ __KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.16 2004/10/23 17:07:39 thorpej Exp $"
 #include <dev/cons.h>
 
 #include <hp700/hp700/machdep.h>
+#include <hp700/hp700/intr.h>
 #include <hp700/dev/cpudevs.h>
-#include <hp700/gsc/gscbusvar.h>
 
 void (*cold_hook)(void); /* see below */
 register_t	kpsw = PSW_Q | PSW_P | PSW_C | PSW_D;
@@ -132,6 +130,9 @@ static struct callout hp700_led_callout;
 static void hp700_led_blinker(void *);
 extern int hz;
 #endif
+
+/* XXX added for RAIDframe but so far ignored by us. */
+struct device *booted_device;
 
 /*
  * cpu_configure:
@@ -307,113 +308,25 @@ bad:
 
 /****************************************************************/
 
-struct device *boot_device = NULL;
+/* This takes the args: name, ctlr, unit */
+typedef struct device * (*findfunc_t)(char *, int, int);
 
+static struct device * find_dev_byname(char *);
+static struct device * net_find(char *, int, int);
+static struct device * scsi_find(char *, int, int);
 
-void
-device_register(struct device *dev, void *aux)
-{
-	int pagezero_cookie;
-
-	if (dev->dv_parent == NULL || dev->dv_parent->dv_parent == NULL)
-		return;
-	pagezero_cookie = hp700_pagezero_map();
-	/* Currently only GSC and PCI devices are supported. */
-	/*
-	 * The boot device is described in PAGE0->mem_boot. We need to do it 
-	 * this way as the MD device path (DP) information in struct confargs 
-	 * is only available in hp700 MD devices. So boot_device is used to 
-	 * propagate information down the device tree.
-	 * 
-	 * If the boot device is a GSC network device all we need to compare 
-	 * is the HPA or device path (DP) to get the boot device. 
-	 * If the boot device is a SCSI device below a GSC attached SCSI 
-	 * controller PAGE0->mem_boot.pz_hpa contains the HPA of the SCSI 
-	 * controller. In that case we remember the the pointer to the 
-	 * controller's struct dev in boot_device. The SCSI device is located 
-	 * later, see below.
-	 */
-	if (strcmp(dev->dv_parent->dv_cfdata->cf_name, "gsc") == 0
-	    && (hppa_hpa_t)PAGE0->mem_boot.pz_hpa == 
-	    ((struct gsc_attach_args *)aux)->ga_ca.ca_hpa)
-		/* This is (the controller of) the boot device. */
-		boot_device = dev;
-	/*
-	 * If the boot device is a PCI device the HPA is the address where the 
-	 * firmware has maped the PCI memory of the PCI device. This is quite 
-	 * device dependent, so we compare the DP. It encodes the bus routing 
-	 * information to the PCI bus bridge in the DP head and the PCI device 
-	 * and PCI function in the last two DP components. So we compare the 
-	 * head of the DP when a PCI bridge attaches and remember the struct 
-	 * dev of the PCI bridge in boot_dev if it machtes. Later, when PCI 
-	 * devices are attached, we look if this PCI device hangs below the 
-	 * boot PCI bridge. If yes we compare the PCI device and PCI function 
-	 * to the DP tail. In case of a network boot we found the boot device 
-	 * on a match. In case of a SCSI boot device we have to do the same 
-	 * check when SCSI devices are attached like on GSC SCSI controllers.
-	 */
-	if (strcmp(dev->dv_cfdata->cf_name, "dino") == 0) {
-		struct confargs *ca = (struct confargs *)aux;
-		int i, n;
-
-		for (n = 0 ; ca->ca_dp.dp_bc[n] < 0 ; n++) {
-			/* Skip unused DP components. */
-		}
-		for (i = 0 ; i < 6 && n < 6 ; i++) {
-			/* Skip unused DP components... */
-			if (PAGE0->mem_boot.pz_dp.dp_bc[i] < 0)
-				continue;
-			/* and compare the rest. */
-			if (PAGE0->mem_boot.pz_dp.dp_bc[i] 
-			    != ca->ca_dp.dp_bc[n]) {
-				hp700_pagezero_unmap(pagezero_cookie);
-				return;
-			}
-			n++;
-		}
-		if (PAGE0->mem_boot.pz_dp.dp_bc[i] != ca->ca_dp.dp_mod) {
-			hp700_pagezero_unmap(pagezero_cookie);
-			return;
-		}
-		/* This is the PCI host bridge in front of the boot device. */
-		boot_device = dev;
-	}
-	/* XXX Guesswork. No hardware to test how firmware handles a ppb. */
-	if (strcmp(dev->dv_cfdata->cf_name, "ppb") == 0
-	    && boot_device == dev->dv_parent->dv_parent
-	    && ((struct pci_attach_args*)aux)->pa_device
-	    == PAGE0->mem_boot.pz_dp.dp_bc[3]
-	    && ((struct pci_attach_args*)aux)->pa_function
-	    == PAGE0->mem_boot.pz_dp.dp_bc[4])
-		/* This is the PCI - PCI bridge in front of the boot device. */
-		boot_device = dev;
-	if (strcmp(dev->dv_parent->dv_cfdata->cf_name, "pci") == 0
-	    && boot_device == dev->dv_parent->dv_parent
-	    && ((struct pci_attach_args*)aux)->pa_device
-	    == PAGE0->mem_boot.pz_dp.dp_bc[5]
-	    && ((struct pci_attach_args*)aux)->pa_function
-	    == PAGE0->mem_boot.pz_dp.dp_mod)
-		/* This is (the controller of) the boot device. */
-		boot_device = dev;
-	/* 
-	 * When SCSI devices are attached, we look if the SCSI device hangs 
-	 * below the controller remembered in boot_device. If so, we compare 
-	 * the SCSI ID and LUN with the DP layer information. If they match 
-	 * we found the boot device.
-	 */
-	if (strcmp(dev->dv_parent->dv_cfdata->cf_name, "scsibus") == 0
-	    && boot_device == dev->dv_parent->dv_parent 
-	    && ((struct scsipibus_attach_args *)aux)->sa_periph->periph_target
-	    == PAGE0->mem_boot.pz_dp.dp_layers[0]
-	    && ((struct scsipibus_attach_args *)aux)->sa_periph->periph_lun
-	    == PAGE0->mem_boot.pz_dp.dp_layers[1])
-		/* This is the boot device. */
-		boot_device = dev;
-	hp700_pagezero_unmap(pagezero_cookie);
-	return;
-}
-
-
+struct prom_n2f {
+	const char name[4];
+	findfunc_t func;
+};
+static struct prom_n2f prom_dev_table[] = {
+	{ "ie",		net_find },
+	{ "iee",	net_find },
+	{ "sd",		scsi_find },
+	{ "st",		scsi_find },
+	{ "cd",		scsi_find },
+	{ "",		0 },
+};
 
 /*
  * Choose root and swap devices.
@@ -421,31 +334,120 @@ device_register(struct device *dev, void *aux)
 void
 cpu_rootconf(void)
 {
-#ifdef DEBUG
-	int pagezero_cookie;
-	int n;
+	struct prom_n2f *nf;
+	struct device *boot_device;
+	int boot_partition;
+	char *devname;
+	findfunc_t find;
+	char promname[4];
+	char partname[4];
+	int prom_ctlr, prom_unit, prom_part;
 
-	pagezero_cookie = hp700_pagezero_map();
-	printf("PROM boot device: hpa %p path ", PAGE0->mem_boot.pz_hpa);
-	for (n = 0 ; n < 6 ; n++) {
-		if (PAGE0->mem_boot.pz_dp.dp_bc[n] >= 0)
-			printf("%d/", PAGE0->mem_boot.pz_dp.dp_bc[n]);
-	}
-	printf("%d dp_layers ", PAGE0->mem_boot.pz_dp.dp_mod);
-	for (n = 0 ; n < 6 ; n++) {
-		printf( "0x%x%c", PAGE0->mem_boot.pz_dp.dp_layers[n], 
-		    n < 5 ? '/' : ' ');
-	}
-	printf("dp_flags 0x%x pz_class 0x%x\n", PAGE0->mem_boot.pz_dp.dp_flags,
-	    PAGE0->mem_boot.pz_class);
-#endif /* DEBUG */
+	/* Get the PROM boot path and take it apart. */
+	/* XXX fredette - need something real here: */
+	strcpy(promname, "iee");
+	prom_ctlr = prom_unit = prom_part = 0;
 
-	if (boot_device != NULL)
-		printf("boot device: %s%d\n", boot_device->dv_cfdata->cf_name, 
-		    boot_device->dv_unit);
-	setroot(boot_device, 0);
+	/* Default to "unknown" */
+	boot_device = NULL;
+	boot_partition = 0;
+	devname = "<unknown>";
+	partname[0] = '\0';
+	find = NULL;
+
+	/* Do we know anything about the PROM boot device? */
+	for (nf = prom_dev_table; nf->func; nf++)
+		if (!strcmp(nf->name, promname)) {
+			find = nf->func;
+			break;
+		}
+	if (find)
+		boot_device = (*find)(promname, prom_ctlr, prom_unit);
+	if (boot_device) {
+		devname = boot_device->dv_xname;
+		if (boot_device->dv_class == DV_DISK) {
+			boot_partition = prom_part & 7;
+			partname[0] = 'a' + boot_partition;
+			partname[1] = '\0';
+		}
+	}
+
+	printf("boot device: %s%s\n", devname, partname);
+	setroot(boot_device, boot_partition);
 }
 
+/*
+ * Functions to find devices using PROM boot parameters.
+ */
+
+/*
+ * Network device:  Just use controller number.
+ */
+static struct device *
+net_find(char *name, int ctlr, int unit)
+{
+	char tname[16];
+
+	sprintf(tname, "%s%d", name, ctlr);
+	return (find_dev_byname(tname));
+}
+
+#if NSCSIBUS != 0
+/*
+ * SCSI device:  The controller number corresponds to the
+ * scsibus number, and the unit number is (targ*8 + LUN).
+ */
+static struct device *
+scsi_find(char *name, int ctlr, int unit)
+{
+	struct device *scsibus;
+	struct scsibus_softc *sbsc;
+	struct scsipi_periph *periph;
+	int target, lun;
+	char tname[16];
+
+	sprintf(tname, "scsibus%d", ctlr);
+	scsibus = find_dev_byname(tname);
+	if (scsibus == NULL)
+		return (NULL);
+
+	/* Compute SCSI target/LUN from PROM unit. */
+	target = (unit >> 3) & 7;
+	lun = unit & 7;
+
+	/* Find the device at this target/LUN */
+	sbsc = (struct scsibus_softc *)scsibus;
+	periph = scsipi_lookup_periph(sbsc->sc_channel, target, lun);
+	if (periph == NULL)
+		return (NULL);
+
+	return (periph->periph_dev);
+}
+#else
+static struct device *
+scsi_find(char *name, int ctlr, int unit)
+{
+
+	return (NULL);
+}
+#endif
+
+/*
+ * Given a device name, find its struct device
+ * XXX - Move this to some common file?
+ */
+static struct device *
+find_dev_byname(char *name)
+{
+	struct device *dv;
+
+	TAILQ_FOREACH(dv, &alldevs, dv_list) {
+		if (!strcmp(dv->dv_xname, name)) {
+			return(dv);
+		}
+	}
+	return (NULL);
+}
 
 #ifdef RAMDISK_HOOKS
 /*static struct device fakerdrootdev = { DV_DISK, {}, NULL, 0, "rd0", NULL };*/

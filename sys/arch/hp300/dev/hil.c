@@ -1,4 +1,4 @@
-/*	$NetBSD: hil.c,v 1.64 2004/08/28 17:37:01 thorpej Exp $	*/
+/*	$NetBSD: hil.c,v 1.61.2.1 2004/04/11 04:00:27 jmc Exp $	*/
 
 /*
  * Copyright (c) 1990, 1993
@@ -77,7 +77,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: hil.c,v 1.64 2004/08/28 17:37:01 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: hil.c,v 1.61.2.1 2004/04/11 04:00:27 jmc Exp $");
 
 #include "opt_compat_hpux.h"
 #include "ite.h"
@@ -113,13 +113,13 @@ __KERNEL_RCSID(0, "$NetBSD: hil.c,v 1.64 2004/08/28 17:37:01 thorpej Exp $");
 #include <machine/bus.h>
 #include <machine/cpu.h>
 
-static int	hilmatch(struct device *, struct cfdata *, void *);
-static void	hilattach(struct device *, struct device *, void *);
+int	hilmatch __P((struct device *, struct cfdata *, void *));
+void	hilattach __P((struct device *, struct device *, void *));
 
 CFATTACH_DECL(hil, sizeof(struct hil_softc),
     hilmatch, hilattach, NULL, NULL);
 
-static struct	_hilbell default_bell = { BELLDUR, BELLFREQ };
+struct	_hilbell default_bell = { BELLDUR, BELLFREQ };
 
 #ifdef DEBUG
 int 	hildebug = 0;
@@ -139,48 +139,51 @@ extern struct emul emul_hpux;
 extern struct kbdmap kbd_map[];
 
 /* symbolic sleep message strings */
-static const char hilin[] = "hilin";
+char hilin[] = "hilin";
 
 extern struct cfdriver hil_cd;
 
-static dev_type_open(hilopen);
-static dev_type_close(hilclose);
-static dev_type_read(hilread);
-static dev_type_ioctl(hilioctl);
-static dev_type_poll(hilpoll);
-static dev_type_kqfilter(hilkqfilter);
+dev_type_open(hilopen);
+dev_type_close(hilclose);
+dev_type_read(hilread);
+dev_type_ioctl(hilioctl);
+dev_type_poll(hilpoll);
+dev_type_kqfilter(hilkqfilter);
 
 const struct cdevsw hil_cdevsw = {
 	hilopen, hilclose, hilread, nullwrite, hilioctl,
 	nostop, notty, hilpoll, nommap, hilkqfilter,
 };
 
-static void	hilattach_deferred(struct device *);
+void	hilattach_deferred __P((struct device *));
 
-static void	hilinfo(struct hil_softc *);
-static void	hilconfig(struct hil_softc *);
-static void	hilreset(struct hil_softc *);
-static void	hilbeep(struct hil_softc *, const struct _hilbell *);
-static int	hiliddev(struct hil_softc *);
+void	hilinfo __P((struct hil_softc *));
+void	hilconfig __P((struct hil_softc *));
+void	hilreset __P((struct hil_softc *));
+void	hilbeep __P((struct hil_softc *, struct _hilbell *));
+int	hiliddev __P((struct hil_softc *));
 
-static int	hilint(void *);
-static void	hil_process_int(struct hil_softc *, u_char, u_char);
-static void	hilevent(struct hil_softc *);
-static void	hpuxhilevent(struct hil_softc *, struct hilloopdev *);
+int	hilint __P((void *));
+void	hil_process_int __P((struct hil_softc *, u_char, u_char));
+void	hilevent __P((struct hil_softc *));
+void	hpuxhilevent __P((struct hil_softc *, struct hilloopdev *));
 
-static int	hilqalloc(struct hil_softc *, struct hilqinfo *, struct proc *);
-static int	hilqfree(struct hil_softc *, int, struct proc *);
-static int	hilqmap(struct hil_softc *, int, int, struct proc *);
-static int	hilqunmap(struct hil_softc *, int, int, struct proc *);
+int	hilqalloc __P((struct hil_softc *, struct hilqinfo *, struct proc *));
+int	hilqfree __P((struct hil_softc *, int, struct proc *));
+int	hilqmap __P((struct hil_softc *, int, int, struct proc *));
+int	hilqunmap __P((struct hil_softc *, int, int, struct proc *));
 
 #ifdef DEBUG
-static void	printhilpollbuf(struct hil_softc *);
-static void	printhilcmdbuf(struct hil_softc *);
-static void	hilreport(struct hil_softc *);
+void	printhilpollbuf __P((struct hil_softc *));
+void	printhilcmdbuf __P((struct hil_softc *));
+void	hilreport __P((struct hil_softc *));
 #endif /* DEBUG */
 
-static int
-hilmatch(struct device *parent, struct cfdata *match, void *aux)
+int
+hilmatch(parent, match, aux)
+	struct device *parent;
+	struct cfdata *match;
+	void *aux;
 {
 	struct intio_attach_args *ia = aux;
 
@@ -190,8 +193,10 @@ hilmatch(struct device *parent, struct cfdata *match, void *aux)
 	return (1);
 }
 
-static void
-hilattach(struct device *parent, struct device *self, void *aux)
+void
+hilattach(parent, self, aux)
+	struct device *parent, *self;
+	void *aux;
 {
 	struct hil_softc *hilp = (struct hil_softc *)self;
 	struct intio_attach_args *ia = aux;
@@ -248,8 +253,9 @@ hilattach(struct device *parent, struct device *self, void *aux)
 	config_interrupts(self, hilattach_deferred);
 }
 
-static void
-hilattach_deferred(struct device *self)
+void
+hilattach_deferred(self)
+	struct device *self;
 {
 	struct hil_softc *hilp = (struct hil_softc *)self;
 
@@ -267,8 +273,11 @@ hilattach_deferred(struct device *self)
 }
 
 /* ARGSUSED */
-static int
-hilopen(dev_t dev, int flags, int mode, struct proc *p)
+int
+hilopen(dev, flags, mode, p)
+	dev_t dev;
+	int flags, mode;
+	struct proc *p;
 {
   	struct hil_softc *hilp;
 	struct hilloopdev *dptr;
@@ -345,8 +354,11 @@ hilopen(dev_t dev, int flags, int mode, struct proc *p)
 }
 
 /* ARGSUSED */
-static int
-hilclose(dev_t dev, int flags, int mode, struct proc *p)
+int
+hilclose(dev, flags, mode, p)
+	dev_t dev;
+	int flags, mode;
+	struct proc *p;
 {
   	struct hil_softc *hilp;
 	struct hilloopdev *dptr;
@@ -428,8 +440,11 @@ hilclose(dev_t dev, int flags, int mode, struct proc *p)
  * Read interface to HIL device.
  */
 /* ARGSUSED */
-static int
-hilread(dev_t dev, struct uio *uio, int flag)
+int
+hilread(dev, uio, flag)
+	dev_t dev;
+	struct uio *uio;
+	int flag;
 {
 	struct hil_softc *hilp;
 	struct hilloopdev *dptr;
@@ -480,8 +495,13 @@ hilread(dev_t dev, struct uio *uio, int flag)
 	return(error);
 }
 
-static int
-hilioctl(dev_t dev, u_long cmd, caddr_t data, int flag, struct proc *p)
+int
+hilioctl(dev, cmd, data, flag, p)
+	dev_t dev;
+	u_long cmd;
+	caddr_t data;
+	int flag;
+	struct proc *p;
 {
 	struct hil_softc *hilp;
 	struct hilloopdev *dptr;
@@ -657,7 +677,10 @@ hilioctl(dev_t dev, u_long cmd, caddr_t data, int flag, struct proc *p)
 #ifdef COMPAT_HPUX
 /* ARGSUSED */
 int
-hpuxhilioctl(dev_t dev, int cmd, caddr_t data, int flag)
+hpuxhilioctl(dev, cmd, data, flag)
+	dev_t dev;
+	int cmd, flag;
+	caddr_t data;
 {
 	struct hil_softc *hilp;
 	struct hilloopdev *dptr;
@@ -782,8 +805,11 @@ hpuxhilioctl(dev_t dev, int cmd, caddr_t data, int flag)
 #endif
 
 /*ARGSUSED*/
-static int
-hilpoll(dev_t dev, int events, struct proc *p)
+int
+hilpoll(dev, events, p)
+	dev_t dev;
+	int events;
+	struct proc *p;
 {
 	struct hil_softc *hilp;
 	struct hilloopdev *dptr;
@@ -920,7 +946,7 @@ static const struct filterops hilread_filtops =
 static const struct filterops hil_seltrue_filtops =
 	{ 1, NULL, filt_hilrdetach, filt_seltrue };
 
-static int
+int
 hilkqfilter(dev_t dev, struct knote *kn)
 {
 	struct hil_softc *hilp = hil_cd.cd_devs[HILLOOP(dev)];
@@ -953,8 +979,9 @@ hilkqfilter(dev_t dev, struct knote *kn)
 }
 
 /*ARGSUSED*/
-static int
-hilint(void *v)
+int
+hilint(v)
+	void *v;
 {
 	struct hil_softc *hilp = v;
 	struct hil_dev *hildevice = hilp->hl_addr;
@@ -969,8 +996,10 @@ hilint(void *v)
 	return (1);
 }
 
-static void
-hil_process_int(struct hil_softc *hilp, u_char stat, u_char c)
+void
+hil_process_int(hilp, stat, c)
+	struct hil_softc *hilp;
+	u_char stat, c;
 {
 #ifdef DEBUG
 	if (hildebug & HDB_EVENTS)
@@ -1048,8 +1077,9 @@ hil_process_int(struct hil_softc *hilp, u_char stat, u_char c)
 #define HQVALID(eq) \
 	((eq)->size == HEVQSIZE && (eq)->tail >= 0 && (eq)->tail < HEVQSIZE)
 
-static void
-hilevent(struct hil_softc *hilp)
+void
+hilevent(hilp)
+	struct hil_softc *hilp;
 {
 	struct hilloopdev *dptr = &hilp->hl_device[hilp->hl_actdev];
 	int len, mask, qnum;
@@ -1143,8 +1173,10 @@ hilevent(struct hil_softc *hilp)
 
 #undef HQFULL
 
-static void
-hpuxhilevent(struct hil_softc *hilp, struct hilloopdev *dptr)
+void
+hpuxhilevent(hilp, dptr)
+	struct hil_softc *hilp;
+	struct hilloopdev *dptr;
 {
 	int len;
 	struct timeval ourtime;
@@ -1186,8 +1218,11 @@ hpuxhilevent(struct hil_softc *hilp, struct hilloopdev *dptr)
  * Shared queue manipulation routines
  */
 
-static int
-hilqalloc(struct hil_softc *hilp, struct hilqinfo *qip, struct proc *p)
+int
+hilqalloc(hilp, qip, p)
+	struct hil_softc *hilp;
+	struct hilqinfo *qip;
+	struct proc *p;
 {
 
 #ifdef DEBUG
@@ -1197,8 +1232,11 @@ hilqalloc(struct hil_softc *hilp, struct hilqinfo *qip, struct proc *p)
 	return(EINVAL);
 }
 
-static int
-hilqfree(struct hil_softc *hilp, int qnum, struct proc *p)
+int
+hilqfree(hilp, qnum, p)
+	struct hil_softc *hilp;
+	int qnum;
+	struct proc *p;
 {
 
 #ifdef DEBUG
@@ -1208,8 +1246,11 @@ hilqfree(struct hil_softc *hilp, int qnum, struct proc *p)
 	return(EINVAL);
 }
 
-static int
-hilqmap(struct hil_softc *hilp, int qnum, int device, struct proc *p)
+int
+hilqmap(hilp, qnum, device, p)
+	struct hil_softc *hilp;
+	int qnum, device;
+	struct proc *p;
 {
 	struct hilloopdev *dptr = &hilp->hl_device[device];
 	int s;
@@ -1242,8 +1283,11 @@ hilqmap(struct hil_softc *hilp, int qnum, int device, struct proc *p)
 	return(0);
 }
 
-static int
-hilqunmap(struct hil_softc *hilp, int qnum, int device, struct proc *p)
+int
+hilqunmap(hilp, qnum, device, p)
+	struct hil_softc *hilp;
+	int qnum, device;
+	struct proc *p;
 {
 	int s;
 
@@ -1276,13 +1320,15 @@ hilqunmap(struct hil_softc *hilp, int qnum, int device, struct proc *p)
  */
 
 void
-hilkbdbell(void *v)
+hilkbdbell(v)
+	void *v;
 {
 	hilbeep(v, &default_bell);
 }
 
 void
-hilkbdenable(void *v)
+hilkbdenable(v)
+	void  *v;
 {
 	struct hil_softc *hilp = v;
 	struct hil_dev *hildevice = HILADDR;
@@ -1304,7 +1350,8 @@ hilkbdenable(void *v)
 }
 
 void
-hilkbddisable(void *v)
+hilkbddisable(v)
+	void *v;
 {
 }
 
@@ -1331,7 +1378,8 @@ extern char us_keymap[], us_shiftmap[], us_ctrlmap[];
  * reading from the keyboard in the normal, interrupt driven fashion.
  */
 int
-hilkbdcngetc(int *statp)
+hilkbdcngetc(statp)
+	int *statp;
 {
 	int c, stat;
 	int s;
@@ -1411,7 +1459,7 @@ hilkbdcnattach(bus_space_tag_t bst, bus_addr_t addr)
  * This seems to be needed, once is not always enough!?!
  */
 int
-kbdnmi(void)
+kbdnmi()
 {
 	struct hil_dev *hl_addr = HILADDR;
 
@@ -1434,7 +1482,8 @@ kbdnmi(void)
  * Called at boot time to print out info about interesting devices
  */
 void
-hilinfo(struct hil_softc *hilp)
+hilinfo(hilp)
+	struct hil_softc *hilp;
 {
 	int id, len;
 	struct kbdmap *km;
@@ -1505,7 +1554,8 @@ hilinfo(struct hil_softc *hilp)
  * we prefer to just assume people won't move things around.
  */
 void
-hilconfig(struct hil_softc *hilp)
+hilconfig(hilp)
+	struct hil_softc *hilp;
 {
 	u_char db;
 	int s;
@@ -1613,7 +1663,8 @@ hilconfig(struct hil_softc *hilp)
 }
 
 void
-hilreset(struct hil_softc *hilp)
+hilreset(hilp)
+	struct hil_softc *hilp;
 {
 	struct hil_dev *hildevice = hilp->hl_addr;
 	u_char db;
@@ -1653,7 +1704,9 @@ hilreset(struct hil_softc *hilp)
 }
 
 void
-hilbeep(struct hil_softc *hilp, const struct _hilbell *bp)
+hilbeep(hilp, bp)
+	struct hil_softc *hilp;
+	struct _hilbell *bp;
 {
 	struct hil_dev *hl_addr = HILADDR;
 	u_char buf[2];
@@ -1670,7 +1723,8 @@ hilbeep(struct hil_softc *hilp, const struct _hilbell *bp)
  * Locate and return the address of the first ID module, 0 if none present.
  */
 int
-hiliddev(struct hil_softc *hilp)
+hiliddev(hilp)
+	struct hil_softc *hilp;
 {
 	int i, len;
 
@@ -1714,7 +1768,8 @@ hiliddev(struct hil_softc *hilp)
  * XXX map devno as expected by HP-UX
  */
 int
-hildevno(dev_t dev)
+hildevno(dev)
+	dev_t dev;
 {
 	int newdev;
 
@@ -1744,8 +1799,10 @@ hildevno(dev_t dev)
  * possible without blocking the clock (is this necessary?)
  */
 void
-send_hil_cmd(struct hil_dev *hildevice, u_char cmd, u_char *data, u_char dlen,
-    u_char *rdata)
+send_hil_cmd(hildevice, cmd, data, dlen, rdata)
+	struct hil_dev *hildevice;
+	u_char cmd, *data, dlen;
+	u_char *rdata;
 {
 	u_char status;
 	int s = splvm();
@@ -1778,7 +1835,9 @@ send_hil_cmd(struct hil_dev *hildevice, u_char cmd, u_char *data, u_char dlen,
  * splvm (clock only interrupts) seems to be good enough in practice.
  */
 void
-send_hildev_cmd(struct hil_softc *hilp, char device, char cmd)
+send_hildev_cmd(hilp, device, cmd)
+	struct hil_softc *hilp;
+	char device, cmd;
 {
 	struct hil_dev *hildevice = hilp->hl_addr;
 	u_char status, c;
@@ -1819,7 +1878,8 @@ send_hildev_cmd(struct hil_softc *hilp, char device, char cmd)
  * Also disables and enable auto-repeat.  Why?
  */
 void
-polloff(struct hil_dev *hildevice)
+polloff(hildevice)
+	struct hil_dev *hildevice;
 {
 	char db;
 
@@ -1854,7 +1914,8 @@ polloff(struct hil_dev *hildevice)
 }
 
 void
-pollon(struct hil_dev *hildevice)
+pollon(hildevice)
+	struct hil_dev *hildevice;
 {
 	char db;
 
@@ -1880,8 +1941,9 @@ pollon(struct hil_dev *hildevice)
 }
 
 #ifdef DEBUG
-static void
-printhilpollbuf(struct hil_softc *hilp)
+void
+printhilpollbuf(hilp)
+	struct hil_softc *hilp;
 {
   	u_char *cp;
 	int i, len;
@@ -1893,8 +1955,9 @@ printhilpollbuf(struct hil_softc *hilp)
 	printf("\n");
 }
 
-static void
-printhilcmdbuf(struct hil_softc *hilp)
+void
+printhilcmdbuf(hilp)
+	struct hil_softc *hilp;
 {
   	u_char *cp;
 	int i, len;
@@ -1906,8 +1969,9 @@ printhilcmdbuf(struct hil_softc *hilp)
 	printf("\n");
 }
 
-static void
-hilreport(struct hil_softc *hilp)
+void
+hilreport(hilp)
+	struct hil_softc *hilp;
 {
 	int i, len;
 	int s = splhil();

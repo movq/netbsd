@@ -1,10 +1,12 @@
-#	$NetBSD: Makefile.inc,v 1.3 2004/07/28 09:17:31 skrll Exp $
+#	$NetBSD: Makefile.inc,v 1.2 2002/11/28 06:01:00 chs Exp $
 
 BINDIR=			/usr/mdec
 
 release:
 
 S?=		${.CURDIR}/../../../..
+
+.if !(defined(PROG) && ${PROG} == "mkboot")
 
 .BEGIN: machine hp700 hppa
 .NOPATH: machine hp700 hppa
@@ -19,3 +21,5 @@ hppa :
 	ln -s ${S}/arch/hppa/include $@
 
 CLEANFILES+=machine hp700 hppa
+
+.endif

@@ -1,4 +1,4 @@
-/*	$NetBSD: netbsd-syscalls.c,v 1.17 2004/09/12 11:05:43 jdolecek Exp $	*/
+/*	$NetBSD: netbsd-syscalls.c,v 1.14 2003/10/21 02:11:21 fvdl Exp $	*/
 
 /*
  * Copyright 2002 Niels Provos <provos@citi.umich.edu>
@@ -31,13 +31,15 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: netbsd-syscalls.c,v 1.17 2004/09/12 11:05:43 jdolecek Exp $");
+__RCSID("$NetBSD: netbsd-syscalls.c,v 1.14 2003/10/21 02:11:21 fvdl Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
 
 #include <sys/syscall.h>
 
+#include "compat/aout/aout_syscall.h"
+#include "compat/aoutm68k/aoutm68k_syscall.h"
 #include "compat/freebsd/freebsd_syscall.h"
 #include "compat/hpux/hpux_syscall.h"
 #include "compat/ibcs2/ibcs2_syscall.h"
@@ -63,6 +65,8 @@ __RCSID("$NetBSD: netbsd-syscalls.c,v 1.17 2004/09/12 11:05:43 jdolecek Exp $");
 #define NTP
 #include "kern/syscalls.c"
 
+#include "compat/aout/aout_syscalls.c"
+#include "compat/aoutm68k/aoutm68k_syscalls.c"
 #include "compat/freebsd/freebsd_syscalls.c"
 #include "compat/hpux/hpux_syscalls.c"
 #include "compat/ibcs2/ibcs2_syscalls.c"
@@ -106,15 +110,11 @@ struct emulation {
 	int  nsysnames;			/* Number of */
 };
 
-static const struct emulation emulations[] = {
-	/* Native NetBSD binaries */
+static struct emulation emulations[] = {
 	{ "netbsd",	syscallnames,		SYS_MAXSYSCALL },
 
-	/* NetBSD a.out binaries running under a.out compatibility wrapper */
-	{ "aout",	syscallnames,		SYS_MAXSYSCALL },
-	{ "aoutm68k",	syscallnames,		SYS_MAXSYSCALL },
-
-	/* Binaries running under OS compatibility wrapper */
+	{ "aout",	aout_syscallnames,	AOUT_SYS_MAXSYSCALL },
+	{ "aoutm68k",	aoutm68k_syscallnames,	AOUTM68K_SYS_MAXSYSCALL },
 	{ "freebsd",	freebsd_syscallnames,	FREEBSD_SYS_MAXSYSCALL },
 	{ "hpux",	hpux_syscallnames,	HPUX_SYS_MAXSYSCALL },
 	{ "ibcs2",	ibcs2_syscallnames,	IBCS2_SYS_MAXSYSCALL },
@@ -133,8 +133,8 @@ static const struct emulation emulations[] = {
 };
 
 struct nbsd_data {
-	const struct emulation *current;
-	const struct emulation *commit;
+	struct emulation *current;
+	struct emulation *commit;
 };
 
 static int nbsd_init(void);
@@ -145,9 +145,9 @@ static int nbsd_open(void);
 static struct intercept_pid *nbsd_getpid(pid_t);
 static void nbsd_freepid(struct intercept_pid *);
 static void nbsd_clonepid(struct intercept_pid *, struct intercept_pid *);
-static const struct emulation *nbsd_find_emulation(const char *);
+static struct emulation *nbsd_find_emulation(const char *);
 static int nbsd_set_emulation(pid_t, const char *);
-static const struct emulation *nbsd_switch_emulation(struct nbsd_data *);
+static struct emulation *nbsd_switch_emulation(struct nbsd_data *);
 static const char *nbsd_syscall_name(pid_t, int);
 static int nbsd_syscall_number(const char *, const char *);
 static short nbsd_translate_policy(short);
@@ -258,10 +258,10 @@ nbsd_clonepid(struct intercept_pid *opid, struct intercept_pid *npid)
 	memcpy(npid->data, opid->data, sizeof(struct nbsd_data));
 }
 
-static const struct emulation *
+static struct emulation *
 nbsd_find_emulation(const char *name)
 {
-	const struct emulation *tmp;
+	struct emulation *tmp;
 
 	tmp = emulations;
 	while (tmp->name) {
@@ -279,7 +279,7 @@ nbsd_find_emulation(const char *name)
 static int
 nbsd_set_emulation(pid_t pidnr, const char *name)
 {
-	const struct emulation *tmp;
+	struct emulation *tmp;
 	struct intercept_pid *pid;
 	struct nbsd_data *data;
 
@@ -296,7 +296,7 @@ nbsd_set_emulation(pid_t pidnr, const char *name)
 	return (0);
 }
 
-static const struct emulation *
+static struct emulation *
 nbsd_switch_emulation(struct nbsd_data *data)
 {
 	data->current = data->commit;
@@ -309,7 +309,7 @@ static const char *
 nbsd_syscall_name(pid_t pidnr, int number)
 {
 	struct intercept_pid *pid;
-	const struct emulation *current;
+	struct emulation *current;
 
 	pid = nbsd_getpid(pidnr);
 	if (pid == NULL)
@@ -325,7 +325,7 @@ nbsd_syscall_name(pid_t pidnr, int number)
 static int
 nbsd_syscall_number(const char *emulation, const char *name)
 {
-	const struct emulation *current;
+	struct emulation *current;
 	int i;
 
 	current = nbsd_find_emulation(emulation);
@@ -551,7 +551,7 @@ nbsd_read(int fd)
 	struct str_message msg;
 	struct intercept_pid *icpid;
 	struct nbsd_data *data;
-	const struct emulation *current;
+	struct emulation *current;
 
 	char name[SYSTR_EMULEN+1];
 	const char *sysname;
@@ -648,7 +648,7 @@ nbsd_read(int fd)
 	return (0);
 }
 
-const struct intercept_system intercept = {
+struct intercept_system intercept = {
 	"netbsd",
 	nbsd_init,
 	nbsd_open,

@@ -1,4 +1,4 @@
-/*	$NetBSD: uvm_mmap.c,v 1.85 2004/12/02 15:23:47 briggs Exp $	*/
+/*	$NetBSD: uvm_mmap.c,v 1.82 2004/03/24 07:47:33 junyoung Exp $	*/
 
 /*
  * Copyright (c) 1997 Charles D. Cranor and Washington University.
@@ -51,7 +51,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uvm_mmap.c,v 1.85 2004/12/02 15:23:47 briggs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uvm_mmap.c,v 1.82 2004/03/24 07:47:33 junyoung Exp $");
 
 #include "opt_compat_netbsd.h"
 
@@ -466,8 +466,7 @@ sys_mmap(l, v, retval)
 				if ((error =
 				    VOP_GETATTR(vp, &va, p->p_ucred, p)))
 					return (error);
-				if ((va.va_flags &
-				    (SF_SNAPSHOT|IMMUTABLE|APPEND)) == 0)
+				if ((va.va_flags & (IMMUTABLE|APPEND)) == 0)
 					maxprot |= VM_PROT_WRITE;
 				else if (prot & PROT_WRITE)
 					return (EPERM);
@@ -935,8 +934,6 @@ sys_mlock(l, v, retval)
 
 	error = uvm_map_pageable(&p->p_vmspace->vm_map, addr, addr+size, FALSE,
 	    0);
-	if (error == EFAULT)
-		error = ENOMEM;
 	return error;
 }
 
@@ -986,8 +983,6 @@ sys_munlock(l, v, retval)
 
 	error = uvm_map_pageable(&p->p_vmspace->vm_map, addr, addr+size, TRUE,
 	    0);
-	if (error == EFAULT)
-		error = ENOMEM;
 	return error;
 }
 
@@ -1159,19 +1154,20 @@ uvm_mmap(map, addr, size, prot, maxprot, flags, handle, foff, locklimit)
 			if (prot & PROT_EXEC)
 				vn_markexec(vp);
 		} else {
-			int i = maxprot;
-
+			uobj = udv_attach((void *) &vp->v_rdev,
+			    (flags & MAP_SHARED) ? maxprot :
+			    (maxprot & ~VM_PROT_WRITE), foff, size);
 			/*
 			 * XXX Some devices don't like to be mapped with
-			 * XXX PROT_EXEC or PROT_WRITE, but we don't really
-			 * XXX have a better way of handling this, right now
+			 * XXX PROT_EXEC, but we don't really have a
+			 * XXX better way of handling this, right now
 			 */
-			do {
-				uobj = udv_attach((void *) &vp->v_rdev,
-				    (flags & MAP_SHARED) ? i :
-				    (i & ~VM_PROT_WRITE), foff, size);
-				i--;
-			} while ((uobj == NULL) && (i > 0));
+			if (uobj == NULL && (prot & PROT_EXEC) == 0) {
+				maxprot &= ~VM_PROT_EXECUTE;
+				uobj = udv_attach((void *)&vp->v_rdev,
+				    (flags & MAP_SHARED) ? maxprot :
+				    (maxprot & ~VM_PROT_WRITE), foff, size);
+			}
 			advice = UVM_ADV_RANDOM;
 		}
 		if (uobj == NULL)

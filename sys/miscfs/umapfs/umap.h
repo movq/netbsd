@@ -1,4 +1,4 @@
-/*	$NetBSD: umap.h,v 1.11 2004/05/20 06:34:32 atatat Exp $	*/
+/*	$NetBSD: umap.h,v 1.10.2.1 2004/05/23 10:45:28 tron Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993

@@ -1,4 +1,4 @@
-/* -*-C++-*-	$NetBSD: rootwindow.h,v 1.7 2004/08/06 18:33:09 uch Exp $	*/
+/* -*-C++-*-	$NetBSD: rootwindow.h,v 1.5 2004/02/27 03:53:33 uwe Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #ifndef _HPCBOOT_ROOTWINDOW_H_
-#define	_HPCBOOT_ROOTWINDOW_H_
+#define _HPCBOOT_ROOTWINDOW_H_
 
 class TabWindow;
 class TabBaseWindow;
@@ -72,7 +72,7 @@ public:
 	BOOL isDialogMessage(MSG &);
 	BOOL focusManagerHook(MSG &, HWND);
 
-	void progress(const char * = NULL);
+	void progress();
 	void unprogress();
 };
 

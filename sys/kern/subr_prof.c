@@ -1,4 +1,4 @@
-/*	$NetBSD: subr_prof.c,v 1.31 2004/04/08 06:20:30 atatat Exp $	*/
+/*	$NetBSD: subr_prof.c,v 1.30.2.1 2004/04/21 04:27:34 jmc Exp $	*/
 
 /*-
  * Copyright (c) 1982, 1986, 1993
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: subr_prof.c,v 1.31 2004/04/08 06:20:30 atatat Exp $");
+__KERNEL_RCSID(0, "$NetBSD: subr_prof.c,v 1.30.2.1 2004/04/21 04:27:34 jmc Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

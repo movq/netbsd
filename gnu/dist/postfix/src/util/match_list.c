@@ -1,5 +1,3 @@
-/*	$NetBSD: match_list.c,v 1.6 2004/05/31 00:46:48 heas Exp $	*/
-
 /*++
 /* NAME
 /*	match_list 3
@@ -107,15 +105,8 @@ static ARGV *match_list_parse(ARGV *list, char *string)
     char   *delim = " ,\t\r\n";
     char   *bp = string;
     char   *pattern;
-    char   *map_type_name;
-    char   *map_type_name_flags;
+    char   *cp;
 
-    /*
-     * XXX We do not support ! before /filename, because the file contents
-     * are expanded in-line. Fixing this requires separating the operator (!)
-     * from its operands (file content) so that the operator can apply to a
-     * group of operands.
-     */
     while ((pattern = mystrtok(&bp, delim)) != 0) {
 	if (*pattern == '/') {			/* /file/name */
 	    if (buf == 0)
@@ -128,19 +119,12 @@ static ARGV *match_list_parse(ARGV *list, char *string)
 	    if (vstream_fclose(fp))
 		msg_fatal("%s: read file %s: %m", myname, pattern);
 	} else if (strchr(pattern, ':') != 0) {	/* type:table */
-	    if (buf == 0)
-		buf = vstring_alloc(10);
-#define OPEN_FLAGS	O_RDONLY
-#define DICT_FLAGS	DICT_FLAG_LOCK
-#define STR(x)		vstring_str(x)
-	    for (map_type_name = pattern; *map_type_name == '!'; map_type_name++)
+	    for (cp = pattern; *cp == '!'; cp++)
 		 /* void */ ;
-	    vstring_sprintf(buf, "%s(%o,%o)", pattern, OPEN_FLAGS, DICT_FLAGS);
-	    map_type_name_flags = STR(buf) + (map_type_name - pattern);
-	    if (dict_handle(map_type_name_flags) == 0)
-		dict_register(map_type_name_flags,
-			      dict_open(map_type_name, OPEN_FLAGS, DICT_FLAGS));
-	    argv_add(list, STR(buf), (char *) 0);
+	    if (dict_handle(pattern) == 0)
+		dict_register(pattern,
+			      dict_open(pattern, O_RDONLY, DICT_FLAG_LOCK));
+	    argv_add(list, pattern, (char *) 0);
 	} else {				/* other pattern */
 	    argv_add(list, pattern, (char *) 0);
 	}

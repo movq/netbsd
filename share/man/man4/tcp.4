@@ -1,5 +1,4 @@
-.\"	$NetBSD: tcp.4,v 1.19 2004/04/29 12:47:59 wiz Exp $
-.\"	$FreeBSD: tcp.4,v 1.11.2.16 2004/02/16 22:21:47 bms Exp $
+.\"	$NetBSD: tcp.4,v 1.14 2003/11/23 07:25:11 jhawk Exp $
 .\"
 .\" Copyright (c) 1983, 1991, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -30,7 +29,7 @@
 .\"
 .\"     @(#)tcp.4	8.1 (Berkeley) 6/5/93
 .\"
-.Dd April 25, 2004
+.Dd November 23, 2003
 .Dt TCP 4
 .Os
 .Sh NAME
@@ -104,12 +103,10 @@ network interface through which packets are being transmitted and received.
 Normally this address corresponds to the peer entity's network.
 .Pp
 .Tn TCP
-supports a number of socket options which can be set with
+supports one socket option which is set with
 .Xr setsockopt 2
 and tested with
-.Xr getsockopt 2 :
-.Bl -tag -width TCP_MD5SIGx
-.It Dv TCP_NODELAY
+.Xr getsockopt 2 .
 Under most circumstances,
 .Tn TCP
 sends data when it is presented;
@@ -126,50 +123,12 @@ provides a boolean option,
 (from
 .Aq Pa netinet/tcp.h ,
 to defeat this algorithm.
-.It Dv TCP_MAXSEG
-By default, a sender- and receiver-TCP
-will negotiate among themselves to determine the maximum segment size
-to be used for each connection.
-The
-.Dv TCP_MAXSEG
-option allows the user to determine the result of this negotiation,
-and to reduce it if desired.
-.It Dv TCP_MD5SIG
-This option enables the use of MD5 digests (also known as TCP-MD5)
-on writes to the specified socket.
-In the current release, only outgoing traffic is digested;
-digests on incoming traffic are not verified.
-The current default behavior for the system is to respond to a system
-advertising this option with TCP-MD5; this may change.
-.Pp
-One common use for this in a
-.Nx
-router deployment is to enable
-based routers to interwork with Cisco equipment at peering points.
-Support for this feature conforms to RFC 2385.
-Only IPv4 (AF_INET) sessions are supported.
-.Pp
-In order for this option to function correctly, it is necessary for the
-administrator to add a tcp-md5 key entry to the system's security
-associations database (SADB) using the
-.Xr setkey 8
-utility.
-This entry must have an SPI of 0x1000 and can therefore only be specified
-on a per-host basis at this time.
-.Pp
-If an SADB entry cannot be found for the destination, the outgoing traffic
-will have an invalid digest option prepended, and the following error message
-will be visible on the system console:
-.Em "tcp_signature_compute: SADB lookup failed for %d.%d.%d.%d" .
-.El
-.Pp
 The option level for the
 .Xr setsockopt 2
 call is the protocol number for
 .Tn TCP ,
 available from
 .Xr getprotobyname 3 .
-.Pp
 In the historical
 .Bx
 .Tn TCP

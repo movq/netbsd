@@ -1,4 +1,4 @@
-/*	$NetBSD: cd9660_vfsops.c,v 1.19 2004/11/21 21:49:08 jdolecek Exp $	*/
+/*	$NetBSD: cd9660_vfsops.c,v 1.11.2.1 2004/05/29 09:05:27 tron Exp $	*/
 
 /*-
  * Copyright (c) 1994
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cd9660_vfsops.c,v 1.19 2004/11/21 21:49:08 jdolecek Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cd9660_vfsops.c,v 1.11.2.1 2004/05/29 09:05:27 tron Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_compat_netbsd.h"
@@ -63,7 +63,6 @@ __KERNEL_RCSID(0, "$NetBSD: cd9660_vfsops.c,v 1.19 2004/11/21 21:49:08 jdolecek 
 #include <sys/pool.h>
 #include <sys/stat.h>
 #include <sys/conf.h>
-#include <sys/dirent.h>
 
 #include <fs/cd9660/iso.h>
 #include <fs/cd9660/cd9660_extern.h>
@@ -91,7 +90,7 @@ struct vfsops cd9660_vfsops = {
 	cd9660_unmount,
 	cd9660_root,
 	cd9660_quotactl,
-	cd9660_statvfs,
+	cd9660_statfs,
 	cd9660_sync,
 	cd9660_vget,
 	cd9660_fhtovp,
@@ -102,7 +101,6 @@ struct vfsops cd9660_vfsops = {
 	NULL,
 	cd9660_mountroot,
 	cd9660_check_export,
-	(int (*)(struct mount *, struct vnode *, struct timespec *)) eopnotsupp,
 	cd9660_vnodeopv_descs,
 };
 
@@ -155,8 +153,9 @@ cd9660_mountroot()
 	simple_lock(&mountlist_slock);
 	CIRCLEQ_INSERT_TAIL(&mountlist, mp, mnt_list);
 	simple_unlock(&mountlist_slock);
-	(void)cd9660_statvfs(mp, &mp->mnt_stat, p);
+	(void)cd9660_statfs(mp, &mp->mnt_stat, p);
 	vfs_unbusy(mp);
+	inittodr(0);
 	return (0);
 }
 
@@ -246,7 +245,7 @@ cd9660_mount(mp, path, data, ndp, p)
 		return error;
 	}
 	imp = VFSTOISOFS(mp);
-	return set_statvfs_info(path, UIO_USERSPACE, args.fspec, UIO_USERSPACE,
+	return set_statfs_info(path, UIO_USERSPACE, args.fspec, UIO_USERSPACE,
 	    mp, p);
 }
 
@@ -419,10 +418,9 @@ iso_mountfs(devvp, mp, p, argp)
 	pribp = NULL;
 	
 	mp->mnt_data = isomp;
-	mp->mnt_stat.f_fsidx.__fsid_val[0] = (long)dev;
-	mp->mnt_stat.f_fsidx.__fsid_val[1] = makefstype(MOUNT_CD9660);
-	mp->mnt_stat.f_fsid = mp->mnt_stat.f_fsidx.__fsid_val[0];
-	mp->mnt_stat.f_namemax = MAXNAMLEN;
+	mp->mnt_stat.f_fsid.val[0] = (long)dev;
+	mp->mnt_stat.f_fsid.val[1] = makefstype(MOUNT_CD9660);
+	mp->mnt_maxsymlinklen = 0;
 	mp->mnt_flag |= MNT_LOCAL;
 	mp->mnt_dev_bshift = iso_bsize;
 	mp->mnt_fs_bshift = isomp->im_bshift;
@@ -605,7 +603,7 @@ cd9660_quotactl(mp, cmd, uid, arg, p)
 	struct mount *mp;
 	int cmd;
 	uid_t uid;
-	void *arg;
+	caddr_t arg;
 	struct proc *p;
 {
 
@@ -616,27 +614,28 @@ cd9660_quotactl(mp, cmd, uid, arg, p)
  * Get file system statistics.
  */
 int
-cd9660_statvfs(mp, sbp, p)
+cd9660_statfs(mp, sbp, p)
 	struct mount *mp;
-	struct statvfs *sbp;
+	struct statfs *sbp;
 	struct proc *p;
 {
 	struct iso_mnt *isomp;
 	
 	isomp = VFSTOISOFS(mp);
 
+#ifdef COMPAT_09
+	sbp->f_type = 5;
+#else
+	sbp->f_type = 0;
+#endif
 	sbp->f_bsize = isomp->logical_block_size;
-	sbp->f_frsize = sbp->f_bsize;
 	sbp->f_iosize = sbp->f_bsize;	/* XXX */
 	sbp->f_blocks = isomp->volume_space_size;
 	sbp->f_bfree = 0; /* total free blocks */
 	sbp->f_bavail = 0; /* blocks free for non superuser */
-	sbp->f_bresvd = 0; /* total reserved blocks */
 	sbp->f_files =  0; /* total files */
 	sbp->f_ffree = 0; /* free file nodes */
-	sbp->f_favail = 0; /* free file nodes */
-	sbp->f_fresvd = 0; /* reserved file nodes */
-	copy_statvfs_info(sbp, mp);
+	copy_statfs_info(sbp, mp);
 	/* Use the first spare for flags: */
 	sbp->f_spare[0] = isomp->im_flags;
 	return 0;
@@ -997,12 +996,9 @@ SYSCTL_SETUP(sysctl_vfs_cd9660_setup, "sysctl vfs.cd9660 subtree setup")
 		       SYSCTL_DESCR("ISO-9660 file system"),
 		       NULL, 0, NULL, 0,
 		       CTL_VFS, 14, CTL_EOL);
-
-	sysctl_createv(clog, 0, NULL, NULL,
-		       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
-		       CTLTYPE_INT, "utf8_joliet", 
-		       SYSCTL_DESCR("Encode Joliet file names to UTF-8"),
-		       NULL, 0, &cd9660_utf8_joliet, 0,
-		       CTL_VFS, 14, CD9660_UTF8_JOLIET, CTL_EOL);
-
+	/*
+	 * XXX the "14" above could be dynamic, thereby eliminating
+	 * one more instance of the "number to vfs" mapping problem,
+	 * but "14" is the order as taken from sys/mount.h
+	 */
 }

@@ -1,7 +1,7 @@
-/*	$NetBSD: hpcboot.cpp,v 1.17 2004/08/13 15:47:53 uch Exp $	*/
+/*	$NetBSD: hpcboot.cpp,v 1.14 2004/02/27 02:02:16 uwe Exp $	*/
 
 /*-
- * Copyright (c) 2001, 2002, 2004 The NetBSD Foundation, Inc.
+ * Copyright (c) 2001, 2002 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -50,13 +50,7 @@
 
 #include <boot.h>
 
-#include "../binary/build_number.h"
-
-#if _WIN32_WCE <= 200
-OSVERSIONINFO WinCEVersion;
-#else
 OSVERSIONINFOW WinCEVersion;
-#endif
 
 int WINAPI
 WinMain(HINSTANCE instance, HINSTANCE prev_instance,
@@ -93,10 +87,10 @@ WinMain(HINSTANCE instance, HINSTANCE prev_instance,
 	HpcMenuInterface::Destroy();
 
 	return ret;
-}
+}	 
 
 //
-// boot sequence.
+// boot sequence. 
 //
 void
 hpcboot(void *arg)
@@ -111,29 +105,19 @@ hpcboot(void *arg)
 	// Open serial port for kernel KGDB.
 	SerialConsole::OpenCOM1();
 
-	menu.progress("0");
+	menu.progress();
 	if (!f.setup()) {
 		error_message = TEXT("Architecture not supported.\n");
 		goto failed_exit;
 	}
 
-	menu.progress("1");
+	menu.progress();
 	if (!f.create()) {
 		error_message = TEXT("Architecture ops. not found.\n");
 		goto failed_exit;
 	}
 
-	// Now we can write console which user specified.
-	{
-		DPRINTF_SETUP();
-		DPRINTF((TEXT("hpcboot build number: %d\n"),
-		    HPCBOOT_BUILD_NUMBER));
-		DPRINTF((TEXT("%s (cpu=0x%08x machine=0x%08x)\n"),
-		    HPC_MENU.platform_get(HPC_MENU.platform_default()),
-		    HPC_PREFERENCE.platid_hi, HPC_PREFERENCE.platid_lo));
-	}
-
-	menu.progress("2");
+	menu.progress();
 	if (!f._arch->init()) {
 		error_message = TEXT("Architecture initialize failed.\n");
 		goto failed_exit;
@@ -141,7 +125,7 @@ hpcboot(void *arg)
 
 	f._arch->systemInfo();
 
-	menu.progress("3");
+	menu.progress();
 	// kernel / file system image directory.
 	if (!f._file->setRoot(f.args.fileRoot)) {
 		error_message = TEXT("Can't set root directory.\n");
@@ -161,13 +145,13 @@ hpcboot(void *arg)
 		f._file->close();
 	}
 
-	menu.progress("4");
+	menu.progress();
 	if (!f._file->open(f.args.fileName)) {
 		error_message = TEXT("Can't open kernel image.\n");
 		goto failed_exit;
 	}
 
-	menu.progress("5");
+	menu.progress();
 	// put kernel to loader.
 	if (!f.attachLoader()) {
 		error_message = TEXT("Can't attach loader.\n");
@@ -179,7 +163,7 @@ hpcboot(void *arg)
 		goto file_close_exit;
 	}
 
-	menu.progress("6");
+	menu.progress();
 	sz += f._mem->roundPage(f._loader->memorySize());
 
 	// allocate required memory.
@@ -188,19 +172,19 @@ hpcboot(void *arg)
 		goto file_close_exit;
 	}
 
-	menu.progress("7");
+	menu.progress();
 	// load kernel to memory.
 	if (!f._arch->setupLoader()) {
 		error_message = TEXT("Can't set up loader.\n");
 		goto file_close_exit;
 	}
 
-	menu.progress("8");
+	menu.progress();
 	if (!f._loader->load()) {
 		error_message = TEXT("Can't load kernel image to memory.\n");
 		goto file_close_exit;
 	}
-	menu.progress("9");
+	menu.progress();
 	f._file->close();
 
 	// load file system image to memory
@@ -222,7 +206,7 @@ hpcboot(void *arg)
 	// setup arguments for kernel.
 	p = f._arch->setupBootInfo(*f._loader);
 
-	menu.progress("10");
+	menu.progress();
 
 	f._loader->tagDump(3); // dump page chain.(print first 3 links)
 
@@ -262,7 +246,7 @@ int
 HpcBootApp::run(void)
 {
 	MSG msg;
-
+		
 	while (GetMessage(&msg, 0, 0, 0)) {
 		// cancel auto-boot.
 		if (HPC_PREFERENCE.auto_boot > 0 && _root &&

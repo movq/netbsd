@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.GLcore,v 1.7 2004/05/14 07:21:24 he Exp $
+#	$NetBSD: Makefile.GLcore,v 1.5.2.1 2004/05/14 07:43:58 tron Exp $
 
 LIB=	GLcore
 
@@ -61,7 +61,6 @@ SRCS+=		compsize.c xf86glx.c xf86glx_util.c
 CPPFLAGS+=	-I${DESTDIR}${X11INCDIR}/X11 \
 		-I${DESTDIR}${X11INCDIR}/X11/extensions \
  		-I${X11SRCDIR.xc}/extras/Mesa/include \
-		-I${X11SRCDIR.xc}/lib/GL/glx \
 		-I${X11SRCDIR.xc}/lib/GL/include \
  		-I${X11SRCDIR.xc}/extras/Mesa/src \
 		-I${X11SRCDIR.xc}/programs/Xserver/include \

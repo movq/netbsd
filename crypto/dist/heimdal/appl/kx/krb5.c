@@ -34,7 +34,7 @@
 #include "kx.h"
 
 __RCSID("$Heimdal: krb5.c,v 1.10.6.2 2004/03/16 11:33:48 lha Exp $"
-        "$NetBSD: krb5.c,v 1.1.1.5 2004/04/02 14:47:32 lha Exp $");
+        "$NetBSD: krb5.c,v 1.1.1.4.2.1 2004/04/21 04:55:37 jmc Exp $");
 
 #ifdef KRB5
 

@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.5 2004/05/08 21:51:48 kleink Exp $
+#	$NetBSD: Makefile,v 1.4 2003/09/20 22:25:40 matt Exp $
 
 INCSDIR= /usr/include/hppa
 
@@ -17,7 +17,6 @@ INCS=	ansi.h aout_machdep.h asm.h \
 	reg.h reloc.h \
 	setjmp.h signal.h som.h spinlock.h stdarg.h \
 	trap.h types.h \
-	varargs.h vmparam.h \
-	wchar_limits.h
+	varargs.h vmparam.h
 
 .include <bsd.kinc.mk>

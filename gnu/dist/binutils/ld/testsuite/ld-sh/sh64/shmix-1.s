@@ -10,7 +10,6 @@ start2:
 	nop
 forw:
 	nop
-	.align 2
 	.long $
 	.long start2
 	.long mediacode2

@@ -1,4 +1,4 @@
-/*	$NetBSD: in6.h,v 1.45 2004/06/11 04:10:10 itojun Exp $	*/
+/*	$NetBSD: in6.h,v 1.44.2.1 2004/06/14 18:00:54 tron Exp $	*/
 /*	$KAME: in6.h,v 1.83 2001/03/29 02:55:07 jinmei Exp $	*/
 
 /*

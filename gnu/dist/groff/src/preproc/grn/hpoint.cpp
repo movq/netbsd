@@ -1,4 +1,4 @@
-/*	$NetBSD: hpoint.cpp,v 1.1.1.2 2004/07/30 14:45:02 wiz Exp $	*/
+/*	$NetBSD: hpoint.cpp,v 1.1.1.1 2003/06/30 17:52:13 wiz Exp $	*/
 
 /* Last non-groff version: hpoint.c  1.1  84/10/08 */
 
@@ -26,26 +26,26 @@ PTInit()
  * into the pointlist.
  */
 POINT *
-PTMakePoint(double x,
-	    double y,
+PTMakePoint(float x,
+	    float y,
 	    POINT **pplist)
 {
-  register POINT *pt;
+  register POINT *point;
 
-  if (Nullpoint(pt = *pplist)) {	/* empty list */
+  if (Nullpoint(point = *pplist)) {	/* empty list */
     *pplist = (POINT *) malloc(sizeof(POINT));
-    pt = *pplist;
+    point = *pplist;
   } else {
-    while (!Nullpoint(pt->nextpt))
-      pt = pt->nextpt;
-    pt->nextpt = (POINT *) malloc(sizeof(POINT));
-    pt = pt->nextpt;
+    while (!Nullpoint(point->nextpt))
+      point = point->nextpt;
+    point->nextpt = (POINT *) malloc(sizeof(POINT));
+    point = point->nextpt;
   }
 
-  pt->x = x;
-  pt->y = y;
-  pt->nextpt = PTInit();
-  return (pt);
+  point->x = x;
+  point->y = y;
+  point->nextpt = PTInit();
+  return (point);
 }				/* end PTMakePoint */
 
 /* EOF */

@@ -35,8 +35,8 @@ static struct dependency * dep_chain = NULL;
 /* Current column in output file.  */
 static int column = 0;
 
-static int quote_string_for_make (FILE *, char *);
-static void wrap_output (FILE *, char *, int);
+static int quote_string_for_make PARAMS ((FILE *, char *));
+static void wrap_output PARAMS ((FILE *, char *, int));
 
 /* Number of columns allowable.  */
 #define MAX_COLUMNS 72
@@ -45,7 +45,8 @@ static void wrap_output (FILE *, char *, int);
    never called, then dependency tracking is simply skipped.  */
 
 void
-start_dependencies (char *filename)
+start_dependencies (filename)
+     char *filename;
 {
   dep_file = filename;
 }
@@ -53,7 +54,8 @@ start_dependencies (char *filename)
 /* Noticed a new filename, so try to register it.  */
 
 void
-register_dependency (char *filename)
+register_dependency (filename)
+     char *filename;
 {
   struct dependency *dep;
 
@@ -79,7 +81,9 @@ register_dependency (char *filename)
    This code is taken from gcc with only minor changes.  */
 
 static int
-quote_string_for_make (FILE *file, char *src)
+quote_string_for_make (file, src)
+     FILE *file;
+     char *src;
 {
   char *p = src;
   int i = 0;
@@ -141,7 +145,10 @@ quote_string_for_make (FILE *file, char *src)
    wrapping as necessary.  */
 
 static void
-wrap_output (FILE *f, char *string, int spacer)
+wrap_output (f, string, spacer)
+     FILE *f;
+     char *string;
+     int spacer;
 {
   int len = quote_string_for_make (NULL, string);
 
@@ -179,7 +186,7 @@ wrap_output (FILE *f, char *string, int spacer)
 /* Print dependency file.  */
 
 void
-print_dependencies (void)
+print_dependencies ()
 {
   FILE *f;
   struct dependency *dep;

@@ -1,4 +1,4 @@
-/*	$NetBSD: if_atw_pci.c,v 1.8 2004/08/21 23:48:33 thorpej Exp $	*/
+/*	$NetBSD: if_atw_pci.c,v 1.6 2004/02/17 21:20:55 dyoung Exp $	*/
 
 /*-
  * Copyright (c) 1998, 1999, 2000, 2002 The NetBSD Foundation, Inc.
@@ -44,7 +44,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_atw_pci.c,v 1.8 2004/08/21 23:48:33 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_atw_pci.c,v 1.6 2004/02/17 21:20:55 dyoung Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h> 
@@ -95,13 +95,13 @@ struct atw_pci_softc {
 	pcitag_t		psc_pcitag;	/* our PCI tag */
 };
 
-static int	atw_pci_match(struct device *, struct cfdata *, void *);
-static void	atw_pci_attach(struct device *, struct device *, void *);
+int	atw_pci_match(struct device *, struct cfdata *, void *);
+void	atw_pci_attach(struct device *, struct device *, void *);
 
 CFATTACH_DECL(atw_pci, sizeof(struct atw_pci_softc),
     atw_pci_match, atw_pci_attach, NULL, NULL);
 
-static const struct atw_pci_product {
+const struct atw_pci_product {
 	u_int32_t	app_vendor;	/* PCI vendor ID */
 	u_int32_t	app_product;	/* PCI product ID */
 	const char	*app_product_name;
@@ -112,7 +112,9 @@ static const struct atw_pci_product {
 	{ 0,				0,				NULL },
 };
 
-static const struct atw_pci_product *
+const struct atw_pci_product *atw_pci_lookup(const struct pci_attach_args *);
+
+const struct atw_pci_product *
 atw_pci_lookup(const struct pci_attach_args *pa)
 {
 	const struct atw_pci_product *app;
@@ -127,7 +129,7 @@ atw_pci_lookup(const struct pci_attach_args *pa)
 	return (NULL);
 }
 
-static int
+int
 atw_pci_match(struct device *parent, struct cfdata *match, void *aux)
 {
 	struct pci_attach_args *pa = aux;
@@ -165,7 +167,7 @@ atw_pci_disable(struct atw_softc *sc)
 	psc->psc_intrcookie = NULL;
 }
 
-static void
+void
 atw_pci_attach(struct device *parent, struct device *self, void *aux)
 {
 	struct atw_pci_softc *psc = (void *) self;
@@ -178,7 +180,7 @@ atw_pci_attach(struct device *parent, struct device *self, void *aux)
 	int ioh_valid, memh_valid;
 	const struct atw_pci_product *app;
 	pcireg_t reg;
-	int pmreg;
+	int pmreg, rev;
 
 	psc->psc_pc = pa->pa_pc;
 	psc->psc_pcitag = pa->pa_tag;
@@ -198,9 +200,9 @@ atw_pci_attach(struct device *parent, struct device *self, void *aux)
 	/*
 	 * Get revision info, and set some chip-specific variables.
 	 */
-	sc->sc_rev = PCI_REVISION(pa->pa_class);
-	printf(": %s, revision %d.%d\n", app->app_product_name,
-	    (sc->sc_rev >> 4) & 0xf, sc->sc_rev & 0xf);
+	rev = PCI_REVISION(pa->pa_class);
+	printf(": %s, pass %d.%d\n", app->app_product_name,
+	    (rev >> 4) & 0xf, rev & 0xf);
 
 	/*
 	 * Check to see if the device is in power-save mode, and

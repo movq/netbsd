@@ -34,7 +34,7 @@
 #include "krb5_locl.h"
 
 __RCSID("$Heimdal: fcache.c,v 1.34.6.6 2004/03/10 13:30:59 lha Exp $"
-        "$NetBSD: fcache.c,v 1.1.1.6 2004/04/02 14:47:49 lha Exp $");
+        "$NetBSD: fcache.c,v 1.1.1.5.2.1 2004/04/21 04:55:41 jmc Exp $");
 
 typedef struct krb5_fcache{
     char *filename;

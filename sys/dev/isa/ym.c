@@ -1,4 +1,4 @@
-/*	$NetBSD: ym.c,v 1.23 2004/10/29 12:57:17 yamt Exp $	*/
+/*	$NetBSD: ym.c,v 1.21 2002/03/10 13:57:11 itohy Exp $	*/
 
 /*-
  * Copyright (c) 1999-2002 The NetBSD Foundation, Inc.
@@ -67,7 +67,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ym.c,v 1.23 2004/10/29 12:57:17 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ym.c,v 1.21 2002/03/10 13:57:11 itohy Exp $");
 
 #include "mpu_ym.h"
 #include "opt_ym.h"
@@ -176,7 +176,7 @@ static void ym_set_3d __P((struct ym_softc *, mixer_ctrl_t *,
 	struct ad1848_volume *, int));
 
 
-const struct audio_hw_if ym_hw_if = {
+struct audio_hw_if ym_hw_if = {
 	ad1848_isa_open,
 	ad1848_isa_close,
 	NULL,
@@ -416,9 +416,9 @@ ym_getdev(addr, retp)
 	struct ym_softc *sc = addr;
 	struct ad1848_softc *ac = &sc->sc_ad1848.sc_ad1848;
 
-	strlcpy(retp->name, ac->chip_name, sizeof(retp->name));
-	snprintf(retp->version, sizeof(retp->version), "%d", sc->sc_version);
-	strlcpy(retp->config, "ym", sizeof(retp->config));
+	strcpy(retp->name, ac->chip_name);
+	sprintf(retp->version, "%d", sc->sc_version);
+	strcpy(retp->config, "ym");
 
 	return 0;
 }

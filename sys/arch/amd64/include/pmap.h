@@ -1,4 +1,4 @@
-/*	$NetBSD: pmap.h,v 1.5 2004/08/08 09:47:05 yamt Exp $	*/
+/*	$NetBSD: pmap.h,v 1.1 2003/04/26 18:39:46 fvdl Exp $	*/
 
 /*
  *
@@ -114,7 +114,7 @@
  *  |         Kernel Space            |
  *  |                                 |
  *  |                                 |
- *  +---------------------------------+ 0xffff800000000000 = 0x0000800000000000
+ *  +---------------------------------+ 0xffff800000000000 = 0x0000008000000000
  *  |                                 |
  *  |    alt.L1 table (PTE pages)     |
  *  |                                 |
@@ -126,7 +126,7 @@
  *  |                                 |
  *  +---------------------------------+ 0x0000000000000000
  *
- * In other words, there is a 'VA hole' at 0x0000800000000000 -
+ * In other words, there is a 'VA hole' at 0x0000008000000000 -
  * 0xffff800000000000 which will trap, just as on, for example,
  * sparcv9.
  *
@@ -334,12 +334,19 @@ struct pmap {
  * describes one mapping).
  */
 
-struct pv_entry {                       /* locked by its list's pvh_lock */
-        SPLAY_ENTRY(pv_entry) pv_node;  /* splay-tree node */
-        struct pmap *pv_pmap;           /* the pmap */
-        vaddr_t pv_va;                  /* the virtual address */
-        struct vm_page *pv_ptp;         /* the vm_page of the PTP */
-};    
+struct pv_entry;
+
+struct pv_head {
+	struct simplelock pvh_lock;	/* locks every pv on this list */
+	struct pv_entry *pvh_list;	/* head of list (locked by pvh_lock) */
+};
+
+struct pv_entry {			/* locked by its list's pvh_lock */
+	struct pv_entry *pv_next;	/* next entry */
+	struct pmap *pv_pmap;		/* the pmap */
+	vaddr_t pv_va;			/* the virtual address */
+	struct vm_page *pv_ptp;		/* the vm_page of the PTP */
+};
 
 /*
  * pv_entrys are dynamically allocated in chunks from a single page.
@@ -435,7 +442,6 @@ static void	pmap_update_pg __P((vaddr_t));
 static void	pmap_update_2pg __P((vaddr_t,vaddr_t));
 void		pmap_write_protect __P((struct pmap *, vaddr_t,
 				vaddr_t, vm_prot_t));
-void		pmap_changeprot_local(vaddr_t, vm_prot_t);
 
 vaddr_t reserve_dumppages __P((vaddr_t)); /* XXX: not a pmap fn */
 
@@ -560,7 +566,7 @@ kvtopte(vaddr_t va)
 	{
 		pd_entry_t *pde;
 
-		pde = L2_BASE + pl2_i(va);
+		pde = L1_BASE + pl2_i(va);
 		if (*pde & PG_PS)
 			return ((pt_entry_t *)pde);
 	}

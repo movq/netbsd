@@ -38,7 +38,7 @@
  */
 
 __RCSID("$Heimdal: arcfour.c,v 1.12.2.3 2003/09/19 15:15:11 lha Exp $"
-        "$NetBSD: arcfour.c,v 1.1.1.1 2004/04/02 14:47:44 lha Exp $");
+        "$NetBSD: arcfour.c,v 1.1.1.1.2.2 2004/04/21 04:55:40 jmc Exp $");
 
 static krb5_error_code
 arcfour_mic_key(krb5_context context, krb5_keyblock *key,

@@ -1,4 +1,4 @@
-/*	$NetBSD: ad1848_isa.c,v 1.26 2004/07/09 03:15:01 mycroft Exp $	*/
+/*	$NetBSD: ad1848_isa.c,v 1.23 2003/05/09 23:51:28 fvdl Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -102,7 +102,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ad1848_isa.c,v 1.26 2004/07/09 03:15:01 mycroft Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ad1848_isa.c,v 1.23 2003/05/09 23:51:28 fvdl Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -547,6 +547,16 @@ ad1848_isa_close(addr)
 	struct ad1848_isa_softc *isc = addr;
 	struct ad1848_softc *sc = &isc->sc_ad1848;
 
+	ad1848_isa_halt_output(isc);
+	ad1848_isa_halt_input(isc);
+
+	isc->sc_pintr = isc->sc_rintr = NULL;
+
+	if (isc->sc_playdrq != -1)
+		isa_drq_free(isc->sc_ic, isc->sc_playdrq);
+	if (isc->sc_recdrq != -1 && isc->sc_recdrq != isc->sc_playdrq)
+		isa_drq_free(isc->sc_ic, isc->sc_recdrq);
+
 	DPRINTF(("ad1848_isa_close: stop DMA\n"));
 	ad1848_close(sc);
 
@@ -555,11 +565,6 @@ ad1848_isa_close(addr)
 	if (isc->powerctl)
 		isc->powerctl(isc->powerarg, 0);
 #endif
-
-	if (isc->sc_playdrq != -1)
-		isa_drq_free(isc->sc_ic, isc->sc_playdrq);
-	if (isc->sc_recdrq != -1 && isc->sc_recdrq != isc->sc_playdrq)
-		isa_drq_free(isc->sc_ic, isc->sc_recdrq);
 }
 
 int
@@ -708,16 +713,16 @@ ad1848_isa_intr(arg)
 	if ((status & INTERRUPT_STATUS) != 0) {
 		if (sc->mode == 2 && isc->sc_playdrq != isc->sc_recdrq) {
 			status = ad_read(sc, CS_IRQ_STATUS);
-			if ((status & CS_IRQ_PI) && isc->sc_playrun) {
+			if ((status & CS_IRQ_PI) && isc->sc_pintr != NULL) {
 				(*isc->sc_pintr)(isc->sc_parg);
 				retval = 1;
 			}
-			if ((status & CS_IRQ_CI) && isc->sc_recrun) {
+			if ((status & CS_IRQ_CI) && isc->sc_rintr != NULL) {
 				(*isc->sc_rintr)(isc->sc_rarg);
 				retval = 1;
 			}
 		} else {
-			if (isc->sc_playrun) {
+			if (isc->sc_pintr != NULL) {
 				(*isc->sc_pintr)(isc->sc_parg);
 				retval = 1;
 			}

@@ -1,4 +1,4 @@
-/*	$NetBSD: darwin_machdep.c,v 1.17 2004/07/28 22:24:06 manu Exp $ */
+/*	$NetBSD: darwin_machdep.c,v 1.12 2003/12/16 13:38:26 manu Exp $ */
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: darwin_machdep.c,v 1.17 2004/07/28 22:24:06 manu Exp $");
+__KERNEL_RCSID(0, "$NetBSD: darwin_machdep.c,v 1.12 2003/12/16 13:38:26 manu Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -48,7 +48,6 @@ __KERNEL_RCSID(0, "$NetBSD: darwin_machdep.c,v 1.17 2004/07/28 22:24:06 manu Exp
 #include <compat/mach/mach_types.h>
 #include <compat/mach/mach_vm.h>
 
-#include <compat/darwin/darwin_audit.h>
 #include <compat/darwin/darwin_signal.h>
 #include <compat/darwin/darwin_syscallargs.h>
 
@@ -110,7 +109,7 @@ darwin_sendsig(ksi, mask)
 	sf.dmc.es.exception = tf->exc;
 
 	sf.dmc.ss.srr0 = tf->srr0;
-	sf.dmc.ss.srr1 = tf->srr1 & PSL_USERSRR1;
+	sf.dmc.ss.srr1 = tf->srr1;
 	memcpy(&sf.dmc.ss.gpreg[0], &tf->fixreg[0], sizeof(sf.dmc.ss.gpreg));
 	sf.dmc.ss.cr = tf->cr;
 	sf.dmc.ss.xer = tf->xer;
@@ -183,13 +182,11 @@ darwin_sendsig(ksi, mask)
  * The signal trampoline calls this system call 
  * to get the process state restored like it was
  * before the signal delivery.
- * 
- * This is the version for X.2 binaries and older
  */
 int
-darwin_sys_sigreturn_x2(struct lwp *l, void *v, register_t *retval)
+darwin_sys_sigreturn(struct lwp *l, void *v, register_t *retval)
 {
-	struct darwin_sys_sigreturn_x2_args /* {
+	struct darwin_sys_sigreturn_args /* {
 		syscallarg(struct darwin_ucontext *) uctx;
 	} */ *uap = v;
 	struct proc *p = l->l_proc;
@@ -218,7 +215,9 @@ darwin_sys_sigreturn_x2(struct lwp *l, void *v, register_t *retval)
 
 	/* Check for security abuse */
 	tf = trapframe(l);
-	if (!PSL_USEROK_P(mctx.ss.srr1)) {
+	mctx.ss.srr1 &= ~(PSL_POW | PSL_ILE | PSL_IP | PSL_LE | PSL_RI);
+	mctx.ss.srr1 |= (PSL_PR | PSL_ME | PSL_IR | PSL_DR | PSL_EE); 
+	if ((mctx.ss.srr1 & PSL_USERSTATIC) != (tf->srr1 & PSL_USERSTATIC)) {
 		DPRINTF(("uctx.ss.srr1 = 0x%08x, rf->srr1 = 0x%08lx\n",
 		    mctx.ss.srr1, tf->srr1));
 		return (EINVAL);
@@ -247,30 +246,6 @@ darwin_sys_sigreturn_x2(struct lwp *l, void *v, register_t *retval)
 	native_sigset13_to_sigset(&uctx.uc_sigmask, &mask);
 	(void)sigprocmask1(p, SIG_SETMASK, &mask, 0);
 
-	return (EJUSTRETURN);
-}
-
-/*
- * This is the version used starting with X.3 binaries
- */
-int
-darwin_sys_sigreturn(struct lwp *l, void *v, register_t *retval)
-{
-	struct darwin_sys_sigreturn_args /* {
-		syscallarg(struct darwin_ucontext *) uctx;
-		syscallarg(int) ucvers;
-	} */ *uap = v;
-
-	switch (SCARG(uap, ucvers)) {
-	case DARWIN_UCVERS_X2:
-		return darwin_sys_sigreturn_x2(l, v, retval);
-		break;
-
-	default:
-		printf("darwin_sys_sigreturn: ucvers = %d\n", 
-		    SCARG(uap, ucvers));
-		break;
-	}
 	return (EJUSTRETURN);
 }
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: iso_pcb.c,v 1.27 2004/04/19 05:16:45 matt Exp $	*/
+/*	$NetBSD: iso_pcb.c,v 1.25 2003/10/30 01:43:10 simonb Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -62,7 +62,7 @@ SOFTWARE.
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: iso_pcb.c,v 1.27 2004/04/19 05:16:45 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: iso_pcb.c,v 1.25 2003/10/30 01:43:10 simonb Exp $");
 
 #include "opt_iso.h"
 
@@ -93,7 +93,9 @@ __KERNEL_RCSID(0, "$NetBSD: iso_pcb.c,v 1.27 2004/04/19 05:16:45 matt Exp $");
 #include <netccitt/pk_extern.h>
 #endif
 
-const struct iso_addr zeroiso_addr;
+struct iso_addr zeroiso_addr = {
+	0
+};
 
 #ifdef ARGO_DEBUG
 unsigned char   argo_debug[128];
@@ -109,7 +111,9 @@ unsigned char   argo_debug[128];
  * RETURNS:		0 if OK, ENOBUFS if can't alloc the necessary mbuf
  */
 int
-iso_pcballoc(struct socket *so, void *v)
+iso_pcballoc(so, v)
+	struct socket  *so;
+	void *v;
 {
 	struct isopcb  *head = v;
 	struct isopcb *isop;
@@ -119,9 +123,10 @@ iso_pcballoc(struct socket *so, void *v)
 		printf("iso_pcballoc(so %p)\n", so);
 	}
 #endif
-	MALLOC(isop, struct isopcb *, sizeof(*isop), M_PCB, M_NOWAIT|M_ZERO);
+	MALLOC(isop, struct isopcb *, sizeof(*isop), M_PCB, M_NOWAIT);
 	if (isop == NULL)
 		return ENOBUFS;
+	bzero(isop, sizeof(*isop));
 	isop->isop_head = head;
 	isop->isop_socket = so;
 	insque(isop, head);
@@ -148,7 +153,10 @@ iso_pcballoc(struct socket *so, void *v)
  * NOTES:
  */
 int
-iso_pcbbind(void *v, struct mbuf *nam, struct proc *p)
+iso_pcbbind(v, nam, p)
+	void *v;
+	struct mbuf *nam;
+	struct proc *p;
 {
 	struct isopcb *isop = v;
 	struct isopcb *head = isop->isop_head;
@@ -279,7 +287,9 @@ noname:
  * NOTES:
  */
 int
-iso_pcbconnect(void *v, struct mbuf *nam)
+iso_pcbconnect(v, nam)
+	void *v;
+	struct mbuf    *nam;
 {
 	struct isopcb *isop = v;
 	struct sockaddr_iso *siso = mtod(nam, struct sockaddr_iso *);
@@ -436,7 +446,8 @@ iso_pcbconnect(void *v, struct mbuf *nam)
  * NOTES:
  */
 void
-iso_pcbdisconnect(void *v)
+iso_pcbdisconnect(v)
+	void *v;
 {
 	struct isopcb  *isop = v;
 	struct sockaddr_iso *siso;
@@ -475,7 +486,8 @@ iso_pcbdisconnect(void *v)
  * NOTES:
  */
 void
-iso_pcbdetach(void *v)
+iso_pcbdetach(v)
+	void *v;
 {
 	struct isopcb  *isop = v;
 	struct socket  *so = isop->isop_socket;
@@ -573,11 +585,14 @@ iso_pcbdetach(void *v)
  * NOTES:		(notify) is called at splnet!
  */
 void
-iso_pcbnotify(struct isopcb *head, struct sockaddr_iso *siso, int errno,
-	void (*notify) (struct isopcb *))
+iso_pcbnotify(head, siso, errno, notify)
+	struct isopcb  *head;
+	struct sockaddr_iso *siso;
+	int             errno;
+	void (*notify) __P((struct isopcb *));
 {
 	struct isopcb *isop;
-	int s = splnet();
+	int             s = splnet();
 
 #ifdef ARGO_DEBUG
 	if (argo_debug[D_ISO]) {
@@ -628,11 +643,11 @@ iso_pcbnotify(struct isopcb *head, struct sockaddr_iso *siso, int errno,
  * NOTES:
  */
 struct isopcb  *
-iso_pcblookup(
-	struct isopcb  *head,
-	int             fportlen,
-	caddr_t         fport,
-	struct sockaddr_iso *laddr)
+iso_pcblookup(head, fportlen, fport, laddr)
+	struct isopcb  *head;
+	struct sockaddr_iso *laddr;
+	caddr_t         fport;
+	int             fportlen;
 {
 	struct isopcb *isop;
 	caddr_t lp = TSEL(laddr);

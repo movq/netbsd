@@ -1,7 +1,7 @@
-/*	$NetBSD: wsconsctl.c,v 1.9 2004/07/30 15:22:42 jmmv Exp $ */
+/*	$NetBSD: wsconsctl.c,v 1.6.2.1 2004/08/22 13:42:46 tron Exp $ */
 
 /*-
- * Copyright (c) 1998, 2004 The NetBSD Foundation, Inc.
+ * Copyright (c) 1998 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -180,8 +180,7 @@ main(argc, argv)
 			if (field_tab[i].flags & FLG_NOAUTO)
 				warnx("Use explicit arg to view %s.",
 				      field_tab[i].name);
-			else if (field_tab[i].flags & FLG_GET &&
-				 !(field_tab[i].flags & FLG_DISABLED))
+			else if (field_tab[i].flags & FLG_GET)
 				pr_field(field_tab + i, sep);
 	} else if (argc > 0) {
 		if (wflag != 0) {
@@ -219,13 +218,9 @@ main(argc, argv)
 				f->flags |= FLG_GET;
 			}
 			(*getval)(fd);
-			for (i = 0; i < field_tab_len; i++) {
-				if (field_tab[i].flags & FLG_DISABLED)
-					errx(1, "%s: no kernel support",
-					     field_tab[i].name);
+			for (i = 0; i < field_tab_len; i++)
 				if (field_tab[i].flags & FLG_GET)
 					pr_field(field_tab + i, sep);
-			}
 		}
 	} else {
 		close(fd);

@@ -1,4 +1,4 @@
-/*	$NetBSD: locore.S,v 1.13 2004/08/26 16:52:27 jkunz Exp $	*/
+/*	$NetBSD: locore.S,v 1.6 2004/01/05 08:59:55 jdolecek Exp $	*/
 
 /*	$OpenBSD: locore.S,v 1.46 2001/09/20 18:33:03 mickey Exp $	*/
 
@@ -63,7 +63,6 @@
  *  suitability of this software for any purpose.
  */
 
-#include "opt_ddb.h"
 #include "opt_kgdb.h"
 #include "opt_lockdebug.h"
 
@@ -619,16 +618,14 @@ $hp700_inew_loop:
 	/*
 	 * If the map entry for this bit has INT_REG_BIT_REG 
 	 * set, branch to descend into the next interrupt 
-	 * register.  Otherwise, set the bits in our ipending_new
+	 * register.  Otherwise, set the bit in our ipending_new
 	 * value and loop.
 	 */
-	ldwx,s  %arg2(%arg0), %t1
-	ldil	L%INT_REG_BIT_REG, %t2
-	ldo	R%INT_REG_BIT_REG(%t2), %t2
-	and	%t1, %t2, %t3
-	combt,=,n	%t2, %t3, $hp700_inew_descend
+	ldbx	%arg2(%arg0), %t1
+	bb,<,n	%t1, (31 - INT_REG_BIT_REG_POS), $hp700_inew_descend
+	mtsar	%t1
 	addib,>= -1, %arg2, $hp700_inew_loop
-	or	%t1, %ret0, %ret0
+	vdepi	1, 1, %ret0
 
 $hp700_inew_done:
 
@@ -647,7 +644,7 @@ $hp700_inew_descend:
 	 * is the CPU interrupt register, which you can
 	 * never descend into since it's the root.)
 	 */
-	andcm,<> %t1, %t2, %t1
+	extru,<> %t1, 31, INT_REG_BIT_REG_POS, %t1
 	b,n	$hp700_inew_unused
 
 	/* Save our state. */
@@ -747,17 +744,12 @@ EXIT(microtime)
 /* Include the support functions. */
 #include <hppa/hppa/support.S>
 
-/* 
- * cpu_switchto(struct lwp *cur, struct lwp *new)
- */
 	.align	32
 ENTRY(cpu_switchto,128)
-	b	switchto
-	copy	%arg0, %arg2
 EXIT(cpu_switchto)
 
 /*
- * cpu_switch(struct lwp *curlwp)
+ * cpu_switch()
  * Find the highest priority LWP and resume it.
  */
 	.align	32
@@ -804,7 +796,8 @@ idle_loop:
 
 #if defined(LOCKDEBUG)
 	/* Release sched_lock */ 
-	CALL(sched_unlock_idle, %r1)
+	.call
+	bl	sched_unlock_idle, %rp
 	nop
 #endif  
 
@@ -823,7 +816,8 @@ idle_loop:
 
 #if defined(LOCKDEBUG)
 	/* Acquire sched_lock */
-	CALL(sched_lock_idle, %r1)
+	.call
+	bl	sched_lock_idle, %rp
 	nop
 #endif
 
@@ -877,7 +871,6 @@ Lcspstr:
 	.align	8
 link_ok:
 #endif
-	/* take new lwp off its runq */
 	ldw	L_FORW(%arg1), %arg0
 	stw	%arg0, L_FORW(%t2)
 	stw	%t2, L_BACK(%arg0)
@@ -890,13 +883,6 @@ link_ok:
 	stw	%t3, R%sched_whichqs(%t1)
 
 	/* don't need &sched_whichqs (t1) starting here */
-	/*
-	 * register usage from here:
-	 * %arg1	new lwp
-	 * %arg2	old lwp
-	 */
-
-switchto:
 sw_qnempty:
 	ldil	L%want_resched, %t3
 	stw	%r0, R%want_resched(%t3)
@@ -912,12 +898,12 @@ sw_qnempty:
 	copy	%arg1, %t2
 	/*
 	 * Either we must be switching to the same LWP, or
-	 * the new LWP's kernel stack must be reasonable.
+	 * the the new LWP's kernel stack must be reasonable.
 	 */
 	comb,=,n %arg1, %arg2, kstack_ok
 	ldw	L_MD_REGS(%arg1), %t1
 	ldw	L_ADDR(%arg1), %arg0
-	ldw	PCB_KSP(%arg0), %t1
+	ldw	TF_R30(%t1), %t1
 	ldo	NBPG(%arg0), %arg0
 	comb,>>,n %arg0, %t1, switch_error
 	copy	%arg1, %t2
@@ -931,7 +917,6 @@ kstack_ok:
 	ldi	LSONPROC, %t1
 	stw	%t1, L_STAT(%arg1)
 	ldil	L%curlwp, %t1
-
 	/*
 	 * Disable interrupts while we're doing the real
 	 * switch.  Is this just being paranoid?
@@ -954,11 +939,11 @@ kstack_ok:
 	ldw	L_MD(%arg2), %t1
 	copy	%sp, %t2
 	ldo	HPPA_FRAME_SIZE+16*4(%sp), %sp
+	ldw	TF_R30(%t1), %t3
 	stw	%t2, HPPA_FRAME_PSP(%sp)
 	stw	%rp, HPPA_FRAME_CRP(%sp)
-	ldw	L_ADDR(%arg2), %t3
-	stw	%sp, PCB_KSP(%t3)
-	fdc	%r0(%t3)
+	stw	%t3, HPPA_FRAME_ARG(0)(%sp)
+	stw	%sp, TF_R30(%t1)
 	fdc	%r0(%t1)
 	/* save callee-save registers */
 	stw	%r3,   0*4(%t2)
@@ -987,14 +972,14 @@ switch_exited:
 	 */
 	ldw	L_MD(%arg1), %t1
 	ldw	TF_CR30(%t1), %t2
-	ldw	L_ADDR(%arg1), %t3
-	ldw	PCB_KSP(%t3), %sp
-	fdc	%r0(%t3)
+	ldw	TF_R30(%t1), %sp
 	ldw	TF_CR9(%t1), %t3
 	mtctl	%t3, %pidr2
 	mtctl	%t2, %cr30
+	ldw	HPPA_FRAME_ARG(0)(%sp), %t3
 	ldw	HPPA_FRAME_CRP(%sp), %rp
 	ldw	HPPA_FRAME_PSP(%sp), %t2
+	stw	%t3, TF_R30(%t1)
 	fdc	%r0(%t1)
 	ldw	HPPA_FRAME_ARG(1)(%sp), %t3 /* in case we're in trampoline */
 	ldw	HPPA_FRAME_ARG(2)(%sp), %arg0
@@ -1015,40 +1000,6 @@ switch_exited:
 	ldw	14*4(%t2), %r17
 	ldw	15*4(%t2), %r18
 	copy	%t2, %sp
-
-	/*
-	 * Check for restartable atomic sequences (RAS)
-	 * We save and restore %arg3 (containing %eiem value)
-	 * and %arg0, %t3 (in case we're doing a trampoline).
-	 */
-
-	ldw	L_PROC(%arg1), %t1
-	ldw	P_RASLIST(%t1), %t1
-	comb,=	%r0, %t1, noras
-
-	/* start stack calling convention */
-	stw	%rp, HPPA_FRAME_CRP(%sp)
-	stw	%arg0, HPPA_FRAME_ARG(0)(%sp)
-	stw	%t3, HPPA_FRAME_ARG(1)(%sp)
-	stw	%arg3, HPPA_FRAME_ARG(3)(%sp)
-	copy	%r3, %r1
-	copy	%sp, %r3
-	stw,ma	%r1, HPPA_FRAME_SIZE(%sp)
-
-	copy	%arg1, %arg0
-
-	.import	hppa_ras, code
-	CALL(hppa_ras, %r1)
-
-	/* end stack calling convention */
-	ldw	HPPA_FRAME_CRP(%r3), %rp
-	ldw	HPPA_FRAME_ARG(3)(%r3), %arg3
-	ldw	HPPA_FRAME_ARG(1)(%r3), %t3
-	ldw	HPPA_FRAME_ARG(0)(%r3), %arg0
-	ldo	HPPA_FRAME_SIZE(%r3), %sp
-	ldw,mb	-HPPA_FRAME_SIZE(%sp), %r3
-
-noras:
 
 	/*
 	 * As an optimization, hppa_fpu_bootstrap
@@ -1083,7 +1034,8 @@ EXIT(cpu_switch)
 
 /*
  * switch_exit(struct lwp *l, void (*)(struct lwp *)))
- * restore lwp0 context and go into cpu_switch to select the next runable LWP.
+ * restore lwp0 context and go into cpu_switch to select the next runable
+ * LWP.
  */
 	.import	kernel_map, data
 	.import	uvmspace_free, code
@@ -1103,11 +1055,6 @@ ENTRY(switch_exit,0)
 	ldi	HPPA_PID_KERNEL, %t4
 	mtctl	%t4, %pidr2
 
-	/* zero curlwp since it's not going to be valid anymore */
-	ldil	L%curlwp, %t4
-	ldw	R%curlwp(%t4), %arg2
-	stw	%r0, R%curlwp(%t4)
-
 	/* switch onto the temporary stack */
 	ldil	L%exit_stack, %t4
 	ldo	R%exit_stack(%t4), %t4
@@ -1122,14 +1069,18 @@ ENTRY(switch_exit,0)
 	stw	%r3, HPPA_FRAME_PSP(%sp)
 
 	/* arg0 -- oldproc */
+	.import lwp_exit2, code
+	ldil	L%lwp_exit2, %t2
+	ldo	R%lwp_exit2(%t2), %t2
 	.call
 	blr	%r0, %rp
-	bv,n	%r0(%arg1)
+	bv,n	%r0(%t2)
 	nop
 
 #if defined(LOCKDEBUG)
 	/* Acquire sched_lock */
-	CALL(sched_lock_idle, %r1)
+	.call
+	bl	sched_lock_idle, %rp
 	nop
 #endif
 
@@ -1141,12 +1092,12 @@ EXIT(switch_exit)
 /*
  * This is the first code run in a new LWP after
  * cpu_switch() has switched to it for the first time.
- * This happens courtesy of the setup in cpu_lwp_fork(),
+ * This happens courtesy of the setup in cpu_fork(),
  * which also makes sure that %t3 is the address of
  * the first kernel function to call, and %arg0 is
  * its argument.
  */
-ENTRY(switch_trampoline, HPPA_FRAME_SIZE)
+ENTRY(switch_trampoline,64)
 
 	/* no return point */
 	copy	%r0, %rp

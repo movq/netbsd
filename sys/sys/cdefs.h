@@ -1,4 +1,4 @@
-/*	$NetBSD: cdefs.h,v 1.58 2004/12/11 05:59:00 christos Exp $	*/
+/*	$NetBSD: cdefs.h,v 1.51 2004/01/07 19:38:10 martin Exp $	*/
 
 /*
  * Copyright (c) 1991, 1993
@@ -136,17 +136,6 @@
 #endif
 
 /*
- * The following macro is used to remove const cast-away warnings
- * from gcc -Wcast-qual; it should be used with caution because it
- * can hide valid errors; in particular most valid uses are in
- * situations where the API requires it, not to cast away string
- * constants. We don't use *intptr_t on purpose here and we are
- * explicit about unsigned long so that we don't have additional
- * dependencies.
- */
-#define __UNCONST(a)	((void *)(unsigned long)(const void *)(a))
-
-/*
  * GCC2 provides __extension__ to suppress warnings for various GNU C
  * language extensions under "-ansi -pedantic".
  */
@@ -180,12 +169,6 @@
 #define	__unused	__attribute__((__unused__))
 #else
 #define	__unused	/* delete */
-#endif
-
-#if __GNUC_PREREQ__(3, 1)
-#define	__used		__attribute__((__used__))
-#else
-#define	__used		/* delete */
 #endif
 
 #if __GNUC_PREREQ__(2, 7)

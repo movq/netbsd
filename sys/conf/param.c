@@ -1,4 +1,4 @@
-/*	$NetBSD: param.c,v 1.48 2004/09/27 14:08:13 christos Exp $	*/
+/*	$NetBSD: param.c,v 1.45 2003/12/31 12:34:22 martin Exp $	*/
 
 /*
  * Copyright (c) 1980, 1986, 1989 Regents of the University of California.
@@ -37,9 +37,8 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: param.c,v 1.48 2004/09/27 14:08:13 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: param.c,v 1.45 2003/12/31 12:34:22 martin Exp $");
 
-#include "opt_hz.h"
 #include "opt_rtc_offset.h"
 #include "opt_sysv.h"
 #include "opt_sysvparam.h"
@@ -102,8 +101,7 @@ __KERNEL_RCSID(0, "$NetBSD: param.c,v 1.48 2004/09/27 14:08:13 christos Exp $");
 
 int	hz = HZ;
 int	tick = 1000000 / HZ;
-/* can adjust 240ms in 60s */
-int	tickadj = (240000 / (60 * HZ)) ? (240000 / (60 * HZ)) : 1;
+int	tickadj = 240000 / (60 * HZ);		/* can adjust 240ms in 60s */
 int	rtc_offset = RTC_OFFSET;
 int	maxproc = NPROC;
 int	desiredvnodes = NVNODE;
@@ -193,7 +191,7 @@ struct	msginfo msginfo = {
  * AUTONICEVAL is NOT offset by NZERO, i.e. it's between PRIO_MIN and PRIO_MAX.
  */
 #ifndef AUTONICETIME
-#define AUTONICETIME 0		/* disabled */
+#define AUTONICETIME (60 * 10)	/* 10 minutes */
 #endif
 
 #ifndef AUTONICEVAL

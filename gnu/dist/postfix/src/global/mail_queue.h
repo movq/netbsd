@@ -1,5 +1,3 @@
-/*	$NetBSD: mail_queue.h,v 1.1.1.4 2004/05/31 00:24:32 heas Exp $	*/
-
 #ifndef _MAIL_QUEUE_H_INCLUDED_
 #define _MAIL_QUEUE_H_INCLUDED_
 
@@ -27,7 +25,6 @@
 #define MAIL_QUEUE_INCOMING	"incoming"
 #define MAIL_QUEUE_ACTIVE	"active"
 #define MAIL_QUEUE_DEFERRED	"deferred"
-#define MAIL_QUEUE_TRACE	"trace"
 #define MAIL_QUEUE_DEFER	"defer"
 #define MAIL_QUEUE_BOUNCE	"bounce"
 #define MAIL_QUEUE_CORRUPT	"corrupt"

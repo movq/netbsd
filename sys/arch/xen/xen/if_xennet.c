@@ -1,4 +1,4 @@
-/*	$NetBSD: if_xennet.c,v 1.11 2004/09/15 04:55:21 tls Exp $	*/
+/*	$NetBSD: if_xennet.c,v 1.1.2.2 2004/09/16 03:18:58 jmc Exp $	*/
 
 /*
  *
@@ -33,7 +33,7 @@
 
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_xennet.c,v 1.11 2004/09/15 04:55:21 tls Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_xennet.c,v 1.1.2.2 2004/09/16 03:18:58 jmc Exp $");
 
 #include "opt_inet.h"
 #include "rnd.h"

@@ -1,5 +1,3 @@
-/*	$NetBSD: attr_print0.c,v 1.1.1.3 2004/05/31 00:24:54 heas Exp $	*/
-
 /*++
 /* NAME
 /*	attr_print0 3
@@ -8,7 +6,7 @@
 /* SYNOPSIS
 /*	#include <attr.h>
 /*
-/*	int	attr_print0(fp, flags, type, name, ..., ATTR_TYPE_END)
+/*	int	attr_print0(fp, flags, type, name, ...)
 /*	VSTREAM	fp;
 /*	int	flags;
 /*	int	type;
@@ -20,8 +18,9 @@
 /*	va_list	ap;
 /* DESCRIPTION
 /*	attr_print0() takes zero or more (name, value) simple attributes
-/*	and converts its input to a byte stream that can be recovered with
-/*	attr_scan0(). The stream is not flushed.
+/*	or (name, count, value) list attributes, and converts its input
+/*	to a byte stream that can be recovered with attr_scan0(). The stream
+/*	is not flushed.
 /*
 /*	attr_vprint0() provides an alternate interface that is convenient
 /*	for calling from within variadoc functions.
@@ -54,9 +53,8 @@
 /*	This argument is followed by an attribute name and a null-terminated
 /*	string.
 /* .IP "ATTR_TYPE_HASH (HTABLE *)"
-/* .IP "ATTR_TYPE_NAMEVAL (NVTABLE *)"
-/*	The content of the table is sent as a sequence of string-valued
-/*	attributes with names equal to the table lookup keys.
+/*	The content of the hash table is sent as a sequence of string-valued
+/*	attributes with names equal to the hash table lookup key.
 /* .IP ATTR_TYPE_END
 /*	This terminates the attribute list.
 /* .RE

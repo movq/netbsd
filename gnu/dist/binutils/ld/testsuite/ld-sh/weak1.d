@@ -4,7 +4,7 @@
 #objdump: -ts
 #target: sh*-*-elf
 
-.*:     file format elf32-sh.*
+.*:     file format elf32-shl
 
 SYMBOL TABLE:
 #...

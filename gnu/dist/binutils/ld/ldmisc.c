@@ -22,11 +22,16 @@
    02111-1307, USA.  */
 
 #include "bfd.h"
-#include "bfdlink.h"
 #include "sysdep.h"
 #include "libiberty.h"
 #include "demangle.h"
+
+#ifdef ANSI_PROTOTYPES
 #include <stdarg.h>
+#else
+#include <varargs.h>
+#endif
+
 #include "ld.h"
 #include "ldmisc.h"
 #include "ldexp.h"
@@ -35,6 +40,8 @@
 #include "ldlex.h"
 #include "ldmain.h"
 #include "ldfile.h"
+
+static void vfinfo PARAMS ((FILE *, const char *, va_list));
 
 /*
  %% literal %
@@ -59,7 +66,10 @@
 */
 
 static void
-vfinfo (FILE *fp, const char *fmt, va_list arg)
+vfinfo (fp, fmt, arg)
+     FILE *fp;
+     const char *fmt;
+     va_list arg;
 {
   bfd_boolean fatal = FALSE;
 
@@ -115,7 +125,7 @@ vfinfo (FILE *fp, const char *fmt, va_list arg)
 
 	    case 'W':
 	      /* hex bfd_vma with 0x with no leading zeroes taking up
-		 8 spaces.  */
+                 8 spaces.  */
 	      {
 		char buf[100];
 		bfd_vma value;
@@ -143,7 +153,7 @@ vfinfo (FILE *fp, const char *fmt, va_list arg)
 	      {
 		const char *name = va_arg (arg, const char *);
 
-		if (name == NULL || *name == 0)
+		if (name == (const char *) NULL || *name == 0)
 		  fprintf (fp, _("no symbol"));
 		else if (! demangling)
 		  fprintf (fp, "%s", name);
@@ -258,7 +268,7 @@ vfinfo (FILE *fp, const char *fmt, va_list arg)
 		    symsize = bfd_get_symtab_upper_bound (abfd);
 		    if (symsize < 0)
 		      einfo (_("%B%F: could not read symbols\n"), abfd);
-		    asymbols = xmalloc (symsize);
+		    asymbols = (asymbol **) xmalloc (symsize);
 		    symbol_count = bfd_canonicalize_symtab (abfd, asymbols);
 		    if (symbol_count < 0)
 		      einfo (_("%B%F: could not read symbols\n"), abfd);
@@ -367,7 +377,8 @@ vfinfo (FILE *fp, const char *fmt, va_list arg)
    other such chars that would otherwise confuse the demangler.  */
 
 char *
-demangle (const char *name)
+demangle (name)
+     const char *name;
 {
   char *res;
   const char *p;
@@ -408,32 +419,34 @@ demangle (const char *name)
 /* Format info message and print on stdout.  */
 
 /* (You would think this should be called just "info", but then you
-   would be hosed by LynxOS, which defines that name in its libc.)  */
+   would hosed by LynxOS, which defines that name in its libc.)  */
 
 void
-info_msg (const char *fmt, ...)
+info_msg VPARAMS ((const char *fmt, ...))
 {
-  va_list arg;
+  VA_OPEN (arg, fmt);
+  VA_FIXEDARG (arg, const char *, fmt);
 
-  va_start (arg, fmt);
   vfinfo (stdout, fmt, arg);
-  va_end (arg);
+  VA_CLOSE (arg);
 }
 
 /* ('e' for error.) Format info message and print on stderr.  */
 
 void
-einfo (const char *fmt, ...)
+einfo VPARAMS ((const char *fmt, ...))
 {
-  va_list arg;
+  VA_OPEN (arg, fmt);
+  VA_FIXEDARG (arg, const char *, fmt);
 
-  va_start (arg, fmt);
   vfinfo (stderr, fmt, arg);
-  va_end (arg);
+  VA_CLOSE (arg);
 }
 
 void
-info_assert (const char *file, unsigned int line)
+info_assert (file, line)
+     const char *file;
+     unsigned int line;
 {
   einfo (_("%F%P: internal error %s %d\n"), file, line);
 }
@@ -441,35 +454,36 @@ info_assert (const char *file, unsigned int line)
 /* ('m' for map) Format info message and print on map.  */
 
 void
-minfo (const char *fmt, ...)
+minfo VPARAMS ((const char *fmt, ...))
 {
-  va_list arg;
+  VA_OPEN (arg, fmt);
+  VA_FIXEDARG (arg, const char *, fmt);
 
-  va_start (arg, fmt);
   vfinfo (config.map_file, fmt, arg);
-  va_end (arg);
+  VA_CLOSE (arg);
 }
 
 void
-lfinfo (FILE *file, const char *fmt, ...)
+lfinfo VPARAMS ((FILE *file, const char *fmt, ...))
 {
-  va_list arg;
+  VA_OPEN (arg, fmt);
+  VA_FIXEDARG (arg, FILE *, file);
+  VA_FIXEDARG (arg, const char *, fmt);
 
-  va_start (arg, fmt);
   vfinfo (file, fmt, arg);
-  va_end (arg);
+  VA_CLOSE (arg);
 }
 
 /* Functions to print the link map.  */
 
 void
-print_space (void)
+print_space ()
 {
   fprintf (config.map_file, " ");
 }
 
 void
-print_nl (void)
+print_nl ()
 {
   fprintf (config.map_file, "\n");
 }
@@ -478,7 +492,10 @@ print_nl (void)
    call this function.  */
 
 void
-ld_abort (const char *file, int line, const char *fn)
+ld_abort (file, line, fn)
+     const char *file;
+     int line;
+     const char *fn;
 {
   if (fn != NULL)
     einfo (_("%P: internal error: aborting at %s line %d in %s\n"),
@@ -491,62 +508,12 @@ ld_abort (const char *file, int line, const char *fn)
 }
 
 bfd_boolean
-error_handler (int id, const char *fmt, ...)
+error_handler VPARAMS ((int id ATTRIBUTE_UNUSED, const char *fmt, ...))
 {
-  va_list arg;
+  VA_OPEN (arg, fmt);
+  VA_FIXEDARG (arg, const char *, fmt);
 
-  va_start (arg, fmt);
-
-  switch (id)
-    {
-    default:
-      break;
-
-    /* We can be called with
-
-	error_handler (-LD_DEFINITION_IN_DISCARDED_SECTION, "", 0);
-
-	to make this error non-fatal and
-
-	error_handler (-LD_DEFINITION_IN_DISCARDED_SECTION, "", 1);
-
-	to make this error fatal.  */
-    case -LD_DEFINITION_IN_DISCARDED_SECTION:
-    case LD_DEFINITION_IN_DISCARDED_SECTION:
-      {
-	static struct bfd_hash_table *hash;
-	static int fatal = 1;
-	const char *name;
-
-	if (id == -LD_DEFINITION_IN_DISCARDED_SECTION)
-	  {
-	    fatal = va_arg (arg, int);
-	    goto out;
-	  }
-
-	name = va_arg (arg, const char *);
-	/* Only warn once about a particular undefined symbol.  */
-	if (hash == NULL)
-	  {
-	    hash = xmalloc (sizeof (struct bfd_hash_table));
-	    if (! bfd_hash_table_init (hash, bfd_hash_newfunc))
-	      einfo (_("%F%P: bfd_hash_table_init failed: %E\n"));
-	  }
-
-	if (bfd_hash_lookup (hash, name, FALSE, FALSE) != NULL)
-	  goto out;
-
-	if (bfd_hash_lookup (hash, name, TRUE, TRUE) == NULL)
-	  einfo (_("%F%P: bfd_hash_lookup failed: %E\n"));
-
-	if (fatal)
-	  config.make_executable = FALSE;
-      }
-      break;
-    }
   vfinfo (stderr, fmt, arg);
-
-out:
-  va_end (arg);
+  VA_CLOSE (arg);
   return TRUE;
 }

@@ -27,6 +27,14 @@ cat >>e${EMULATION_NAME}.c <<EOF
 #include "ldctor.h"
 #include "elf32-hppa.h"
 
+static void hppaelf_after_parse PARAMS ((void));
+static void hppaelf_create_output_section_statements PARAMS ((void));
+static asection *hppaelf_add_stub_section
+  PARAMS ((const char *, asection *));
+static void hppaelf_layout_sections_again PARAMS ((void));
+static void gld${EMULATION_NAME}_finish PARAMS ((void));
+static void build_section_lists PARAMS ((lang_statement_union_type *));
+
 
 /* Fake input file for stubs.  */
 static lang_input_statement_type *stub_file;
@@ -48,9 +56,9 @@ static bfd_signed_vma group_size = 1;
    and adds millicode library to the list of input files.  */
 
 static void
-hppaelf_after_parse (void)
+hppaelf_after_parse ()
 {
-  if (link_info.relocatable)
+  if (link_info.relocateable)
     lang_add_unique (".text");
 #if 0 /* Enable this once we split millicode stuff from libgcc.  */
   else
@@ -64,15 +72,8 @@ hppaelf_after_parse (void)
    fake input file to hold the stub sections.  */
 
 static void
-hppaelf_create_output_section_statements (void)
+hppaelf_create_output_section_statements ()
 {
-  extern const bfd_target bfd_elf32_hppa_linux_vec;
-  extern const bfd_target bfd_elf32_hppa_vec;
-
-  if (link_info.hash->creator != &bfd_elf32_hppa_linux_vec
-      && link_info.hash->creator != &bfd_elf32_hppa_vec)
-    return;
-
   stub_file = lang_add_input_file ("linker stubs",
 				   lang_input_file_is_fake_enum,
 				   NULL);
@@ -98,8 +99,13 @@ struct hook_stub_info
 
 /* Traverse the linker tree to find the spot where the stub goes.  */
 
+static bfd_boolean hook_in_stub
+  PARAMS ((struct hook_stub_info *, lang_statement_union_type **));
+
 static bfd_boolean
-hook_in_stub (struct hook_stub_info *info, lang_statement_union_type **lp)
+hook_in_stub (info, lp)
+     struct hook_stub_info *info;
+     lang_statement_union_type **lp;
 {
   lang_statement_union_type *l;
   bfd_boolean ret;
@@ -171,7 +177,9 @@ hook_in_stub (struct hook_stub_info *info, lang_statement_union_type **lp)
    immediately before INPUT_SECTION.  */
 
 static asection *
-hppaelf_add_stub_section (const char *stub_sec_name, asection *input_section)
+hppaelf_add_stub_section (stub_sec_name, input_section)
+     const char *stub_sec_name;
+     asection *input_section;
 {
   asection *stub_sec;
   flagword flags;
@@ -212,7 +220,7 @@ hppaelf_add_stub_section (const char *stub_sec_name, asection *input_section)
 /* Another call-back for elf32_hppa_size_stubs.  */
 
 static void
-hppaelf_layout_sections_again (void)
+hppaelf_layout_sections_again ()
 {
   /* If we have changed sizes of the stub sections, then we need
      to recalculate all the section offsets.  This may mean we need to
@@ -235,7 +243,8 @@ hppaelf_layout_sections_again (void)
 
 
 static void
-build_section_lists (lang_statement_union_type *statement)
+build_section_lists (statement)
+     lang_statement_union_type *statement;
 {
   if (statement->header.type == lang_input_section_enum
       && !statement->input_section.ifile->just_syms_flag
@@ -252,18 +261,18 @@ build_section_lists (lang_statement_union_type *statement)
    to build linker stubs.  */
 
 static void
-gld${EMULATION_NAME}_finish (void)
+gld${EMULATION_NAME}_finish ()
 {
-  /* bfd_elf_discard_info just plays with debugging sections,
+  /* bfd_elf32_discard_info just plays with debugging sections,
      ie. doesn't affect any code, so we can delay resizing the
      sections.  It's likely we'll resize everything in the process of
      adding stubs.  */
-  if (bfd_elf_discard_info (output_bfd, &link_info))
+  if (bfd_elf${ELFSIZE}_discard_info (output_bfd, &link_info))
     need_laying_out = 1;
 
   /* If generating a relocatable output file, then we don't
      have to examine the relocs.  */
-  if (stub_file != NULL && !link_info.relocatable)
+  if (! link_info.relocateable)
     {
       int ret = elf32_hppa_setup_section_lists (output_bfd, &link_info);
 
@@ -295,7 +304,7 @@ gld${EMULATION_NAME}_finish (void)
   if (need_laying_out)
     hppaelf_layout_sections_again ();
 
-  if (! link_info.relocatable)
+  if (! link_info.relocateable)
     {
       /* Set the global data pointer.  */
       if (! elf32_hppa_set_gp (output_bfd, &link_info))
@@ -305,7 +314,7 @@ gld${EMULATION_NAME}_finish (void)
 	}
 
       /* Now build the linker stubs.  */
-      if (stub_file != NULL && stub_file->the_bfd->sections != NULL)
+      if (stub_file->the_bfd->sections != NULL)
 	{
 	  if (! elf32_hppa_build_stubs (&link_info))
 	    einfo ("%X%P: can not build stubs: %E\n");
@@ -317,16 +326,23 @@ gld${EMULATION_NAME}_finish (void)
 /* Avoid processing the fake stub_file in vercheck, stat_needed and
    check_needed routines.  */
 
-static void (*real_func) (lang_input_statement_type *);
+static void hppa_for_each_input_file_wrapper
+  PARAMS ((lang_input_statement_type *));
+static void hppa_lang_for_each_input_file
+  PARAMS ((void (*) (lang_input_statement_type *)));
 
-static void hppa_for_each_input_file_wrapper (lang_input_statement_type *l)
+static void (*real_func) PARAMS ((lang_input_statement_type *));
+
+static void hppa_for_each_input_file_wrapper (l)
+     lang_input_statement_type *l;
 {
   if (l != stub_file)
     (*real_func) (l);
 }
 
 static void
-hppa_lang_for_each_input_file (void (*func) (lang_input_statement_type *))
+hppa_lang_for_each_input_file (func)
+     void (*func) PARAMS ((lang_input_statement_type *));
 {
   real_func = func;
   lang_for_each_input_file (&hppa_for_each_input_file_wrapper);

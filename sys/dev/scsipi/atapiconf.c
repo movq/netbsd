@@ -1,4 +1,4 @@
-/*	$NetBSD: atapiconf.c,v 1.66 2004/09/13 12:55:48 drochner Exp $	*/
+/*	$NetBSD: atapiconf.c,v 1.63 2003/10/17 00:19:46 mycroft Exp $	*/
 
 /*
  * Copyright (c) 1996, 2001 Manuel Bouyer.  All rights reserved.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: atapiconf.c,v 1.66 2004/09/13 12:55:48 drochner Exp $");
+__KERNEL_RCSID(0, "$NetBSD: atapiconf.c,v 1.63 2003/10/17 00:19:46 mycroft Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -56,24 +56,23 @@ const struct scsipi_periphsw atapi_probe_periphsw = {
 	NULL,
 };
 
-static int	atapibusmatch(struct device *, struct cfdata *, void *);
-static void	atapibusattach(struct device *, struct device *, void *);
-static int	atapibusactivate(struct device *, enum devact);
-static int	atapibusdetach(struct device *, int flags);
+int	atapibusmatch __P((struct device *, struct cfdata *, void *));
+void	atapibusattach __P((struct device *, struct device *, void *));
+int	atapibusactivate __P((struct device *, enum devact));
+int	atapibusdetach __P((struct device *, int flags));
 
-static int	atapibussubmatch(struct device *, struct cfdata *,
-				 const locdesc_t *, void *);
+int	atapibussubmatch __P((struct device *, struct cfdata *, void *));
 
-static int	atapi_probe_bus(struct atapibus_softc *, int);
-
-static int	atapibusprint(void *, const char *);
+int	atapi_probe_bus __P((struct atapibus_softc *, int));
 
 CFATTACH_DECL(atapibus, sizeof(struct atapibus_softc),
     atapibusmatch, atapibusattach, atapibusdetach, atapibusactivate);
 
 extern struct cfdriver atapibus_cd;
 
-static const struct scsi_quirk_inquiry_pattern atapi_quirk_patterns[] = {
+int atapibusprint __P((void *, const char *));
+
+const struct scsi_quirk_inquiry_pattern atapi_quirk_patterns[] = {
 	{{T_CDROM, T_REMOV,
 	 "ALPS ELECTRIC CO.,LTD. DC544C", "", "SW03D"},	PQUIRK_NOTUR},
 	{{T_CDROM, T_REMOV,
@@ -107,15 +106,20 @@ static const struct scsi_quirk_inquiry_pattern atapi_quirk_patterns[] = {
 };
 
 int
-atapiprint(void *aux, const char *pnp)
+atapiprint(aux, pnp)
+	void *aux;
+	const char *pnp; 
 {
 	if (pnp)
 		aprint_normal("atapibus at %s", pnp);
 	return (UNCONF);
 }
 
-static int
-atapibusmatch(struct device *parent, struct cfdata *cf, void *aux)
+int
+atapibusmatch(parent, cf, aux)
+	struct device *parent;
+	struct cfdata *cf;
+	void *aux;
 {
 	struct scsipi_channel *chan = aux;
 
@@ -128,9 +132,11 @@ atapibusmatch(struct device *parent, struct cfdata *cf, void *aux)
 	return (1);
 }
 
-static int
-atapibussubmatch(struct device *parent, struct cfdata *cf,
-		 const locdesc_t *ldesc, void *aux)
+int
+atapibussubmatch(parent, cf, aux)
+	struct device *parent;
+	struct cfdata *cf;
+	void *aux;
 {
 	struct scsipibus_attach_args *sa = aux;
 	struct scsipi_periph *periph = sa->sa_periph;
@@ -141,8 +147,10 @@ atapibussubmatch(struct device *parent, struct cfdata *cf,
 	return (config_match(parent, cf, aux));
 }
 
-static void
-atapibusattach(struct device *parent, struct device *self, void *aux)
+void
+atapibusattach(parent, self, aux)
+	struct device *parent, *self;
+	void *aux;
 {
 	struct atapibus_softc *sc = (void *) self;
 	struct scsipi_channel *chan = aux;
@@ -164,8 +172,10 @@ atapibusattach(struct device *parent, struct device *self, void *aux)
 	atapi_probe_bus(sc, -1);
 }
 
-static int
-atapibusactivate(struct device *self, enum devact act)
+int
+atapibusactivate(self, act)
+	struct device *self;
+	enum devact act;
 {
 	struct atapibus_softc *sc = (void *) self;
 	struct scsipi_channel *chan = sc->sc_channel;
@@ -194,8 +204,10 @@ atapibusactivate(struct device *self, enum devact act)
 	return (error);
 }
 
-static int
-atapibusdetach(struct device *self, int flags)
+int
+atapibusdetach(self, flags)
+	struct device *self;
+	int flags;
 {
 	struct atapibus_softc *sc = (void *)self;
 	struct scsipi_channel *chan = sc->sc_channel;
@@ -224,8 +236,10 @@ atapibusdetach(struct device *self, int flags)
 	return (0);
 }
 
-static int
-atapi_probe_bus(struct atapibus_softc *sc, int target)
+int
+atapi_probe_bus(sc, target)
+	struct atapibus_softc *sc;
+	int target;
 {
 	struct scsipi_channel *chan = sc->sc_channel;
 	int maxtarget, mintarget;
@@ -251,8 +265,11 @@ atapi_probe_bus(struct atapibus_softc *sc, int target)
 }
 
 void *
-atapi_probe_device(struct atapibus_softc *sc, int target,
-    struct scsipi_periph *periph, struct scsipibus_attach_args *sa)
+atapi_probe_device(sc, target, periph, sa)
+	struct atapibus_softc *sc;
+	int target;
+	struct scsipi_periph *periph;
+	struct scsipibus_attach_args *sa;
 {
 	struct scsipi_channel *chan = sc->sc_channel;
 	struct scsi_quirk_inquiry_pattern *finger;
@@ -275,8 +292,8 @@ atapi_probe_device(struct atapibus_softc *sc, int target,
 	 */
 	periph->periph_quirks |= quirks;
 
-	if ((cf = config_search_ia(atapibussubmatch, &sc->sc_dev,
-	    "atapibus", sa)) != 0) {
+	if ((cf = config_search(atapibussubmatch, &sc->sc_dev,
+	    sa)) != 0) {
 		scsipi_insert_periph(chan, periph);
 		/*
 		 * XXX Can't assign periph_dev here, because we'll
@@ -293,12 +310,14 @@ atapi_probe_device(struct atapibus_softc *sc, int target,
 	}
 }
 
-static int
-atapibusprint(void *aux, const char *pnp)
+int
+atapibusprint(aux, pnp)
+	void *aux;
+	const char *pnp;
 {
 	struct scsipibus_attach_args *sa = aux;
 	struct scsipi_inquiry_pattern *inqbuf;
-	const char *dtype;
+	char *dtype;
 
 	if (pnp != NULL)
 		aprint_normal("%s", pnp);

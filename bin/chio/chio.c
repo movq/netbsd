@@ -1,4 +1,4 @@
-/* $NetBSD: chio.c,v 1.26 2004/10/29 19:51:36 dsl Exp $ */
+/* $NetBSD: chio.c,v 1.24 2004/01/05 23:23:32 jmmv Exp $ */
 
 /*-
  * Copyright (c) 1996, 1998, 1999 The NetBSD Foundation, Inc.
@@ -46,7 +46,7 @@
 __COPYRIGHT(
 "@(#) Copyright (c) 1996, 1998, 1999\
 	The NetBSD Foundation, Inc.  All rights reserved.");
-__RCSID("$NetBSD: chio.c,v 1.26 2004/10/29 19:51:36 dsl Exp $");
+__RCSID("$NetBSD: chio.c,v 1.24 2004/01/05 23:23:32 jmmv Exp $");
 #endif
 
 #include <sys/param.h>
@@ -545,7 +545,7 @@ do_status(const char *cname, int argc, char **argv)
 		 * If we get an element type, we can't have specified
 		 * anything else.
 		 */
-		if (isdigit((unsigned char)*argv[0]) == 0) {
+		if (isdigit(*argv[0]) == 0) {
 			if (schet == echet || flags != 0 || have_unit ||
 			    have_ucount) {
 				warnx("%s: malformed command line", cname);
@@ -850,8 +850,7 @@ usage(void)
 {
 	int i;
 
-	(void)fprintf(stderr,
-	    "usage: %s [-f changer] command arg1 arg2 [arg3 [...]]\n",
+	(void)fprintf(stderr, "usage: %s command arg1 arg2 ...\n",
 	    getprogname());
 
 	(void)fprintf(stderr, "Where command (and args) are:\n");

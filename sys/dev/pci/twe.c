@@ -1,7 +1,7 @@
-/*	$NetBSD: twe.c,v 1.60 2004/09/23 01:16:34 heas Exp $	*/
+/*	$NetBSD: twe.c,v 1.54.2.2 2004/06/05 04:59:21 jmc Exp $	*/
 
 /*-
- * Copyright (c) 2000, 2001, 2002, 2003, 2004 The NetBSD Foundation, Inc.
+ * Copyright (c) 2000, 2001, 2002, 2003 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -70,7 +70,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: twe.c,v 1.60 2004/09/23 01:16:34 heas Exp $");
+__KERNEL_RCSID(0, "$NetBSD: twe.c,v 1.54.2.2 2004/06/05 04:59:21 jmc Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -83,7 +83,6 @@ __KERNEL_RCSID(0, "$NetBSD: twe.c,v 1.60 2004/09/23 01:16:34 heas Exp $");
 #include <sys/malloc.h>
 #include <sys/conf.h>
 #include <sys/disk.h>
-#include <sys/syslog.h>
 
 #include <uvm/uvm_extern.h>
 
@@ -96,8 +95,6 @@ __KERNEL_RCSID(0, "$NetBSD: twe.c,v 1.60 2004/09/23 01:16:34 heas Exp $");
 #include <dev/pci/twereg.h>
 #include <dev/pci/twevar.h>
 #include <dev/pci/tweio.h>
-
-#include "locators.h"
 
 #define	PCI_CBIO	0x10
 
@@ -114,8 +111,7 @@ static int	twe_param_set(struct twe_softc *, int, int, size_t, void *);
 static void	twe_poll(struct twe_softc *);
 static int	twe_print(void *, const char *);
 static int	twe_reset(struct twe_softc *);
-static int	twe_submatch(struct device *, struct cfdata *,
-			     const locdesc_t *, void *);
+static int	twe_submatch(struct device *, struct cfdata *, void *);
 static int	twe_status_check(struct twe_softc *, u_int);
 static int	twe_status_wait(struct twe_softc *, u_int, int);
 static void	twe_describe_controller(struct twe_softc *);
@@ -211,52 +207,41 @@ const struct twe_code_table twe_table_stripedepth[] = {
  *	a - not unit/port specific
  *	u - unit specific
  *	p - port specific
- *
- * They are further qualified with a severity:
- *	E - LOG_EMERG
- *	a - LOG_ALERT
- *	c - LOG_CRIT
- *	e - LOG_ERR
- *	w - LOG_WARNING
- *	n - LOG_NOTICE
- *	i - LOG_INFO
- *	d - LOG_DEBUG
- *	blank - just use printf
  */
 const struct twe_code_table twe_table_aen[] = {
-	{ 0x00,	"a  queue empty" },
-	{ 0x01,	"a  soft reset" },
-	{ 0x02,	"uc degraded mode" },
-	{ 0x03,	"aa controller error" },
-	{ 0x04,	"uE rebuild fail" },
-	{ 0x05,	"un rebuild done" },
-	{ 0x06,	"ue incomplete unit" },
-	{ 0x07,	"un initialization done" },
-	{ 0x08,	"uw unclean shutdown detected" },
-	{ 0x09,	"pe drive timeout" },
-	{ 0x0a,	"pc drive error" },
-	{ 0x0b,	"un rebuild started" },
-	{ 0x0c,	"un initialization started" },
-	{ 0x0d,	"ui logical unit deleted" },
-	{ 0x0f,	"pc SMART threshold exceeded" },
-	{ 0x15,	"a  table undefined" },	/* XXX: Not in FreeBSD's table */
-	{ 0x21,	"pe ATA UDMA downgrade" },
-	{ 0x22,	"pi ATA UDMA upgrade" },
-	{ 0x23,	"pw sector repair occurred" },
-	{ 0x24,	"aa SBUF integrity check failure" },
-	{ 0x25,	"pa lost cached write" },
-	{ 0x26,	"pa drive ECC error detected" },
-	{ 0x27,	"pe DCB checksum error" },
-	{ 0x28,	"pn DCB unsupported version" },
-	{ 0x29,	"ui verify started" },
-	{ 0x2a,	"ua verify failed" },
-	{ 0x2b,	"ui verify complete" },
-	{ 0x2c,	"pw overwrote bad sector during rebuild" },
-	{ 0x2d,	"pa encountered bad sector during rebuild" },
-	{ 0x2e,	"pe replacement drive too small" },
-	{ 0x2f,	"ue array not previously initialized" },
-	{ 0x30,	"p  drive not supported" },
-	{ 0xff,	"a  aen queue full" },
+	{ 0x00,	"a queue empty" },
+	{ 0x01,	"a soft reset" },
+	{ 0x02,	"u degraded mode" },
+	{ 0x03,	"a controller error" },
+	{ 0x04,	"u rebuild fail" },
+	{ 0x05,	"u rebuild done" },
+	{ 0x06,	"u incomplete unit" },
+	{ 0x07,	"u initialization done" },
+	{ 0x08,	"u unclean shutdown detected" },
+	{ 0x09,	"p drive timeout" },
+	{ 0x0a,	"p drive error" },
+	{ 0x0b,	"u rebuild started" },
+	{ 0x0c,	"u initialization started" },
+	{ 0x0d,	"u logical unit deleted" },
+	{ 0x0f,	"p SMART threshold exceeded" },
+	{ 0x15,	"a table undefined" },	/* XXX: Not in FreeBSD's table */
+	{ 0x21,	"p ATA UDMA downgrade" },
+	{ 0x22,	"p ATA UDMA upgrade" },
+	{ 0x23,	"p sector repair occurred" },
+	{ 0x24,	"a SBUF integrity check failure" },
+	{ 0x25,	"p lost cached write" },
+	{ 0x26,	"p drive ECC error detected" },
+	{ 0x27,	"p DCB checksum error" },
+	{ 0x28,	"p DCB unsupported version" },
+	{ 0x29,	"u verify started" },
+	{ 0x2a,	"u verify failed" },
+	{ 0x2b,	"u verify complete" },
+	{ 0x2c,	"p overwrote bad sector during rebuild" },
+	{ 0x2d,	"p encountered bad sector during rebuild" },
+	{ 0x2e,	"p replacement drive too small" },
+	{ 0x2f,	"u array not previously initialized" },
+	{ 0x30,	"p drive not supported" },
+	{ 0xff,	"a aen queue full" },
 
 	{ 0,	NULL },
 };
@@ -516,8 +501,6 @@ twe_add_unit(struct twe_softc *sc, int unit)
 	int rv;
 	uint16_t dsize;
 	uint8_t newtype, newstripe;
-	int help[2];
-	locdesc_t *ldesc = (void *)help; /* XXX */
 
 	if (unit < 0 || unit >= TWE_MAX_UNITS)
 		return (EINVAL);
@@ -604,12 +587,8 @@ twe_add_unit(struct twe_softc *sc, int unit)
 	twe_recompute_openings(sc);
 
 	twea.twea_unit = unit;
-
-	ldesc->len = 1;
-	ldesc->locs[TWECF_UNIT] = unit;
-
-	td->td_dev = config_found_sm_loc(&sc->sc_dv, "twe", NULL, &twea,
-					 twe_print, twe_submatch);
+	td->td_dev = config_found_sm(&sc->sc_dv, &twea, twe_print,
+	    twe_submatch);
 
 	rv = 0;
  out:
@@ -661,8 +640,8 @@ twe_reset(struct twe_softc *sc)
 	    TWE_CTL_DISABLE_INTRS);
 
 	/* Wait for attention... */
-	if (twe_status_wait(sc, TWE_STS_ATTN_INTR, 30)) {
-		printf("%s: timeout waiting for attention interrupt\n",
+	if (twe_status_wait(sc, TWE_STS_ATTN_INTR, 15)) {
+		printf("%s: no attention interrupt\n",
 		    sc->sc_dv.dv_xname);
 		return (-1);
 	}
@@ -744,12 +723,14 @@ twe_print(void *aux, const char *pnp)
  * Match a sub-device.
  */
 static int
-twe_submatch(struct device *parent, struct cfdata *cf,
-	     const locdesc_t *ldesc, void *aux)
+twe_submatch(struct device *parent, struct cfdata *cf, void *aux)
 {
+	struct twe_attach_args *twea;
 
-	if (cf->cf_loc[TWECF_UNIT] != TWECF_UNIT_DEFAULT &&
-	    cf->cf_loc[TWECF_UNIT] != ldesc->locs[TWECF_UNIT])
+	twea = aux;
+
+	if (cf->tweacf_unit != TWECF_UNIT_DEFAULT &&
+	    cf->tweacf_unit != twea->twea_unit)
 		return (0);
 
 	return (config_match(parent, cf, aux));
@@ -945,7 +926,7 @@ static void
 twe_aen_enqueue(struct twe_softc *sc, uint16_t aen, int quiet)
 {
 	const char *str, *msg;
-	int s, next, nextnext, level;
+	int s, next, nextnext;
 
 	/*
 	 * First report the AEN on the console.  Maybe.
@@ -956,49 +937,20 @@ twe_aen_enqueue(struct twe_softc *sc, uint16_t aen, int quiet)
 			printf("%s: unknown AEN 0x%04x\n",
 			    sc->sc_dv.dv_xname, aen);
 		} else {
-			msg = str + 3;
-			switch (str[1]) {
-			case 'E':	level = LOG_EMERG; break;
-			case 'a':	level = LOG_ALERT; break;
-			case 'c':	level = LOG_CRIT; break;
-			case 'e':	level = LOG_ERR; break;
-			case 'w':	level = LOG_WARNING; break;
-			case 'n':	level = LOG_NOTICE; break;
-			case 'i':	level = LOG_INFO; break;
-			case 'd':	level = LOG_DEBUG; break;
+			msg = str + 2;
+			switch (*str) {
+			case 'u':
+				printf("%s: unit %d: %s\n",
+				    sc->sc_dv.dv_xname, TWE_AEN_UNIT(aen), msg);
+				break;
+
+			case 'p':
+				printf("%s: port %d: %s\n",
+				    sc->sc_dv.dv_xname, TWE_AEN_UNIT(aen), msg);
+				break;
+
 			default:
-				/* Don't use syslog. */
-				level = -1;
-			}
-
-			if (level < 0) {
-				switch (str[0]) {
-				case 'u':
-				case 'p':
-					printf("%s: %s %d: %s\n",
-					    sc->sc_dv.dv_xname,
-					    str[0] == 'u' ? "unit" : "port",
-					    TWE_AEN_UNIT(aen), msg);
-					break;
-
-				default:
-					printf("%s: %s\n",
-					    sc->sc_dv.dv_xname, msg);
-				}
-			} else {
-				switch (str[0]) {
-				case 'u':
-				case 'p':
-					log(level, "%s: %s %d: %s\n",
-					    sc->sc_dv.dv_xname,
-					    str[0] == 'u' ? "unit" : "port",
-					    TWE_AEN_UNIT(aen), msg);
-					break;
-
-				default:
-					log(level, "%s: %s\n",
-					    sc->sc_dv.dv_xname, msg);
-				}
+				printf("%s: %s\n", sc->sc_dv.dv_xname, msg);
 			}
 		}
 	}
@@ -1039,7 +991,7 @@ twe_aen_dequeue(struct twe_softc *sc)
 		aen = TWE_AEN_QUEUE_EMPTY;
 	else {
 		aen = sc->sc_aen_queue[sc->sc_aen_tail];
-		sc->sc_aen_tail = (sc->sc_aen_tail + 1) % TWE_AEN_Q_LENGTH;
+		sc->sc_aen_tail = (sc->sc_aen_tail + 1) & TWE_AEN_Q_LENGTH;
 	}
 
 	return (aen);

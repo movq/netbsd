@@ -1,4 +1,4 @@
-/*	$NetBSD: config.h,v 1.17 2004/05/07 00:04:38 ross Exp $	*/
+/*	$NetBSD: config.h,v 1.16.2.1 2004/05/10 15:41:48 tron Exp $	*/
 
 /*
  * Copyright (c) 1988, 1989, 1990 The Regents of the University of California.

@@ -1,4 +1,4 @@
-$NetBSD: acronyms,v 1.143 2004/12/04 02:03:32 hubertf Exp $
+$NetBSD: acronyms,v 1.139 2004/03/26 12:45:39 keihan Exp $
 
 AFAIC	as far as I'm concerned
 AFAICR	as far as I can recall
@@ -43,7 +43,6 @@ BTW	by the way
 CMIIW	correct me if I'm wrong
 CNP	continued [in my] next post
 COB	close of business [day]
-COTS	commercial off-the-shelf
 CYA	see you around
 D/L	download
 DIY	do it yourself
@@ -120,7 +119,6 @@ KITA	kick in the ass
 KNF	kernel normal form
 L8R	later
 LART	luser attitude readjustment tool (ie, hammer)
-LBNL	last but not least
 LJBF	let's just be friends
 LMAO	laughing my ass off
 LMSO	laughing my socks off
@@ -161,7 +159,6 @@ PNG	persona non grata
 PNP	plug and pray
 POC	point of contact
 POLA	principle of least astonishment
-POLS	principle of least surprise
 POS	piece of shit
 PPL	pretty please
 PTV	parental tunnel vision
@@ -215,7 +212,6 @@ TLA	three letter acronym
 TLB	translation lookaside buffer
 TMA	too many abbreviations
 TMI	too much information
-TNF	The NetBSD Foundation
 TOEFL	test of english as a foreign language
 TPTB	the powers that be
 TRT	the right thing

@@ -1,4 +1,4 @@
-/* $NetBSD: rwall.x,v 1.7 2004/07/01 22:52:34 kleink Exp $ */
+/* $NetBSD: rwall.x,v 1.6.2.1 2004/07/02 18:19:53 he Exp $ */
 
 /*
  * Copyright (c) 1993 Christopher G. Demetriou
@@ -43,7 +43,7 @@
 #ifndef RPC_HDR
 %#include <sys/cdefs.h>
 %#ifndef __lint__
-%__RCSID("$NetBSD: rwall.x,v 1.7 2004/07/01 22:52:34 kleink Exp $");
+%__RCSID("$NetBSD: rwall.x,v 1.6.2.1 2004/07/02 18:19:53 he Exp $");
 %#endif /* not __lint__ */
 #endif
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: ahc_eisa.c,v 1.29 2004/08/23 06:03:19 thorpej Exp $	*/
+/*	$NetBSD: ahc_eisa.c,v 1.28 2003/04/22 14:33:01 tsutsui Exp $	*/
 
 /*
  * Product specific probe and attach routines for:
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ahc_eisa.c,v 1.29 2004/08/23 06:03:19 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ahc_eisa.c,v 1.28 2003/04/22 14:33:01 tsutsui Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -56,8 +56,8 @@ __KERNEL_RCSID(0, "$NetBSD: ahc_eisa.c,v 1.29 2004/08/23 06:03:19 thorpej Exp $"
 #include <dev/ic/aic77xxreg.h>
 #include <dev/ic/aic77xxvar.h>
 
-static int	ahc_eisa_match(struct device *, struct cfdata *, void *);
-static void	ahc_eisa_attach(struct device *, struct device *, void *);
+int	ahc_eisa_match __P((struct device *, struct cfdata *, void *));
+void	ahc_eisa_attach __P((struct device *, struct device *, void *));
 
 
 CFATTACH_DECL(ahc_eisa, sizeof(struct ahc_softc),
@@ -68,8 +68,11 @@ CFATTACH_DECL(ahc_eisa, sizeof(struct ahc_softc),
  * If we find one, note it's address (slot) and call
  * the actual probe routine to check it out.
  */
-static int
-ahc_eisa_match(struct device *parent, struct cfdata *match, void *aux)
+int
+ahc_eisa_match(parent, match, aux)
+	struct device *parent;
+	struct cfdata *match;
+	void *aux;
 {
 	struct eisa_attach_args *ea = aux;
 	bus_space_tag_t iot = ea->ea_iot;
@@ -92,8 +95,10 @@ ahc_eisa_match(struct device *parent, struct cfdata *match, void *aux)
 	return (irq >= 0);
 }
 
-static void
-ahc_eisa_attach(struct device *parent, struct device *self, void *aux)
+void
+ahc_eisa_attach(parent, self, aux)
+	struct device *parent, *self;
+	void *aux;
 {
 	struct ahc_softc *ahc = (void *)self;
 	struct eisa_attach_args *ea = aux;

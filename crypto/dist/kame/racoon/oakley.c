@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: oakley.c,v 1.12 2004/06/17 03:42:55 itojun Exp $");
+__RCSID("$NetBSD: oakley.c,v 1.10.2.1 2004/06/17 12:38:10 tron Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>

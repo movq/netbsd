@@ -1,4 +1,4 @@
-/*	$NetBSD: gapspci.c,v 1.12 2004/08/30 15:05:16 drochner Exp $	*/
+/*	$NetBSD: gapspci.c,v 1.11 2003/07/15 01:31:38 lukem Exp $	*/
 
 /*-
  * Copyright (c) 2001 Marcus Comstedt
@@ -33,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
-__KERNEL_RCSID(0, "$NetBSD: gapspci.c,v 1.12 2004/08/30 15:05:16 drochner Exp $");
+__KERNEL_RCSID(0, "$NetBSD: gapspci.c,v 1.11 2003/07/15 01:31:38 lukem Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -56,6 +56,8 @@ __KERNEL_RCSID(0, "$NetBSD: gapspci.c,v 1.12 2004/08/30 15:05:16 drochner Exp $"
 
 int	gaps_match(struct device *, struct cfdata *, void *);
 void	gaps_attach(struct device *, struct device *, void *);
+
+int	gaps_print(void *, const char *);
 
 CFATTACH_DECL(gapspci, sizeof(struct gaps_softc),
     gaps_match, gaps_attach, NULL, NULL);
@@ -121,6 +123,7 @@ gaps_attach(struct device *parent, struct device *self, void *aux)
 
 	memset(&pba, 0, sizeof(pba));
 
+	pba.pba_busname = "pci";
 	pba.pba_memt = sc->sc_memt;
 	pba.pba_dmat = &sc->sc_dmat;
 	pba.pba_dmat64 = NULL;
@@ -129,5 +132,17 @@ gaps_attach(struct device *parent, struct device *self, void *aux)
 	pba.pba_flags = PCI_FLAGS_MEM_ENABLED;
 	pba.pba_pc = &sc->sc_pc;
 
-	(void) config_found_ia(self, "pcibus", &pba, pcibusprint);
+	(void) config_found(self, &pba, gaps_print);
+}
+
+int
+gaps_print(void *aux, const char *pnp)
+{
+	struct pcibus_attach_args *pba = aux;
+
+	if (pnp)
+		aprint_normal("%s at %s", pba->pba_busname, pnp);
+	aprint_normal(" bus %d", pba->pba_bus);
+
+	return (UNCONF);
 }

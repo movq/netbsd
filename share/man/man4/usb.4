@@ -1,4 +1,4 @@
-.\" $NetBSD: usb.4,v 1.72 2004/10/24 16:40:32 wiz Exp $
+.\" $NetBSD: usb.4,v 1.64.2.1 2004/05/11 12:52:34 tron Exp $
 .\"
 .\" Copyright (c) 1999, 2000, 2001, 2002 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -34,7 +34,7 @@
 .\" ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 .\" POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd October 23, 2004
+.Dd May 8, 2004
 .Dt USB 4
 .Os
 .Sh NAME
@@ -57,8 +57,8 @@
 .Pp
 .Cd options USBVERBOSE
 .Pp
-.In dev/usb/usb.h
-.In dev/usb/usbhid.h
+.Cd "#include \*[Lt]dev/usb/usb.h\*[Gt]"
+.Cd "#include \*[Lt]dev/usb/usbhid.h\*[Gt]"
 .Sh DESCRIPTION
 .Nx
 provides machine-independent bus support and drivers for
@@ -122,16 +122,14 @@ drivers, sorted by driver name:
 .Bl -tag -width usscanner -offset indent
 .It aue
 driver for ADMtek AN986 Pegasus USB Ethernet.
-.It axe
-driver for ASIX AX88172 USB Ethernet.
-.It cdce
-driver Communication Data Class, Ethernet Networking Control Model devices
 .It cue
 driver for CATC USB-EL1201A USB Ethernet.
 .It kue
 driver for Kawasaki LSI KL5KUSB101B USB Ethernet.
 .It uaudio
 driver for audio devices.
+.It uax
+driver for ASIX AX88172 USB Ethernet.
 .It ubsa
 driver for Belkin serial adapters.
 .It udsbr
@@ -320,7 +318,7 @@ struct usb_device_info {
 	u_int8_t	udi_protocol;
 	u_int8_t	udi_config;
 	u_int8_t	udi_speed;
-#define USB_SPEED_LOW  1
+#define USB_SPEED_LOW  1        
 #define USB_SPEED_FULL 2
 #define USB_SPEED_HIGH 3
 	int		udi_power;
@@ -468,7 +466,7 @@ record contains information about the device in a device event event.
 .br
 The
 .Va ue_cookie
-is an opaque value that uniquely determines which
+is an opaque value that uniquely determines which which
 device a device driver has been attached to (i.e., it equals
 the cookie value in the device that the driver attached to).
 The
@@ -476,7 +474,7 @@ The
 contains the name of the device (driver) as seen in, e.g.,
 kernel messages.
 .Pp
-Note that there is a separation between device and device
+Note that that there is a separation between device and device
 driver events.  A device event is generated when a physical
 USB device is attached or detached.  A single USB device may
 have zero, one, or many device drivers associated with it.
@@ -502,9 +500,7 @@ specifications can be found at:
 .D1 http://www.usb.org/developers/docs/
 .Pp
 .Xr aue 4 ,
-.Xr axe 4 ,
 .Xr cardbus 4 ,
-.Xr cdce 4 ,
 .Xr cue 4 ,
 .Xr ehci 4 ,
 .Xr isa 4 ,
@@ -513,10 +509,10 @@ specifications can be found at:
 .Xr pci 4 ,
 .Xr slhci 4 ,
 .Xr uaudio 4 ,
+.Xr uax 4 ,
 .Xr ubsa 4 ,
 .Xr ucom 4 ,
 .Xr udsbr 4 ,
-.Xr uep 4 ,
 .Xr ugen 4 ,
 .Xr uhci 4 ,
 .Xr uhid 4 ,

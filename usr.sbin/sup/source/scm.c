@@ -1,4 +1,4 @@
-/*	$NetBSD: scm.c,v 1.20 2004/11/16 06:00:37 itojun Exp $	*/
+/*	$NetBSD: scm.c,v 1.17 2003/04/03 17:15:22 christos Exp $	*/
 
 /*
  * Copyright (c) 1992 Carnegie Mellon University
@@ -571,7 +571,11 @@ samehost(void)
 {				/* is remote host same as local host? */
 	struct ifaddrs *ifap, *ifa;
 	char h1[NI_MAXHOST], h2[NI_MAXHOST];
+#ifdef NI_WITHSCOPEID
+	const int niflags = NI_NUMERICHOST | NI_WITHSCOPEID;
+#else
 	const int niflags = NI_NUMERICHOST;
+#endif
 
 	if (getnameinfo((struct sockaddr *) &remoteaddr,
 #ifdef BSD4_4
@@ -588,11 +592,11 @@ samehost(void)
 			continue;
 		if (getnameinfo(ifa->ifa_addr,
 #ifdef BSD4_4
-		    ifa->ifa_addr->sa_len,
+		ifa->ifa_addr->sa_len,
 #else
-		    sizeof(struct sockaddr),
+		sizeof(struct sockaddr),
 #endif
-		    h2, sizeof(h2), NULL, 0, niflags))
+			h2, sizeof(h2), NULL, 0, niflags))
 			continue;
 		if (strcmp(h1, h2) == 0) {
 			freeifaddrs(ifap);
@@ -607,7 +611,11 @@ int
 matchhost(char *name)
 {				/* is this name of remote host? */
 	char h1[NI_MAXHOST], h2[NI_MAXHOST];
+#ifdef NI_WITHSCOPEID
+	const int niflags = NI_NUMERICHOST | NI_WITHSCOPEID;
+#else
 	const int niflags = NI_NUMERICHOST;
+#endif
 	struct addrinfo hints, *res0, *res;
 
 	if (getnameinfo((struct sockaddr *) & remoteaddr,
@@ -621,6 +629,7 @@ matchhost(char *name)
 	memset(&hints, 0, sizeof(hints));
 	hints.ai_family = PF_UNSPEC;
 	hints.ai_socktype = SOCK_DGRAM;	/* dummy */
+	hints.ai_flags = AI_NUMERICHOST;
 	if (getaddrinfo(name, "0", &hints, &res0) != 0)
 		return (0);
 	for (res = res0; res; res = res->ai_next) {

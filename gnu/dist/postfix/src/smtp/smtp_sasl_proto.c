@@ -1,5 +1,3 @@
-/*	$NetBSD: smtp_sasl_proto.c,v 1.1.1.4 2004/05/31 00:24:45 heas Exp $	*/
-
 /*++
 /* NAME
 /*	smtp_sasl_proto 3
@@ -116,7 +114,7 @@ int     smtp_sasl_helo_login(SMTP_STATE *state)
      * required, and assume that an authentication error is recoverable.
      */
     if (smtp_sasl_passwd_lookup(state) != 0) {
-	smtp_sasl_start(state, VAR_SMTP_SASL_OPTS, var_smtp_sasl_opts);
+	smtp_sasl_start(state);
 	if (smtp_sasl_authenticate(state, why) <= 0)
 	    ret = smtp_site_fail(state, 450, "Authentication failed: %s",
 				 vstring_str(why));

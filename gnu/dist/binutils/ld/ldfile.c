@@ -1,6 +1,6 @@
 /* Linker file opening and searching.
-   Copyright 1991, 1992, 1993, 1994, 1995, 1998, 1999, 2000, 2001, 2002,
-   2003, 2004 Free Software Foundation, Inc.
+   Copyright 1991, 1992, 1993, 1994, 1995, 1998, 1999, 2000, 2001, 2002, 2003
+   Free Software Foundation, Inc.
 
    This file is part of GLD, the Gnu Linker.
 
@@ -69,11 +69,18 @@ static search_dirs_type **search_tail_ptr = &search_head;
 static search_arch_type *search_arch_head;
 static search_arch_type **search_arch_tail_ptr = &search_arch_head;
 
+static FILE *try_open
+  PARAMS ((const char *, const char *));
+static bfd_boolean is_sysrooted_pathname
+  PARAMS ((const char *, bfd_boolean));
+
 /* Test whether a pathname, after canonicalization, is the same or a
    sub-directory of the sysroot directory.  */
 
 static bfd_boolean
-is_sysrooted_pathname (const char *name, bfd_boolean notsame)
+is_sysrooted_pathname (name, notsame)
+     const char *name;
+     bfd_boolean notsame;
 {
   char * realname = ld_canon_sysroot ? lrealpath (name) : NULL;
   int len;
@@ -81,7 +88,7 @@ is_sysrooted_pathname (const char *name, bfd_boolean notsame)
 
   if (! realname)
     return FALSE;
-
+  
   len = strlen (realname);
 
   if (((! notsame && len == ld_canon_sysroot_len)
@@ -103,14 +110,16 @@ is_sysrooted_pathname (const char *name, bfd_boolean notsame)
    Makes a copy of NAME using xmalloc().  */
 
 void
-ldfile_add_library_path (const char *name, bfd_boolean cmdline)
+ldfile_add_library_path (name, cmdline)
+     const char *name;
+     bfd_boolean cmdline;
 {
   search_dirs_type *new;
 
   if (!cmdline && config.only_cmd_line_lib_dirs)
     return;
 
-  new = xmalloc (sizeof (search_dirs_type));
+  new = (search_dirs_type *) xmalloc (sizeof (search_dirs_type));
   new->next = NULL;
   new->cmdline = cmdline;
   *search_tail_ptr = new;
@@ -133,8 +142,9 @@ ldfile_add_library_path (const char *name, bfd_boolean cmdline)
 /* Try to open a BFD for a lang_input_statement.  */
 
 bfd_boolean
-ldfile_try_open_bfd (const char *attempt,
-		     lang_input_statement_type *entry)
+ldfile_try_open_bfd (attempt, entry)
+     const char *attempt;
+     lang_input_statement_type *entry;
 {
   entry->the_bfd = bfd_openr (attempt, entry->target);
 
@@ -246,7 +256,7 @@ ldfile_try_open_bfd (const char *attempt,
 			  if (yylval.bigint.str)
 			    free (yylval.bigint.str);
 			  break;
-			}
+		        }
 		      token = yylex ();
 		    }
 		  ldlex_popstate ();
@@ -288,10 +298,11 @@ ldfile_try_open_bfd (const char *attempt,
    archive, use ARCH, LIB and SUFFIX to modify the file name.  */
 
 bfd_boolean
-ldfile_open_file_search (const char *arch,
-			 lang_input_statement_type *entry,
-			 const char *lib,
-			 const char *suffix)
+ldfile_open_file_search (arch, entry, lib, suffix)
+     const char *arch;
+     lang_input_statement_type *entry;
+     const char *lib;
+     const char *suffix;
 {
   search_dirs_type *search;
 
@@ -321,11 +332,13 @@ ldfile_open_file_search (const char *arch,
 	return FALSE;
     }
 
-  for (search = search_head; search != NULL; search = search->next)
+  for (search = search_head;
+       search != (search_dirs_type *) NULL;
+       search = search->next)
     {
       char *string;
 
-      if (entry->dynamic && ! link_info.relocatable)
+      if (entry->dynamic && ! link_info.relocateable)
 	{
 	  if (ldemul_open_dynamic_archive (arch, search, entry))
 	    {
@@ -334,13 +347,13 @@ ldfile_open_file_search (const char *arch,
 	    }
 	}
 
-      string = xmalloc (strlen (search->name)
-			+ strlen (slash)
-			+ strlen (lib)
-			+ strlen (entry->filename)
-			+ strlen (arch)
-			+ strlen (suffix)
-			+ 1);
+      string = (char *) xmalloc (strlen (search->name)
+				 + strlen (slash)
+				 + strlen (lib)
+				 + strlen (entry->filename)
+				 + strlen (arch)
+				 + strlen (suffix)
+				 + 1);
 
       if (entry->is_archive)
 	sprintf (string, "%s%s%s%s%s%s", search->name, slash,
@@ -364,7 +377,8 @@ ldfile_open_file_search (const char *arch,
 /* Open the input file specified by ENTRY.  */
 
 void
-ldfile_open_file (lang_input_statement_type *entry)
+ldfile_open_file (entry)
+     lang_input_statement_type *entry;
 {
   if (entry->the_bfd != NULL)
     return;
@@ -374,10 +388,10 @@ ldfile_open_file (lang_input_statement_type *entry)
       if (ldfile_try_open_bfd (entry->filename, entry))
 	return;
       if (strcmp (entry->filename, entry->local_sym_name) != 0)
-	einfo (_("%F%P: %s (%s): No such file: %E\n"),
+	einfo (_("%F%P: cannot open %s for %s: %E\n"),
 	       entry->filename, entry->local_sym_name);
       else
-	einfo (_("%F%P: %s: No such file: %E\n"), entry->local_sym_name);
+	einfo (_("%F%P: cannot open %s: %E\n"), entry->local_sym_name);
     }
   else
     {
@@ -385,7 +399,9 @@ ldfile_open_file (lang_input_statement_type *entry)
       bfd_boolean found = FALSE;
 
       /* Try to open <filename><suffix> or lib<filename><suffix>.a */
-      for (arch = search_arch_head; arch != NULL; arch = arch->next)
+      for (arch = search_arch_head;
+	   arch != (search_arch_type *) NULL;
+	   arch = arch->next)
 	{
 	  found = ldfile_open_file_search (arch->name, entry, "lib", ".a");
 	  if (found)
@@ -417,7 +433,9 @@ ldfile_open_file (lang_input_statement_type *entry)
 /* Try to open NAME; if that fails, try NAME with EXTEN appended to it.  */
 
 static FILE *
-try_open (const char *name, const char *exten)
+try_open (name, exten)
+     const char *name;
+     const char *exten;
 {
   FILE *result;
   char buff[1000];
@@ -456,7 +474,9 @@ try_open (const char *name, const char *exten)
    specified with -L, without and with EXTEND appended.  */
 
 FILE *
-ldfile_find_command_file (const char *name, const char *extend)
+ldfile_find_command_file (name, extend)
+     const char *name;
+     const char *extend;
 {
   search_dirs_type *search;
   FILE *result;
@@ -464,10 +484,12 @@ ldfile_find_command_file (const char *name, const char *extend)
 
   /* First try raw name.  */
   result = try_open (name, "");
-  if (result == NULL)
+  if (result == (FILE *) NULL)
     {
       /* Try now prefixes.  */
-      for (search = search_head; search != NULL; search = search->next)
+      for (search = search_head;
+	   search != (search_dirs_type *) NULL;
+	   search = search->next)
 	{
 	  sprintf (buffer, "%s%s%s", search->name, slash, name);
 
@@ -481,12 +503,13 @@ ldfile_find_command_file (const char *name, const char *extend)
 }
 
 void
-ldfile_open_command_file (const char *name)
+ldfile_open_command_file (name)
+     const char *name;
 {
   FILE *ldlex_input_stack;
   ldlex_input_stack = ldfile_find_command_file (name, "");
 
-  if (ldlex_input_stack == NULL)
+  if (ldlex_input_stack == (FILE *) NULL)
     {
       bfd_set_error (bfd_error_system_call);
       einfo (_("%P%F: cannot open linker script file %s: %E\n"), name);
@@ -502,7 +525,8 @@ ldfile_open_command_file (const char *name)
 
 #ifdef GNU960
 static char *
-gnu960_map_archname (char *name)
+gnu960_map_archname (name)
+     char *name;
 {
   struct tabentry { char *cmd_switch; char *arch; };
   static struct tabentry arch_tab[] =
@@ -532,9 +556,11 @@ gnu960_map_archname (char *name)
 }
 
 void
-ldfile_add_arch (char *name)
+ldfile_add_arch (name)
+     char *name;
 {
-  search_arch_type *new = xmalloc (sizeof (search_arch_type));
+  search_arch_type *new =
+    (search_arch_type *) xmalloc ((bfd_size_type) (sizeof (search_arch_type)));
 
   if (*name != '\0')
     {
@@ -547,7 +573,7 @@ ldfile_add_arch (char *name)
       ldfile_output_machine_name = name;
     }
 
-  new->next = NULL;
+  new->next = (search_arch_type *) NULL;
   new->name = gnu960_map_archname (name);
   *search_arch_tail_ptr = new;
   search_arch_tail_ptr = &new->next;
@@ -556,15 +582,17 @@ ldfile_add_arch (char *name)
 #else /* not GNU960 */
 
 void
-ldfile_add_arch (const char *in_name)
+ldfile_add_arch (in_name)
+     const char *in_name;
 {
   char *name = xstrdup (in_name);
-  search_arch_type *new = xmalloc (sizeof (search_arch_type));
+  search_arch_type *new =
+    (search_arch_type *) xmalloc (sizeof (search_arch_type));
 
   ldfile_output_machine_name = in_name;
 
   new->name = name;
-  new->next = NULL;
+  new->next = (search_arch_type *) NULL;
   while (*name)
     {
       *name = TOLOWER (*name);
@@ -579,7 +607,8 @@ ldfile_add_arch (const char *in_name)
 /* Set the output architecture.  */
 
 void
-ldfile_set_output_arch (const char *string, enum bfd_architecture defarch)
+ldfile_set_output_arch (string)
+     const char *string;
 {
   const bfd_arch_info_type *arch = bfd_scan_arch (string);
 
@@ -589,8 +618,8 @@ ldfile_set_output_arch (const char *string, enum bfd_architecture defarch)
       ldfile_output_machine = arch->mach;
       ldfile_output_machine_name = arch->printable_name;
     }
-  else if (defarch != bfd_arch_unknown)
-    ldfile_output_architecture = defarch;
   else
-    einfo (_("%P%F: cannot represent machine `%s'\n"), string);
+    {
+      einfo (_("%P%F: cannot represent machine `%s'\n"), string);
+    }
 }

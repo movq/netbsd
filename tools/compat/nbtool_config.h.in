@@ -1,4 +1,4 @@
-/*	$NetBSD: nbtool_config.h.in,v 1.7 2004/10/12 03:28:31 jmc Exp $	*/
+/*	$NetBSD: nbtool_config.h.in,v 1.2.2.2 2004/07/25 07:49:46 tron Exp $	*/
 
 #ifndef	__NETBSD_NBTOOL_CONFIG_H__
 #define	__NETBSD_NBTOOL_CONFIG_H__
@@ -40,8 +40,6 @@
 #undef HAVE_U_SHORT
 #undef HAVE_U_QUAD_T
 
-#undef HAVE_FSTATVFS
-
 #undef HAVE_BSWAP16
 #undef HAVE_BSWAP32
 #undef HAVE_BSWAP64
@@ -65,7 +63,6 @@
 #undef HAVE_STRUCT_STAT_ST_BIRTHTIME
 #undef HAVE_STRUCT_STAT_ST_ATIM
 #undef HAVE_STRUCT_STAT_ST_MTIMENSEC
-#undef HAVE_STRUCT_STATVFS_F_IOSIZE
 
 #undef HAVE_DECL_OPTIND
 #undef HAVE_DECL_OPTRESET
@@ -84,7 +81,6 @@
 #undef HAVE_FUTIMES
 #undef HAVE_GETOPT
 #undef HAVE_GETOPT_LONG
-#undef HAVE_GROUP_FROM_GID
 #undef HAVE_ISBLANK
 #undef HAVE_ISSETUGID
 #undef HAVE_LCHFLAGS

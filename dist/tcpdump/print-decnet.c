@@ -1,4 +1,4 @@
-/*	$NetBSD: print-decnet.c,v 1.5 2004/09/27 23:04:24 dyoung Exp $	*/
+/*	$NetBSD: print-decnet.c,v 1.4 2002/05/31 09:45:45 itojun Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993, 1994, 1995, 1996, 1997
@@ -24,10 +24,10 @@
 #include <sys/cdefs.h>
 #ifndef lint
 #if 0
-static const char rcsid[] _U_ =
-    "@(#) Header: /tcpdump/master/tcpdump/print-decnet.c,v 1.36.2.2 2003/11/16 08:51:16 guy Exp (LBL)";
+static const char rcsid[] =
+    "@(#) Header: /tcpdump/master/tcpdump/print-decnet.c,v 1.34 2002/04/07 02:09:05 guy Exp (LBL)";
 #else
-__RCSID("$NetBSD: print-decnet.c,v 1.5 2004/09/27 23:04:24 dyoung Exp $");
+__RCSID("$NetBSD: print-decnet.c,v 1.4 2002/05/31 09:45:45 itojun Exp $");
 #endif
 #endif
 
@@ -35,7 +35,9 @@ __RCSID("$NetBSD: print-decnet.c,v 1.5 2004/09/27 23:04:24 dyoung Exp $");
 #include "config.h"
 #endif
 
-#include <tcpdump-stdinc.h>
+#include <sys/param.h>
+#include <sys/time.h>
+#include <sys/socket.h>
 
 struct mbuf;
 struct rtentry;
@@ -44,9 +46,11 @@ struct rtentry;
 #include <netdnet/dnetdb.h>
 #endif
 
+#include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 #include "decnet.h"
 #include "extract.h"
@@ -347,13 +351,13 @@ print_i_info(int info)
 }
 
 static void
-print_elist(const char *elp _U_, u_int len _U_)
+print_elist(const char *elp, u_int len)
 {
 	/* Not enough examples available for me to debug this */
 }
 
 static void
-print_nsp(const u_char *nspp, u_int nsplen _U_)
+print_nsp(const u_char *nspp, u_int nsplen)
 {
 	const struct nsphdr *nsphp = (struct nsphdr *)nspp;
 	int dst, src, flags;

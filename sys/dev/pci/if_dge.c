@@ -1,4 +1,4 @@
-/*	$NetBSD: if_dge.c,v 1.7 2004/10/30 18:09:22 thorpej Exp $ */
+/*	$NetBSD: if_dge.c,v 1.1.2.2 2004/04/16 08:02:53 tron Exp $ */
 
 /*
  * Copyright (c) 2004, SUNET, Swedish University Computer Network.
@@ -80,7 +80,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_dge.c,v 1.7 2004/10/30 18:09:22 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_dge.c,v 1.1.2.2 2004/04/16 08:02:53 tron Exp $");
 
 #include "bpfilter.h"
 #include "rnd.h"
@@ -389,10 +389,10 @@ do {									\
 	__n = (n);							\
 									\
 	/* If it will wrap around, sync to the end of the ring. */	\
-	if ((__x + __n) > DGE_NTXDESC) {				\
+	if ((__x + __n) > DGE_NTXDESC) {					\
 		bus_dmamap_sync((sc)->sc_dmat, (sc)->sc_cddmamap,	\
 		    DGE_CDTXOFF(__x), sizeof(struct dge_tdes) *		\
-		    (DGE_NTXDESC - __x), (ops));			\
+		    (DGE_NTXDESC - __x), (ops));				\
 		__n -= (DGE_NTXDESC - __x);				\
 		__x = 0;						\
 	}								\
@@ -450,10 +450,10 @@ do {									\
 	 */								\
 	__m->m_data = __m->m_ext.ext_buf + (sc)->sc_align_tweak;	\
 									\
-	__rxd->dr_baddrl =						\
+	__rxd->dr_baddrl =					\
 	    htole32(__rxs->rxs_dmamap->dm_segs[0].ds_addr +		\
 		(sc)->sc_align_tweak);					\
-	__rxd->dr_baddrh = 0;						\
+	__rxd->dr_baddrh = 0;					\
 	__rxd->dr_len = 0;						\
 	__rxd->dr_cksum = 0;						\
 	__rxd->dr_status = 0;						\
@@ -917,8 +917,7 @@ dge_attach(struct device *parent, struct device *self, void *aux)
 		dge_txseg_evcnt_names =
 		    malloc(sizeof(*dge_txseg_evcnt_names), M_DEVBUF, M_WAITOK);
 		for (i = 0; i < DGE_NTXSEGS; i++)
-			snprintf((*dge_txseg_evcnt_names)[i],
-			    sizeof((*dge_txseg_evcnt_names)[i]), "txseg%d", i);
+			sprintf((*dge_txseg_evcnt_names)[i], "txseg%d", i);
 	}
 
 	/* Attach event counters. */
@@ -1471,8 +1470,7 @@ dge_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 			 * Multicast list has changed; set the hardware filter
 			 * accordingly.
 			 */
-			if (ifp->if_flags & IFF_RUNNING)
-				dge_set_filter(sc);
+			dge_set_filter(sc);
 			error = 0;
 		}
 		break;
@@ -2130,7 +2128,6 @@ dge_add_rxbuf(struct dge_softc *sc, int idx)
 
 	m->m_len = m->m_pkthdr.len = DGE_BUFFER_SIZE;
 	MEXTADD(m, buf, DGE_BUFFER_SIZE, M_DEVBUF, dge_freebuf, sc);
-	m->m_flags |= M_EXT_RW;
 
 	if (rxs->rxs_mbuf != NULL)
 		bus_dmamap_unload(sc->sc_dmat, rxs->rxs_dmamap);
@@ -2434,3 +2431,4 @@ dge_xgmii_mediachange(struct ifnet *ifp)
 {
 	return 0;
 }
+

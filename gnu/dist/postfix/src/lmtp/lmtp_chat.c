@@ -1,5 +1,3 @@
-/*	$NetBSD: lmtp_chat.c,v 1.1.1.4 2004/05/31 00:24:36 heas Exp $	*/
-
 /*++
 /* NAME
 /*	lmtp_chat 3
@@ -264,14 +262,13 @@ void    lmtp_chat_notify(LMTP_STATE *state)
      * mail bounce wars. Always prepend one space to message content that we
      * generate from untrusted data.
      */
-#define NULL_TRACE_FLAGS	0
+#define NULL_CLEANUP_FLAGS	0
 #define LENGTH	78
 #define INDENT	4
 
     notice = post_mail_fopen_nowait(mail_addr_double_bounce(),
 				    var_error_rcpt,
-				    CLEANUP_FLAG_MASK_INTERNAL,
-				    NULL_TRACE_FLAGS);
+				    NULL_CLEANUP_FLAGS);
     if (notice == 0) {
 	msg_warn("postmaster notify: %m");
 	return;

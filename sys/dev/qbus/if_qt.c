@@ -1,4 +1,4 @@
-/*	$NetBSD: if_qt.c,v 1.5 2004/10/30 23:45:10 thorpej Exp $	*/
+/*	$NetBSD: if_qt.c,v 1.4 2003/08/31 11:13:43 ragge Exp $	*/
 /*
  * Copyright (c) 1992 Steven M. Schultz
  * All rights reserved.
@@ -80,7 +80,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_qt.c,v 1.5 2004/10/30 23:45:10 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_qt.c,v 1.4 2003/08/31 11:13:43 ragge Exp $");
 
 #include "opt_inet.h"
 #include "bpfilter.h"
@@ -354,10 +354,8 @@ qtinit(struct ifnet *ifp)
 	struct	qt_tring *tp;
 	register int i, error;
  
-	if (ifp->if_flags & IFF_RUNNING) {
-		/* Cancel any pending I/O. */
-		qtstop(ifp, 0);
-	}
+	if (ifp->if_flags & IFF_RUNNING)
+		return 0; /* Already in good shape */
 
 	if (sc->sc_ib == NULL) {
 		if (if_ubaminit(&sc->sc_ifuba, (void *)sc->sc_dev.dv_parent,
@@ -618,16 +616,15 @@ qtioctl(ifp, cmd, data)
 	u_long	cmd;
 	caddr_t	data;
 	{
-	int s, error;
+	int error, flags;
+	int s = splnet();
 
-	s = splnet();
-
+	flags = ifp->if_flags & IFF_PROMISC;
 	error = ether_ioctl(ifp, cmd, data);
-	if (error == ENETRESET) {
-		if (ifp->if_flags & IFF_RUNNING)
-			error = qtinit(ifp);
-		else
-			error = 0;
+	if (error == ENETRESET || (ifp->if_flags ^ flags)) {
+		qtstop(ifp, 1);
+		qtinit(ifp);
+		error = 0;
 	}
 	splx(s);
 	return (error);

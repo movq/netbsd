@@ -1,4 +1,4 @@
-/*	$NetBSD: strerror.c,v 1.18 2004/07/01 19:04:43 christos Exp $	*/
+/*	$NetBSD: strerror.c,v 1.16 2003/08/07 16:32:30 agc Exp $	*/
 
 /*-
  * Copyright (c) 1993
@@ -35,7 +35,7 @@
 
 static const struct mi {
 	int	errno;
-	const char *msg;
+	char	*msg;
 } errlist[] = {
 	{ EADAPT,	"bad adaptor number" },
 	{ ECTLR,	"bad controller number" },
@@ -64,7 +64,7 @@ strerror(int err)
 
 	for (mi = errlist; mi->msg; mi++)
 		if (mi->errno == err)
-			return __UNCONST(mi->msg);
+			return mi->msg;
 
 	snprintf(ebuf, sizeof ebuf, "Unknown error: code %d", err);
 	return ebuf;

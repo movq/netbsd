@@ -1,12 +1,12 @@
 #!/bin/sh
 #
-# $NetBSD: fsck,v 1.5 2004/08/13 18:08:03 mycroft Exp $
+# $NetBSD: fsck,v 1.4 2003/10/20 15:02:15 christos Exp $
 #
 
 # PROVIDE: fsck
 # REQUIRE: localswap
 
-$_rc_subr_loaded . /etc/rc.subr
+. /etc/rc.subr
 
 name="fsck"
 start_cmd="fsck_start"

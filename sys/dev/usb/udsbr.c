@@ -1,4 +1,4 @@
-/*	$NetBSD: udsbr.c,v 1.9 2004/10/29 12:57:26 yamt Exp $	*/
+/*	$NetBSD: udsbr.c,v 1.7 2002/07/11 21:14:27 augustss Exp $	*/
 
 /*
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -45,7 +45,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: udsbr.c,v 1.9 2004/10/29 12:57:26 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: udsbr.c,v 1.7 2002/07/11 21:14:27 augustss Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -75,7 +75,7 @@ int	udsbrdebug = 0;
 Static	int     udsbr_get_info(void *, struct radio_info *);
 Static	int     udsbr_set_info(void *, struct radio_info *);
 
-const struct radio_hw_if udsbr_hw_if = {
+struct radio_hw_if udsbr_hw_if = {
 	NULL, /* open */
 	NULL, /* close */
 	udsbr_get_info,
@@ -129,7 +129,7 @@ USB_ATTACH(udsbr)
 
 	DPRINTFN(10,("udsbr_attach: sc=%p\n", sc));
 
-	usbd_devinfo(dev, 0, devinfo, sizeof(devinfo));
+	usbd_devinfo(dev, 0, devinfo);
 	USB_ATTACH_SETUP;
 	printf("%s: %s\n", USBDEVNAME(sc->sc_dev), devinfo);
 

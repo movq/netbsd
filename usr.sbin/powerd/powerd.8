@@ -1,4 +1,4 @@
-.\"	$NetBSD: powerd.8,v 1.8 2004/05/03 14:23:12 wiz Exp $
+.\"	$NetBSD: powerd.8,v 1.5.2.1 2004/05/06 05:24:31 jmc Exp $
 .\"
 .\" Copyright (c) 2003 Wasabi Systems, Inc.
 .\" All rights reserved.
@@ -33,7 +33,7 @@
 .\" ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 .\" POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd May 3, 2004
+.Dd April 25, 2004
 .Dt POWERD 8
 .Os
 .Sh NAME
@@ -72,7 +72,7 @@ will look for these scripts in two locations.
 The first location is
 .Pa /etc/powerd/scripts/\*[Lt]power_type\*[Gt] ,
 where
-.Aq Pa power_type
+.Pa \*[Lt]power_type\*[Gt]
 is defined by the power management mechanism supported by the system,
 e.g.,
 .Dq apm
@@ -107,16 +107,14 @@ This script is called when an event occurs on a reset button device.
 This script is called when an event occurs on a sleep button device.
 .It lid_switch
 This script is called when an event occurs on a lid switch device.
-.It acadapter
-This script is called when an online or offline event occurs on an AC adapter device.
 .El
 .Pp
 The following events are defined for power switch devices:
 .Bl -tag -width "released"
 .It pressed
-The button was pressed, the lid closed, or the AC adapter connected.
+The button was pressed or the lid closed.
 .It released
-The button was released, the lid opened, or the AC adapter disconnected.
+The button was released or the lid opened.
 Note that power and sleep button devices usually do not
 post this type of event.
 .El
@@ -128,7 +126,6 @@ when a power button is pressed by the operator:
 .Ed
 .Sh SEE ALSO
 .Xr acpi 4 ,
-.Xr acpiacad 4 ,
 .Xr acpibut 4 ,
 .Xr acpilid 4 ,
 .Xr apm 4

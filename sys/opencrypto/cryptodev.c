@@ -1,4 +1,4 @@
-/*	$NetBSD: cryptodev.c,v 1.12 2004/11/30 04:25:44 christos Exp $ */
+/*	$NetBSD: cryptodev.c,v 1.10 2003/11/19 04:14:07 jonathan Exp $ */
 /*	$FreeBSD: src/sys/opencrypto/cryptodev.c,v 1.4.2.4 2003/06/03 00:09:02 sam Exp $	*/
 /*	$OpenBSD: cryptodev.c,v 1.53 2002/07/10 22:21:30 mickey Exp $	*/
 
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cryptodev.c,v 1.12 2004/11/30 04:25:44 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cryptodev.c,v 1.10 2003/11/19 04:14:07 jonathan Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -97,17 +97,21 @@ static int	cryptoselect(dev_t dev, int rw, struct proc *p);
 static int	cryptof_read(struct file *, off_t *, struct uio *, struct ucred *, int);
 static int	cryptof_write(struct file *, off_t *, struct uio *, struct ucred *, int);
 static int	cryptof_ioctl(struct file *, u_long, void*, struct proc *p);
+static int	cryptof_fcntl(struct file *, u_int, void*, struct proc *p);
+static int	cryptof_poll(struct file *, int, struct proc *);
+static int	cryptof_kqfilter(struct file *, struct knote *);
+static int	cryptof_stat(struct file *, struct stat *, struct proc *);
 static int	cryptof_close(struct file *, struct proc *);
 
-static const struct fileops cryptofops = {
+static struct fileops cryptofops = {
     cryptof_read,
     cryptof_write,
     cryptof_ioctl,
-    fnullop_fcntl,
-    fnullop_poll,
-    fbadop_stat,
+    cryptof_fcntl,
+    cryptof_poll,
+    cryptof_stat,
     cryptof_close,
-    fnullop_kqfilter
+    cryptof_kqfilter
 };
 
 static struct	csession *csefind(struct fcrypt *, u_int);
@@ -323,6 +327,13 @@ bail:
 	return (error);
 }
 
+/* ARGSUSED */
+int
+cryptof_fcntl(struct file *fp, u_int cmd, void *data, struct proc *p)
+{
+  return (0);
+}
+
 static int
 cryptodev_op(struct csession *cse, struct crypt_op *cop, struct proc *p)
 {
@@ -341,7 +352,7 @@ cryptodev_op(struct csession *cse, struct crypt_op *cop, struct proc *p)
 	cse->uio.uio_resid = 0;
 	cse->uio.uio_segflg = UIO_SYSSPACE;
 	cse->uio.uio_rw = UIO_WRITE;
-	cse->uio.uio_procp = NULL;
+	cse->uio.uio_procp = p;
 	cse->uio.uio_iov = cse->iovec;
 	bzero(&cse->iovec, sizeof(cse->iovec));
 	cse->uio.uio_iov[0].iov_len = cop->len;
@@ -583,6 +594,29 @@ fail:
 		free(krp, M_XDATA);
 	}
 	return (error);
+}
+
+/* ARGSUSED */
+static int
+cryptof_poll(struct file *fp, int which, struct proc *p)
+{
+	return (0);
+}
+
+
+/* ARGSUSED */
+static int
+cryptof_kqfilter(struct file *fp, struct knote *kn)
+{
+
+	return (0);
+}
+
+/* ARGSUSED */
+static int
+cryptof_stat(struct file *fp, struct stat *sb, struct proc *p)
+{
+	return (EOPNOTSUPP);
 }
 
 /* ARGSUSED */

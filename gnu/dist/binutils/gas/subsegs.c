@@ -70,14 +70,14 @@ static segment_info_type *und_seg_info;
 
 #endif /* BFD_ASSEMBLER */
 
-static void subseg_set_rest (segT, subsegT);
+static void subseg_set_rest PARAMS ((segT, subsegT));
 
 static fragS dummy_frag;
 
 static frchainS absolute_frchain;
 
 void
-subsegs_begin (void)
+subsegs_begin ()
 {
   /* Check table(s) seg_name[], seg_N_TYPE[] is in correct order */
 #if !defined (MANY_SEGMENTS) && !defined (BFD_ASSEMBLER)
@@ -146,7 +146,9 @@ subsegs_begin (void)
  * segment context correct.
  */
 void
-subseg_change (register segT seg, register int subseg)
+subseg_change (seg, subseg)
+     register segT seg;
+     register int subseg;
 {
   now_seg = seg;
   now_subseg = subseg;
@@ -201,7 +203,9 @@ subseg_change (register segT seg, register int subseg)
 }
 
 static void
-subseg_set_rest (segT seg, subsegT subseg)
+subseg_set_rest (seg, subseg)
+     segT seg;
+     subsegT subseg;
 {
   register frchainS *frcP;	/* crawl frchain chain */
   register frchainS **lastPP;	/* address of last pointer */
@@ -397,7 +401,9 @@ subseg_set (seg, subseg)	/* begin assembly for a new sub-segment */
 #else /* BFD_ASSEMBLER */
 
 segT
-subseg_get (const char *segname, int force_new)
+subseg_get (segname, force_new)
+     const char *segname;
+     int force_new;
 {
   segT secptr;
   segment_info_type *seginfo;
@@ -415,10 +421,6 @@ subseg_get (const char *segname, int force_new)
     secptr = bfd_make_section_old_way (stdoutput, segname);
   else
     secptr = bfd_make_section_anyway (stdoutput, segname);
-
-#ifdef obj_sec_set_private_data
-  obj_sec_set_private_data (stdoutput, secptr);
-#endif
 
   seginfo = seg_info (secptr);
   if (! seginfo)
@@ -447,7 +449,9 @@ subseg_get (const char *segname, int force_new)
 }
 
 segT
-subseg_new (const char *segname, subsegT subseg)
+subseg_new (segname, subseg)
+     const char *segname;
+     subsegT subseg;
 {
   segT secptr;
   segment_info_type *seginfo;
@@ -463,7 +467,9 @@ subseg_new (const char *segname, subsegT subseg)
 /* Like subseg_new, except a new section is always created, even if
    a section with that name already exists.  */
 segT
-subseg_force_new (const char *segname, subsegT subseg)
+subseg_force_new (segname, subseg)
+     const char *segname;
+     subsegT subseg;
 {
   segT secptr;
   segment_info_type *seginfo;
@@ -477,7 +483,9 @@ subseg_force_new (const char *segname, subsegT subseg)
 }
 
 void
-subseg_set (segT secptr, subsegT subseg)
+subseg_set (secptr, subseg)
+     segT secptr;
+     subsegT subseg;
 {
   if (! (secptr == now_seg && subseg == now_subseg))
     subseg_set_rest (secptr, subseg);
@@ -491,7 +499,8 @@ subseg_set (segT secptr, subsegT subseg)
 /* Get the gas information we are storing for a section.  */
 
 segment_info_type *
-seg_info (segT sec)
+seg_info (sec)
+     segT sec;
 {
   if (sec == bfd_abs_section_ptr)
     return abs_seg_info;
@@ -502,7 +511,8 @@ seg_info (segT sec)
 }
 
 symbolS *
-section_symbol (segT sec)
+section_symbol (sec)
+     segT sec;
 {
   segment_info_type *seginfo = seg_info (sec);
   symbolS *s;
@@ -567,7 +577,8 @@ const char * const nontext_section_names[] = {
 #endif /* ! BFD_ASSEMBLER */
 
 int
-subseg_text_p (segT sec)
+subseg_text_p (sec)
+     segT sec;
 {
 #ifdef BFD_ASSEMBLER
   return (bfd_get_section_flags (stdoutput, sec) & SEC_CODE) != 0;
@@ -594,7 +605,8 @@ subseg_text_p (segT sec)
 }
 
 void
-subsegs_print_statistics (FILE *file)
+subsegs_print_statistics (file)
+     FILE *file;
 {
   frchainS *frchp;
   fprintf (file, "frag chains:\n");

@@ -1,4 +1,4 @@
-/*	$NetBSD: pecoff_exec.c,v 1.25 2004/07/18 04:36:42 kent Exp $	*/
+/*	$NetBSD: pecoff_exec.c,v 1.24.2.1 2004/07/19 09:02:16 tron Exp $	*/
 
 /*
  * Copyright (c) 2000 Masaru OKI
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pecoff_exec.c,v 1.25 2004/07/18 04:36:42 kent Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pecoff_exec.c,v 1.24.2.1 2004/07/19 09:02:16 tron Exp $");
 
 /*#define DEBUG_PECOFF*/
 

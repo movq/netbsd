@@ -1,4 +1,4 @@
-/*	$NetBSD: var.c,v 1.4 2004/11/13 19:16:10 he Exp $	*/
+/*	$NetBSD: var.c,v 1.1.1.1.2.1 2004/08/13 03:57:17 jmc Exp $	*/
 
 #include <ctype.h>
 
@@ -46,9 +46,9 @@ int line;
 			fprintf(stderr, "%d: { without }\n", line);
 			return NULL;
 		}
-	} else if (ISALPHA(*s)) {
+	} else if (isalpha(*s)) {
 		for (t = s + 1; *t != '\0'; t++)
-			if (!ISALPHA(*t) && !ISDIGIT(*t) && (*t != '_'))
+			if (!isalpha(*t) && !isdigit(*t) && (*t != '_'))
 				break;
 	} else {
 		fprintf(stderr, "%d: variables cannot start with '%c'\n",

@@ -1,4 +1,4 @@
-#	$NetBSD: defs.mk.in,v 1.9 2004/06/20 22:20:15 jmc Exp $
+#	$NetBSD: defs.mk.in,v 1.8.2.1 2004/06/22 07:20:43 tron Exp $
 
 COMPATOBJ:=	${.PARSEDIR}
 HOSTEXEEXT=	@EXEEXT@

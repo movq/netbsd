@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.251 2004/06/30 21:16:39 pk Exp $ */
+/*	$NetBSD: machdep.c,v 1.245.2.1 2004/04/29 04:19:33 jmc Exp $ */
 
 /*-
  * Copyright (c) 1996, 1997, 1998 The NetBSD Foundation, Inc.
@@ -78,7 +78,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.251 2004/06/30 21:16:39 pk Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.245.2.1 2004/04/29 04:19:33 jmc Exp $");
 
 #include "opt_compat_netbsd.h"
 #include "opt_compat_sunos.h"
@@ -297,14 +297,6 @@ cpu_startup()
 			 */
 			buf_setvalimit(12 * 256*1024);
 		}
-
-		/* Clip max data & stack to avoid running into the MMU hole */
-#if MAXDSIZ > 256*1024*1024
-		maxdmap = 256*1024*1024;
-#endif
-#if MAXSSIZ > 256*1024*1024
-		maxsmap = 256*1024*1024;
-#endif
 	}
 
 	/*
@@ -2138,40 +2130,13 @@ static void     sparc_bus_barrier __P(( bus_space_tag_t, bus_space_handle_t,
 					bus_size_t, bus_size_t, int));
 
 /*
- * Allocate a new bus tag and have it inherit the methods of the
- * given parent.
- */
-bus_space_tag_t
-bus_space_tag_alloc(parent, cookie)
-	bus_space_tag_t parent;
-	void *cookie;
-{
-	struct sparc_bus_space_tag *sbt;
-
-	sbt = malloc(sizeof(struct sparc_bus_space_tag),
-		     M_DEVBUF, M_NOWAIT|M_ZERO);
-	if (sbt == NULL)
-		return (NULL);
-
-	if (parent) {
-		memcpy(sbt, parent, sizeof(*sbt));
-		sbt->parent = parent;
-		sbt->ranges = NULL;
-		sbt->nranges = 0;
-	}
-
-	sbt->cookie = cookie;
-	return (sbt);
-}
-
-/*
  * Generic routine to translate an address using OpenPROM `ranges'.
  */
 int
-bus_space_translate_address_generic(struct openprom_range *ranges, int nranges,
-    bus_addr_t *bap)
+bus_translate_address_generic(struct openprom_range *ranges, int nranges,
+    bus_addr_t addr, bus_addr_t *addrp)
 {
-	int i, space = BUS_ADDR_IOSPACE(*bap);
+	int i, space = BUS_ADDR_IOSPACE(addr);
 
 	for (i = 0; i < nranges; i++) {
 		struct openprom_range *rp = &ranges[i];
@@ -2180,8 +2145,8 @@ bus_space_translate_address_generic(struct openprom_range *ranges, int nranges,
 			continue;
 
 		/* We've found the connection to the parent bus. */
-		*bap = BUS_ADDR(rp->or_parent_space,
-		    rp->or_parent_base + BUS_ADDR_PADDR(*bap));
+		*addrp = BUS_ADDR(rp->or_parent_space,
+		    rp->or_parent_base + BUS_ADDR_PADDR(addr));
 		return (0);
 	}
 
@@ -2199,28 +2164,17 @@ sparc_bus_map(t, ba, size, flags, va, hp)
 	vaddr_t v;
 	paddr_t pa;
 	unsigned int pmtype;
-	bus_space_tag_t pt;
 static	vaddr_t iobase;
 
-	/*
-	 * This base class bus map function knows about address range
-	 * translation so bus drivers that need no other special
-	 * handling can just keep this method in their tags.
-	 *
-	 * We expect to resolve range translations iteratively, but allow
-	 * for recursion just in case.
-	 */
-	while ((pt = t->parent) != NULL) {
-		if (t->ranges != NULL) {
-			int error;
+	if (t->ranges != NULL) {
+		bus_addr_t addr;
+		int error;
 
-			if ((error = bus_space_translate_address_generic(
-					t->ranges, t->nranges, &ba)) != 0)
-				return (error);
-		}
-		if (pt->sparc_bus_map != sparc_bus_map)
-			return (bus_space_map2(pt, ba, size, flags, va, hp));
-		t = pt;
+		error = bus_translate_address_generic(t->ranges, t->nranges,
+		    ba, &addr);
+		if (error)
+			return (error);
+		return (bus_space_map2(t->parent, addr, size, flags, va, hp));
 	}
 
 	if (iobase == 0)
@@ -2294,22 +2248,16 @@ sparc_bus_mmap(t, ba, off, prot, flags)
 {
 	u_int pmtype;
 	paddr_t pa;
-	bus_space_tag_t pt;
 
-	/*
-	 * Base class bus mmap function; see also sparc_bus_map
-	 */
-	while ((pt = t->parent) != NULL) {
-		if (t->ranges != NULL) {
-			int error;
+	if (t->ranges != NULL) {
+		bus_addr_t addr;
+		int error;
 
-			if ((error = bus_space_translate_address_generic(
-					t->ranges, t->nranges, &ba)) != 0)
-				return (-1);
-		}
-		if (pt->sparc_bus_mmap != sparc_bus_mmap)
-			return (bus_space_mmap(pt, ba, off, prot, flags));
-		t = pt;
+		error = bus_translate_address_generic(t->ranges, t->nranges,
+		    ba, &addr);
+		if (error)
+			return (-1);
+		return (bus_space_mmap(t->parent, addr, off, prot, flags));
 	}
 
 	pmtype = PMAP_IOENC(BUS_ADDR_IOSPACE(ba));
@@ -2380,58 +2328,6 @@ void sparc_bus_barrier (t, h, offset, size, flags)
 	return;
 }
 
-static u_int8_t
-sparc_bus_space_read_1(bus_space_tag_t t, bus_space_handle_t h, bus_size_t o)
-{
-	return bus_space_read_1_real(t, h, o);
-}
-
-static u_int16_t
-sparc_bus_space_read_2(bus_space_tag_t t, bus_space_handle_t h, bus_size_t o)
-{
-	return bus_space_read_2_real(t, h, o);
-}
-
-static u_int32_t
-sparc_bus_space_read_4(bus_space_tag_t t, bus_space_handle_t h, bus_size_t o)
-{
-	return bus_space_read_4_real(t, h, o);
-}
-
-static u_int64_t
-sparc_bus_space_read_8(bus_space_tag_t t, bus_space_handle_t h, bus_size_t o)
-{
-	return bus_space_read_8_real(t, h, o);
-}
-
-static void
-sparc_bus_space_write_1(bus_space_tag_t t, bus_space_handle_t h, bus_size_t o,
-			u_int8_t v)
-{
-	bus_space_write_1_real(t, h, o, v);
-}
-
-static void
-sparc_bus_space_write_2(bus_space_tag_t t, bus_space_handle_t h, bus_size_t o,
-			u_int16_t v)
-{
-	bus_space_write_2_real(t, h, o, v);
-}
-
-static void
-sparc_bus_space_write_4(bus_space_tag_t t, bus_space_handle_t h, bus_size_t o,
-			u_int32_t v)
-{
-	bus_space_write_4_real(t, h, o, v);
-}
-
-static void
-sparc_bus_space_write_8(bus_space_tag_t t, bus_space_handle_t h, bus_size_t o,
-			u_int64_t v)
-{
-	bus_space_write_8_real(t, h, o, v);
-}
-
 struct sparc_bus_space_tag mainbus_space_tag = {
 	NULL,				/* cookie */
 	NULL,				/* parent bus tag */
@@ -2443,13 +2339,14 @@ struct sparc_bus_space_tag mainbus_space_tag = {
 	sparc_bus_barrier,		/* bus_space_barrier */
 	sparc_bus_mmap,			/* bus_space_mmap */
 	sparc_mainbus_intr_establish,	/* bus_intr_establish */
-
-	sparc_bus_space_read_1,		/* bus_space_read_1 */
-	sparc_bus_space_read_2,		/* bus_space_read_2 */
-	sparc_bus_space_read_4,		/* bus_space_read_4 */
-	sparc_bus_space_read_8,		/* bus_space_read_8 */
-	sparc_bus_space_write_1,	/* bus_space_write_1 */
-	sparc_bus_space_write_2,	/* bus_space_write_2 */
-	sparc_bus_space_write_4,	/* bus_space_write_4 */
-	sparc_bus_space_write_8		/* bus_space_write_8 */
+#if __FULL_SPARC_BUS_SPACE
+	NULL,				/* read_1 */
+	NULL,				/* read_2 */
+	NULL,				/* read_4 */
+	NULL,				/* read_8 */
+	NULL,				/* write_1 */
+	NULL,				/* write_2 */
+	NULL,				/* write_4 */
+	NULL				/* write_8 */
+#endif
 };

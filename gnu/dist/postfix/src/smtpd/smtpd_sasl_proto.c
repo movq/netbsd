@@ -1,5 +1,3 @@
-/*	$NetBSD: smtpd_sasl_proto.c,v 1.1.1.3 2004/05/31 00:24:50 heas Exp $	*/
-
 /*++
 /* NAME
 /*	smtpd_sasl_proto 3
@@ -95,7 +93,6 @@
 
 #include <msg.h>
 #include <mymalloc.h>
-#include <stringops.h>
 
 /* Global library. */
 
@@ -189,10 +186,8 @@ char   *smtpd_sasl_mail_opt(SMTPD_STATE *state, const char *addr)
 	state->error_mask |= MAIL_ERROR_PROTOCOL;
 	return ("503 Error: multiple AUTH= options");
     }
-    if (strcmp(addr, "<>") != 0) {
+    if (strcmp(addr, "<>") != 0)
 	state->sasl_sender = mystrdup(addr);
-	printable(state->sasl_sender, '?');
-    }
     return (0);
 }
 
@@ -202,8 +197,8 @@ void    smtpd_sasl_mail_log(SMTPD_STATE *state)
 {
 #define IFELSE(e1,e2,e3) ((e1) ? (e2) : (e3))
 
-    msg_info("%s: client=%s%s%s%s%s%s%s",
-      state->queue_id ? state->queue_id : "NOQUEUE", FORWARD_NAMADDR(state),
+    msg_info("%s: client=%s[%s]%s%s%s%s%s%s",
+	     state->queue_id, state->name, state->addr,
 	     IFELSE(state->sasl_method, ", sasl_method=", ""),
 	     IFELSE(state->sasl_method, state->sasl_method, ""),
 	     IFELSE(state->sasl_username, ", sasl_username=", ""),

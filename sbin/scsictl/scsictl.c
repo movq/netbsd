@@ -1,4 +1,4 @@
-/*	$NetBSD: scsictl.c,v 1.24 2004/06/01 02:40:00 fair Exp $	*/
+/*	$NetBSD: scsictl.c,v 1.23.2.1 2004/06/01 04:40:34 jmc Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2002 The NetBSD Foundation, Inc.
@@ -43,7 +43,7 @@
 #include <sys/cdefs.h>
 
 #ifndef lint
-__RCSID("$NetBSD: scsictl.c,v 1.24 2004/06/01 02:40:00 fair Exp $");
+__RCSID("$NetBSD: scsictl.c,v 1.23.2.1 2004/06/01 04:40:34 jmc Exp $");
 #endif
 
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: init.c,v 1.68 2004/10/12 10:08:09 dan Exp $	*/
+/*	$NetBSD: init.c,v 1.63.2.1 2004/11/12 04:43:29 jmc Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -42,7 +42,7 @@ __COPYRIGHT("@(#) Copyright (c) 1991, 1993\n"
 #if 0
 static char sccsid[] = "@(#)init.c	8.2 (Berkeley) 4/28/95";
 #else
-__RCSID("$NetBSD: init.c,v 1.68 2004/10/12 10:08:09 dan Exp $");
+__RCSID("$NetBSD: init.c,v 1.63.2.1 2004/11/12 04:43:29 jmc Exp $");
 #endif
 #endif /* not lint */
 
@@ -90,7 +90,6 @@ __RCSID("$NetBSD: init.c,v 1.68 2004/10/12 10:08:09 dan Exp $");
 #define	STALL_TIMEOUT		30	/* wait N secs after warning */
 #define	DEATH_WATCH		10	/* wait N secs for procs to die */
 
-const struct timespec dtrtime = {.tv_sec = 0, .tv_nsec = 250000};
 
 #if defined(RESCUEDIR)
 #define	INIT_BSHELL	RESCUEDIR "/sh"
@@ -174,9 +173,7 @@ int getsecuritylevel(void);
 int setupargv(session_t *, struct ttyent *);
 int clang;
 
-#ifndef LETS_GET_SMALL
 void clear_session_logs(session_t *, int);
-#endif
 
 int start_session_db(void);
 void add_session(session_t *);
@@ -500,7 +497,6 @@ transition(state_t s)
 		s = (state_t)(*s)();
 }
 
-#ifndef LETS_GET_SMALL
 /*
  * Close out the accounting files for a login session.
  * NB: should send a message to the session logger to avoid blocking.
@@ -519,7 +515,6 @@ clear_session_logs(session_t *sp, int status)
 		logwtmp(line, "", "");
 #endif
 }
-#endif
 
 /*
  * Start a session and allocate a controlling terminal.
@@ -531,7 +526,7 @@ setctty(const char *name)
 	int fd;
 
 	(void) revoke(name);
-	nanosleep(&dtrtime, NULL);	/* leave DTR low for a bit */
+	sleep(2);			/* leave DTR low */
 	if ((fd = open(name, O_RDWR)) == -1) {
 		stall("can't open %s: %m", name);
 		_exit(1);
@@ -1021,10 +1016,8 @@ read_ttys(void)
 	 * There shouldn't be any, but just in case...
 	 */
 	for (sp = sessions; sp; sp = snext) {
-#ifndef LETS_GET_SMALL
 		if (sp->se_process)
 			clear_session_logs(sp, 0);
-#endif
 		snext = sp->se_next;
 		free_session(sp);
 	}

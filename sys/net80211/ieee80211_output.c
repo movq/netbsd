@@ -1,4 +1,4 @@
-/*	$NetBSD: ieee80211_output.c,v 1.17 2004/08/10 00:57:22 dyoung Exp $	*/
+/*	$NetBSD: ieee80211_output.c,v 1.11 2004/01/13 23:37:30 dyoung Exp $	*/
 /*-
  * Copyright (c) 2001 Atsushi Onoe
  * Copyright (c) 2002, 2003 Sam Leffler, Errno Consulting
@@ -33,9 +33,9 @@
 
 #include <sys/cdefs.h>
 #ifdef __FreeBSD__
-__FBSDID("$FreeBSD: src/sys/net80211/ieee80211_output.c,v 1.10 2004/04/02 23:25:39 sam Exp $");
+__FBSDID("$FreeBSD: src/sys/net80211/ieee80211_output.c,v 1.9 2003/10/17 23:15:30 sam Exp $");
 #else
-__KERNEL_RCSID(0, "$NetBSD: ieee80211_output.c,v 1.17 2004/08/10 00:57:22 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ieee80211_output.c,v 1.11 2004/01/13 23:37:30 dyoung Exp $");
 #endif
 
 #include "opt_inet.h"
@@ -90,24 +90,6 @@ __KERNEL_RCSID(0, "$NetBSD: ieee80211_output.c,v 1.17 2004/08/10 00:57:22 dyoung
 #endif
 #endif
 
-#ifdef IEEE80211_DEBUG
-/*
- * Decide if an outbound management frame should be
- * printed when debugging is enabled.  This filters some
- * of the less interesting frames that come frequently
- * (e.g. beacons).
- */
-static __inline int
-doprint(struct ieee80211com *ic, int subtype)
-{
-	switch (subtype) {
-	case IEEE80211_FC0_SUBTYPE_PROBE_RESP:
-		return (ic->ic_opmode == IEEE80211_M_IBSS);
-	}
-	return 1;
-}
-#endif
-
 /*
  * Send a management frame to the specified node.  The node pointer
  * must have a reference as the pointer will be passed to the driver
@@ -158,23 +140,27 @@ ieee80211_mgmt_output(struct ifnet *ifp, struct ieee80211_node *ni,
 
 	if ((m->m_flags & M_LINK0) != 0 && ni->ni_challenge != NULL) {
 		m->m_flags &= ~M_LINK0;
-		IEEE80211_DPRINTF(ic, IEEE80211_MSG_AUTH,
-			("%s: encrypting frame for %s\n",
-			__func__, ether_sprintf(wh->i_addr1)));
+		IEEE80211_DPRINTF(("%s: encrypting frame for %s\n", __func__,
+		    ether_sprintf(wh->i_addr1)));
 		wh->i_fc[1] |= IEEE80211_FC1_WEP;
 	}
+
+	if (ifp->if_flags & IFF_DEBUG) {
+		/* avoid to print too many frames */
+		if (ic->ic_opmode == IEEE80211_M_IBSS ||
 #ifdef IEEE80211_DEBUG
-	/* avoid printing too many frames */
-	if ((ieee80211_msg_debug(ic) && doprint(ic, type)) ||
-	    ieee80211_msg_dumppkts(ic)) {
-		if_printf(ifp, "sending %s to %s on channel %u\n",
-		    ieee80211_mgt_subtype_name[
-		    (type & IEEE80211_FC0_SUBTYPE_MASK)
-		    >> IEEE80211_FC0_SUBTYPE_SHIFT],
-		    ether_sprintf(ni->ni_macaddr),
-		    ieee80211_chan2ieee(ic, ni->ni_chan));
-	}
+		    ieee80211_debug > 1 ||
 #endif
+		    (type & IEEE80211_FC0_SUBTYPE_MASK) !=
+		    IEEE80211_FC0_SUBTYPE_PROBE_RESP)
+			if_printf(ifp, "sending %s to %s on channel %u\n",
+			    ieee80211_mgt_subtype_name[
+			    (type & IEEE80211_FC0_SUBTYPE_MASK)
+			    >> IEEE80211_FC0_SUBTYPE_SHIFT],
+			    ether_sprintf(ni->ni_macaddr),
+			    ieee80211_chan2ieee(ic, ni->ni_chan));
+	}
+
 	IF_ENQUEUE(&ic->ic_mgtq, m);
 	ifp->if_timer = 1;
 	(*ifp->if_start)(ifp);
@@ -208,14 +194,9 @@ ieee80211_encap(struct ifnet *ifp, struct mbuf *m, struct ieee80211_node **pni)
 	}
 	memcpy(&eh, mtod(m, caddr_t), sizeof(struct ether_header));
 
-	ni = ieee80211_find_txnode(ic, eh.ether_dhost);
-	if (ni == NULL) {
-		IEEE80211_DPRINTF(ic, IEEE80211_MSG_OUTPUT,
-			("%s: no node for dst %s, discard frame\n",
-			__func__, ether_sprintf(eh.ether_dhost)));
-		ic->ic_stats.is_tx_nonode++; 
+	if ((ni = ieee80211_find_txnode(ic, eh.ether_dhost)) == NULL)
 		goto bad;
-	}
+
 	ni->ni_inact = 0;
 
 	m_adj(m, sizeof(struct ether_header) - sizeof(struct llc));
@@ -260,15 +241,13 @@ ieee80211_encap(struct ifnet *ifp, struct mbuf *m, struct ieee80211_node **pni)
 	case IEEE80211_M_MONITOR:
 		goto bad;
 	}
-	if (ic->ic_flags & IEEE80211_F_PRIVACY)
-		wh->i_fc[1] |= IEEE80211_FC1_WEP;
 	*pni = ni;
 	return m;
 bad:
 	if (m != NULL)
 		m_freem(m);
-	if (ni != NULL)
-		ieee80211_release_node(ic, ni);
+	if (ni && ni != ic->ic_bss)
+		ieee80211_free_node(ic, ni);
 	*pni = NULL;
 	return NULL;
 }
@@ -364,7 +343,8 @@ ieee80211_send_mgmt(struct ieee80211com *ic, struct ieee80211_node *ni,
 	 * the xmit is complete all the way in the driver.  On error we
 	 * will remove our reference.
 	 */
-	ieee80211_ref_node(ni);
+	if (ni != ic->ic_bss)
+		ieee80211_ref_node(ni);
 	timer = 0;
 	switch (type) {
 	case IEEE80211_FC0_SUBTYPE_PROBE_REQ:
@@ -423,7 +403,7 @@ ieee80211_send_mgmt(struct ieee80211com *ic, struct ieee80211_node *ni,
 			capinfo = IEEE80211_CAPINFO_IBSS;
 		else
 			capinfo = IEEE80211_CAPINFO_ESS;
-		if (ic->ic_flags & IEEE80211_F_PRIVACY)
+		if (ic->ic_flags & IEEE80211_F_WEPON)
 			capinfo |= IEEE80211_CAPINFO_PRIVACY;
 		if ((ic->ic_flags & IEEE80211_F_SHPREAMBLE) &&
 		    IEEE80211_IS_CHAN_2GHZ(ni->ni_chan))
@@ -502,8 +482,8 @@ ieee80211_send_mgmt(struct ieee80211com *ic, struct ieee80211_node *ni,
 			memcpy(&((u_int16_t *)frm)[4], ni->ni_challenge,
 			    IEEE80211_CHALLENGE_LEN);
 			if (arg == IEEE80211_AUTH_SHARED_RESPONSE) {
-				IEEE80211_DPRINTF(ic, IEEE80211_MSG_AUTH,
-				    ("%s: request encrypt frame\n", __func__));
+				IEEE80211_DPRINTF((
+				    "%s: request encrypt frame\n", __func__));
 				m->m_flags |= M_LINK0; /* WEP-encrypt, please */
 			}
 		}
@@ -512,9 +492,9 @@ ieee80211_send_mgmt(struct ieee80211com *ic, struct ieee80211_node *ni,
 		break;
 
 	case IEEE80211_FC0_SUBTYPE_DEAUTH:
-		IEEE80211_DPRINTF(ic, IEEE80211_MSG_AUTH,
-			("send station %s deauthenticate (reason %d)\n",
-			ether_sprintf(ni->ni_macaddr), arg));
+		if (ifp->if_flags & IFF_DEBUG)
+			if_printf(ifp, "station %s deauthenticate (reason %d)\n",
+			    ether_sprintf(ni->ni_macaddr), arg);
 		MGETHDR(m, M_DONTWAIT, MT_DATA);
 		if (m == NULL)
 			senderr(ENOMEM, is_tx_nombuf);
@@ -551,7 +531,7 @@ ieee80211_send_mgmt(struct ieee80211com *ic, struct ieee80211_node *ni,
 			capinfo |= IEEE80211_CAPINFO_IBSS;
 		else		/* IEEE80211_M_STA */
 			capinfo |= IEEE80211_CAPINFO_ESS;
-		if (ic->ic_flags & IEEE80211_F_PRIVACY)
+		if (ic->ic_flags & IEEE80211_F_WEPON)
 			capinfo |= IEEE80211_CAPINFO_PRIVACY;
 		/*
 		 * NB: Some 11a AP's reject the request when
@@ -603,7 +583,7 @@ ieee80211_send_mgmt(struct ieee80211com *ic, struct ieee80211_node *ni,
 		frm = mtod(m, u_int8_t *);
 
 		capinfo = IEEE80211_CAPINFO_ESS;
-		if (ic->ic_flags & IEEE80211_F_PRIVACY)
+		if (ic->ic_flags & IEEE80211_F_WEPON)
 			capinfo |= IEEE80211_CAPINFO_PRIVACY;
 		if ((ic->ic_flags & IEEE80211_F_SHPREAMBLE) &&
 		    IEEE80211_IS_CHAN_2GHZ(ni->ni_chan))
@@ -624,9 +604,9 @@ ieee80211_send_mgmt(struct ieee80211com *ic, struct ieee80211_node *ni,
 		break;
 
 	case IEEE80211_FC0_SUBTYPE_DISASSOC:
-		IEEE80211_DPRINTF(ic, IEEE80211_MSG_ASSOC,
-			("send station %s disassociate (reason %d)\n",
-			ether_sprintf(ni->ni_macaddr), arg));
+		if (ifp->if_flags & IFF_DEBUG)
+			if_printf(ifp, "station %s disassociate (reason %d)\n",
+			    ether_sprintf(ni->ni_macaddr), arg);
 		MGETHDR(m, M_DONTWAIT, MT_DATA);
 		if (m == NULL)
 			senderr(ENOMEM, is_tx_nombuf);
@@ -636,8 +616,8 @@ ieee80211_send_mgmt(struct ieee80211com *ic, struct ieee80211_node *ni,
 		break;
 
 	default:
-		IEEE80211_DPRINTF(ic, IEEE80211_MSG_ANY,
-			("%s: invalid mgmt frame type %u\n", __func__, type));
+		IEEE80211_DPRINTF(("%s: invalid mgmt frame type %u\n",
+			__func__, type));
 		senderr(EINVAL, is_tx_unknownmgt);
 		/* NOTREACHED */
 	}
@@ -648,7 +628,8 @@ ieee80211_send_mgmt(struct ieee80211com *ic, struct ieee80211_node *ni,
 			ic->ic_mgt_timer = timer;
 	} else {
 bad:
-		ieee80211_release_node(ic, ni);
+		if (ni != ic->ic_bss)		/* remove ref we added */
+			ieee80211_free_node(ic, ni);
 	}
 	return ret;
 #undef senderr

@@ -1,4 +1,4 @@
-/*	$NetBSD: autri.c,v 1.22 2004/11/09 16:28:14 kent Exp $	*/
+/*	$NetBSD: autri.c,v 1.18.2.1 2004/09/22 20:58:12 jmc Exp $	*/
 
 /*
  * Copyright (c) 2001 SOMEYA Yoshihiko and KUROSAWA Takahiro.
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: autri.c,v 1.22 2004/11/09 16:28:14 kent Exp $");
+__KERNEL_RCSID(0, "$NetBSD: autri.c,v 1.18.2.1 2004/09/22 20:58:12 jmc Exp $");
 
 #include "midi.h"
 
@@ -145,7 +145,7 @@ int	autri_query_devinfo(void *addr, mixer_devinfo_t *dip);
 
 int     autri_get_portnum_by_name(struct autri_softc *, char *, char *, char *);
 
-static const struct audio_hw_if autri_hw_if = {
+static struct audio_hw_if autri_hw_if = {
         autri_open,
 	autri_close,
 	NULL,			/* drain */
@@ -182,7 +182,7 @@ int	autri_midi_open(void *, int, void (*)(void *, int),
 			   void (*)(void *), void *);
 int	autri_midi_output(void *, int);
 
-const struct midi_hw_if autri_midi_hw_if = {
+struct midi_hw_if autri_midi_hw_if = {
 	autri_midi_open,
 	autri_midi_close,
 	autri_midi_output,
@@ -494,7 +494,8 @@ autri_attach(struct device *parent, struct device *self, void *aux)
 	pci_intr_handle_t ih;
 	char const *intrstr;
 	char devinfo[256];
-	int r;
+	mixer_ctrl_t ctl;
+	int i, r;
 	u_int32_t reg;
 
 	aprint_naive(": Audio controller\n");
@@ -502,7 +503,7 @@ autri_attach(struct device *parent, struct device *self, void *aux)
 	sc->sc_devid = pa->pa_id;
 	sc->sc_class = pa->pa_class;
 
-	pci_devinfo(pa->pa_id, pa->pa_class, 0, devinfo, sizeof(devinfo));
+	pci_devinfo(pa->pa_id, pa->pa_class, 0, devinfo);
 	sc->sc_revision = PCI_REVISION(pa->pa_class);
 	aprint_normal(": %s (rev. 0x%02x)\n", devinfo, sc->sc_revision);
 
@@ -561,6 +562,38 @@ autri_attach(struct device *parent, struct device *self, void *aux)
 		    sc->sc_dev.dv_xname, r);
 		return;
 	}
+
+	/* disable mutes */
+	for (i = 0; i < 4; i++) {
+		static struct {
+			char *class, *device;
+		} d[] = {
+			{ AudioCoutputs, AudioNmaster},
+			{ AudioCinputs, AudioNdac},
+			{ AudioCinputs, AudioNcd},
+			{ AudioCrecord, AudioNvolume},
+		};
+
+		ctl.type = AUDIO_MIXER_ENUM;
+		ctl.un.ord = 0;
+
+#if 0
+		ctl.dev = sc->sc_codec.codec_if->vtbl->get_portnum_by_name(sc->sc_codec.codec_if,
+		    d[i].class, d[i].device, AudioNmute);
+#endif
+		ctl.dev = autri_get_portnum_by_name(sc,d[i].class, 
+						   d[i].device, AudioNmute);
+		autri_mixer_set_port(sc, &ctl);
+	}
+
+	/* set a reasonable default volume */
+	ctl.type = AUDIO_MIXER_VALUE;
+	ctl.un.value.num_channels = 2;
+	ctl.un.value.level[AUDIO_MIXER_LEVEL_LEFT] =
+	ctl.un.value.level[AUDIO_MIXER_LEVEL_RIGHT] = 127;
+
+	ctl.dev = autri_get_portnum_by_name(sc,AudioCoutputs,AudioNmaster,NULL);
+	autri_mixer_set_port(sc, &ctl);
 
 	audio_attach_mi(&autri_hw_if, sc, &sc->sc_dev);
 

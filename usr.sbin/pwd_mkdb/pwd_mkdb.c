@@ -1,4 +1,4 @@
-/*	$NetBSD: pwd_mkdb.c,v 1.29 2004/06/20 22:20:18 jmc Exp $	*/
+/*	$NetBSD: pwd_mkdb.c,v 1.28.2.1 2004/06/22 07:28:36 tron Exp $	*/
 
 /*
  * Copyright (c) 1991, 1993, 1994
@@ -65,7 +65,7 @@ __COPYRIGHT("@(#) Copyright (c) 2000\n\
 Copyright (c) 1991, 1993, 1994\n\
 	The Regents of the University of California.  All rights reserved.\n");
 __SCCSID("from: @(#)pwd_mkdb.c	8.5 (Berkeley) 4/20/94");
-__RCSID("$NetBSD: pwd_mkdb.c,v 1.29 2004/06/20 22:20:18 jmc Exp $");
+__RCSID("$NetBSD: pwd_mkdb.c,v 1.28.2.1 2004/06/22 07:28:36 tron Exp $");
 #endif /* not lint */
 
 #if HAVE_NBTOOL_CONFIG_H

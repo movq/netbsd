@@ -1,4 +1,4 @@
-/*	$NetBSD: compat_16_machdep.c,v 1.4 2004/05/20 11:36:43 martin Exp $ */
+/*	$NetBSD: compat_16_machdep.c,v 1.3 2003/10/27 00:16:24 christos Exp $ */
 
 /*-
  * Copyright (c) 1996, 1997, 1998 The NetBSD Foundation, Inc.
@@ -38,7 +38,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: compat_16_machdep.c,v 1.4 2004/05/20 11:36:43 martin Exp $");
+__KERNEL_RCSID(0, "$NetBSD: compat_16_machdep.c,v 1.3 2003/10/27 00:16:24 christos Exp $");
 
 #include "opt_compat_netbsd.h"
 
@@ -61,6 +61,8 @@ __KERNEL_RCSID(0, "$NetBSD: compat_16_machdep.c,v 1.4 2004/05/20 11:36:43 martin
 #ifdef DEBUG
 /* See sigdebug.h */
 #include <sparc64/sparc64/sigdebug.h>
+int sigdebug = 0x0;
+int sigpid = 0;
 #endif
 
 #ifdef __arch64__

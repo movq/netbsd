@@ -1,4 +1,4 @@
-/*	$NetBSD: if_ep_eisa.c,v 1.29 2004/08/23 05:50:02 thorpej Exp $	*/
+/*	$NetBSD: if_ep_eisa.c,v 1.28 2003/02/08 12:06:13 jdolecek Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -71,7 +71,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_ep_eisa.c,v 1.29 2004/08/23 05:50:02 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_ep_eisa.c,v 1.28 2003/02/08 12:06:13 jdolecek Exp $");
 
 #include "opt_inet.h"
 #include "opt_ns.h"
@@ -123,8 +123,8 @@ __KERNEL_RCSID(0, "$NetBSD: if_ep_eisa.c,v 1.29 2004/08/23 05:50:02 thorpej Exp 
 #include <dev/eisa/eisavar.h>
 #include <dev/eisa/eisadevs.h>
 
-static int	ep_eisa_match(struct device *, struct cfdata *, void *);
-static void	ep_eisa_attach(struct device *, struct device *, void *);
+int ep_eisa_match __P((struct device *, struct cfdata *, void *));
+void ep_eisa_attach __P((struct device *, struct device *, void *));
 
 CFATTACH_DECL(ep_eisa, sizeof(struct ep_softc),
     ep_eisa_match, ep_eisa_attach, NULL, NULL);
@@ -147,7 +147,7 @@ CFATTACH_DECL(ep_eisa, sizeof(struct ep_softc),
 #define EISA_ERROR	0x02
 #define EISA_ENABLE	0x01
 
-static const struct ep_eisa_product {
+struct ep_eisa_product {
 	const char	*eep_eisaid;	/* EISA ID */
 	u_short		eep_chipset;	/* 3Com chipset used */
 	int		eep_flags;	/* initial softc flags */
@@ -185,10 +185,13 @@ static const struct ep_eisa_product {
 	  0,				NULL },
 };
 
-static const struct ep_eisa_product *
-ep_eisa_lookup(const struct eisa_attach_args *ea)
+struct ep_eisa_product *ep_eisa_lookup __P((struct eisa_attach_args *));
+
+struct ep_eisa_product *
+ep_eisa_lookup(ea)
+	struct eisa_attach_args *ea;
 {
-	const struct ep_eisa_product *eep;
+	struct ep_eisa_product *eep;
 
 	for (eep = ep_eisa_products; eep->eep_name != NULL; eep++)
 		if (strcmp(ea->ea_idstring, eep->eep_eisaid) == 0)
@@ -197,8 +200,11 @@ ep_eisa_lookup(const struct eisa_attach_args *ea)
 	return (NULL);
 }
 
-static int
-ep_eisa_match(struct device *parent, struct cfdata *match, void *aux)
+int
+ep_eisa_match(parent, match, aux)
+	struct device *parent;
+	struct cfdata *match;
+	void *aux;
 {
 	struct eisa_attach_args *ea = aux;
 
@@ -209,8 +215,10 @@ ep_eisa_match(struct device *parent, struct cfdata *match, void *aux)
 	return (0);
 }
 
-static void
-ep_eisa_attach(struct device *parent, struct device *self, void *aux)
+void
+ep_eisa_attach(parent, self, aux)
+	struct device *parent, *self;
+	void *aux;
 {
 	struct ep_softc *sc = (void *)self;
 	struct eisa_attach_args *ea = aux;
@@ -219,7 +227,7 @@ ep_eisa_attach(struct device *parent, struct device *self, void *aux)
 	eisa_chipset_tag_t ec = ea->ea_ec;
 	eisa_intr_handle_t ih;
 	const char *intrstr;
-	const struct ep_eisa_product *eep;
+	struct ep_eisa_product *eep;
 	u_int irq;
 
 	/* Map i/o space. */

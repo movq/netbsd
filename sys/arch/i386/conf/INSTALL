@@ -1,4 +1,4 @@
-#	$NetBSD: INSTALL,v 1.256 2004/12/06 19:28:12 cube Exp $
+#	$NetBSD: INSTALL,v 1.238.2.6 2004/07/23 23:33:54 he Exp $
 #
 #	INSTALL - Installation kernel.
 #
@@ -33,6 +33,9 @@ options 	I686_CPU
 options 	MATH_EMULATE	# floating point emulation
 #options 	VM86		# virtual 8086 emulation
 #options 	USER_LDT	# user-settable LDT; used by WINE
+
+# Misc. i386-specific options
+#options 	XSERVER		# X server support in console drivers
 
 # This option allows you to force a serial console at the specified
 # I/O address.
@@ -99,7 +102,6 @@ options 	COMPAT_386BSD_MBRPART # recognize old partition ID
 #options 	COMPAT_IBCS2	# binary compatibility with SCO and ISC
 #options 	COMPAT_LINUX	# binary compatibility with Linux
 #options 	COMPAT_FREEBSD	# binary compatibility with FreeBSD
-options		COMPAT_BSDPTY	# /dev/[pt]ty?? ptys.
 
 # File systems
 file-system 	FFS		# UFS
@@ -131,7 +133,6 @@ options 	VNODE_OP_NOINLINE	# Not inlining vnode op calls saves mem
 options 	INET		# IP + ICMP + TCP + UDP
 options 	INET6		# IPv6
 #options 	MROUTING	# IP multicast routing
-#options 	PIM		# Protocol Independent Multicast
 #options 	NS		# XNS
 #options 	NSIP		# XNS tunneling over IP
 #options 	ISO,TPIP	# OSI
@@ -160,19 +161,9 @@ options 	INET6		# IPv6
 # builtin terminal emulations 
 #options 	WSEMUL_SUN		# sun terminal emulation
 options 	WSEMUL_VT100		# VT100 / VT220 emulation
-# customization of console and kernel output - see dev/wscons/wsdisplayvar.h
-#options 	WSDISPLAY_CUSTOM_OUTPUT	# color customization from wsconsctl(8)
-#options 	WS_DEFAULT_FG=WSCOL_WHITE
-#options 	WS_DEFAULT_BG=WSCOL_BLACK
-#options 	WS_DEFAULT_COLATTR="(0)"
-#options 	WS_DEFAULT_MONOATTR="(0)"
-#options 	WS_KERNEL_FG=WSCOL_GREEN
+# different kernel output - see dev/wscons/wsdisplayvar.h
+options 	WS_KERNEL_FG=WSCOL_WHITE
 #options 	WS_KERNEL_BG=WSCOL_BLACK
-#options 	WS_KERNEL_COLATTR=""
-#options 	WS_KERNEL_MONOATTR=""
-# customization of console border color
-#options 	WSDISPLAY_CUSTOM_BORDER	# border customization from wsconsctl(8)
-#options 	WSDISPLAY_BORDER_COLOR=WSCOL_BLUE	# default color
 # compatibility to other console drivers
 #options 	WSDISPLAY_COMPAT_PCVT           # emulate some ioctls
 #options 	WSDISPLAY_COMPAT_SYSCONS        # emulate some ioctls
@@ -419,12 +410,9 @@ cmdide* 	at pci? dev ? function ?	# CMD tech IDE controllers
 cypide* 	at pci? dev ? function ?	# Cypress IDE controllers
 geodeide* 	at pci? dev ? function ?	# AMD Geode IDE controllers
 hptide* 	at pci? dev ? function ?	# Triones/HighPoint IDE controllers
-iteide* 	at pci? dev ? function ?	# IT Express IDE controllers
-ixpide*		at pci? dev ? function ?	# ATI IXP IDE controllers
 optiide* 	at pci? dev ? function ?	# Opti IDE controllers
 piixide* 	at pci? dev ? function ?	# Intel IDE controllers
 pdcide* 	at pci? dev ? function ?	# Promise IDE controllers
-pdcsata*	at pci? dev ? function ?	# Promise SATA150 controllers
 rccide* 	at pci? dev ? function ?	# ServerWorks IDE controllers
 satalink*	at pci? dev ? function ?	# SiI SATALink controllers
 siside* 	at pci? dev ? function ?	# SiS IDE controllers
@@ -550,16 +538,14 @@ tr*	at isapnp?			# IBM/3COM TROPIC Token-Ring
 an*	at pcmcia? function ?		# Aironet PC4500/PC4800 (802.11)
 awi*	at pcmcia? function ?		# BayStack 650 (802.11FH)
 cnw*	at pcmcia? function ?		# Xircom/Netwave AirSurfer
-cs*	at pcmcia? function ?		# CS89xx Ethernet
 ep*	at pcmcia? function ?		# 3Com 3c589 and 3c562 Ethernet
 mbe*	at pcmcia? function ?		# MB8696x based Ethernet
 ne*	at pcmcia? function ?		# NE2000-compatible Ethernet
 ray* 	at pcmcia? function ?		# Raytheon Raylink (802.11)
 sm*	at pcmcia? function ?		# Megahertz Ethernet
 wi*	at pcmcia? function ?		# Lucent/Intersil WaveLan IEEE (802.11)
-xirc*	at pcmcia? function ?		# Xircom CreditCard Ethernet
-com*	at xirc?
-xi*	at xirc?
+xi*	at pcmcia? function ?		# Xircom CreditCard Ethernet
+
 mhzc*	at pcmcia? function ?		# Megahertz Ethernet/Modem combo cards
 com*	at mhzc?
 sm*	at mhzc?
@@ -661,9 +647,9 @@ umass*	at uhub? port ? configuration ? interface ?
 
 # USB Ethernet adapters
 aue* 	at uhub? port ?		# ADMtek AN986 Pegasus based adapters
-axe*	at uhub? port ?		# ASIX AX88172 based adapters
 cue* 	at uhub? port ?		# CATC USB-EL1201A based adapters
 kue* 	at uhub? port ?		# Kawasaki LSI KL5KUSB101B based adapters
+uax*	at uhub? port ?		# ASIX AX88172 based adapters
 url*	at uhub? port ?		# Realtek RTL8150L based adapters
 
 # Audio Devices

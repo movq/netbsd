@@ -1,6 +1,6 @@
 /* include/cdk_config.h.  Generated automatically by configure.  */
 /* 
- * $Id: cdk_config.h,v 1.2 2004/04/26 05:15:17 simonb Exp $
+ * $Id: cdk_config.h,v 1.1.1.1 2001/01/04 19:58:54 garbled Exp $
  */
 
 #ifndef CDK_CONFIG_H
@@ -26,6 +26,7 @@
 /* #undef NCURSES */
 #define RETSIGTYPE void
 #define STDC_HEADERS 1
+#define SYSTEM_NAME "netbsd1.4Y"
 #define TYPE_CHTYPE_IS_SCALAR 1
 
 #if !defined(HAVE_LSTAT) && !defined(lstat)

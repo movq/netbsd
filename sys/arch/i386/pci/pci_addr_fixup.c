@@ -1,4 +1,4 @@
-/*	$NetBSD: pci_addr_fixup.c,v 1.13 2004/04/11 06:00:26 kochi Exp $	*/
+/*	$NetBSD: pci_addr_fixup.c,v 1.12 2003/02/26 22:23:07 fvdl Exp $	*/
 
 /*-
  * Copyright (c) 2000 UCHIYAMA Yasushi.  All rights reserved.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pci_addr_fixup.c,v 1.13 2004/04/11 06:00:26 kochi Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pci_addr_fixup.c,v 1.12 2003/02/26 22:23:07 fvdl Exp $");
 
 #include "opt_pcibios.h"
 
@@ -49,15 +49,19 @@ __KERNEL_RCSID(0, "$NetBSD: pci_addr_fixup.c,v 1.13 2004/04/11 06:00:26 kochi Ex
 
 struct pciaddr pciaddr;
 
-void	pciaddr_resource_reserve(pci_chipset_tag_t, pcitag_t, void *context);
-int	pciaddr_do_resource_reserve(pci_chipset_tag_t, pcitag_t, int,
-    				    void *, int, bus_addr_t *, bus_size_t);
-void	pciaddr_resource_allocate(pci_chipset_tag_t, pcitag_t, void *context);
-int	pciaddr_do_resource_allocate(pci_chipset_tag_t, pcitag_t, int,
-				     void *, int, bus_addr_t *, bus_size_t);
-int	device_is_agp(pci_chipset_tag_t, pcitag_t);
+void	pciaddr_resource_reserve __P((pci_chipset_tag_t, pcitag_t,
+				      void *context));
+int	pciaddr_do_resource_reserve __P((pci_chipset_tag_t, pcitag_t, int,
+					 void *, int, bus_addr_t *,
+					 bus_size_t));
+void	pciaddr_resource_allocate __P((pci_chipset_tag_t, pcitag_t,
+				       void *context));
+int	pciaddr_do_resource_allocate __P((pci_chipset_tag_t, pcitag_t, int,
+					  void *, int,	bus_addr_t *,
+					  bus_size_t));
+int	device_is_agp __P((pci_chipset_tag_t, pcitag_t));
 
-int	device_is_agp(pci_chipset_tag_t, pcitag_t);
+int	device_is_agp __P((pci_chipset_tag_t, pcitag_t));
 
 #define PCIADDR_MEM_START	0x0
 #define PCIADDR_MEM_END		0xffffffff
@@ -69,7 +73,9 @@ int	device_is_agp(pci_chipset_tag_t, pcitag_t);
 #define PCIADDR_ISAMEM_RESERVE	(16 * 1024 * 1024)
 
 void
-pci_addr_fixup(pci_chipset_tag_t pc, int maxbus)
+pci_addr_fixup(pc, maxbus)
+	pci_chipset_tag_t pc;
+	int maxbus;
 {
 	extern paddr_t avail_end;
 #ifdef PCIBIOSVERBOSE
@@ -151,7 +157,10 @@ pci_addr_fixup(pci_chipset_tag_t pc, int maxbus)
 }
 
 void
-pciaddr_resource_reserve(pci_chipset_tag_t pc, pcitag_t tag, void *context)
+pciaddr_resource_reserve(pc, tag, context)
+	pci_chipset_tag_t pc;
+	pcitag_t tag;
+	void *context;
 {
 #ifdef PCIBIOSVERBOSE
 	if (pcibiosverbose)
@@ -163,7 +172,10 @@ pciaddr_resource_reserve(pci_chipset_tag_t pc, pcitag_t tag, void *context)
 }
 
 void
-pciaddr_resource_allocate(pci_chipset_tag_t pc, pcitag_t tag, void *context)
+pciaddr_resource_allocate(pc, tag, context)
+	pci_chipset_tag_t pc;
+	pcitag_t tag;
+	void *context;
 {
 #ifdef PCIBIOSVERBOSE
 	if (pcibiosverbose)
@@ -175,8 +187,11 @@ pciaddr_resource_allocate(pci_chipset_tag_t pc, pcitag_t tag, void *context)
 }
 
 void
-pciaddr_resource_manage(pci_chipset_tag_t pc, pcitag_t tag,
-    pciaddr_resource_manage_func_t func, void *ctx)
+pciaddr_resource_manage(pc, tag, func, ctx)
+	pci_chipset_tag_t pc;
+	pcitag_t tag;
+	pciaddr_resource_manage_func_t func;
+	void                          *ctx;
 {
 	pcireg_t val, mask;
 	bus_addr_t addr;
@@ -267,8 +282,13 @@ pciaddr_resource_manage(pci_chipset_tag_t pc, pcitag_t tag,
 }
 
 int
-pciaddr_do_resource_allocate(pci_chipset_tag_t pc, pcitag_t tag,
-    int mapreg, void *ctx, int type, bus_addr_t *addr, bus_size_t size)
+pciaddr_do_resource_allocate(pc, tag, mapreg, ctx, type, addr, size)
+	pci_chipset_tag_t pc;
+	pcitag_t tag;
+	void       *ctx;
+	int mapreg, type;
+	bus_addr_t *addr;
+	bus_size_t size;
 {
  	struct pciaddr *pciaddrmap = (struct pciaddr *)ctx;
 	bus_addr_t start;
@@ -324,8 +344,13 @@ pciaddr_do_resource_allocate(pci_chipset_tag_t pc, pcitag_t tag,
 }
 
 int
-pciaddr_do_resource_reserve(pci_chipset_tag_t pc, pcitag_t tag,
-    int mapreg, void *ctx, int type, bus_addr_t *addr, bus_size_t size)
+pciaddr_do_resource_reserve(pc, tag, mapreg, ctx, type, addr, size)
+	pci_chipset_tag_t pc;
+	pcitag_t tag;
+	void          *ctx;
+	int type, mapreg;
+	bus_addr_t *addr;
+	bus_size_t size;
 {
 	struct extent *ex;
 	struct pciaddr *pciaddrmap = (struct pciaddr *)ctx;
@@ -348,7 +373,8 @@ pciaddr_do_resource_reserve(pci_chipset_tag_t pc, pcitag_t tag,
 }
 
 bus_addr_t
-pciaddr_ioaddr(u_int32_t val)
+pciaddr_ioaddr(val)
+	u_int32_t val;
 {
 	return ((PCI_MAPREG_TYPE(val) == PCI_MAPREG_TYPE_MEM)
 		? PCI_MAPREG_MEM_ADDR(val)
@@ -356,7 +382,9 @@ pciaddr_ioaddr(u_int32_t val)
 }
 
 void
-pciaddr_print_devid(pci_chipset_tag_t pc, pcitag_t tag)
+pciaddr_print_devid(pc, tag)
+	pci_chipset_tag_t pc;
+	pcitag_t tag;
 {
 	int bus, device, function;	
 	pcireg_t id;
@@ -368,7 +396,9 @@ pciaddr_print_devid(pci_chipset_tag_t pc, pcitag_t tag)
 }
 
 int
-device_is_agp(pci_chipset_tag_t pc, pcitag_t tag)
+device_is_agp(pc, tag)
+	pci_chipset_tag_t pc;
+	pcitag_t tag;
 {
 	pcireg_t class, status, rval;
 	int off;
@@ -390,3 +420,4 @@ device_is_agp(pci_chipset_tag_t pc, pcitag_t tag)
 	}
 	return (0);
 }
+

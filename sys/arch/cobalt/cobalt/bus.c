@@ -1,4 +1,4 @@
-/*	$NetBSD: bus.c,v 1.19 2004/11/28 17:34:45 thorpej Exp $	*/
+/*	$NetBSD: bus.c,v 1.17 2003/07/15 01:29:22 lukem Exp $	*/
 
 /*
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -38,7 +38,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bus.c,v 1.19 2004/11/28 17:34:45 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bus.c,v 1.17 2003/07/15 01:29:22 lukem Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -157,12 +157,12 @@ _bus_dmamap_create(t, size, nsegments, maxsegsz, boundary, flags, dmamp)
 	size_t mapsize;
 
 	/*
-	 * Allocate and initialize the DMA map.  The end of the map
+	 * Allcoate and initialize the DMA map.  The end of the map
 	 * is a variable-sized array of segments, so we allocate enough
 	 * room for them in one shot.
 	 *
 	 * Note we don't preserve the WAITOK or NOWAIT flags.  Preservation
-	 * of ALLOCNOW notifies others that we've reserved these resources,
+	 * of ALLOCNOW notifes others that we've reserved these resources,
 	 * and they are not to be freed.
 	 *
 	 * The bus_dmamap_t includes one bus_dma_segment_t, hence
@@ -376,8 +376,6 @@ _bus_dmamap_load_mbuf(t, map, m0, flags)
 	seg = 0;
 	error = 0;
 	for (m = m0; m != NULL && error == 0; m = m->m_next) {
-		if (m->m_len == 0)
-			continue;
 		error = _bus_dmamap_load_buffer(map,
 		    m->m_data, m->m_len, NULL, flags, &lastaddr, &seg, first);
 		first = 0;

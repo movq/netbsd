@@ -1,9 +1,9 @@
-/*	$NetBSD: gayle_pcmcia.c,v 1.17 2004/09/13 15:14:12 drochner Exp $ */
+/*	$NetBSD: gayle_pcmcia.c,v 1.14 2002/10/02 04:55:49 thorpej Exp $ */
 
 /* public domain */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: gayle_pcmcia.c,v 1.17 2004/09/13 15:14:12 drochner Exp $");
+__KERNEL_RCSID(0, "$NetBSD: gayle_pcmcia.c,v 1.14 2002/10/02 04:55:49 thorpej Exp $");
 
 /* PCMCIA front-end driver for A1200's and A600's. */
 
@@ -71,7 +71,6 @@ static void *pcf_intr_establish(pcmcia_chipset_handle_t,
 static void pcf_intr_disestablish(pcmcia_chipset_handle_t, void *);
 static void pcf_socket_enable(pcmcia_chipset_handle_t);
 static void pcf_socket_disable(pcmcia_chipset_handle_t);
-static void pcf_socket_settype(pcmcia_chipset_handle_t, int);
 
 static bsr(pcmio_bsr1, u_int8_t);
 static bsw(pcmio_bsw1, u_int8_t);
@@ -91,8 +90,7 @@ struct pcmcia_chip_functions chip_functions = {
 	pcf_io_alloc,		pcf_io_free,
 	pcf_io_map,		pcf_io_unmap,
 	pcf_intr_establish,	pcf_intr_disestablish,
-	pcf_socket_enable,	pcf_socket_disable,
-	pcf_socket_settype
+	pcf_socket_enable,	pcf_socket_disable
 };
 
 struct amiga_bus_space_methods pcmio_bs_methods;
@@ -181,7 +179,7 @@ pccard_attach(struct device *parent, struct device *myself, void *aux)
 	paa.iobase = 0;
 	paa.iosize = 0;
 	self->devs[0].card =
-		config_found(myself, &paa, simple_devprint);
+		config_found_sm(myself, &paa, simple_devprint, NULL);
 	if (self->devs[0].card == NULL) {
 		printf("attach failed, config_found_sm() returned NULL\n");
 		return;
@@ -378,7 +376,7 @@ pcf_io_map(pcmcia_chipset_handle_t pch, int width, bus_addr_t offset,
 	struct pccard_slot *slot = (struct pccard_slot *) pch;
 
 	pcihp->iot = &slot->sc->io_space;
-	bus_space_map(pcihp->iot, offset, size, 0, &pcihp->ioh);
+	pcihp->ioh = offset;
 
 	*windowp = 0;		/* unused */
 	return 0;
@@ -431,9 +429,6 @@ pcf_socket_disable(pcmcia_chipset_handle_t pch)
 {
 }
 
-static void
-pcf_socket_settype(pcmcia_chipset_handle_t pch, int type) {
-}
 
 static u_int8_t
 pcmio_bsr1(bus_space_handle_t h, bus_size_t o)

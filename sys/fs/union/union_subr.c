@@ -1,4 +1,4 @@
-/*	$NetBSD: union_subr.c,v 1.11 2004/09/17 14:11:24 skrll Exp $	*/
+/*	$NetBSD: union_subr.c,v 1.8 2003/10/15 11:28:59 hannken Exp $	*/
 
 /*
  * Copyright (c) 1994
@@ -72,7 +72,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: union_subr.c,v 1.11 2004/09/17 14:11:24 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: union_subr.c,v 1.8 2003/10/15 11:28:59 hannken Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -123,7 +123,7 @@ union_init()
 
 	for (i = 0; i < NHASH; i++)
 		LIST_INIT(&unhead[i]);
-	memset(unvplock, 0, sizeof(unvplock));
+	memset((caddr_t) unvplock, 0, sizeof(unvplock));
 }
 
 /*
@@ -162,7 +162,7 @@ union_list_unlock(ix)
 
 	if (unvplock[ix] & UN_WANTED) {
 		unvplock[ix] &= ~UN_WANTED;
-		wakeup(&unvplock[ix]);
+		wakeup((caddr_t) &unvplock[ix]);
 	}
 }
 
@@ -637,7 +637,7 @@ union_copyfile(fvp, tvp, cred, p)
 	 * give up at the first sign of trouble.
 	 */
 
-	uio.uio_procp = NULL;
+	uio.uio_procp = p;
 	uio.uio_segflg = UIO_SYSSPACE;
 	uio.uio_offset = 0;
 
@@ -1240,7 +1240,7 @@ union_readdirhook(struct vnode **vpp, struct file *fp, struct proc *p)
 		return (error);
 	}
 	VOP_UNLOCK(lvp, 0);
-	fp->f_data = lvp;
+	fp->f_data = (caddr_t) lvp;
 	fp->f_offset = 0;
 	error = vn_close(vp, FREAD, fp->f_cred, p);
 	if (error)

@@ -1,5 +1,3 @@
-/*	$NetBSD: mail_stream.c,v 1.1.1.6 2004/05/31 00:24:32 heas Exp $	*/
-
 /*++
 /* NAME
 /*	mail_stream 3
@@ -86,7 +84,6 @@
 #include <unistd.h>
 #include <errno.h>
 #include <utime.h>
-#include <string.h>
 
 /* Utility library. */
 
@@ -320,7 +317,6 @@ MAIL_STREAM *mail_stream_command(const char *command)
     VSTREAM *stream;
     MAIL_STREAM *info;
     ARGV   *export_env;
-    int     status;
 
     if (id_buf == 0)
 	id_buf = vstring_alloc(10);
@@ -350,8 +346,7 @@ MAIL_STREAM *mail_stream_command(const char *command)
 
     if (attr_scan(stream, ATTR_FLAG_MISSING,
 		  ATTR_TYPE_STR, MAIL_ATTR_QUEUEID, id_buf, 0) != 1) {
-	if ((status = vstream_pclose(stream)) != 0)
-	    msg_warn("command \"%s\" exited with status %d", command, status);
+	vstream_pclose(stream);
 	return (0);
     } else {
 	info = (MAIL_STREAM *) mymalloc(sizeof(*info));

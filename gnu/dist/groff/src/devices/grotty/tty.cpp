@@ -1,8 +1,7 @@
-/*	$NetBSD: tty.cpp,v 1.4 2004/07/30 14:56:51 wiz Exp $	*/
+/*	$NetBSD: tty.cpp,v 1.3 2003/07/20 13:01:08 wiz Exp $	*/
 
 // -*- C++ -*-
-/* Copyright (C) 1989-2000, 2001, 2002, 2003, 2004
-   Free Software Foundation, Inc.
+/* Copyright (C) 1989-2000, 2001, 2002, 2003 Free Software Foundation, Inc.
      Written by James Clark (jjc@jclark.com)
 
 This file is part of groff.
@@ -25,10 +24,8 @@ Foundation, 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA. */
 #include "device.h"
 #include "ptable.h"
 
-typedef signed char schar;
-
-declare_ptable(schar)
-implement_ptable(schar)
+declare_ptable(char)
+implement_ptable(char)
 
 extern "C" const char *Version_string;
 
@@ -61,18 +58,13 @@ static int old_drawing_scheme = 0;
 static void update_options();
 static void usage(FILE *stream);
 
-static int hline_char = '-';
-static int vline_char = '|';
-
 enum {
   UNDERLINE_MODE = 0x01,
   BOLD_MODE = 0x02,
   VDRAW_MODE = 0x04,
   HDRAW_MODE = 0x08,
   CU_MODE = 0x10,
-  COLOR_CHANGE = 0x20,
-  START_LINE = 0x40,
-  END_LINE = 0x80
+  COLOR_CHANGE = 0x20
 };
 
 // Mode to use for bold-underlining.
@@ -123,14 +115,13 @@ tty_font *tty_font::load_tty_font(const char *s)
   const char *num = f->get_internal_name();
   long n;
   if (num != 0 && (n = strtol(num, 0, 0)) != 0)
-    f->mode = (unsigned char)(n & (BOLD_MODE|UNDERLINE_MODE));
+    f->mode = int(n & (BOLD_MODE|UNDERLINE_MODE));
   if (!underline_flag)
     f->mode &= ~UNDERLINE_MODE;
   if (!bold_flag)
     f->mode &= ~BOLD_MODE;
   if ((f->mode & (BOLD_MODE|UNDERLINE_MODE)) == (BOLD_MODE|UNDERLINE_MODE))
-    f->mode = (unsigned char)((f->mode & ~(BOLD_MODE|UNDERLINE_MODE))
-			      | bold_underline_mode);
+    f->mode = (f->mode & ~(BOLD_MODE|UNDERLINE_MODE)) | bold_underline_mode;
   return f;
 }
 
@@ -157,11 +148,11 @@ class glyph {
   static glyph *free_list;
 public:
   glyph *next;
-  int hpos;
+  short hpos;
   unsigned int code;
   unsigned char mode;
-  schar back_color_idx;
-  schar fore_color_idx;
+  char back_color_idx;
+  char fore_color_idx;
   void *operator new(size_t);
   void operator delete(void *);
   inline int draw_mode() { return mode & (VDRAW_MODE|HDRAW_MODE); }
@@ -200,19 +191,19 @@ class tty_printer : public printer {
   int nlines;
   int cached_v;
   int cached_vpos;
-  schar curr_fore_idx;
-  schar curr_back_idx;
+  signed char curr_fore_idx;
+  signed char curr_back_idx;
   int is_underline;
   int is_bold;
   int cu_flag;
-  PTABLE(schar) tty_colors;
+  PTABLE(char) tty_colors;
   void make_underline();
   void make_bold(unsigned int);
-  schar color_to_idx(color *col);
+  signed char color_to_idx(color *col);
   void add_char(unsigned int, int, int, color *, color *, unsigned char);
   char *make_rgb_string(unsigned int, unsigned int, unsigned int);
-  int tty_color(unsigned int, unsigned int, unsigned int, schar *,
-		schar = DEFAULT_COLOR_IDX);
+  int tty_color(unsigned int, unsigned int, unsigned int, char *,
+		signed char = DEFAULT_COLOR_IDX);
 public:
   tty_printer(const char *device);
   ~tty_printer();
@@ -222,7 +213,7 @@ public:
   void change_color(const environment * const env);
   void change_fill_color(const environment * const env);
   void put_char(unsigned int);
-  void put_color(schar, int);
+  void put_color(signed char, int);
   void begin_page(int) { }
   void end_page(int page_length);
   font *make_font(const char *);
@@ -252,14 +243,14 @@ char *tty_printer::make_rgb_string(unsigned int r,
 
 int tty_printer::tty_color(unsigned int r,
 			   unsigned int g,
-			   unsigned int b, schar *idx, schar value)
+			   unsigned int b, char *idx, signed char value)
 {
   int unknown_color = 0;
   char *s = make_rgb_string(r, g, b);
-  schar *i = tty_colors.lookup(s);
+  char *i = tty_colors.lookup(s);
   if (!i) {
     unknown_color = 1;
-    i = new schar[1];
+    i = new char[1];
     *i = value;
     tty_colors.define(s, i);
   }
@@ -268,14 +259,10 @@ int tty_printer::tty_color(unsigned int r,
   return unknown_color;
 }
 
-tty_printer::tty_printer(const char *dev) : cached_v(0)
+tty_printer::tty_printer(const char *device) : cached_v(0)
 {
-  is_utf8 = !strcmp(dev, "utf8");
-  if (is_utf8) {
-    hline_char = 0x2500;
-    vline_char = 0x2502;
-  }
-  schar dummy;
+  is_utf8 = !strcmp(device, "utf8");
+  char dummy;
   // black, white
   (void)tty_color(0, 0, 0, &dummy, 0);
   (void)tty_color(color::MAX_COLOR_VAL,
@@ -333,13 +320,13 @@ void tty_printer::make_bold(unsigned int c)
   }
 }
 
-schar tty_printer::color_to_idx(color *col)
+signed char tty_printer::color_to_idx(color *col)
 {
   if (col->is_default())
     return DEFAULT_COLOR_IDX;
   unsigned int r, g, b;
   col->get_rgb(&r, &g, &b);
-  schar idx;
+  char idx;
   if (tty_color(r, g, b, &idx)) {
     char *s = col->print_color();
     error("Unknown color (%1) mapped to default", s);
@@ -486,22 +473,10 @@ void tty_printer::draw(int code, int *p, int np, const environment *env)
       v += len;
       len = -len;
     }
-    if (len >= 0 && len <= font::vert)
-      add_char(vline_char, env->hpos, v, env->col, env->fill,
-	       VDRAW_MODE|START_LINE|END_LINE);
-    else {
-      add_char(vline_char, env->hpos, v, env->col, env->fill,
-	       VDRAW_MODE|START_LINE);
+    while (len >= 0) {
+      add_char('|', env->hpos, v, env->col, env->fill, VDRAW_MODE);
       len -= font::vert;
       v += font::vert;
-      while (len > 0) {
-	add_char(vline_char, env->hpos, v, env->col, env->fill,
-		 VDRAW_MODE|START_LINE|END_LINE);
-	len -= font::vert;
-	v += font::vert;
-      }
-      add_char(vline_char, env->hpos, v, env->col, env->fill,
-	       VDRAW_MODE|END_LINE);
     }
   }
   if (p[1] == 0) {
@@ -512,22 +487,10 @@ void tty_printer::draw(int code, int *p, int np, const environment *env)
       h += len;
       len = -len;
     }
-    if (len >= 0 && len <= font::hor)
-      add_char(hline_char, h, env->vpos, env->col, env->fill,
-	       HDRAW_MODE|START_LINE|END_LINE);
-    else {
-      add_char(hline_char, h, env->vpos, env->col, env->fill,
-	       HDRAW_MODE|START_LINE);
+    while (len >= 0) {
+      add_char('-', h, env->vpos, env->col, env->fill, HDRAW_MODE);
       len -= font::hor;
       h += font::hor;
-      while (len > 0) {
-	add_char(hline_char, h, env->vpos, env->col, env->fill,
-		 HDRAW_MODE|START_LINE|END_LINE);
-	len -= font::hor;
-	h += font::hor;
-      }
-      add_char(hline_char, h, env->vpos, env->col, env->fill,
-	       HDRAW_MODE|END_LINE);
     }
   }
 }
@@ -559,7 +522,7 @@ void tty_printer::put_char(unsigned int wc)
     putchar(wc);
 }
 
-void tty_printer::put_color(schar color_index, int back)
+void tty_printer::put_color(signed char color_index, int back)
 {
   if (color_index == DEFAULT_COLOR_IDX) {
     putstring(SGR_DEFAULT);
@@ -588,20 +551,6 @@ void tty_printer::put_color(schar color_index, int back)
     putchar('m');
   }
 }
-
-// The possible Unicode combinations for crossing characters.
-//
-// `  ' = 0, ` -' = 4, `- ' = 8, `--' = 12,
-//
-// `  ' = 0, ` ' = 1, `|' = 2, `|' = 3
-//            |                 |
-
-static int crossings[4*4] = {
-  0x0000, 0x2577, 0x2575, 0x2502,
-  0x2576, 0x250C, 0x2514, 0x251C,
-  0x2574, 0x2510, 0x2518, 0x2524,
-  0x2500, 0x252C, 0x2534, 0x253C
-};
 
 void tty_printer::end_page(int page_length)
 {
@@ -650,12 +599,7 @@ void tty_printer::end_page(int page_length)
       if (nextp && p->hpos == nextp->hpos) {
 	if (p->draw_mode() == HDRAW_MODE &&
 	    nextp->draw_mode() == VDRAW_MODE) {
-	  if (is_utf8)
-	    nextp->code =
-	      crossings[((p->mode & (START_LINE|END_LINE)) >> 4)
-			+ ((nextp->mode & (START_LINE|END_LINE)) >> 6)];
-	  else
-	    nextp->code = '+';
+	  nextp->code = '+';
 	  continue;
 	}
 	if (p->draw_mode() != 0 && p->draw_mode() == nextp->draw_mode()) {
@@ -809,7 +753,7 @@ int main(int argc, char **argv)
     { "version", no_argument, 0, 'v' },
     { NULL, 0, 0, 0 }
   };
-  while ((c = getopt_long(argc, argv, "bBcdfF:hiI:oruUv", long_options, NULL))
+  while ((c = getopt_long(argc, argv, "bBcdfF:hioruUv", long_options, NULL))
 	 != EOF)
     switch(c) {
     case 'v':
@@ -819,9 +763,6 @@ int main(int argc, char **argv)
     case 'i':
       // Use italic font instead of underlining.
       italic_flag_option = 1;
-      break;
-    case 'I':
-      // ignore include search path
       break;
     case 'b':
       // Do not embolden by overstriking.

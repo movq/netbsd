@@ -9,7 +9,7 @@
 #ifdef HAVE_CONFIG_H
 #include <config.h>
 __RCSID("$Heimdal: xnlock.c,v 1.93.2.4 2004/09/08 09:16:00 joda Exp $"
-        "$NetBSD: xnlock.c,v 1.1.1.9 2004/09/14 07:46:24 lha Exp $");
+        "$NetBSD: xnlock.c,v 1.1.1.7.2.2 2004/09/17 04:35:36 jmc Exp $");
 #endif
 
 #include <stdio.h>

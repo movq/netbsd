@@ -1,4 +1,4 @@
-/*	$NetBSD: cpu.c,v 1.9 2004/12/13 02:14:13 chs Exp $	*/
+/*	$NetBSD: cpu.c,v 1.7 2003/11/23 17:09:29 chs Exp $	*/
 
 /*	$OpenBSD: cpu.c,v 1.8 2000/08/15 20:38:24 mickey Exp $	*/
 
@@ -33,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cpu.c,v 1.9 2004/12/13 02:14:13 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cpu.c,v 1.7 2003/11/23 17:09:29 chs Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -62,8 +62,6 @@ void	cpuattach(struct device *, struct device *, void *);
 CFATTACH_DECL(cpu, sizeof(struct cpu_softc),
     cpumatch, cpuattach, NULL, NULL);
 
-static int cpu_attached;
-
 int
 cpumatch(struct device *parent, struct cfdata *cf, void *aux)
 {
@@ -71,7 +69,7 @@ cpumatch(struct device *parent, struct cfdata *cf, void *aux)
 
 	/* there will be only one for now XXX */
 	/* probe any 1.0, 1.1 or 2.0 */
-	if (cpu_attached ||
+	if (cf->cf_unit > 0 ||
 	    ca->ca_type.iodc_type != HPPA_TYPE_NPROC ||
 	    ca->ca_type.iodc_sv_model != HPPA_NPROC_HPPA)
 		return 0;
@@ -93,8 +91,6 @@ cpuattach(struct device *parent, struct device *self, void *aux)
 	char c;
 	const char lvls[4][4] = { "0", "1", "1.5", "2" };
 	u_int mhz = 100 * cpu_ticksnum / cpu_ticksdenom;
-
-	cpu_attached = 1;
 
 	/* Print the CPU chip name, nickname, and rev. */
 	printf(": %s", hppa_cpu_info->hppa_cpu_info_chip_name);
@@ -177,5 +173,5 @@ cpuattach(struct device *parent, struct device *self, void *aux)
 	 * or below 27.
 	 */
 	int_reg_cpu.int_reg_allocatable_bits =
-		(1 << 28) | (1 << 27) | (1 << 26);
+		(1 << 28) | (1 << 27);
 }

@@ -1,7 +1,7 @@
-/*	$NetBSD: keyboard.c,v 1.6 2004/07/30 15:22:42 jmmv Exp $ */
+/*	$NetBSD: keyboard.c,v 1.3.4.2 2004/07/02 17:50:13 he Exp $ */
 
 /*-
- * Copyright (c) 1998, 2004 The NetBSD Foundation, Inc.
+ * Copyright (c) 1998 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation

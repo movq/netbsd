@@ -1,4 +1,4 @@
-/*	$NetBSD: printjob.c,v 1.41 2004/10/30 08:44:26 dsl Exp $	*/
+/*	$NetBSD: printjob.c,v 1.39 2003/08/07 11:25:28 agc Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -41,7 +41,7 @@ __COPYRIGHT("@(#) Copyright (c) 1983, 1993\n\
 #if 0
 static char sccsid[] = "@(#)printjob.c	8.7 (Berkeley) 5/10/95";
 #else
-__RCSID("$NetBSD: printjob.c,v 1.41 2004/10/30 08:44:26 dsl Exp $");
+__RCSID("$NetBSD: printjob.c,v 1.39 2003/08/07 11:25:28 agc Exp $");
 #endif
 #endif /* not lint */
 
@@ -61,7 +61,6 @@ __RCSID("$NetBSD: printjob.c,v 1.41 2004/10/30 08:44:26 dsl Exp $");
 
 #include <pwd.h>
 #include <unistd.h>
-#include <sys/uio.h>
 #include <signal.h>
 #include <termios.h>
 #include <syslog.h>
@@ -1088,7 +1087,7 @@ sendmail(char *user, int bombed)
 	struct stat stb;
 	FILE *fp;
 
-	if (user[0] == '-' || user[0] == '/' || !isprint((unsigned char)user[0]))
+	if (user[0] == '-' || user[0] == '/' || !isprint(user[0]))
 		return;
 	pipe(p);
 	if ((s = dofork(DORETURN)) == 0) {		/* child */
@@ -1618,7 +1617,6 @@ pstatus(const char *msg, ...)
 	int fd;
 	char *buf;
 	va_list ap;
-	struct iovec iov[2];
 
 	umask(0);
 	fd = open(ST, O_WRONLY|O_CREAT, 0664);
@@ -1630,12 +1628,9 @@ pstatus(const char *msg, ...)
 	va_start(ap, msg);
 	(void)vasprintf(&buf, msg, ap);
 	va_end(ap);
-
-	iov[0].iov_base = buf;
-	iov[0].iov_len = strlen(buf);
-	iov[1].iov_base = "\n";
-	iov[1].iov_len = 1;
-	(void)writev(fd, iov, 2);
+	/* XXX writev */
+	(void)write(fd, buf, strlen(buf));
+	(void)write(fd, "\n", 2);
 	(void)close(fd);
 	free(buf);
 }

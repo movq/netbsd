@@ -1,5 +1,3 @@
-/*	$NetBSD: flush_clnt.h,v 1.1.1.4 2004/05/31 00:24:30 heas Exp $	*/
-
 #ifndef _FLUSH_CLNT_H_INCLUDED_
 #define _FLUSH_CLNT_H_INCLUDED_
 
@@ -16,7 +14,6 @@
  /*
   * External interface.
   */
-extern void flush_init(void);
 extern int flush_add(const char *, const char *);
 extern int flush_send(const char *);
 extern int flush_refresh(void);

@@ -1,4 +1,4 @@
-/*	$NetBSD: nd6.c,v 1.91 2004/12/04 16:10:25 peter Exp $	*/
+/*	$NetBSD: nd6.c,v 1.89 2004/02/11 10:37:33 itojun Exp $	*/
 /*	$KAME: nd6.c,v 1.279 2002/06/08 11:16:51 itojun Exp $	*/
 
 /*
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nd6.c,v 1.91 2004/12/04 16:10:25 peter Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nd6.c,v 1.89 2004/02/11 10:37:33 itojun Exp $");
 
 #include "opt_ipsec.h"
 
@@ -68,6 +68,9 @@ __KERNEL_RCSID(0, "$NetBSD: nd6.c,v 1.91 2004/12/04 16:10:25 peter Exp $");
 #ifdef IPSEC
 #include <netinet6/ipsec.h>
 #endif
+
+#include "loop.h"
+extern struct ifnet loif[NLOOP];
 
 #include <net/net_osdep.h>
 
@@ -1174,7 +1177,7 @@ nd6_rtrequest(req, rt, info)
 				SDL(gate)->sdl_alen = ifp->if_addrlen;
 			}
 			if (nd6_useloopback) {
-				rt->rt_ifp = lo0ifp;	/* XXX */
+				rt->rt_ifp = &loif[0];	/* XXX */
 				/*
 				 * Make sure rt_ifa be equal to the ifaddr
 				 * corresponding to the address.
@@ -1751,8 +1754,11 @@ nd6_output(ifp, origifp, m0, dst, rt0)
 			    1)) != NULL)
 			{
 				rt->rt_refcnt--;
-				if (rt->rt_ifp != ifp)
-					senderr(EHOSTUNREACH);
+				if (rt->rt_ifp != ifp) {
+					/* XXX: loop care? */
+					return nd6_output(ifp, origifp, m0,
+					    dst, rt);
+				}
 			} else
 				senderr(EHOSTUNREACH);
 		}

@@ -1,4 +1,4 @@
-/*	$NetBSD: ffs.c,v 1.32 2004/10/12 03:28:30 jmc Exp $	*/
+/*	$NetBSD: ffs.c,v 1.25.2.3 2004/06/25 02:34:44 jmc Exp $	*/
 
 /*
  * Copyright (c) 2001 Wasabi Systems, Inc.
@@ -71,7 +71,7 @@
 
 #include <sys/cdefs.h>
 #if defined(__RCSID) && !defined(__lint)
-__RCSID("$NetBSD: ffs.c,v 1.32 2004/10/12 03:28:30 jmc Exp $");
+__RCSID("$NetBSD: ffs.c,v 1.25.2.3 2004/06/25 02:34:44 jmc Exp $");
 #endif	/* !__lint */
 
 #include <sys/param.h>
@@ -90,10 +90,6 @@ __RCSID("$NetBSD: ffs.c,v 1.32 2004/10/12 03:28:30 jmc Exp $");
 #include <unistd.h>
 
 #include "makefs.h"
-
-#if HAVE_STRUCT_STATVFS_F_IOSIZE && HAVE_FSTATVFS
-#include <sys/statvfs.h>
-#endif
 
 #include <ufs/ufs/dinode.h>
 #include <ufs/ufs/dir.h>
@@ -221,8 +217,7 @@ ffs_parse_opts(const char *option, fsinfo_t *fsopts)
 void
 ffs_makefs(const char *image, const char *dir, fsnode *root, fsinfo_t *fsopts)
 {
-	struct fs	*superblock;
-	struct timeval	start;
+	struct timeval start;
 
 	assert(image != NULL);
 	assert(dir != NULL);
@@ -263,15 +258,9 @@ ffs_makefs(const char *image, const char *dir, fsnode *root, fsinfo_t *fsopts)
 	if (debug & DEBUG_FS_MAKEFS)
 		bcleanup();
 
-		/* update various superblock parameters */
-	superblock = fsopts->superblock;
-	superblock->fs_fmod = 0;
-	superblock->fs_old_cstotal.cs_ndir   = superblock->fs_cstotal.cs_ndir;
-	superblock->fs_old_cstotal.cs_nbfree = superblock->fs_cstotal.cs_nbfree;
-	superblock->fs_old_cstotal.cs_nifree = superblock->fs_cstotal.cs_nifree;
-	superblock->fs_old_cstotal.cs_nffree = superblock->fs_cstotal.cs_nffree;
-
 		/* write out superblock; image is now complete */
+
+	((struct fs *)fsopts->superblock)->fs_fmod = 0;
 	ffs_write_superblock(fsopts->superblock, fsopts);
 	if (close(fsopts->fd) == -1)
 		err(1, "Closing `%s'", image);
@@ -426,8 +415,8 @@ ffs_dump_fsinfo(fsinfo_t *f)
 static int
 ffs_create_image(const char *image, fsinfo_t *fsopts)
 {
-#if HAVE_STRUCT_STATVFS_F_IOSIZE && HAVE_FSTATVFS
-	struct statvfs	sfs;
+#if HAVE_STRUCT_STATFS_F_IOSIZE
+	struct statfs	sfs;
 #endif
 	struct fs	*fs;
 	char	*buf;
@@ -445,12 +434,12 @@ ffs_create_image(const char *image, fsinfo_t *fsopts)
 	}
 
 		/* zero image */
-#if HAVE_STRUCT_STATVFS_F_IOSIZE && HAVE_FSTATVFS
-	if (fstatvfs(fsopts->fd, &sfs) == -1) {
+#if HAVE_STRUCT_STATFS_F_IOSIZE
+	if (fstatfs(fsopts->fd, &sfs) == -1) {
 #endif
 		bufsize = 8192;
-#if HAVE_STRUCT_STATVFS_F_IOSIZE && HAVE_FSTATVFS
-		warn("can't fstatvfs `%s', using default %d byte chunk",
+#if HAVE_STRUCT_STATFS_F_IOSIZE
+		warn("can't fstatfs `%s', using default %d byte chunk",
 		    image, bufsize);
 	} else
 		bufsize = sfs.f_iosize;

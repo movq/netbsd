@@ -1,4 +1,4 @@
-/*	$NetBSD: twevar.h,v 1.22 2004/09/13 12:55:48 drochner Exp $	*/
+/*	$NetBSD: twevar.h,v 1.20.2.1 2004/05/30 07:10:47 tron Exp $	*/
 
 /*-
  * Copyright (c) 2000, 2001, 2002 The NetBSD Foundation, Inc.
@@ -38,6 +38,8 @@
 
 #ifndef _PCI_TWEVAR_H_
 #define	_PCI_TWEVAR_H_
+
+#include "locators.h"
 
 #define	TWE_MAX_QUEUECNT	129
 
@@ -118,6 +120,8 @@ struct twe_ccb {
 struct twe_attach_args {
 	int		twea_unit;
 };
+
+#define	tweacf_unit	cf_loc[TWECF_UNIT]
 
 struct twe_ccb *twe_ccb_alloc(struct twe_softc *, int);
 struct twe_ccb *twe_ccb_alloc_wait(struct twe_softc *, int);

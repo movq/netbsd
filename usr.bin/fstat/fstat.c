@@ -1,4 +1,4 @@
-/*	$NetBSD: fstat.c,v 1.71 2004/12/14 03:09:24 atatat Exp $	*/
+/*	$NetBSD: fstat.c,v 1.65.2.1 2004/04/02 14:54:17 tron Exp $	*/
 
 /*-
  * Copyright (c) 1988, 1993
@@ -39,7 +39,7 @@ __COPYRIGHT("@(#) Copyright (c) 1988, 1993\n\
 #if 0
 static char sccsid[] = "@(#)fstat.c	8.3 (Berkeley) 5/2/95";
 #else
-__RCSID("$NetBSD: fstat.c,v 1.71 2004/12/14 03:09:24 atatat Exp $");
+__RCSID("$NetBSD: fstat.c,v 1.65.2.1 2004/04/02 14:54:17 tron Exp $");
 #endif
 #endif /* not lint */
 
@@ -199,7 +199,7 @@ main(argc, argv)
 		case 'p':
 			if (pflg++)
 				usage();
-			if (!isdigit((unsigned char)*optarg)) {
+			if (!isdigit(*optarg)) {
 				warnx("-p requires a process id");
 				usage();
 			}
@@ -444,10 +444,6 @@ vfilestat(vp, fsp)
 			if (!ntfs_filestat(vp, fsp))
 				badtype = "error";
 			break;
-		case VT_PTYFS:
-			if (!ptyfs_filestat(vp, fsp))
-				badtype = "error";
-			break;
 		case VT_NULL:
 		case VT_OVERLAY:
 		case VT_UMAP:
@@ -510,7 +506,7 @@ vtrans(vp, i, flag)
 		(void)snprintf(mode, sizeof mode, "%o", fst.mode);
 	else
 		strmode(fst.mode, mode);
-	(void)printf(" %7lu %*s", (unsigned long)fst.fileid, nflg ? 5 : 10, mode);
+	(void)printf(" %7ld %*s", (long)fst.fileid, nflg ? 5 : 10, mode);
 	switch (vn.v_type) {
 	case VBLK:
 	case VCHR: {
@@ -691,7 +687,7 @@ layer_filestat(vp, fsp)
 		return ("error");
 	}
 	if ((badtype = vfilestat(&vn, fsp)) == NULL)
-		fsp->fsid = mount.mnt_stat.f_fsidx.__fsid_val[0];
+		fsp->fsid = mount.mnt_stat.f_fsid.val[0];
 	return (badtype);
 }
 
@@ -731,7 +727,11 @@ inet6_addrstr(p)
 {
 	struct sockaddr_in6 sin6;
 	static char hbuf[NI_MAXHOST];
+#ifdef NI_WITHSCOPEID
+	const int niflags = NI_NUMERICHOST | NI_WITHSCOPEID;
+#else
 	const int niflags = NI_NUMERICHOST;
+#endif
 
 	memset(&sin6, 0, sizeof(sin6));
 	sin6.sin6_family = AF_INET6;
@@ -1090,9 +1090,8 @@ getftype(v_type)
 }
 
 void
-usage(void)
+usage()
 {
-	(void)fprintf(stderr, "Usage: %s [-fnv] [-p pid] [-u user] "
-	    "[-N system] [-M core] [file ...]\n", getprogname());
-	exit(1);
+	errx(1,
+ "usage: fstat [-fnv] [-p pid] [-u user] [-N system] [-M core] [file ...]\n");
 }

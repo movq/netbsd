@@ -1,4 +1,4 @@
-/*	$NetBSD: nfs_node.c,v 1.77 2004/04/25 16:42:42 simonb Exp $	*/
+/*	$NetBSD: nfs_node.c,v 1.73.2.2 2004/07/10 14:31:41 tron Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nfs_node.c,v 1.77 2004/04/25 16:42:42 simonb Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nfs_node.c,v 1.73.2.2 2004/07/10 14:31:41 tron Exp $");
 
 #include "opt_nfs.h"
 
@@ -63,10 +63,8 @@ struct nfsnodehashhead *nfsnodehashtbl;
 u_long nfsnodehash;
 struct lock nfs_hashlock;
 
-POOL_INIT(nfs_node_pool, sizeof(struct nfsnode), 0, 0, 0, "nfsnodepl",
-    &pool_allocator_nointr);
-POOL_INIT(nfs_vattr_pool, sizeof(struct vattr), 0, 0, 0, "nfsvapl",
-    &pool_allocator_nointr);
+struct pool nfs_node_pool;		/* memory pool for nfs nodes */
+struct pool nfs_vattr_pool;		/* memory pool for nfs vattrs */
 
 MALLOC_DEFINE(M_NFSBIGFH, "NFS bigfh", "NFS big filehandle");
 MALLOC_DEFINE(M_NFSNODE, "NFS node", "NFS vnode private part");
@@ -96,6 +94,11 @@ nfs_nhinit()
 	nfsnodehashtbl = hashinit(desiredvnodes, HASH_LIST, M_NFSNODE,
 	    M_WAITOK, &nfsnodehash);
 	lockinit(&nfs_hashlock, PINOD, "nfs_hashlock", 0, 0);
+
+	pool_init(&nfs_node_pool, sizeof(struct nfsnode), 0, 0, 0, "nfsnodepl",
+	    &pool_allocator_nointr);
+	pool_init(&nfs_vattr_pool, sizeof(struct vattr), 0, 0, 0, "nfsvapl",
+	    &pool_allocator_nointr);
 }
 
 /*
@@ -247,20 +250,7 @@ nfs_inactive(v)
 	removed = (np->n_flag & NREMOVED) != 0;
 	np->n_flag &= (NMODIFIED | NFLUSHINPROG | NFLUSHWANT | NQNFSEVICTED |
 		NQNFSNONCACHE | NQNFSWRITE);
-
-	if ((nmp->nm_flag & NFSMNT_NQNFS) && CIRCLEQ_NEXT(np, n_timer) != 0) {
-		CIRCLEQ_REMOVE(&nmp->nm_timerhead, np, n_timer);
-	}
-
-	if (vp->v_type == VDIR && np->n_dircache)
-		nfs_invaldircache(vp, 1);
-
 	VOP_UNLOCK(vp, 0);
-
-	/* XXXMP only kernel_lock protects vp */
-	if (removed)
-		vrecycle(vp, NULL, p);
-
 	if (sp != NULL) {
 
 		/*
@@ -280,6 +270,16 @@ nfs_inactive(v)
 			vrele(sp->s_dvp);
 		FREE(sp, M_NFSREQ);
 	}
+
+	if ((nmp->nm_flag & NFSMNT_NQNFS) && CIRCLEQ_NEXT(np, n_timer) != 0) {
+		CIRCLEQ_REMOVE(&nmp->nm_timerhead, np, n_timer);
+	}
+
+	if (vp->v_type == VDIR && np->n_dircache)
+		nfs_invaldircache(vp, 1);
+
+	if (removed)
+		vrecycle(vp, NULL, p);
 
 	return (0);
 }

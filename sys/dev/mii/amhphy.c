@@ -1,4 +1,4 @@
-/*	$NetBSD: amhphy.c,v 1.10 2004/08/23 06:16:06 thorpej Exp $	*/
+/*	$NetBSD: amhphy.c,v 1.9 2003/04/29 01:49:33 thorpej Exp $	*/
 
 /*
  * Copyright 2001 Wasabi Systems, Inc.
@@ -40,7 +40,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: amhphy.c,v 1.10 2004/08/23 06:16:06 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: amhphy.c,v 1.9 2003/04/29 01:49:33 thorpej Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -58,20 +58,20 @@ __KERNEL_RCSID(0, "$NetBSD: amhphy.c,v 1.10 2004/08/23 06:16:06 thorpej Exp $");
 
 #include <dev/mii/amhphyreg.h>
 
-static int	amhphymatch(struct device *, struct cfdata *, void *);
-static void	amhphyattach(struct device *, struct device *, void *);
+int	amhphymatch(struct device *, struct cfdata *, void *);
+void	amhphyattach(struct device *, struct device *, void *);
 
 CFATTACH_DECL(amhphy, sizeof(struct mii_softc),
     amhphymatch, amhphyattach, mii_phy_detach, mii_phy_activate);
 
-static int	amhphy_service(struct mii_softc *, struct mii_data *, int);
-static void	amhphy_status(struct mii_softc *);
+int	amhphy_service(struct mii_softc *, struct mii_data *, int);
+void	amhphy_status(struct mii_softc *);
 
-static const struct mii_phy_funcs amhphy_funcs = {
+const struct mii_phy_funcs amhphy_funcs = {
 	amhphy_service, amhphy_status, mii_phy_reset,
 };
 
-static const struct mii_phydesc amhphys[] = {
+const struct mii_phydesc amhphys[] = {
 	{ MII_OUI_yyAMD,		MII_MODEL_yyAMD_79c901,
 	  MII_STR_yyAMD_79c901 },
 
@@ -79,7 +79,7 @@ static const struct mii_phydesc amhphys[] = {
 	  NULL },
 };
 
-static int
+int
 amhphymatch(struct device *parent, struct cfdata *match, void *aux)
 {
 	struct mii_attach_args *ma = aux;
@@ -90,7 +90,7 @@ amhphymatch(struct device *parent, struct cfdata *match, void *aux)
 	return (0);
 }
 
-static void
+void
 amhphyattach(struct device *parent, struct device *self, void *aux)
 {
 	struct mii_softc *sc = (struct mii_softc *)self;
@@ -121,7 +121,7 @@ amhphyattach(struct device *parent, struct device *self, void *aux)
 	aprint_normal("\n");
 }
 
-static int
+int
 amhphy_service(struct mii_softc *sc, struct mii_data *mii, int cmd)
 {
 	struct ifmedia_entry *ife = mii->mii_media.ifm_cur;
@@ -180,7 +180,7 @@ amhphy_service(struct mii_softc *sc, struct mii_data *mii, int cmd)
 	return (0);
 }
 
-static void
+void
 amhphy_status(struct mii_softc *sc)
 {
 	struct mii_data *mii = sc->mii_pdata;

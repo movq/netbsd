@@ -1,4 +1,4 @@
-/*	$NetBSD: mlx.c,v 1.31 2004/10/28 07:07:40 yamt Exp $	*/
+/*	$NetBSD: mlx.c,v 1.28 2003/06/29 22:30:13 fvdl Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -74,7 +74,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mlx.c,v 1.31 2004/10/28 07:07:40 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mlx.c,v 1.28 2003/06/29 22:30:13 fvdl Exp $");
 
 #include "ld.h"
 
@@ -85,7 +85,6 @@ __KERNEL_RCSID(0, "$NetBSD: mlx.c,v 1.31 2004/10/28 07:07:40 yamt Exp $");
 #include <sys/queue.h>
 #include <sys/proc.h>
 #include <sys/buf.h>
-#include <sys/bufq.h>
 #include <sys/endian.h>
 #include <sys/malloc.h>
 #include <sys/conf.h>
@@ -102,8 +101,6 @@ __KERNEL_RCSID(0, "$NetBSD: mlx.c,v 1.31 2004/10/28 07:07:40 yamt Exp $");
 #include <dev/ic/mlxreg.h>
 #include <dev/ic/mlxio.h>
 #include <dev/ic/mlxvar.h>
-
-#include "locators.h"
 
 #define	MLX_TIMEOUT	60
 
@@ -133,8 +130,7 @@ static void	mlx_periodic_thread(void *);
 static int	mlx_print(void *, const char *);
 static int	mlx_rebuild(struct mlx_softc *, int, int);
 static void	mlx_shutdown(void *);
-static int	mlx_submatch(struct device *, struct cfdata *,
-			     const locdesc_t *, void *);
+static int	mlx_submatch(struct device *, struct cfdata *, void *);
 static int	mlx_user_command(struct mlx_softc *, struct mlx_usercommand *);
 
 static __inline__ time_t	mlx_curtime(void);
@@ -550,7 +546,7 @@ mlx_describe(struct mlx_softc *mlx)
 		}
 
 	if (model == NULL) {
-		snprintf(buf, sizeof(buf), " model 0x%x", ci->ci_hardware_id);
+		sprintf(buf, " model 0x%x", ci->ci_hardware_id);
 		model = buf;
 	}
 
@@ -577,8 +573,6 @@ mlx_configure(struct mlx_softc *mlx, int waitok)
 	struct mlx_attach_args mlxa;
 	int i, nunits;
 	u_int size;
-	int help[2];
-	locdesc_t *ldesc = (void *)help; /* XXX */
 
 	mlx->mlx_flags |= MLXF_RESCANNING;
 
@@ -642,11 +636,7 @@ mlx_configure(struct mlx_softc *mlx, int waitok)
 		 * Attach a new device.
 		 */
 		mlxa.mlxa_unit = i;
-
-		ldesc->len = 1;
-		ldesc->locs[MLXCF_UNIT] = i;
-
-		ms->ms_dv = config_found_sm_loc(&mlx->mlx_dv, "mlx", NULL, &mlxa, mlx_print,
+		ms->ms_dv = config_found_sm(&mlx->mlx_dv, &mlxa, mlx_print,
 		    mlx_submatch);
 		nunits += (ms->ms_dv != NULL);
 	}
@@ -680,12 +670,14 @@ mlx_print(void *aux, const char *pnp)
  * Match a sub-device.
  */
 static int
-mlx_submatch(struct device *parent, struct cfdata *cf,
-	     const locdesc_t *ldesc, void *aux)
+mlx_submatch(struct device *parent, struct cfdata *cf, void *aux)
 {
+	struct mlx_attach_args *mlxa;
 
-	if (cf->cf_loc[MLXCF_UNIT] != MLXCF_UNIT_DEFAULT &&
-	    cf->cf_loc[MLXCF_UNIT] != ldesc->locs[MLXCF_UNIT])
+	mlxa = (struct mlx_attach_args *)aux;
+
+	if (cf->mlxacf_unit != MLXCF_UNIT_DEFAULT &&
+	    cf->mlxacf_unit != mlxa->mlxa_unit)
 		return (0);
 
 	return (config_match(parent, cf, aux));
@@ -2137,12 +2129,12 @@ mlx_ccb_diagnose(struct mlx_ccb *mc)
 		if ((mc->mc_mbox[0] == mlx_msgs[i].command ||
 		    mlx_msgs[i].command == 0) &&
 		    mc->mc_status == mlx_msgs[i].status) {
-			snprintf(buf, sizeof(buf), "%s (0x%x)",
+			sprintf(buf, "%s (0x%x)",
 			    mlx_status_msgs[mlx_msgs[i].msg], mc->mc_status);
 			return (buf);
 		}
 
-	snprintf(buf, sizeof(buf), "unknown response 0x%x for command 0x%x",
+	sprintf(buf, "unknown response 0x%x for command 0x%x",
 	    (int)mc->mc_status, (int)mc->mc_mbox[0]);
 
 	return (buf);

@@ -1,4 +1,4 @@
-/*	$NetBSD: arcbios.h,v 1.6 2004/10/02 03:11:14 sekiya Exp $	*/
+/*	$NetBSD: arcbios.h,v 1.4.2.1 2004/07/23 06:57:46 tron Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -85,21 +85,21 @@
  * 4.2.2: System Parameter Block
  */
 struct arcbios_spb {
-	paddr_t		SPBSignature;
-	paddr_t		SPBLength;
+	uint32_t	SPBSignature;
+	uint32_t	SPBLength;
 	uint16_t	Version;
 	uint16_t	Revision;
 	void		*RestartBlock;
 	void		*DebugBlock;
 	void		*GEVector;
 	void		*UTLBMissVector;
-	paddr_t		FirmwareVectorLength;
+	uint32_t	FirmwareVectorLength;
 	void		*FirmwareVector;
-	paddr_t		PrivateVectorLength;
+	uint32_t	PrivateVectorLength;
 	void		*PrivateVector;
-	paddr_t		AdapterCount;
-	paddr_t		AdapterType;
-	paddr_t		AdapterVectorLength;
+	uint32_t	AdapterCount;
+	uint32_t	AdapterType;
+	uint32_t	AdapterVectorLength;
 	void		*AdapterVector;
 };
 
@@ -115,10 +115,10 @@ struct arcbios_component {
 	uint32_t	Flags;
 	uint16_t	Version;
 	uint16_t	Revision;
-	unsigned long	Key;
-	unsigned long	AffinityMask;
-	unsigned long	ConfigurationDataSize;
-	unsigned long	IdentifierLength;
+	uint32_t	Key;
+	uint32_t	AffinityMask;
+	uint32_t	ConfigurationDataSize;
+	uint32_t	IdentifierLength;
 	char		*Identifier;
 };
 
@@ -284,8 +284,8 @@ struct arcbios_sysid {
  */
 struct arcbios_mem {
 	uint32_t	Type;
-	paddr_t		BasePage;
-	paddr_t		PageCount;
+	uint32_t	BasePage;
+	uint32_t	PageCount;
 };
 
 #if defined(sgimips)
@@ -327,22 +327,22 @@ struct arcbios_dsp_stat {
  * ARC firmware vector
  */
 struct arcbios_fv {
-	paddr_t		(*Load)(
+	uint32_t	(*Load)(
 			    char *,		/* image to load */
-			    paddr_t,		/* top address */
-			    paddr_t,		/* entry address */
-			    paddr_t *);	/* low address */
+			    uint32_t,		/* top address */
+			    uint32_t,		/* entry address */
+			    uint32_t *);	/* low address */
 
-	paddr_t		(*Invoke)(
-			    paddr_t,		/* entry address */
-			    paddr_t,		/* stack address */
-			    paddr_t,		/* argc */
+	uint32_t	(*Invoke)(
+			    uint32_t,		/* entry address */
+			    uint32_t,		/* stack address */
+			    uint32_t,		/* argc */
 			    char **,		/* argv */
 			    char **);		/* envp */
 
-	paddr_t		(*Execute)(
+	uint32_t	(*Execute)(
 			    char *,		/* image path */
-			    paddr_t,		/* argc */
+			    uint32_t,		/* argc */
 			    char **,		/* argv */
 			    char **);		/* envp */
 
@@ -375,7 +375,7 @@ struct arcbios_fv {
 	void		*(*GetParent)(
 			    void *);		/* component */
 
-	paddr_t		(*GetConfigurationData)(
+	uint32_t	(*GetConfigurationData)(
 			    void *,		/* configuration data */
 			    void *);		/* component */
 
@@ -383,13 +383,13 @@ struct arcbios_fv {
 			    void *,		/* component */
 			    void *);		/* new component */
 
-	paddr_t		(*DeleteComponent)(
+	uint32_t	(*DeleteComponent)(
 			    void *);		/* component */
 
-	paddr_t		(*GetComponent)(
+	uint32_t	(*GetComponent)(
 			    char *);		/* path */
 
-	paddr_t		(*SaveConfiguration)(void);
+	uint32_t	(*SaveConfiguration)(void);
 
 	void		*(*GetSystemId)(void);
 
@@ -399,75 +399,75 @@ struct arcbios_fv {
 	void		*reserved1;
 #else
 	void		(*Signal)(
-			    paddr_t,		/* signal number */
+			    uint32_t,		/* signal number */
 			    void *);		/* handler */
 #endif
 	void		*(*GetTime)(void);
 
-	paddr_t		(*GetRelativeTime)(void);
+	uint32_t	(*GetRelativeTime)(void);
 
-	paddr_t		(*GetDirectoryEntry)(
-			    paddr_t,		/* file ID */
+	uint32_t	(*GetDirectoryEntry)(
+			    uint32_t,		/* file ID */
 			    void *,		/* directory entry */
-			    paddr_t,		/* length */
-			    paddr_t *);	/* count */
+			    uint32_t,		/* length */
+			    uint32_t *);	/* count */
 
-	paddr_t		(*Open)(
+	uint32_t	(*Open)(
 			    char *,		/* path */
-			    paddr_t,		/* open mode */
-			    paddr_t *);	/* file ID */
+			    uint32_t,		/* open mode */
+			    uint32_t *);	/* file ID */
 
-	paddr_t		(*Close)(
-			    paddr_t);		/* file ID */
+	uint32_t	(*Close)(
+			    uint32_t);		/* file ID */
 
-	paddr_t		(*Read)(
-			    paddr_t,		/* file ID */
+	uint32_t	(*Read)(
+			    uint32_t,		/* file ID */
 			    void *,		/* buffer */
-			    paddr_t,		/* length */
-			    paddr_t *);	/* count */
+			    uint32_t,		/* length */
+			    uint32_t *);	/* count */
 
-	paddr_t		(*GetReadStatus)(
-			    paddr_t);		/* file ID */
+	uint32_t	(*GetReadStatus)(
+			    uint32_t);		/* file ID */
 
-	paddr_t		(*Write)(
-			    paddr_t,		/* file ID */
+	uint32_t	(*Write)(
+			    uint32_t,		/* file ID */
 			    void *,		/* buffer */
-			    paddr_t,		/* length */
-			    paddr_t *);	/* count */
+			    uint32_t,		/* length */
+			    uint32_t *);	/* count */
 
-	paddr_t		(*Seek)(
-			    paddr_t,		/* file ID */
+	uint32_t	(*Seek)(
+			    uint32_t,		/* file ID */
 			    int64_t *,		/* offset */
-			    paddr_t);		/* whence */
+			    uint32_t);		/* whence */
 
-	paddr_t		(*Mount)(
+	uint32_t	(*Mount)(
 			    char *,		/* path */
-			    paddr_t);		/* operation */
+			    uint32_t);		/* operation */
 
 	char		*(*GetEnvironmentVariable)(
 			    char *);		/* variable */
 
-	paddr_t		(*SetEnvironmentVariable)(
+	uint32_t	(*SetEnvironmentVariable)(
 			    char *,		/* variable */
 			    char *);		/* contents */
 
-	paddr_t		(*GetFileInformation)(
-			    paddr_t,		/* file ID */
+	uint32_t	(*GetFileInformation)(
+			    uint32_t,		/* file ID */
 			    void *);		/* XXX */
 
-	paddr_t		(*SetFileInformation)(
-			    paddr_t,		/* file ID */
-			    paddr_t,		/* XXX */
-			    paddr_t);		/* XXX */
+	uint32_t	(*SetFileInformation)(
+			    uint32_t,		/* file ID */
+			    uint32_t,		/* XXX */
+			    uint32_t);		/* XXX */
 
 	void		(*FlushAllCaches)(void);
 #if !defined(sgimips)
-	paddr_t		(*TestUnicode)(
-			    paddr_t,		/* file ID */
+	uint32_t	(*TestUnicode)(
+			    uint32_t,		/* file ID */
 			    uint16_t);		/* unicode character */
 
 	void		*(*GetDisplayStatus)(
-			    paddr_t);		/* file ID */
+			    uint32_t);		/* file ID */
 #endif
 };
 

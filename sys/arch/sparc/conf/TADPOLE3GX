@@ -1,4 +1,4 @@
-# 	$NetBSD: TADPOLE3GX,v 1.22 2004/11/10 17:54:07 christos Exp $
+# 	$NetBSD: TADPOLE3GX,v 1.19.2.1 2004/07/15 20:19:51 he Exp $
 
 include "arch/sparc/conf/std.sparc"
 
@@ -126,7 +126,6 @@ options 	COMPAT_16	# NetBSD 1.6 binary compatibility
 options 	COMPAT_SUNOS	# SunOS 4.x binary compatibility
 options 	COMPAT_SVR4	# SunOS 5.x binary compatibility
 #options 	TCP_COMPAT_42	# 4.2BSD TCP/IP bug compat. Not recommended.
-options		COMPAT_BSDPTY	# /dev/[pt]ty?? ptys.
 
 ## File systems.  You probably need at least one of FFS or NFS.
 file-system	FFS		# Berkeley Fast Filesystem
@@ -152,7 +151,6 @@ options 	QUOTA		# FFS quotas
 options 	INET		# IP (Internet Protocol) v4
 #options 	GATEWAY		# packet forwarding ("router switch")
 #options 	MROUTING	# packet forwarding of multicast packets
-#options 	PIM		# Protocol Independent Multicast
 #options 	DIRECTED_BROADCAST	# allow broadcasts through routers
 #options 	NS		# Xerox NS networking
 #options 	NSIP		# Xerox NS tunneling over IP

@@ -1,6 +1,6 @@
 /* mri.c -- handle MRI style linker scripts
-   Copyright 1991, 1992, 1993, 1994, 1996, 1997, 1998, 1999, 2000, 2002,
-   2003, 2004 Free Software Foundation, Inc.
+   Copyright 1991, 1992, 1993, 1994, 1996, 1997, 1998, 1999, 2000, 2002
+   Free Software Foundation, Inc.
 
 This file is part of GLD, the Gnu Linker.
 
@@ -53,8 +53,17 @@ struct section_name_struct *alias;
 struct section_name_struct *alignment;
 struct section_name_struct *subalignment;
 
+static struct section_name_struct **lookup
+  PARAMS ((const char *name, struct section_name_struct **list));
+static void mri_add_to_list PARAMS ((struct section_name_struct **list,
+				     const char *name, etree_type *vma,
+				     const char *zalias, etree_type *align,
+				     etree_type *subalign));
+
 static struct section_name_struct **
-lookup (const char *name, struct section_name_struct **list)
+lookup (name, list)
+     const char *name;
+     struct section_name_struct **list;
 {
   struct section_name_struct **ptr = list;
 
@@ -68,23 +77,24 @@ lookup (const char *name, struct section_name_struct **list)
 	ptr = &((*ptr)->next);
     }
 
-  *ptr = xmalloc (sizeof (struct section_name_struct));
+  *ptr = (struct section_name_struct *) xmalloc (sizeof (struct section_name_struct));
   return ptr;
 }
 
 static void
-mri_add_to_list (struct section_name_struct **list,
-		 const char *name,
-		 etree_type *vma,
-		 const char *zalias,
-		 etree_type *align,
-		 etree_type *subalign)
+mri_add_to_list (list, name, vma, zalias, align, subalign)
+     struct section_name_struct **list;
+     const char *name;
+     etree_type *vma;
+     const char *zalias;
+     etree_type *align;
+     etree_type *subalign;
 {
   struct section_name_struct **ptr = lookup (name, list);
 
   (*ptr)->name = name;
   (*ptr)->vma = vma;
-  (*ptr)->next = NULL;
+  (*ptr)->next = (struct section_name_struct *) NULL;
   (*ptr)->ok_to_load = 0;
   (*ptr)->alias = zalias;
   (*ptr)->align = align;
@@ -92,7 +102,9 @@ mri_add_to_list (struct section_name_struct **list,
 }
 
 void
-mri_output_section (const char *name, etree_type *vma)
+mri_output_section (name, vma)
+     const char *name;
+     etree_type *vma;
 {
   mri_add_to_list (&address, name, vma, 0, 0, 0);
 }
@@ -101,13 +113,15 @@ mri_output_section (const char *name, etree_type *vma)
    marked thus.  */
 
 void
-mri_only_load (const char *name)
+mri_only_load (name)
+     const char *name;
 {
   mri_add_to_list (&only_load, name, 0, 0, 0, 0);
 }
 
 void
-mri_base (etree_type *exp)
+mri_base (exp)
+     etree_type *exp;
 {
   base = exp;
 }
@@ -115,7 +129,7 @@ mri_base (etree_type *exp)
 static int done_tree = 0;
 
 void
-mri_draw_tree (void)
+mri_draw_tree ()
 {
   if (done_tree)
     return;
@@ -128,8 +142,8 @@ mri_draw_tree (void)
     r = lang_memory_region_lookup("long");
     r->current = r->origin = exp_get_vma (base, (bfd_vma)0, "origin",
 					  lang_first_phase_enum);
-    r->length = (bfd_size_type) exp_get_vma (0, ~(bfd_vma) 0, "length",
-					     lang_first_phase_enum);
+    r->length = (bfd_size_type) exp_get_vma (0, (bfd_vma) ~((bfd_size_type)0),
+					     "length", lang_first_phase_enum);
   }
 #endif
 
@@ -137,21 +151,23 @@ mri_draw_tree (void)
 
   /* Attach the addresses of any which have addresses,
      and add the ones not mentioned.  */
-  if (address != NULL)
+  if (address != (struct section_name_struct *) NULL)
     {
       struct section_name_struct *alist;
       struct section_name_struct *olist;
 
-      if (order == NULL)
+      if (order == (struct section_name_struct *) NULL)
 	order = address;
 
       for (alist = address;
-	   alist != NULL;
+	   alist != (struct section_name_struct *) NULL;
 	   alist = alist->next)
 	{
 	  int done = 0;
 
-	  for (olist = order; done == 0 && olist != NULL; olist = olist->next)
+	  for (olist = order;
+	       done == 0 && olist != (struct section_name_struct *) NULL;
+	       olist = olist->next)
 	    {
 	      if (strcmp (alist->name, olist->name) == 0)
 		{
@@ -170,12 +186,12 @@ mri_draw_tree (void)
 
   /* If we're only supposed to load a subset of them in, then prune
      the list.  */
-  if (only_load != NULL)
+  if (only_load != (struct section_name_struct *) NULL)
     {
       struct section_name_struct *ptr1;
       struct section_name_struct *ptr2;
 
-      if (order == NULL)
+      if (order == (struct section_name_struct *) NULL)
 	order = only_load;
 
       /* See if this name is in the list, if it is then we can load it.  */
@@ -194,7 +210,7 @@ mri_draw_tree (void)
     }
 
   /* Create the order of sections to load.  */
-  if (order != NULL)
+  if (order != (struct section_name_struct *) NULL)
     {
       /* Been told to output the sections in a certain order.  */
       struct section_name_struct *p = order;
@@ -220,9 +236,10 @@ mri_draw_tree (void)
 
 	  lang_enter_output_section_statement (p->name, base,
 					       p->ok_to_load ? 0 : noload_section,
-					       align, subalign, NULL);
+					       1, align, subalign,
+					       (etree_type *) NULL);
 	  base = 0;
-	  tmp = xmalloc (sizeof *tmp);
+	  tmp = (struct wildcard_list *) xmalloc (sizeof *tmp);
 	  tmp->next = NULL;
 	  tmp->spec.name = p->name;
 	  tmp->spec.exclude_name_list = NULL;
@@ -233,7 +250,7 @@ mri_draw_tree (void)
 	  for (aptr = alias; aptr; aptr = aptr->next)
 	    if (strcmp (aptr->alias, p->name) == 0)
 	      {
-		tmp = xmalloc (sizeof *tmp);
+		tmp = (struct wildcard_list *) xmalloc (sizeof *tmp);
 		tmp->next = NULL;
 		tmp->spec.name = aptr->name;
 		tmp->spec.exclude_name_list = NULL;
@@ -241,7 +258,9 @@ mri_draw_tree (void)
 		lang_add_wild (NULL, tmp, FALSE);
 	      }
 
-	  lang_leave_output_section_statement (0, "*default*", NULL, NULL);
+	  lang_leave_output_section_statement
+	    (0, "*default*", (struct lang_output_section_phdr_list *) NULL,
+	     NULL);
 
 	  p = p->next;
 	}
@@ -251,23 +270,29 @@ mri_draw_tree (void)
 }
 
 void
-mri_load (const char *name)
+mri_load (name)
+     const char *name;
 {
   base = 0;
-  lang_add_input_file (name, lang_input_file_is_file_enum, NULL);
+  lang_add_input_file (name,
+		       lang_input_file_is_file_enum, (char *) NULL);
 #if 0
   lang_leave_output_section_statement (0, "*default*");
 #endif
 }
 
 void
-mri_order (const char *name)
+mri_order (name)
+     const char *name;
 {
   mri_add_to_list (&order, name, 0, 0, 0, 0);
 }
 
 void
-mri_alias (const char *want, const char *is, int isn)
+mri_alias (want, is, isn)
+     const char *want;
+     const char *is;
+     int isn;
 {
   if (!is)
     {
@@ -286,47 +311,56 @@ mri_alias (const char *want, const char *is, int isn)
 }
 
 void
-mri_name (const char *name)
+mri_name (name)
+     const char *name;
 {
   lang_add_output (name, 1);
 }
 
 void
-mri_format (const char *name)
+mri_format (name)
+     const char *name;
 {
   if (strcmp (name, "S") == 0)
-    lang_add_output_format ("srec", NULL, NULL, 1);
+    lang_add_output_format ("srec", (char *) NULL, (char *) NULL, 1);
 
   else if (strcmp (name, "IEEE") == 0)
-    lang_add_output_format ("ieee", NULL, NULL, 1);
+    lang_add_output_format ("ieee", (char *) NULL, (char *) NULL, 1);
 
   else if (strcmp (name, "COFF") == 0)
-    lang_add_output_format ("coff-m68k", NULL, NULL, 1);
+    lang_add_output_format ("coff-m68k", (char *) NULL, (char *) NULL, 1);
 
   else
     einfo (_("%P%F: unknown format type %s\n"), name);
 }
 
 void
-mri_public (const char *name, etree_type *exp)
+mri_public (name, exp)
+     const char *name;
+     etree_type *exp;
 {
   lang_add_assignment (exp_assop ('=', name, exp));
 }
 
 void
-mri_align (const char *name, etree_type *exp)
+mri_align (name, exp)
+     const char *name;
+     etree_type *exp;
 {
   mri_add_to_list (&alignment, name, 0, 0, exp, 0);
 }
 
 void
-mri_alignmod (const char *name, etree_type *exp)
+mri_alignmod (name, exp)
+     const char *name;
+     etree_type *exp;
 {
   mri_add_to_list (&subalignment, name, 0, 0, 0, exp);
 }
 
 void
-mri_truncate (unsigned int exp)
+mri_truncate (exp)
+     unsigned int exp;
 {
   symbol_truncate = exp;
 }

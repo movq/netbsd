@@ -1,7 +1,7 @@
-/* -*-C++-*-	$NetBSD: sh_arch.h,v 1.8 2004/08/13 15:50:09 uch Exp $	*/
+/* -*-C++-*-	$NetBSD: sh_arch.h,v 1.6 2002/02/11 17:08:56 uch Exp $	*/
 
 /*-
- * Copyright (c) 2001, 2002, 2004 The NetBSD Foundation, Inc.
+ * Copyright (c) 2001, 2002 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -37,7 +37,7 @@
  */
 
 #ifndef _HPCBOOT_SH_ARCH_H_
-#define	_HPCBOOT_SH_ARCH_H_
+#define _HPCBOOT_SH_ARCH_H_
 
 #include <arch.h>
 #include <memory.h>	// loadBank
@@ -77,14 +77,14 @@ public:
 	static int cpu_type(void);
 };
 
-//
+// 
 // SH product. setup cache flush routine and 2nd-bootloader.
 //
 
 //
 // SH3 series.
 ///
-#define	SH_(x)								\
+#define SH_(x)								\
 class SH ## x : public SHArchitecture {					\
 private:								\
 	typedef SHArchitecture super;					\
@@ -119,7 +119,6 @@ public:									\
 
 SH_(7709);
 SH_(7709A);
-SH_(7707);
 
 //
 // SH4 series.
@@ -149,7 +148,7 @@ public:
 
 	virtual void cache_flush(void) {
 		//
-		// To invalidate I-cache, program must run on P2. I can't
+		// To invalidate I-cache, program must run on P2. I can't 
 		// do it myself, use WinCE API. (WCE2.10 or later)
 		//
 		CacheSync(CACHE_D_WBINV);
@@ -159,7 +158,7 @@ public:
 	virtual BOOL setupLoader(void) {
 		//
 		// 2nd boot loader access cache address array. run on P2.
-		//
+		// 
 		if (super::setupLoader()) {
 			(u_int32_t)_loader_addr |= 0x20000000;
 			DPRINTF
@@ -174,11 +173,11 @@ public:
 	static void boot_func(struct BootArgs *, struct PageTag *);
 };
 
-//
+// 
 // 2nd-bootloader.  make sure that PIC and its size is lower than page size.
 // and can't call subroutine.
 //
-#define	SH_BOOT_FUNC_(x)						\
+#define SH_BOOT_FUNC_(x)						\
 void									\
 SH##x##::boot_func(struct BootArgs *bi, struct PageTag *p)		\
 {									\
@@ -210,7 +209,7 @@ SH##x##::boot_func(struct BootArgs *bi, struct PageTag *p)		\
 		 bi->bootinfo, bi->kernel_entry);			\
 }
 
-//   suspend/resume external Interrupt.
+//   suspend/resume external Interrupt. 
 //  (don't block) use under privilege mode.
 //
 __BEGIN_DECLS

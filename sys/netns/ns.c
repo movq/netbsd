@@ -1,4 +1,4 @@
-/*	$NetBSD: ns.c,v 1.26 2004/04/19 00:10:48 matt Exp $	*/
+/*	$NetBSD: ns.c,v 1.24 2003/08/07 16:33:45 agc Exp $	*/
 
 /*
  * Copyright (c) 1984, 1985, 1986, 1987, 1993
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ns.c,v 1.26 2004/04/19 00:10:48 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ns.c,v 1.24 2003/08/07 16:33:45 agc Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -59,8 +59,12 @@ int ns_interfaces;
  */
 /* ARGSUSED */
 int
-ns_control(struct socket *so, u_long cmd, caddr_t data, struct ifnet *ifp,
-	struct proc *p)
+ns_control(so, cmd, data, ifp, p)
+	struct socket *so;
+	u_long cmd;
+	caddr_t data;
+	struct ifnet *ifp;
+	struct proc *p;
 {
 	struct ifreq *ifr = (struct ifreq *)data;
 	struct ns_ifaddr *ia = 0;
@@ -98,9 +102,10 @@ ns_control(struct socket *so, u_long cmd, caddr_t data, struct ifnet *ifp,
 			panic("ns_control");
 		if (ia == 0) {
 			MALLOC(ia, struct ns_ifaddr *, sizeof(*ia),
-			       M_IFADDR, M_WAITOK|M_ZERO);
+			       M_IFADDR, M_WAITOK);
 			if (ia == 0)
 				return (ENOBUFS);
+			bzero((caddr_t)ia, sizeof(*ia));
 			TAILQ_INSERT_TAIL(&ns_ifaddr, ia, ia_list);
 			IFAREF((struct ifaddr *)ia);
 			TAILQ_INSERT_TAIL(&ifp->if_addrlist, (struct ifaddr *)ia,
@@ -200,7 +205,9 @@ ns_control(struct socket *so, u_long cmd, caddr_t data, struct ifnet *ifp,
 }
 
 void
-ns_purgeaddr(struct ifaddr *ifa, struct ifnet *ifp)
+ns_purgeaddr(ifa, ifp)
+	struct ifaddr *ifa;
+	struct ifnet *ifp;
 {
 	struct ns_ifaddr *ia = (void *) ifa;
 
@@ -218,7 +225,8 @@ ns_purgeaddr(struct ifaddr *ifa, struct ifnet *ifp)
 }
 
 void
-ns_purgeif(struct ifnet *ifp)
+ns_purgeif(ifp)
+	struct ifnet *ifp;
 {
 	struct ifaddr *ifa, *nifa;
 
@@ -234,7 +242,9 @@ ns_purgeif(struct ifnet *ifp)
  * Delete any previous route for an old address.
  */
 void
-ns_ifscrub(struct ifnet *ifp, struct ns_ifaddr *ia)
+ns_ifscrub(ifp, ia)
+	struct ifnet *ifp;
+	struct ns_ifaddr *ia; 
 {
 
 	if ((ia->ia_flags & IFA_ROUTE) == 0)
@@ -250,8 +260,11 @@ ns_ifscrub(struct ifnet *ifp, struct ns_ifaddr *ia)
  * and routing table entry.
  */
 int
-ns_ifinit(struct ifnet *ifp, struct ns_ifaddr *ia, struct sockaddr_ns *sns,
-	int scrub)
+ns_ifinit(ifp, ia, sns, scrub)
+	struct ifnet *ifp;
+	struct ns_ifaddr *ia;
+	struct sockaddr_ns *sns;
+	int scrub;
 {
 	struct sockaddr_ns oldaddr;
 	union ns_host *h = &ia->ia_addr.sns_addr.x_host;
@@ -323,7 +336,8 @@ bad:
  * Return address info for specified internet network.
  */
 struct ns_ifaddr *
-ns_iaonnetof(struct ns_addr *dst)
+ns_iaonnetof(dst)
+	struct ns_addr *dst;
 {
 	struct ns_ifaddr *ia;
 	struct ns_addr *compare;

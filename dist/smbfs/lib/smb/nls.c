@@ -33,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: nls.c,v 1.8 2004/10/29 19:18:32 dsl Exp $");
+__RCSID("$NetBSD: nls.c,v 1.5 2004/03/01 07:46:33 jdolecek Exp $");
 
 #include <sys/param.h>
 #include <sys/types.h>
@@ -189,7 +189,7 @@ nls_str_upper(char *dst, const char *src)
 	char *p = dst;
 
 	while (*src)
-		*dst++ = toupper((unsigned char)*src++);
+		*dst++ = toupper(*src++);
 	*dst = 0;
 	return p;
 }
@@ -200,7 +200,7 @@ nls_str_lower(char *dst, const char *src)
 	char *p = dst;
 
 	while (*src)
-		*dst++ = tolower((unsigned char)*src++);
+		*dst++ = tolower(*src++);
 	*dst = 0;
 	return p;
 }

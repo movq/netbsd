@@ -1,4 +1,4 @@
-/*	$NetBSD: fdesc.h,v 1.16 2004/05/20 06:34:30 atatat Exp $	*/
+/*	$NetBSD: fdesc.h,v 1.15.2.1 2004/05/23 10:44:33 tron Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993

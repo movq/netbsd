@@ -1,4 +1,4 @@
-/*	$NetBSD: quota.c,v 1.30 2004/09/07 13:20:40 jrf Exp $	*/
+/*	$NetBSD: quota.c,v 1.28 2004/01/05 23:23:36 jmmv Exp $	*/
 
 /*
  * Copyright (c) 1980, 1990, 1993
@@ -42,7 +42,7 @@ __COPYRIGHT("@(#) Copyright (c) 1980, 1990, 1993\n\
 #if 0
 static char sccsid[] = "@(#)quota.c	8.4 (Berkeley) 4/28/95";
 #else
-__RCSID("$NetBSD: quota.c,v 1.30 2004/09/07 13:20:40 jrf Exp $");
+__RCSID("$NetBSD: quota.c,v 1.28 2004/01/05 23:23:36 jmmv Exp $");
 #endif
 #endif /* not lint */
 
@@ -90,10 +90,10 @@ int	alldigits __P((char *));
 int	callaurpc __P((char *, int, int, int, xdrproc_t, void *,
 	    xdrproc_t, void *));
 int	main __P((int, char **));
-int	getnfsquota __P((struct statvfs *, struct fstab *, struct quotause *,
+int	getnfsquota __P((struct statfs *, struct fstab *, struct quotause *,
 	    long, int));
 struct quotause	*getprivs __P((long id, int quotatype));
-int	getufsquota __P((struct statvfs *, struct fstab *, struct quotause *,
+int	getufsquota __P((struct statfs *, struct fstab *, struct quotause *,
 	    long, int));
 void	heading __P((int, u_long, const char *, const char *));
 void	showgid __P((gid_t));
@@ -463,7 +463,7 @@ getprivs(id, quotatype)
 	struct quotause *qup, *quptail;
 	struct fstab *fs;
 	struct quotause *quphead;
-	struct statvfs *fst;
+	struct statfs *fst;
 	int nfst, i;
 
 	qup = quphead = quptail = NULL;
@@ -534,7 +534,8 @@ ufshasquota(fs, type, qfnamep)
 		    qfextension[GRPQUOTA], qfname);
 		initname = 1;
 	}
-	(void)strlcpy(buf, fs->fs_mntops, sizeof(buf));
+	(void)strncpy(buf, fs->fs_mntops, sizeof(buf) - 1);
+	buf[sizeof(buf) - 1] = '\0';
 	for (opt = strtok(buf, ","); opt; opt = strtok(NULL, ",")) {
 		if ((cp = strchr(opt, '=')) != NULL)
 			*cp++ = '\0';
@@ -557,7 +558,7 @@ ufshasquota(fs, type, qfnamep)
 
 int
 getufsquota(fst, fs, qup, id, quotatype)
-	struct statvfs *fst;
+	struct statfs *fst;
 	struct fstab *fs;
 	struct quotause *qup;
 	long id;
@@ -598,7 +599,7 @@ getufsquota(fst, fs, qup, id, quotatype)
 
 int
 getnfsquota(fst, fs, qup, id, quotatype)
-	struct statvfs *fst;
+	struct statfs *fst;
 	struct fstab *fs; 
 	struct quotause *qup;
 	long id;
@@ -612,7 +613,7 @@ getnfsquota(fst, fs, qup, id, quotatype)
 	char *cp;
 	int ret;
 
-	if (fst->f_flag & MNT_LOCAL)
+	if (fst->f_flags & MNT_LOCAL)
 		return (0);
 
 	/*

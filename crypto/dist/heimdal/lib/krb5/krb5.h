@@ -32,7 +32,7 @@
  */
 
 /* $Heimdal: krb5.h,v 1.209.2.2 2004/06/21 08:32:00 lha Exp $
-   $NetBSD: krb5.h,v 1.7 2004/09/14 08:08:20 lha Exp $ */
+   $NetBSD: krb5.h,v 1.4.2.3 2004/09/17 04:36:34 jmc Exp $ */
 
 #ifndef __KRB5_H__
 #define __KRB5_H__

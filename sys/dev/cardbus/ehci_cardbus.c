@@ -1,4 +1,4 @@
-/*	$NetBSD: ehci_cardbus.c,v 1.10 2004/08/02 19:14:28 mycroft Exp $	*/
+/*	$NetBSD: ehci_cardbus.c,v 1.6 2002/10/02 16:33:41 thorpej Exp $	*/
 
 /*
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -38,7 +38,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ehci_cardbus.c,v 1.10 2004/08/02 19:14:28 mycroft Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ehci_cardbus.c,v 1.6 2002/10/02 16:33:41 thorpej Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -53,7 +53,7 @@ __KERNEL_RCSID(0, "$NetBSD: ehci_cardbus.c,v 1.10 2004/08/02 19:14:28 mycroft Ex
 #endif
 
 #include <dev/cardbus/cardbusvar.h>
-#include <dev/pci/pcidevs.h>
+#include <dev/cardbus/cardbusdevs.h>
 
 #include <dev/cardbus/usb_cardbus.h>
 
@@ -119,12 +119,12 @@ ehci_cardbus_attach(struct device *parent, struct device *self, void *aux)
 	cardbusreg_t csr;
 	char devinfo[256];
 	usbd_status r;
-	const char *vendor;
+	char *vendor;
 	u_int ncomp;
 	const char *devname = sc->sc.sc_bus.bdev.dv_xname;
 	struct usb_cardbus *up;
 
-	cardbus_devinfo(ca->ca_id, ca->ca_class, 0, devinfo, sizeof(devinfo));
+	cardbus_devinfo(ca->ca_id, ca->ca_class, 0, devinfo);
 	printf(": %s (rev. 0x%02x)\n", devinfo,
 	       CARDBUS_REVISION(ca->ca_class));
 
@@ -171,10 +171,11 @@ XXX	(ct->ct_cf->cardbus_mem_open)(cc, 0, iob, iob + 0x40);
 	vendor = cardbus_findvendor(ca->ca_id);
 	sc->sc.sc_id_vendor = CARDBUS_VENDOR(ca->ca_id);
 	if (vendor)
-		strlcpy(sc->sc.sc_vendor, vendor, sizeof(sc->sc.sc_vendor));
+		strncpy(sc->sc.sc_vendor, vendor,
+			sizeof(sc->sc.sc_vendor) - 1);
 	else
-		snprintf(sc->sc.sc_vendor, sizeof(sc->sc.sc_vendor),
-		    "vendor 0x%04x", CARDBUS_VENDOR(ca->ca_id));
+		sprintf(sc->sc.sc_vendor, "vendor 0x%04x", 
+			CARDBUS_VENDOR(ca->ca_id));
 	
 	/*
 	 * Find companion controllers.  According to the spec they always

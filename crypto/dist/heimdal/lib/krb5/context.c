@@ -35,7 +35,7 @@
 #include <com_err.h>
 
 __RCSID("$Heimdal: context.c,v 1.83.2.1 2004/08/20 15:30:24 lha Exp $"
-        "$NetBSD: context.c,v 1.12 2004/09/14 08:08:20 lha Exp $");
+        "$NetBSD: context.c,v 1.11.2.1 2004/09/17 04:36:24 jmc Exp $");
 
 #define INIT_FIELD(C, T, E, D, F)					\
     (C)->E = krb5_config_get_ ## T ## _default ((C), NULL, (D), 	\

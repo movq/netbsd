@@ -1,4 +1,4 @@
-/*	$NetBSD: fpsetsticky.c,v 1.6 2004/04/04 19:54:05 matt Exp $	*/
+/*	$NetBSD: fpsetsticky.c,v 1.3 2002/01/13 21:45:48 thorpej Exp $	*/
 
 /*
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -42,47 +42,21 @@
 
 #include <sys/types.h>
 #include <ieeefp.h>
-#include <powerpc/fpu.h>
-
-#define	STICKYBITS	(FPSCR_XX|FPSCR_ZX|FPSCR_UX|FPSCR_OX|FPSCR_VX)
-#define	INVBITS		(FPSCR_VXCVI|FPSCR_VXSQRT|FPSCR_VXSOFT|FPSCR_VXVC|\
-			 FPSCR_VXIMZ|FPSCR_VXZDZ|FPSCR_VXIDI|FPSCR_VXISI|\
-			 FPSCR_VXSNAN)
-#define	STICKYSHFT	25
 
 #ifdef __weak_alias
 __weak_alias(fpsetsticky,_fpsetsticky)
 #endif
 
 fp_except
-fpsetsticky(fp_except mask)
+fpsetsticky(mask)
+	fp_except mask;
 {
-	uint64_t fpscr;
-	fp_except old;
+	u_int64_t fpscr;
+	fp_rnd old;
 
 	__asm__ __volatile("mffs %0" : "=f"(fpscr));
-	old = ((uint32_t)fpscr & STICKYBITS) >> STICKYSHFT;
-	/*
-	 * FPSCR_VX (aka FP_X_INV) is not a sticky bit but a summary of the
-	 * all the FPSCR_VX* sticky bits.  So when FP_X_INV is cleared then
-	 * clear all of those bits, likewise when it's set, set them all.
-	 */
-	if ((mask & FP_X_INV) == 0)
-		fpscr &= ~INVBITS;
-	else 
-		fpscr |= INVBITS;
-	fpscr &= ~STICKYBITS;
-	fpscr |= ((uint32_t)mask << STICKYSHFT) & STICKYBITS;
-	/*
-	 * Make FPSCR_FX reflect the presence of a set sticky bit (or not).
-	 */
-	if (fpscr & (STICKYBITS|INVBITS))
-		fpscr |= FPSCR_FX;
-	else
-		fpscr &= ~FPSCR_FX;
-	/*
-	 * Write back the fpscr.
-	 */
+	old = (fp_except)((fpscr >> 25) & 0x1f);
+	fpscr = (fpscr & 0xc1ffffff) | (mask << 25);
 	__asm__ __volatile("mtfsf 0xff,%0" :: "f"(fpscr));
 	return (old);
 }

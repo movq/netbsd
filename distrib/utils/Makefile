@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.16 2004/06/08 21:43:40 abs Exp $
+#	$NetBSD: Makefile,v 1.15.2.1 2004/06/17 08:03:04 tron Exp $
 
 SUBDIR=	libhack more ssh tls \
 	x_dhclient x_dmesg x_ed x_gzip x_ifconfig \

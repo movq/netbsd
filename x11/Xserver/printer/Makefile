@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.6 2004/05/16 10:25:14 lukem Exp $
+#	$NetBSD: Makefile,v 1.5 2004/01/10 16:28:29 rtr Exp $
 
 .include "../Makefile.serverlib"
 
@@ -26,7 +26,7 @@ CPPFLAGS+=	-I${DESTDIR}${X11INCDIR}/X11 \
 		-I${DESTDIR}${X11INCDIR}/X11/extensions \
 		-I${X11SRCDIR.xc}/lib/X11
 
-CPPFLAGS+=	-DXPRINTDIR=\"${X11ETCDIR}/xserver\" \
+CPPFLAGS+=	-DXPRINTDIR=\"${X11LIBDIR}/xserver\" \
 		-DXPRASTERDDX -DXPPCLDDX -DXPPSDDX -DHAS_MKSTEMP \
 		-UXFree86LOADER -D_XP_PRINT_SERVER_
 

@@ -1,4 +1,4 @@
-	$NetBSD: syscalls.master,v 1.46 2004/05/11 10:54:51 drochner Exp $
+	$NetBSD: syscalls.master,v 1.43 2004/01/29 02:00:02 tsarna Exp $
 
 ;	from: @(#)syscalls.master	8.2 (Berkeley) 1/13/94
 
@@ -86,8 +86,8 @@
 16	STD		{ int freebsd_sys_chown(const char *path, int uid, \
 			    int gid); }
 17	NOARGS		{ int sys_obreak(char *nsize); } break
-18	NOARGS		{ int compat_20_sys_getfsstat(struct statfs12 *buf, \
-			    long bufsize, int flags); }
+18	NOARGS		{ int sys_getfsstat(struct statfs *buf, long bufsize, \
+			    int flags); }
 19	NOARGS		{ long compat_43_sys_lseek(int fd, long offset, \
 			    int whence); } olseek
 20	NOARGS		{ pid_t sys_getpid_with_ppid(void); }
@@ -308,9 +308,8 @@
 156	NOARGS		{ int compat_43_sys_getdirentries(int fd, char *buf, \
 			    u_int count, long *basep); } ogetdirentries
 157	STD		{ int freebsd_sys_statfs(const char *path, \
-			    struct statfs12 *buf); }
-158	NOARGS		{ int compat_20_sys_fstatfs(int fd, \
-			    struct statfs12 *buf); }
+			    struct statfs *buf); }
+158	NOARGS		{ int sys_fstatfs(int fd, struct statfs *buf); }
 159	UNIMPL
 160	UNIMPL
 #ifdef NFS
@@ -555,8 +554,8 @@
 294	UNIMPL
 295	UNIMPL
 296	UNIMPL
-297	NOARGS		{ int compat_20_sys_fhstatfs(const fhandle_t *fhp, \
-			    struct statfs12 *buf); }
+297	NOARGS		{ int sys_fhstatfs(const fhandle_t *fhp, \
+			    struct statfs *buf); }
 298	NOARGS		{ int sys_fhopen(const fhandle_t *fhp, int flags); }
 299	NOARGS		{ int sys_fhstat(const fhandle_t *fhp, \
 			    struct stat *sb); }

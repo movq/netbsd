@@ -1,4 +1,4 @@
-/*	$NetBSD: mkbootimage.c,v 1.11 2004/06/23 21:39:32 kleink Exp $	*/
+/*	$NetBSD: mkbootimage.c,v 1.9.2.1 2004/12/06 05:40:09 jmc Exp $	*/
 
 /*-
  * Copyright (C) 1999, 2000 NONAKA Kimihiro (nonaka@NetBSD.org)
@@ -34,9 +34,6 @@
 
 #if HAVE_NBTOOL_CONFIG_H
 #include "nbtool_config.h"
-#include "../../sys/sys/bootblock.h"
-#else
-#include <sys/bootblock.h>
 #endif
 
 #include <stdio.h>
@@ -45,13 +42,16 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <errno.h>
+#include <elf.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/uio.h>
 
-/* BFD ELF headers */
-#include <elf/common.h>
-#include <elf/external.h>
+#if HAVE_NBTOOL_CONFIG_H
+#include "../../sys/sys/bootblock.h"
+#else
+#include <sys/bootblock.h>
+#endif
 
 #include "byteorder.h"
 #include "magic.h"
@@ -64,14 +64,6 @@
 #define	MBR_PFLAG_ACTIVE	0x80
 #endif
 
-/*
- * Macros to get values from multi-byte ELF header fields.  These assume
- * a big-endian image.
- */
-#define	ELFGET16(x)	(((x)[0] << 8) | (x)[1])
-
-#define	ELFGET32(x)	(((x)[0] << 24) | ((x)[1] << 16) |		\
-			 ((x)[2] <<  8) |  (x)[3])
 
 int
 main(argc, argv)
@@ -86,8 +78,8 @@ main(argc, argv)
 	unsigned char mbr[512];
 	unsigned long entry;
 	unsigned long length;
-	Elf32_External_Ehdr hdr;
-	Elf32_External_Phdr phdr;
+	Elf32_Ehdr hdr;
+	Elf32_Phdr phdr;
 	struct mbr_partition *mbrp = (struct mbr_partition *)&mbr[MBR_PART_OFFSET];
 
 	switch (argc) { 
@@ -129,26 +121,19 @@ main(argc, argv)
 			argv[1], strerror(errno));
 		exit(3);
 	}
-	if (hdr.e_ident[EI_MAG0] != ELFMAG0 ||
-	    hdr.e_ident[EI_MAG1] != ELFMAG1 ||
-	    hdr.e_ident[EI_MAG2] != ELFMAG2 ||
-	    hdr.e_ident[EI_MAG3] != ELFMAG3 ||
+	if (memcmp(hdr.e_ident, ELFMAG, SELFMAG) != 0 ||
 	    hdr.e_ident[EI_CLASS] != ELFCLASS32) {
 		fprintf(stderr, "input '%s' is not ELF32 format\n", argv[1]);
 		exit(3);
 	}
-	if (hdr.e_ident[EI_DATA] != ELFDATA2MSB) {
-		fprintf(stderr, "input '%s' is not big-endian\n", argv[1]);
-		exit(3);
-	}
-	if (ELFGET16(hdr.e_machine) != EM_PPC) {
+	if (sa_be16toh(hdr.e_machine) != EM_PPC) {
 		fprintf(stderr, "input '%s' is not PowerPC exec binary\n",
 			argv[1]);
 		exit(3);
 	}
 
-	for (i = 0; i < ELFGET16(hdr.e_phnum); i++) {
-		lseek(elf_fd, ELFGET32(hdr.e_phoff) + sizeof(phdr) * i,
+	for (i = 0; i < sa_be16toh(hdr.e_phnum); i++) {
+		lseek(elf_fd, sa_be32toh(hdr.e_phoff) + sizeof(phdr) * i,
 			SEEK_SET);
 		if (read(elf_fd, &phdr, sizeof(phdr)) != sizeof(phdr)) {
 			fprintf(stderr, "Can't read input '%s' phdr : %s\n",
@@ -156,13 +141,13 @@ main(argc, argv)
 			exit(3);
                 }
 
-		if ((ELFGET32(phdr.p_type) != PT_LOAD) ||
-		    !(ELFGET32(phdr.p_flags) & PF_X))
+		if ((sa_be32toh(phdr.p_type) != PT_LOAD) ||
+		    !(sa_be32toh(phdr.p_flags) & PF_X))
 			continue;
 
 		fstat(elf_fd, &elf_stat);
-		elf_img_len = elf_stat.st_size - ELFGET32(phdr.p_offset);
-		lseek(elf_fd, ELFGET32(phdr.p_offset), SEEK_SET);
+		elf_img_len = elf_stat.st_size - sa_be32toh(phdr.p_offset);
+		lseek(elf_fd, sa_be32toh(phdr.p_offset), SEEK_SET);
 
 		break;
 	}

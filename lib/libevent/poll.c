@@ -1,4 +1,4 @@
-/*	$NetBSD: poll.c,v 1.5 2004/08/07 21:09:47 provos Exp $	*/
+/*	$NetBSD: poll.c,v 1.4 2003/09/28 20:02:44 provos Exp $	*/
 /*	$OpenBSD: poll.c,v 1.2 2002/06/25 15:50:15 mickey Exp $	*/
 
 /*
@@ -193,18 +193,13 @@ poll_dispatch(void *arg, struct timeval *tv)
 		return (0);
 
 	for (i = 0; i < nfds; i++) {
-                int what = pop->event_set[i].revents;
-		
 		res = 0;
-
 		/* If the file gets closed notify */
-		if (what & POLLHUP)
-			what |= POLLIN|POLLOUT;
-                if (what & POLLERR) 
-                        what |= POLLIN|POLLOUT;
-		if (what & POLLIN)
+		if (pop->event_set[i].revents & POLLHUP)
+			pop->event_set[i].revents = POLLIN|POLLOUT;
+		if (pop->event_set[i].revents & POLLIN)
 			res |= EV_READ;
-		if (what & POLLOUT)
+		if (pop->event_set[i].revents & POLLOUT)
 			res |= EV_WRITE;
 		if (res == 0)
 			continue;

@@ -1,4 +1,4 @@
-/*	$NetBSD: auvia.c,v 1.49 2004/11/16 17:15:01 xtraeme Exp $	*/
+/*	$NetBSD: auvia.c,v 1.36.2.2 2004/09/22 20:58:15 jmc Exp $	*/
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -47,7 +47,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: auvia.c,v 1.49 2004/11/16 17:15:01 xtraeme Exp $");
+__KERNEL_RCSID(0, "$NetBSD: auvia.c,v 1.36.2.2 2004/09/22 20:58:15 jmc Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -113,8 +113,8 @@ int	auvia_trigger_output(void *, void *, void *, int, void (*)(void *),
 	void *, struct audio_params *);
 int	auvia_trigger_input(void *, void *, void *, int, void (*)(void *),
 	void *, struct audio_params *);
-void	auvia_powerhook(int, void *);
-int	auvia_intr(void *);
+
+int	auvia_intr __P((void *));
 
 CFATTACH_DECL(auvia, sizeof (struct auvia_softc),
     auvia_match, auvia_attach, NULL, NULL);
@@ -124,7 +124,6 @@ CFATTACH_DECL(auvia, sizeof (struct auvia_softc),
 #define VIA_REV_8233	0x30
 #define VIA_REV_8233A	0x40
 #define VIA_REV_8235	0x50
-#define VIA_REV_8237	0x60
 
 #define AUVIA_PCICONF_JUNK	0x40
 #define		AUVIA_PCICONF_ENABLES	 0x00FF0000	/* reg 42 mask */
@@ -194,7 +193,7 @@ CFATTACH_DECL(auvia, sizeof (struct auvia_softc),
 
 #define TIMEOUT	50
 
-const struct audio_hw_if auvia_hw_if = {
+struct audio_hw_if auvia_hw_if = {
 	auvia_open,
 	auvia_close,
 	NULL, /* drain */
@@ -222,29 +221,6 @@ const struct audio_hw_if auvia_hw_if = {
 	auvia_trigger_output,
 	auvia_trigger_input,
 	NULL, /* dev_ioctl */
-};
-
-#define AUVIA_FORMATS_4CH_16	2
-#define AUVIA_FORMATS_6CH_16	3
-#define AUVIA_FORMATS_4CH_8	6
-#define AUVIA_FORMATS_6CH_8	7
-static const struct audio_format auvia_formats[AUVIA_NFORMATS] = {
-	{NULL, AUMODE_PLAY | AUMODE_RECORD, AUDIO_ENCODING_SLINEAR_LE, 16, 16,
-	 1, AUFMT_MONAURAL, 0, {8000, 48000}},
-	{NULL, AUMODE_PLAY | AUMODE_RECORD, AUDIO_ENCODING_SLINEAR_LE, 16, 16,
-	 2, AUFMT_STEREO, 0, {8000, 48000}},
-	{NULL, AUMODE_PLAY, AUDIO_ENCODING_SLINEAR_LE, 16, 16,
-	 4, AUFMT_SURROUND4, 0, {8000, 48000}},
-	{NULL, AUMODE_PLAY, AUDIO_ENCODING_SLINEAR_LE, 16, 16,
-	 6, AUFMT_DOLBY_5_1, 0, {8000, 48000}},
-	{NULL, AUMODE_PLAY | AUMODE_RECORD, AUDIO_ENCODING_ULINEAR_LE, 8, 8,
-	 1, AUFMT_MONAURAL, 0, {8000, 48000}},
-	{NULL, AUMODE_PLAY | AUMODE_RECORD, AUDIO_ENCODING_ULINEAR_LE, 8, 8,
-	 2, AUFMT_STEREO, 0, {8000, 48000}},
-	{NULL, AUMODE_PLAY, AUDIO_ENCODING_ULINEAR_LE, 8, 8,
-	 4, AUFMT_SURROUND4, 0, {8000, 48000}},
-	{NULL, AUMODE_PLAY, AUDIO_ENCODING_SLINEAR_LE, 8, 8,
-	 6, AUFMT_DOLBY_5_1, 0, {8000, 48000}},
 };
 
 int	auvia_attach_codec(void *, struct ac97_codec_if *);
@@ -309,7 +285,7 @@ auvia_attach(struct device *parent, struct device *self, void *aux)
 
 	r = PCI_REVISION(pa->pa_class);
 	if (sc->sc_flags & AUVIA_FLAGS_VT8233) {
-		snprintf(sc->sc_revision, sizeof(sc->sc_revision), "0x%02X", r);
+		sprintf(sc->sc_revision, "0x%02X", r);
 		switch(r) {
 		case VIA_REV_8233C:
 			/* 2 rec, 4 pb, 1 multi-pb */
@@ -326,12 +302,10 @@ auvia_attach(struct device *parent, struct device *self, void *aux)
 		default:
 			break;
 		}
-		if (r >= VIA_REV_8237)
-			revnum = "7";
-		else if (r >= VIA_REV_8235) /* 2 rec, 4 pb, 1 multi-pb, spdif */
+		if (r >= VIA_REV_8235) /* 2 rec, 4 pb, 1 multi-pb, spdif */
 			revnum = "5";
-		aprint_normal(": VIA Technologies VT823%s AC'97 Audio "
-		    "(rev %s)\n", revnum, sc->sc_revision);
+		aprint_normal(": VIA VT823%s AC'97 (rev %s)\n",
+			revnum, sc->sc_revision);
 	} else {
 		sc->sc_revision[1] = '\0';
 		if (r == 0x20) {
@@ -339,12 +313,11 @@ auvia_attach(struct device *parent, struct device *self, void *aux)
 		} else if ((r >= 0x10) && (r <= 0x14)) {
 			sc->sc_revision[0] = 'A' + (r - 0x10);
 		} else {
-			snprintf(sc->sc_revision, sizeof(sc->sc_revision),
-			    "0x%02X", r);
+			sprintf(sc->sc_revision, "0x%02X", r);
 		}
 
-		aprint_normal(": VIA Technologies VT82C686A AC'97 Audio "
-		    "(rev %s)\n", sc->sc_revision);
+		aprint_normal(": VIA VT82C686A AC'97 Audio (rev %s)\n",
+		       sc->sc_revision);
 	}
 
 	if (pci_intr_map(pa, &ih)) {
@@ -394,37 +367,7 @@ auvia_attach(struct device *parent, struct device *self, void *aux)
 		return;
 	}
 
-	/* setup audio_format */
-	memcpy(sc->sc_formats, auvia_formats, sizeof(auvia_formats));
-	if (sc->sc_play.sc_base != VIA8233_MP_BASE || !AC97_IS_4CH(sc->codec_if)) {
-		AUFMT_INVALIDATE(&sc->sc_formats[AUVIA_FORMATS_4CH_8]);
-		AUFMT_INVALIDATE(&sc->sc_formats[AUVIA_FORMATS_4CH_16]);
-	}
-	if (sc->sc_play.sc_base != VIA8233_MP_BASE || !AC97_IS_6CH(sc->codec_if)) {
-		AUFMT_INVALIDATE(&sc->sc_formats[AUVIA_FORMATS_6CH_8]);
-		AUFMT_INVALIDATE(&sc->sc_formats[AUVIA_FORMATS_6CH_16]);
-	}
-	if (AC97_IS_FIXED_RATE(sc->codec_if)) {
-		for (r = 0; r < AUVIA_NFORMATS; r++) {
-			sc->sc_formats[r].frequency_type = 1;
-			sc->sc_formats[r].frequency[0] = 48000;
-		}
-	}
-
-	if (0 != auconv_create_encodings(sc->sc_formats, AUVIA_NFORMATS,
-					 &sc->sc_encodings)) {
-		sc->codec_if->vtbl->detach(sc->codec_if);
-		pci_intr_disestablish(pc, sc->sc_ih);
-		bus_space_unmap(sc->sc_iot, sc->sc_ioh, iosize);
-		return;
-	}
-
-	/* Watch for power change */
-	sc->sc_suspend = PWR_RESUME;
-	sc->sc_powerhook = powerhook_establish(auvia_powerhook, sc);
-
 	audio_attach_mi(&auvia_hw_if, sc, &sc->sc_dev);
-	return;
 }
 
 
@@ -553,16 +496,71 @@ auvia_open(void *addr, int flags)
 void
 auvia_close(void *addr)
 {
+	struct auvia_softc *sc = addr;
+
+	auvia_halt_output(sc);
+	auvia_halt_input(sc);
+
+	sc->sc_play.sc_intr = NULL;
+	sc->sc_record.sc_intr = NULL;
 }
 
 
 int
 auvia_query_encoding(void *addr, struct audio_encoding *fp)
 {
-	struct auvia_softc *sc;
-
-	sc = (struct auvia_softc *)addr;
-	return auconv_query_encoding(sc->sc_encodings, fp);
+	switch (fp->index) {
+	case 0:
+		strcpy(fp->name, AudioEulinear);
+		fp->encoding = AUDIO_ENCODING_ULINEAR;
+		fp->precision = 8;
+		fp->flags = 0;
+		return (0);
+	case 1:
+		strcpy(fp->name, AudioEmulaw);
+		fp->encoding = AUDIO_ENCODING_ULAW;
+		fp->precision = 8;
+		fp->flags = AUDIO_ENCODINGFLAG_EMULATED;
+		return (0);
+	case 2:
+		strcpy(fp->name, AudioEalaw);
+		fp->encoding = AUDIO_ENCODING_ALAW;
+		fp->precision = 8;
+		fp->flags = AUDIO_ENCODINGFLAG_EMULATED;
+		return (0);
+	case 3:
+		strcpy(fp->name, AudioEslinear);
+		fp->encoding = AUDIO_ENCODING_SLINEAR;
+		fp->precision = 8;
+		fp->flags = AUDIO_ENCODINGFLAG_EMULATED;
+		return (0);
+	case 4:
+		strcpy(fp->name, AudioEslinear_le);
+		fp->encoding = AUDIO_ENCODING_SLINEAR_LE;
+		fp->precision = 16;
+		fp->flags = 0;
+		return (0);
+	case 5:
+		strcpy(fp->name, AudioEulinear_le);
+		fp->encoding = AUDIO_ENCODING_ULINEAR_LE;
+		fp->precision = 16;
+		fp->flags = AUDIO_ENCODINGFLAG_EMULATED;
+		return (0);
+	case 6:
+		strcpy(fp->name, AudioEslinear_be);
+		fp->encoding = AUDIO_ENCODING_SLINEAR_BE;
+		fp->precision = 16;
+		fp->flags = AUDIO_ENCODINGFLAG_EMULATED;
+		return (0);
+	case 7:
+		strcpy(fp->name, AudioEulinear_be);
+		fp->encoding = AUDIO_ENCODING_ULINEAR_BE;
+		fp->precision = 16;
+		fp->flags = AUDIO_ENCODINGFLAG_EMULATED;
+		return (0);
+	default:
+		return (EINVAL);
+	}
 }
 
 void
@@ -573,8 +571,8 @@ auvia_set_params_sub(struct auvia_softc *sc, struct auvia_softc_chan *ch,
 	u_int16_t regval;
 
 	if (!(sc->sc_flags & AUVIA_FLAGS_VT8233)) {
-		regval = (p->hw_channels == 2 ? AUVIA_RPMODE_STEREO : 0)
-			| (p->hw_precision * p->factor == 16 ?
+		regval = (p->channels == 2 ? AUVIA_RPMODE_STEREO : 0)
+			| (p->precision * p->factor == 16 ?
 				AUVIA_RPMODE_16BIT : 0)
 			| AUVIA_RPMODE_INTR_FLAG | AUVIA_RPMODE_INTR_EOL
 			| AUVIA_RPMODE_AUTOSTART;
@@ -584,11 +582,11 @@ auvia_set_params_sub(struct auvia_softc *sc, struct auvia_softc_chan *ch,
 		v &= ~(VIA8233_RATEFMT_48K | VIA8233_RATEFMT_STEREO
 			| VIA8233_RATEFMT_16BIT);
 
-		v |= VIA8233_RATEFMT_48K * (p->hw_sample_rate / 20)
+		v |= VIA8233_RATEFMT_48K * (p->sample_rate / 20)
 			/ (48000 / 20);
-		if (p->hw_channels == 2)
+		if (p->channels == 2)
 			v |= VIA8233_RATEFMT_STEREO;
-		if (p->hw_precision == 16)
+		if (p->precision == 16)
 			v |= VIA8233_RATEFMT_16BIT;
 
 		CH_WRITE4(sc, ch, VIA8233_RP_RATEFMT, v);
@@ -614,7 +612,7 @@ auvia_set_params(void *addr, int setmode, int usemode,
 	struct audio_params *p;
 	struct ac97_codec_if* codec;
 	int reg, mode;
-	int index;
+	u_int16_t ext_id;
 
 	codec = sc->codec_if;
 	/* for mode in (RECORD, PLAY) */
@@ -633,26 +631,121 @@ auvia_set_params(void *addr, int setmode, int usemode,
 			reg = AC97_REG_PCM_LR_ADC_RATE;
 		}
 
+		if (ch->sc_base == VIA8233_MP_BASE && mode == AUMODE_PLAY) {
+			ext_id = codec->vtbl->get_extcaps(codec);
+			if (p->channels == 1) {
+				/* ok */
+			} else if (p->channels == 2) {
+				/* ok */
+			} else if (p->channels == 4
+				&& ext_id & AC97_EXT_AUDIO_SDAC) {
+				/* ok */
+#define BITS_6CH	(AC97_EXT_AUDIO_SDAC | AC97_EXT_AUDIO_CDAC | AC97_EXT_AUDIO_LDAC)
+			} else if (p->channels == 6
+				&& (ext_id & BITS_6CH) == BITS_6CH) {
+				/* ok */
+			} else {
+				return (EINVAL);
+			}
+		} else {
+			if (p->channels != 1 && p->channels != 2)
+				return (EINVAL);
+		}
 		if (p->sample_rate < 4000 || p->sample_rate > 48000 ||
 		    (p->precision != 8 && p->precision != 16))
 			return (EINVAL);
-		index = auconv_set_converter(sc->sc_formats, AUVIA_NFORMATS,
-					     mode, p, TRUE);
-		if (index < 0)
-			return EINVAL;
-		if (!AC97_IS_FIXED_RATE(codec)) {
-			if (codec->vtbl->set_rate(codec, reg, &p->hw_sample_rate))
-				return EINVAL;
+
+		if (IS_FIXED_RATE(codec)) {
+			/* Enable aurateconv */
+			p->hw_sample_rate = AC97_SINGLE_RATE;
+		} else {
+			if (codec->vtbl->set_rate(codec, reg, &p->sample_rate))
+				return (EINVAL);
 			reg = AC97_REG_PCM_SURR_DAC_RATE;
-			if (p->hw_channels >= 4
+			if (p->channels >= 4
 			    && codec->vtbl->set_rate(codec, reg,
-						     &p->hw_sample_rate))
-				return EINVAL;
+						     &p->sample_rate))
+				return (EINVAL);
 			reg = AC97_REG_PCM_LFE_DAC_RATE;
-			if (p->hw_channels == 6
+			if (p->channels == 6
 			    && codec->vtbl->set_rate(codec, reg,
-						     &p->hw_sample_rate))
-				return EINVAL;
+						     &p->sample_rate))
+				return (EINVAL);
+		}
+
+		p->factor = 1;
+		p->sw_code = 0;
+		switch (p->encoding) {
+		case AUDIO_ENCODING_SLINEAR_BE:
+			if (p->precision == 16) {
+				p->sw_code = swap_bytes;
+				p->hw_encoding = AUDIO_ENCODING_SLINEAR_LE;
+			} else {
+				p->sw_code = change_sign8;
+				p->hw_encoding = AUDIO_ENCODING_ULINEAR;
+			}
+			break;
+		case AUDIO_ENCODING_SLINEAR_LE:
+			if (p->precision != 16) {
+				p->sw_code = change_sign8;
+				p->hw_encoding = AUDIO_ENCODING_ULINEAR;
+			}
+			break;
+		case AUDIO_ENCODING_ULINEAR_BE:
+			if (p->precision == 16) {
+				if (mode == AUMODE_PLAY)
+					p->sw_code = swap_bytes_change_sign16_le;
+				else
+					p->sw_code = change_sign16_swap_bytes_le;
+				p->hw_encoding = AUDIO_ENCODING_SLINEAR_LE;
+			}
+			break;
+		case AUDIO_ENCODING_ULINEAR_LE:
+			if (p->precision == 16) {
+				p->sw_code = change_sign16_le;
+				p->hw_encoding = AUDIO_ENCODING_SLINEAR_LE;
+			}
+			break;
+		case AUDIO_ENCODING_ULAW:
+			if (p->precision != 8)
+				return (EINVAL);
+			if (mode == AUMODE_PLAY) {
+				p->factor = 2;
+				p->sw_code = mulaw_to_slinear16_le;
+				p->hw_encoding = AUDIO_ENCODING_SLINEAR_LE;
+				p->hw_precision = 16;
+			} else if (!IS_FIXED_RATE(codec)) {
+				p->sw_code = ulinear8_to_mulaw;
+				p->hw_encoding = AUDIO_ENCODING_ULINEAR;
+			} else {
+				/* aurateconv supports no 8 bit PCM */
+				p->factor = 2;
+				p->sw_code = slinear16_to_mulaw_le;
+				p->hw_encoding = AUDIO_ENCODING_SLINEAR_LE;
+				p->hw_precision = 16;
+			}
+			break;
+		case AUDIO_ENCODING_ALAW:
+			if (p->precision != 8)
+				return (EINVAL);
+			if (mode == AUMODE_PLAY) {
+				p->factor = 2;
+				p->sw_code = alaw_to_slinear16_le;
+				p->hw_encoding = AUDIO_ENCODING_SLINEAR_LE;
+				p->hw_precision = 16;
+			} else if (!IS_FIXED_RATE(codec)) {
+				p->sw_code = ulinear8_to_alaw;
+				p->hw_encoding = AUDIO_ENCODING_ULINEAR;
+			} else {
+				/* aurateconv supports no 8 bit PCM */
+				p->factor = 2;
+				p->sw_code = slinear16_to_alaw_le;
+				p->hw_encoding = AUDIO_ENCODING_SLINEAR_LE;
+				p->hw_precision = 16;
+			}
+			break;
+		default:
+			return (EINVAL);
 		}
 		auvia_set_params_sub(sc, ch, p);
 	}
@@ -681,7 +774,6 @@ auvia_halt_output(void *addr)
 	struct auvia_softc_chan *ch = &(sc->sc_play);
 
 	CH_WRITE1(sc, ch, AUVIA_RP_CONTROL, AUVIA_RPCTRL_TERMINATE);
-	ch->sc_intr = NULL;
 	return 0;
 }
 
@@ -693,7 +785,6 @@ auvia_halt_input(void *addr)
 	struct auvia_softc_chan *ch = &(sc->sc_record);
 
 	CH_WRITE1(sc, ch, AUVIA_RP_CONTROL, AUVIA_RPCTRL_TERMINATE);
-	ch->sc_intr = NULL;
 	return 0;
 }
 
@@ -705,7 +796,7 @@ auvia_getdev(void *addr, struct audio_device *retp)
 
 	if (retp) {
 		if (sc->sc_flags & AUVIA_FLAGS_VT8233) {
-			strncpy(retp->name, "VIA VT823x",
+			strncpy(retp->name, "VIA VT8233/8235",
 				sizeof(retp->name));
 		} else {
 			strncpy(retp->name, "VIA VT82C686A",
@@ -867,7 +958,7 @@ auvia_get_props(void *addr)
 	 * rate because of aurateconv.  Applications can't know what rate the
 	 * device can process in the case of mmap().
 	 */
-	if (!AC97_IS_FIXED_RATE(sc->codec_if))
+	if (!IS_FIXED_RATE(sc->codec_if))
 		props |= AUDIO_PROP_MMAP;
 	return props;
 }
@@ -1052,37 +1143,4 @@ auvia_intr(void *arg)
 	}
 
 	return rval;
-}
-
-void
-auvia_powerhook(int why, void *addr)
-{
-	struct auvia_softc *sc = (struct auvia_softc *)addr;
-
-	switch (why) {
-	case PWR_SUSPEND:
-	case PWR_STANDBY:
-		/* Power down */
-		sc->sc_suspend = why;
-		break;
-
-	case PWR_RESUME:
-		/* Wake up */
-		if (sc->sc_suspend == PWR_RESUME) {
-			printf("%s: resume without suspend.\n",
-			    sc->sc_dev.dv_xname);
-			sc->sc_suspend = why;
-			return;
-		}
-		sc->sc_suspend = why;
-		auvia_reset_codec(sc);
-		DELAY(1000);
-		(sc->codec_if->vtbl->restore_ports)(sc->codec_if);
-		break;
-
-	case PWR_SOFTSUSPEND:
-	case PWR_SOFTSTANDBY:
-	case PWR_SOFTRESUME:
-		break;
-	}
 }

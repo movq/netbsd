@@ -1,4 +1,4 @@
-/*	$NetBSD: fault.c,v 1.52 2004/10/24 06:58:14 skrll Exp $	*/
+/*	$NetBSD: fault.c,v 1.49 2004/03/14 01:08:47 cl Exp $	*/
 
 /*
  * Copyright 2003 Wasabi Systems, Inc.
@@ -81,7 +81,7 @@
 #include "opt_kgdb.h"
 
 #include <sys/types.h>
-__KERNEL_RCSID(0, "$NetBSD: fault.c,v 1.52 2004/10/24 06:58:14 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: fault.c,v 1.49 2004/03/14 01:08:47 cl Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -91,10 +91,6 @@ __KERNEL_RCSID(0, "$NetBSD: fault.c,v 1.52 2004/10/24 06:58:14 skrll Exp $");
 #include <sys/kernel.h>
 
 #include <uvm/uvm_extern.h>
-#include <uvm/uvm_stat.h>
-#ifdef UVMHIST
-#include <uvm/uvm.h>
-#endif
 
 #include <arm/cpuconf.h>
 
@@ -174,9 +170,9 @@ static __inline void
 call_trapsignal(struct lwp *l, ksiginfo_t *ksi)
 {
 
-	KERNEL_PROC_LOCK(l);
+	KERNEL_PROC_LOCK(l->l_proc);
 	TRAPSIGNAL(l, ksi);
-	KERNEL_PROC_UNLOCK(l);
+	KERNEL_PROC_UNLOCK(l->l_proc);
 }
 
 static __inline int
@@ -195,18 +191,8 @@ data_abort_fixup(trapframe_t *tf, u_int fsr, u_int far, struct lwp *l)
 	 */
 	printf("data_abort_fixup: fixup for %s mode data abort failed.\n",
 	    TRAP_USERMODE(tf) ? "user" : "kernel");
-#ifdef THUMB_CODE
-	if (tf->tf_spsr & PSR_T_bit) {
-		printf("pc = 0x%08x, opcode 0x%04x, 0x%04x, insn = ",
-		    tf->tf_pc, *((u_int16 *)(tf->tf_pc & ~1),
-		    *((u_int16 *)((tf->tf_pc + 2) & ~1));
-	}
-	else
-#endif
-	{
-		printf("pc = 0x%08x, opcode 0x%08x, insn = ", tf->tf_pc,
-		    *((u_int *)tf->tf_pc));
-	}
+	printf("pc = 0x%08x, opcode 0x%08x, insn = ", tf->tf_pc,
+	    *((u_int *)tf->tf_pc));
 	disassemble(tf->tf_pc);
 
 	/* Die now if this happened in kernel mode */
@@ -232,13 +218,10 @@ data_abort_handler(trapframe_t *tf)
 	int error;
 	ksiginfo_t ksi;
 
-	UVMHIST_FUNC("data_abort_handler"); 
-
 	/* Grab FAR/FSR before enabling interrupts */
 	far = cpu_faultaddress();
 	fsr = cpu_faultstatus();
 
-	UVMHIST_CALLED(maphist);
 	/* Update vmmeter statistics */
 	uvmexp.traps++;
 
@@ -248,9 +231,6 @@ data_abort_handler(trapframe_t *tf)
 
 	/* Get the current lwp structure or lwp0 if there is none */
 	l = (curlwp != NULL) ? curlwp : &lwp0;
-
-	UVMHIST_LOG(maphist, " (pc=0x%x, l=0x%x, far=0x%x, fsr=0x%x)",
-	    tf->tf_pc, l, far, fsr);
 
 	/* Data abort came from user mode? */
 	user = TRAP_USERMODE(tf);
@@ -295,18 +275,8 @@ data_abort_handler(trapframe_t *tf)
 	 * someone executing Thumb code, in which case the PC might not
 	 * be word-aligned. This would cause a kernel alignment fault
 	 * further down if we have to decode the current instruction.
+	 * XXX: It would be nice to be able to support Thumb at some point.
 	 */
-#ifdef THUMB_CODE
-	/* 
-	 * XXX: It would be nice to be able to support Thumb in the kernel
-	 * at some point.
-	 */
-	if (__predict_false(!user && (tf->tf_pc & 3) != 0)) {
-		printf("\ndata_abort_fault: Misaligned Kernel-mode "
-		    "Program Counter\n");
-		dab_fatal(tf, fsr, far, l, NULL);
-	}
-#else
 	if (__predict_false((tf->tf_pc & 3) != 0)) {
 		if (user) {
 			/*
@@ -328,7 +298,6 @@ data_abort_handler(trapframe_t *tf)
 		    "Program Counter\n");
 		dab_fatal(tf, fsr, far, l, NULL);
 	}
-#endif
 
 	/* See if the CPU state needs to be fixed up */
 	switch (data_abort_fixup(tf, fsr, far, l)) {
@@ -400,39 +369,17 @@ data_abort_handler(trapframe_t *tf)
 	if (IS_PERMISSION_FAULT(fsr))
 		ftype = VM_PROT_WRITE; 
 	else {
-#ifdef THUMB_CODE
-		/* Fast track the ARM case.  */
-		if (__predict_false(tf->tf_spsr & PSR_T_bit)) {
-			u_int insn = fusword((void *)(tf->tf_pc & ~1));
-			u_int insn_f8 = insn & 0xf800;
-			u_int insn_fe = insn & 0xfe00;
+		u_int insn = ReadWord(tf->tf_pc);
 
-			if (insn_f8 == 0x6000 || /* STR(1) */
-			    insn_f8 == 0x7000 || /* STRB(1) */
-			    insn_f8 == 0x8000 || /* STRH(1) */
-			    insn_f8 == 0x9000 || /* STR(3) */
-			    insn_f8 == 0xc000 || /* STM */
-			    insn_fe == 0x5000 || /* STR(2) */
-			    insn_fe == 0x5200 || /* STRH(2) */
-			    insn_fe == 0x5400)   /* STRB(2) */
-				ftype = VM_PROT_WRITE;
-			else
-				ftype = VM_PROT_READ;
-		}
+		if (((insn & 0x0c100000) == 0x04000000) ||	/* STR/STRB */
+		    ((insn & 0x0e1000b0) == 0x000000b0) ||	/* STRH/STRD */
+		    ((insn & 0x0a100000) == 0x08000000))	/* STM/CDT */
+			ftype = VM_PROT_WRITE; 
 		else
-#endif
-		{
-			u_int insn = ReadWord(tf->tf_pc);
-
-			if (((insn & 0x0c100000) == 0x04000000) || /* STR[B] */
-			    ((insn & 0x0e1000b0) == 0x000000b0) || /* STR[HD]*/
-			    ((insn & 0x0a100000) == 0x08000000))   /* STM/CDT*/
-				ftype = VM_PROT_WRITE; 
-			else if ((insn & 0x0fb00ff0) == 0x01000090)/* SWP */
-				ftype = VM_PROT_READ | VM_PROT_WRITE; 
-			else
-				ftype = VM_PROT_READ; 
-		}
+		if ((insn & 0x0fb00ff0) == 0x01000090)		/* SWP */
+			ftype = VM_PROT_READ | VM_PROT_WRITE; 
+		else
+			ftype = VM_PROT_READ; 
 	}
 
 	/*
@@ -445,7 +392,6 @@ data_abort_handler(trapframe_t *tf)
 	if (pmap_fault_fixup(map->pmap, va, ftype, user)) {
 		if (map != kernel_map)
 			l->l_flag &= ~L_SA_PAGEFAULT;
-		UVMHIST_LOG(maphist, " <- ref/mod emul", 0, 0, 0, 0);
 		goto out;
 	}
 
@@ -470,7 +416,6 @@ data_abort_handler(trapframe_t *tf)
 	if (__predict_true(error == 0)) {
 		if (user)
 			uvm_grow(l->l_proc, va); /* Record any stack growth */
-		UVMHIST_LOG(maphist, " <- uvm", 0, 0, 0, 0);
 		goto out;
 	}
 
@@ -500,7 +445,6 @@ data_abort_handler(trapframe_t *tf)
 	ksi.ksi_code = (error == EACCES) ? SEGV_ACCERR : SEGV_MAPERR;
 	ksi.ksi_addr = (u_int32_t *)(intptr_t) far;
 	ksi.ksi_trap = fsr;
-	UVMHIST_LOG(maphist, " <- erorr (%d)", error, 0, 0, 0);
 
 do_trapsignal:
 	call_trapsignal(l, &ksi);
@@ -669,11 +613,6 @@ dab_buserr(trapframe_t *tf, u_int fsr, u_int far, struct lwp *l,
 			 */
 			tf->tf_spsr |= PSR_USR32_MODE;
 			tf->tf_pc = tf->tf_usr_lr;
-#ifdef THUMB_CODE
-			tf->tf_spsr &= ~PSR_T_bit;
-			if (tf->tf_usr_lr & 1)
-				tf->tf_spsr |= PSR_T_bit;
-#endif
 		}
 	}
 
@@ -727,18 +666,8 @@ prefetch_abort_fixup(trapframe_t *tf)
 	printf(
 	    "prefetch_abort_fixup: fixup for %s mode prefetch abort failed.\n",
 	    TRAP_USERMODE(tf) ? "user" : "kernel");
-#ifdef THUMB_CODE
-	if (tf->tf_spsr & PSR_T_bit) {
-		printf("pc = 0x%08x, opcode 0x%04x, 0x%04x, insn = ",
-		    tf->tf_pc, *((u_int16 *)(tf->tf_pc & ~1),
-		    *((u_int16 *)((tf->tf_pc + 2) & ~1));
-	}
-	else
-#endif
-	{
-		printf("pc = 0x%08x, opcode 0x%08x, insn = ", tf->tf_pc,
-		    *((u_int *)tf->tf_pc));
-	}
+	printf("pc = 0x%08x, opcode 0x%08x, insn = ", tf->tf_pc,
+	    *((u_int *)tf->tf_pc));
 	disassemble(tf->tf_pc);
 
 	/* Die now if this happened in kernel mode */
@@ -770,8 +699,6 @@ prefetch_abort_handler(trapframe_t *tf)
 	vaddr_t fault_pc, va;
 	ksiginfo_t ksi;
 	int error;
-
-	UVMHIST_FUNC("prefetch_abort_handler"); UVMHIST_CALLED(maphist);
 
 	/* Update vmmeter statistics */
 	uvmexp.traps++;
@@ -809,8 +736,6 @@ prefetch_abort_handler(trapframe_t *tf)
 	fault_pc = tf->tf_pc;
 	l = curlwp;
 	l->l_addr->u_pcb.pcb_tf = tf;
-	UVMHIST_LOG(maphist, " (pc=0x%x, l=0x%x, tf=0x%x)", fault_pc, l, tf,
-	    0);
 
 	/* Ok validate the address, can only execute in USER space */
 	if (__predict_false(fault_pc >= VM_MAXUSER_ADDRESS ||
@@ -832,10 +757,8 @@ prefetch_abort_handler(trapframe_t *tf)
 #ifdef DEBUG
 	last_fault_code = -1;
 #endif
-	if (pmap_fault_fixup(map->pmap, va, VM_PROT_READ, 1)) {
-		UVMHIST_LOG (maphist, " <- emulated", 0, 0, 0, 0);
+	if (pmap_fault_fixup(map->pmap, va, VM_PROT_READ, 1))
 		goto out;
-	}
 
 #ifdef DIAGNOSTIC
 	if (__predict_false(current_intr_depth > 0)) {
@@ -845,13 +768,11 @@ prefetch_abort_handler(trapframe_t *tf)
 #endif
 
 	error = uvm_fault(map, va, 0, VM_PROT_READ);
-	if (__predict_true(error == 0)) {
-		UVMHIST_LOG (maphist, " <- uvm", 0, 0, 0, 0);
+	if (__predict_true(error == 0))
 		goto out;
-	}
+
 	KSI_INIT_TRAP(&ksi);
 
-	UVMHIST_LOG (maphist, " <- fatal (%d)", error, 0, 0, 0);
 	if (error == ENOMEM) {
 		printf("UVM: pid %d (%s), uid %d killed: "
 		    "out of swap\n", l->l_proc->p_pid, l->l_proc->p_comm,

@@ -1,11 +1,11 @@
-/*	$NetBSD: show.c,v 1.29 2004/05/07 16:40:31 jlam Exp $	*/
+/*	$NetBSD: show.c,v 1.27 2003/09/02 07:34:59 jlam Exp $	*/
 
 #include <sys/cdefs.h>
 #ifndef lint
 #if 0
 static const char *rcsid = "from FreeBSD Id: show.c,v 1.11 1997/10/08 07:47:38 charnier Exp";
 #else
-__RCSID("$NetBSD: show.c,v 1.29 2004/05/07 16:40:31 jlam Exp $");
+__RCSID("$NetBSD: show.c,v 1.27 2003/09/02 07:34:59 jlam Exp $");
 #endif
 #endif
 
@@ -124,48 +124,6 @@ show_file(char *title, char *fname)
 }
 
 void
-show_var(const char *fname, const char *variable)
-{
-	FILE   *fp;
-	char   *line;
-	size_t  len;
-	size_t  varlen;
-
-	fp = fopen(fname, "r");
-	if (!fp) {
-		warnx("show_var: can't open '%s' for reading", fname);
-		return;
-	}
-
-	varlen = strlen(variable);
-	if (varlen > 0) {
-		while ((line = fgetln(fp, &len)) != (char *) NULL) {
-			/*
-			 * We expect lines to look like one of the following
-			 * forms:
-			 *      VAR=value
-			 *      VAR= value
-			 * We print out the value of VAR, or nothing if it
-			 * doesn't exist.
-			 */
-			if (line[len - 1] == '\n')
-				line[len - 1] = '\0';
-			if (strncmp(variable, line, varlen) == 0) {
-				line += varlen;
-				if (*line != '=')
-					continue;
-				++line;
-				if (*line == ' ')
-					++line;
-				(void) printf("%s\n", line);
-			}
-		}
-	}
-	(void) fclose(fp);
-	return;
-}
-
-void
 show_index(char *title, char *fname)
 {
 	FILE   *fp;
@@ -175,7 +133,7 @@ show_index(char *title, char *fname)
 
 	if (!Quiet) {
 		printf("%s%s", InfoPrefix, title);
-		maxline -= MAX(MAXNAMESIZE, strlen(title));
+		maxline -= MAXNAMESIZE;
 	}
 	if ((fp = fopen(fname, "r")) == (FILE *) NULL) {
 		warnx("show_file: can't open '%s' for reading", fname);

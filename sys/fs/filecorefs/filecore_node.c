@@ -1,4 +1,4 @@
-/*	$NetBSD: filecore_node.c,v 1.5 2004/05/20 05:39:34 atatat Exp $	*/
+/*	$NetBSD: filecore_node.c,v 1.3 2004/03/27 04:43:43 atatat Exp $	*/
 
 /*-
  * Copyright (c) 1982, 1986, 1989, 1994 
@@ -67,7 +67,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: filecore_node.c,v 1.5 2004/05/20 05:39:34 atatat Exp $");
+__KERNEL_RCSID(0, "$NetBSD: filecore_node.c,v 1.3 2004/03/27 04:43:43 atatat Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -95,8 +95,7 @@ u_long filecorehash;
 #define	INOHASH(device, inum)	(((device) + ((inum)>>12)) & filecorehash)
 struct simplelock filecore_ihash_slock;
 
-POOL_INIT(filecore_node_pool, sizeof(struct filecore_node), 0, 0, 0,
-    "filecrnopl", &pool_allocator_nointr);
+struct pool filecore_node_pool;
 
 extern int prtactive;	/* 1 => print out reclaim of active vnodes */
 
@@ -108,12 +107,12 @@ filecore_init()
 {
 #ifdef _LKM
 	malloc_type_attach(M_FILECOREMNT);
-	pool_init(&filecore_node_pool, sizeof(struct filecore_node), 0, 0, 0,
-	    "filecrnopl", &pool_allocator_nointr);
 #endif
 	filecorehashtbl = hashinit(desiredvnodes, HASH_LIST, M_FILECOREMNT,
 	    M_WAITOK, &filecorehash);
 	simple_lock_init(&filecore_ihash_slock);
+	pool_init(&filecore_node_pool, sizeof(struct filecore_node),
+	    0, 0, 0, "filecrnopl", &pool_allocator_nointr);
 }
 
 /*
@@ -152,9 +151,9 @@ filecore_reinit()
 void
 filecore_done()
 {
+	pool_destroy(&filecore_node_pool);
 	hashdone(filecorehashtbl, M_FILECOREMNT);
 #ifdef _LKM
-	pool_destroy(&filecore_node_pool);
 	malloc_type_detach(M_FILECOREMNT);
 #endif
 }

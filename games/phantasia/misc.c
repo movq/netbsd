@@ -1,12 +1,10 @@
-/*	$NetBSD: misc.c,v 1.12 2004/04/11 13:35:06 he Exp $	*/
+/*	$NetBSD: misc.c,v 1.10 2004/01/01 16:03:46 jsm Exp $	*/
 
 /*
  * misc.c  Phantasia miscellaneous support routines
  */
 
 #include "include.h"
-#undef bool
-#include <curses.h>
 
 
 void

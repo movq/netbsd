@@ -1,4 +1,4 @@
-/*	$NetBSD: sysctl.h,v 1.127 2004/08/09 08:35:23 yamt Exp $	*/
+/*	$NetBSD: sysctl.h,v 1.116.2.8 2004/05/23 10:45:52 tron Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -797,8 +797,7 @@ struct buf_sysctl {
 #define	PROC_PID_LIMIT_MEMLOCK	(RLIMIT_MEMLOCK+1)
 #define PROC_PID_LIMIT_NPROC	(RLIMIT_NPROC+1)
 #define	PROC_PID_LIMIT_NOFILE	(RLIMIT_NOFILE+1)
-#define	PROC_PID_LIMIT_SBSIZE	(RLIMIT_SBSIZE+1)
-#define	PROC_PID_LIMIT_MAXID 	(RLIM_NLIMITS+1)
+#define	PROC_PID_LIMIT_MAXID 	10
 
 #define	PROC_PID_LIMIT_NAMES { \
 	{ 0, 0 }, \
@@ -811,7 +810,6 @@ struct buf_sysctl {
 	{ "memorylocked", CTLTYPE_NODE }, \
 	{ "maxproc", CTLTYPE_NODE }, \
 	{ "descriptors", CTLTYPE_NODE }, \
-	{ "sbsize", CTLTYPE_NODE }, \
 }
 /* for each type, either hard or soft value */
 #define	PROC_PID_LIMIT_TYPE_SOFT	1
@@ -833,15 +831,13 @@ struct buf_sysctl {
 #define	EMUL_LINUX	1
 #define	EMUL_IRIX	2
 #define	EMUL_DARWIN	3
-#define	EMUL_MACH	4
 
-#define	EMUL_MAXID	5
+#define	EMUL_MAXID	4
 #define	CTL_EMUL_NAMES { \
 	{ 0, 0 }, \
 	{ "linux", CTLTYPE_NODE }, \
 	{ "irix", CTLTYPE_NODE }, \
 	{ "darwin", CTLTYPE_NODE }, \
-	{ "mach", CTLTYPE_NODE }, \
 }
 
 #ifdef _KERNEL
@@ -1003,7 +999,7 @@ void	sysctl_dump(const struct sysctlnode *);
 void	sysctl_free(struct sysctlnode *);
 void	sysctl_teardown(struct sysctllog **);
 
-#ifdef SYSCTL_INCLUDE_DESCR
+#if SYSCTL_INCLUDE_DESCR
 #define SYSCTL_DESCR(s) s
 #else /* SYSCTL_INCLUDE_DESCR */
 #define SYSCTL_DESCR(s) NULL

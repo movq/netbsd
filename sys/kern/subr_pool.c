@@ -1,4 +1,4 @@
-/*	$NetBSD: subr_pool.c,v 1.96 2004/06/20 18:19:27 thorpej Exp $	*/
+/*	$NetBSD: subr_pool.c,v 1.93.2.1 2004/06/22 08:58:42 tron Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1999, 2000 The NetBSD Foundation, Inc.
@@ -38,7 +38,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: subr_pool.c,v 1.96 2004/06/20 18:19:27 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: subr_pool.c,v 1.93.2.1 2004/06/22 08:58:42 tron Exp $");
 
 #include "opt_pool.h"
 #include "opt_poollog.h"
@@ -357,21 +357,6 @@ pr_rmpage(struct pool *pp, struct pool_item_header *ph,
 }
 
 /*
- * Initialize all the pools listed in the "pools" link set.
- */
-void
-link_pool_init(void)
-{
-	__link_set_decl(pools, struct link_pool_init);
-	struct link_pool_init * const *pi;
-
-	__link_set_foreach(pi, pools)
-		pool_init((*pi)->pp, (*pi)->size, (*pi)->align,
-		    (*pi)->align_offset, (*pi)->flags, (*pi)->wchan,
-		    (*pi)->palloc);
-}
-
-/*
  * Initialize the given pool resource structure.
  *
  * We export this routine to allow other kernel parts to declare
@@ -670,9 +655,6 @@ pool_get(struct pool *pp, int flags)
 	void *v;
 
 #ifdef DIAGNOSTIC
-	if (__predict_false(pp->pr_itemsperpage == 0))
-		panic("pool_get: pool %p: pr_itemsperpage is zero, "
-		    "pool not initialized?", pp);
 	if (__predict_false(curlwp == NULL && doing_shutdown == 0 &&
 			    (flags & PR_WAITOK) != 0))
 		panic("pool_get: %s: must have NOWAIT", pp->pr_wchan);

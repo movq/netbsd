@@ -23,3 +23,5 @@ SYMBOL TABLE:
 
 Contents of section \.text:
  1000 fd030303                             .*
+Contents of section \.data:
+Contents of section \.sbss:

@@ -1,4 +1,4 @@
-/*	$NetBSD: if_sq.c,v 1.21 2004/10/30 18:08:35 thorpej Exp $	*/
+/*	$NetBSD: if_sq.c,v 1.20 2003/12/30 23:48:07 sekiya Exp $	*/
 
 /*
  * Copyright (c) 2001 Rafal K. Boni
@@ -33,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_sq.c,v 1.21 2004/10/30 18:08:35 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_sq.c,v 1.20 2003/12/30 23:48:07 sekiya Exp $");
 
 #include "bpfilter.h"
 
@@ -480,10 +480,7 @@ sq_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 		 * Multicast list has changed; set the hardware filter
 		 * accordingly.
 		 */
-		if (ifp->if_flags & IFF_RUNNING)
-			error = sq_init(ifp);
-		else
-			error = 0;
+		error = sq_init(ifp);
 	}
 
 	splx(s);

@@ -33,7 +33,7 @@
 
 #include "rsh_locl.h"
 __RCSID("$Heimdal: rshd.c,v 1.51.2.1 2003/08/19 11:36:17 joda Exp $"
-        "$NetBSD: rshd.c,v 1.1.1.8 2004/04/02 14:47:25 lha Exp $");
+        "$NetBSD: rshd.c,v 1.1.1.7.2.1 2004/04/21 04:55:37 jmc Exp $");
 
 int
 login_access( struct passwd *user, char *from);

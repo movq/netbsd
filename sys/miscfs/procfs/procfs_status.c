@@ -1,4 +1,4 @@
-/*	$NetBSD: procfs_status.c,v 1.23 2004/04/22 00:31:00 itojun Exp $	*/
+/*	$NetBSD: procfs_status.c,v 1.22 2003/08/07 16:32:42 agc Exp $	*/
 
 /*
  * Copyright (c) 1993
@@ -72,7 +72,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: procfs_status.c,v 1.23 2004/04/22 00:31:00 itojun Exp $");
+__KERNEL_RCSID(0, "$NetBSD: procfs_status.c,v 1.22 2003/08/07 16:32:42 agc Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -101,6 +101,8 @@ procfs_dostatus(curp, l, pfs, uio)
 	char *sep;
 	int pid, ppid, pgid, sid;
 	u_int i;
+	int xlen;
+	int error;
 	char psbuf[256+MAXHOSTNAMELEN];		/* XXX - conservative */
 
 	if (uio->uio_rw != UIO_READ)
@@ -118,54 +120,63 @@ procfs_dostatus(curp, l, pfs, uio)
 	memcpy(ps, p->p_comm, MAXCOMLEN);
 	ps[MAXCOMLEN] = '\0';
 	ps += strlen(ps);
-	ps += snprintf(ps, sizeof(psbuf) - (ps - psbuf), " %d %d %d %d ",
-	    pid, ppid, pgid, sid);
+	ps += sprintf(ps, " %d %d %d %d ", pid, ppid, pgid, sid);
 
 	if ((p->p_flag&P_CONTROLT) && (tp = sess->s_ttyp))
-		ps += snprintf(ps, sizeof(psbuf) - (ps - psbuf), "%d,%d ",
-		    major(tp->t_dev), minor(tp->t_dev));
+		ps += sprintf(ps, "%d,%d ", major(tp->t_dev),
+		    minor(tp->t_dev));
 	else
-		ps += snprintf(ps, sizeof(psbuf) - (ps - psbuf), "%d,%d ",
-		    -1, -1);
+		ps += sprintf(ps, "%d,%d ", -1, -1);
 
 	sep = "";
 	if (sess->s_ttyvp) {
-		ps += snprintf(ps, sizeof(psbuf) - (ps - psbuf), "%sctty", sep);
+		ps += sprintf(ps, "%sctty", sep);
 		sep = ",";
 	}
 	if (SESS_LEADER(p)) {
-		ps += snprintf(ps, sizeof(psbuf) - (ps - psbuf), "%ssldr", sep);
+		ps += sprintf(ps, "%ssldr", sep);
 		sep = ",";
 	}
 	if (*sep != ',')
-		ps += snprintf(ps, sizeof(psbuf) - (ps - psbuf), "noflags");
+		ps += sprintf(ps, "noflags");
 
 	if (l->l_flag & L_INMEM)
-		ps += snprintf(ps, sizeof(psbuf) - (ps - psbuf), " %ld,%ld",
-		    p->p_stats->p_start.tv_sec, p->p_stats->p_start.tv_usec);
+		ps += sprintf(ps, " %ld,%ld",
+			p->p_stats->p_start.tv_sec,
+			p->p_stats->p_start.tv_usec);
 	else
-		ps += snprintf(ps, sizeof(psbuf) - (ps - psbuf), " -1,-1");
+		ps += sprintf(ps, " -1,-1");
 	
 	{
 		struct timeval ut, st;
 
 		calcru(p, &ut, &st, (void *) 0);
-		ps += snprintf(ps, sizeof(psbuf) - (ps - psbuf),
-		    " %ld,%ld %ld,%ld", ut.tv_sec, ut.tv_usec, st.tv_sec,
-		    st.tv_usec);
+		ps += sprintf(ps, " %ld,%ld %ld,%ld",
+			ut.tv_sec,
+			ut.tv_usec,
+			st.tv_sec,
+			st.tv_usec);
 	}
 
-	ps += snprintf(ps, sizeof(psbuf) - (ps - psbuf), " %s",
+	ps += sprintf(ps, " %s",
 	    (l->l_wchan && l->l_wmesg) ? l->l_wmesg : "nochan");
 
 	cr = p->p_ucred;
 
-	ps += snprintf(ps, sizeof(psbuf) - (ps - psbuf), " %d", cr->cr_uid);
-	ps += snprintf(ps, sizeof(psbuf) - (ps - psbuf), " %d", cr->cr_gid);
+	ps += sprintf(ps, " %d", cr->cr_uid);
+	ps += sprintf(ps, " %d", cr->cr_gid);
 	for (i = 0; i < cr->cr_ngroups; i++)
-		ps += snprintf(ps, sizeof(psbuf) - (ps - psbuf), ",%d",
-		    cr->cr_groups[i]);
-	ps += snprintf(ps, sizeof(psbuf) - (ps - psbuf), "\n");
+		ps += sprintf(ps, ",%d", cr->cr_groups[i]);
+	ps += sprintf(ps, "\n");
 
-	return (uiomove_frombuf(psbuf, ps - psbuf, uio));
+	xlen = ps - psbuf;
+	xlen -= uio->uio_offset;
+	ps = psbuf + uio->uio_offset;
+	xlen = imin(xlen, uio->uio_resid);
+	if (xlen <= 0)
+		error = 0;
+	else
+		error = uiomove(ps, xlen, uio);
+
+	return (error);
 }

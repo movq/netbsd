@@ -1,4 +1,4 @@
-/*	$NetBSD: bootptest.c,v 1.14 2004/11/17 13:28:31 hira Exp $	*/
+/*	$NetBSD: bootptest.c,v 1.13 2003/07/14 06:08:04 itojun Exp $	*/
 
 /*
  * bootptest.c - Test out a bootp server.
@@ -36,11 +36,10 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: bootptest.c,v 1.14 2004/11/17 13:28:31 hira Exp $");
+__RCSID("$NetBSD: bootptest.c,v 1.13 2003/07/14 06:08:04 itojun Exp $");
 #endif
 
-char *usage = "usage: %s [-f bootfile] [-h] [-m magic_number] server-name\n"
-	      "                 [vendor-data-template-file]\n";
+char *usage = "bootptest [-h] server-name [vendor-data-template-file]";
 
 #include <sys/param.h>
 #include <sys/socket.h>
@@ -197,7 +196,7 @@ main(int argc, char **argv)
 
 		error:
 		default:
-			(void)fprintf(stderr, usage, getprogname());
+			puts(usage);
 			exit(1);
 
 		}
@@ -219,7 +218,7 @@ main(int argc, char **argv)
 	}
 	if (!servername) {
 		printf("missing server name.\n");
-		(void)fprintf(stderr, usage, getprogname());
+		puts(usage);
 		exit(1);
 	}
 	/*

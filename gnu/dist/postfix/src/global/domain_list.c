@@ -1,5 +1,3 @@
-/*	$NetBSD: domain_list.c,v 1.1.1.4 2004/05/31 00:24:29 heas Exp $	*/
-
 /*++
 /* NAME
 /*	domain_list 3

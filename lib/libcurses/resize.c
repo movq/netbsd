@@ -1,4 +1,4 @@
-/*	$NetBSD: resize.c,v 1.11 2004/04/29 22:28:51 christos Exp $	*/
+/*	$NetBSD: resize.c,v 1.10.2.1 2004/05/11 13:12:49 tron Exp $	*/
 
 /*
  * Copyright (c) 2001
@@ -40,7 +40,7 @@
 #if 0
 static char sccsid[] = "@(#)resize.c   blymn 2001/08/26";
 #else
-__RCSID("$NetBSD: resize.c,v 1.11 2004/04/29 22:28:51 christos Exp $");
+__RCSID("$NetBSD: resize.c,v 1.10.2.1 2004/05/11 13:12:49 tron Exp $");
 #endif
 #endif				/* not lint */
 

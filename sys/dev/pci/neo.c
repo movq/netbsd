@@ -1,4 +1,4 @@
-/*	$NetBSD: neo.c,v 1.24 2004/10/29 12:57:18 yamt Exp $	*/
+/*	$NetBSD: neo.c,v 1.20.2.1 2004/09/22 20:58:43 jmc Exp $	*/
 
 /*
  * Copyright (c) 1999 Cameron Grant <gandalf@vilnya.demon.co.uk>
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: neo.c,v 1.24 2004/10/29 12:57:18 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: neo.c,v 1.20.2.1 2004/09/22 20:58:43 jmc Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -233,7 +233,7 @@ static const int samplerates[9] = {
 
 /* -------------------------------------------------------------------- */
 
-const struct audio_hw_if neo_hw_if = {
+struct audio_hw_if neo_hw_if = {
 	neo_open,
 	neo_close,
 	NULL,				/* drain */
@@ -691,6 +691,13 @@ neo_open(void *addr, int flags)
 void
 neo_close(void *addr)
 {
+	struct neo_softc *sc = addr;
+    
+	neo_halt_output(sc);
+	neo_halt_input(sc);
+
+	sc->pintr = 0;
+	sc->rintr = 0;
 }
 
 int
@@ -914,7 +921,6 @@ neo_halt_output(void *addr)
 
 	nm_wr_1(sc, NM_PLAYBACK_ENABLE_REG, 0);
 	nm_wr_2(sc, NM_AUDIO_MUTE_REG, NM_AUDIO_MUTE_BOTH);
-	sc->pintr = 0;
 
 	return (0);
 }
@@ -925,7 +931,6 @@ neo_halt_input(void *addr)
 	struct neo_softc *sc = (struct neo_softc *)addr;
 
 	nm_wr_1(sc, NM_RECORD_ENABLE_REG, 0);
-	sc->rintr = 0;
 
 	return (0);
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: intersil7170.c,v 1.3 2004/07/05 09:24:31 pk Exp $ */
+/*	$NetBSD: intersil7170.c,v 1.2 2001/11/13 13:14:38 lukem Exp $ */
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -40,7 +40,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: intersil7170.c,v 1.3 2004/07/05 09:24:31 pk Exp $");
+__KERNEL_RCSID(0, "$NetBSD: intersil7170.c,v 1.2 2001/11/13 13:14:38 lukem Exp $");
 
 #include <sys/param.h>
 #include <sys/malloc.h>
@@ -159,11 +159,9 @@ intersil7170_settime(handle, tv)
 	struct clock_ymdhms dt;
 	u_int8_t cmd;
 	int year;
-	long sec;
 	int s;
 
-	sec = tv->tv_sec + ((tv->tv_usec < 500000) ? 0 : 1);
-	clock_secs_to_ymdhms(sec, &dt);
+	clock_secs_to_ymdhms(tv->tv_sec, &dt);
 
 	year = dt.dt_year - sil->sil_year0;
 	if (year > 99 && intersil7170_auto_century_adjust != 0)

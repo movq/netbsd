@@ -1,4 +1,4 @@
-/*	$NetBSD: newfs_extern.h,v 1.2 2004/06/24 22:30:13 lukem Exp $	*/
+/*	$NetBSD: newfs_extern.h,v 1.1.1.1.4.1 2004/06/25 02:34:37 jmc Exp $	*/
 /* From: NetBSD: extern.h,v 1.3 2000/12/01 12:03:27 simonb Exp $ */
 
 /*

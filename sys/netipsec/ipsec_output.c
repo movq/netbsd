@@ -1,4 +1,4 @@
-/*	$NetBSD: ipsec_output.c,v 1.13 2004/05/07 00:55:15 jonathan Exp $	*/
+/*	$NetBSD: ipsec_output.c,v 1.12.2.1 2004/05/10 15:02:18 tron Exp $	*/
 
 /*-
  * Copyright (c) 2002, 2003 Sam Leffler, Errno Consulting
@@ -29,7 +29,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ipsec_output.c,v 1.13 2004/05/07 00:55:15 jonathan Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ipsec_output.c,v 1.12.2.1 2004/05/10 15:02:18 tron Exp $");
 
 /*
  * IPsec output processing.

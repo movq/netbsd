@@ -1,4 +1,4 @@
-/* $NetBSD: opms_isa.c,v 1.6 2004/09/14 20:32:48 drochner Exp $ */
+/* $NetBSD: opms_isa.c,v 1.5 2003/07/15 00:04:47 lukem Exp $ */
 
 /*
  * Copyright (c) 1995, 1996 Carnegie-Mellon University.
@@ -28,7 +28,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: opms_isa.c,v 1.6 2004/09/14 20:32:48 drochner Exp $");
+__KERNEL_RCSID(0, "$NetBSD: opms_isa.c,v 1.5 2003/07/15 00:04:47 lukem Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -64,13 +64,13 @@ opms_isa_match(parent, match, aux)
 
 	if (ia->ia_nio < 1)
 		return (0);
-	if (ia->ia_io[0].ir_addr != ISA_UNKNOWN_PORT)
+	if (ia->ia_io[0].ir_addr != ISACF_PORT_DEFAULT)
 		iobase = ia->ia_io[0].ir_addr;
 #if 0	/* XXX isa.c */
 	if (ia->ia_iosize != 0)
 		iosize = ia->ia_iosize;
 #endif
-	if (ia->ia_irq[0].ir_irq != ISA_UNKNOWN_IRQ)
+	if (ia->ia_irq[0].ir_irq != ISACF_IRQ_DEFAULT)
 		irq = ia->ia_irq[0].ir_irq;
 
 #if 0

@@ -1,4 +1,4 @@
-/*	$NetBSD: ufs_quota.c,v 1.32 2004/09/17 14:11:27 skrll Exp $	*/
+/*	$NetBSD: ufs_quota.c,v 1.30 2003/11/05 10:18:38 hannken Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1990, 1993, 1995
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ufs_quota.c,v 1.32 2004/09/17 14:11:27 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ufs_quota.c,v 1.30 2003/11/05 10:18:38 hannken Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
@@ -69,10 +69,11 @@ int
 getinoquota(ip)
 	struct inode *ip;
 {
-	struct ufsmount *ump = ip->i_ump;
+	struct ufsmount *ump;
 	struct vnode *vp = ITOV(ip);
 	int error;
 
+	ump = VFSTOUFS(vp->v_mount);
 	/*
 	 * Set up the user quota based on file uid.
 	 * EINVAL means that quotas are not enabled.
@@ -187,7 +188,8 @@ chkdqchg(ip, change, cred, type)
 	 */
 	if (ncurblocks >= dq->dq_bsoftlimit && dq->dq_bsoftlimit) {
 		if (dq->dq_curblocks < dq->dq_bsoftlimit) {
-			dq->dq_btime = time.tv_sec + ip->i_ump->um_btime[type];
+			dq->dq_btime = time.tv_sec +
+			    VFSTOUFS(ITOV(ip)->v_mount)->um_btime[type];
 			if (ip->i_uid == cred->cr_uid)
 				uprintf("\n%s: warning, %s %s\n",
 				    ITOV(ip)->v_mount->mnt_stat.f_mntonname,
@@ -301,7 +303,8 @@ chkiqchg(ip, change, cred, type)
 	 */
 	if (ncurinodes >= dq->dq_isoftlimit && dq->dq_isoftlimit) {
 		if (dq->dq_curinodes < dq->dq_isoftlimit) {
-			dq->dq_itime = time.tv_sec + ip->i_ump->um_itime[type];
+			dq->dq_itime = time.tv_sec +
+			    VFSTOUFS(ITOV(ip)->v_mount)->um_itime[type];
 			if (ip->i_uid == cred->cr_uid)
 				uprintf("\n%s: warning, %s %s\n",
 				    ITOV(ip)->v_mount->mnt_stat.f_mntonname,
@@ -332,7 +335,7 @@ void
 chkdquot(ip)
 	struct inode *ip;
 {
-	struct ufsmount *ump = ip->i_ump;
+	struct ufsmount *ump = VFSTOUFS(ITOV(ip)->v_mount);
 	int i;
 
 	for (i = 0; i < MAXQUOTAS; i++) {
@@ -806,7 +809,7 @@ dqget(vp, id, ump, type, dqp)
 	auio.uio_offset = (off_t)(id * sizeof (struct dqblk));
 	auio.uio_segflg = UIO_SYSSPACE;
 	auio.uio_rw = UIO_READ;
-	auio.uio_procp = NULL;
+	auio.uio_procp = (struct proc *)0;
 	error = VOP_READ(dqvp, &auio, 0, ump->um_cred[type]);
 	if (auio.uio_resid == sizeof(struct dqblk) && error == 0)
 		memset((caddr_t)&dq->dq_dqb, 0, sizeof(struct dqblk));
@@ -917,7 +920,7 @@ dqsync(vp, dq)
 	auio.uio_offset = (off_t)(dq->dq_id * sizeof (struct dqblk));
 	auio.uio_segflg = UIO_SYSSPACE;
 	auio.uio_rw = UIO_WRITE;
-	auio.uio_procp = NULL;
+	auio.uio_procp = (struct proc *)0;
 	error = VOP_WRITE(dqvp, &auio, 0, dq->dq_ump->um_cred[dq->dq_type]);
 	if (auio.uio_resid && error == 0)
 		error = EIO;

@@ -1,4 +1,4 @@
-/*	$NetBSD: rrunner.c,v 1.46 2004/10/28 07:07:40 yamt Exp $	*/
+/*	$NetBSD: rrunner.c,v 1.44 2003/11/03 03:05:25 ichiro Exp $	*/
 
 /*
  * Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.
@@ -42,7 +42,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rrunner.c,v 1.46 2004/10/28 07:07:40 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rrunner.c,v 1.44 2003/11/03 03:05:25 ichiro Exp $");
 
 #include "opt_inet.h"
 #include "opt_ns.h"
@@ -54,7 +54,6 @@ __KERNEL_RCSID(0, "$NetBSD: rrunner.c,v 1.46 2004/10/28 07:07:40 yamt Exp $");
 #include <sys/systm.h>
 #include <sys/mbuf.h>
 #include <sys/buf.h>
-#include <sys/bufq.h>
 #include <sys/socket.h>
 #include <sys/ioctl.h>
 #include <sys/errno.h>
@@ -1470,7 +1469,7 @@ eshintr(arg)
 		int i;
 
 		buf[0] = '\0';
-		strlcat(buf, "rc:  ", sizeof(buf));
+		strcat(buf, "rc:  ");
 		rc_send_consumer = (rc_offsets >> 8) & 0xff;
 		rc_snap_ring_consumer = (rc_offsets >> 16) & 0xff;
 		for (i = 0; i < RR_MAX_RECV_RING; i += 4) {
@@ -1480,8 +1479,8 @@ eshintr(arg)
 			/* XXX:  should do this right! */
 			NTOHL(rc_offsets);
 			*((u_int32_t *) &fp_ring_consumer[i]) = rc_offsets;
-			snprintf(t, sizeof(t), "%.8x|", rc_offsets);
-			strlcat(buf, t, sizeof(buf));
+			sprintf(t, "%.8x|", rc_offsets);
+			strcat(buf, t);
 		}
 	}
 	start_consumer = sc->sc_event_consumer;
@@ -1888,12 +1887,12 @@ eshintr(arg)
 		u_int32_t u;
 
 		buf[0] = '\0';
-		strlcat(buf, "drv: ", sizeof(buf));
+		strcat(buf, "drv: ");
 		for (i = 0; i < RR_MAX_RECV_RING; i += 4) {
 			/* XXX:  should do this right! */
 			u = *((u_int32_t *) &fp_ring_consumer[i]);
-			snprintf(t, sizeof(t), "%.8x|", u);
-			strlcat(buf, t, sizeof(buf));
+			sprintf(t, "%.8x|", u);
+			strcat(buf, t);
 			NTOHL(u);
 			bus_space_write_4(iot, ioh, 
 					  RR_DRIVER_RECV_CONS + i, u);
@@ -1904,14 +1903,14 @@ eshintr(arg)
 #endif
 
 		buf[0] = '\0';
-		strlcat(buf, "rcn: ", sizeof(buf));
+		strcat(buf, "rcn: ");
 		for (i = 0; i < RR_MAX_RECV_RING; i += 4) {
 			u = bus_space_read_4(iot, ioh, 
 					     RR_RUNCODE_RECV_CONS + i);
 			/* XXX:  should do this right! */
 			NTOHL(u);
-			snprintf(t, sizeof(t), "%.8x|", u);
-			strlcat(buf, t, sizeof(buf));
+			sprintf(t, "%.8x|", u);
+			strcat(buf, t);
 		}
 #ifdef ESH_PRINTF
 		if (okay == 1)

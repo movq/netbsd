@@ -1,4 +1,4 @@
-/*	$NetBSD: yppasswdd_mkpw.c,v 1.12 2004/05/12 08:25:53 wennmach Exp $	*/
+/*	$NetBSD: yppasswdd_mkpw.c,v 1.11.2.1 2004/05/20 09:43:00 tron Exp $	*/
 
 /*
  * Copyright (c) 1996 Jason R. Thorpe <thorpej@NetBSD.org>
@@ -36,7 +36,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: yppasswdd_mkpw.c,v 1.12 2004/05/12 08:25:53 wennmach Exp $");
+__RCSID("$NetBSD: yppasswdd_mkpw.c,v 1.11.2.1 2004/05/20 09:43:00 tron Exp $");
 #endif /* not lint */
 
 #include <sys/types.h>

@@ -36,8 +36,6 @@
 # include <config.h>
 #endif
 
-#include <ansidecl.h>
-
 #ifndef PARAMS
 # if defined __GNUC__ || (defined __STDC__ && __STDC__)
 #  define PARAMS(args) args
@@ -8042,7 +8040,7 @@ regcomp (preg, pattern, cflags)
 
       /* Map uppercase characters to corresponding lowercase ones.  */
       for (i = 0; i < CHAR_SET_SIZE; i++)
-        preg->translate[i] = ISUPPER (i) ? TOLOWER (i) : (int) i;
+        preg->translate[i] = ISUPPER (i) ? TOLOWER (i) : i;
     }
   else
     preg->translate = NULL;
@@ -8177,7 +8175,7 @@ weak_alias (__regexec, regexec)
 size_t
 regerror (errcode, preg, errbuf, errbuf_size)
     int errcode;
-    const regex_t *preg ATTRIBUTE_UNUSED;
+    const regex_t *preg;
     char *errbuf;
     size_t errbuf_size;
 {

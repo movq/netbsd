@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_oldmmap.c,v 1.63 2004/08/24 17:41:54 jdolecek Exp $	*/
+/*	$NetBSD: linux_oldmmap.c,v 1.61 2003/01/18 08:04:38 thorpej Exp $	*/
 
 /*-
  * Copyright (c) 1995, 1998 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: linux_oldmmap.c,v 1.63 2004/08/24 17:41:54 jdolecek Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux_oldmmap.c,v 1.61 2003/01/18 08:04:38 thorpej Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -86,18 +86,18 @@ linux_sys_old_mmap(l, v, retval)
 	if ((error = copyin(SCARG(uap, lmp), &lmap, sizeof lmap)))
 		return error;
 
-	if (lmap.lm_offset & PAGE_MASK)
+	if (lmap.lm_pos & PAGE_MASK)
 		return EINVAL;
 
-	SCARG(&nlmap,addr) = lmap.lm_addr;
+	SCARG(&nlmap,addr) = (unsigned long)lmap.lm_addr;
 	SCARG(&nlmap,len) = lmap.lm_len;
 	SCARG(&nlmap,prot) = lmap.lm_prot;
 	SCARG(&nlmap,flags) = lmap.lm_flags;
 	SCARG(&nlmap,fd) = lmap.lm_fd;
-	SCARG(&nlmap,offset) = lmap.lm_offset;
-	DPRINTF(("old_mmap(%#x, %u, %u, %u, %d, %u)\n",
+	SCARG(&nlmap,offset) = (unsigned)lmap.lm_pos;
+	DPRINTF(("old_mmap(%p, %d, %d, %d, %d, %d)\n",
 	    lmap.lm_addr, lmap.lm_len, lmap.lm_prot, lmap.lm_flags,
-	    lmap.lm_fd, lmap.lm_offset));
+	    lmap.lm_fd, lmap.lm_pos));
 	return linux_sys_mmap(l, &nlmap, retval);
 }
 

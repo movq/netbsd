@@ -1,4 +1,4 @@
-/*	$NetBSD: mount_lfs.c,v 1.20 2004/07/06 16:39:37 wiz Exp $	*/
+/*	$NetBSD: mount_lfs.c,v 1.18 2003/08/07 10:04:28 agc Exp $	*/
 
 /*-
  * Copyright (c) 1993, 1994
@@ -39,7 +39,7 @@ __COPYRIGHT("@(#) Copyright (c) 1993, 1994\n\
 #if 0
 static char sccsid[] = "@(#)mount_lfs.c	8.4 (Berkeley) 4/26/95";
 #else
-__RCSID("$NetBSD: mount_lfs.c,v 1.20 2004/07/06 16:39:37 wiz Exp $");
+__RCSID("$NetBSD: mount_lfs.c,v 1.18 2003/08/07 10:04:28 agc Exp $");
 #endif
 #endif /* not lint */
 
@@ -99,7 +99,7 @@ mount_lfs(argc, argv)
 	char *fs_name, *options;
 
 	const char *errcause;
-	struct statvfs *mntbuf;
+	struct statfs *mntbuf;
 
 	options = NULL;
 	nsegs = "4";
@@ -157,7 +157,7 @@ mount_lfs(argc, argv)
 			err(1, "getmntinfo");
 		for (i = 0; i < mntsize; i++) {
 			if (strcmp(mntbuf[i].f_mntfromname, args.fspec) == 0) {
-				oldflags = mntbuf[i].f_flag;
+				oldflags = mntbuf[i].f_flags;
 				break;
 			}
 		}
@@ -272,7 +272,6 @@ static void
 usage()
 {
 	(void)fprintf(stderr,
-		"usage: %s [-bdns] [-N nsegs] [-o options] special node\n",
-		getprogname());
+		"usage: mount_lfs [-dns] [-o options] special node\n");
 	exit(1);
 }

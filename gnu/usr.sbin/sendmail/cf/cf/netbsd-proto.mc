@@ -1,4 +1,4 @@
-# $NetBSD: netbsd-proto.mc,v 1.12 2004/07/15 03:47:18 atatat Exp $
+# $NetBSD: netbsd-proto.mc,v 1.11.2.1 2004/07/15 19:38:03 he Exp $
 
 divert(-1)
 #
@@ -42,7 +42,7 @@ divert(-1)
 #
 
 include(`../m4/cf.m4')
-VERSIONID(`@(#)netbsd-proto.mc	$Revision: 1.12 $')
+VERSIONID(`@(#)netbsd-proto.mc	$Revision: 1.11.2.1 $')
 OSTYPE(bsd4.4)dnl
 DOMAIN(generic)dnl
 FEATURE(genericstable,DATABASE_MAP_TYPE` -o 'MAIL_SETTINGS_DIR`genericstable')

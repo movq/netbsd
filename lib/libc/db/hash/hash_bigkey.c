@@ -1,4 +1,4 @@
-/*	$NetBSD: hash_bigkey.c,v 1.18 2004/06/20 22:20:14 jmc Exp $	*/
+/*	$NetBSD: hash_bigkey.c,v 1.17.2.1 2004/06/22 07:21:53 tron Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993, 1994
@@ -41,7 +41,7 @@
 #if 0
 static char sccsid[] = "@(#)hash_bigkey.c	8.3 (Berkeley) 5/31/94";
 #else
-__RCSID("$NetBSD: hash_bigkey.c,v 1.18 2004/06/20 22:20:14 jmc Exp $");
+__RCSID("$NetBSD: hash_bigkey.c,v 1.17.2.1 2004/06/22 07:21:53 tron Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 

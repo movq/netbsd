@@ -1,4 +1,4 @@
-/*	$NetBSD: shlib.c,v 1.19 2004/10/28 20:18:48 dsl Exp $	*/
+/*	$NetBSD: shlib.c,v 1.18 2000/05/27 06:53:30 matt Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -173,7 +173,7 @@ char	*cp;
 #ifdef SUNOS_LIB_COMPAT
 		if (!(isdigit)(*cp))
 #else
-		if (!isdigit((unsigned char)*cp))
+		if (!isdigit(*cp))
 #endif
 			return 0;
 

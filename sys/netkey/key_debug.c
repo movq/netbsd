@@ -1,4 +1,4 @@
-/*	$NetBSD: key_debug.c,v 1.30 2004/10/30 08:22:40 dsl Exp $	*/
+/*	$NetBSD: key_debug.c,v 1.28 2003/09/12 07:38:11 itojun Exp $	*/
 /*	$KAME: key_debug.c,v 1.36 2003/06/27 06:46:01 itojun Exp $	*/
 
 /*
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: key_debug.c,v 1.30 2004/10/30 08:22:40 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: key_debug.c,v 1.28 2003/09/12 07:38:11 itojun Exp $");
 
 #ifdef _KERNEL
 #include "opt_inet.h"
@@ -342,15 +342,15 @@ kdebug_sadb_identity(ext)
 #ifdef _KERNEL
 			ipsec_hexdump((caddr_t)(id + 1), len); /*XXX cast ?*/
 #else
-			unsigned char *p, *ep;
+			char *p, *ep;
 			printf("\n  str=\"");
-			p = (void *)(id + 1);
+			p = (char *)(id + 1);
 			ep = p + len;
 			for (/*nothing*/; *p && p < ep; p++) {
 				if (isprint(*p))
-					printf("%c", *p);
+					printf("%c", *p & 0xff);
 				else
-					printf("\\%03o", *p);
+					printf("\\%03o", *p & 0xff);
 			}
 #endif
 			printf("\"");

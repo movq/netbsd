@@ -1,9 +1,9 @@
 #include <cdk.h>
 
 /*
- * $Author: dsl $
- * $Date: 2004/10/28 20:52:20 $
- * $Revision: 1.5 $
+ * $Author: garbled $
+ * $Date: 2001/01/09 18:41:53 $
+ * $Revision: 1.3 $
  */
 
 /*
@@ -708,7 +708,7 @@ static void CDKMentryCallBack (CDKMENTRY *mentry, chtype character)
    /* Check the type of character we are looking for. */
    if ((mentry->dispType == vINT ||
 	mentry->dispType == vHINT) &&
-	!isdigit((unsigned char)plainchar))
+	!isdigit((int)plainchar))
    {
       Beep();
    }
@@ -717,7 +717,7 @@ static void CDKMentryCallBack (CDKMENTRY *mentry, chtype character)
 		mentry->dispType == vLCHAR ||
 		mentry->dispType == vUHCHAR ||
 		mentry->dispType == vLHCHAR) &&
-		isdigit((unsigned char)plainchar))
+		isdigit((int)plainchar))
    {
       Beep();
    }
@@ -738,17 +738,17 @@ static void CDKMentryCallBack (CDKMENTRY *mentry, chtype character)
 		mentry->dispType == vUHCHAR ||
 		mentry->dispType == vUMIXED ||
 		mentry->dispType == vUHMIXED) &&
-		!isdigit((unsigned char)plainchar))
+		!isdigit((int)plainchar))
 	 {
-	    plainchar = toupper ((unsigned char)plainchar);
+	    plainchar = toupper (plainchar);
 	 }
 	 else if ((mentry->dispType == vLCHAR ||
 			mentry->dispType == vLHCHAR ||
 			mentry->dispType == vLMIXED ||
 			mentry->dispType == vLHMIXED) &&
-			!isdigit((unsigned char)plainchar))
+			!isdigit((int)plainchar))
 	 {
-	    plainchar = tolower ((unsigned char)plainchar);
+	    plainchar = tolower (plainchar);
 	 }
 
 	 /*

@@ -1,4 +1,4 @@
-/*	$NetBSD: pcmcia_cis.c,v 1.37 2004/10/15 21:25:04 enami Exp $	*/
+/*	$NetBSD: pcmcia_cis.c,v 1.32 2003/10/22 09:13:17 mjl Exp $	*/
 
 /*
  * Copyright (c) 1997 Marc Horowitz.  All rights reserved.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pcmcia_cis.c,v 1.37 2004/10/15 21:25:04 enami Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pcmcia_cis.c,v 1.32 2003/10/22 09:13:17 mjl Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -77,18 +77,25 @@ create_pf(struct cis_state *state)
 void
 pcmcia_free_pf(struct pcmcia_function_head *pfhead)
 {
-	struct pcmcia_function *pf, *npf;
-	struct pcmcia_config_entry *cfe, *ncfe;
+	struct pcmcia_function *pf, *opf = NULL;
+	struct pcmcia_config_entry *cfe, *ocfe = NULL;
 
-	for (pf = SIMPLEQ_FIRST(pfhead); pf != NULL; pf = npf) {
-		npf = SIMPLEQ_NEXT(pf, pf_list);
-		for (cfe = SIMPLEQ_FIRST(&pf->cfe_head); cfe != NULL;
-		    cfe = ncfe) {
-			ncfe = SIMPLEQ_NEXT(cfe, cfe_list);
-			free(cfe, M_DEVBUF);
+	SIMPLEQ_FOREACH(pf, pfhead, pf_list) {
+		SIMPLEQ_FOREACH(cfe, &pf->cfe_head, cfe_list) {
+			if (ocfe)
+				free(ocfe, M_DEVBUF);
+			ocfe = cfe;
 		}
-		free(pf, M_DEVBUF);
+		if (ocfe) {
+			free(ocfe, M_DEVBUF);
+			ocfe = NULL;
+		}
+		if (opf)
+			free(opf, M_DEVBUF);
+		opf = pf;
 	}
+	if (opf)
+		free(opf, M_DEVBUF);
 
 	SIMPLEQ_INIT(pfhead);
 }
@@ -185,8 +192,6 @@ pcmcia_scan_cis(dev, fct, arg)
 	DPRINTF(("%s: CIS tuple chain:\n", sc->dev.dv_xname));
 
 	while (1) {
-		DELAY(1000);
-
 		while (1) {
 			/*
 			 * Perform boundary check for insane cards.
@@ -203,16 +208,17 @@ pcmcia_scan_cis(dev, fct, arg)
 
 			/* get the tuple code */
 
+			DELAY(1000);
 			tuple.code = pcmcia_cis_read_1(&tuple, tuple.ptr);
 
 			/* two special-case tuples */
 
 			if (tuple.code == PCMCIA_CISTPL_NULL) {
-				DPRINTF((" 00\nCISTPL_NONE\n"));
+				DPRINTF(("CISTPL_NONE\n 00\n"));
 				tuple.ptr++;
 				continue;
 			} else if (tuple.code == PCMCIA_CISTPL_END) {
-				DPRINTF((" ff\nCISTPL_END\n"));
+				DPRINTF(("CISTPL_END\n ff\n"));
 			cis_end:
 				/* Call the function for the END tuple, since
 				   the CIS semantics depend on it */
@@ -225,28 +231,10 @@ pcmcia_scan_cis(dev, fct, arg)
 				tuple.ptr++;
 				break;
 			}
-
 			/* now all the normal tuples */
 
+			DELAY(1250);
 			tuple.length = pcmcia_cis_read_1(&tuple, tuple.ptr + 1);
-#ifdef PCMCIACISDEBUG
-			/* print the tuple */
-			{
-				int i;
-
-				DPRINTF((" %02x %02x", tuple.code,
-				    tuple.length));
-
-				for (i = 0; i < tuple.length; i++) {
-					DPRINTF((" %02x",
-					    pcmcia_tuple_read_1(&tuple, i)));
-					if ((i % 16) == 13)
-						DPRINTF(("\n"));
-				}
-				if ((i % 16) != 14)
-					DPRINTF(("\n"));
-			}
-#endif
 			switch (tuple.code) {
 			case PCMCIA_CISTPL_LONGLINK_A:
 			case PCMCIA_CISTPL_LONGLINK_C:
@@ -282,7 +270,9 @@ pcmcia_scan_cis(dev, fct, arg)
 
 					*((u_int16_t *) & offset) =
 					    pcmcia_tuple_read_2(&tuple, 0);
+					DELAY(500);
 					length = pcmcia_tuple_read_2(&tuple, 2);
+					DELAY(500);
 					cksum = pcmcia_tuple_read_1(&tuple, 4);
 
 					addr = tuple.ptr + offset;
@@ -411,6 +401,24 @@ pcmcia_scan_cis(dev, fct, arg)
 				}
 				break;
 			}	/* switch */
+#ifdef PCMCIACISDEBUG
+			/* print the tuple */
+			{
+				int i;
+
+				DPRINTF((" %02x %02x", tuple.code,
+				    tuple.length));
+
+				for (i = 0; i < tuple.length; i++) {
+					DPRINTF((" %02x",
+					    pcmcia_tuple_read_1(&tuple, i)));
+					if ((i % 16) == 13)
+						DPRINTF(("\n"));
+				}
+				if ((i % 16) != 14)
+					DPRINTF(("\n"));
+			}
+#endif
 			/* skip to the next tuple */
 			tuple.ptr += 2 + tuple.length;
 		}
@@ -699,7 +707,7 @@ pcmcia_parse_cis_tuple(tuple, arg)
 	void *arg;
 {
 	/* most of these are educated guesses */
-	static const struct pcmcia_config_entry init_cfe = {
+	static struct pcmcia_config_entry init_cfe = {
 		-1, PCMCIA_CFE_RDYBSY_ACTIVE | PCMCIA_CFE_WP_ACTIVE |
 		PCMCIA_CFE_BVD_ACTIVE, PCMCIA_IFTYPE_MEMORY,
 	};
@@ -1133,10 +1141,6 @@ pcmcia_parse_cis_tuple(tuple, arg)
 					}
 					for (i = 0; i < cfe->num_iospace; i++) {
 						switch (reg & PCMCIA_TPCE_IO_RANGE_ADDRSIZE_MASK) {
-						case PCMCIA_TPCE_IO_RANGE_ADDRSIZE_NONE:
-							cfe->iospace[i].start =
-							    0;
-							break;
 						case PCMCIA_TPCE_IO_RANGE_ADDRSIZE_ONE:
 							cfe->iospace[i].start =
 								pcmcia_tuple_read_1(tuple, idx);
@@ -1155,10 +1159,6 @@ pcmcia_parse_cis_tuple(tuple, arg)
 						}
 						switch (reg &
 							PCMCIA_TPCE_IO_RANGE_LENGTHSIZE_MASK) {
-						case PCMCIA_TPCE_IO_RANGE_LENGTHSIZE_NONE:
-							cfe->iospace[i].length =
-							    0;
-							break;
 						case PCMCIA_TPCE_IO_RANGE_LENGTHSIZE_ONE:
 							cfe->iospace[i].length =
 								pcmcia_tuple_read_1(tuple, idx);

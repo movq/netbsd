@@ -1,9 +1,9 @@
-/*	$NetBSD: infomap.h,v 1.1.1.3 2004/07/12 23:26:54 wiz Exp $	*/
+/*	$NetBSD: infomap.h,v 1.1.1.2 2003/01/17 14:54:32 wiz Exp $	*/
 
 /* infomap.h -- description of a keymap in Info and related functions.
-   Id: infomap.h,v 1.3 2004/03/14 00:57:29 karl Exp
+   Id: infomap.h,v 1.1 2002/08/25 23:38:38 karl Exp
 
-   Copyright (C) 1993, 2001, 2004 Free Software Foundation, Inc.
+   Copyright (C) 1993, 2001 Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -69,16 +69,15 @@ extern Keymap echo_area_keymap;
 
 /* Return a new keymap which has all the uppercase letters mapped to run
    the function info_do_lowercase_version (). */
-extern Keymap keymap_make_keymap (void);
+extern Keymap keymap_make_keymap ();
 
 /* Return a new keymap which is a copy of MAP. */
-extern Keymap keymap_copy_keymap (Keymap map, Keymap rootmap,
-    Keymap newroot);
+extern Keymap keymap_copy_keymap ();
 
 /* Free MAP and it's descendents. */
-extern void keymap_discard_keymap (Keymap map, Keymap rootmap);
+extern void keymap_discard_keymap ();
 
 /* Initialize the info keymaps. */
-extern void initialize_info_keymaps (void);
+extern void initialize_info_keymaps ();
 
 #endif /* not INFOMAP_H */

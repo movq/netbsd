@@ -1,4 +1,4 @@
-/*	$NetBSD: ip_input.c,v 1.206 2004/12/15 04:25:19 thorpej Exp $	*/
+/*	$NetBSD: ip_input.c,v 1.197.2.1 2004/05/28 07:25:05 tron Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.
@@ -98,7 +98,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ip_input.c,v 1.206 2004/12/15 04:25:19 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ip_input.c,v 1.197.2.1 2004/05/28 07:25:05 tron Exp $");
 
 #include "opt_inet.h"
 #include "opt_gateway.h"
@@ -200,7 +200,6 @@ int	ipprintfs = 0;
 #endif
 
 int	ip_do_randomid = 0;
-int	ip_do_loopback_cksum = 0;
 
 /*
  * XXX - Setting ip_checkinterface mostly implements the receive side of
@@ -220,6 +219,7 @@ int	ip_checkinterface = 0;
 
 struct rttimer_queue *ip_mtudisc_timeout_q = NULL;
 
+extern	struct domain inetdomain;
 int	ipqmaxlen = IFQ_MAXLEN;
 u_long	in_ifaddrhash;				/* size of hash table - 1 */
 int	in_ifaddrentries;			/* total number of addrs */
@@ -333,8 +333,8 @@ do {									\
 
 #define	IPQ_UNLOCK()		ipq_unlock()
 
-POOL_INIT(inmulti_pool, sizeof(struct in_multi), 0, 0, 0, "inmltpl", NULL);
-POOL_INIT(ipqent_pool, sizeof(struct ipqent), 0, 0, 0, "ipqepl", NULL);
+struct pool inmulti_pool;
+struct pool ipqent_pool;
 
 #ifdef INET_CSUM_COUNTERS
 #include <sys/device.h>
@@ -347,10 +347,6 @@ struct evcnt ip_swcsum = EVCNT_INITIALIZER(EVCNT_TYPE_MISC,
     NULL, "inet", "swcsum");
 
 #define	INET_CSUM_COUNTER_INCR(ev)	(ev)->ev_count++
-
-EVCNT_ATTACH_STATIC(ip_hwcsum_bad);
-EVCNT_ATTACH_STATIC(ip_hwcsum_ok);
-EVCNT_ATTACH_STATIC(ip_swcsum);
 
 #else
 
@@ -397,8 +393,13 @@ ip_nmbclusters_changed(void)
 void
 ip_init()
 {
-	const struct protosw *pr;
+	struct protosw *pr;
 	int i;
+
+	pool_init(&inmulti_pool, sizeof(struct in_multi), 0, 0, 0, "inmltpl",
+	    NULL);
+	pool_init(&ipqent_pool, sizeof(struct ipqent), 0, 0, 0, "ipqepl",
+	    NULL);
 
 	pr = pffindproto(PF_INET, IPPROTO_RAW, SOCK_RAW);
 	if (pr == 0)
@@ -438,6 +439,12 @@ ip_init()
 		printf("ip_init: WARNING: unable to register pfil hook, "
 		    "error %d\n", i);
 #endif /* PFIL_HOOKS */
+
+#ifdef INET_CSUM_COUNTERS
+	evcnt_attach_static(&ip_hwcsum_bad);
+	evcnt_attach_static(&ip_hwcsum_ok);
+	evcnt_attach_static(&ip_swcsum);
+#endif /* INET_CSUM_COUNTERS */
 
 #ifdef MBUFTRACE
 	MOWNER_ATTACH(&ip_tx_mowner);
@@ -573,16 +580,10 @@ ip_input(struct mbuf *m)
 		break;
 
 	default:
-		/*
-		 * Must compute it ourselves.  Maybe skip checksum on
-		 * loopback interfaces.
-		 */
-		if (__predict_true(!(m->m_pkthdr.rcvif->if_flags &
-				     IFF_LOOPBACK) || ip_do_loopback_cksum)) {
-			INET_CSUM_COUNTER_INCR(&ip_swcsum);
-			if (in_cksum(m, hlen) != 0)
-				goto badcsum;
-		}
+		/* Must compute it ourselves. */
+		INET_CSUM_COUNTER_INCR(&ip_swcsum);
+		if (in_cksum(m, hlen) != 0)
+			goto bad;
 		break;
 	}
 
@@ -656,20 +657,6 @@ ip_input(struct mbuf *m)
 			return;
 		ip = mtod(m, struct ip *);
 		hlen = ip->ip_hl << 2;
-		/*
-		 * XXX The setting of "srcrt" here is to prevent ip_forward()
-		 * from generating ICMP redirects for packets that have
-		 * been redirected by a hook back out on to the same LAN that
-		 * they came from and is not an indication that the packet
-		 * is being inffluenced by source routing options.  This
-		 * allows things like
-		 * "rdr tlp0 0/0 port 80 -> 1.1.1.200 3128 tcp"
-		 * where tlp0 is both on the 1.1.1.0/24 network and is the
-		 * default route for hosts on 1.1.1.0/24.  Of course this
-		 * also requires a "map tlp0 ..." to complete the story.
-		 * One might argue whether or not this kind of network config.
-		 * should be supported in this manner... 
-		 */
 		srcrt = (odst.s_addr != ip->ip_dst.s_addr);
 	}
 #endif /* PFIL_HOOKS */
@@ -758,6 +745,14 @@ ip_input(struct mbuf *m)
 		struct in_multi *inm;
 #ifdef MROUTING
 		extern struct socket *ip_mrouter;
+
+		if (M_READONLY(m)) {
+			if ((m = m_pullup(m, hlen)) == 0) {
+				ipstat.ips_toosmall++;
+				return;
+			}
+			ip = mtod(m, struct ip *);
+		}
 
 		if (ip_mrouter) {
 			/*
@@ -890,6 +885,13 @@ ours:
 	 * but it's not worth the time; just let them time out.)
 	 */
 	if (ip->ip_off & ~htons(IP_DF|IP_RF)) {
+		if (M_READONLY(m)) {
+			if ((m = m_pullup(m, hlen)) == NULL) {
+				ipstat.ips_toosmall++;
+				goto bad;
+			}
+			ip = mtod(m, struct ip *);
+		}
 
 		/*
 		 * Look for queue of fragments
@@ -1286,9 +1288,9 @@ static u_int	fragttl_histo[(IPFRAGTTL+1)];
 static u_int
 ip_reass_ttl_decr(u_int ticks)
 {
-	u_int nfrags, median, dropfraction, keepfraction;
+	u_int i, nfrags, median;
 	struct ipq *fp, *nfp;
-	int i;
+	u_int dropfraction, keepfraction;
 	
 	nfrags = 0;
 	memset(fragttl_histo, 0, sizeof fragttl_histo);
@@ -2349,11 +2351,4 @@ SYSCTL_SETUP(sysctl_net_inet_ip_setup, "sysctl net.inet.ip subtree setup")
 		       NULL, 0, &ip_do_randomid, 0,
 		       CTL_NET, PF_INET, IPPROTO_IP,
 		       IPCTL_RANDOMID, CTL_EOL);
-	sysctl_createv(clog, 0, NULL, NULL,
-		       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
-		       CTLTYPE_INT, "do_loopback_cksum",
-		       SYSCTL_DESCR("Perform IP checksum on loopback"),
-		       NULL, 0, &ip_do_loopback_cksum, 0,
-		       CTL_NET, PF_INET, IPPROTO_IP,
-		       IPCTL_LOOPBACKCKSUM, CTL_EOL);
 }

@@ -1,5 +1,3 @@
-/*	$NetBSD: qmqpd_peer.c,v 1.1.1.3 2004/05/31 00:24:45 heas Exp $	*/
-
 /*++
 /* NAME
 /*	qmqpd_peer 3
@@ -107,8 +105,8 @@ void    qmqpd_peer_init(QMQPD_STATE *state)
      * If peer went away, give up.
      */
     if (errno == ECONNRESET || errno == ECONNABORTED) {
-	state->name = mystrdup(CLIENT_ATTR_UNKNOWN);
-	state->addr = mystrdup(CLIENT_ATTR_UNKNOWN);
+	state->name = mystrdup("unknown");
+	state->addr = mystrdup("unknown");
     }
 
     /*
@@ -119,9 +117,9 @@ void    qmqpd_peer_init(QMQPD_STATE *state)
 	hp = gethostbyaddr((char *) &(sin.sin_addr),
 			   sizeof(sin.sin_addr), AF_INET);
 	if (hp == 0) {
-	    state->name = mystrdup(CLIENT_ATTR_UNKNOWN);
+	    state->name = mystrdup("unknown");
 	} else if (!valid_hostname(hp->h_name, DONT_GRIPE)) {
-	    state->name = mystrdup(CLIENT_ATTR_UNKNOWN);
+	    state->name = mystrdup("unknown");
 	} else {
 	    state->name = mystrdup(hp->h_name);	/* hp->name is clobbered!! */
 
@@ -130,7 +128,7 @@ void    qmqpd_peer_init(QMQPD_STATE *state)
 	     */
 #define REJECT_PEER_NAME(state) { \
 	myfree(state->name); \
-	state->name = mystrdup(CLIENT_ATTR_UNKNOWN); \
+	state->name = mystrdup("unknown"); \
     }
 
 	    hp = gethostbyname(state->name);	/* clobbers hp->name!! */

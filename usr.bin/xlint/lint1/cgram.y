@@ -1,5 +1,5 @@
 %{
-/* $NetBSD: cgram.y,v 1.34 2004/08/03 12:11:54 yamt Exp $ */
+/* $NetBSD: cgram.y,v 1.33 2003/05/24 22:17:46 christos Exp $ */
 
 /*
  * Copyright (c) 1996 Christopher G. Demetriou.  All Rights Reserved.
@@ -35,7 +35,7 @@
 
 #include <sys/cdefs.h>
 #if defined(__RCSID) && !defined(lint)
-__RCSID("$NetBSD: cgram.y,v 1.34 2004/08/03 12:11:54 yamt Exp $");
+__RCSID("$NetBSD: cgram.y,v 1.33 2003/05/24 22:17:46 christos Exp $");
 #endif
 
 #include <stdlib.h>
@@ -1133,13 +1133,9 @@ init_expr_list:
 	| init_expr_list T_COMMA init_expr
 	;
 
+
 init_by_name:
-	  T_LBRACK constant T_RBRACK T_ASSIGN {
-		if (!Sflag)
-			warning(321);
-		(void) toicon($2, 1);
-	  }
-	| point T_NAME T_ASSIGN {
+	  point T_NAME T_ASSIGN {
 		if (!Sflag)
 			warning(313);
 		memberpush($2);

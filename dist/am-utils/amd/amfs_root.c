@@ -1,7 +1,7 @@
-/*	$NetBSD: amfs_root.c,v 1.1.1.7 2004/11/27 01:00:38 christos Exp $	*/
+/*	$NetBSD: amfs_root.c,v 1.1.1.6 2003/03/09 01:13:08 christos Exp $	*/
 
 /*
- * Copyright (c) 1997-2004 Erez Zadok
+ * Copyright (c) 1997-2003 Erez Zadok
  * Copyright (c) 1990 Jan-Simon Pendry
  * Copyright (c) 1990 Imperial College of Science, Technology & Medicine
  * Copyright (c) 1990 The Regents of the University of California.
@@ -39,7 +39,7 @@
  * SUCH DAMAGE.
  *
  *
- * Id: amfs_root.c,v 1.15 2004/01/06 03:56:20 ezk Exp
+ * Id: amfs_root.c,v 1.11 2002/12/27 22:43:47 ezk Exp
  *
  */
 
@@ -67,15 +67,14 @@ am_ops amfs_root_ops =
   0,				/* amfs_root_match */
   0,				/* amfs_root_init */
   amfs_root_mount,
-  amfs_generic_umount,
-  amfs_generic_lookup_child,
-  amfs_generic_mount_child,
-  amfs_generic_readdir,
+  amfs_auto_umount,
+  amfs_auto_lookup_child,
+  amfs_auto_mount_child,
+  amfs_auto_readdir,
   0,				/* amfs_root_readlink */
   0,				/* amfs_root_mounted */
   0,				/* amfs_root_umounted */
-  amfs_generic_find_srvr,
-  0,				/* amfs_root_get_wchan */
+  find_amfs_auto_srvr,
   FS_NOTIMEOUT | FS_AMQINFO | FS_DIRECTORY,	/* nfs_fs_flags */
 #ifdef HAVE_FS_AUTOFS
   AUTOFS_ROOT_FS_FLAGS,
@@ -94,7 +93,7 @@ static int
 amfs_root_mount(am_node *mp, mntfs *mf)
 {
   mf->mf_mount = strealloc(mf->mf_mount, pid_fsname);
-  mf->mf_private = (opaque_t) mapc_find(mf->mf_info, "", NULL);
+  mf->mf_private = (voidp) mapc_find(mf->mf_info, "", NULL);
   mf->mf_prfree = mapc_free;
 
   return 0;

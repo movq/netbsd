@@ -1,4 +1,4 @@
-# 	$NetBSD: INSTALL,v 1.53 2004/07/15 03:53:51 atatat Exp $
+# 	$NetBSD: INSTALL,v 1.52.2.1 2004/07/15 20:15:50 he Exp $
 #
 # Distribution	install kernel (any model)
 #    netbsd:	cut-down kernel for miniroots.

@@ -1,4 +1,4 @@
-/*	$NetBSD: tcp_input.c,v 1.210 2004/12/15 04:25:19 thorpej Exp $	*/
+/*	$NetBSD: tcp_input.c,v 1.190.2.6 2004/09/19 15:38:01 he Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.
@@ -148,7 +148,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tcp_input.c,v 1.210 2004/12/15 04:25:19 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tcp_input.c,v 1.190.2.6 2004/09/19 15:38:01 he Exp $");
 
 #include "opt_inet.h"
 #include "opt_ipsec.h"
@@ -167,9 +167,6 @@ __KERNEL_RCSID(0, "$NetBSD: tcp_input.c,v 1.210 2004/12/15 04:25:19 thorpej Exp 
 #include <sys/pool.h>
 #include <sys/domain.h>
 #include <sys/kernel.h>
-#ifdef TCP_SIGNATURE
-#include <sys/md5.h>
-#endif
 
 #include <net/if.h>
 #include <net/route.h>
@@ -229,6 +226,7 @@ __KERNEL_RCSID(0, "$NetBSD: tcp_input.c,v 1.210 2004/12/15 04:25:19 thorpej Exp 
 #include <netipsec/ipsec6.h>
 #endif
 #endif	/* FAST_IPSEC*/
+
 
 int	tcprexmtthresh = 3;
 int	tcp_log_refused;
@@ -345,9 +343,7 @@ static void tcp6_log_refused
     __P((const struct ip6_hdr *, const struct tcphdr *));
 #endif
 
-#define	TRAVERSE(x) while ((x)->m_next) (x) = (x)->m_next
-
-POOL_INIT(tcpipqent_pool, sizeof(struct ipqent), 0, 0, 0, "tcpipqepl", NULL);
+struct pool tcpipqent_pool;
 
 int
 tcp_reass(tp, th, m, tlen)
@@ -402,8 +398,7 @@ tcp_reass(tp, th, m, tlen)
 		if (pkt_seq == p->ipqe_seq + p->ipqe_len) {
 			p->ipqe_len += pkt_len;
 			p->ipqe_flags |= pkt_flags;
-			m_cat(p->ipre_mlast, m);
-			TRAVERSE(p->ipre_mlast);
+			m_cat(p->ipqe_m, m);
 			m = NULL;
 			tiqe = p;
 			TAILQ_REMOVE(&tp->timeq, p, ipqe_timeq);
@@ -434,8 +429,6 @@ tcp_reass(tp, th, m, tlen)
 			q->ipqe_flags |= pkt_flags;
 			m_cat(m, q->ipqe_m);
 			q->ipqe_m = m;
-			q->ipre_mlast = m; /* last mbuf may have changed */
-			TRAVERSE(q->ipre_mlast);
 			tiqe = q;
 			TAILQ_REMOVE(&tp->timeq, q, ipqe_timeq);
 			TCP_REASS_COUNTER_INCR(&tcp_reass_prependfirst);
@@ -467,8 +460,7 @@ tcp_reass(tp, th, m, tlen)
 			pkt_len += q->ipqe_len;
 			pkt_flags |= q->ipqe_flags;
 			pkt_seq = q->ipqe_seq;
-			m_cat(q->ipre_mlast, m);
-			TRAVERSE(q->ipre_mlast);
+			m_cat(q->ipqe_m, m);
 			m = q->ipqe_m;
 			TCP_REASS_COUNTER_INCR(&tcp_reass_append);
 			goto free_ipqe;
@@ -532,8 +524,7 @@ tcp_reass(tp, th, m, tlen)
 #endif
 			m_adj(m, overlap);
 			rcvpartdupbyte += overlap;
-			m_cat(q->ipre_mlast, m);
-			TRAVERSE(q->ipre_mlast);
+			m_cat(q->ipqe_m, m);
 			m = q->ipqe_m;
 			pkt_seq = q->ipqe_seq;
 			pkt_len += q->ipqe_len - overlap;
@@ -647,7 +638,6 @@ tcp_reass(tp, th, m, tlen)
 	 * Insert the new fragment queue entry into both queues.
 	 */
 	tiqe->ipqe_m = m;
-	tiqe->ipre_mlast = m;
 	tiqe->ipqe_seq = pkt_seq;
 	tiqe->ipqe_len = pkt_len;
 	tiqe->ipqe_flags = pkt_flags;
@@ -783,7 +773,12 @@ tcp6_log_refused(ip6, th)
  * protocol specification dated September, 1981 very closely.
  */
 void
+#if __STDC__
 tcp_input(struct mbuf *m, ...)
+#else
+tcp_input(m, va_alist)
+	struct mbuf *m;
+#endif
 {
 	struct tcphdr *th;
 	struct ip *ip;
@@ -843,7 +838,7 @@ tcp_input(struct mbuf *m, ...)
 #endif
 
 	/*
-	 * Get IP and TCP header.
+	 * Get IP and TCP header together in first mbuf.
 	 * Note: IP leaves IP header in first mbuf.
 	 */
 	ip = mtod(m, struct ip *);
@@ -1135,18 +1130,10 @@ findpcb:
 			break;
 
 		default:
-			/*
-			 * Must compute it ourselves.  Maybe skip checksum
-			 * on loopback interfaces.
-			 */
-			if (__predict_true(!(m->m_pkthdr.rcvif->if_flags &
-					     IFF_LOOPBACK) ||
-					   tcp_do_loopback_cksum)) {
-				TCP_CSUM_COUNTER_INCR(&tcp_swcsum);
-				if (in4_cksum(m, IPPROTO_TCP, toff,
-					      tlen + off) != 0)
-					goto badcsum;
-			}
+			/* Must compute it ourselves. */
+			TCP_CSUM_COUNTER_INCR(&tcp_swcsum);
+			if (in4_cksum(m, IPPROTO_TCP, toff, tlen + off) != 0)
+				goto badcsum;
 			break;
 		}
 		break;
@@ -1374,7 +1361,6 @@ findpcb:
 
 #ifdef IPSEC
 				switch (af) {
-#ifdef INET
 				case AF_INET:
 					if (ipsec4_in_reject_so(m, so)) {
 						ipsecstat.in_polvio++;
@@ -1382,7 +1368,6 @@ findpcb:
 						goto dropwithreset;
 					}
 					break;
-#endif
 #ifdef INET6
 				case AF_INET6:
 					if (ipsec6_in_reject_so(m, so)) {
@@ -1457,13 +1442,8 @@ after_listen:
 	/*
 	 * Process options.
 	 */
-#ifdef TCP_SIGNATURE
-	if (optp || (tp->t_flags & TF_SIGNATURE))
-#else
 	if (optp)
-#endif
-		if (tcp_dooptions(tp, optp, optlen, th, m, toff, &opti) < 0)
-			goto drop;
+		tcp_dooptions(tp, optp, optlen, th, &opti);
 
 	/*
 	 * Header prediction: check for the two common cases
@@ -1512,7 +1492,7 @@ after_listen:
 				else if (tp->t_rtttime &&
 				    SEQ_GT(th->th_ack, tp->t_rtseq))
 					tcp_xmit_timer(tp,
-					  tcp_now - tp->t_rtttime);
+					tcp_now - tp->t_rtttime);
 				acked = th->th_ack - tp->snd_una;
 				tcpstat.tcps_rcvackpack++;
 				tcpstat.tcps_rcvackbyte += acked;
@@ -2571,153 +2551,18 @@ drop:
 	return;
 }
 
-#ifdef TCP_SIGNATURE
-int
-tcp_signature_apply(void *fstate, caddr_t data, u_int len)
-{
-
-	MD5Update(fstate, (u_char *)data, len);
-	return (0);
-}
-
-struct secasvar *
-tcp_signature_getsav(struct mbuf *m, struct tcphdr *th)
-{
-	struct secasvar *sav;
-#ifdef FAST_IPSEC
-	union sockaddr_union dst;
-#endif
-	struct ip *ip;
-	struct ip6_hdr *ip6;
-
-	ip = mtod(m, struct ip *);
-	switch (ip->ip_v) {
-	case 4:
-		ip = mtod(m, struct ip *);
-		ip6 = NULL;
-		break;
-	case 6:
-		ip = NULL;
-		ip6 = mtod(m, struct ip6_hdr *);
-		break;
-	default:
-		return (NULL);
-	}
-
-#ifdef FAST_IPSEC
-	/* Extract the destination from the IP header in the mbuf. */
-	bzero(&dst, sizeof(union sockaddr_union));
-	dst.sa.sa_len = sizeof(struct sockaddr_in);
-	dst.sa.sa_family = AF_INET;
-	dst.sin.sin_addr = ip->ip_dst;
-
-	/*
-	 * Look up an SADB entry which matches the address of the peer.
-	 */
-	sav = KEY_ALLOCSA(&dst, IPPROTO_TCP, htonl(TCP_SIG_SPI));
-#else
-	if (ip)
-		sav = key_allocsa(AF_INET, (caddr_t)&ip->ip_src,
-		    (caddr_t)&ip->ip_dst, IPPROTO_TCP,
-		    htonl(TCP_SIG_SPI));
-	else
-		sav = key_allocsa(AF_INET6, (caddr_t)&ip6->ip6_src,
-		    (caddr_t)&ip6->ip6_dst, IPPROTO_TCP,
-		    htonl(TCP_SIG_SPI));
-#endif
-
-	return (sav);	/* freesav must be performed by caller */
-}
-
-int
-tcp_signature(struct mbuf *m, struct tcphdr *th, int thoff,
-    struct secasvar *sav, char *sig)
-{
-	MD5_CTX ctx;
-	struct ip *ip;
-	struct ipovly *ipovly;
-	struct ip6_hdr *ip6;
-	struct ippseudo ippseudo;
-	struct ip6_hdr_pseudo ip6pseudo;
-	struct tcphdr th0;
-	int l, tcphdrlen;
-
-	if (sav == NULL)
-		return (-1);
-
-	tcphdrlen = th->th_off * 4;
-
-	switch (mtod(m, struct ip *)->ip_v) {
-	case 4:
-		ip = mtod(m, struct ip *);
-		ip6 = NULL;
-		break;
-	case 6:
-		ip = NULL;
-		ip6 = mtod(m, struct ip6_hdr *);
-		break;
-	default:
-		return (-1);
-	}
-
-	MD5Init(&ctx);
-
-	if (ip) {
-		memset(&ippseudo, 0, sizeof(ippseudo));
-		ipovly = (struct ipovly *)ip;
-		ippseudo.ippseudo_src = ipovly->ih_src;
-		ippseudo.ippseudo_dst = ipovly->ih_dst;
-		ippseudo.ippseudo_pad = 0;
-		ippseudo.ippseudo_p = IPPROTO_TCP;
-		ippseudo.ippseudo_len = htons(m->m_pkthdr.len - thoff);
-		MD5Update(&ctx, (char *)&ippseudo, sizeof(ippseudo));
-	} else {
-		memset(&ip6pseudo, 0, sizeof(ip6pseudo));
-		ip6pseudo.ip6ph_src = ip6->ip6_src;
-		in6_clearscope(&ip6pseudo.ip6ph_src);
-		ip6pseudo.ip6ph_dst = ip6->ip6_dst;
-		in6_clearscope(&ip6pseudo.ip6ph_dst);
-		ip6pseudo.ip6ph_len = htons(m->m_pkthdr.len - thoff);
-		ip6pseudo.ip6ph_nxt = IPPROTO_TCP;
-		MD5Update(&ctx, (char *)&ip6pseudo, sizeof(ip6pseudo));
-	}
-
-	th0 = *th;
-	th0.th_sum = 0;
-	MD5Update(&ctx, (char *)&th0, sizeof(th0));
-
-	l = m->m_pkthdr.len - thoff - tcphdrlen;
-	if (l > 0)
-		m_apply(m, thoff + tcphdrlen,
-		    m->m_pkthdr.len - thoff - tcphdrlen,
-		    tcp_signature_apply, &ctx);
-
-	MD5Update(&ctx, _KEYBUF(sav->key_auth), _KEYLEN(sav->key_auth));
-	MD5Final(sig, &ctx);
-
-	return (0);
-}
-#endif
-
-int
-tcp_dooptions(tp, cp, cnt, th, m, toff, oi)
+void
+tcp_dooptions(tp, cp, cnt, th, oi)
 	struct tcpcb *tp;
 	u_char *cp;
 	int cnt;
 	struct tcphdr *th;
-	struct mbuf *m;
-	int toff;
 	struct tcp_opt_info *oi;
 {
 	u_int16_t mss;
-	int opt, optlen = 0;
-#ifdef TCP_SIGNATURE
-	caddr_t sigp = NULL;
-	char sigbuf[TCP_SIGLEN];
-	struct secasvar *sav = NULL;
-#endif
+	int opt, optlen;
 
-	for (; cp && cnt > 0; cnt -= optlen, cp += optlen) {
+	for (; cnt > 0; cnt -= optlen, cp += optlen) {
 		opt = cp[0];
 		if (opt == TCPOPT_EOL)
 			break;
@@ -2820,82 +2665,8 @@ tcp_dooptions(tp, cp, cnt, th, m, toff, oi)
 				/* tcp_mark_sacked(tp, lwe, rwe); */
 			}
 			break;
-#ifdef TCP_SIGNATURE
-		case TCPOPT_SIGNATURE:
-			if (optlen != TCPOLEN_SIGNATURE)
-				continue;
-			if (sigp && bcmp(sigp, cp + 2, TCP_SIGLEN))
-				return (-1);
-
-			sigp = sigbuf;
-			memcpy(sigbuf, cp + 2, TCP_SIGLEN);
-			memset(cp + 2, 0, TCP_SIGLEN);
-			tp->t_flags |= TF_SIGNATURE;
-			break;
-#endif
 		}
 	}
-
-#ifdef TCP_SIGNATURE
-	if (tp->t_flags & TF_SIGNATURE) {
-
-		sav = tcp_signature_getsav(m, th);
-
-		if (sav == NULL && tp->t_state == TCPS_LISTEN)
-			return (-1);
-	}
-
-	if ((sigp ? TF_SIGNATURE : 0) ^ (tp->t_flags & TF_SIGNATURE)) {
-		if (sav == NULL)
-			return (-1);
-#ifdef FAST_IPSEC
-		KEY_FREESAV(&sav);
-#else
-		key_freesav(sav);
-#endif
-		return (-1);
-	}
-
-	if (sigp) {
-		char sig[TCP_SIGLEN];
-
-		TCP_FIELDS_TO_NET(th);
-		if (tcp_signature(m, th, toff, sav, sig) < 0) {
-			TCP_FIELDS_TO_HOST(th);
-			if (sav == NULL)
-				return (-1);
-#ifdef FAST_IPSEC
-			KEY_FREESAV(&sav);
-#else
-			key_freesav(sav);
-#endif
-			return (-1);
-		}
-		TCP_FIELDS_TO_HOST(th);
-
-		if (bcmp(sig, sigp, TCP_SIGLEN)) {
-			tcpstat.tcps_badsig++;
-			if (sav == NULL)
-				return (-1);
-#ifdef FAST_IPSEC
-			KEY_FREESAV(&sav);
-#else
-			key_freesav(sav);
-#endif
-			return (-1);
-		} else
-			tcpstat.tcps_goodsig++;
-
-		key_sa_recordxfer(sav, m);
-#ifdef FAST_IPSEC
-		KEY_FREESAV(&sav);
-#else
-		key_freesav(sav);
-#endif
-	}
-#endif
-
-	return (0);
 }
 
 /*
@@ -3116,7 +2887,7 @@ do {									\
 		pool_put(&syn_cache_pool, (sc));			\
 } while (/*CONSTCOND*/0)
 
-POOL_INIT(syn_cache_pool, sizeof(struct syn_cache), 0, 0, 0, "synpl", NULL);
+struct pool syn_cache_pool;
 
 /*
  * We don't estimate RTT with SYNs, so each packet starts with the default
@@ -3141,6 +2912,10 @@ syn_cache_init()
 	/* Initialize the hash buckets. */
 	for (i = 0; i < tcp_syn_cache_size; i++)
 		TAILQ_INIT(&tcp_syn_cache[i].sch_bucket);
+
+	/* Initialize the syn cache pool. */
+	pool_init(&syn_cache_pool, sizeof(struct syn_cache), 0, 0, 0,
+	    "synpl", NULL);
 }
 
 void
@@ -3617,11 +3392,6 @@ syn_cache_get(src, dst, th, hlen, tlen, so, m)
 	TCP_TIMER_ARM(tp, TCPT_KEEP, TCPTV_KEEP_INIT);
 	tcpstat.tcps_accepts++;
 
-#ifdef TCP_SIGNATURE
-	if (sc->sc_flags & SCF_SIGNATURE)
-		tp->t_flags |= TF_SIGNATURE;
-#endif
-
 	/* Initialize tp->t_ourmss before we deal with the peer's! */
 	tp->t_ourmss = sc->sc_ourmaxseg;
 	tcp_mss_from_peer(tp, sc->sc_peermaxseg);
@@ -3666,7 +3436,8 @@ syn_cache_get(src, dst, th, hlen, tlen, so, m)
 	return (so);
 
 resetandabort:
-	(void)tcp_respond(NULL, m, m, th, (tcp_seq)0, th->th_ack, TH_RST);
+	(void) tcp_respond(NULL, m, m, th,
+			   th->th_seq + tlen, (tcp_seq)0, TH_RST|TH_ACK);
 abort:
 	if (so != NULL)
 		(void) soabort(so);
@@ -3778,11 +3549,8 @@ syn_cache_add(src, dst, th, hlen, so, m, optp, optlen, oi)
 	struct syn_cache *sc;
 	struct syn_cache_head *scp;
 	struct mbuf *ipopts;
-	struct tcp_opt_info opti;
 
 	tp = sototcpcb(so);
-
-	bzero(&opti, sizeof(opti));
 
 	/*
 	 * RFC1122 4.2.3.10, p. 104: discard bcast/mcast SYN
@@ -3810,19 +3578,9 @@ syn_cache_add(src, dst, th, hlen, so, m, optp, optlen, oi)
 		ipopts = NULL;
 	}
 
-#ifdef TCP_SIGNATURE
-	if (optp || (tp->t_flags & TF_SIGNATURE))
-#else
-	if (optp)
-#endif
-	{
+	if (optp) {
 		tb.t_flags = tcp_do_rfc1323 ? (TF_REQ_SCALE|TF_REQ_TSTMP) : 0;
-#ifdef TCP_SIGNATURE
-		tb.t_flags |= (tp->t_flags & TF_SIGNATURE);
-#endif
-		if (tcp_dooptions(&tb, optp, optlen, th, m, m->m_pkthdr.len -
-		    sizeof(struct tcphdr) - optlen - hlen, oi) < 0)
-			return (0);
+		tcp_dooptions(&tb, optp, optlen, th, oi);
 	} else
 		tb.t_flags = 0;
 
@@ -3916,10 +3674,6 @@ syn_cache_add(src, dst, th, hlen, so, m, optp, optlen, oi)
 		sc->sc_requested_s_scale = 15;
 		sc->sc_request_r_scale = 15;
 	}
-#ifdef TCP_SIGNATURE
-	if (tb.t_flags & TF_SIGNATURE)
-		sc->sc_flags |= SCF_SIGNATURE;
-#endif
 	sc->sc_tp = tp;
 	if (syn_cache_respond(sc, m) == 0) {
 		syn_cache_insert(sc, tp);
@@ -3969,9 +3723,6 @@ syn_cache_respond(sc, m)
 
 	/* Compute the size of the TCP options. */
 	optlen = 4 + (sc->sc_request_r_scale != 15 ? 4 : 0) +
-#ifdef TCP_SIGNATURE
-	    ((sc->sc_flags & SCF_SIGNATURE) ? (TCPOLEN_SIGNATURE + 2) : 0) +
-#endif
 	    ((sc->sc_flags & SCF_TIMESTAMP) ? TCPOLEN_TSTAMP_APPA : 0);
 
 	tlen = hlen + sizeof(struct tcphdr) + optlen;
@@ -4018,7 +3769,6 @@ syn_cache_respond(sc, m)
 	switch (sc->sc_src.sa.sa_family) {
 	case AF_INET:
 		ip = mtod(m, struct ip *);
-		ip->ip_v = 4;
 		ip->ip_dst = sc->sc_src.sin.sin_addr;
 		ip->ip_src = sc->sc_dst.sin.sin_addr;
 		ip->ip_p = IPPROTO_TCP;
@@ -4029,7 +3779,6 @@ syn_cache_respond(sc, m)
 #ifdef INET6
 	case AF_INET6:
 		ip6 = mtod(m, struct ip6_hdr *);
-		ip6->ip6_vfc = IPV6_VERSION;
 		ip6->ip6_dst = sc->sc_src.sin6.sin6_addr;
 		ip6->ip6_src = sc->sc_dst.sin6.sin6_addr;
 		ip6->ip6_nxt = IPPROTO_TCP;
@@ -4074,44 +3823,12 @@ syn_cache_respond(sc, m)
 		optp += TCPOLEN_TSTAMP_APPA;
 	}
 
-#ifdef TCP_SIGNATURE
-	if (sc->sc_flags & SCF_SIGNATURE) {
-		struct secasvar *sav;
-		u_int8_t *sigp;
-
-		sav = tcp_signature_getsav(m, th);
-		
-		if (sav == NULL) {
-			if (m)
-				m_freem(m);
-			return (EPERM);
-		}
-
-		*optp++ = TCPOPT_SIGNATURE;
-		*optp++ = TCPOLEN_SIGNATURE;
-		sigp = optp;
-		bzero(optp, TCP_SIGLEN);
-		optp += TCP_SIGLEN;
-		*optp++ = TCPOPT_NOP;
-		*optp++ = TCPOPT_EOL;
-
-		(void)tcp_signature(m, th, hlen, sav, sigp);
-
-		key_sa_recordxfer(sav, m);
-#ifdef FAST_IPSEC
-		KEY_FREESAV(&sav);
-#else
-		key_freesav(sav);
-#endif
-	}
-#endif
-
 	/* Compute the packet's checksum. */
 	switch (sc->sc_src.sa.sa_family) {
 	case AF_INET:
 		ip->ip_len = htons(tlen - hlen);
 		th->th_sum = 0;
-		th->th_sum = in4_cksum(m, IPPROTO_TCP, hlen, tlen - hlen);
+		th->th_sum = in_cksum(m, tlen);
 		break;
 #ifdef INET6
 	case AF_INET6:

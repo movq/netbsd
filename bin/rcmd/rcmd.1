@@ -1,4 +1,4 @@
-.\"	$NetBSD: rcmd.1,v 1.18 2004/09/05 08:48:32 wiz Exp $
+.\"	$NetBSD: rcmd.1,v 1.16 2003/10/13 14:22:20 agc Exp $
 .\"
 .\" Copyright (c) 1997 Matthew R. Green.
 .\" Copyright (c) 1983, 1990 The Regents of the University of California.
@@ -31,7 +31,7 @@
 .\"	from: @(#)rsh.1	6.10 (Berkeley) 7/24/91
 .\"	from: NetBSD: rsh.1,v 1.3 1997/01/09 20:21:14 tls Exp
 .\"
-.Dd September 5, 2004
+.Dd May 26, 2003
 .Dt RCMD 1
 .Os
 .Sh NAME
@@ -40,6 +40,8 @@
 .Xr rcmd 3
 .Sh SYNOPSIS
 .Nm
+.Op Fl Kdnx
+.Op Fl k Ar realm
 .Op Fl l Ar username
 .Op Fl u Ar localusername
 .Ar host
@@ -61,6 +63,10 @@ command;
 normally terminates when the remote command does.
 The options are as follows:
 .Bl -tag -width flag
+.It Fl K
+The
+.Fl K
+option turns off all Kerberos authentication.
 .It Fl d
 The
 .Fl d
@@ -69,11 +75,23 @@ option turns on socket debugging (using
 on the
 .Tn TCP
 sockets used for communication with the remote host.
+.It Fl k
+The
+.Fl k
+option causes
+.Nm
+to obtain tickets for the remote host in
+.Ar realm
+instead of the remote host's realm as determined by
+.Xr krb_realmofhost  3  .
 .It Fl l
 By default, the remote username is the same as the local username.
 The
 .Fl l
 option allows the remote name to be specified.
+Kerberos authentication is used, and authorization is determined
+as in
+.Xr rlogin  1  .
 .It Fl u
 The
 .Fl u
@@ -87,6 +105,13 @@ option redirects input from the special device
 (see the
 .Sx BUGS
 section of this manual page).
+.It Fl x
+The
+.Fl x
+option turns on
+.Tn DES
+encryption for all data exchange.
+This may introduce a significant delay in response time.
 .El
 .Pp
 Shell metacharacters which are not quoted are interpreted on local machine,
@@ -113,8 +138,11 @@ to
 .El
 .Sh SEE ALSO
 .Xr rsh 1 ,
+.Xr krb_realmofhost 3 ,
+.Xr krb_sendauth 3 ,
 .Xr rcmd 3 ,
-.Xr environ 7
+.Xr environ 7 ,
+.Xr kerberos 8
 .Sh HISTORY
 The
 .Nm

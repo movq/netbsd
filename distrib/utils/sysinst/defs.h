@@ -1,4 +1,4 @@
-/*	$NetBSD: defs.h,v 1.120 2004/11/11 21:24:40 dsl Exp $	*/
+/*	$NetBSD: defs.h,v 1.111.2.3 2004/06/17 09:14:13 tron Exp $	*/
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -57,6 +57,15 @@ deconst(const void *p)
 
 #define min(a,b)	((a) < (b) ? (a) : (b))
 #define max(a,b)	((a) > (b) ? (a) : (b))
+
+/* Define for external varible use */ 
+#ifdef MAIN
+#define EXTERN 
+#define INIT(x) = x
+#else
+#define EXTERN extern
+#define INIT(x)
+#endif
 
 /* constants */
 #define MEG (1024 * 1024)
@@ -162,57 +171,61 @@ typedef struct _partinfo {
 
 /* variables */
 
-int debug;		/* set by -D option */
+EXTERN int debug;		/* set by -D option */
 
-char rel[SSTRSIZE];
-char machine[SSTRSIZE];
+EXTERN char rel[SSTRSIZE] INIT(REL);
+EXTERN char machine[SSTRSIZE] INIT(MACH);
 
-int yesno;
-int ignorerror;
-int ttysig_ignore;
-pid_t ttysig_forward;
-int layoutkind;
-int sizemult;
-const char *multname; 
-const char *shellpath;
+EXTERN int yesno;
+EXTERN int ignorerror;
+EXTERN int ttysig_ignore;
+EXTERN pid_t ttysig_forward;
+EXTERN int layoutkind;
+EXTERN int sizemult INIT(1);
+EXTERN const char *multname; 
+EXTERN const char *shellpath;
 
 /* loging variables */
 
-int logging;
-int scripting;
-FILE *logfp;
-FILE *script;
+EXTERN int logging;
+EXTERN int scripting;
+EXTERN FILE *logfp;
+EXTERN FILE *script;
+
+/* Hardware variables */
+EXTERN unsigned long ramsize INIT(0);
+EXTERN unsigned int  rammb   INIT(0);
 
 /* Actual name of the disk. */
-char diskdev[SSTRSIZE];
-int no_mbr;				/* set for raid (etc) */
-int rootpart;				/* partition we install into */
-const char *disktype;		/* ST506, SCSI, ... */
+EXTERN char diskdev[SSTRSIZE] INIT("");
+EXTERN int no_mbr;				/* set for raid (etc) */
+EXTERN int rootpart;				/* partition we install into */
+EXTERN const char *disktype INIT("unknown");		/* ST506, SCSI, ... */
 
 /* Area of disk we can allocate, start and size in disk sectors. */
-int ptstart, ptsize;	
+EXTERN int ptstart, ptsize;	
 
 /* Actual values for current disk - set by find_disks() or md_get_info() */
-int sectorsize;
-int dlcyl, dlhead, dlsec, dlsize, dlcylsize;
-int current_cylsize;
-int root_limit;
+EXTERN int sectorsize;
+EXTERN int dlcyl, dlhead, dlsec, dlsize, dlcylsize;
+EXTERN int current_cylsize;
+EXTERN int root_limit;
 
 /* Information for the NetBSD disklabel */
 enum DLTR { PART_A, PART_B, PART_C, PART_D, PART_E, PART_F, PART_G, PART_H,
 	    PART_I, PART_J, PART_K, PART_L, PART_M, PART_N, PART_O, PART_P};
 #define partition_name(x)	('a' + (x))
-partinfo oldlabel[MAXPARTITIONS];	/* What we found on the disk */
-partinfo bsdlabel[MAXPARTITIONS];	/* What we want it to look like */
-int tmp_mfs_size;
+EXTERN partinfo oldlabel[MAXPARTITIONS];	/* What we found on the disk */
+EXTERN partinfo bsdlabel[MAXPARTITIONS];	/* What we want it to look like */
+EXTERN int tmp_mfs_size INIT(0);
 
 #define DISKNAME_SIZE 16
-char bsddiskname[DISKNAME_SIZE];
-const char *doessf;
+EXTERN char bsddiskname[DISKNAME_SIZE] INIT("mydisk");
+EXTERN const char *doessf INIT("");
 
 /* Relative file name for storing a distribution. */
-char dist_dir[STRSIZE];  
-int  clean_dist_dir;
+EXTERN char dist_dir[STRSIZE] INIT("/usr/INSTALL");  
+EXTERN int  clean_dist_dir INIT(0);
 /* Absolute path name where the distribution should be extracted from. */
 
 #if !defined(SYSINST_FTP_HOST)
@@ -224,32 +237,32 @@ int  clean_dist_dir;
 #endif
 
 /* Abs. path we extract from */
-char ext_dir[STRSIZE];
+EXTERN char ext_dir[STRSIZE] INIT("");
 
 /* Place we look in all fs types */
-char set_dir[STRSIZE];
+EXTERN char set_dir[STRSIZE] INIT("/" MACH "/binary/sets");
 
-char ftp_host[STRSIZE];
-char ftp_dir[STRSIZE] ;
-char ftp_user[SSTRSIZE];
-char ftp_pass[STRSIZE];
-char ftp_proxy[STRSIZE];
+EXTERN char ftp_host[STRSIZE] INIT(SYSINST_FTP_HOST);
+EXTERN char ftp_dir[STRSIZE]  INIT(SYSINST_FTP_DIR);
+EXTERN char ftp_user[SSTRSIZE] INIT("ftp");
+EXTERN char ftp_pass[STRSIZE] INIT("");
+EXTERN char ftp_proxy[STRSIZE] INIT("");
 
-char nfs_host[STRSIZE];
-char nfs_dir[STRSIZE];
+EXTERN char nfs_host[STRSIZE] INIT("");
+EXTERN char nfs_dir[STRSIZE] INIT("/bsd/release");
 
-char cdrom_dev[SSTRSIZE];
+EXTERN char cdrom_dev[SSTRSIZE] INIT("cd0a");
 
-char localfs_dev[SSTRSIZE];
-char localfs_fs[SSTRSIZE];
-char localfs_dir[STRSIZE];
+EXTERN char localfs_dev[SSTRSIZE] INIT("sd0a");
+EXTERN char localfs_fs[SSTRSIZE] INIT("ffs");
+EXTERN char localfs_dir[STRSIZE] INIT("release");
 
-char targetroot_mnt[SSTRSIZE];
-char distfs_mnt[SSTRSIZE];
+EXTERN char targetroot_mnt[SSTRSIZE] INIT ("/targetroot");
+EXTERN char distfs_mnt[SSTRSIZE] INIT ("/mnt2");
 
-int  mnt2_mounted;
+EXTERN int  mnt2_mounted INIT(0);
 
-char dist_postfix[SSTRSIZE];
+EXTERN char dist_postfix[SSTRSIZE] INIT(".tgz");
 
 /* selescted sets */
 extern distinfo dist_list[];
@@ -272,6 +285,7 @@ int	md_pre_disklabel(void);
 int	md_pre_update(void);
 int	md_update(void);
 void	md_init(void);
+void	md_set_sizemultname(void);
 void	md_set_no_x(void);
 
 /* from main.c */
@@ -319,7 +333,7 @@ int	get_real_geom(const char *, struct disklabel *);
 
 /* from net.c */
 extern char net_namesvr6[STRSIZE];
-int	get_via_ftp(const char *);
+int	get_via_ftp(void);
 int	get_via_nfs(void);
 int	config_network(void);
 void	mnt_net_config(void);
@@ -340,8 +354,9 @@ int	dir_exists_p(const char *);
 int	file_exists_p(const char *);
 int	file_mode_match(const char *, unsigned int);
 int	distribution_sets_exist_p(const char *);
-uint	get_ramsize(void);
+void	get_ramsize(void);
 void	ask_sizemult(int);
+void	reask_sizemult(int);
 void	run_makedev(void);
 int	get_via_floppy(void);
 int	get_via_cdrom(void);
@@ -399,12 +414,4 @@ int	make_bsd_partitions(void);
 
 /* from aout2elf.c */
 int move_aout_libs(void);
-
-#ifdef WSKBD
-void	get_kb_encoding(void);
-void	save_kb_encoding(void);
-#else
-#define	get_kb_encoding()
-#define	save_kb_encoding()
-#endif
 #endif	/* _DEFS_H_ */

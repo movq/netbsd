@@ -34,7 +34,7 @@
 #ifdef HAVE_CONFIG_H
 #include <config.h>
 __RCSID("$Heimdal: gai_strerror.c,v 1.2.20.1 2004/01/15 18:14:17 lha Exp $"
-        "$NetBSD: gai_strerror.c,v 1.1.1.4 2004/04/02 14:47:55 lha Exp $");
+        "$NetBSD: gai_strerror.c,v 1.1.1.3.2.1 2004/04/21 04:55:42 jmc Exp $");
 #endif
 
 #include "roken.h"

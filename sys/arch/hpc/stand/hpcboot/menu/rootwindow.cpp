@@ -1,7 +1,7 @@
-/* -*-C++-*-	$NetBSD: rootwindow.cpp,v 1.20 2004/08/13 15:49:37 uch Exp $	*/
+/* -*-C++-*-	$NetBSD: rootwindow.cpp,v 1.16 2004/02/27 04:20:38 uwe Exp $	*/
 
 /*-
- * Copyright (c) 2001, 2004 The NetBSD Foundation, Inc.
+ * Copyright (c) 2001 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -42,7 +42,6 @@
 #include <menu/rootwindow.h>
 #include <res/resource.h>
 #include "../binary/build_number.h"
-#include <console.h>
 
 //
 // root window
@@ -295,8 +294,6 @@ RootWindow::isDialogMessage(MSG &msg)
 }
 
 //
-// XXX !!! XXX !!! XXX !!! XXX !!!
-//
 // WinCE 2.11 doesn't support keyboard focus traversal for nested
 // dialogs, so implement poor man focus manager for our root window.
 // This function handles focus transition from boot/cancel buttons.
@@ -304,14 +301,13 @@ RootWindow::isDialogMessage(MSG &msg)
 // above.
 //
 // XXX: This is a very smplistic implementation that doesn't handle
-// <TAB> auto-repeat count in LOWORD(msg.lParam), WS_GROUP, etc...
+// <TAB> auto-repeat count in LOWORD(msg.lParam).
 //
 BOOL
 RootWindow::focusManagerHook(MSG &msg, HWND tab_window)
 {
 	HWND next, prev;
 	HWND dst = 0;
-	LRESULT dlgcode = 0;
 
 	if (msg.message != WM_KEYDOWN)
 		return FALSE;
@@ -327,36 +323,25 @@ RootWindow::focusManagerHook(MSG &msg, HWND tab_window)
 	} else {
 		// last focusable control in the tab_window (XXX: WS_GROUP?)
 		HWND last = GetNextDlgTabItem(tab_window, NULL, TRUE);
-		if (last == NULL ||
-		    !(last == msg.hwnd || IsChild(last, msg.hwnd)))
+		if (!last || msg.hwnd != last)
 			return FALSE;
-		dlgcode = SendMessage(last, WM_GETDLGCODE, NULL, (LPARAM)&msg);
+		// XXX: handle DLGC_WANTARROWS &c
 		next = _base->_window; // out of the tab window
 		prev = 0;	// let IsDialogMessage handle it
 	}
 
-#if 0 // XXX: breaks tabbing out of the console window
-	if (dlgcode & DLGC_WANTALLKEYS)
-		return FALSE;
-#endif
 	switch (msg.wParam) {
 	case VK_RIGHT:
 	case VK_DOWN:
-		if (dlgcode & DLGC_WANTARROWS)
-			return FALSE;
 		dst = next;
 		break;
 
 	case VK_LEFT:
 	case VK_UP:
-		if (dlgcode & DLGC_WANTARROWS)
-			return FALSE;
 		dst = prev;
 		break;
 
 	case VK_TAB:
-		if (dlgcode & DLGC_WANTTAB)
-			return FALSE;
 		if (GetKeyState(VK_SHIFT) & 0x8000) // Shift-Tab
 			dst = prev;
 		else
@@ -372,12 +357,8 @@ RootWindow::focusManagerHook(MSG &msg, HWND tab_window)
 }
 
 void
-RootWindow::progress(const char *msg)
+RootWindow::progress()
 {
-
-	if (msg)
-		Console::Instance()->print(TEXT("[progress] %S\n"), msg);
-
 	SendMessage(_progress_bar->_window, PBM_STEPIT, 0, 0);
 }
 

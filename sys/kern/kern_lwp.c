@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_lwp.c,v 1.28 2004/10/06 08:55:27 skrll Exp $	*/
+/*	$NetBSD: kern_lwp.c,v 1.26 2004/03/05 11:17:41 junyoung Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_lwp.c,v 1.28 2004/10/06 08:55:27 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_lwp.c,v 1.26 2004/03/05 11:17:41 junyoung Exp $");
 
 #include "opt_multiprocessor.h"
 
@@ -300,7 +300,7 @@ int
 sys__lwp_wakeup(struct lwp *l, void *v, register_t *retval)
 {
 	struct sys__lwp_wakeup_args /* {
-		syscallarg(lwpid_t) target;
+		syscallarg(lwpid_t) wakeup;
 	} */ *uap = v;
 	lwpid_t target_lid;
 	struct lwp *t;
@@ -625,7 +625,6 @@ struct lwp *
 proc_representative_lwp(struct proc *p)
 {
 	struct lwp *l, *onproc, *running, *sleeping, *stopped, *suspended;
-	struct lwp *signalled;
 
 	/* Trivial case: only one LWP */
 	if (p->p_nlwps == 1)
@@ -636,10 +635,7 @@ proc_representative_lwp(struct proc *p)
 	case SACTIVE:
 		/* Pick the most live LWP */
 		onproc = running = sleeping = stopped = suspended = NULL;
-		signalled = NULL;
 		LIST_FOREACH(l, &p->p_lwps, l_sibling) {
-			if (l->l_lid == p->p_sigctx.ps_lwp)
-				signalled = l;
 			switch (l->l_stat) {
 			case LSONPROC:
 				onproc = l;
@@ -658,8 +654,6 @@ proc_representative_lwp(struct proc *p)
 				break;
 			}
 		}
-		if (signalled)
-			return signalled;
 		if (onproc)
 			return onproc;
 		if (running)

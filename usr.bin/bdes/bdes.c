@@ -1,4 +1,4 @@
-/*	$NetBSD: bdes.c,v 1.6 2004/10/30 17:02:20 dsl Exp $	*/
+/*	$NetBSD: bdes.c,v 1.5 2003/08/07 11:13:11 agc Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -46,7 +46,7 @@ __COPYRIGHT("@(#) Copyright (c) 1991, 1993\n\
 #if 0
 static char sccsid[] = "@(#)bdes.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: bdes.c,v 1.6 2004/10/30 17:02:20 dsl Exp $");
+__RCSID("$NetBSD: bdes.c,v 1.5 2003/08/07 11:13:11 agc Exp $");
 #endif
 #endif /* not lint */
 
@@ -464,19 +464,31 @@ cvtkey(char *obuf, char *ibuf)
 
 /*
  * convert an ASCII string into a decimal number:
- * 1. must be between 0 and 64 inclusive (or 56, checked by caller)
+ * 1. must be between 0 and 64 inclusive
  * 2. must be a valid decimal number
  * 3. must be a multiple of mult
  */
 int
 setbits(char *s, int mult)
 {
-	char *p;
-	int n;		/* the integer collected */
+	register char *p;		/* pointer in a for loop */
+	register int n = 0;		/* the integer collected */
 
-	n = strtoul(s, &p, 10);
-	if (*p != 0)
-		bdes_err(-1, "bad decimal digit in MAC length");
+	/*
+	 * skip white space
+	 */
+	while (isspace(*s))
+		s++;
+	/*
+	 * get the integer
+	 */
+	for (p = s; *p; p++) {
+		if (isdigit(*p))
+			n = n * 10 + *p - '0';
+		else {
+			bdes_err(-1, "bad decimal digit in MAC length");
+		}
+	}
 	/*
 	 * be sure it's a multiple of mult
 	 */

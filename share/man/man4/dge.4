@@ -1,4 +1,4 @@
-.\"	$NetBSD: dge.4,v 1.7 2004/10/04 19:06:46 rumble Exp $
+.\"	$NetBSD: dge.4,v 1.4 2004/03/18 21:02:59 wiz Exp $
 .\"
 .\" Copyright (c) 2004, SUNET, Swedish University Computer Network.
 .\" All rights reserved.
@@ -35,19 +35,26 @@
 .Dd March 18, 2004
 .Dt DGE 4
 .Os
+.\" the next line has to end in a whitespace
+.ds nummer "i82597EX 
 .Sh NAME
 .Nm dge
-.Nd Intel i82597EX Ten Gigabit Ethernet driver
+.Nd Intel
+.nummer
+Ten Gigabit Ethernet driver
 .Sh SYNOPSIS
 .Cd "dge* at pci? dev ? function ?"
 .Sh DESCRIPTION
 The
 .Nm
-device driver supports the Intel i82597EX PRO/10GbE LR Ethernet
-adapter,
+device driver supports the Intel
+.nummer
+PRO/10GbE LR Ethernet adapter,
 which uses a single mode fiber (1310nm) interface.
 .Pp
-The i82597EX supports IPv4/TCP/UDP checksumming in hardware, as well
+The
+.nummer
+supports IPv4/TCP/UDP checksumming in hardware, as well
 as TCP Segmentation Offloading (TSO).
 The driver does currently only support the hardware checksumming
 features.
@@ -86,13 +93,15 @@ segments, but over 80 segments has been seen using large (16k)
 jumbo frames.
 .Pp
 .It dge%s: device timeout (txfree %d txsfree %d txnext %d)
-The i82597EX had been given packets to send, but didn't interrupt
-within 5 seconds.
+The
+.nummer
+had been given packets to send, but didn't interrupt within 5
+seconds.
 This diagnostic is most likely the result of a hardware failure,
 and the chip will be reset to resume normal operation.
 .Pp
 .It dge%d: Receive overrun
-If the computer is under heavy load, the software may not be able to
+If the computer is is heavy loaded the software may not be able to
 keep up removing received datagrams from the receive queue, and
 will therefore loose datagrams.
 To avoid this, check that the other end is using the XON/XOFF

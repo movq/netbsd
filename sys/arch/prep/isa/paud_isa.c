@@ -1,4 +1,4 @@
-/*	$NetBSD: paud_isa.c,v 1.8 2004/10/29 12:57:16 yamt Exp $	*/
+/*	$NetBSD: paud_isa.c,v 1.6 2003/07/15 02:54:51 lukem Exp $	*/
 
 /*-
  * Copyright (c) 1998, 1999 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: paud_isa.c,v 1.8 2004/10/29 12:57:16 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: paud_isa.c,v 1.6 2003/07/15 02:54:51 lukem Exp $");
 
 #include "audio.h"
 #if NAUDIO > 0
@@ -99,7 +99,7 @@ static int paud_mixer_set_port(void *, mixer_ctrl_t *);
 static int paud_mixer_get_port(void *, mixer_ctrl_t *);
 static int paud_query_devinfo(void *, mixer_devinfo_t *);
 
-static const struct audio_hw_if paud_hw_if = {
+static struct audio_hw_if paud_hw_if = {
 	ad1848_isa_open,
 	ad1848_isa_close,
 	NULL,
@@ -137,13 +137,13 @@ paud_match_isa(struct device *parent, struct cfdata *cf, void *aux)
 	struct ad1848_isa_softc probesc, *sc = &probesc;
 	struct isa_attach_args *ia = aux;
 
-	if (ia->ia_io[0].ir_addr != 0x830)
+	if (ia->ia_iobase != 0x830)
 		return 0;
 
 	sc->sc_ad1848.sc_iot = ia->ia_iot;
 	sc->sc_ic = ia->ia_ic;
-	if (ad1848_isa_mapprobe(sc, ia->ia_io[0].ir_addr)) {
-		ia->ia_io[0].ir_size = AD1848_NPORT;
+	if (ad1848_isa_mapprobe(sc, ia->ia_iobase)) {
+		ia->ia_iosize = AD1848_NPORT;
 		ad1848_isa_unmap(sc);
 		return 1;
 	}
@@ -162,13 +162,13 @@ paud_attach_isa(struct device *parent, struct device *self, void *aux)
 	sc->sc_ad1848.sc_iot = ia->ia_iot;
 	sc->sc_ic = ia->ia_ic;
 
-	if (ad1848_isa_mapprobe(sc, ia->ia_io[0].ir_addr) == 0) {
+	if (ad1848_isa_mapprobe(sc, ia->ia_iobase) == 0) {
 		printf(": attach failed\n");
 		return;
 	}
-	sc->sc_playdrq = ia->ia_drq[0].ir_drq;
-	sc->sc_recdrq = ia->ia_drq[1].ir_drq;
-	sc->sc_ih = isa_intr_establish(ia->ia_ic, ia->ia_irq[0].ir_irq,
+	sc->sc_playdrq = ia->ia_drq;
+	sc->sc_recdrq = ia->ia_drq2;
+	sc->sc_ih = isa_intr_establish(ia->ia_ic, ia->ia_irq,
 				       IST_EDGE, IPL_AUDIO,
 				       ad1848_isa_intr, sc);
 	ad1848_isa_attach(sc);

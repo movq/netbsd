@@ -1,4 +1,4 @@
-/*	$NetBSD: acpi_button.c,v 1.16 2004/05/01 12:03:48 kochi Exp $	*/
+/*	$NetBSD: acpi_button.c,v 1.13 2003/11/03 18:07:10 mycroft Exp $	*/
 
 /*
  * Copyright 2001, 2003 Wasabi Systems, Inc.
@@ -40,7 +40,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: acpi_button.c,v 1.16 2004/05/01 12:03:48 kochi Exp $");
+__KERNEL_RCSID(0, "$NetBSD: acpi_button.c,v 1.13 2003/11/03 18:07:10 mycroft Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -59,47 +59,37 @@ struct acpibut_softc {
 	int sc_flags;			/* see below */
 };
 
-static const char * const power_button_hid[] = {
+static const char * const button_hid[] = {
 	"PNP0C0C",
-	NULL
-};
-
-static const char * const sleep_button_hid[] = {
 	"PNP0C0E",
 	NULL
 };
 
 #define	ACPIBUT_F_VERBOSE		0x01	/* verbose events */
 
-static int	acpibut_match(struct device *, struct cfdata *, void *);
-static void	acpibut_attach(struct device *, struct device *, void *);
+int	acpibut_match(struct device *, struct cfdata *, void *);
+void	acpibut_attach(struct device *, struct device *, void *);
 
 CFATTACH_DECL(acpibut, sizeof(struct acpibut_softc),
     acpibut_match, acpibut_attach, NULL, NULL);
 
-static void	acpibut_pressed_event(void *);
-static void	acpibut_notify_handler(ACPI_HANDLE, UINT32, void *context);
+void	acpibut_pressed_event(void *);
+void	acpibut_notify_handler(ACPI_HANDLE, UINT32, void *context);
 
 /*
  * acpibut_match:
  *
  *	Autoconfiguration `match' routine.
  */
-static int
+int
 acpibut_match(struct device *parent, struct cfdata *match, void *aux)
 {
 	struct acpi_attach_args *aa = aux;
 
 	if (aa->aa_node->ad_type != ACPI_TYPE_DEVICE)
-		return 0;
+		return (0);
 
-	if (acpi_match_hid(aa->aa_node->ad_devinfo, power_button_hid))
-		return 1;
-
-	if (acpi_match_hid(aa->aa_node->ad_devinfo, sleep_button_hid))
-		return 1;
-
-	return 0;
+	return (acpi_match_hid(aa->aa_node->ad_devinfo, button_hid));
 }
 
 /*
@@ -107,7 +97,7 @@ acpibut_match(struct device *parent, struct cfdata *match, void *aux)
  *
  *	Autoconfiguration `attach' routine.
  */
-static void
+void
 acpibut_attach(struct device *parent, struct device *self, void *aux)
 {
 	struct acpibut_softc *sc = (void *) self;
@@ -117,10 +107,10 @@ acpibut_attach(struct device *parent, struct device *self, void *aux)
 
 	sc->sc_smpsw.smpsw_name = sc->sc_dev.dv_xname;
 
-	if (acpi_match_hid(aa->aa_node->ad_devinfo, power_button_hid)) {
+	if (strcmp(aa->aa_node->ad_devinfo->HardwareId.Value, "PNP0C0C") == 0) {
 		sc->sc_smpsw.smpsw_type = PSWITCH_TYPE_POWER;
 		desc = "Power";
-	} else if (acpi_match_hid(aa->aa_node->ad_devinfo, sleep_button_hid)) {
+	} else if (strcmp(aa->aa_node->ad_devinfo->HardwareId.Value, "PNP0C0E") == 0) {
 		sc->sc_smpsw.smpsw_type = PSWITCH_TYPE_SLEEP;
 		desc = "Sleep";
 	} else {
@@ -157,7 +147,7 @@ acpibut_attach(struct device *parent, struct device *self, void *aux)
  *
  *	Deal with a button being pressed.
  */
-static void
+void
 acpibut_pressed_event(void *arg)
 {
 	struct acpibut_softc *sc = arg;
@@ -173,7 +163,7 @@ acpibut_pressed_event(void *arg)
  *
  *	Callback from ACPI interrupt handler to notify us of an event.
  */
-static void
+void
 acpibut_notify_handler(ACPI_HANDLE handle, UINT32 notify, void *context)
 {
 	struct acpibut_softc *sc = context;

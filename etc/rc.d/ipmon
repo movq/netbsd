@@ -1,13 +1,13 @@
 #!/bin/sh
 #
-# $NetBSD: ipmon,v 1.12 2004/08/13 18:08:03 mycroft Exp $
+# $NetBSD: ipmon,v 1.10.2.1 2004/04/06 03:56:14 jmc Exp $
 #
 
 # PROVIDE: ipmon
 # REQUIRE: syslogd
 # BEFORE:  SERVERS
 
-$_rc_subr_loaded . /etc/rc.subr
+. /etc/rc.subr
 
 name="ipmon"
 rcvar=$name

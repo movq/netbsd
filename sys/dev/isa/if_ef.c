@@ -1,4 +1,4 @@
-/*	$NetBSD: if_ef.c,v 1.17 2004/09/14 20:20:47 drochner Exp $	*/
+/*	$NetBSD: if_ef.c,v 1.15 2002/10/02 03:10:47 thorpej Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_ef.c,v 1.17 2004/09/14 20:20:47 drochner Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_ef.c,v 1.15 2002/10/02 03:10:47 thorpej Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -467,15 +467,15 @@ ef_match(parent, cf, aux)
 		if (bus->isa_cards[idx].available != 1)
 			continue;
 
-		if (ia->ia_io[0].ir_addr != ISA_UNKNOWN_PORT &&
+		if (ia->ia_io[0].ir_addr != ISACF_PORT_DEFAULT &&
 		    ia->ia_io[0].ir_addr != bus->isa_cards[idx].iobase)
 			continue;
 
-		if (ia->ia_iomem[0].ir_addr != ISA_UNKNOWN_IOMEM &&
+		if (ia->ia_iomem[0].ir_addr != ISACF_IOMEM_DEFAULT &&
 		    ia->ia_iomem[0].ir_addr != bus->isa_cards[idx].maddr)
 			continue;
 
-		if (ia->ia_irq[0].ir_irq != ISA_UNKNOWN_IRQ &&
+		if (ia->ia_irq[0].ir_irq != ISACF_IRQ_DEFAULT &&
 		    ia->ia_irq[0].ir_irq != bus->isa_cards[idx].irq)
 			continue;
 
@@ -658,7 +658,7 @@ ef_attach(parent, self, aux)
 		ethaddr[i] = bus_space_read_1(esc->sc_regt, esc->sc_regh,
 					      EF_ADDR + i);
 
-	snprintf(version, sizeof(version), "%s, rev. %d",
+	sprintf(version, "%s, rev. %d",
 		(esc->card_type == EF_CARD_TP) ? "3C507-TP" : "3C507",
 		esc->card_rev);
 

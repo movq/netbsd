@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.inc,v 1.16 2004/06/17 03:42:55 itojun Exp $
+#	$NetBSD: Makefile.inc,v 1.14.2.1 2004/06/17 12:38:10 tron Exp $
 
 .include <bsd.own.mk>		# for NETBSDSRCDIR & MKDYNAMICROOT definition
 

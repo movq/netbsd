@@ -1,4 +1,4 @@
-/*	$NetBSD: acpi_bat.c,v 1.40 2004/06/25 13:47:04 mycroft Exp $	*/
+/*	$NetBSD: acpi_bat.c,v 1.36.2.1 2004/07/02 17:27:10 he Exp $	*/
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -86,7 +86,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: acpi_bat.c,v 1.40 2004/06/25 13:47:04 mycroft Exp $");
+__KERNEL_RCSID(0, "$NetBSD: acpi_bat.c,v 1.36.2.1 2004/07/02 17:27:10 he Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -114,14 +114,14 @@ __KERNEL_RCSID(0, "$NetBSD: acpi_bat.c,v 1.40 2004/06/25 13:47:04 mycroft Exp $"
 #define ACPIBAT_DISCHARGING	12
 #define ACPIBAT_NSENSORS	13  /* number of sensors */
 
-static const struct envsys_range acpibat_range_amp[] = {
+const struct envsys_range acpibat_range_amp[] = {
 	{ 0, 1,		ENVSYS_SVOLTS_DC },
 	{ 1, 2,		ENVSYS_SAMPS },
 	{ 2, 3,		ENVSYS_SAMPHOUR },
 	{ 1, 0,		-1 },
 };
 
-static const struct envsys_range acpibat_range_watt[] = {
+const struct envsys_range acpibat_range_watt[] = {
 	{ 0, 1,		ENVSYS_SVOLTS_DC },
 	{ 1, 2,		ENVSYS_SWATTS },
 	{ 2, 3,		ENVSYS_SWATTHOUR },
@@ -213,8 +213,8 @@ do {						\
 	splx((s));				\
 } while(/*CONSTCOND*/0)
 
-static int	acpibat_match(struct device *, struct cfdata *, void *);
-static void	acpibat_attach(struct device *, struct device *, void *);
+int	acpibat_match(struct device *, struct cfdata *, void *);
+void	acpibat_attach(struct device *, struct device *, void *);
 
 CFATTACH_DECL(acpibat, sizeof(struct acpibat_softc),
     acpibat_match, acpibat_attach, NULL, NULL);
@@ -239,15 +239,15 @@ static int acpibat_streinfo(struct sysmon_envsys *, struct envsys_basic_info *);
  *
  *	Autoconfiguration `match' routine.
  */
-static int
+int
 acpibat_match(struct device *parent, struct cfdata *match, void *aux)
 {
 	struct acpi_attach_args *aa = aux;
 
 	if (aa->aa_node->ad_type != ACPI_TYPE_DEVICE)
-		return 0;
+		return (0);
 
-	return acpi_match_hid(aa->aa_node->ad_devinfo, bat_hid);
+	return (acpi_match_hid(aa->aa_node->ad_devinfo, bat_hid));
 }
 
 /*
@@ -255,7 +255,7 @@ acpibat_match(struct device *parent, struct cfdata *match, void *aux)
  *
  *	Autoconfiguration `attach' routine.
  */
-static void
+void
 acpibat_attach(struct device *parent, struct device *self, void *aux)
 {
 	struct acpibat_softc *sc = (void *) self;
@@ -297,7 +297,7 @@ acpibat_attach(struct device *parent, struct device *self, void *aux)
  * clear informations
  */
 
-static void
+void
 acpibat_clear_presence(struct acpibat_softc *sc)
 {
 
@@ -308,7 +308,7 @@ acpibat_clear_presence(struct acpibat_softc *sc)
 	ABAT_CLEAR(sc, ABAT_F_PRESENT);
 }
 
-static void
+void
 acpibat_clear_info(struct acpibat_softc *sc)
 {
 
@@ -326,7 +326,7 @@ acpibat_clear_info(struct acpibat_softc *sc)
 	sc->sc_data[ACPIBAT_LCAPACITY].validflags &= ~(ENVSYS_FCURVALID | ENVSYS_FMAXVALID | ENVSYS_FFRACVALID);
 }
 
-static void
+void
 acpibat_clear_stat(struct acpibat_softc *sc)
 {
 
@@ -347,7 +347,7 @@ acpibat_clear_stat(struct acpibat_softc *sc)
 /*
  * returns 0 for no battery, 1 for present, and -1 on error
  */
-static int
+int
 acpibat_battery_present(struct acpibat_softc *sc)
 {
 	u_int32_t sta;
@@ -359,7 +359,7 @@ acpibat_battery_present(struct acpibat_softc *sc)
 	if (ACPI_FAILURE(rv)) {
 		printf("%s: failed to evaluate _STA: %s\n",
 		       sc->sc_dev.dv_xname, AcpiFormatException(rv));
-		return -1;
+		return (-1);
 	}
 
 	sta = (u_int32_t)val;
@@ -374,7 +374,7 @@ acpibat_battery_present(struct acpibat_softc *sc)
 	sc->sc_data[ACPIBAT_PRESENT].validflags |= ENVSYS_FCURVALID;
 	ABAT_UNLOCK(sc, s);
 
-	return (sta & ACPIBAT_STA_PRESENT) ? 1 : 0;
+	return ((sta & ACPIBAT_STA_PRESENT)?1:0);
 }
 
 /*
@@ -383,7 +383,7 @@ acpibat_battery_present(struct acpibat_softc *sc)
  * 	Get, and possibly display, the battery info.
  */
 
-static ACPI_STATUS
+ACPI_STATUS
 acpibat_get_info(struct acpibat_softc *sc)
 {
 	ACPI_OBJECT *p1, *p2;
@@ -395,7 +395,7 @@ acpibat_get_info(struct acpibat_softc *sc)
 	if (ACPI_FAILURE(rv)) {
 		printf("%s: failed to evaluate _BIF: %s\n",
 		    sc->sc_dev.dv_xname, AcpiFormatException(rv));
-		return rv;
+		return (rv);
 	}
 	p1 = (ACPI_OBJECT *)buf.Pointer;
 
@@ -465,7 +465,7 @@ acpibat_get_info(struct acpibat_softc *sc)
 
 out:
 	AcpiOsFree(buf.Pointer);
-	return rv;
+	return (rv);
 }
 
 /*
@@ -473,7 +473,7 @@ out:
  *
  *	Get, and possibly display, the current battery line status.
  */
-static ACPI_STATUS
+ACPI_STATUS
 acpibat_get_status(struct acpibat_softc *sc)
 {
 	int flags, status, s;
@@ -485,7 +485,7 @@ acpibat_get_status(struct acpibat_softc *sc)
 	if (ACPI_FAILURE(rv)) {
 		printf("%s: failed to evaluate _BST: %s\n",
 		    sc->sc_dev.dv_xname, AcpiFormatException(rv));
-		return rv;
+		return (rv);
 	}
 	p1 = (ACPI_OBJECT *)buf.Pointer;
 
@@ -538,7 +538,7 @@ acpibat_get_status(struct acpibat_softc *sc)
 
 out:
 	AcpiOsFree(buf.Pointer);
-	return rv;
+	return (rv);
 }
 
 #define SCALE(x)	((x)/1000000), (((x)%1000000)/1000)
@@ -554,7 +554,7 @@ acpibat_print_info(struct acpibat_softc *sc)
 	else
 		tech = "primary";
 
-	printf("%s: %s battery, Design %d.%03d%s, Last full %d.%03d%s "
+	printf("%s: %s battery, Design %d.%03d%s, Last full %d.%03d%s"
 	       "Warn %d.%03d%s Low %d.%03d%s\n",
 	       sc->sc_dev.dv_xname, tech,
 	       SCALE(sc->sc_data[ACPIBAT_DCAPACITY].cur.data_s), CAPUNITS(sc),
@@ -657,7 +657,7 @@ acpibat_update(void *arg)
  *
  *	Callback from ACPI interrupt handler to notify us of an event.
  */
-static void
+void
 acpibat_notify_handler(ACPI_HANDLE handle, UINT32 notify, void *context)
 {
 	struct acpibat_softc *sc = context;
@@ -701,7 +701,7 @@ acpibat_notify_handler(ACPI_HANDLE handle, UINT32 notify, void *context)
 	}
 }
 
-static void
+void
 acpibat_init_envsys(struct acpibat_softc *sc)
 {
 	int capunit, rateunit;
@@ -764,7 +764,7 @@ acpibat_init_envsys(struct acpibat_softc *sc)
 		    sc->sc_dev.dv_xname);
 }
 
-static int
+int
 acpibat_gtredata(struct sysmon_envsys *sme, struct envsys_tre_data *tred)
 {
 	struct acpibat_softc *sc = sme->sme_cookie;
@@ -776,15 +776,15 @@ acpibat_gtredata(struct sysmon_envsys *sme, struct envsys_tre_data *tred)
 	*tred = sc->sc_data[tred->sensor];
 	/* XXX locking */
 
-	return 0;
+	return (0);
 }
 
-static int
+int
 acpibat_streinfo(struct sysmon_envsys *sme, struct envsys_basic_info *binfo)
 {
 
 	/* XXX Not implemented */
 	binfo->validflags = 0;
 
-	return 0;
+	return (0);
 }

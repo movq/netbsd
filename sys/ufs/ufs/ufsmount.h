@@ -1,4 +1,4 @@
-/*	$NetBSD: ufsmount.h,v 1.17 2004/08/15 07:20:00 mycroft Exp $	*/
+/*	$NetBSD: ufsmount.h,v 1.15 2004/01/09 19:10:22 dbj Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1989, 1993
@@ -94,13 +94,7 @@ struct ufsmount {
 	time_t	um_itime[MAXQUOTAS];		/* inode quota time limit */
 	char	um_qflags[MAXQUOTAS];		/* quota specific flags */
 	struct	netexport um_export;		/* export information */
-	void	*um_oldfscompat;		/* save 4.2 rotbl */
-	TAILQ_HEAD(, inode) um_snapshots;	/* list of active snapshots */
-	daddr_t	um_snaplistsize;		/* size of block hints list */
-	daddr_t	*um_snapblklist;		/* snapshot block hints list */
-	int	um_maxsymlinklen;
-	int	um_dirblksiz;
-	off_t	um_maxfilesize;
+	void	*um_oldfscompat;			/* save 4.2 rotbl */
 };
 
 /* UFS-specific flags */
@@ -124,9 +118,9 @@ struct ufsmount {
 #define VFSTOUFS(mp)	((struct ufsmount *)((mp)->mnt_data))
 
 #ifdef APPLE_UFS
-#define UFS_MPISAPPLEUFS(ump)	((ump)->um_flags & UFS_ISAPPLEUFS)
+#define UFS_MPISAPPLEUFS(mp)	(VFSTOUFS(mp)->um_flags & UFS_ISAPPLEUFS)
 #else
-#define UFS_MPISAPPLEUFS(ump)	(0)
+#define UFS_MPISAPPLEUFS(mp)	(0)
 #endif
 
 /*

@@ -1,4 +1,4 @@
-/*	$NetBSD: pthread_md.h,v 1.5 2004/07/03 05:10:06 simonb Exp $	*/
+/*	$NetBSD: pthread_md.h,v 1.4.2.1 2004/07/04 12:56:21 he Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.

@@ -1,4 +1,4 @@
-/*	$NetBSD: darwin_iohidsystem.c,v 1.27 2004/10/24 14:42:10 skrll Exp $ */
+/*	$NetBSD: darwin_iohidsystem.c,v 1.25 2003/12/09 17:13:19 manu Exp $ */
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: darwin_iohidsystem.c,v 1.27 2004/10/24 14:42:10 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: darwin_iohidsystem.c,v 1.25 2003/12/09 17:13:19 manu Exp $");
 
 #include "ioconf.h"
 #include "wsmux.h"
@@ -477,7 +477,7 @@ darwin_iohidsystem_thread(args)
 		auio.uio_offset = 0;
 		auio.uio_segflg = UIO_SYSSPACE;
 		auio.uio_rw = UIO_READ;
-		auio.uio_procp = NULL;
+		auio.uio_procp = p;
 
 		if ((error = (wsmux->d_read)(dev, &auio, 0)) != 0) {
 #ifdef DEBUG_DARWIN
@@ -720,8 +720,7 @@ mach_notify_iohidsystem(l, mr)
 	mach_set_trailer(req, sizeof(*req));
 
 #ifdef KTRACE
-	if (KTRPOINT(l->l_proc, KTR_USER))
-		ktruser(l->l_proc, "notify_iohidsystem", NULL, 0, 0);
+	ktruser(l->l_proc, "notify_iohidsystem", NULL, 0, 0);
 #endif
 	
 	mr->mr_refcount++;

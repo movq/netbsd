@@ -1,4 +1,4 @@
-/*	$NetBSD: domainname.c,v 1.13 2004/04/19 08:24:56 kleink Exp $	*/
+/*	$NetBSD: domainname.c,v 1.12 2003/08/07 09:05:12 agc Exp $	*/
 
 /*
  * Copyright (c) 1988, 1993
@@ -39,7 +39,7 @@ __COPYRIGHT("@(#) Copyright (c) 1988, 1993\n\
 #if 0
 static char sccsid[] = "@(#)hostname.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: domainname.c,v 1.13 2004/04/19 08:24:56 kleink Exp $");
+__RCSID("$NetBSD: domainname.c,v 1.12 2003/08/07 09:05:12 agc Exp $");
 #endif
 #endif /* not lint */
 
@@ -51,25 +51,23 @@ __RCSID("$NetBSD: domainname.c,v 1.13 2004/04/19 08:24:56 kleink Exp $");
 #include <string.h>
 #include <unistd.h>
 
-static void usage(void);
-int main(int, char *[]);
+void usage __P((void));
+int main __P((int, char *[]));
 
 int
-main(int argc, char *argv[])
+main(argc, argv)
+	int argc;
+	char *argv[];
 {
 	int ch;
 	char domainname[MAXHOSTNAMELEN];
 
-	setprogname(argv[0]);
-
-	while ((ch = getopt(argc, argv, "")) != -1) {
+	while ((ch = getopt(argc, argv, "")) != -1)
 		switch (ch) {
 		case '?':
 		default:
 			usage();
-			/* NOTREACHED */
 		}
-	}
 	argc -= optind;
 	argv += optind;
 
@@ -84,13 +82,15 @@ main(int argc, char *argv[])
 			err(1, "getdomainname");
 		(void)printf("%s\n", domainname);
 	}
-	exit(EXIT_SUCCESS);
+	exit(0);
 	/* NOTREACHED */
 }
 
-static void
-usage(void)
+void
+usage()
 {
-	(void)fprintf(stderr, "usage: %s [name-of-domain]\n", getprogname());
-	exit(EXIT_FAILURE);
+
+	(void)fprintf(stderr, "usage: domainname [name-of-domain]\n");
+	exit(1);
+	/* NOTREACHED */
 }

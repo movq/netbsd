@@ -1,4 +1,4 @@
-#	$NetBSD: GENERIC_TINY,v 1.76 2004/11/10 17:25:22 christos Exp $
+#	$NetBSD: GENERIC_TINY,v 1.61.2.3 2004/07/15 20:28:05 he Exp $
 #
 #	GENERIC_TINY -- suitable default for 4M machines
 #			No EISA, PCI, or SCSI.
@@ -24,6 +24,9 @@ options 	MATH_EMULATE	# floating point emulation
 #options 	USER_LDT	# user-settable LDT; used by WINE
 # insert delay no-ops in interrupts; recommended on very old machines
 options 	PIC_DELAY
+
+# Misc. i386-specific options
+#options 	XSERVER		# X server support in console drivers
 
 # This option allows you to force a serial console at the specified
 # I/O address.   see console(4) for details.
@@ -92,7 +95,6 @@ options 	COMPAT_386BSD_MBRPART # recognize old partition ID
 #options 	COMPAT_IBCS2	# binary compatibility with SCO and ISC
 #options 	COMPAT_LINUX	# binary compatibility with Linux
 #options 	COMPAT_FREEBSD	# binary compatibility with FreeBSD
-options		COMPAT_BSDPTY	# /dev/[pt]ty?? ptys.
 
 # File systems
 file-system 	FFS		# UFS
@@ -122,7 +124,6 @@ options 	VNODE_OP_NOINLINE # don't inline vnode op calls
 #options 	GATEWAY		# packet forwarding
 options 	INET		# IP + ICMP + TCP + UDP
 #options 	MROUTING	# IP multicast routing
-#options 	PIM		# Protocol Independent Multicast
 #options 	NS		# XNS
 #options 	NSIP		# XNS tunneling over IP
 #options 	ISO,TPIP	# OSI
@@ -134,7 +135,7 @@ options 	INET		# IP + ICMP + TCP + UDP
 #options 	PPP_FILTER	# Active filter support for PPP (requires bpf)
 #options 	PFIL_HOOKS	# pfil(9) packet filter hooks
 #options 	IPFILTER_LOG	# ipmon(8) log support
-#options 	IPFILTER_DEFAULT_BLOCK	# block all packets by default
+#options	IPFILTER_DEFAULT_BLOCK	# block all packets by default
 #options 	TCP_DEBUG	# Record last TCP_NDEBUG packets with SO_DEBUG
 
 #options 	ALTQ		# Manipulate network interfaces' output queues
@@ -172,19 +173,9 @@ config		netbsd	root on ? type ?
 # builtin terminal emulations
 #options 	WSEMUL_SUN		# sun terminal emulation
 options 	WSEMUL_VT100		# VT100 / VT220 emulation
-# customization of console and kernel output - see dev/wscons/wsdisplayvar.h
-#options 	WSDISPLAY_CUSTOM_OUTPUT	# color customization from wsconsctl(8)
-#options 	WS_DEFAULT_FG=WSCOL_WHITE
-#options 	WS_DEFAULT_BG=WSCOL_BLACK
-#options 	WS_DEFAULT_COLATTR="(0)"
-#options 	WS_DEFAULT_MONOATTR="(0)"
+# different kernel output - see dev/wscons/wsdisplayvar.h
 options 	WS_KERNEL_FG=WSCOL_GREEN
 #options 	WS_KERNEL_BG=WSCOL_BLACK
-#options 	WS_KERNEL_COLATTR=""
-#options 	WS_KERNEL_MONOATTR=""
-# customization of console border color
-#options 	WSDISPLAY_CUSTOM_BORDER	# border customization from wsconsctl(8)
-#options 	WSDISPLAY_BORDER_COLOR=WSCOL_BLUE	# default color
 # compatibility to other console drivers
 options 	WSDISPLAY_COMPAT_PCVT		# emulate some ioctls
 options 	WSDISPLAY_COMPAT_SYSCONS	# emulate some ioctls
@@ -219,8 +210,7 @@ cpu0 at mainbus0
 #pchb*	at pci? dev ? function ?	# PCI-Host bridges
 #pceb*	at pci? dev ? function ?	# PCI-EISA bridges
 #pcib*	at pci? dev ? function ?	# PCI-ISA bridges
-#ichlpcib* at pci? dev ? function ?	# Intel ICH PCI-ISA w/ watchdog and
-					# SpeedStep support
+#ichlpcib* at pci? dev ? function ?	# Intel ICH PCI-ISA w/ watchdog support
 #ppb*	at pci? dev ? function ?	# PCI-PCI bridges
 # XXX 'puc's aren't really bridges, but there's no better place for them here
 #puc*	at pci? dev ? function ?	# PCI "universal" comm. cards
@@ -495,14 +485,12 @@ we1	at isa? port 0x300 iomem 0xcc000 irq 10
 
 # USB Mass Storage
 #umass*	at uhub? port ? configuration ? interface ?
-#scsibus* at umass?
-#wd*	at umass?
 
 # USB Ethernet adapters
 #aue*	at uhub? port ?		# ADMtek AN986 Pegasus based adapters
-#axe*	at uhub? port ?		# ASIX AX88172 based adapters
 #cue*	at uhub? port ?		# CATC USB-EL1201A based adapters
 #kue*	at uhub? port ?		# Kawasaki LSI KL5KUSB101B based adapters
+#uax*	at uhub? port ?		# ASIX AX88172 based adapters
 #url*	at uhub? port ?		# Realtek RTL8150L based adapters
 
 # Y@P firmware loader

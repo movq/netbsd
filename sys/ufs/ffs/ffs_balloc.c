@@ -1,4 +1,4 @@
-/*	$NetBSD: ffs_balloc.c,v 1.37 2004/12/15 07:11:51 mycroft Exp $	*/
+/*	$NetBSD: ffs_balloc.c,v 1.34 2003/08/07 16:34:29 agc Exp $	*/
 
 /*
  * Copyright (c) 2002 Networks Associates Technology, Inc.
@@ -41,7 +41,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ffs_balloc.c,v 1.37 2004/12/15 07:11:51 mycroft Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ffs_balloc.c,v 1.34 2003/08/07 16:34:29 agc Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_quota.h"
@@ -103,12 +103,13 @@ ffs_balloc_ufs1(v)
 	int size;
 	struct ucred *cred;
 	int flags;
+	int32_t nb;
 	struct buf *bp, *nbp;
 	struct vnode *vp = ap->a_vp;
 	struct inode *ip = VTOI(vp);
 	struct fs *fs = ip->i_fs;
 	struct indir indirs[NIADDR + 2];
-	daddr_t newb, pref, nb;
+	daddr_t newb, pref;
 	int32_t *bap;	/* XXX ondisk32 */
 	int deallocated, osize, nsize, num, i, error;
 	int32_t *blkp, *allocblk, allociblk[NIADDR + 1];
@@ -159,7 +160,7 @@ ffs_balloc_ufs1(v)
 			ip->i_size = lblktosize(fs, nb + 1);
 			ip->i_ffs1_size = ip->i_size;
 			uvm_vnp_setsize(vp, ip->i_ffs1_size);
-			ip->i_ffs1_db[nb] = ufs_rw32((u_int32_t)newb, needswap);
+			ip->i_ffs1_db[nb] = ufs_rw32((int32_t)newb, needswap);
 			ip->i_flag |= IN_CHANGE | IN_UPDATE;
 			if (bpp) {
 				if (flags & B_SYNC)
@@ -267,7 +268,7 @@ ffs_balloc_ufs1(v)
 				    nsize, 0, bpp ? *bpp : NULL);
 			}
 		}
-		ip->i_ffs1_db[lbn] = ufs_rw32((u_int32_t)newb, needswap);
+		ip->i_ffs1_db[lbn] = ufs_rw32((int32_t)newb, needswap);
 		ip->i_flag |= IN_CHANGE | IN_UPDATE;
 		return (0);
 	}
@@ -384,11 +385,6 @@ ffs_balloc_ufs1(v)
 		}
 	}
 
-	if (flags & B_METAONLY) {
-		*bpp = bp;
-		return (0);
-	}
-
 	/*
 	 * Get the data block, allocating if necessary.
 	 */
@@ -485,8 +481,8 @@ fail:
 				brelse(bp);
 			}
 		}
-		if (DOINGSOFTDEP(vp) && unwindidx == 0) {
-			ip->i_flag |= IN_CHANGE | IN_UPDATE;
+		if (unwindidx == 0) {
+			ip->i_flag |= IN_MODIFIED | IN_CHANGE | IN_UPDATE;
 			VOP_UPDATE(vp, NULL, NULL, UPDATE_WAIT);
 		}
 
@@ -497,9 +493,8 @@ fail:
 
 		if (unwindidx == 0) {
 			*allocib = 0;
-			ip->i_flag |= IN_CHANGE | IN_UPDATE;
-			if (DOINGSOFTDEP(vp))
-				VOP_UPDATE(vp, NULL, NULL, UPDATE_WAIT);
+			ip->i_flag |= IN_MODIFIED | IN_CHANGE | IN_UPDATE;
+			VOP_UPDATE(vp, NULL, NULL, UPDATE_WAIT);
 		} else {
 			int r;
 
@@ -522,7 +517,7 @@ fail:
 		}
 	}
 	for (deallocated = 0, blkp = allociblk; blkp < allocblk; blkp++) {
-		ffs_blkfree(fs, ip->i_devvp, *blkp, fs->fs_bsize, ip->i_number);
+		ffs_blkfree(ip, *blkp, fs->fs_bsize);
 		deallocated += fs->fs_bsize;
 	}
 	if (deallocated) {
@@ -942,11 +937,6 @@ ffs_balloc_ufs2(v)
 		}
 	}
 
-	if (flags & B_METAONLY) {
-		*bpp = bp;
-		return (0);
-	}
-
 	/*
 	 * Get the data block, allocating if necessary.
 	 */
@@ -1043,8 +1033,8 @@ fail:
 				brelse(bp);
 			}
 		}
-		if (DOINGSOFTDEP(vp) && unwindidx == 0) {
-			ip->i_flag |= IN_CHANGE | IN_UPDATE;
+		if (unwindidx == 0) {
+			ip->i_flag |= IN_MODIFIED | IN_CHANGE | IN_UPDATE;
 			VOP_UPDATE(vp, NULL, NULL, UPDATE_WAIT);
 		}
 
@@ -1055,9 +1045,8 @@ fail:
 
 		if (unwindidx == 0) {
 			*allocib = 0;
-			ip->i_flag |= IN_CHANGE | IN_UPDATE;
-			if (DOINGSOFTDEP(vp))
-				VOP_UPDATE(vp, NULL, NULL, UPDATE_WAIT);
+			ip->i_flag |= IN_MODIFIED | IN_CHANGE | IN_UPDATE;
+			VOP_UPDATE(vp, NULL, NULL, UPDATE_WAIT);
 		} else {
 			int r;
 
@@ -1080,7 +1069,7 @@ fail:
 		}
 	}
 	for (deallocated = 0, blkp = allociblk; blkp < allocblk; blkp++) {
-		ffs_blkfree(fs, ip->i_devvp, *blkp, fs->fs_bsize, ip->i_number);
+		ffs_blkfree(ip, *blkp, fs->fs_bsize);
 		deallocated += fs->fs_bsize;
 	}
 	if (deallocated) {

@@ -69,7 +69,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "uipc_mbuf.c,v 1.84 2004/07/21 12:06:46 yamt Exp");
+__KERNEL_RCSID(0, "$NetBSD: uipc_mbuf.c,v 1.80.2.5 2004/10/08 03:05:26 jmc Exp $");
 
 #include "opt_mbuftrace.h"
 
@@ -115,7 +115,7 @@ struct pool_allocator mclpool_allocator = {
 
 static struct mbuf *m_copym0(struct mbuf *, int, int, int, int);
 static struct mbuf *m_split0(struct mbuf *, int, int, int);
-static int m_copyback0(struct mbuf **, int, int, const void *, int, int);
+static int m_copyback0(struct mbuf **, int, int, caddr_t, int, int);
 
 /* flags for m_copyback0 */
 #define	M_COPYBACK0_COPYBACK	0x0001	/* copyback from cp */
@@ -374,7 +374,7 @@ void
 m_reclaim(void *arg, int flags)
 {
 	struct domain *dp;
-	const struct protosw *pr;
+	struct protosw *pr;
 	struct ifnet *ifp;
 	int s = splvm();
 
@@ -536,7 +536,7 @@ m_copym0(struct mbuf *m, int off0, int len, int wait, int deep)
 		copyhdr = 1;
 	while (off > 0) {
 		if (m == 0)
-			panic("m_copym: m == 0, off %d", off);
+			panic("m_copym: m == 0");
 		if (off < m->m_len)
 			break;
 		off -= m->m_len;
@@ -547,8 +547,7 @@ m_copym0(struct mbuf *m, int off0, int len, int wait, int deep)
 	while (len > 0) {
 		if (m == 0) {
 			if (len != M_COPYALL)
-				panic("m_copym: m == 0, len %d [!COPYALL]",
-				    len);
+				panic("m_copym: m == 0 and not COPYALL");
 			break;
 		}
 		MGET(n, wait, m->m_type);
@@ -666,16 +665,15 @@ nospace:
  * continuing for "len" bytes, into the indicated buffer.
  */
 void
-m_copydata(struct mbuf *m, int off, int len, void *vp)
+m_copydata(struct mbuf *m, int off, int len, caddr_t cp)
 {
 	unsigned count;
-	char *cp = vp;
 
 	if (off < 0 || len < 0)
-		panic("m_copydata: off %d, len %d", off, len);
+		panic("m_copydata");
 	while (off > 0) {
 		if (m == 0)
-			panic("m_copydata: m == 0, off %d", off);
+			panic("m_copydata");
 		if (off < m->m_len)
 			break;
 		off -= m->m_len;
@@ -683,7 +681,7 @@ m_copydata(struct mbuf *m, int off, int len, void *vp)
 	}
 	while (len > 0) {
 		if (m == 0)
-			panic("m_copydata: m == 0, len %d", len);
+			panic("m_copydata");
 		count = min(m->m_len - off, len);
 		memcpy(cp, mtod(m, caddr_t) + off, count);
 		len -= count;
@@ -882,7 +880,7 @@ m_copyup(struct mbuf *n, int len, int dstoff)
 	m->m_len = 0;
 	if (n->m_flags & M_PKTHDR) {
 		M_COPY_PKTHDR(m, n);
-		m_tag_delete_chain(n, NULL);
+		m_tag_delete_chain(m, NULL);
 		n->m_flags &= ~M_PKTHDR;
 	}
 	m->m_data += dstoff;
@@ -1062,7 +1060,7 @@ m_devget(char *buf, int totlen, int off0, struct ifnet *ifp,
  * chain if necessary.
  */
 void
-m_copyback(struct mbuf *m0, int off, int len, const void *cp)
+m_copyback(struct mbuf *m0, int off, int len, caddr_t cp)
 {
 #if defined(DEBUG)
 	struct mbuf *origm = m0;
@@ -1085,7 +1083,7 @@ m_copyback(struct mbuf *m0, int off, int len, const void *cp)
 }
 
 struct mbuf *
-m_copyback_cow(struct mbuf *m0, int off, int len, const void *cp, int how)
+m_copyback_cow(struct mbuf *m0, int off, int len, caddr_t cp, int how)
 {
 	int error;
 
@@ -1141,14 +1139,12 @@ m_makewritable(struct mbuf **mp, int off, int len, int how)
 }
 
 int
-m_copyback0(struct mbuf **mp0, int off, int len, const void *vp, int flags,
-    int how)
+m_copyback0(struct mbuf **mp0, int off, int len, caddr_t cp, int flags, int how)
 {
 	int mlen;
 	struct mbuf *m, *n;
 	struct mbuf **mp;
 	int totlen = 0;
-	const char *cp = vp;
 
 	KASSERT(mp0 != NULL);
 	KASSERT(*mp0 != NULL);

@@ -1,4 +1,4 @@
-/*	$NetBSD: progress.c,v 1.9 2004/04/03 06:19:22 lukem Exp $ */
+/*	$NetBSD: progress.c,v 1.8 2004/03/09 17:04:24 hubertf Exp $ */
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -34,7 +34,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: progress.c,v 1.9 2004/04/03 06:19:22 lukem Exp $");
+__RCSID("$NetBSD: progress.c,v 1.8 2004/03/09 17:04:24 hubertf Exp $");
 #endif				/* not lint */
 
 #include <sys/types.h>
@@ -105,8 +105,7 @@ main(int argc, char *argv[])
 			break;
 		case 'l':
 			lflag++;
-			filesize = strsuftoll("input size", optarg, 0,
-			    LLONG_MAX);
+			filesize = strtoull(optarg, NULL, 0);
 			break;
 		case 'p':
 			prefix = optarg;

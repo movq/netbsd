@@ -1,8 +1,8 @@
-/*	$NetBSD: conf_tok.l,v 1.1.1.7 2004/11/27 01:00:39 christos Exp $	*/
+/*	$NetBSD: conf_tok.l,v 1.1.1.6 2003/03/09 01:13:05 christos Exp $	*/
 
 %{
 /*
- * Copyright (c) 1997-2004 Erez Zadok
+ * Copyright (c) 1997-2003 Erez Zadok
  * Copyright (c) 1989 Jan-Simon Pendry
  * Copyright (c) 1989 Imperial College of Science, Technology & Medicine
  * Copyright (c) 1989 The Regents of the University of California.
@@ -40,7 +40,7 @@
  * SUCH DAMAGE.
  *
  *
- * Id: conf_tok.l,v 1.12 2004/01/06 03:56:20 ezk Exp
+ * Id: conf_tok.l,v 1.7 2002/12/27 22:43:48 ezk Exp
  *
  */
 
@@ -78,9 +78,8 @@
 # ifndef ECHO
 #  define ECHO (void) fwrite( yytext, yyleng, 1, yyout )
 # endif /* not ECHO */
+int yylineno = 0;
 #endif /* FLEX_SCANNER */
-
-int ayylineno = 0;
 
 int yylex(void);
 /*
@@ -95,24 +94,18 @@ int yywrap(void);
 #define TOK_DEBUG 0
 
 #if TOK_DEBUG
-# define dprintf(f,s) fprintf(stderr, (f), ayylineno, (s))
+# define dprintf(f,s) fprintf(stderr, (f), yylineno, (s))
 # define amu_return(v)
-#else /* not TOK_DEBUG */
+#else
 # define dprintf(f,s)
 # define amu_return(v) return((v))
-#endif /* not TOK_DEBUG */
+#endif /* TOK_DEBUG */
 
-/* no need to use yywrap() */
+/* no need to use yyunput() or yywrap() */
+#define YY_NO_UNPUT
 #define YY_SKIP_YYWRAP
 
 %}
-
-/* This option causes Solaris lex to fail.  Use flex.  See BUGS file */
-/* no need to use yyunput() */
-%option nounput
-
-/* allocate more output slots so lex scanners don't run out of mem */
-%o 1024
 
 DIGIT		[0-9]
 ALPHA		[A-Za-z]
@@ -127,7 +120,7 @@ NONQUOTE	[^\"]
 %%
 
 \n			{
-			ayylineno++;
+			yylineno++;
 			amu_return(NEWLINE);
 			}
 
@@ -154,7 +147,7 @@ NONQUOTE	[^\"]
 			}
 "#"[^\n]*\n		{
 			/* a comment line includes the terminating \n */
-			ayylineno++;
+			yylineno++;
 			yytext[strlen((char *)yytext)-1] = '\0';
 			dprintf("%8d: Comment \"%s\"\n", yytext);
 			}

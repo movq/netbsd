@@ -1,4 +1,4 @@
-/*	$NetBSD: core_elf32.c,v 1.14 2004/09/17 14:11:24 skrll Exp $	*/
+/*	$NetBSD: core_elf32.c,v 1.12 2003/09/14 06:59:13 christos Exp $	*/
 
 /*
  * Copyright (c) 2001 Wasabi Systems, Inc.
@@ -40,7 +40,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(1, "$NetBSD: core_elf32.c,v 1.14 2004/09/17 14:11:24 skrll Exp $");
+__KERNEL_RCSID(1, "$NetBSD: core_elf32.c,v 1.12 2003/09/14 06:59:13 christos Exp $");
 
 /* If not included by core_elf64.c, ELFSIZE won't be defined. */
 #ifndef ELFSIZE
@@ -152,7 +152,7 @@ ELFNAMEEND(coredump)(struct lwp *l, struct vnode *vp, struct ucred *cred)
 	/* Write out the ELF header. */
 	error = vn_rdwr(UIO_WRITE, vp, (caddr_t)&ehdr,
 	    (int)sizeof(ehdr), (off_t)0,
-	    UIO_SYSSPACE, IO_NODELOCKED|IO_UNIT, cred, NULL, NULL);
+	    UIO_SYSSPACE, IO_NODELOCKED|IO_UNIT, cred, NULL, p);
 
 	ws.offset = ehdr.e_phoff;
 	notestart = ws.offset + (sizeof(phdr) * cs.npsections);
@@ -178,7 +178,7 @@ ELFNAMEEND(coredump)(struct lwp *l, struct vnode *vp, struct ucred *cred)
 	error = vn_rdwr(UIO_WRITE, vp,
 	    (caddr_t)&phdr, sizeof(phdr),
 	    ws.offset, UIO_SYSSPACE,
-	    IO_NODELOCKED|IO_UNIT, cred, NULL, NULL);
+	    IO_NODELOCKED|IO_UNIT, cred, NULL, p);
 	if (error)
 		return (error);
 
@@ -250,7 +250,7 @@ ELFNAMEEND(coredump_writeseghdrs)(struct proc *p, struct vnode *vp,
 	error = vn_rdwr(UIO_WRITE, vp,
 	    (caddr_t)&phdr, sizeof(phdr),
 	    ws->offset, UIO_SYSSPACE,
-	    IO_NODELOCKED|IO_UNIT, cred, NULL, NULL);
+	    IO_NODELOCKED|IO_UNIT, cred, NULL, p);
 	if (error)
 		return (error);
 
@@ -394,8 +394,7 @@ ELFNAMEEND(coredump_note)(struct proc *p, struct lwp *l, struct vnode *vp,
 
 	size = 0;
 
-	snprintf(name, sizeof(name), "%s@%d", ELF_NOTE_NETBSD_CORE_NAME,
-	    l->l_lid);
+	sprintf(name, "%s@%d", ELF_NOTE_NETBSD_CORE_NAME, l->l_lid);
 	namesize = strlen(name) + 1;
 
 	notesize = sizeof(nhdr) + elfround(namesize) + elfround(sizeof(intreg));
@@ -456,7 +455,7 @@ ELFNAMEEND(coredump_writenote)(struct proc *p, struct vnode *vp,
 	error = vn_rdwr(UIO_WRITE, vp,
 	    (caddr_t) nhdr, sizeof(*nhdr),
 	    offset, UIO_SYSSPACE,
-	    IO_NODELOCKED|IO_UNIT, cred, NULL, NULL);
+	    IO_NODELOCKED|IO_UNIT, cred, NULL, p);
 	if (error)
 		return (error);
 
@@ -465,7 +464,7 @@ ELFNAMEEND(coredump_writenote)(struct proc *p, struct vnode *vp,
 	error = vn_rdwr(UIO_WRITE, vp,
 	    (caddr_t)name, nhdr->n_namesz,
 	    offset, UIO_SYSSPACE,
-	    IO_NODELOCKED|IO_UNIT, cred, NULL, NULL);
+	    IO_NODELOCKED|IO_UNIT, cred, NULL, p);
 	if (error)
 		return (error);
 
@@ -474,7 +473,7 @@ ELFNAMEEND(coredump_writenote)(struct proc *p, struct vnode *vp,
 	error = vn_rdwr(UIO_WRITE, vp,
 	    data, nhdr->n_descsz,
 	    offset, UIO_SYSSPACE,
-	    IO_NODELOCKED|IO_UNIT, cred, NULL, NULL);
+	    IO_NODELOCKED|IO_UNIT, cred, NULL, p);
 
 	return (error);
 }

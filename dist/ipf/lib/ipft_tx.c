@@ -1,4 +1,4 @@
-/*	$NetBSD: ipft_tx.c,v 1.4 2004/11/13 19:16:10 he Exp $	*/
+/*	$NetBSD: ipft_tx.c,v 1.1.1.1 2004/03/28 08:56:19 martti Exp $	*/
 
 /*
  * Copyright (C) 1995-2001 by Darren Reed.
@@ -56,7 +56,7 @@ int	*resolved;
 	*resolved = 0;
 	if (!strcasecmp("any", host))
 		return 0L;
-	if (ISDIGIT(*host))
+	if (isdigit(*host))
 		return inet_addr(host);
 
 	if (gethost(host, &ipa) == -1) {
@@ -78,7 +78,7 @@ char	*name;
 	struct	servent	*sp, *sp2;
 	u_short	p1 = 0;
 
-	if (ISDIGIT(*name))
+	if (isdigit(*name))
 		return (u_short)atoi(name);
 	if (!tx_proto)
 		tx_proto = "tcp/udp";
@@ -202,11 +202,11 @@ int	*out;
 		return 1;
 
 	c = **cpp;
-	if (!ISALPHA(c) || (TOLOWER(c) != 'o' && TOLOWER(c) != 'i')) {
+	if (!isalpha(c) || (tolower(c) != 'o' && tolower(c) != 'i')) {
 		fprintf(stderr, "bad direction \"%s\"\n", *cpp);
 		return 1;
 	}
-	*out = (TOLOWER(c) == 'o') ? 1 : 0;
+	*out = (tolower(c) == 'o') ? 1 : 0;
 	cpp++;
 	if (!*cpp)
 		return 1;
@@ -238,7 +238,7 @@ int	*out;
 			tx_proto = "icmp";
 		}
 		cpp++;
-	} else if (ISDIGIT(**cpp) && !index(*cpp, '.')) {
+	} else if (isdigit(**cpp) && !index(*cpp, '.')) {
 		ip->ip_p = atoi(*cpp);
 		cpp++;
 	} else

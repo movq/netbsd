@@ -1,4 +1,4 @@
-/*	$NetBSD: filecore_vnops.c,v 1.10 2004/09/13 19:25:48 jdolecek Exp $	*/
+/*	$NetBSD: filecore_vnops.c,v 1.8 2004/01/26 10:39:30 hannken Exp $	*/
 
 /*-
  * Copyright (c) 1994 The Regents of the University of California.
@@ -66,7 +66,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: filecore_vnops.c,v 1.10 2004/09/13 19:25:48 jdolecek Exp $");
+__KERNEL_RCSID(0, "$NetBSD: filecore_vnops.c,v 1.8 2004/01/26 10:39:30 hannken Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -350,7 +350,7 @@ filecore_readdir(v)
 		de.d_reclen = DIRENT_SIZE(&de);
 		if (uio->uio_resid < de.d_reclen)
 			goto out;
-		error = uiomove(&de, de.d_reclen, uio);
+		error = uiomove((caddr_t) &de, de.d_reclen, uio);
 		if (error)
 			goto out;
 		uiooff += FILECORE_DIRENT_SIZE;
@@ -500,7 +500,7 @@ filecore_pathconf(v)
 		*ap->a_retval = 1;
 		return (0);
 	case _PC_NAME_MAX:
-		*ap->a_retval = ap->a_vp->v_mount->mnt_stat.f_namemax;
+		*ap->a_retval = 10;
 		return (0);
 	case _PC_PATH_MAX:
 		*ap->a_retval = 256;

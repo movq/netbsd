@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_sysctl.h,v 1.2 2004/05/20 06:34:24 atatat Exp $	*/
+/*	$NetBSD: linux_sysctl.h,v 1.1.22.1 2004/05/23 10:45:04 tron Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.

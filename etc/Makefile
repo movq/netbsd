@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.298 2004/11/16 03:51:30 christos Exp $
+#	$NetBSD: Makefile,v 1.284.2.1 2004/07/28 21:35:29 jmc Exp $
 #	from: @(#)Makefile	8.7 (Berkeley) 5/25/95
 
 # Environment variables without default values:
@@ -27,7 +27,7 @@
 #    distrib-dirs: creates an empty NetBSD directory tree in DESTDIR.
 #	Called by distribution.
 #    snapshot: calls distribution, above, and then tars up the files
-#	into a release(7) format in RELEASEDIR/${RELEASEMACHINEDIR}.
+#	into a release(7) format in RELEASEDIR/${MACHINE}.
 #	Any port-dependent stuff for this target is found in
 #	etc.${MACHINE}/Makefile.inc.
 #    release: a synonym for `snapshot'
@@ -61,7 +61,7 @@ MKISOFS_FLAGS+= -J -l \
 		-r -T -v \
 		-V ${ISO_VOLID} \
 		-P "The NetBSD Project" \
-		-m "${RELEASEDIR}/${RELEASEMACHINEDIR}/installation/cdrom"
+		-m "${RELEASEDIR}/${MACHINE}/installation/cdrom"
 
 # MD Makefile.inc may append MD targets to BIN[123].  Make sure all
 # are empty, to preserve the old semantics of setting them below with "=".
@@ -70,14 +70,14 @@ BIN1=
 BIN2=
 BIN3=
 
-# Directories to build in ${RELEASEDIR}/${RELEASEMACHINEDIR}.
+# Directories to build in ${RELEASEDIR}/${MACHINE}.
 # MD Makefile.inc files can add to this.
 # NOTE: Parent directories must be listed before subdirectories.
 #
 INSTALLATION_DIRS=	binary binary/sets binary/kernel installation
 
-.if exists(etc.${RELEASEMACHINE}/Makefile.inc)
-.include "etc.${RELEASEMACHINE}/Makefile.inc"
+.if exists(etc.${MACHINE}/Makefile.inc)
+.include "etc.${MACHINE}/Makefile.inc"
 .endif
 
 # -rw-r--r--
@@ -89,10 +89,11 @@ BIN1+=	bootptab changelist csh.cshrc csh.login csh.logout daily \
 	gettytab group hosts hosts.lpd inetd.conf lkm.conf locate.conf \
 	mailer.conf man.conf monthly monthly.conf mrouted.conf \
 	netconfig networks newsyslog.conf nsswitch.conf ntp.conf \
-	passwd.conf phones printcap profile protocols \
-	rbootd.conf rc rc.conf rc.lkm rc.local rc.subr rc.shutdown remote rpc \
+	passwd.conf phones printcap profile protocols rbootd.conf rc rc.conf \
+	rc.lkm rc.local rc.subr rc.shutdown remote rpc \
 	security security.conf services shells sysctl.conf syslog.conf \
-	weekly weekly.conf wscons.conf
+	weekly weekly.conf wscons.conf \
+	etc.${MACHINE}/ttys
 
 # Use machine-specific disktab if it exists, or the MI one otherwise
 .if exists(etc.${MACHINE}/disktab)
@@ -115,11 +116,16 @@ BIN2+=	motd
 # -rw-------
 BIN3+=	hosts.equiv
 
-SYSPKG=	etc
 ETC_PKG=-T etc_pkg
 BASE_PKG=-T base_pkg
 ETC_INSTALL_FILE=cd ${.CURDIR} && ${INSTALL_FILE} ${ETC_PKG}
 ETC_INSTALL_OBJ_FILE=cd ${.OBJDIR} && ${INSTALL_FILE} ${ETC_PKG}
+ETC_INSTALL_LINK=cd ${.CURDIR} && ${INSTALL_LINK} ${ETC_PKG}
+ETC_INSTALL_SYMLINK=cd ${.CURDIR} && ${INSTALL_SYMLINK} ${ETC_PKG}
+
+NAMEDB=	127 root.cache named.conf localhost loopback.v6
+
+SSH=	ssh_known_hosts
 
 .if ${TARGET_ENDIANNESS} == "1234"
 PWD_MKDB_ENDIAN=	-L
@@ -136,14 +142,11 @@ PWD_MKDB_ENDIAN=
 distribution: .PHONY check_DESTDIR .WAIT distrib-dirs
 .if !defined(DISTRIBUTION_DONE)
 .if !defined(INSTALL_DONE)
-	${MAKEDIRTARGET} ${NETBSDSRCDIR} include _DISTRIB=
-	${MAKEDIRTARGET} ${NETBSDSRCDIR} install _DISTRIB=
+	(cd ${NETBSDSRCDIR}; ${MAKE} _DISTRIB= includes)
+	(cd ${NETBSDSRCDIR}; ${MAKE} _DISTRIB= install)
 .endif	# !INSTALL_DONE
-	${MAKEDIRTARGET} . install-etc-files
-.if ${MKX11} != "no"
-	${MAKEDIRTARGET} ${NETBSDSRCDIR}/x11 distribution
-.endif
-	${MAKEDIRTARGET} ${NETBSDSRCDIR}/distrib/sets makesetfiles
+	(cd ${.CURDIR}; ${MAKE} install-etc-files)
+	(cd ${NETBSDSRCDIR}/distrib/sets && ${MAKE} makesetfiles)
 .endif	# !DISTRIBUTION_DONE
 
 
@@ -153,6 +156,7 @@ MAKEDEV: .EXEC
 	MACHINE=${MACHINE:Q} MACHINE_ARCH=${MACHINE_ARCH:Q} \
 	    NETBSDSRCDIR=${NETBSDSRCDIR:Q} \
 	    awk -f ${.CURDIR}/MAKEDEV.awk ${.CURDIR}/MAKEDEV.tmpl > ${.TARGET}
+
 
 RELEASEVARS=	BSDOBJDIR BSDSRCDIR BUILDID \
 		DESTDIR EXTERNAL_TOOLCHAIN \
@@ -204,55 +208,22 @@ install-etc-release: .PHONY etc-release
 	${ETC_INSTALL_OBJ_FILE} -o ${BINOWN} -g ${BINGRP} -m 444 \
 	    etc-release ${DESTDIR}/etc/release
 
-
-FILESDIR=		/etc
-CONFIGFILES=
-CONFIGSYMLINKS=
-
-.for file in ${BIN1}
-CONFIGFILES+=		${file}
-FILESMODE_${file:T}=	644
-.endfor
-
-.for file in ${BIN2}
-CONFIGFILES+=		${file}
-FILESMODE_${file:T}=	664
-.endfor
-
-.for file in ${BIN3}
-CONFIGFILES+=		${file}
-FILESMODE_${file:T}=	600
-.endfor
-
-CONFIGFILES+=		postinstall
-FILESMODE_postinstall=	${BINMODE}
-
-CONFIGFILES+=		aliases
-FILESDIR_aliases=	/etc/mail
-FILESMODE_aliases=	644
-
-CONFIGFILES+=		MAKEDEV.local
-FILESDIR_MAKEDEV.local=	/dev
-FILESMODE_MAKEDEV.local=${BINMODE}
-
-CONFIGFILES+=		crontab
-FILESDIR_crontab=	/var/cron/tabs
-FILESNAME_crontab=	root
-FILESMODE_crontab=	600
-
-CONFIGFILES+=		minfree
-FILESDIR_minfree=	/var/crash
-FILESMODE_minfree=	600
-
-CONFIGSYMLINKS+=	${TZDIR}/${LOCALTIME}	/etc/localtime \
-			/usr/sbin/rmt		/etc/rmt
-
-
 # install-etc-files --
 #	Install etc (config) files; not performed by "make build"
 #
 install-etc-files: .PHONY check_DESTDIR MAKEDEV
-	${_MKMSG_INSTALL} ${DESTDIR}/etc/master.passwd
+	${ETC_INSTALL_FILE} -o ${BINOWN} -g ${BINGRP} -m 644 \
+	    ${BIN1} ${DESTDIR}/etc
+	${ETC_INSTALL_FILE} -o ${BINOWN} -g ${BINGRP} -m 664 \
+	    ${BIN2} ${DESTDIR}/etc
+	${ETC_INSTALL_FILE} -o ${BINOWN} -g ${BINGRP} -m 600 \
+	    ${BIN3} ${DESTDIR}/etc
+	${ETC_INSTALL_FILE} -o ${BINOWN} -g ${BINGRP} -m 644 \
+	    aliases ${DESTDIR}/etc/mail
+	${ETC_INSTALL_FILE} -o ${BINOWN} -g ${BINGRP} -m 644 \
+	    /dev/null ${DESTDIR}/etc/mail/local-host-names
+	${ETC_INSTALL_FILE} -o root -g wheel -m 600 \
+	    crontab ${DESTDIR}/var/cron/tabs/root
 	${ETC_INSTALL_FILE} -o root -g wheel -m 600 \
 	    master.passwd ${DESTDIR}/etc
 	${TOOL_PWD_MKDB} -p ${PWD_MKDB_ENDIAN} -d ${DESTDIR}/ \
@@ -264,63 +235,115 @@ install-etc-files: .PHONY check_DESTDIR MAKEDEV
 		done; \
 	) | ${METALOG.add}
 .endif	# MKUNPRIVED != no
-	${_MKMSG_INSTALL} ${DESTDIR}/etc/ttys
-	${ETC_INSTALL_OBJ_FILE} -o ${BINOWN} -g ${BINGRP} -m 644 \
-	    ${.CURDIR}/etc.${MACHINE}/ttys ${DESTDIR}/etc
-	${_MKMSG_INSTALL} ${DESTDIR}/dev/MAKEDEV
 	${ETC_INSTALL_OBJ_FILE} -o ${BINOWN} -g ${BINGRP} -m 555 \
 	    MAKEDEV ${DESTDIR}/dev
-.for owner group mode file in \
-		${BINOWN} operator	664	/etc/dumpdates  \
-		${BINOWN} ${BINGRP}	644	/etc/mail/local-host-names \
-		${BINOWN} operator	600	/etc/skeykeys \
-		root wheel		600	/var/at/at.deny \
-		nobody ${BINGRP}	664	/var/db/locate.database \
-		uucp dialer		640	/var/log/aculog \
-		${BINOWN} ${BINGRP}	600	/var/log/authlog \
-		root wheel		600	/var/log/cron \
-		${BINOWN} ${BINGRP}	664	/var/log/lastlog \
-		${BINOWN} ${BINGRP}	640	/var/log/lpd-errs \
-		${BINOWN} ${BINGRP}	600	/var/log/maillog \
-		${BINOWN} ${BINGRP}	644	/var/log/messages \
-		${BINOWN} ${BINGRP}	600	/var/log/secure \
-		${BINOWN} ${BINGRP}	644	/var/log/sendmail.st \
-		${BINOWN} ${BINGRP}	644	/var/log/wtmp \
-		${BINOWN} ${BINGRP}	644	/var/log/wtmpx \
-		${BINOWN} ${BINGRP}	600	/var/log/xferlog \
-		daemon staff		664	/var/msgs/bounds \
-		${BINOWN} ${UTMPGRP}	664	/var/run/utmp \
-		${BINOWN} ${UTMPGRP}	664	/var/run/utmpx \
-		games games		664	/var/games/atc_score \
-		games games		664	/var/games/battlestar.log \
-		games games		664	/var/games/cfscores \
-		games games		664	/var/games/criblog \
-		games games		660	/var/games/hackdir/perm \
-		games games		660	/var/games/hackdir/record \
-		games games		664	/var/games/larn/llog12.0 \
-		games games		664	/var/games/larn/lscore12.0 \
-		games games		664	/var/games/larn/playerids \
-		games games		664	/var/games/robots_roll \
-		games games		664	/var/games/rogue.scores \
-		games games		664	/var/games/saillog \
-		games games		664	/var/games/snakerawscores \
-		games games		664	/var/games/snake.log \
-		games games		664	/var/games/tetris.scores
-	${_MKMSG_INSTALL} ${DESTDIR}${file}
-	${ETC_INSTALL_FILE} -o ${owner} -g ${group} -m ${mode} \
-	    	/dev/null ${DESTDIR}${file}
+	${ETC_INSTALL_FILE} -o ${BINOWN} -g ${BINGRP} -m 555 \
+	    MAKEDEV.local ${DESTDIR}/dev
+	${ETC_INSTALL_FILE} -o root -g wheel -m 600 \
+	    minfree ${DESTDIR}/var/crash
+.for file in cshrc login profile shrc
+	${ETC_INSTALL_FILE} -o root -g wheel -m 644 \
+	    root/dot.${file} ${DESTDIR}/root/.${file}
 .endfor
-.for subdir in . defaults mtree namedb powerd rc.d root skel ssh
-	${MAKEDIRTARGET} ${subdir} configinstall
+	${ETC_INSTALL_FILE} -o root -g wheel -m 600 \
+	    root/dot.klogin ${DESTDIR}/root/.klogin
+	rm -f ${DESTDIR}/.cshrc ${DESTDIR}/.profile
+	${ETC_INSTALL_LINK} ${DESTDIR}/root/.cshrc ${DESTDIR}/.cshrc
+	${ETC_INSTALL_LINK} ${DESTDIR}/root/.profile ${DESTDIR}/.profile
+	(cd ${.CURDIR}/defaults; ${MAKE} install)
+	(cd ${.CURDIR}/mtree; ${MAKE} install)
+.for file in ${NAMEDB}
+	${ETC_INSTALL_FILE} -o ${BINOWN} -g ${BINGRP} -m 644 \
+	    namedb/${file} ${DESTDIR}/etc/namedb
 .endfor
-	${MAKEDIRTARGET} ${NETBSDSRCDIR}/usr.bin/mail configinstall
-	${MAKEDIRTARGET} ${NETBSDSRCDIR}/usr.sbin/pf configinstall
-	${MAKEDIRTARGET} ${NETBSDSRCDIR}/gnu/usr.sbin/postfix configinstall
+.for file in ${SSH}
+	${ETC_INSTALL_FILE} -o ${BINOWN} -g ${BINGRP} -m 644 \
+	    ssh/${file} ${DESTDIR}/etc/ssh
+.endfor
+	(cd ${.CURDIR}/powerd; ${MAKE} install)
+	(cd ${.CURDIR}/rc.d; ${MAKE} install)
+	${ETC_INSTALL_FILE} -o ${BINOWN} -g ${BINGRP} -m ${BINMODE} \
+	    postinstall ${DESTDIR}/etc
+	${ETC_INSTALL_SYMLINK} -o root -g wheel -m 755 \
+	    ${TZDIR}/${LOCALTIME} ${DESTDIR}/etc/localtime
+	${ETC_INSTALL_SYMLINK} -o root -g wheel -m 755 \
+	    /usr/sbin/rmt ${DESTDIR}/etc/rmt
+	${ETC_INSTALL_FILE} -o ${BINOWN} -g operator -m 664 \
+	    /dev/null ${DESTDIR}/etc/dumpdates
+	${ETC_INSTALL_FILE} -o ${BINOWN} -g operator -m 600 \
+	    /dev/null ${DESTDIR}/etc/skeykeys
+	${ETC_INSTALL_FILE} -o root -g wheel -m 600 \
+	    /dev/null ${DESTDIR}/var/at/at.deny
+	${ETC_INSTALL_FILE} -o nobody -g ${BINGRP} -m 664 \
+	    /dev/null ${DESTDIR}/var/db/locate.database
+	${ETC_INSTALL_FILE} -o uucp -g dialer -m 640 \
+	    /dev/null ${DESTDIR}/var/log/aculog
+	${ETC_INSTALL_FILE} -o ${BINOWN} -g ${BINGRP} -m 600 \
+	    /dev/null ${DESTDIR}/var/log/authlog
+	${ETC_INSTALL_FILE} -o root -g wheel -m 600 \
+	    /dev/null ${DESTDIR}/var/log/cron
+	${ETC_INSTALL_FILE} -o ${BINOWN} -g ${BINGRP} -m 664 \
+	    /dev/null ${DESTDIR}/var/log/lastlog
+	${ETC_INSTALL_FILE} -o ${BINOWN} -g ${BINGRP} -m 640 \
+	    /dev/null ${DESTDIR}/var/log/lpd-errs
+	${ETC_INSTALL_FILE} -o ${BINOWN} -g ${BINGRP} -m 600 \
+	    /dev/null ${DESTDIR}/var/log/maillog
+	${ETC_INSTALL_FILE} -o ${BINOWN} -g ${BINGRP} -m 644 \
+	    /dev/null ${DESTDIR}/var/log/messages
+	${ETC_INSTALL_FILE} -o ${BINOWN} -g ${BINGRP} -m 600 \
+	    /dev/null ${DESTDIR}/var/log/secure
+	${ETC_INSTALL_FILE} -o ${BINOWN} -g ${BINGRP} -m 644 \
+	    /dev/null ${DESTDIR}/var/log/sendmail.st
+	${ETC_INSTALL_FILE} -o ${BINOWN} -g ${BINGRP} -m 644 \
+	    /dev/null ${DESTDIR}/var/log/wtmp
+	${ETC_INSTALL_FILE} -o ${BINOWN} -g ${BINGRP} -m 644 \
+	    /dev/null ${DESTDIR}/var/log/wtmpx
+	${ETC_INSTALL_FILE} -o ${BINOWN} -g ${BINGRP} -m 600 \
+	    /dev/null ${DESTDIR}/var/log/xferlog
+	${ETC_INSTALL_FILE} -o daemon -g staff -m 664 \
+	    /dev/null ${DESTDIR}/var/msgs/bounds
+	${ETC_INSTALL_FILE} -o ${BINOWN} -g ${UTMPGRP} -m 664 \
+	    /dev/null ${DESTDIR}/var/run/utmp
+	${ETC_INSTALL_FILE} -o ${BINOWN} -g ${UTMPGRP} -m 664 \
+	    /dev/null ${DESTDIR}/var/run/utmpx
+	${ETC_INSTALL_FILE} -o games -g games -m 664 \
+	    /dev/null ${DESTDIR}/var/games/atc_score
+	${ETC_INSTALL_FILE} -o games -g games -m 664 \
+	    /dev/null ${DESTDIR}/var/games/battlestar.log
+	${ETC_INSTALL_FILE} -o games -g games -m 664 \
+	    /dev/null ${DESTDIR}/var/games/cfscores
+	${ETC_INSTALL_FILE} -o games -g games -m 664 \
+	    /dev/null ${DESTDIR}/var/games/criblog
+	${ETC_INSTALL_FILE} -o games -g games -m 660 \
+	    /dev/null ${DESTDIR}/var/games/hackdir/perm
+	${ETC_INSTALL_FILE} -o games -g games -m 660 \
+	    /dev/null ${DESTDIR}/var/games/hackdir/record
+	${ETC_INSTALL_FILE} -o games -g games -m 664 \
+	    /dev/null ${DESTDIR}/var/games/larn/llog12.0
+	${ETC_INSTALL_FILE} -o games -g games -m 664 \
+	    /dev/null ${DESTDIR}/var/games/larn/lscore12.0
+	${ETC_INSTALL_FILE} -o games -g games -m 664 \
+	    /dev/null ${DESTDIR}/var/games/larn/playerids
+	${ETC_INSTALL_FILE} -o games -g games -m 664 \
+	    /dev/null ${DESTDIR}/var/games/robots_roll
+	${ETC_INSTALL_FILE} -o games -g games -m 664 \
+	    /dev/null ${DESTDIR}/var/games/rogue.scores
+	${ETC_INSTALL_FILE} -o games -g games -m 664 \
+	    /dev/null ${DESTDIR}/var/games/saillog
+	${ETC_INSTALL_FILE} -o games -g games -m 664 \
+	    /dev/null ${DESTDIR}/var/games/snakerawscores
+	${ETC_INSTALL_FILE} -o games -g games -m 664 \
+	    /dev/null ${DESTDIR}/var/games/snake.log
+	${ETC_INSTALL_FILE} -o games -g games -m 664 \
+	    /dev/null ${DESTDIR}/var/games/tetris.scores
+	(cd ${.CURDIR}/skel; ${MAKE} distribution)
+	(cd ${NETBSDSRCDIR}/usr.bin/mail; ${MAKE} distribution)
+	(cd ${NETBSDSRCDIR}/gnu/usr.sbin/postfix/; ${MAKE} distribution)
 .if (${MKCRYPTO} != "no")
-	${MAKEDIRTARGET} ${NETBSDSRCDIR}/usr.bin/ssh configinstall
+	(cd ${NETBSDSRCDIR}/usr.bin/ssh; ${MAKE} distribution)
 .endif
 .if (${MKSENDMAIL} != "no")
-	${MAKEDIRTARGET} ${NETBSDSRCDIR}/gnu/usr.sbin/sendmail/cf/cf configinstall
+	(cd ${NETBSDSRCDIR}/gnu/usr.sbin/sendmail/cf/cf; ${MAKE} distribution)
 .endif
 
 
@@ -335,7 +358,6 @@ install-obsolete-lists: .PHONY
 	(cd ${NETBSDSRCDIR}/distrib/sets && \
 	    MAKE=${MAKE:Q} ${HOST_SH} ./makeobsolete -t ${OBSOLETE.dir})
 .for file in ${OBSOLETE.files}
-	${_MKMSG_INSTALL} ${DESTDIR}/var/db/obsolete/${file}
 	${ETC_INSTALL_FILE} -o ${BINOWN} -g ${BINGRP} -m 644 \
 	    ${OBSOLETE.dir}/${file} ${DESTDIR}/var/db/obsolete
 .endfor
@@ -365,8 +387,8 @@ release snapshot: .PHONY check_DESTDIR check_RELEASEDIR .WAIT \
 		    distribution .WAIT \
 		    snap_pre .WAIT snap_kern .WAIT \
 		    snap_post .WAIT snap_md_post
-	${MAKEDIRTARGET} ${NETBSDSRCDIR}/distrib/sets sets
-	${MAKESUMS} -t ${RELEASEDIR}/${RELEASEMACHINEDIR}/binary/kernel '*.gz'
+	(cd ${NETBSDSRCDIR}/distrib/sets; ${MAKE} sets)
+	${MAKESUMS} -t ${RELEASEDIR}/${MACHINE}/binary/kernel '*.gz'
 
 
 # iso-image --
@@ -376,19 +398,19 @@ release snapshot: .PHONY check_DESTDIR check_RELEASEDIR .WAIT \
 #	Note: At least mkisofs 2.0 should be used.
 #
 CDROM_NAME_ADD?=
-CDROM.image=${RELEASEDIR}/${RELEASEMACHINEDIR}/installation/cdrom/netbsd-${MACHINE}${CDROM_NAME_ADD}.iso
+CDROM.image=${RELEASEDIR}/${MACHINE}/installation/cdrom/netbsd-${MACHINE}${CDROM_NAME_ADD}.iso
 CDROM.dir=	cdrom.dir
 CDROM.pathlist=	cdrom.pathlist
 
 iso-image: .PHONY check_DESTDIR check_RELEASEDIR .WAIT iso-image-md-post
-	${MAKESUMS} -t ${RELEASEDIR}/${RELEASEMACHINEDIR}/installation/cdrom '*.iso'
+	${MAKESUMS} -t ${RELEASEDIR}/${MACHINE}/installation/cdrom '*.iso'
 	@echo "iso-image created as: ${CDROM.image}"
 
 iso-image-setup: .PHONY check_RELEASEDIR
 	rm -f ${CDROM.pathlist}
-	echo "${MACHINE}=${RELEASEDIR}/${RELEASEMACHINEDIR}" >> ${CDROM.pathlist}
+	echo "${MACHINE}=${RELEASEDIR}/${MACHINE}" >> ${CDROM.pathlist}
 	mkdir -p ${CDROM.dir}
-	mkdir -p ${RELEASEDIR}/${RELEASEMACHINEDIR}/installation/cdrom
+	mkdir -p ${RELEASEDIR}/${MACHINE}/installation/cdrom
 
 # iso-image-mi --
 #	Create the image after the MD operations have completed.
@@ -424,11 +446,11 @@ snap_pre: .PHONY check_DESTDIR check_RELEASEDIR
 	${INSTALL} -d -m 755 ${RELEASEDIR}
 .if ${MKUPDATE} == "no"
 # Could be a mount point, ignore the errors
-	-/bin/rm -rf ${RELEASEDIR}/${RELEASEMACHINEDIR}
+	-/bin/rm -rf ${RELEASEDIR}/${MACHINE}
 .endif
-	${INSTALL} -d -m 755 ${RELEASEDIR}/${RELEASEMACHINEDIR}
+	${INSTALL} -d -m 755 ${RELEASEDIR}/${MACHINE}
 .for dir in ${INSTALLATION_DIRS}
-	${INSTALL} -d -m 755 ${RELEASEDIR}/${RELEASEMACHINEDIR}/${dir}
+	${INSTALL} -d -m 755 ${RELEASEDIR}/${MACHINE}/${dir}
 .endfor
 
 # snap_post --
@@ -508,7 +530,7 @@ build_kernels: .PHONY ${_KERNELS_TO_BUILD}
 
 # build_kernelsets --
 #	Create kernel sets from ${KERNEL_SETS} into
-#	${RELEASEDIR}/${RELEASEMACHINEDIR}/binary/sets
+#	${RELEASEDIR}/${MACHINE}/binary/sets
 #
 .for configfile in ${KERNEL_SETS}					# {
 _KERNELSETS_TO_BUILD+=kernset-${configfile}
@@ -516,7 +538,7 @@ kernset-${configfile}: .PHONY
 	@ kernlist=`${GETKERNELAWK} ${KERNCONFDIR}/${configfile}`; \
 	kerndir=${KERNOBJDIR}/${configfile:C/.*\///}; \
 	kernsuffixes="${KERNEL_SUFFIXES:S/^/./}"; \
-	kern_tgz=${RELEASEDIR}/${RELEASEMACHINEDIR}/binary/sets/kern-${configfile}.tgz; \
+	kern_tgz=${RELEASEDIR}/${MACHINE}/binary/sets/kern-${configfile}.tgz; \
 	pax_cmd="GZIP=-9 ${TOOL_PAX} -O -zw -M -N ${NETBSDSRCDIR}/etc -f $${kern_tgz}"; \
 	cd $${kerndir} && { \
 		kernels=; newest=; \
@@ -544,7 +566,7 @@ build_kernelsets: ${_KERNELSETS_TO_BUILD}
 
 # build_releasekernels --
 #	Build kernel.gz from ${KERNEL_SETS} ${EXTRA_KERNELS} into
-#	${RELEASEDIR}/${RELEASEMACHINEDIR}/binary/kernel
+#	${RELEASEDIR}/${MACHINE}/binary/kernel
 #
 .for configfile in ${KERNEL_SETS} ${EXTRA_KERNELS}			# {
 _RELEASEKERNELS_TO_BUILD+=releasekern-${configfile}
@@ -557,7 +579,7 @@ releasekern-${configfile}: .PHONY
 			for s in "" $${kernsuffixes}; do \
 				ks="$${kernel}$${s}"; \
 				[ ! -f $${ks} ] && continue; \
-				knl_gz="${RELEASEDIR}/${RELEASEMACHINEDIR}/binary/kernel/$${ks}-${configfile:C/.*\///}.gz"; \
+				knl_gz="${RELEASEDIR}/${MACHINE}/binary/kernel/$${ks}-${configfile:C/.*\///}.gz"; \
 				[ $${knl_gz} -nt $${ks} ] && continue; \
 				echo "gzip -c -9 < $${kerndir}/$${ks} > $${knl_gz}"; \
 				gzip -c -9 < $${ks} > $${knl_gz}; \

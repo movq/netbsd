@@ -1,4 +1,4 @@
-/*      $NetBSD: n_floor.c,v 1.6 2004/05/13 20:35:40 mhitch Exp $ */
+/*      $NetBSD: n_floor.c,v 1.5.2.1 2004/05/15 13:46:32 tron Exp $ */
 /*
  * Copyright (c) 1985, 1993
  *	The Regents of the University of California.  All rights reserved.

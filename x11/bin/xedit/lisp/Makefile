@@ -1,6 +1,10 @@
-#	$NetBSD: Makefile,v 1.5 2004/05/23 02:24:52 lukem Exp $
+#	$NetBSD: Makefile,v 1.4 2004/03/06 03:09:36 rtr Exp $
 
-MKPRIVATELIB=	yes
+NOLINT=         1
+NOPIC=          1
+NOPROFILE=      1
+
+libinstall::
 
 .include <bsd.own.mk>
 

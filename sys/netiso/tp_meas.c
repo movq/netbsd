@@ -1,4 +1,4 @@
-/*	$NetBSD: tp_meas.c,v 1.11 2004/04/19 05:16:46 matt Exp $	*/
+/*	$NetBSD: tp_meas.c,v 1.10 2003/08/07 16:33:40 agc Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -63,7 +63,7 @@ SOFTWARE.
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tp_meas.c,v 1.11 2004/04/19 05:16:46 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tp_meas.c,v 1.10 2003/08/07 16:33:40 agc Exp $");
 
 #include <sys/types.h>
 #include <sys/time.h>
@@ -97,8 +97,11 @@ struct tp_Meas  tp_Meas[TPMEASN];
  * NOTES:
  */
 void
-Tpmeas(u_int ref, u_int kind, struct timeval *timev, u_int seq, u_int win,
-	u_int size)
+Tpmeas(ref, kind, timev, seq, win, size)
+	u_int           ref;
+	u_int           kind;
+	struct timeval *timev;
+	u_int           seq, win, size;
 {
 	struct tp_Meas *tpm;
 	static int      mseq;

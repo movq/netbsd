@@ -1,5 +1,3 @@
-/*	$NetBSD: ext_prop.h,v 1.1.1.3 2004/05/31 00:24:30 heas Exp $	*/
-
 #ifndef _EXT_PROP_INCLUDED_
 #define _EXT_PROP_INCLUDED_
 
@@ -22,7 +20,7 @@
 #define EXT_PROP_FORWARD	(1<<3)
 #define EXT_PROP_INCLUDE	(1<<4)
 
-extern int ext_prop_mask(const char *, const char *);
+extern int ext_prop_mask(const char *);
 
 /* LICENSE
 /* .ad

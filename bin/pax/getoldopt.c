@@ -1,4 +1,4 @@
-/*	$NetBSD: getoldopt.c,v 1.20 2004/06/20 22:20:14 jmc Exp $	*/
+/*	$NetBSD: getoldopt.c,v 1.19.2.1 2004/06/22 07:25:39 tron Exp $	*/
 
 /*
  * Plug-compatible replacement for getopt() for parsing tar-like
@@ -15,7 +15,7 @@
 
 #include <sys/cdefs.h>
 #if !defined(lint)
-__RCSID("$NetBSD: getoldopt.c,v 1.20 2004/06/20 22:20:14 jmc Exp $");
+__RCSID("$NetBSD: getoldopt.c,v 1.19.2.1 2004/06/22 07:25:39 tron Exp $");
 #endif /* not lint */
 
 #if HAVE_NBTOOL_CONFIG_H

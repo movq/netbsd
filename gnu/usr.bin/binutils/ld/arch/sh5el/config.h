@@ -144,7 +144,7 @@
 #define PACKAGE "ld"
 
 /* Version number of package */
-#define VERSION "2.15"
+#define VERSION "2.14"
 
 /* Define if you have the stpcpy function */
 /* #undef HAVE_STPCPY */

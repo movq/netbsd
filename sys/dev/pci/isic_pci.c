@@ -1,4 +1,4 @@
-/* $NetBSD: isic_pci.c,v 1.21 2004/07/22 19:14:39 drochner Exp $ */
+/* $NetBSD: isic_pci.c,v 1.20 2003/12/04 13:57:31 keihan Exp $ */
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: isic_pci.c,v 1.21 2004/07/22 19:14:39 drochner Exp $");
+__KERNEL_RCSID(0, "$NetBSD: isic_pci.c,v 1.20 2003/12/04 13:57:31 keihan Exp $");
 
 #include <sys/param.h>
 #include <sys/errno.h>
@@ -91,7 +91,7 @@ static const struct isic_pci_product {
 	pci_product_id_t npp_product;
 	int cardtype;
 	const char * name;
-	int (*attach)(struct pci_isic_softc *psc, struct pci_attach_args *pa);
+	void (*attach)(struct pci_isic_softc *psc, struct pci_attach_args *pa);
 	void (*pciattach)(struct pci_isic_softc *psc, struct pci_attach_args *pa, const char *cardname);
 } isic_pci_products[] = {
 	{ PCI_VENDOR_ELSA, PCI_PRODUCT_ELSA_QS1PCI,
@@ -156,8 +156,7 @@ isic_pci_attach(parent, self, aux)
 	callout_init(&sc->sc_T4_callout);
 
 	/* card initilization and sc setup */
-	if (!prod->attach(psc, pa))
-		return;
+	prod->attach(psc, pa);
 
 	/* generic setup, if needed for this card */
 	if (prod->pciattach) prod->pciattach(psc, pa, prod->name);

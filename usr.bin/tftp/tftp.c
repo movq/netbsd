@@ -1,4 +1,4 @@
-/*	$NetBSD: tftp.c,v 1.20 2004/10/10 22:15:34 he Exp $	*/
+/*	$NetBSD: tftp.c,v 1.18 2003/08/07 11:16:14 agc Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)tftp.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: tftp.c,v 1.20 2004/10/10 22:15:34 he Exp $");
+__RCSID("$NetBSD: tftp.c,v 1.18 2003/08/07 11:16:14 agc Exp $");
 #endif
 #endif /* not lint */
 
@@ -154,7 +154,7 @@ sendfile(fd, name, mode)
 {
 	struct tftphdr *ap;	   /* data and ack packets */
 	struct tftphdr *dp;
-	int j, n;
+	int n;
 	volatile unsigned int block;
 	volatile int size, convert;
 	volatile unsigned long amount;
@@ -234,13 +234,14 @@ send_data:
 				tpacket("received", ap, n);
 			/* should verify packet came from server */
 			ap->th_opcode = ntohs(ap->th_opcode);
+			ap->th_block = ntohs(ap->th_block);
 			if (ap->th_opcode == ERROR) {
 				printf("Error code %d: %s\n", ap->th_code,
 					ap->th_msg);
 				goto abort;
 			}
 			if (ap->th_opcode == ACK) {
-				ap->th_block = ntohs(ap->th_block);
+				int j;
 
 				if (ap->th_block == 0) {
 					/*
@@ -299,7 +300,7 @@ recvfile(fd, name, mode)
 {
 	struct tftphdr *ap;
 	struct tftphdr *dp;
-	int j, n, oack=0;
+	int n, oack=0;
 	volatile unsigned int block;
 	volatile int size, firsttrip;
 	volatile unsigned long amount;
@@ -370,13 +371,14 @@ send_ack:
 				tpacket("received", dp, n);
 			/* should verify client address */
 			dp->th_opcode = ntohs(dp->th_opcode);
+			dp->th_block = ntohs(dp->th_block);
 			if (dp->th_opcode == ERROR) {
 				printf("Error code %d: %s\n", dp->th_code,
 					dp->th_msg);
 				goto abort;
 			}
 			if (dp->th_opcode == DATA) {
-				dp->th_block = ntohs(dp->th_block);
+				int j;
 
 				if (dp->th_block == 1 && !oack) {
 					/* no OACK, revert to defaults */
@@ -418,7 +420,7 @@ send_ack:
 			break;
 		}
 		amount += size;
-	} while (size == blksize);
+	} while (size == blksize || block == 1);
 abort:						/* ok to ack, since user */
 	ap->th_opcode = htons((u_short)ACK);	/* has seen err msg */
 	ap->th_block = htons((u_short)block);

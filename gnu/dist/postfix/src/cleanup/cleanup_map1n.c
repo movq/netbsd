@@ -1,5 +1,3 @@
-/*	$NetBSD: cleanup_map1n.c,v 1.1.1.6 2004/05/31 00:24:27 heas Exp $	*/
-
 /*++
 /* NAME
 /*	cleanup_map1n 3
@@ -57,7 +55,6 @@
 
 /* Global library. */
 
-#include <mail_params.h>
 #include <mail_addr_map.h>
 #include <cleanup_user.h>
 #include <quote_822_local.h>
@@ -96,11 +93,13 @@ ARGV   *cleanup_map1n_internal(CLEANUP_STATE *state, const char *addr,
      * pointer.
      */
 #define UPDATE(ptr,new)	{ myfree(ptr); ptr = mystrdup(new); }
+#define MAX_RECURSION 1000
+#define MAX_EXPANSION 1000
 #define STR	vstring_str
 #define RETURN(x) { been_here_free(been_here); return (x); }
 
     for (arg = 0; arg < argv->argc; arg++) {
-	if (argv->argc > var_virt_expan_limit) {
+	if (argv->argc > MAX_EXPANSION) {
 	    msg_warn("%s: unreasonable %s map expansion size for %s",
 		     state->queue_id, maps->title, addr);
 	    break;
@@ -112,7 +111,7 @@ ARGV   *cleanup_map1n_internal(CLEANUP_STATE *state, const char *addr,
 	     */
 	    if (been_here_check_fixed(been_here, argv->argv[arg]) != 0)
 		break;
-	    if (count >= var_virt_recur_limit) {
+	    if (count >= MAX_RECURSION) {
 		msg_warn("%s: unreasonable %s map nesting for %s",
 			 state->queue_id, maps->title, addr);
 		break;

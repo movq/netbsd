@@ -1,11 +1,11 @@
-/*	$NetBSD: if.c,v 1.150 2004/12/04 23:03:33 peter Exp $	*/
+/*	$NetBSD: if.c,v 1.139.2.1 2004/05/28 07:24:37 tron Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2000, 2001 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
- * by William Studenmund and Jason R. Thorpe.
+ * by William Studnemund and Jason R. Thorpe.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -97,7 +97,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if.c,v 1.150 2004/12/04 23:03:33 peter Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if.c,v 1.139.2.1 2004/05/28 07:24:37 tron Exp $");
 
 #include "opt_inet.h"
 
@@ -137,7 +137,6 @@ __KERNEL_RCSID(0, "$NetBSD: if.c,v 1.150 2004/12/04 23:03:33 peter Exp $");
 #include <netatalk/at_extern.h>
 #include <netatalk/at.h>
 #endif
-#include <net/pfil.h>
 
 #ifdef INET6
 #include <netinet/in.h>
@@ -161,10 +160,6 @@ int if_clone_list __P((struct if_clonereq *));
 LIST_HEAD(, if_clone) if_cloners = LIST_HEAD_INITIALIZER(if_cloners);
 int if_cloners_count;
 
-#ifdef PFIL_HOOKS
-struct pfil_head if_pfil;	/* packet filtering hook for interfaces */
-#endif
-
 #if defined(INET) || defined(INET6) || defined(NETATALK) || defined(NS) || \
     defined(ISO) || defined(CCITT) || defined(NATM)
 static void if_detach_queues __P((struct ifnet *, struct ifqueue *));
@@ -182,12 +177,6 @@ ifinit()
 
 	callout_init(&if_slowtimo_ch);
 	if_slowtimo(NULL);
-#ifdef PFIL_HOOKS
-	if_pfil.ph_type = PFIL_TYPE_IFNET;
-	if_pfil.ph_ifnet = NULL;
-	if (pfil_head_register(&if_pfil) != 0)
-		printf("WARNING: unable to register pfil hook\n");
-#endif
 }
 
 /*
@@ -271,7 +260,6 @@ struct ifnet_head ifnet;
 size_t if_indexlim = 0;
 struct ifaddr **ifnet_addrs = NULL;
 struct ifnet **ifindex2ifnet = NULL;
-struct ifnet *lo0ifp;
 
 /*
  * Allocate the link level name for the specified interface.  This
@@ -476,8 +464,6 @@ if_attach(ifp)
 	if (pfil_head_register(&ifp->if_pfil) != 0)
 		printf("%s: WARNING: unable to register pfil hook\n",
 		    ifp->if_xname);
-	(void)pfil_run_hooks(&if_pfil,
-	    (struct mbuf **)PFIL_IFNET_ATTACH, ifp, PFIL_IFNET);
 #endif
 
 	if (domains)
@@ -563,7 +549,7 @@ if_detach(ifp)
 	struct ifaddr *last_ifa = NULL;
 #endif
 	struct domain *dp;
-	const struct protosw *pr;
+	struct protosw *pr;
 	struct radix_node_head *rnh;
 	int s, i, family, purged;
 
@@ -588,9 +574,7 @@ if_detach(ifp)
 #endif
 
 #ifdef PFIL_HOOKS
-	(void)pfil_run_hooks(&if_pfil,
-	    (struct mbuf **)PFIL_IFNET_DETACH, ifp, PFIL_IFNET);
-	(void)pfil_head_unregister(&ifp->if_pfil);
+	(void) pfil_head_unregister(&ifp->if_pfil);
 #endif
 
 	/*
@@ -807,7 +791,8 @@ if_clone_destroy(name)
 	if (ifc->ifc_destroy == NULL)
 		return (EOPNOTSUPP);
 
-	return ((*ifc->ifc_destroy)(ifp));
+	(*ifc->ifc_destroy)(ifp);
+	return (0);
 }
 
 /*
@@ -919,7 +904,7 @@ if_clone_list(ifcr)
 /*ARGSUSED*/
 struct ifaddr *
 ifa_ifwithaddr(addr)
-	const struct sockaddr *addr;
+	struct sockaddr *addr;
 {
 	struct ifnet *ifp;
 	struct ifaddr *ifa;
@@ -954,7 +939,7 @@ ifa_ifwithaddr(addr)
 /*ARGSUSED*/
 struct ifaddr *
 ifa_ifwithdstaddr(addr)
-	const struct sockaddr *addr;
+	struct sockaddr *addr;
 {
 	struct ifnet *ifp;
 	struct ifaddr *ifa;
@@ -984,11 +969,11 @@ ifa_ifwithdstaddr(addr)
  */
 struct ifaddr *
 ifa_ifwithnet(addr)
-	const struct sockaddr *addr;
+	struct sockaddr *addr;
 {
 	struct ifnet *ifp;
 	struct ifaddr *ifa;
-	const struct sockaddr_dl *sdl;
+	struct sockaddr_dl *sdl;
 	struct ifaddr *ifa_maybe = 0;
 	u_int af = addr->sa_family;
 	char *addr_data = addr->sa_data, *cplim;
@@ -1002,7 +987,7 @@ ifa_ifwithnet(addr)
 	}
 #ifdef NETATALK
 	if (af == AF_APPLETALK) {
-		const struct sockaddr_at *sat, *sat2;
+		struct sockaddr_at *sat, *sat2;
 		sat = (struct sockaddr_at *)addr;
 		for (ifp = TAILQ_FIRST(&ifnet); ifp != NULL;
 		     ifp = TAILQ_NEXT(ifp, if_list)) {
@@ -1058,7 +1043,7 @@ ifa_ifwithnet(addr)
  */
 struct ifaddr *
 ifa_ifwithladdr(addr)
-	const struct sockaddr *addr;
+	struct sockaddr *addr;
 {
 	struct ifaddr *ia;
 
@@ -1097,12 +1082,12 @@ ifa_ifwithaf(af)
  */
 struct ifaddr *
 ifaof_ifpforaddr(addr, ifp)
-	const struct sockaddr *addr;
+	struct sockaddr *addr;
 	struct ifnet *ifp;
 {
 	struct ifaddr *ifa;
-	const char *cp, *cp2, *cp3;
-	const char *cplim;
+	char *cp, *cp2, *cp3;
+	char *cplim;
 	struct ifaddr *ifa_maybe = 0;
 	u_int af = addr->sa_family;
 
@@ -1346,12 +1331,6 @@ ifioctl(so, cmd, data, p)
 	struct ifdatareq *ifdr;
 	int s, error = 0;
 	short oif_flags;
-	int prived_error;
-
-	if (p)
-		prived_error = suser(p->p_ucred, &p->p_acflag);
-	else
-		prived_error = 0;
 
 	switch (cmd) {
 
@@ -1366,8 +1345,8 @@ ifioctl(so, cmd, data, p)
 	switch (cmd) {
 	case SIOCIFCREATE:
 	case SIOCIFDESTROY:
-		if (prived_error)
-			return (prived_error);
+		if ((error = suser(p->p_ucred, &p->p_acflag)) != 0)
+			return (error);
 		return ((cmd == SIOCIFCREATE) ?
 			if_clone_create(ifr->ifr_name) :
 			if_clone_destroy(ifr->ifr_name));
@@ -1399,8 +1378,8 @@ ifioctl(so, cmd, data, p)
 		break;
 
 	case SIOCSIFFLAGS:
-		if (prived_error != 0)
-			return (prived_error);
+		if ((error = suser(p->p_ucred, &p->p_acflag)) != 0)
+			return (error);
 		if (ifp->if_flags & IFF_UP && (ifr->ifr_flags & IFF_UP) == 0) {
 			s = splnet();
 			if_down(ifp);
@@ -1423,8 +1402,8 @@ ifioctl(so, cmd, data, p)
 		break;
 
 	case SIOCSIFCAP:
-		if (prived_error != 0)
-			return (prived_error);
+		if ((error = suser(p->p_ucred, &p->p_acflag)) != 0)
+			return (error);
 		if ((ifcr->ifcr_capenable & ~ifp->if_capabilities) != 0)
 			return (EINVAL);
 		if (ifp->if_ioctl == NULL)
@@ -1481,8 +1460,8 @@ ifioctl(so, cmd, data, p)
 		break;
 
 	case SIOCSIFMETRIC:
-		if (prived_error != 0)
-			return (prived_error);
+		if ((error = suser(p->p_ucred, &p->p_acflag)) != 0)
+			return (error);
 		ifp->if_metric = ifr->ifr_metric;
 		break;
 
@@ -1491,8 +1470,8 @@ ifioctl(so, cmd, data, p)
 		break;
 
 	case SIOCZIFDATA:
-		if (prived_error != 0)
-			return (prived_error);
+		if ((error = suser(p->p_ucred, &p->p_acflag)) != 0)
+			return (error);
 		ifdr->ifdr_data = ifp->if_data;
 		/*
 		 * Assumes that the volatile counters that can be
@@ -1506,8 +1485,9 @@ ifioctl(so, cmd, data, p)
 	{
 		u_long oldmtu = ifp->if_mtu;
 
-		if (prived_error)
-			return (prived_error);
+		error = suser(p->p_ucred, &p->p_acflag);
+		if (error)
+			return (error);
 		if (ifp->if_ioctl == NULL)
 			return (EOPNOTSUPP);
 		error = (*ifp->if_ioctl)(ifp, cmd, data);
@@ -1531,8 +1511,8 @@ ifioctl(so, cmd, data, p)
 	case SIOCADDMULTI:
 	case SIOCDELMULTI:
 	case SIOCSIFMEDIA:
-		if (prived_error != 0)
-			return (prived_error);
+		if ((error = suser(p->p_ucred, &p->p_acflag)) != 0)
+			return (error);
 		/* FALLTHROUGH */
 	case SIOCGIFPSRCADDR:
 	case SIOCGIFPDSTADDR:
@@ -1550,8 +1530,8 @@ ifioctl(so, cmd, data, p)
 	case SIOCS80211BSSID:
 	case SIOCS80211CHANNEL:
 		/* XXX:  need to pass proc pointer through to driver... */
-		if (prived_error != 0)
-			return (prived_error);
+		if ((error = suser(p->p_ucred, &p->p_acflag)) != 0)
+			return (error);
 	/* FALLTHROUGH */
 	default:
 		if (so->so_proto == 0)

@@ -1,9 +1,9 @@
-#	$NetBSD: Makefile,v 1.32 2004/11/28 06:57:14 jmc Exp $
+#	$NetBSD: Makefile,v 1.28.2.1 2004/06/22 07:22:39 tron Exp $
 
 HOSTLIB=	nbcompat
 
 SRCS=		atoll.c basename.c dirname.c fgetln.c flock.c fparseln.c \
-		getmode.c getopt_long.c gettemp.c heapsort.c issetugid.c \
+		getmode.c getopt_long.c gettemp.c issetugid.c \
 		lchflags.c lchmod.c lchown.c libyywrap.c \
 		md2c.c md2hl.c md4c.c md4hl.c md5c.c md5hl.c mkdtemp.c \
 		mkstemp.c pread.c putc_unlocked.c pwcache.c pwrite.c \
@@ -44,7 +44,7 @@ _CURDIR:=	${.CURDIR}
 .include "${.CURDIR}/db/Makefile.inc"
 .CURDIR:=	${_CURDIR}
 
-SRCS:=		${SRCS:Nndbm.c:N__ndbm13.c}
+SRCS:=		${SRCS:Nndbm.c}
 
 config.cache: include/.stamp configure nbtool_config.h.in defs.mk.in
 	rm -f ${.TARGET}
@@ -56,7 +56,7 @@ defs.mk: config.cache
 
 # Run by hand, then "configure" script committed:
 regen:
-	cd ${.CURDIR} && ${TOOLDIR}/bin/${_TOOL_PREFIX}autoconf
+	cd ${.CURDIR} && ${TOOLDIR}/bin/nbautoconf
 
 include/.stamp:
 	mkdir -p include/sys include/machine include/rpc

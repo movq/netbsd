@@ -34,7 +34,7 @@
 #include "gssapi_locl.h"
 
 __RCSID("$Heimdal: accept_sec_context.c,v 1.33.2.2 2003/12/19 00:37:06 lha Exp $"
-        "$NetBSD: accept_sec_context.c,v 1.5 2004/04/02 14:59:47 lha Exp $");
+        "$NetBSD: accept_sec_context.c,v 1.4.2.1 2004/04/21 04:55:40 jmc Exp $");
 
 krb5_keytab gssapi_krb5_keytab;
 

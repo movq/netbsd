@@ -1,8 +1,6 @@
-# $NetBSD: Makefile,v 1.22 2004/07/30 15:04:19 wiz Exp $
+# $NetBSD: Makefile,v 1.20 2003/12/12 06:08:30 jmc Exp $
 
 # $FreeBSD: src/gnu/usr.bin/groff/tmac/Makefile,v 1.41 2003/05/01 13:22:21 ru Exp $
-
-SUBDIR=	man
 
 TMACOWN?=	${BINOWN}
 TMACGRP?=	${BINGRP}
@@ -11,7 +9,17 @@ TMACMODE?=	${NOBINMODE}
 TMACDIR?=	/usr/share/tmac
 MDOCDIR?=	${TMACDIR}/mdoc
 
-CLEANFILES=	${MDOCFILES:S/$/-s/} ${STRIPFILES:S/$/-s/} ${SPECIALFILES:S/$/-s/}
+# For ms.7
+USETBL=
+
+MAN=		groff_ms.7 groff_man.7 groff_me.7 groff_mdoc.7
+MAN+=		groff_trace.7 groff_www.7
+MLINKS=		groff_ms.7 ms.7
+MLINKS+=	groff_man.7 man.7
+MLINKS+=	groff_me.7 me.7
+MLINKS+=	groff_mdoc.7 mdoc.7 groff_mdoc.7 mdoc.samples.7
+
+CLEANFILES=	${MAN} ${MDOCFILES:S/$/-s/} ${STRIPFILES:S/$/-s/} ${SPECIALFILES:S/$/-s/}
 
 # XXX: hyphen.ru
 NORMALFILES=	mandoc.tmac andoc.tmac an-old.tmac \
@@ -26,7 +34,7 @@ NORMALFILES=	mandoc.tmac andoc.tmac an-old.tmac \
 		ps.tmac psold.tmac pspic.tmac psatk.tmac \
 		dvi.tmac \
 		tty.tmac tty-char.tmac \
-		latin1.tmac latin2.tmac latin5.tmac latin9.tmac cp1047.tmac \
+		latin1.tmac latin2.tmac latin9.tmac cp1047.tmac \
 		X.tmac Xps.tmac \
 		lj4.tmac \
 		lbp.tmac \
@@ -78,4 +86,3 @@ FILES+=	${NORMALFILES}
 .endif
 
 .include <bsd.prog.mk>
-.include <bsd.subdir.mk>

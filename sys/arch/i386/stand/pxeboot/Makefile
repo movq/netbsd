@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.7 2004/08/05 18:04:35 dbj Exp $
+#	$NetBSD: Makefile,v 1.6.4.1 2004/08/16 17:46:09 jmc Exp $
 
 S=	${.CURDIR}/../../../../
 

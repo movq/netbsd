@@ -8,36 +8,32 @@
 #	strict_address;
 #}
 
-# Uncomment the following for GSS-API to work with older versions of
-# racoon that (incorrectly) used ISO-Latin-1 encoding for the GSS-API
-# identifier attribute.
-#gss_id_enc latin1;
-
 remote anonymous {
 	exchange_mode main;
+	#exchange_mode aggressive;
 
-	lifetime time 24 hour;
+	# specify the identifier type
+	my_identifier fqdn "foo.kame.net";
+
+	lifetime time 1 min;
 
 	proposal {
-		encryption_algorithm 3des;
+		encryption_algorithm blowfish;
 		hash_algorithm sha1;
+		#authentication_method pre_shared_key;
 		authentication_method gssapi_krb;
-		# The default GSS-API ID is "host/hostname", where
-		# hostname is the output of the hostname(1) command.
-		# You probably want this to match your system's host
-		# principal.  ktutil(8)'s "list" command will list the
-		# principals in your system's keytab.  If you need to,
-		# you can change the GSS-API ID here.
-		#gss_id "host/some.host.name";
+		gssapi_id "ike/myidentification";
 
 		dh_group 1;
 	}
 }
 
 sainfo anonymous {
-	lifetime time 2 hour;
+	my_identifier fqdn "foo.kame.net";
 
-	encryption_algorithm rijndael, 3des;
-	authentication_algorithm hmac_sha1, hmac_md5;
+	lifetime time 30 min;
+
+	encryption_algorithm blowfish 448;
+	authentication_algorithm hmac_sha1;
 	compression_algorithm deflate;
 }

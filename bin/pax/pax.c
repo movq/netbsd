@@ -1,4 +1,4 @@
-/*	$NetBSD: pax.c,v 1.36 2004/10/10 21:53:23 christos Exp $	*/
+/*	$NetBSD: pax.c,v 1.33.2.1 2004/06/22 07:23:25 tron Exp $	*/
 
 /*-
  * Copyright (c) 1992 Keith Muller.
@@ -44,7 +44,7 @@ __COPYRIGHT("@(#) Copyright (c) 1992, 1993\n\
 #if 0
 static char sccsid[] = "@(#)pax.c	8.2 (Berkeley) 4/18/94";
 #else
-__RCSID("$NetBSD: pax.c,v 1.36 2004/10/10 21:53:23 christos Exp $");
+__RCSID("$NetBSD: pax.c,v 1.33.2.1 2004/06/22 07:23:25 tron Exp $");
 #endif
 #endif /* not lint */
 
@@ -75,7 +75,7 @@ static int gen_init(void);
 int	act = ERROR;		/* read/write/append/copy */
 FSUB	*frmt = NULL;		/* archive format type */
 int	cflag;			/* match all EXCEPT pattern/file */
-int	cwdfd = -1;		/* starting cwd */
+int	cwdfd;			/* starting cwd */
 int	dflag;			/* directory member match only  */
 int	iflag;			/* interactive file/archive rename */
 int	jflag;			/* pass through bzip2 */
@@ -107,7 +107,7 @@ int	docrc;			/* check/create file crc */
 int	to_stdout;		/* extract to stdout */
 char	*dirptr;		/* destination dir in a copy */
 char	*ltmfrmt;		/* -v locale time format (if any) */
-const char *argv0;		/* root of argv[0] */
+char	*argv0;			/* root of argv[0] */
 sigset_t s_mask;		/* signal mask for cleanup critical sect */
 FILE	*listf;			/* file pointer to print file list to */
 char	*tempfile;		/* tempfile to use for mkstemp(3) */
@@ -240,23 +240,12 @@ int	secure = 1;		/* don't extract names that contain .. */
 int
 main(int argc, char **argv)
 {
-	const char *tmpdir;
+	char *tmpdir;
 	size_t tdlen;
 
 	setprogname(argv[0]);
 
 	listf = stderr;
-
-	/*
-	 * parse options, determine operational mode
-	 */
-	options(argc, argv);
-
-	/*
-	 * general init
-	 */
-	if ((gen_init() < 0) || (tty_init() < 0))
-		return(exit_val);
 
 	/*
 	 * Keep a reference to cwd, so we can always come back home.
@@ -284,6 +273,13 @@ main(int argc, char **argv)
 		memcpy(tempfile, tmpdir, tdlen);
 	tempbase = tempfile + tdlen;
 	*tempbase++ = '/';
+
+	/*
+	 * parse options, determine operational mode, general init
+	 */
+	options(argc, argv);
+	if ((gen_init() < 0) || (tty_init() < 0))
+		return(exit_val);
 
 	(void)time(&starttime);
 #ifdef SIGINFO

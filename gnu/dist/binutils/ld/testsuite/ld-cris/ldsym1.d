@@ -1,5 +1,4 @@
 # source: expdyn1.s
-# target: cris-*-*elf* cris-*-*aout*
 # as: --em=criself
 # ld: -mcriself
 # objdump: -d

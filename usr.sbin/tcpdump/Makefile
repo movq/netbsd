@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.37 2004/09/30 06:40:19 dyoung Exp $	
+#	$NetBSD: Makefile,v 1.33 2003/10/21 10:01:22 lukem Exp $	
 
 .include <bsd.own.mk>
 
@@ -8,23 +8,22 @@ SRCDIR=	${NETBSDSRCDIR}/dist/tcpdump
 PROG=	tcpdump
 MAN=	tcpdump.8 
 
-SRCS=	addrtoname.c cpack.c gmpls.c gmt2local.c machdep.c oui.c parsenfsfh.c \
-	print-802_11.c print-ah.c print-aodv.c print-ap1394.c print-arcnet.c \
-	print-arp.c \
-	print-ascii.c print-atalk.c print-atm.c print-bfd.c print-bgp.c \
+SRCS=	addrtoname.c gmt2local.c machdep.c parsenfsfh.c \
+	print-802_11.c print-ah.c print-arcnet.c print-arp.c \
+	print-ascii.c print-atalk.c print-atm.c print-bgp.c \
 	print-bootp.c print-beep.c print-cdp.c print-chdlc.c \
 	print-cip.c print-cnfp.c print-decnet.c print-domain.c \
-	print-dvmrp.c print-egp.c print-enc.c print-esp.c print-ether.c \
-	print-fddi.c print-fr.c print-gre.c print-hsrp.c print-icmp.c \
-	print-igmp.c print-igrp.c print-ip.c print-ipcomp.c print-ipfc.c \
+	print-dvmrp.c print-egp.c print-esp.c print-ether.c \
+	print-fddi.c print-gre.c print-hsrp.c print-icmp.c \
+	print-igmp.c print-igrp.c print-ip.c print-ipcomp.c \
 	print-ipx.c print-isakmp.c print-isoclns.c print-krb.c \
-	print-l2tp.c print-lane.c print-ldp.c print-llc.c print-lwres.c \
-	print-msdp.c print-mobile.c print-mobility.c print-mpls.c print-nfs.c \
+	print-l2tp.c print-lane.c print-lcp.c print-llc.c print-lwres.c \
+	print-msdp.c print-mobile.c print-mpls.c print-nfs.c \
 	print-ntp.c print-null.c print-ospf.c print-pflog.c \
 	print-pim.c print-ppp.c print-pppoe.c print-pptp.c \
-	print-radius.c print-raw.c print-rip.c print-rsvp.c print-rx.c \
+	print-radius.c print-raw.c print-rip.c print-rx.c \
 	print-sctp.c print-sl.c print-sll.c print-smb.c print-snmp.c \
-	print-stp.c print-sunatm.c print-sunrpc.c print-tcp.c \
+	print-stp.c print-sunrpc.c print-tcp.c \
 	print-telnet.c print-tftp.c print-timed.c print-token.c \
 	print-udp.c print-vjc.c print-vrrp.c print-wb.c print-zephyr.c \
 	setsignal.c smbutil.c tcpdump.c util.c
@@ -46,7 +45,7 @@ version.c: VERSION
 LDADD+=	-lpcap -ll
 DPADD+=	${LIBPCAP} ${LIBL}
 
-CPPFLAGS+=	-I${.CURDIR} -I${SRCDIR} -I${NETBSDSRCDIR}/sys/dist/pf
+CPPFLAGS+=	-I${.CURDIR} -I${SRCDIR}
 
 AWKS= atime.awk packetdat.awk stime.awk send-ack.awk   
 
@@ -61,11 +60,9 @@ CPPFLAGS+= \
 	-DHAVE_STRDUP=1 -DHAVE_ETHER_NTOHOST=1 -DUSE_ETHER_NTOHOST=1 \
 	-DHAVE_SETLINEBUF=1 -DHAVE_VSNPRINTF=1 -DHAVE_SNPRINTF=1 \
 	-DRETSIGTYPE=void -DRETSIGVAL= -DHAVE_SIGACTION=1 \
-	-DHAVE_SOCKADDR_SA_LEN=1 -DHAVE_H_ERRNO=1 -DHAVE_OPENSSL_EVP_H=1 \
-	-DHAVE_PCAP_LIB_VERSION=1 -DHAVE_PCAP_SET_DATALINK=1
+	-DHAVE_SOCKADDR_SA_LEN=1 -DHAVE_H_ERRNO=1
 CPPFLAGS+=-DLBL_ALIGN=1
 CPPFLAGS+=-DTCPDUMP_DO_SMB=1
-CPPFLAGS+=-D_U_="__attribute__((unused))"
 
 .if (${MKCRYPTO} != "no")
 CPPFLAGS+=-DHAVE_LIBCRYPTO=1 

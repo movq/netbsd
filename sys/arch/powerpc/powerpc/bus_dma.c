@@ -1,4 +1,4 @@
-/*	$NetBSD: bus_dma.c,v 1.20 2004/11/28 17:34:46 thorpej Exp $	*/
+/*	$NetBSD: bus_dma.c,v 1.17 2003/07/25 10:12:46 scw Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997, 1998 The NetBSD Foundation, Inc.
@@ -38,7 +38,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bus_dma.c,v 1.20 2004/11/28 17:34:46 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bus_dma.c,v 1.17 2003/07/25 10:12:46 scw Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -195,7 +195,6 @@ _bus_dmamap_load_buffer(t, map, buf, buflen, p, flags, lastaddrp, segp, first)
 		sgsize = PAGE_SIZE - ((u_long)vaddr & PGOFSET);
 		if (buflen < sgsize)
 			sgsize = buflen;
-		sgsize = min(sgsize, map->_dm_maxsegsz);
 
 		/*
 		 * Make sure we don't cross any boundaries.
@@ -315,8 +314,6 @@ _bus_dmamap_load_mbuf(t, map, m0, flags)
 	seg = 0;
 	error = 0;
 	for (m = m0; m != NULL && error == 0; m = m->m_next, first = 0) {
-		if (m->m_len == 0)
-			continue;
 #ifdef POOL_VTOPHYS
 		/* XXX Could be better about coalescing. */
 		/* XXX Doesn't check boundaries. */
@@ -549,7 +546,7 @@ _bus_dmamap_sync(t, map, offset, len, ops)
 			 * them from the cache.  Note: some implementation
 			 * implement dcbi identically to dcbf.  Thus if the
 			 * cacheline has data, it will be written to memory.
-			 * If the DMA is updating the same cacheline at the
+			 * If the DMA is updaing the same cacheline at the
 			 * time, bad things can happen.
 			 */
 			dcbi(addr, seglen, dcache_line_size);

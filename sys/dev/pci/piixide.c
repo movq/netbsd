@@ -1,4 +1,4 @@
-/*	$NetBSD: piixide.c,v 1.17 2004/11/10 17:19:05 cube Exp $	*/
+/*	$NetBSD: piixide.c,v 1.8.2.1 2004/07/28 11:21:02 tron Exp $	*/
 
 /*
  * Copyright (c) 1999, 2000, 2001 Manuel Bouyer.
@@ -39,8 +39,8 @@
 #include <dev/pci/pciide_piix_reg.h>
 
 static void piix_chip_map(struct pciide_softc*, struct pci_attach_args *);
-static void piix_setup_channel(struct ata_channel *);
-static void piix3_4_setup_channel(struct ata_channel *);
+static void piix_setup_channel(struct wdc_channel *);
+static void piix3_4_setup_channel(struct wdc_channel *);
 static u_int32_t piix_setup_idetim_timings(u_int8_t, u_int8_t, u_int8_t);
 static u_int32_t piix_setup_idetim_drvs(struct ata_drive_datas *);
 static u_int32_t piix_setup_sidetim_timings(u_int8_t, u_int8_t, u_int8_t);
@@ -140,21 +140,6 @@ static const struct pciide_product_desc pciide_intel_products[] =  {
 	  "Intel 6300ESB Serial ATA Controller",
 	  piixsata_chip_map,
 	},
-	{ PCI_PRODUCT_INTEL_82801FB_IDE,
-	  0,
-	  "Intel 82801FB IDE Controller (ICH6)",
-	  piix_chip_map,
-	},
-	{ PCI_PRODUCT_INTEL_82801FB_SATA,
-	  0,
-	  "Intel 82801FB Serial ATA/Raid Controller",
-	  piixsata_chip_map,
-	},
-	{ PCI_PRODUCT_INTEL_82801FR_SATA,
-	  0,
-	  "Intel 82801FR Serial ATA/Raid Controller",
-	  piixsata_chip_map,
-	},
 	{ 0,
 	  0,
 	  NULL,
@@ -200,12 +185,13 @@ piix_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
 		return;
 
 	aprint_normal("%s: bus-master DMA support present",
-	    sc->sc_wdcdev.sc_atac.atac_dev.dv_xname);
+	    sc->sc_wdcdev.sc_dev.dv_xname);
 	pciide_mapreg_dma(sc, pa);
 	aprint_normal("\n");
-	sc->sc_wdcdev.sc_atac.atac_cap |= ATAC_CAP_DATA16 | ATAC_CAP_DATA32;
+	sc->sc_wdcdev.cap |= WDC_CAPABILITY_DATA16 | WDC_CAPABILITY_DATA32 |
+	    WDC_CAPABILITY_MODE;
 	if (sc->sc_dma_ok) {
-		sc->sc_wdcdev.sc_atac.atac_cap |= ATAC_CAP_DMA;
+		sc->sc_wdcdev.cap |= WDC_CAPABILITY_DMA | WDC_CAPABILITY_IRQACK;
 		sc->sc_wdcdev.irqack = pciide_irqack;
 		switch(sc->sc_pp->ide_product) {
 		case PCI_PRODUCT_INTEL_82371AB_IDE:
@@ -220,15 +206,14 @@ piix_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
 		case PCI_PRODUCT_INTEL_82801DBM_IDE:
 		case PCI_PRODUCT_INTEL_82801EB_IDE:
 		case PCI_PRODUCT_INTEL_6300ESB_IDE:
-		case PCI_PRODUCT_INTEL_82801FB_IDE:
-			sc->sc_wdcdev.sc_atac.atac_cap |= ATAC_CAP_UDMA;
+			sc->sc_wdcdev.cap |= WDC_CAPABILITY_UDMA;
 		}
 	}
-	sc->sc_wdcdev.sc_atac.atac_pio_cap = 4;
-	sc->sc_wdcdev.sc_atac.atac_dma_cap = 2;
+	sc->sc_wdcdev.PIO_cap = 4;
+	sc->sc_wdcdev.DMA_cap = 2;
 	switch(sc->sc_pp->ide_product) {
 	case PCI_PRODUCT_INTEL_82801AA_IDE:
-		sc->sc_wdcdev.sc_atac.atac_udma_cap = 4;
+		sc->sc_wdcdev.UDMA_cap = 4;
 		break;
 	case PCI_PRODUCT_INTEL_82801BA_IDE:
 	case PCI_PRODUCT_INTEL_82801BAM_IDE:
@@ -238,28 +223,27 @@ piix_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
 	case PCI_PRODUCT_INTEL_82801DBM_IDE:
 	case PCI_PRODUCT_INTEL_82801EB_IDE:
 	case PCI_PRODUCT_INTEL_6300ESB_IDE:
-	case PCI_PRODUCT_INTEL_82801FB_IDE:
-		sc->sc_wdcdev.sc_atac.atac_udma_cap = 5;
+		sc->sc_wdcdev.UDMA_cap = 5;
 		break;
 	default:
-		sc->sc_wdcdev.sc_atac.atac_udma_cap = 2;
+		sc->sc_wdcdev.UDMA_cap = 2;
 	}
 	if (sc->sc_pp->ide_product == PCI_PRODUCT_INTEL_82371FB_IDE)
-		sc->sc_wdcdev.sc_atac.atac_set_modes = piix_setup_channel;
+		sc->sc_wdcdev.set_modes = piix_setup_channel;
 	else
-		sc->sc_wdcdev.sc_atac.atac_set_modes = piix3_4_setup_channel;
-	sc->sc_wdcdev.sc_atac.atac_channels = sc->wdc_chanarray;
-	sc->sc_wdcdev.sc_atac.atac_nchannels = PCIIDE_NUM_CHANNELS;
+		sc->sc_wdcdev.set_modes = piix3_4_setup_channel;
+	sc->sc_wdcdev.channels = sc->wdc_chanarray;
+	sc->sc_wdcdev.nchannels = PCIIDE_NUM_CHANNELS;
 
-	ATADEBUG_PRINT(("piix_setup_chip: old idetim=0x%x",
+	WDCDEBUG_PRINT(("piix_setup_chip: old idetim=0x%x",
 	    pci_conf_read(sc->sc_pc, sc->sc_tag, PIIX_IDETIM)),
 	    DEBUG_PROBE);
 	if (sc->sc_pp->ide_product != PCI_PRODUCT_INTEL_82371FB_IDE) {
-		ATADEBUG_PRINT((", sidetim=0x%x",
+		WDCDEBUG_PRINT((", sidetim=0x%x",
 		    pci_conf_read(sc->sc_pc, sc->sc_tag, PIIX_SIDETIM)),
 		    DEBUG_PROBE);
-		if (sc->sc_wdcdev.sc_atac.atac_cap & ATAC_CAP_UDMA) {
-			ATADEBUG_PRINT((", udamreg 0x%x",
+		if (sc->sc_wdcdev.cap & WDC_CAPABILITY_UDMA) {
+			WDCDEBUG_PRINT((", udamreg 0x%x",
 			    pci_conf_read(sc->sc_pc, sc->sc_tag, PIIX_UDMAREG)),
 			    DEBUG_PROBE);
 		}
@@ -272,20 +256,16 @@ piix_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
 		    sc->sc_pp->ide_product == PCI_PRODUCT_INTEL_82801DB_IDE ||
 		    sc->sc_pp->ide_product == PCI_PRODUCT_INTEL_82801DBM_IDE ||
 		    sc->sc_pp->ide_product == PCI_PRODUCT_INTEL_82801EB_IDE ||
-		    sc->sc_pp->ide_product == PCI_PRODUCT_INTEL_82801FB_IDE ||
 		    sc->sc_pp->ide_product == PCI_PRODUCT_INTEL_6300ESB_IDE) {
-			ATADEBUG_PRINT((", IDE_CONTROL 0x%x",
+			WDCDEBUG_PRINT((", IDE_CONTROL 0x%x",
 			    pci_conf_read(sc->sc_pc, sc->sc_tag, PIIX_CONFIG)),
 			    DEBUG_PROBE);
 		}
 
 	}
-	ATADEBUG_PRINT(("\n"), DEBUG_PROBE);
+	WDCDEBUG_PRINT(("\n"), DEBUG_PROBE);
 
-	wdc_allocate_regs(&sc->sc_wdcdev);
-
-	for (channel = 0; channel < sc->sc_wdcdev.sc_atac.atac_nchannels;
-	     channel++) {
+	for (channel = 0; channel < sc->sc_wdcdev.nchannels; channel++) {
 		cp = &sc->pciide_channels[channel];
 		/* PIIX is compat-only */
 		if (pciide_chansetup(sc, channel, 0) == 0)
@@ -295,8 +275,8 @@ piix_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
 		    PIIX_IDETIM_IDE) == 0) {
 #if 1
 			aprint_normal("%s: %s channel ignored (disabled)\n",
-			    sc->sc_wdcdev.sc_atac.atac_dev.dv_xname, cp->name);
-			cp->ata_channel.ch_flags |= ATACH_DISABLED;
+			    sc->sc_wdcdev.sc_dev.dv_xname, cp->name);
+			cp->wdc_channel.ch_flags |= WDCF_DISABLED;
 			continue;
 #else
 			pcireg_t interface;
@@ -315,15 +295,15 @@ piix_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
 		pciide_mapchan(pa, cp, 0, &cmdsize, &ctlsize, pciide_pci_intr);
 	}
 
-	ATADEBUG_PRINT(("piix_setup_chip: idetim=0x%x",
+	WDCDEBUG_PRINT(("piix_setup_chip: idetim=0x%x",
 	    pci_conf_read(sc->sc_pc, sc->sc_tag, PIIX_IDETIM)),
 	    DEBUG_PROBE);
 	if (sc->sc_pp->ide_product != PCI_PRODUCT_INTEL_82371FB_IDE) {
-		ATADEBUG_PRINT((", sidetim=0x%x",
+		WDCDEBUG_PRINT((", sidetim=0x%x",
 		    pci_conf_read(sc->sc_pc, sc->sc_tag, PIIX_SIDETIM)),
 		    DEBUG_PROBE);
-		if (sc->sc_wdcdev.sc_atac.atac_cap & ATAC_CAP_UDMA) {
-			ATADEBUG_PRINT((", udamreg 0x%x",
+		if (sc->sc_wdcdev.cap & WDC_CAPABILITY_UDMA) {
+			WDCDEBUG_PRINT((", udamreg 0x%x",
 			    pci_conf_read(sc->sc_pc, sc->sc_tag, PIIX_UDMAREG)),
 			    DEBUG_PROBE);
 		}
@@ -336,24 +316,23 @@ piix_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
 		    sc->sc_pp->ide_product == PCI_PRODUCT_INTEL_82801DB_IDE ||
 		    sc->sc_pp->ide_product == PCI_PRODUCT_INTEL_82801DBM_IDE ||
 		    sc->sc_pp->ide_product == PCI_PRODUCT_INTEL_82801EB_IDE ||
-		    sc->sc_pp->ide_product == PCI_PRODUCT_INTEL_82801FB_IDE ||
 		    sc->sc_pp->ide_product == PCI_PRODUCT_INTEL_6300ESB_IDE) {
-			ATADEBUG_PRINT((", IDE_CONTROL 0x%x",
+			WDCDEBUG_PRINT((", IDE_CONTROL 0x%x",
 			    pci_conf_read(sc->sc_pc, sc->sc_tag, PIIX_CONFIG)),
 			    DEBUG_PROBE);
 		}
 	}
-	ATADEBUG_PRINT(("\n"), DEBUG_PROBE);
+	WDCDEBUG_PRINT(("\n"), DEBUG_PROBE);
 }
 
 static void
-piix_setup_channel(struct ata_channel *chp)
+piix_setup_channel(struct wdc_channel *chp)
 {
 	u_int8_t mode[2], drive;
 	u_int32_t oidetim, idetim, idedma_ctl;
-	struct pciide_channel *cp = CHAN_TO_PCHAN(chp);
-	struct pciide_softc *sc = CHAN_TO_PCIIDE(chp);
-	struct ata_drive_datas *drvp = cp->ata_channel.ch_drive;
+	struct pciide_channel *cp = (struct pciide_channel*)chp;
+	struct pciide_softc *sc = (struct pciide_softc *)cp->wdc_channel.ch_wdc;
+	struct ata_drive_datas *drvp = cp->wdc_channel.ch_drive;
 
 	oidetim = pci_conf_read(sc->sc_pc, sc->sc_tag, PIIX_IDETIM);
 	idetim = PIIX_IDETIM_CLEAR(oidetim, 0xffff, chp->ch_channel);
@@ -453,14 +432,14 @@ end:	/*
 }
 
 static void
-piix3_4_setup_channel(struct ata_channel *chp)
+piix3_4_setup_channel(struct wdc_channel *chp)
 {
 	struct ata_drive_datas *drvp;
 	u_int32_t oidetim, idetim, sidetim, udmareg, ideconf, idedma_ctl;
-	struct pciide_channel *cp = CHAN_TO_PCHAN(chp);
-	struct pciide_softc *sc = CHAN_TO_PCIIDE(chp);
+	struct pciide_channel *cp = (struct pciide_channel*)chp;
+	struct pciide_softc *sc = (struct pciide_softc *)cp->wdc_channel.ch_wdc;
 	struct wdc_softc *wdc = &sc->sc_wdcdev;
-	int drive, s;
+	int drive;
 	int channel = chp->ch_channel;
 
 	oidetim = pci_conf_read(sc->sc_pc, sc->sc_tag, PIIX_IDETIM);
@@ -498,7 +477,6 @@ piix3_4_setup_channel(struct ata_channel *chp)
 		    sc->sc_pp->ide_product == PCI_PRODUCT_INTEL_82801DB_IDE ||
 		    sc->sc_pp->ide_product == PCI_PRODUCT_INTEL_82801DBM_IDE ||
 		    sc->sc_pp->ide_product == PCI_PRODUCT_INTEL_82801EB_IDE ||
-		    sc->sc_pp->ide_product == PCI_PRODUCT_INTEL_82801FB_IDE ||
 		    sc->sc_pp->ide_product == PCI_PRODUCT_INTEL_6300ESB_IDE) {
 			ideconf |= PIIX_CONFIG_PINGPONG;
 		}
@@ -509,7 +487,6 @@ piix3_4_setup_channel(struct ata_channel *chp)
 		    sc->sc_pp->ide_product == PCI_PRODUCT_INTEL_82801DB_IDE ||
 		    sc->sc_pp->ide_product == PCI_PRODUCT_INTEL_82801DBM_IDE ||
 		    sc->sc_pp->ide_product == PCI_PRODUCT_INTEL_82801EB_IDE ||
-		    sc->sc_pp->ide_product == PCI_PRODUCT_INTEL_82801FB_IDE ||
 		    sc->sc_pp->ide_product == PCI_PRODUCT_INTEL_6300ESB_IDE) {
 			/* setup Ultra/100 */
 			if (drvp->UDMA_mode > 2 &&
@@ -538,20 +515,16 @@ piix3_4_setup_channel(struct ata_channel *chp)
 			else
 				ideconf &= ~PIIX_CONFIG_UDMA66(channel, drive);
 		}
-		if ((wdc->sc_atac.atac_cap & ATAC_CAP_UDMA) &&
+		if ((wdc->cap & WDC_CAPABILITY_UDMA) &&
 		    (drvp->drive_flags & DRIVE_UDMA)) {
 			/* use Ultra/DMA */
-			s = splbio();
 			drvp->drive_flags &= ~DRIVE_DMA;
-			splx(s);
 			udmareg |= PIIX_UDMACTL_DRV_EN( channel, drive);
 			udmareg |= PIIX_UDMATIM_SET(
 			    piix4_sct_udma[drvp->UDMA_mode], channel, drive);
 		} else {
 			/* use Multiword DMA */
-			s = splbio();
 			drvp->drive_flags &= ~DRIVE_UDMA;
-			splx(s);
 			if (drive == 0) {
 				idetim |= piix_setup_idetim_timings(
 				    drvp->DMA_mode, 1, channel);
@@ -614,7 +587,7 @@ piix_setup_idetim_drvs(drvp)
 	struct ata_drive_datas *drvp;
 {
 	u_int32_t ret = 0;
-	struct ata_channel *chp = drvp->chnl_softc;
+	struct wdc_channel *chp = drvp->chnl_softc;
 	u_int8_t channel = chp->ch_channel;
 	u_int8_t drive = drvp->drive;
 
@@ -691,29 +664,28 @@ piixsata_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
 		return;
 
 	aprint_normal("%s: bus-master DMA support present",
-	    sc->sc_wdcdev.sc_atac.atac_dev.dv_xname);
+	    sc->sc_wdcdev.sc_dev.dv_xname);
 	pciide_mapreg_dma(sc, pa);
 	aprint_normal("\n");
 
-	sc->sc_wdcdev.sc_atac.atac_cap |= ATAC_CAP_DATA16 | ATAC_CAP_DATA32;
-	sc->sc_wdcdev.sc_atac.atac_pio_cap = 4;
+	sc->sc_wdcdev.cap |= WDC_CAPABILITY_DATA16 | WDC_CAPABILITY_DATA32 |
+	    WDC_CAPABILITY_MODE;
+	sc->sc_wdcdev.PIO_cap = 4;
 	if (sc->sc_dma_ok) {
-		sc->sc_wdcdev.sc_atac.atac_cap |= ATAC_CAP_DMA | ATAC_CAP_UDMA;
+		sc->sc_wdcdev.cap |= WDC_CAPABILITY_DMA | WDC_CAPABILITY_UDMA;
+		sc->sc_wdcdev.cap |= WDC_CAPABILITY_IRQACK;
 		sc->sc_wdcdev.irqack = pciide_irqack;
-		sc->sc_wdcdev.sc_atac.atac_dma_cap = 2;
-		sc->sc_wdcdev.sc_atac.atac_udma_cap = 6;
+		sc->sc_wdcdev.DMA_cap = 2;
+		sc->sc_wdcdev.UDMA_cap = 6;
 	}
-	sc->sc_wdcdev.sc_atac.atac_set_modes = sata_setup_channel;
+	sc->sc_wdcdev.set_modes = sata_setup_channel;
 
-	sc->sc_wdcdev.sc_atac.atac_channels = sc->wdc_chanarray;
-	sc->sc_wdcdev.sc_atac.atac_nchannels = PCIIDE_NUM_CHANNELS;
+	sc->sc_wdcdev.channels = sc->wdc_chanarray;
+	sc->sc_wdcdev.nchannels = PCIIDE_NUM_CHANNELS;
 
 	interface = PCI_INTERFACE(pa->pa_class);
 
-	wdc_allocate_regs(&sc->sc_wdcdev);
-
-	for (channel = 0; channel < sc->sc_wdcdev.sc_atac.atac_nchannels;
-	     channel++) {
+	for (channel = 0; channel < sc->sc_wdcdev.nchannels; channel++) {
 		cp = &sc->pciide_channels[channel];
 		if (pciide_chansetup(sc, channel, interface) == 0)
 			continue;

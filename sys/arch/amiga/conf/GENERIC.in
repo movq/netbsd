@@ -1,4 +1,4 @@
-# $NetBSD: GENERIC.in,v 1.26 2004/11/10 17:25:21 christos Exp $
+# $NetBSD: GENERIC.in,v 1.18.2.3 2004/07/15 20:22:46 he Exp $
 #
 # GENERIC machine description file
 #
@@ -56,7 +56,7 @@ include "arch/amiga/conf/std.amiga"
 
 options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
-#ident 		"GENERIC-$Revision: 1.26 $"
+#ident 		"GENERIC-$Revision: 1.18.2.3 $"
 
 m4_ifdef(`INSTALL_CONFIGURATION', `m4_dnl
 makeoptions	COPTS="-Os"
@@ -106,7 +106,6 @@ options 	INET6		# IPV6
 
 m4_ifdef(`INSTALL_CONFIGURATION', `', `m4_dnl
 #options 	MROUTING	# Multicast routing
-#options 	PIM		# Protocol Independent Multicast
 options 	NS		# XNS
 #options 	NSIP		# XNS tunneling over IP
 options 	ISO,TPIP	# OSI
@@ -199,7 +198,6 @@ options 	COMPAT_NOMID	# allow nonvalid machine id executables
 
 options 	EXEC_AOUT	# 32-bit aout executables (NetBSD-1.5.x)
 options 	COMPAT_AOUT_M68K # actually make some system calls work.
-options		COMPAT_BSDPTY	# /dev/[pt]ty?? ptys.
 
 m4_ifdef(`INSTALL_CONFIGURATION', `', `m4_dnl
 #
@@ -580,8 +578,6 @@ pseudo-device	gif		4	# IPv[46] over IPv[46] tunnel (RFC1933)
 pseudo-device	vlan			# IEEE 802.1q encapsulation
 pseudo-device	bridge			# simple inter-network bridging
 #options	BRIDGE_IPF		# bridge uses IP/IPv6 pfil hooks too
-#pseudo-device	pf			# PF packet filter
-#pseudo-device	pflog			# PF log if
 
 pseudo-device	view		4	# views (needed for grfcc)
 m4_ifdef(`INSTALL_CONFIGURATION', `m4_dnl

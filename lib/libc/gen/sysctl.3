@@ -1,4 +1,4 @@
-.\"	$NetBSD: sysctl.3,v 1.141 2004/10/15 15:19:02 enami Exp $
+.\"	$NetBSD: sysctl.3,v 1.135.2.1 2004/11/12 05:32:09 jmc Exp $
 .\"
 .\" Copyright (c) 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -397,7 +397,7 @@ information.
 .It KERN\_BOOTTIME	struct timeval	no
 .It KERN\_CCPU	integer	no
 .It KERN\_CLOCKRATE	struct clockinfo	no
-.It KERN\_CP\_TIME	uint64_t[\|]	no
+.It KERN\_CP\_TIME	long[\|]	no
 .It KERN\_DEFCORENAME	string	yes
 .It KERN\_DOMAINNAME	string	yes
 .It KERN\_DRIVERS	struct kinfo_drivers	no
@@ -485,13 +485,11 @@ This structure contains the clock, statistics clock and profiling clock
 frequencies, the number of micro-seconds per hz tick, and the clock
 skew rate.
 .It Li KERN_CP_TIME
-Returns an array of CPUSTATES uint64_ts.
+Returns an array of CPUSTATES longs.
 This array contains the
 number of clock ticks spent in different CPU states.
-On multi-processor systems, the sum across all CPUs is returned unless
+On multi-processor system, the sum across all CPUs is returned unless
 appropriate space is given for one data set for each CPU.
-Data for a specific CPU can also be obtained by adding the number of the
-CPU at the end of the MIB, enlarging it by one.
 .It Li KERN_DEFCORENAME
 Default template for the name of core dump files (see also PROC_PID_CORENAME
 in the per-process variables CTL_PROC, and
@@ -531,7 +529,7 @@ If
 .Xr fork 2
 system call fails due to limit on number of processes (either
 the global maxproc limit or user's one), wait for this many
-milliseconds before returning
+miliseconds before returning
 .Er EAGAIN
 error to process.
 Useful to keep heavily forking runaway processes in bay.
@@ -1074,8 +1072,8 @@ Returns the default TCP send buffer size.
 .It Li tcp.recvspace
 Returns the default TCP receive buffer size.
 .It Li tcp.mssdflt
-Returns the default maximum segment size both advertised to the peer
-and to use when either the peer does not advertise a maximum segment size to
+Returns the default maximum segment size both advertized to the peer
+and to use when either the peer does not advertize a maximum segment size to
 us during connection setup or Path MTU Discovery
 .Li ( ip.mtudisc )
 is disabled.
@@ -1167,8 +1165,7 @@ TCP RST packet that exceeded the value are subject to rate limitation
 and will not go out from the node.
 Negative value disables rate limitation.
 .It Li udp.checksum
-Returns 1 when UDP checksums are being computed.
-Received non-zero UDP checksums are always checked.
+Returns 1 when UDP checksums are being computed and checked.
 Disabling UDP checksums is strongly discouraged.
 .It Li udp.sendspace
 Returns the default UDP send buffer size.
@@ -1435,6 +1432,7 @@ The currently defined variable and names are:
 .It spi_try	integer	yes
 .It spi_min_value	integer	yes
 .It spi_max_value	integer	yes
+.It random_int	integer	yes
 .It larval_lifetime	integer	yes
 .It blockacq_count	integer	yes
 .It blockacq_lifetime	integer	yes
@@ -1455,6 +1453,14 @@ when it generates it from random number generator.
 Minimum SPI value when generating it within the kernel.
 .It Li spi_max_value
 Maximum SPI value when generating it within the kernel.
+.It Li random_int
+Interval to stir pseudo-random number generator, in seconds.
+Pseudo-random number generator is used only as a last resort when
+random number source
+.Pq Pa /dev/urandom
+is not available.
+It should not really be used, and if it were used,
+kernel will warn about it.
 .It Li larval_lifetime
 Lifetime for LARVAL SAD entries, in seconds.
 .It Li blockacq_count
@@ -1698,7 +1704,7 @@ at any one time.
 The minimum maximum number of types supported for the name of a
 timezone.
 .It Li USER_ATEXIT_MAX
-The maximum number of functions that may be registered with
+The maximum namber of functions that may be registered with
 .Xr atexit 3 .
 .El
 .Sh CTL_VM
@@ -1743,7 +1749,7 @@ The amount of kernel memory that is being used by the buffer cache.
 The minimum amount of kernel memory to reserve for the
 buffer cache.
 .It Li VM_BUFMEM_HIWATER
-The maximum amount of kernel memory to be used for the
+The maximum amount of kernel memort to be used for the
 buffer cache.
 .It Li VM_EXECMAX
 The percentage of physical memory which will be reclaimed
@@ -2142,7 +2148,7 @@ desc.sysctl_desc = "audio debug control knob";
 sysctl(mib, 2, NULL, NULL, \*[Am]desc, sizeof(desc));
 .Ed
 .Pp
-Upon successfully setting a description, the new description will be
+Upon successully setting a description, the new description will be
 returned in the space indicated by the
 .Fa oldp
 and

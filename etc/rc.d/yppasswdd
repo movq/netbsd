@@ -1,13 +1,13 @@
 #!/bin/sh
 #
-# $NetBSD: yppasswdd,v 1.10 2004/10/12 14:51:03 lukem Exp $
+# $NetBSD: yppasswdd,v 1.6 2002/03/22 04:34:01 thorpej Exp $
 #
 
 # PROVIDE: yppasswdd
-# REQUIRE: rpcbind ypserv ypbind
+# REQUIRE: ypserv ypbind
 # BEFORE:  LOGIN
 
-$_rc_subr_loaded . /etc/rc.subr
+. /etc/rc.subr
 
 name="yppasswdd"
 rcvar=$name
@@ -17,7 +17,7 @@ start_precmd="yppasswdd_precmd"
 
 yppasswdd_precmd()
 {
-	_domain=$(domainname)
+	_domain=`domainname`
 	if [ -z "$_domain" ]; then
 		warn "domainname(1) is not set."
 		return 1
@@ -25,6 +25,4 @@ yppasswdd_precmd()
 }
 
 load_rc_config $name
-load_rc_config_var rpcbind rpcbind
-load_rc_config_var ypserv ypserv
 run_rc_command "$1"

@@ -1,4 +1,4 @@
-/*	$NetBSD: load_elf.cpp,v 1.13 2004/08/06 18:33:09 uch Exp $	*/
+/*	$NetBSD: load_elf.cpp,v 1.10 2004/03/16 22:30:36 uwe Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -46,28 +46,20 @@
 #include <memory.h>
 #include <file.h>
 
-#define	ROUND4(x)	(((x) + 3) & ~3)
+#define ROUND4(x)	(((x) + 3) & ~3)
 
 ElfLoader::ElfLoader(Console *&cons, MemoryManager *&mem)
 	: Loader(cons, mem)
 {
-
 	_sym_blk.enable = FALSE;
-	_ph = NULL;
-	_sh = NULL;
 
 	DPRINTF((TEXT("Loader: ELF\n")));
 }
 
 ElfLoader::~ElfLoader(void)
 {
-
 	if (_sym_blk.header != NULL)
-		free(_sym_blk.header);
-	if (_ph != NULL)
-		free(_ph);
-	if (_sh != NULL)
-		free(_sh);
+		free (_sym_blk.header);
 }
 
 BOOL
@@ -79,30 +71,14 @@ ElfLoader::setFile(File *&file)
 	// read ELF header and check it
 	if (!read_header())
 		return FALSE;
-
 	// read section header
 	sz = _eh.e_shnum * _eh.e_shentsize;
-	if ((_sh = static_cast<Elf_Shdr *>(malloc(sz))) == NULL) {
-		DPRINTF((TEXT("can't allocate section header table.\n")));
-		return FALSE;
-	}
-	if (_file->read(_sh, sz, _eh.e_shoff) != sz) {
-		DPRINTF((TEXT("section header read error.\n")));
-		return FALSE;
-	}
+	_file->read(_sh, _eh.e_shentsize * _eh.e_shnum, _eh.e_shoff);
 
 	// read program header
 	sz = _eh.e_phnum * _eh.e_phentsize;
-	if ((_ph = static_cast<Elf_Phdr *>(malloc(sz))) == NULL) {
-		DPRINTF((TEXT("can't allocate program header table.\n")));
-		return FALSE;
-	}
-	if (_file->read(_ph, sz, _eh.e_phoff) != sz) {
-		DPRINTF((TEXT("program header read error.\n")));
-		return FALSE;
-	}
 
-	return TRUE;
+	return _file->read(_ph, sz, _eh.e_phoff) == sz;
 }
 
 size_t
@@ -145,7 +121,7 @@ ElfLoader::load()
 	Elf_Phdr *ph;
 	vaddr_t kv;
 	int i;
-
+  
 	_load_segment_start();
 
 	for (i = 0, ph = _ph; i < _eh.e_phnum; i++, ph++) {
@@ -157,13 +133,13 @@ ElfLoader::load()
 			DPRINTF((TEXT("[%d] vaddr 0x%08x file size 0x%x mem size 0x%x\n"),
 			    i, kv, filesz, memsz));
 			_load_segment(kv, memsz, fileofs, filesz);
-			kv += ROUND4(memsz);
+			kv += memsz;
 		}
 	}
 
 	load_symbol_block(kv);
 
-	// tag chain still opening
+	// tag chain still opening 
 
 	return _load_success();
 }
@@ -262,7 +238,7 @@ void
 ElfLoader::load_symbol_block(vaddr_t kv)
 {
 	size_t sz;
-
+	
 	if (!_sym_blk.enable)
 		return;
 
@@ -291,7 +267,7 @@ ElfLoader::read_header()
 		DPRINTF((TEXT("not a ELF file.\n")));
 		return FALSE;
 	}
-
+  
 	// Windows CE is 32bit little-endian only.
 	if (_eh.e_ident[EI_DATA] != ELFDATA2LSB ||
 	    _eh.e_ident[EI_CLASS] != ELFCLASS32) {
@@ -308,14 +284,14 @@ ElfLoader::read_header()
 		    _eh.e_machine));
 		return FALSE;
 	}
-
+  
 	// Check object type
 	if (_eh.e_type != ET_EXEC) {
 		DPRINTF((TEXT("not a executable file. type = %d\n"),
 		    _eh.e_type));
 		return FALSE;
 	}
-
+  
 	if (_eh.e_phoff == 0 || _eh.e_phnum == 0 || _eh.e_phnum > 16 ||
 	    _eh.e_phentsize != sizeof(Elf_Phdr)) {
 		DPRINTF((TEXT("invalid program header information.\n")));

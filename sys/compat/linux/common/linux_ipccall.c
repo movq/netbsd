@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_ipccall.c,v 1.24 2004/09/28 19:05:19 jdolecek Exp $	*/
+/*	$NetBSD: linux_ipccall.c,v 1.23.4.1 2004/10/04 05:19:18 jmc Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: linux_ipccall.c,v 1.24 2004/09/28 19:05:19 jdolecek Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux_ipccall.c,v 1.23.4.1 2004/10/04 05:19:18 jmc Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_sysv.h"

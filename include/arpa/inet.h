@@ -1,4 +1,4 @@
-/*	$NetBSD: inet.h,v 1.20 2004/11/07 01:48:01 christos Exp $	*/
+/*	$NetBSD: inet.h,v 1.18 2003/08/07 09:44:12 agc Exp $	*/
 
 /*
  * ++Copyright++ 1983, 1993
@@ -49,11 +49,8 @@
  * SOFTWARE.
  * -
  * --Copyright--
- */
-
-/*
+ *
  *	@(#)inet.h	8.1 (Berkeley) 6/2/93
- *	Id: inet.h,v 1.1.206.1 2004/03/09 08:33:30 marka Exp
  */
 
 #ifndef _ARPA_INET_H_
@@ -95,8 +92,6 @@ int		 inet_aton __P((const char *, struct in_addr *));
 char *		 inet_neta __P((u_long, char *, size_t));
 char		*inet_net_ntop __P((int, const void *, int, char *, size_t));
 int		 inet_net_pton __P((int, const char *, void *, size_t));
-char		*inet_cidr_ntop __P((int, const void *, int, char *, size_t));
-int		 inet_cidr_pton __P((int, const char *, void *, int *));
 u_int		 inet_nsap_addr __P((const char *, u_char *, int));
 char		*inet_nsap_ntoa __P((int, const u_char *, char *));
 #endif

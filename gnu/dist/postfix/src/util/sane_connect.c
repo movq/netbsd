@@ -1,5 +1,3 @@
-/*	$NetBSD: sane_connect.c,v 1.1.1.3 2004/05/31 00:25:00 heas Exp $	*/
-
 /*++
 /* NAME
 /*	sane_connect 3
@@ -13,7 +11,7 @@
 /*	struct sockaddr	*buf;
 /*	SOCKADDR_SIZE *len;
 /* DESCRIPTION
-/*	sane_connect() implements the connect(2) socket call, and maps
+/*	sane_connect() implements the accept(2) socket call, and maps
 /*	known harmless error results to EAGAIN.
 /* BUGS
 /*	Bizarre systems may have other harmless error results. Such

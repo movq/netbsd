@@ -1,8 +1,7 @@
-/*	$NetBSD: ptable.h,v 1.1.1.3 2004/07/30 14:44:51 wiz Exp $	*/
+/*	$NetBSD: ptable.h,v 1.1.1.2 2003/06/30 17:52:05 wiz Exp $	*/
 
 // -*- C++ -*-
-/* Copyright (C) 1989, 1990, 1991, 1992, 2003, 2004
-   Free Software Foundation, Inc.
+/* Copyright (C) 1989, 1990, 1991, 1992, 2003 Free Software Foundation, Inc.
      Written by James Clark (jjc@jclark.com)
 
 This file is part of groff.
@@ -46,7 +45,7 @@ struct PASSOC(T) {							      \
   PASSOC(T)();								      \
 };									      \
 									      \
-class PTABLE(T);							      \
+struct PTABLE(T);							      \
 									      \
 class PTABLE_ITERATOR(T) {						      \
   PTABLE(T) *p;								      \

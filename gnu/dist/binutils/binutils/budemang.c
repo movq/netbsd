@@ -1,5 +1,5 @@
 /* demangle.c -- A wrapper calling libiberty cplus_demangle
-   Copyright 2002, 2003 Free Software Foundation, Inc.
+   Copyright 2002 Free Software Foundation, Inc.
 
    This file is part of GNU Binutils.
 
@@ -36,7 +36,9 @@
    other such chars that would otherwise confuse the demangler.  */
 
 char *
-demangle (bfd *abfd, const char *name)
+demangle (abfd, name)
+     bfd *abfd;
+     const char *name;
 {
   char *res;
   const char *p;

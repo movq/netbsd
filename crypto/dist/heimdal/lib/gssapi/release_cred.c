@@ -34,7 +34,7 @@
 #include "gssapi_locl.h"
 
 __RCSID("$Heimdal: release_cred.c,v 1.8.2.1 2003/10/07 01:08:21 lha Exp $"
-        "$NetBSD: release_cred.c,v 1.7 2004/04/02 14:59:48 lha Exp $");
+        "$NetBSD: release_cred.c,v 1.6.2.1 2004/04/21 04:55:40 jmc Exp $");
 
 OM_uint32 gss_release_cred
            (OM_uint32 * minor_status,

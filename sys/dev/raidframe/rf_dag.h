@@ -1,4 +1,4 @@
-/*	$NetBSD: rf_dag.h,v 1.16 2004/04/09 23:10:17 oster Exp $	*/
+/*	$NetBSD: rf_dag.h,v 1.15.2.1 2004/04/11 11:19:03 tron Exp $	*/
 /*
  * Copyright (c) 1995 Carnegie-Mellon University.
  * All rights reserved.

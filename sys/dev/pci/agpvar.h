@@ -1,4 +1,4 @@
-/*	$NetBSD: agpvar.h,v 1.8 2004/08/30 15:05:20 drochner Exp $	*/
+/*	$NetBSD: agpvar.h,v 1.6 2003/07/08 10:06:32 itojun Exp $	*/
 
 /*-
  * Copyright (c) 2000 Doug Rabson
@@ -35,7 +35,7 @@
 #include <sys/lock.h>
 
 struct agpbus_attach_args {
-	char	*_apa_busname; /* XXX placeholder */
+	char	*apa_busname;
 	struct pci_attach_args apa_pci_args;
 };
 
@@ -162,8 +162,6 @@ struct agp_gatt {
 	bus_dma_segment_t ag_dmaseg;
 	size_t		  ag_size;
 };
-
-int agpbusprint(void *, const char *);
 
 /*
  * Functions private to the AGP code.

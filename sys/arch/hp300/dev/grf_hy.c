@@ -1,4 +1,4 @@
-/*	$NetBSD: grf_hy.c,v 1.23 2004/08/28 17:37:01 thorpej Exp $	*/
+/*	$NetBSD: grf_hy.c,v 1.21.2.1 2004/04/11 03:02:49 jmc Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997 The NetBSD Foundation, Inc.
@@ -120,7 +120,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: grf_hy.c,v 1.23 2004/08/28 17:37:01 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: grf_hy.c,v 1.21.2.1 2004/04/11 03:02:49 jmc Exp $");
 
 #include "opt_compat_hpux.h"
 
@@ -155,19 +155,22 @@ __KERNEL_RCSID(0, "$NetBSD: grf_hy.c,v 1.23 2004/08/28 17:37:01 thorpej Exp $");
 
 #include "ite.h"
 
-static int	hy_init(struct grf_data *gp, int, caddr_t);
-static int	hy_mode(struct grf_data *gp, int, caddr_t);
+caddr_t badhyaddr = (caddr_t) -1;
 
-static int	hyper_dio_match(struct device *, struct cfdata *, void *);
-static void	hyper_dio_attach(struct device *, struct device *, void *);
+int	hy_init __P((struct grf_data *gp, int, caddr_t));
+int	hy_mode __P((struct grf_data *gp, int, caddr_t));
+void	hyper_ite_fontinit __P((struct ite_data *));
 
-int	hypercnattach(bus_space_tag_t, bus_addr_t, int);
+int	hyper_dio_match __P((struct device *, struct cfdata *, void *));
+void	hyper_dio_attach __P((struct device *, struct device *, void *));
+
+int	hypercnattach __P((bus_space_tag_t, bus_addr_t, int));
 
 CFATTACH_DECL(hyper_dio, sizeof(struct grfdev_softc),
     hyper_dio_match, hyper_dio_attach, NULL, NULL);
 
 /* Hyperion grf switch */
-static struct grfsw hyper_grfsw = {
+struct grfsw hyper_grfsw = {
 	GID_HYPERION, GRFHYPERION, "hyperion", hy_init, hy_mode
 };
 
@@ -175,25 +178,28 @@ static int hyperconscode;
 static caddr_t hyperconaddr;
 
 #if NITE > 0
-static void	hyper_init(struct ite_data *);
-static void	hyper_deinit(struct ite_data *);
-static void	hyper_ite_fontinit(struct ite_data *);
-static void	hyper_putc(struct ite_data *, int, int, int, int);
-static void	hyper_cursor(struct ite_data *, int);
-static void	hyper_clear(struct ite_data *, int, int, int, int);
-static void	hyper_scroll(struct ite_data *, int, int, int, int);
-static void	hyper_windowmove(struct ite_data *, int, int, int, int,
-			int, int, int);
+void	hyper_init __P((struct ite_data *));
+void	hyper_deinit __P((struct ite_data *));
+void	hyper_int_fontinit __P((struct ite_data *));
+void	hyper_putc __P((struct ite_data *, int, int, int, int));
+void	hyper_cursor __P((struct ite_data *, int));
+void	hyper_clear __P((struct ite_data *, int, int, int, int));
+void	hyper_scroll __P((struct ite_data *, int, int, int, int));
+void	hyper_windowmove __P((struct ite_data *, int, int, int, int,
+		int, int, int));
 
 /* Hyperion ite switch */
-static struct itesw hyper_itesw = {
+struct itesw hyper_itesw = {
 	hyper_init, hyper_deinit, hyper_clear, hyper_putc,
 	hyper_cursor, hyper_scroll, ite_readbyte, ite_writeglyph
 };
 #endif /* NITE > 0 */
 
-static int
-hyper_dio_match(struct device *parent, struct cfdata *match, void *aux)
+int
+hyper_dio_match(parent, match, aux)
+	struct device *parent;
+	struct cfdata *match;
+	void *aux;
 {
 	struct dio_attach_args *da = aux;
 
@@ -204,8 +210,10 @@ hyper_dio_match(struct device *parent, struct cfdata *match, void *aux)
 	return (0);
 }
 
-static void
-hyper_dio_attach(struct device *parent, struct device *self, void *aux)
+void
+hyper_dio_attach(parent, self, aux)
+	struct device *parent, *self;
+	void *aux;
 {
 	struct grfdev_softc *sc = (struct grfdev_softc *)self;
 	struct dio_attach_args *da = aux;
@@ -232,8 +240,11 @@ hyper_dio_attach(struct device *parent, struct device *self, void *aux)
  * Must fill in the grfinfo structure in g_softc.
  * Returns 0 if hardware not present, non-zero ow.
  */
-static int
-hy_init(struct grf_data *gp, int scode, caddr_t addr)
+int
+hy_init(gp, scode, addr)
+	struct grf_data *gp;
+	int scode;
+	caddr_t addr;
 {
 	struct hyboxfb *hy = (struct hyboxfb *) addr;
 	struct grfinfo *gi = &gp->g_display;
@@ -287,8 +298,11 @@ hy_init(struct grf_data *gp, int scode, caddr_t addr)
  * Return a UNIX error number or 0 for success.
  * Function may not be needed anymore.
  */
-static int
-hy_mode(struct grf_data *gp, int cmd, caddr_t data)
+int
+hy_mode(gp, cmd, data)
+	struct grf_data *gp;
+	int cmd;
+	caddr_t data;
 {
 	int error = 0;
 
@@ -366,8 +380,9 @@ hy_mode(struct grf_data *gp, int cmd, caddr_t data)
 #define	charX(ip,c)	\
 	(((c) % (ip)->cpl) * ((((ip)->ftwidth + 7) / 8) * 8) + (ip)->fontx)
 
-static void
-hyper_init(struct ite_data *ip)
+void
+hyper_init(ip)
+	struct ite_data *ip;
 {
 	int width;
 
@@ -405,8 +420,9 @@ hyper_init(struct ite_data *ip)
 			 ip->ftwidth, RR_COPYINVERTED);
 }
 
-static void
-hyper_deinit(struct ite_data *ip)
+void
+hyper_deinit(ip)
+	struct ite_data *ip;
 {
 	hyper_windowmove(ip, 0, 0, 0, 0, ip->fbheight, ip->fbwidth, RR_CLEAR);
 
@@ -414,8 +430,9 @@ hyper_deinit(struct ite_data *ip)
 	ip->flags &= ~ITE_INITED;
 }
 
-static void
-hyper_ite_fontinit(struct ite_data *ip)
+void
+hyper_ite_fontinit(ip)
+	struct ite_data *ip;
 {
 	u_char *fbmem, *dp;
 	int c, l, b;
@@ -442,8 +459,10 @@ hyper_ite_fontinit(struct ite_data *ip)
 	}
 }
 
-static void
-hyper_putc(struct ite_data *ip, int c, int dy, int dx, int mode)
+void
+hyper_putc(ip, c, dy, dx, mode)
+	struct ite_data *ip;
+	int c, dy, dx, mode;
 {
 	int wmrr = ((mode == ATTR_INV) ? RR_COPYINVERTED : RR_COPY);
 
@@ -452,8 +471,10 @@ hyper_putc(struct ite_data *ip, int c, int dy, int dx, int mode)
 			 ip->ftheight, ip->ftwidth, wmrr);
 }
 
-static void
-hyper_cursor(struct ite_data *ip, int flag)
+void
+hyper_cursor(ip, flag)
+	struct ite_data *ip;
+	int flag;
 {
 	if (flag == DRAW_CURSOR)
 		draw_cursor(ip)
@@ -465,8 +486,10 @@ hyper_cursor(struct ite_data *ip, int flag)
 		erase_cursor(ip)
 }
 
-static void
-hyper_clear(struct ite_data *ip, int sy, int sx, int h, int w)
+void
+hyper_clear(ip, sy, sx, h, w)
+	struct ite_data *ip;
+	int sy, sx, h, w;
 {
 	hyper_windowmove(ip, sy * ip->ftheight, sx * ip->ftwidth,
 			 sy * ip->ftheight, sx * ip->ftwidth,
@@ -475,7 +498,9 @@ hyper_clear(struct ite_data *ip, int sy, int sx, int h, int w)
 }
 
 void
-hyper_scroll(struct ite_data *ip, int sy, int sx, int count, int dir)
+hyper_scroll(ip, sy, sx, count, dir)
+	struct ite_data *ip;
+	int sy, count, dir, sx;
 {
 	int dy;
 	int dx = sx;
@@ -515,7 +540,7 @@ hyper_scroll(struct ite_data *ip, int sy, int sx, int count, int dir)
  * than having to do the multiple reads and masks that we'd
  * have to do if we thought it was partial.
  */
-static const int starttab[32] = {
+int starttab[32] = {
 	0x00000000,
 	0x7FFFFFFF,
 	0x3FFFFFFF,
@@ -550,7 +575,7 @@ static const int starttab[32] = {
 	0x00000001
 };
 
-static const int endtab[32] = {
+int endtab[32] = {
 	0x00000000,
 	0x80000000,
 	0xC0000000,
@@ -585,9 +610,10 @@ static const int endtab[32] = {
 	0xFFFFFFFE
 };
 
-static void
-hyper_windowmove(struct ite_data *ip, int sy, int sx, int dy, int dx, int h,
-    int w, int func)
+void
+hyper_windowmove(ip, sy, sx, dy, dx, h, w, func)
+	struct ite_data *ip;
+	int sy, sx, dy, dx, h, w, func;
 {
 	int width;		/* add to get to same position in next line */
 
@@ -790,14 +816,14 @@ hypercnattach(bus_space_tag_t bst, bus_addr_t addr, int scode)
 
 	/*
 	 * Set up required grf data.
-	 */
+	*/
 	gp->g_sw = &hyper_grfsw;
 	gp->g_display.gd_id = gp->g_sw->gd_swid;
 	gp->g_flags = GF_ALIVE;
 
 	/*
 	 * Initialize the terminal emulator.
-	 */
+	*/
 	itedisplaycnattach(gp, &hyper_itesw);
 	return (0);
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: stat.c,v 1.19 2004/06/20 22:20:16 jmc Exp $ */
+/*	$NetBSD: stat.c,v 1.17.2.2 2004/06/22 07:22:16 tron Exp $ */
 
 /*
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -42,7 +42,7 @@
 
 #include <sys/cdefs.h>
 #if !defined(lint)
-__RCSID("$NetBSD: stat.c,v 1.19 2004/06/20 22:20:16 jmc Exp $");
+__RCSID("$NetBSD: stat.c,v 1.17.2.2 2004/06/22 07:22:16 tron Exp $");
 #endif
 
 #if ! HAVE_NBTOOL_CONFIG_H

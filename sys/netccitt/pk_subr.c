@@ -1,4 +1,4 @@
-/*	$NetBSD: pk_subr.c,v 1.28 2004/04/26 01:41:15 matt Exp $	*/
+/*	$NetBSD: pk_subr.c,v 1.24 2003/08/07 16:33:04 agc Exp $	*/
 
 /*
  * Copyright (c) 1991, 1992, 1993
@@ -78,7 +78,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pk_subr.c,v 1.28 2004/04/26 01:41:15 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pk_subr.c,v 1.24 2003/08/07 16:33:04 agc Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -138,8 +138,9 @@ pk_attach(so)
 	struct pklcd *lcp;
 	int    error = ENOBUFS;
 
-	MALLOC(lcp, struct pklcd *, sizeof(*lcp), M_PCB, M_NOWAIT|M_ZERO);
+	MALLOC(lcp, struct pklcd *, sizeof(*lcp), M_PCB, M_NOWAIT);
 	if (lcp) {
+		bzero((caddr_t) lcp, sizeof(*lcp));
 		insque(&lcp->lcd_q, &pklcd_q);
 		lcp->lcd_state = READY;
 		lcp->lcd_send = pk_output;
@@ -149,7 +150,7 @@ pk_attach(so)
 			if (so->so_options & SO_ACCEPTCONN)
 				lcp->lcd_state = LISTEN;
 		} else
-			sbreserve(&lcp->lcd_sb, pk_sendspace, so);
+			sbreserve(&lcp->lcd_sb, pk_sendspace);
 	}
 	if (so) {
 		so->so_pcb = lcp;
@@ -745,8 +746,7 @@ to_bcd(b, sa, xcp)
 		char            dnicname[sizeof(long) * NBBY / 3 + 2];
 		char  *p = dnicname;
 
-		snprintf(p, sizeof(dnicname), "%d",
-		    xcp->xc_addr.x25_net & 0x7fff);
+		sprintf(p, "%d", xcp->xc_addr.x25_net & 0x7fff);
 		for (; *p; p++)	/* *p == 0 means dnic matched */
 			if ((*p ^ *x++) & 0x0f)
 				break;
@@ -1167,7 +1167,15 @@ format_ntn(xcp)
 
 /* VARARGS1 */
 void
+#if __STDC__
 pk_message(int lcn, struct x25config * xcp, char * fmt,...)
+#else
+pk_message(lcn, xcp, fmt, va_alist)
+	int             lcn;
+	struct x25config *xcp;
+	char           *fmt;
+	va_dcl
+#endif
 {
 	va_list         ap;
 

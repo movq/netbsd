@@ -1,4 +1,4 @@
-/*	$NetBSD: if_fxp_pci.c,v 1.39 2004/08/21 23:48:33 thorpej Exp $	*/
+/*	$NetBSD: if_fxp_pci.c,v 1.37.2.1 2004/04/28 07:06:49 tron Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998, 1999, 2000, 2001 The NetBSD Foundation, Inc.
@@ -43,7 +43,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_fxp_pci.c,v 1.39 2004/08/21 23:48:33 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_fxp_pci.c,v 1.37.2.1 2004/04/28 07:06:49 tron Exp $");
 
 #include "rnd.h"
 
@@ -92,14 +92,14 @@ struct fxp_pci_softc {
 	pcireg_t psc_pwrmgmt_csr;	/* ...and the contents at D0 */
 };
 
-static int	fxp_pci_match(struct device *, struct cfdata *, void *);
-static void	fxp_pci_attach(struct device *, struct device *, void *);
+int	fxp_pci_match __P((struct device *, struct cfdata *, void *));
+void	fxp_pci_attach __P((struct device *, struct device *, void *));
 
-static int	fxp_pci_enable(struct fxp_softc *);
-static void	fxp_pci_disable(struct fxp_softc *);
+int	fxp_pci_enable __P((struct fxp_softc *));
+void	fxp_pci_disable __P((struct fxp_softc *));
 
-static void	fxp_pci_confreg_restore(struct fxp_pci_softc *psc);
-static void	fxp_pci_power(int why, void *arg);
+static void	fxp_pci_confreg_restore __P((struct fxp_pci_softc *psc));
+static void	fxp_pci_power __P((int why, void *arg));
 
 CFATTACH_DECL(fxp_pci, sizeof(struct fxp_pci_softc),
     fxp_pci_match, fxp_pci_attach, NULL, NULL);
@@ -167,8 +167,11 @@ fxp_pci_lookup(const struct pci_attach_args *pa)
 	return (NULL);
 }
 
-static int
-fxp_pci_match(struct device *parent, struct cfdata *match, void *aux)
+int
+fxp_pci_match(parent, match, aux)
+	struct device *parent;
+	struct cfdata *match;
+	void *aux;
 {
 	struct pci_attach_args *pa = aux;
 
@@ -186,7 +189,8 @@ fxp_pci_match(struct device *parent, struct cfdata *match, void *aux)
  * APM resume events, as well as after the ACPI D3->D0 transition.
  */
 static void
-fxp_pci_confreg_restore(struct fxp_pci_softc *psc)
+fxp_pci_confreg_restore(psc)
+        struct fxp_pci_softc *psc;
 {
 	pcireg_t reg;
 
@@ -233,7 +237,9 @@ fxp_pci_confreg_restore(struct fxp_pci_softc *psc)
  * on a resume.
  */
 static void
-fxp_pci_power(int why, void *arg)
+fxp_pci_power(why, arg)
+	int why;
+	void *arg;
 {
 	struct fxp_pci_softc *psc = arg;
 
@@ -241,8 +247,10 @@ fxp_pci_power(int why, void *arg)
 		fxp_pci_confreg_restore(psc);
 }
 
-static void
-fxp_pci_attach(struct device *parent, struct device *self, void *aux)
+void
+fxp_pci_attach(parent, self, aux)
+	struct device *parent, *self;
+	void *aux;
 {
 	struct fxp_pci_softc *psc = (struct fxp_pci_softc *)self;
 	struct fxp_softc *sc = (struct fxp_softc *)self;
@@ -497,7 +505,7 @@ fxp_pci_attach(struct device *parent, struct device *self, void *aux)
 		    sc->sc_dev.dv_xname);
 }
 
-static int
+int
 fxp_pci_enable(struct fxp_softc *sc)
 {
 	struct fxp_pci_softc *psc = (void *) sc;
@@ -516,7 +524,7 @@ fxp_pci_enable(struct fxp_softc *sc)
 	return (0);
 }
 
-static void
+void
 fxp_pci_disable(struct fxp_softc *sc)
 {
 	struct fxp_pci_softc *psc = (void *) sc;

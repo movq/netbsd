@@ -1,4 +1,4 @@
-/*	$NetBSD: uk.c,v 1.42 2004/08/21 22:02:31 thorpej Exp $	*/
+/*	$NetBSD: uk.c,v 1.41 2003/09/08 01:26:42 mycroft Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -42,7 +42,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uk.c,v 1.42 2004/08/21 22:02:31 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uk.c,v 1.41 2003/09/08 01:26:42 mycroft Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -65,10 +65,10 @@ struct uk_softc {
 	struct scsipi_periph *sc_periph; /* all the inter level info */
 };
 
-static int	ukmatch(struct device *, struct cfdata *, void *);
-static void	ukattach(struct device *, struct device *, void *);
-static int	ukactivate(struct device *, enum devact);
-static int	ukdetach(struct device *, int);
+int ukmatch __P((struct device *, struct cfdata *, void *));
+void ukattach __P((struct device *, struct device *, void *));
+int ukactivate __P((struct device *, enum devact));
+int ukdetach __P((struct device *, int));
 
 
 CFATTACH_DECL(uk, sizeof(struct uk_softc), ukmatch, ukattach, ukdetach,
@@ -76,17 +76,20 @@ CFATTACH_DECL(uk, sizeof(struct uk_softc), ukmatch, ukattach, ukdetach,
 
 extern struct cfdriver uk_cd;
 
-static dev_type_open(ukopen);
-static dev_type_close(ukclose);
-static dev_type_ioctl(ukioctl);
+dev_type_open(ukopen);
+dev_type_close(ukclose);
+dev_type_ioctl(ukioctl);
 
 const struct cdevsw uk_cdevsw = {
 	ukopen, ukclose, noread, nowrite, ukioctl,
 	nostop, notty, nopoll, nommap, nokqfilter,
 };
 
-static int
-ukmatch(struct device *parent, struct cfdata *match, void *aux)
+int
+ukmatch(parent, match, aux)
+	struct device *parent;
+	struct cfdata *match;
+	void *aux;
 {
 
 	return (1);
@@ -96,8 +99,10 @@ ukmatch(struct device *parent, struct cfdata *match, void *aux)
  * The routine called by the low level scsi routine when it discovers
  * a device suitable for this driver.
  */
-static void
-ukattach(struct device *parent, struct device *self, void *aux)
+void
+ukattach(parent, self, aux)
+	struct device *parent, *self;
+	void *aux;
 {
 	struct uk_softc *uk = (void *)self;
 	struct scsipibus_attach_args *sa = aux;
@@ -114,8 +119,10 @@ ukattach(struct device *parent, struct device *self, void *aux)
 	printf("\n");
 }
 
-static int
-ukactivate(struct device *self, enum devact act)
+int
+ukactivate(self, act)
+	struct device *self;
+	enum devact act;
 {
 	int rv = 0;
  
@@ -133,8 +140,10 @@ ukactivate(struct device *self, enum devact act)
 	return (rv);
 }
  
-static int
-ukdetach(struct device *self, int flags)
+int
+ukdetach(self, flags)
+	struct device *self;
+	int flags;
 {
 	/*struct uk_softc *uk = (struct uk_softc *) self;*/
 	int cmaj, mn;
@@ -149,11 +158,16 @@ ukdetach(struct device *self, int flags)
 	return (0);
 }
 
+
+
 /*
  * open the device.
  */
-static int
-ukopen(dev_t dev, int flag, int fmt, struct proc *p)
+int
+ukopen(dev, flag, fmt, p)
+	dev_t dev;
+	int flag, fmt;
+	struct proc *p;
 {
 	int unit, error;
 	struct uk_softc *uk;
@@ -194,8 +208,11 @@ ukopen(dev_t dev, int flag, int fmt, struct proc *p)
  * close the device.. only called if we are the LAST
  * occurence of an open device
  */
-static int
-ukclose(dev_t dev, int flag, int fmt, struct proc *p)
+int
+ukclose(dev, flag, fmt, p)
+	dev_t dev;
+	int flag, fmt;
+	struct proc *p;
 {
 	struct uk_softc *uk = uk_cd.cd_devs[UKUNIT(dev)];
 	struct scsipi_periph *periph = uk->sc_periph;
@@ -215,8 +232,13 @@ ukclose(dev_t dev, int flag, int fmt, struct proc *p)
  * Perform special action on behalf of the user
  * Only does generic scsi ioctls.
  */
-static int
-ukioctl(dev_t dev, u_long cmd, caddr_t addr, int flag, struct proc *p)
+int
+ukioctl(dev, cmd, addr, flag, p)
+	dev_t dev;
+	u_long cmd;
+	caddr_t addr;
+	int flag;
+	struct proc *p;
 {
 	register struct uk_softc *uk = uk_cd.cd_devs[UKUNIT(dev)];
 

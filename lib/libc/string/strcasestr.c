@@ -1,4 +1,4 @@
-/*	$NetBSD: strcasestr.c,v 1.1 2004/07/03 08:27:25 junyoung Exp $	*/
+/*	$NetBSD: strcasestr.c,v 1.1.2.2 2004/07/12 20:53:40 he Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -34,7 +34,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: strcasestr.c,v 1.1 2004/07/03 08:27:25 junyoung Exp $");
+__RCSID("$NetBSD: strcasestr.c,v 1.1.2.2 2004/07/12 20:53:40 he Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include <assert.h>

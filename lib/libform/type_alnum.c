@@ -1,4 +1,4 @@
-/*	$NetBSD: type_alnum.c,v 1.10 2004/11/24 11:57:09 blymn Exp $	*/
+/*	$NetBSD: type_alnum.c,v 1.6 2001/06/13 10:45:59 wiz Exp $	*/
 
 /*-
  * Copyright (c) 1998-1999 Brett Lymn
@@ -63,7 +63,7 @@ create_alnum_args(va_list *args)
 }
 
 /*
- * Copy the alnum argument structure.
+ * Copy the the alnum argument structure.
  */
 static char *
 copy_alnum_args(char *args)
@@ -115,7 +115,7 @@ alnum_check_field(FIELD *field, char *args)
 
 	  /* find the end of the non-whitespace stuff */
 	cur = start;
-	while(isalnum((unsigned char)buf[cur]))
+	while((buf[cur] != '\0') && isalnum(buf[cur]))
 		cur++;
 
 	  /* no good if it exceeds the width */
@@ -137,7 +137,7 @@ alnum_check_field(FIELD *field, char *args)
 		return FALSE;
 
 	if ((end - start) >= 1) {
-		strncpy(new, &buf[start], (size_t) (end - start - 1));
+		strncpy(new, &buf[start], (unsigned) end - start - 1);
 		new[end] = '\0';
 	} else
 		new[0]= '\0';

@@ -1,7 +1,7 @@
-/*	$NetBSD: namespace.h,v 1.96 2004/12/16 12:30:04 kleink Exp $	*/
+/*	$NetBSD: namespace.h,v 1.84.2.3 2004/09/11 11:55:16 he Exp $	*/
 
 /*-
- * Copyright (c) 1997-2004 The NetBSD Foundation, Inc.
+ * Copyright (c) 1997-2002 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -156,6 +156,16 @@
 #define ctermid			_ctermid
 #define ctime_r			_ctime_r
 #define daemon			_daemon
+#define dbm_clearerr		_dbm_clearerr
+#define dbm_close		_dbm_close
+#define dbm_delete		_dbm_delete
+#define dbm_dirfno		_dbm_dirfno
+#define dbm_error		_dbm_error
+#define dbm_fetch		_dbm_fetch
+#define dbm_firstkey		_dbm_firstkey
+#define dbm_nextkey		_dbm_nextkey
+#define dbm_open		_dbm_open
+#define dbm_store		_dbm_store
 #define dbopen			_dbopen
 #define devname			_devname
 #define dirname			_dirname
@@ -214,7 +224,6 @@
 #define getaddrinfo		_getaddrinfo
 #define getbsize		_getbsize
 #define getcwd			_getcwd
-#define getdevmajor		_getdevmajor
 #define getdiskbyname		_getdiskbyname
 #define getdomainname		_getdomainname
 #define getfsent		_getfsent
@@ -222,9 +231,7 @@
 #define getfsspec		_getfsspec
 #define getgrent		_getgrent
 #define getgrgid		_getgrgid
-#define getgrgid_r		_getgrgid_r
 #define getgrnam		_getgrnam
-#define getgrnam_r		_getgrnam_r
 #define getgrouplist		_getgrouplist
 #define gethostbyaddr		_gethostbyaddr
 #define gethostbyname		_gethostbyname
@@ -256,9 +263,7 @@
 #define getprotoent_r		_getprotoent_r
 #define getpwent		_getpwent
 #define getpwnam		_getpwnam
-#define getpwnam_r		_getpwnam_r
 #define getpwuid		_getpwuid
-#define getpwuid_r		_getpwuid_r
 #define getrpcbyname		_getrpcbyname
 #define getrpcbyname_r		_getrpcbyname_r
 #define getrpcbynumber		_getrpcbynumber

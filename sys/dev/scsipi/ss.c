@@ -1,4 +1,4 @@
-/*	$NetBSD: ss.c,v 1.57 2004/10/28 07:07:45 yamt Exp $	*/
+/*	$NetBSD: ss.c,v 1.51.2.1 2004/09/11 12:56:41 he Exp $	*/
 
 /*
  * Copyright (c) 1995 Kenneth Stailey.  All rights reserved.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ss.c,v 1.57 2004/10/28 07:07:45 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ss.c,v 1.51.2.1 2004/09/11 12:56:41 he Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -40,7 +40,6 @@ __KERNEL_RCSID(0, "$NetBSD: ss.c,v 1.57 2004/10/28 07:07:45 yamt Exp $");
 #include <sys/ioctl.h>
 #include <sys/malloc.h>
 #include <sys/buf.h>
-#include <sys/bufq.h>
 #include <sys/proc.h>
 #include <sys/user.h>
 #include <sys/device.h>
@@ -69,39 +68,38 @@ __KERNEL_RCSID(0, "$NetBSD: ss.c,v 1.57 2004/10/28 07:07:45 yamt Exp $");
 #define MODE_NONREWIND	1
 #define MODE_CONTROL	3
 
-static int	ssmatch(struct device *, struct cfdata *, void *);
-static void	ssattach(struct device *, struct device *, void *);
-static int	ssdetach(struct device *self, int flags);
-static int	ssactivate(struct device *self, enum devact act);
+int ssmatch(struct device *, struct cfdata *, void *);
+void ssattach(struct device *, struct device *, void *);
+int ssdetach(struct device *self, int flags);
+int ssactivate(struct device *self, enum devact act);
 
 CFATTACH_DECL(ss, sizeof(struct ss_softc),
     ssmatch, ssattach, ssdetach, ssactivate);
 
 extern struct cfdriver ss_cd;
 
-static dev_type_open(ssopen);
-static dev_type_close(ssclose);
-static dev_type_read(ssread);
-static dev_type_ioctl(ssioctl);
+dev_type_open(ssopen);
+dev_type_close(ssclose);
+dev_type_read(ssread);
+dev_type_ioctl(ssioctl);
 
 const struct cdevsw ss_cdevsw = {
 	ssopen, ssclose, ssread, nowrite, ssioctl,
 	nostop, notty, nopoll, nommap, nokqfilter,
 };
 
-static void	ssstrategy(struct buf *);
-static void	ssstart(struct scsipi_periph *);
-static void	ssdone(struct scsipi_xfer *, int);
-static void	ssminphys(struct buf *);
+void    ssstrategy __P((struct buf *));
+void    ssstart __P((struct scsipi_periph *));
+void	ssminphys __P((struct buf *));
 
-static const struct scsipi_periphsw ss_switch = {
+const struct scsipi_periphsw ss_switch = {
 	NULL,
 	ssstart,
 	NULL,
-	ssdone,
+	NULL,
 };
 
-static const struct scsipi_inquiry_pattern ss_patterns[] = {
+const struct scsipi_inquiry_pattern ss_patterns[] = {
 	{T_SCANNER, T_FIXED,
 	 "",         "",                 ""},
 	{T_SCANNER, T_REMOV,
@@ -122,7 +120,7 @@ static const struct scsipi_inquiry_pattern ss_patterns[] = {
 	 "HP      ", "", ""},
 };
 
-static int
+int
 ssmatch(struct device *parent, struct cfdata *match, void *aux)
 {
 	struct scsipibus_attach_args *sa = aux;
@@ -140,7 +138,7 @@ ssmatch(struct device *parent, struct cfdata *match, void *aux)
  * If it is a know special, call special attach routine to install
  * special handlers into the ss_softc structure
  */
-static void
+void
 ssattach(struct device *parent, struct device *self, void *aux)
 {
 	struct ss_softc *ss = (void *)self;
@@ -184,7 +182,7 @@ ssattach(struct device *parent, struct device *self, void *aux)
 	ss->flags &= ~SSF_AUTOCONF;
 }
 
-static int
+int
 ssdetach(struct device *self, int flags)
 {
 	struct ss_softc *ss = (struct ss_softc *) self;
@@ -221,7 +219,7 @@ ssdetach(struct device *self, int flags)
 	return (0);
 }
 
-static int
+int
 ssactivate(struct device *self, enum devact act)
 {
 	int rv = 0;
@@ -243,7 +241,7 @@ ssactivate(struct device *self, enum devact act)
 /*
  * open the device.
  */
-static int
+int
 ssopen(dev_t dev, int flag, int mode, struct proc *p)
 {
 	int unit;
@@ -315,7 +313,7 @@ bad:
  * close the device.. only called if we are the LAST
  * occurence of an open device
  */
-static int
+int
 ssclose(dev_t dev, int flag, int mode, struct proc *p)
 {
 	struct ss_softc *ss = ss_cd.cd_devs[SSUNIT(dev)];
@@ -352,7 +350,7 @@ ssclose(dev_t dev, int flag, int mode, struct proc *p)
  * basically the smaller of our min and the scsi driver's
  * minphys
  */
-static void
+void
 ssminphys(struct buf *bp)
 {
 	struct ss_softc *ss = ss_cd.cd_devs[SSUNIT(bp->b_dev)];
@@ -375,8 +373,11 @@ ssminphys(struct buf *bp)
  * Prime scanner at start of read, check uio values, call ssstrategy
  * via physio for the actual transfer.
  */
-static int
-ssread(dev_t dev, struct uio *uio, int flag)
+int
+ssread(dev, uio, flag)
+	dev_t dev;
+	struct uio *uio;
+	int flag;
 {
 	struct ss_softc *ss = ss_cd.cd_devs[SSUNIT(dev)];
 	int error;
@@ -402,15 +403,16 @@ ssread(dev_t dev, struct uio *uio, int flag)
  * driver can understand The transfer is described by a buf and will
  * include only one physical transfer.
  */
-static void
-ssstrategy(struct buf *bp)
+void
+ssstrategy(bp)
+	struct buf *bp;
 {
 	struct ss_softc *ss = ss_cd.cd_devs[SSUNIT(bp->b_dev)];
 	struct scsipi_periph *periph = ss->sc_periph;
 	int s;
 
 	SC_DEBUG(ss->sc_periph, SCSIPI_DB1,
-	    ("ssstrategy %d bytes @ blk %" PRId64 "\n", bp->b_bcount, bp->b_blkno));
+	    ("ssstrategy %ld bytes @ blk %" PRId64 "\n", bp->b_bcount, bp->b_blkno));
 
 	/*
 	 * If the device has been made invalid, error out
@@ -480,8 +482,9 @@ done:
  * continues to be drained.
  * ssstart() is called at splbio
  */
-static void
-ssstart(struct scsipi_periph *periph)
+void
+ssstart(periph)
+	struct scsipi_periph *periph;
 {
 	struct ss_softc *ss = (void *)periph->periph_dev;
 	struct buf *bp;
@@ -522,27 +525,18 @@ ssrestart(void *v)
 	splx(s);
 }
 
-static void
-ssdone(struct scsipi_xfer *xs, int error)
-{
-	struct buf *bp = xs->bp;
-
-	if (bp) {
-		bp->b_error = error;
-		bp->b_resid = xs->resid;
-		if (error)
-			bp->b_flags |= B_ERROR;
-		biodone(bp);
-	}
-}
-
 
 /*
  * Perform special action on behalf of the user;
  * knows about the internals of this device
  */
 int
-ssioctl(dev_t dev, u_long cmd, caddr_t addr, int flag, struct proc *p)
+ssioctl(dev, cmd, addr, flag, p)
+	dev_t dev;
+	u_long cmd;
+	caddr_t addr;
+	int flag;
+	struct proc *p;
 {
 	struct ss_softc *ss = ss_cd.cd_devs[SSUNIT(dev)];
 	int error = 0;

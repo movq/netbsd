@@ -1,4 +1,4 @@
-/*	$NetBSD: type_enum.c,v 1.10 2004/11/24 11:57:09 blymn Exp $	*/
+/*	$NetBSD: type_enum.c,v 1.8 2004/03/22 18:59:48 jdc Exp $	*/
 
 /*-
  * Copyright (c) 1998-1999 Brett Lymn
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: type_enum.c,v 1.10 2004/11/24 11:57:09 blymn Exp $");
+__RCSID("$NetBSD: type_enum.c,v 1.8 2004/03/22 18:59:48 jdc Exp $");
 
 #include <ctype.h>
 #include <stdlib.h>
@@ -65,7 +65,7 @@ trim_blanks(char *field)
 {
 	int i;
 
-	i = (int) strlen(field);
+	i = strlen(field);
 	if (i > 0)
 		i--;
 	else
@@ -125,7 +125,7 @@ create_enum_args(va_list *args)
 }
 
 /*
- * Copy the enum argument structure.
+ * Copy the the enum argument structure.
  */
 static char *
 copy_enum_args(char *args)
@@ -166,8 +166,7 @@ match_enum(char **choices, unsigned num_choices, bool ignore_case,
 	end = trim_blanks(this);
 
 	if (end >= start)
-		blen = (unsigned) (strlen(&this[start])
-				   - strlen(&this[end]) + 1);
+		blen = strlen(&this[start]) - strlen(&this[end]) + 1;
 	else
 		blen = 0;
 
@@ -179,8 +178,8 @@ match_enum(char **choices, unsigned num_choices, bool ignore_case,
 		enum_end = trim_blanks(choices[i]);
 
 		if (enum_end >= enum_start)
-			elen = (unsigned) (strlen(&choices[i][enum_start])
-				- strlen(&choices[i][enum_end]) + 1);
+			elen = strlen(&choices[i][enum_start])
+				- strlen(&choices[i][enum_end]) + 1;
 		else
 			elen = 0;
 		
@@ -208,13 +207,11 @@ match_enum(char **choices, unsigned num_choices, bool ignore_case,
 		
 		if (ignore_case)
 			cur_match = (strncasecmp(&choices[i][enum_start],
-						 &this[start],
-						 (size_t)blen) == 0) ?
+						 &this[start], blen) == 0) ?
 				TRUE : FALSE;
 		else
 			cur_match = (strncmp(&choices[i][enum_start],
-					     &this[start],
-					     (size_t) blen) == 0) ?
+					     &this[start], blen) == 0) ?
 				TRUE : FALSE;
 
 #ifdef DEBUG

@@ -1,4 +1,4 @@
-/*	$NetBSD: zs.c,v 1.20 2004/09/04 13:43:11 tsutsui Exp $	*/
+/*	$NetBSD: zs.c,v 1.18 2003/07/15 02:59:26 lukem Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -48,7 +48,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: zs.c,v 1.20 2004/09/04 13:43:11 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: zs.c,v 1.18 2003/07/15 02:59:26 lukem Exp $");
 
 #include "opt_ddb.h"
 
@@ -65,8 +65,6 @@ __KERNEL_RCSID(0, "$NetBSD: zs.c,v 1.20 2004/09/04 13:43:11 tsutsui Exp $");
 #include <dev/ic/z8530reg.h>
 
 #include <news68k/dev/hbvar.h>
-
-#include "ioconf.h"
 
 int  zs_getc(void *);
 void zs_putc(void *, int);
@@ -153,6 +151,8 @@ static int  zs_print(void *, const char *name);
 CFATTACH_DECL(zsc, sizeof(struct zsc_softc),
     zs_match, zs_attach, NULL, NULL);
 
+extern struct cfdriver zsc_cd;
+
 static int zshard(void *);
 void zssoft(void *);
 #if 0
@@ -163,7 +163,10 @@ static int zs_get_speed(struct zs_chanstate *);
  * Is the zs chip present?
  */
 static int
-zs_match(struct device *parent, struct cfdata *cf, void *aux)
+zs_match(parent, cf, aux)
+	struct device *parent;
+	struct cfdata *cf;
+	void *aux;
 {
 	struct hb_attach_args *ha = aux;
 	u_int addr;
@@ -187,7 +190,10 @@ zs_match(struct device *parent, struct cfdata *cf, void *aux)
  * Attach a found zs.
  */
 static void
-zs_attach(struct device *parent, struct device *self, void *aux)
+zs_attach(parent, self, aux)
+	struct device *parent;
+	struct device *self;
+	void *aux;
 {
 	struct zsc_softc *zsc = (void *) self;
 	struct cfdata *cf = self->dv_cfdata;
@@ -293,7 +299,9 @@ zs_attach(struct device *parent, struct device *self, void *aux)
 }
 
 static int
-zs_print(void *aux, const char *name)
+zs_print(aux, name)
+	void *aux;
+	const char *name;
 {
 	struct zsc_attach_args *args = aux;
 
@@ -311,7 +319,8 @@ zs_print(void *aux, const char *name)
  * We do not need to look at all of the zs chips.
  */
 static int
-zshard(void *arg)
+zshard(arg)
+	void *arg;
 {
 	struct zsc_softc *zsc = arg;
 	int rval;
@@ -330,7 +339,8 @@ zshard(void *arg)
  * Shared among the all chips. We have to look at all of them.
  */
 void
-zssoft(void *arg)
+zssoft(arg)
+	void *arg;
 {
 	struct zsc_softc *zsc;
 	int s, unit;
@@ -351,7 +361,8 @@ zssoft(void *arg)
  */
 #if 0
 static int
-zs_get_speed(struct zs_chanstate *cs)
+zs_get_speed(cs)
+	struct zs_chanstate *cs;
 {
 	int tconst;
 
@@ -365,7 +376,9 @@ zs_get_speed(struct zs_chanstate *cs)
  * MD functions for setting the baud rate and control modes.
  */
 int
-zs_set_speed(struct zs_chanstate *cs, int bps)
+zs_set_speed(cs, bps)
+	struct zs_chanstate *cs;
+	int bps;	/* bits per second */
 {
 	int tconst, real_bps;
 
@@ -396,7 +409,9 @@ zs_set_speed(struct zs_chanstate *cs, int bps)
 }
 
 int
-zs_set_modes(struct zs_chanstate *cs, int cflag)
+zs_set_modes(cs, cflag)
+	struct zs_chanstate *cs;
+	int cflag;	/* bits per second */
 {
 	int s;
 
@@ -440,7 +455,9 @@ zs_set_modes(struct zs_chanstate *cs, int cflag)
  */
 
 u_char
-zs_read_reg(struct zs_chanstate *cs, u_char reg)
+zs_read_reg(cs, reg)
+	struct zs_chanstate *cs;
+	u_char reg;
 {
 	u_char val;
 
@@ -452,7 +469,9 @@ zs_read_reg(struct zs_chanstate *cs, u_char reg)
 }
 
 void
-zs_write_reg(struct zs_chanstate *cs, u_char reg, u_char val)
+zs_write_reg(cs, reg, val)
+	struct zs_chanstate *cs;
+	u_char reg, val;
 {
 
 	*cs->cs_reg_csr = reg;
@@ -462,7 +481,8 @@ zs_write_reg(struct zs_chanstate *cs, u_char reg, u_char val)
 }
 
 u_char
-zs_read_csr(struct zs_chanstate *cs)
+zs_read_csr(cs)
+	struct zs_chanstate *cs;
 {
 	u_char val;
 
@@ -472,7 +492,9 @@ zs_read_csr(struct zs_chanstate *cs)
 }
 
 void
-zs_write_csr(struct zs_chanstate *cs, u_char val)
+zs_write_csr(cs, val)
+	struct zs_chanstate *cs;
+	u_char val;
 {
 
 	*cs->cs_reg_csr = val;
@@ -480,7 +502,8 @@ zs_write_csr(struct zs_chanstate *cs, u_char val)
 }
 
 u_char
-zs_read_data(struct zs_chanstate *cs)
+zs_read_data(cs)
+	struct zs_chanstate *cs;
 {
 	u_char val;
 
@@ -490,7 +513,9 @@ zs_read_data(struct zs_chanstate *cs)
 }
 
 void
-zs_write_data(struct zs_chanstate *cs, u_char val)
+zs_write_data(cs, val)
+	struct zs_chanstate *cs;
+	u_char val;
 {
 
 	*cs->cs_reg_data = val;
@@ -498,7 +523,8 @@ zs_write_data(struct zs_chanstate *cs, u_char val)
 }
 
 void
-zs_abort(struct zs_chanstate *cs)
+zs_abort(cs)
+	struct zs_chanstate *cs;
 {
 
 #ifdef DDB
@@ -510,7 +536,8 @@ zs_abort(struct zs_chanstate *cs)
  * Polled input char.
  */
 int
-zs_getc(void *arg)
+zs_getc(arg)
+	void *arg;
 {
 	struct zs_chanstate *cs = arg;
 	int s, c, rr0;
@@ -533,7 +560,9 @@ zs_getc(void *arg)
  * Polled output char.
  */
 void
-zs_putc(void *arg, int c)
+zs_putc(arg, c)
+	void *arg;
+	int c;
 {
 	struct zs_chanstate *cs = arg;
 	int s, rr0;
@@ -571,12 +600,14 @@ struct consdev consdev_zs = {
 };
 
 static void
-zscnprobe(struct consdev *cn)
+zscnprobe(cn)
+	struct consdev *cn;
 {
 }
 
 static void
-zscninit(struct consdev *cn)
+zscninit(cn)
+	struct consdev *cn;
 {
 	struct zs_chanstate *cs;
 
@@ -617,14 +648,17 @@ zscninit(struct consdev *cn)
 }
 
 static int
-zscngetc(dev_t dev)
+zscngetc(dev)
+	dev_t dev;
 {
 
 	return zs_getc((void *)zs_conschan);
 }
 
 static void
-zscnputc(dev_t dev, int c)
+zscnputc(dev, c)
+	dev_t dev;
+	int c;
 {
 
 	zs_putc((void *)zs_conschan, c);

@@ -5,7 +5,7 @@
 
 #include <machine/asm.h>
 
-RCSID("$NetBSD: s_ceilf.S,v 1.8 2004/07/16 18:40:24 drochner Exp $")
+RCSID("$NetBSD: s_ceilf.S,v 1.7.2.1 2004/07/19 17:59:22 tron Exp $")
 
 ENTRY(ceilf)
 #ifdef __i386__

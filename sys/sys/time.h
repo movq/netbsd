@@ -1,4 +1,4 @@
-/*	$NetBSD: time.h,v 1.43 2004/11/14 03:30:08 atatat Exp $	*/
+/*	$NetBSD: time.h,v 1.41 2003/09/06 22:01:21 christos Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1993
@@ -59,14 +59,14 @@ struct timespec {
 	long	tv_nsec;	/* and nanoseconds */
 };
 
-#define	TIMEVAL_TO_TIMESPEC(tv, ts) do {				\
+#define	TIMEVAL_TO_TIMESPEC(tv, ts) {					\
 	(ts)->tv_sec = (tv)->tv_sec;					\
 	(ts)->tv_nsec = (tv)->tv_usec * 1000;				\
-} while (/*CONSTCOND*/0)
-#define	TIMESPEC_TO_TIMEVAL(tv, ts) do {				\
+}
+#define	TIMESPEC_TO_TIMEVAL(tv, ts) {					\
 	(tv)->tv_sec = (ts)->tv_sec;					\
 	(tv)->tv_usec = (ts)->tv_nsec / 1000;				\
-} while (/*CONSTCOND*/0)
+}
 
 /*
  * Note: timezone is obsolete. All timezone handling is now in
@@ -235,16 +235,13 @@ void	realtimerexpire __P((void *));
 
 __BEGIN_DECLS
 int	adjtime __P((const struct timeval *, struct timeval *));
-int	futimes __P((int, const struct timeval [2]));
+int	futimes __P((int, const struct timeval *));
 int	getitimer __P((int, struct itimerval *));
-int	gettimeofday __P((struct timeval * __restrict,
-	    void * __restrict));
-int	lutimes __P((const char *, const struct timeval [2]));
-int	setitimer __P((int, const struct itimerval * __restrict,
-	    struct itimerval * __restrict));
-int	settimeofday __P((const struct timeval * __restrict,
-	    const void * __restrict));
-int	utimes __P((const char *, const struct timeval [2]));
+int	gettimeofday __P((struct timeval *, struct timezone *));
+int	lutimes __P((const char *, const struct timeval *));
+int	setitimer __P((int, const struct itimerval *, struct itimerval *));
+int	settimeofday __P((const struct timeval *, const struct timezone *));
+int	utimes __P((const char *, const struct timeval *));
 __END_DECLS
 #endif /* _XOPEN_SOURCE || _NETBSD_SOURCE */
 

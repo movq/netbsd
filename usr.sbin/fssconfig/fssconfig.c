@@ -1,4 +1,4 @@
-/*	$NetBSD: fssconfig.c,v 1.4 2004/05/25 14:55:47 hannken Exp $	*/
+/*	$NetBSD: fssconfig.c,v 1.2 2004/01/11 19:05:27 hannken Exp $	*/
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -55,6 +55,7 @@
 int	vflag = 0;
 int	xflag = 0;
 
+int	mkfile(int, off_t);
 void	config(int, char **);
 void	unconfig(int, char **);
 void	list(int, char **);
@@ -100,43 +101,42 @@ main(int argc, char **argv)
 	exit(0);
 }
 
+int
+mkfile(int fd, off_t size)
+{
+	char buf[64*1024];
+	ssize_t l;
+
+	memset(buf, 0, sizeof(buf));
+	while (size > 0) {
+		if ((l = write(fd, buf, sizeof(buf))) < 0)
+			return -1;
+		size -= l;
+	}
+
+	return 0;
+}
+
 void
 config(int argc, char **argv)
 {
-	int fd, isreg, istmp, ispersistent;
+	int fd, isreg, istmp;
 	char full[64], path[MAXPATHLEN];
 	off_t bssize;
-	dev_t mountdev;
 	struct stat sbuf;
-	struct statvfs fsbuf;
+	struct statfs fsbuf;
 	struct fss_set fss;
 
 	if (argc < 3)
 		usage();
 
-	istmp = ispersistent = 0;
+	istmp = 0;
+
+	if (statfs(argv[1], &fsbuf) != 0)
+		err(1, "statfs %s", argv[1]);
 
 	fss.fss_mount = argv[1];
 	fss.fss_bstore = argv[2];
-
-	if (statvfs(argv[1], &fsbuf) != 0 || stat(argv[1], &sbuf) != 0)
-		err(1, "stat %s", argv[1]);
-	mountdev = sbuf.st_dev;
-	if (stat(argv[2], &sbuf) == 0 &&
-	    S_ISREG(sbuf.st_mode) &&
-	    sbuf.st_dev == mountdev) {
-		if ((sbuf.st_flags & SF_SNAPSHOT) == 0)
-			errx(1, "%s: exists and is not a snapshot", argv[2]);
-		if (argc != 3)
-			usage();
-		isreg = ispersistent = 1;
-
-		goto configure;
-	}
-
-	if (argc > 5)
-		usage();
-
 	if (argc > 3)
 		fss.fss_csize = strsuftoll("cluster size", argv[3], 0, INT_MAX);
 	else
@@ -144,7 +144,7 @@ config(int argc, char **argv)
 	if (argc > 4)
 		bssize = strsuftoll("bs size", argv[4], 0, LLONG_MAX);
 	else
-		bssize = (off_t)fsbuf.f_blocks*fsbuf.f_frsize;
+		bssize = (off_t)fsbuf.f_blocks*fsbuf.f_bsize;
 
 	/*
 	 * Create the backing store. If it is a directory, create a temporary
@@ -161,14 +161,11 @@ config(int argc, char **argv)
 	}
 	if (fstat(fd, &sbuf) < 0)
 		err(1, "stat: %s", fss.fss_bstore);
-	if (!ispersistent && sbuf.st_dev == mountdev)
-		ispersistent = 1;
 	isreg = S_ISREG(sbuf.st_mode);
-	if (!ispersistent && isreg && ftruncate(fd, bssize) < 0)
+	if (isreg && ftruncate(fd, bssize) < 0)
 		err(1, "truncate %s", fss.fss_bstore);
 	close(fd);
 
-configure:
 	if ((fd = opendisk(argv[0], O_RDWR, full, sizeof(full), 0)) < 0) {
 		if (istmp)
 			unlink(fss.fss_bstore);
@@ -250,13 +247,9 @@ list(int argc, char **argv)
 			t = fsg.fsg_time.tv_sec;
 			strftime(tmbuf, sizeof(tmbuf), "%F %T", localtime(&t));
 
-			if (fsg.fsg_csize == 0)
-				printf("%s: %s, persistent, taken %s\n", dev,
-				    fsg.fsg_mount, tmbuf);
-			else
-				printf("%s: %s, taken %s, %" PRId64 " clusters"
-				    " of %s, %s backup\n", dev, fsg.fsg_mount,
-				    tmbuf, fsg.fsg_mount_size, clbuf, bsbuf);
+			printf("%s: %s, taken %s, %" PRId64 " clusters of %s"
+			    ", %s backup\n", dev, fsg.fsg_mount, tmbuf,
+			    fsg.fsg_mount_size, clbuf, bsbuf);
 		} else
 			printf("%s: %s\n", dev, fsg.fsg_mount);
 
@@ -271,8 +264,8 @@ void
 usage(void)
 {
 	fprintf(stderr, "%s",
-	    "usage: fssconfig [-cxv] device path backup [cluster [size]]\n"
-	    "       fssconfig -u [-v] device\n"
+	    "usage: fssconfig [-cx] device path backup [cluster [size]]\n"
+	    "       fssconfig -u device\n"
 	    "       fssconfig -l [-v] [device]\n");
 	exit(1);
 }

@@ -41,7 +41,7 @@
 
 #ifndef lint
 static char ocopyright[] =
-"$Id: dhclient.c,v 1.13 2004/05/06 09:07:54 itojun Exp $ Copyright (c) 1995-2002 Internet Software Consortium.  All rights reserved.\n";
+"$Id: dhclient.c,v 1.9 2003/10/24 05:27:55 mellon Exp $ Copyright (c) 1995-2002 Internet Software Consortium.  All rights reserved.\n";
 #endif /* not lint */
 
 #include "dhcpd.h"
@@ -88,22 +88,6 @@ int nowait=0;
 static void usage PROTO ((void));
 
 void do_release(struct client_state *);
-
-#if !defined (SMALL)
-static isc_result_t
-verify_addr (omapi_object_t *l, omapi_addr_t *addr)
-{
-	return ISC_R_SUCCESS;
-}
-
-static isc_result_t
-verify_auth (omapi_object_t *p, omapi_auth_key_t *a)
-{
-	if (a != top_level_config.omapi_key)
-		return ISC_R_INVALIDKEY;
-	return ISC_R_SUCCESS;
-}
-#endif
 
 int main (argc, argv, envp)
 	int argc;
@@ -458,12 +442,10 @@ int main (argc, argv, envp)
 		if (result != ISC_R_SUCCESS)
 			log_fatal ("Can't allocate new generic object: %s\n",
 				   isc_result_totext (result));
-		result = (omapi_protocol_listen
-			  (listener,
-			   (unsigned)top_level_config.omapi_port, 1));
-		if (result == ISC_R_SUCCESS && top_level_config.omapi_key)
-			result = (omapi_protocol_configure_security
-				  (listener, verify_addr, verify_auth));
+		result = omapi_protocol_listen (listener,
+						(unsigned)
+						top_level_config.omapi_port,
+						1);
 		if (result != ISC_R_SUCCESS)
 			log_fatal ("Can't start OMAPI protocol: %s",
 				   isc_result_totext (result));
@@ -2131,14 +2113,11 @@ void rewrite_client_leases ()
 	struct interface_info *ip;
 	struct client_state *client;
 	struct client_lease *lp;
-	int fd;
 
 	if (leaseFile)
 		fclose (leaseFile);
-	fd = open (path_dhclient_db, O_WRONLY|O_CREAT|O_TRUNC, 0600);
-	if (fd != -1)
-		leaseFile = fdopen (fd, "w");
-	if (fd == -1 || !leaseFile) {
+	leaseFile = fopen (path_dhclient_db, "w");
+	if (!leaseFile) {
 		log_error ("can't create %s: %m", path_dhclient_db);
 		return;
 	}
@@ -2228,12 +2207,8 @@ int write_client_lease (client, lease, rewrite, makesure)
 		return 1;
 
 	if (!leaseFile) {	/* XXX */
-		int fd;
-
-		fd = open (path_dhclient_db, O_WRONLY|O_CREAT|O_TRUNC, 0600);
-		if (fd != -1)
-			leaseFile = fdopen (fd, "w");
-		if (fd == -1 || !leaseFile) {
+		leaseFile = fopen (path_dhclient_db, "w");
+		if (!leaseFile) {
 			log_error ("can't create %s: %m", path_dhclient_db);
 			return 0;
 		}

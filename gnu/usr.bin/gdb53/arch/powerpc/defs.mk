@@ -1,4 +1,4 @@
-# $NetBSD: defs.mk,v 1.3 2004/04/02 13:36:32 mrg Exp $
+# $NetBSD: defs.mk,v 1.2.2.1 2004/04/06 04:33:48 jmc Exp $
 G_GDB_OBJS=\
 annotate.o \
 arch-utils.o \

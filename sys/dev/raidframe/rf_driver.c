@@ -1,4 +1,4 @@
-/*	$NetBSD: rf_driver.c,v 1.105 2004/11/16 16:45:51 oster Exp $	*/
+/*	$NetBSD: rf_driver.c,v 1.98.2.5 2004/07/01 21:51:53 jdc Exp $	*/
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -73,7 +73,7 @@
 
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rf_driver.c,v 1.105 2004/11/16 16:45:51 oster Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rf_driver.c,v 1.98.2.5 2004/07/01 21:51:53 jdc Exp $");
 
 #include "opt_raid_diagnostic.h"
 
@@ -573,7 +573,6 @@ rf_AllocRaidAccDesc(RF_Raid_t *raidPtr, RF_IoType_t type,
 	desc->dagList = NULL;
 
 	desc->status = 0;
-	desc->numRetries = 0;
 #if RF_ACC_TRACE > 0
 	memset((char *) &desc->tracerec, 0, sizeof(RF_AccTraceEntry_t));
 #endif
@@ -868,15 +867,15 @@ rf_ConfigureDebug(RF_Config_t *cfgPtr)
 void
 rf_print_panic_message(int line, char *file)
 {
-	snprintf(rf_panicbuf, sizeof(rf_panicbuf),
-	    "raidframe error at line %d file %s", line, file);
+	sprintf(rf_panicbuf,"raidframe error at line %d file %s",
+		line, file);
 }
 
 #ifdef RAID_DIAGNOSTIC
 void
 rf_print_assert_panic_message(int line,	char *file, char *condition)
 {
-	snprintf(rf_panicbuf, sizeof(rf_panicbuf),
+	sprintf(rf_panicbuf,
 		"raidframe error at line %d file %s (failed asserting %s)\n",
 		line, file, condition);
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: dir.c,v 1.41 2004/10/08 17:29:29 dbj Exp $	*/
+/*	$NetBSD: dir.c,v 1.39 2004/01/10 14:28:37 mrg Exp $	*/
 
 /*
  * Copyright (c) 1980, 1986, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)dir.c	8.8 (Berkeley) 4/28/95";
 #else
-__RCSID("$NetBSD: dir.c,v 1.41 2004/10/08 17:29:29 dbj Exp $");
+__RCSID("$NetBSD: dir.c,v 1.39 2004/01/10 14:28:37 mrg Exp $");
 #endif
 #endif /* not lint */
 
@@ -98,7 +98,7 @@ propagate(inumber)
 		else if (inp->i_sibling)
 			inp = inp->i_sibling;
 		else
-			inp = getinoinfo(inp->i_parent);
+			inp = inp->i_parentp;
 	}
 
 	for (;;) {
@@ -111,7 +111,7 @@ propagate(inumber)
 		else if (inp->i_sibling)
 			inp = inp->i_sibling;
 		else
-			inp = getinoinfo(inp->i_parent);
+			inp = inp->i_parentp;
 	}
 }
 
@@ -124,6 +124,7 @@ reparent(inumber, parent)
 	inp = getinoinfo(inumber);
 	inp->i_parent = inp->i_dotdot = parent;
 	pinp = getinoinfo(parent);
+	inp->i_parentp = pinp;
 	inp->i_sibling = pinp->i_child;
 	pinp->i_child = inp;
 	propagate(inumber);
@@ -793,8 +794,6 @@ allocdir(parent, request, mode)
 	daddr_t dirblk;
 
 	ino = allocino(request, IFDIR|mode);
-	if (ino < ROOTINO)
-		return 0;
 	dirhead.dot_reclen = iswap16(12);
 	dirhead.dotdot_reclen = iswap16(dirblksiz - 12);
 	odirhead.dot_reclen = iswap16(12);

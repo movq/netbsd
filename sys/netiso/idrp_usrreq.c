@@ -1,4 +1,4 @@
-/*	$NetBSD: idrp_usrreq.c,v 1.15 2004/04/25 21:13:13 matt Exp $	*/
+/*	$NetBSD: idrp_usrreq.c,v 1.12 2003/08/07 16:33:35 agc Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: idrp_usrreq.c,v 1.15 2004/04/25 21:13:13 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: idrp_usrreq.c,v 1.12 2003/08/07 16:33:35 agc Exp $");
 
 #include <sys/param.h>
 #include <sys/proc.h>
@@ -67,7 +67,7 @@ static struct sockaddr_iso idrp_addrs[2] =
  * IDRP initialization
  */
 void
-idrp_init(void)
+idrp_init()
 {
 	extern struct clnl_protosw clnl_protox[256];
 
@@ -90,7 +90,13 @@ idrp_init(void)
  * No return value.
  */
 void
+#if __STDC__
 idrp_input(struct mbuf *m, ...)
+#else
+idrp_input(m, va_alist)
+	struct mbuf *m;
+	va_dcl
+#endif
 {
 	struct sockaddr_iso *src, *dst;
 	va_list ap;
@@ -117,7 +123,13 @@ bad:		m_freem(m);
 }
 
 int
+#if __STDC__
 idrp_output(struct mbuf *m, ...)
+#else
+idrp_output(m, va_alist)
+	struct mbuf    *m;
+	va_dcl
+#endif
 {
 	struct sockaddr_iso *siso;
 	int             s = splsoftnet(), i;
@@ -142,8 +154,11 @@ u_long          idrp_recvspace = 40 * 1024;	/* 40 1K datagrams */
 
 /* ARGSUSED */
 int
-idrp_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
-	struct mbuf *control, struct proc *p)
+idrp_usrreq(so, req, m, nam, control, p)
+	struct socket *so;
+	int req;
+	struct mbuf *m, *nam, *control;
+	struct proc *p;
 {
 	struct rawcb *rp;
 	int error = 0;
@@ -177,11 +192,12 @@ idrp_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
 			if (error)
 				break;
 		}
-		MALLOC(rp, struct rawcb *, sizeof(*rp), M_PCB, M_WAITOK|M_ZERO);
+		MALLOC(rp, struct rawcb *, sizeof(*rp), M_PCB, M_WAITOK);
 		if (rp == 0) {
 			error = ENOBUFS;
 			break;
 		}
+		bzero(rp, sizeof(*rp));
 		rp->rcb_socket = so;
 		LIST_INSERT_HEAD(&idrp_pcb, rp, rcb_list);
 		so->so_pcb = rp;

@@ -1,5 +1,3 @@
-/*	$NetBSD: forward.c,v 1.1.1.5 2004/05/31 00:24:37 heas Exp $	*/
-
 /*++
 /* NAME
 /*	forward 3
@@ -13,8 +11,7 @@
 /*	int	forward_append(attr)
 /*	DELIVER_ATTR attr;
 /*
-/*	int	forward_finish(request, attr, cancel)
-/*	DELIVER_REQUEST *request;
+/*	int	forward_finish(attr, cancel)
 /*	DELIVER_ATTR attr;
 /*	int	cancel;
 /* DESCRIPTION
@@ -142,11 +139,8 @@ static FORWARD_INFO *forward_open(char *sender)
     info->cleanup = cleanup;
     info->queue_id = mystrdup(vstring_str(buffer));
     info->posting_time = time((time_t *) 0);
-
-#define FORWARD_CLEANUP_FLAGS (CLEANUP_FLAG_BOUNCE | CLEANUP_FLAG_MASK_INTERNAL)
-
     attr_print(cleanup, ATTR_FLAG_NONE,
-	       ATTR_TYPE_NUM, MAIL_ATTR_FLAGS, FORWARD_CLEANUP_FLAGS,
+	       ATTR_TYPE_NUM, MAIL_ATTR_FLAGS, CLEANUP_FLAG_BOUNCE,
 	       ATTR_TYPE_END);
 
     /*
@@ -191,11 +185,9 @@ int     forward_append(DELIVER_ATTR attr)
     }
 
     /*
-     * Append the recipient to the message envelope. Don't send the original
-     * recipient if it was reset due to mailing list expansion.
+     * Append the recipient to the message envelope.
      */
-    if (*attr.orig_rcpt)
-	rec_fputs(info->cleanup, REC_TYPE_ORCP, attr.orig_rcpt);
+    rec_fputs(info->cleanup, REC_TYPE_ORCP, attr.orig_rcpt);
     rec_fputs(info->cleanup, REC_TYPE_RCPT, attr.recipient);
 
     return (vstream_ferror(info->cleanup));
@@ -203,8 +195,7 @@ int     forward_append(DELIVER_ATTR attr)
 
 /* forward_send - send forwarded message */
 
-static int forward_send(FORWARD_INFO *info, DELIVER_REQUEST *request,
-			        DELIVER_ATTR attr, char *delivered)
+static int forward_send(FORWARD_INFO *info, DELIVER_ATTR attr, char *delivered)
 {
     char   *myname = "forward_send";
     VSTRING *buffer = vstring_alloc(100);
@@ -260,8 +251,7 @@ static int forward_send(FORWARD_INFO *info, DELIVER_REQUEST *request,
      * Log successful forwarding.
      */
     if (status == 0)
-	status = sent(BOUNCE_FLAGS(request), SENT_ATTR(attr),
-		      "forwarded as %s", info->queue_id);
+	sent(SENT_ATTR(attr), "forwarded as %s", info->queue_id);
 
     /*
      * Cleanup.
@@ -272,7 +262,7 @@ static int forward_send(FORWARD_INFO *info, DELIVER_REQUEST *request,
 
 /* forward_finish - complete message forwarding requests and clean up */
 
-int     forward_finish(DELIVER_REQUEST *request, DELIVER_ATTR attr, int cancel)
+int     forward_finish(DELIVER_ATTR attr, int cancel)
 {
     HTABLE_INFO **dt_list;
     HTABLE_INFO **dt;
@@ -301,7 +291,7 @@ int     forward_finish(DELIVER_REQUEST *request, DELIVER_ATTR attr, int cancel)
 	    sender = sn[0]->key;
 	    info = (FORWARD_INFO *) sn[0]->value;
 	    if (status == 0)
-		status |= forward_send(info, request, attr, delivered);
+		status |= forward_send(info, attr, delivered);
 	    if (msg_verbose)
 		msg_info("forward_finish: delivered %s sender %s status %d",
 			 delivered, sender, status);

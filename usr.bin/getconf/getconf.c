@@ -1,4 +1,4 @@
-/*	$NetBSD: getconf.c,v 1.22 2004/11/10 04:02:52 lukem Exp $	*/
+/*	$NetBSD: getconf.c,v 1.20 2003/02/02 20:33:10 kleink Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1998 The NetBSD Foundation, Inc.
@@ -38,7 +38,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: getconf.c,v 1.22 2004/11/10 04:02:52 lukem Exp $");
+__RCSID("$NetBSD: getconf.c,v 1.20 2003/02/02 20:33:10 kleink Exp $");
 #endif /* not lint */
 
 #include <err.h>
@@ -165,11 +165,6 @@ const struct conf_variable conf_table[] =
 
   /* POSIX.1-2001 XSI Option Group Configurable System Variables */
   { "ATEXIT_MAX",		SYSCONF,	_SC_ATEXIT_MAX		},
-
-  /* POSIX.1-2001 TSF Configurable System Variables */
-  { "GETGR_R_SIZE_MAX",		SYSCONF,	_SC_GETGR_R_SIZE_MAX	},
-  { "GETPW_R_SIZE_MAX",		SYSCONF,	_SC_GETPW_R_SIZE_MAX	},
-
   { NULL }
 };
 
@@ -237,7 +232,7 @@ main(argc, argv)
 		errno = 0;
 		if ((val = sysconf(cp->value)) == -1) {
 			if (errno != 0) {
-				err(1, "sysconf");
+				err(1, "malloc");
 				/* NOTREACHED */
 			}
 

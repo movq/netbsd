@@ -1,4 +1,4 @@
-/*	$NetBSD: imc.c,v 1.23 2004/09/29 03:11:28 sekiya Exp $	*/
+/*	$NetBSD: imc.c,v 1.16.2.1 2004/05/11 12:37:09 tron Exp $	*/
 
 /*
  * Copyright (c) 2001 Rafal K. Boni
@@ -28,7 +28,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: imc.c,v 1.23 2004/09/29 03:11:28 sekiya Exp $");
+__KERNEL_RCSID(0, "$NetBSD: imc.c,v 1.16.2.1 2004/05/11 12:37:09 tron Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -51,17 +51,17 @@ struct imc_softc {
 	bus_space_tag_t iot;
 	bus_space_handle_t ioh;
 
-	int eisa_present;
+	int eisa_present : 1;
 };
 
 static int	imc_match(struct device *, struct cfdata *, void *);
 static void	imc_attach(struct device *, struct device *, void *);
 static int	imc_print(void *, const char *);
-static void	imc_bus_reset(void);
-static void	imc_bus_error(u_int32_t, u_int32_t, u_int32_t, u_int32_t);
-static void	imc_watchdog_reset(void);
-static void	imc_watchdog_disable(void);
-static void	imc_watchdog_enable(void);
+void		imc_bus_reset(void);
+void		imc_bus_error(u_int32_t, u_int32_t, u_int32_t, u_int32_t);
+void		imc_watchdog_reset(void);
+void		imc_watchdog_disable(void);
+void		imc_watchdog_enable(void);
 
 CFATTACH_DECL(imc, sizeof(struct imc_softc),
     imc_match, imc_attach, NULL, NULL);
@@ -83,7 +83,10 @@ struct imc_attach_args {
 struct imc_softc isc;
 
 static int
-imc_match(struct device *parent, struct cfdata *match, void *aux)
+imc_match(parent, match, aux)
+	struct device *parent;
+	struct cfdata *match;
+	void *aux;
 {
 
 	if ( (mach_type == MACH_SGI_IP22) || (mach_type == MACH_SGI_IP20) )
@@ -93,7 +96,10 @@ imc_match(struct device *parent, struct cfdata *match, void *aux)
 }
 
 static void
-imc_attach(struct device *parent, struct device *self, void *aux)
+imc_attach(parent, self, aux)
+	struct device *parent;
+	struct device *self;
+	void *aux;
 {
 	u_int32_t reg;
 	struct imc_attach_args iaa;
@@ -112,7 +118,7 @@ imc_attach(struct device *parent, struct device *self, void *aux)
 
 	sysid = bus_space_read_4(isc.iot, isc.ioh, IMC_SYSID);
 
-	/* EISA exists on IP22 only */
+	/* EISA present bit is on even on Indys, so don't trust it! */
 	if (mach_subtype == MACH_SGI_IP22_FULLHOUSE)
 		isc.eisa_present = (sysid & IMC_SYSID_HAVEISA);
 	else
@@ -147,21 +153,8 @@ imc_attach(struct device *parent, struct device *self, void *aux)
 	/* Setup the MC write buffer depth */
 	reg = bus_space_read_4(isc.iot, isc.ioh, IMC_CPUCTRL1);
 	reg = (reg & ~IMC_CPUCTRL1_MCHWMSK) | 13;
-
-	/*
-	 * Force endianness on the onboard HPC and both slots.
-	 * This should be safe for Fullhouse, but leave it conditional
-	 * for now.
-	 */
-	if (mach_type == MACH_SGI_IP20 || (mach_type == MACH_SGI_IP22 &&
-	    mach_subtype == MACH_SGI_IP22_GUINESS)) {
-		reg |=  IMC_CPUCTRL1_HPCFX;
-		reg |=  IMC_CPUCTRL1_EXP0FX;
-		reg |=  IMC_CPUCTRL1_EXP1FX;
-		reg &= ~IMC_CPUCTRL1_HPCLITTLE;
-		reg &= ~IMC_CPUCTRL1_EXP0LITTLE;
-		reg &= ~IMC_CPUCTRL1_EXP1LITTLE;
-	}
+	if (mach_type == MACH_SGI_IP20)
+		reg = (reg & ~IMC_CPUCTRL1_HPCLITTLE) | IMC_CPUCTRL1_HPCFX;
 	bus_space_write_4(isc.iot, isc.ioh, IMC_CPUCTRL1, reg);
 
 
@@ -175,31 +168,26 @@ imc_attach(struct device *parent, struct device *self, void *aux)
 	reg = bus_space_read_4(isc.iot, isc.ioh, IMC_GIO64ARB);
 	reg &= (IMC_GIO64ARB_GRX64 | IMC_GIO64ARB_GRXRT | IMC_GIO64ARB_GRXMST);
 
+	/* GIO64 invariant for all IP22 platforms: one GIO bus, HPC1 @ 64 */
+	reg |= IMC_GIO64ARB_ONEGIO | IMC_GIO64ARB_HPC64;
+
 	/* Rest of settings are machine/board dependant */
 	if (mach_type == MACH_SGI_IP20)
 	{
-		reg |=   IMC_GIO64ARB_ONEGIO;
-	        reg |=  (IMC_GIO64ARB_EXP0RT	| IMC_GIO64ARB_EXP1RT);
-		reg |=  (IMC_GIO64ARB_EXP0MST	| IMC_GIO64ARB_EXP1MST);
-                reg &= ~(IMC_GIO64ARB_HPC64	|
-                         IMC_GIO64ARB_HPCEXP64	| IMC_GIO64ARB_EISA64 |
-                         IMC_GIO64ARB_EXP064	| IMC_GIO64ARB_EXP164 |
-                         IMC_GIO64ARB_EXP0PIPE	| IMC_GIO64ARB_EXP1PIPE);
+	        reg |= (IMC_GIO64ARB_ONEGIO |
+			 IMC_GIO64ARB_EXP1RT | IMC_GIO64ARB_EXP0RT);
+                reg &= ~(IMC_GIO64ARB_HPC64 |
+                         IMC_GIO64ARB_HPCEXP64 | IMC_GIO64ARB_EISA64 |
+                         IMC_GIO64ARB_EXP064   | IMC_GIO64ARB_EXP164 |
+                         IMC_GIO64ARB_EXP0PIPE | IMC_GIO64ARB_EXP1PIPE |
+                         IMC_GIO64ARB_EXP0MST | IMC_GIO64ARB_EXP1MST);
+/* XXX second ethernet adapter */
+                reg |= IMC_GIO64ARB_EXP0MST;
 	}
 	else
 	{
-		/*
-		 * GIO64 invariant for all IP22 platforms: one GIO bus,
-		 * HPC1 @ 64
-		 */
-		reg |= IMC_GIO64ARB_ONEGIO | IMC_GIO64ARB_HPC64;
-
 		switch (mach_subtype) {
 		case MACH_SGI_IP22_GUINESS:
-			/* XXX is MST mutually exclusive? */
-	        	reg |=  (IMC_GIO64ARB_EXP0RT	| IMC_GIO64ARB_EXP1RT);
-			reg |=  (IMC_GIO64ARB_EXP0MST	| IMC_GIO64ARB_EXP1MST);
-
 			/* EISA can bus-master, is 64-bit */
 			reg |= (IMC_GIO64ARB_EISAMST | IMC_GIO64ARB_EISA64);
 			break;
@@ -228,35 +216,41 @@ imc_attach(struct device *parent, struct device *self, void *aux)
 #if notyet
 		memset(&iaa, 0, sizeof(iaa));
 
-		config_found_ia(self, "eisabus", (void*)&iaa, eisabusprint);
+		iaa.iaa_name = "eisa";
+		(void)config_found(self, (void*)&iaa, imc_print);
 #endif
 	}
 
 	memset(&iaa, 0, sizeof(iaa));
 
-	config_found_ia(self, "giobus", (void*)&iaa, imc_print);
+	iaa.iaa_name = "gio";
+	(void)config_found(self, (void*)&iaa, imc_print);
 
 	imc_watchdog_enable();
 }
 
 
 static int
-imc_print(void *aux, const char *name)
+imc_print(aux, name)
+	void *aux;
+	const char *name;
 {
+	struct imc_attach_args* iaa = aux;
+
 	if (name)
-		aprint_normal("gio at %s", name);
+		aprint_normal("%s at %s", iaa->iaa_name, name);
 
 	return UNCONF;
 }
 
-static void
+void
 imc_bus_reset(void)
 {
 	bus_space_write_4(isc.iot, isc.ioh, IMC_CPU_ERRSTAT, 0);
 	bus_space_write_4(isc.iot, isc.ioh, IMC_GIO_ERRSTAT, 0);
 }
 
-static void
+void
 imc_bus_error(u_int32_t status, u_int32_t cause, u_int32_t pc, u_int32_t ipending)
 {
 	printf("bus error: cpu_stat %08x addr %08x, gio_stat %08x addr %08x\n",
@@ -267,13 +261,12 @@ imc_bus_error(u_int32_t status, u_int32_t cause, u_int32_t pc, u_int32_t ipendin
 	imc_bus_reset();
 }
 
-static void
+void
 imc_watchdog_reset(void)
 {
 	bus_space_write_4(isc.iot, isc.ioh, IMC_WDOG, 0);
 }
-
-static void
+void
 imc_watchdog_disable(void)
 {
 	u_int32_t reg;
@@ -284,7 +277,7 @@ imc_watchdog_disable(void)
         bus_space_write_4(isc.iot, isc.ioh, IMC_CPUCTRL0, reg);
 }
 
-static void
+void
 imc_watchdog_enable(void)
 {
 	u_int32_t reg;

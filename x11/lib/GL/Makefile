@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.8 2004/08/05 01:28:48 lukem Exp $
+#	$NetBSD: Makefile,v 1.5 2004/03/06 03:05:39 rtr Exp $
 
 .include <bsd.own.mk>
 
@@ -18,8 +18,9 @@ SRCS.glx+=	glapi.c
 .if ${MACHINE} == "i386"
 .PATH:		${X11SRCDIR.xc}/extras/Mesa/src/X86
 SRCS.glx+=	glapi_x86.S
-CPPFLAGS+=	-DUSE_X86_ASM -I${X11SRCDIR.xc}/extras/Mesa/src/X86
-# -DUSE_X86_ASM $(MMX_DEFS) $(3DNOW_DEFS) $(SSE_DEFS)
+.for fn in ${SRCS.glx}
+CPPFLAGS.${fn}=	-DUSE_X86_ASM
+.endfor
 .endif
 
 
@@ -107,6 +108,7 @@ CPPFLAGS.${fn}+=-I${X11SRCDIR.xc}/lib/GL/dri \
 		-I${X11SRCDIR.xc}/extras/Mesa/src/include
 CPPFLAGS.${fn}+=${X11FLAGS.DRI}
 
+# -DUSE_X86_ASM $(MMX_DEFS) $(3DNOW_DEFS) $(SSE_DEFS)
 .endfor
 
 SRCS+=	${SRCS.dri} ${SRCS.drm} ${SRCS.mesa} ${SRCS.ac} ${SRCS.math} \
@@ -121,8 +123,9 @@ CPPFLAGS+=	-I${DESTDIR}${X11INCDIR}/X11 \
 		-I${X11SRCDIR.xc}/extras/Mesa/src \
 		${X11FLAGS.THREADLIB} -DGLXEXT -DGLX_USE_MESA
 
-LIBDPLIBS=	Xext	${.CURDIR}/../Xext \
-		X11	${.CURDIR}/../X11/dynamic
+LDADD+=		-lXext -lX11
+DPADD+=		${LIBXEXT} ${LIBX11}
 
 .include <bsd.x11.mk>
 .include <bsd.lib.mk>
+

@@ -1,4 +1,4 @@
-.\"	$NetBSD: cardbus.4,v 1.20 2004/05/11 23:21:51 wiz Exp $
+.\"	$NetBSD: cardbus.4,v 1.16.2.1 2004/05/06 05:46:07 jmc Exp $
 .\"
 .\" Copyright (c) 1999-2001 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -55,8 +55,7 @@ drivers for CardBus devices.
 .Pp
 The
 .Cm cbb
-device represents the CardBus controller.
-Each controller has a number
+device represents the CardBus controller. Each controller has a number
 of slots, represented by the
 .Cm cardslot
 devices. A slot can have either a CardBus card or a
@@ -106,7 +105,7 @@ devices may not be properly handled by the system BIOS on i386-family
 systems.
 If, on an i386-family system, the
 .Nm cbb
-driver reports
+driver reports 
 .Dl cbb0: NOT USED because of unconfigured interrupt
 then enabling
 .Bl -item -offset indent -compact
@@ -134,5 +133,6 @@ in the kernel configuration might be of use.
 .Sh HISTORY
 The
 .Nm
-driver appeared in
+driver
+appeared in
 .Nx 1.5 .

@@ -1,4 +1,4 @@
-#	$NetBSD: files.isa,v 1.135 2004/09/14 17:19:34 drochner Exp $
+#	$NetBSD: files.isa,v 1.132 2004/01/31 13:59:20 jdolecek Exp $
 #
 # Config file and device description for machine-independent ISA code.
 # Included by ports that need it.  Requires that the SCSI files be
@@ -14,8 +14,6 @@ device	isa {[port = -1], [size = 0],
 attach	isa at isabus
 file	dev/isa/isa.c			isa			needs-flag
 
-file	dev/isa/isabusprint.c		isabus
-
 # ISA DMA controller
 define	isadma
 file	dev/isa/isadma.c		isadma			needs-flag
@@ -25,7 +23,6 @@ file	dev/isa/isadma.c		isadma			needs-flag
 #
 
 define	commulti {[slave = -1]}
-file	dev/isa/commultiprint.c		commulti
 
 # AST 4-port board
 device	ast: commulti
@@ -359,9 +356,6 @@ file	dev/isa/ess_isa.c		ess_isa			needs-flag
 
 attach	opl at ess with opl_ess
 file	dev/isa/opl_ess.c		opl_ess
-
-attach	joy at ess with joy_ess
-file	dev/isa/joy_ess.c		joy_ess			needs-flag
 
 # Yamaha OPL2/OPL3 FM synth
 attach	opl at isa with opl_isa

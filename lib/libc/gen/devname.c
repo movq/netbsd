@@ -1,4 +1,4 @@
-/*	$NetBSD: devname.c,v 1.16 2004/12/16 04:33:03 atatat Exp $	*/
+/*	$NetBSD: devname.c,v 1.11 2003/10/13 07:41:22 agc Exp $	*/
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -74,14 +74,12 @@
 #if 0
 static char sccsid[] = "@(#)devname.c	8.2 (Berkeley) 4/29/95";
 #else
-__RCSID("$NetBSD: devname.c,v 1.16 2004/12/16 04:33:03 atatat Exp $");
+__RCSID("$NetBSD: devname.c,v 1.11 2003/10/13 07:41:22 agc Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
 #include "namespace.h"
 #include <sys/types.h>
-#include <sys/stat.h>
-#include <sys/param.h>
 
 #include <db.h>
 #include <fcntl.h>
@@ -120,7 +118,6 @@ devname(dev, type)
 	DBT data, key;
 	DEVC *ptr, **pptr;
 	static DEVC **devtb = NULL;
-	static dev_t pts = (dev_t)~1;
 
 	if (!db && !failure &&
 	    !(db = dbopen(_PATH_DEVDB, O_RDONLY, 0, DB_HASH, NULL))) {
@@ -167,25 +164,13 @@ devname(dev, type)
 		strncpy(ptr->name, (char *)data.data, NAME_MAX);
 		ptr->name[NAME_MAX - 1] = '\0';
 		ptr->valid = VALID;
+		return (ptr->name);
 	} else {
 		if (ptr == NULL)
 			return (NULL);
-		ptr->valid = INVALID;
-		if (type == S_IFCHR) {
-			if (pts == (dev_t)~1)
-				pts = getdevmajor("pts", S_IFCHR);
-			if (pts != (dev_t)~0 && major(dev) == pts) {
-				(void)snprintf(ptr->name, sizeof(ptr->name),
-				    "%s%d", _PATH_DEV_PTS +
-				    sizeof(_PATH_DEV) - 1, minor(dev));
-				ptr->valid = VALID;
-			}
-		}
 		ptr->dev = dev;
 		ptr->type = type;
-	}
-	if (ptr->valid == VALID)
-		return (ptr->name);
-	else
+		ptr->valid = INVALID;
 		return (NULL);
+	}
 }

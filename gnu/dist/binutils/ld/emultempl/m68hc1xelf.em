@@ -44,7 +44,12 @@ cat >>e${EMULATION_NAME}.c <<EOF
 #include "ldctor.h"
 #include "elf32-m68hc1x.h"
 
-static asection *m68hc11elf_add_stub_section (const char *, asection *);
+static void m68hc11elf_create_output_section_statements PARAMS ((void));
+static asection *m68hc11elf_add_stub_section
+  PARAMS ((const char *, asection *));
+static void gld${EMULATION_NAME}_finish PARAMS ((void));
+static void m68hc11_elf_${EMULATION_NAME}_before_allocation PARAMS ((void));
+
 
 /* Fake input file for stubs.  */
 static lang_input_statement_type *stub_file;
@@ -59,7 +64,7 @@ static int no_trampoline = 0;
 static const char* bank_window_name = 0;
 
 static void
-m68hc11_elf_${EMULATION_NAME}_before_allocation (void)
+m68hc11_elf_${EMULATION_NAME}_before_allocation ()
 {
   lang_memory_region_type* region;
   int ret;
@@ -68,7 +73,7 @@ m68hc11_elf_${EMULATION_NAME}_before_allocation (void)
 
   /* If generating a relocatable output file, then we don't
      have to generate the trampolines.  */
-  if (link_info.relocatable)
+  if (link_info.relocateable)
     return;
 
   ret = elf32_m68hc11_setup_section_lists (output_bfd, &link_info);
@@ -82,9 +87,9 @@ m68hc11_elf_${EMULATION_NAME}_before_allocation (void)
 
       /* Call into the BFD backend to do the real work.  */
       if (!elf32_m68hc11_size_stubs (output_bfd,
-				     stub_file->the_bfd,
-				     &link_info,
-				     &m68hc11elf_add_stub_section))
+                                     stub_file->the_bfd,
+                                     &link_info,
+                                     &m68hc11elf_add_stub_section))
 	{
 	  einfo ("%X%P: can not size stub section: %E\n");
 	  return;
@@ -102,7 +107,7 @@ m68hc11_elf_${EMULATION_NAME}_before_allocation (void)
 
      But for 68HC11 this is board specific.  The definition of such
      memory region allows to control how this paged memory is accessed.  */
-  region = lang_memory_region_lookup (bank_window_name, FALSE);
+  region = lang_memory_region_lookup (bank_window_name);
 
   /* Check the length to see if it was defined in the script.  */
   if (region->length != 0)
@@ -118,7 +123,7 @@ m68hc11_elf_${EMULATION_NAME}_before_allocation (void)
       pinfo->bank_size = region->length;
       pinfo->bank_shift = 0;
       for (i = pinfo->bank_size; i != 0; i >>= 1)
-	pinfo->bank_shift++;
+        pinfo->bank_shift++;
       pinfo->bank_shift--;
       pinfo->bank_size = 1L << pinfo->bank_shift;
       pinfo->bank_mask = (1 << pinfo->bank_shift) - 1;
@@ -126,12 +131,12 @@ m68hc11_elf_${EMULATION_NAME}_before_allocation (void)
       pinfo->bank_physical_end = region->origin + pinfo->bank_size;
 
       if (pinfo->bank_size != region->length)
-	{
-	  einfo (_("warning: the size of the 'window' memory region "
-		   "is not a power of 2\n"));
-	  einfo (_("warning: its size %d is truncated to %d\n"),
-		 region->length, pinfo->bank_size);
-	}
+        {
+          einfo (_("warning: the size of the 'window' memory region "
+                   "is not a power of 2\n"));
+          einfo (_("warning: its size %d is truncated to %d\n"),
+                 region->length, pinfo->bank_size);
+        }
     }
 }
 
@@ -139,7 +144,7 @@ m68hc11_elf_${EMULATION_NAME}_before_allocation (void)
    fake input file to hold the stub sections.  */
 
 static void
-m68hc11elf_create_output_section_statements (void)
+m68hc11elf_create_output_section_statements ()
 {
   stub_file = lang_add_input_file ("linker stubs",
 				   lang_input_file_is_fake_enum,
@@ -147,8 +152,8 @@ m68hc11elf_create_output_section_statements (void)
   stub_file->the_bfd = bfd_create ("linker stubs", output_bfd);
   if (stub_file->the_bfd == NULL
       || !bfd_set_arch_mach (stub_file->the_bfd,
-			     bfd_get_arch (output_bfd),
-			     bfd_get_mach (output_bfd)))
+                             bfd_get_arch (output_bfd),
+                             bfd_get_mach (output_bfd)))
     {
       einfo ("%X%P: can not create BFD %E\n");
       return;
@@ -166,8 +171,13 @@ struct hook_stub_info
 
 /* Traverse the linker tree to find the spot where the stub goes.  */
 
+static bfd_boolean hook_in_stub
+  PARAMS ((struct hook_stub_info *, lang_statement_union_type **));
+
 static bfd_boolean
-hook_in_stub (struct hook_stub_info *info, lang_statement_union_type **lp)
+hook_in_stub (info, lp)
+     struct hook_stub_info *info;
+     lang_statement_union_type **lp;
 {
   lang_statement_union_type *l;
   bfd_boolean ret;
@@ -203,10 +213,10 @@ hook_in_stub (struct hook_stub_info *info, lang_statement_union_type **lp)
 
 	case lang_input_section_enum:
 	  if (l->input_section.section == info->input_section
-	      || strcmp (bfd_get_section_name (output_section,
-					       l->input_section.section),
-			 bfd_get_section_name (output_section,
-					       info->input_section)) == 0)
+              || strcmp (bfd_get_section_name (output_section,
+                                               l->input_section.section),
+                         bfd_get_section_name (output_section,
+                                               info->input_section)) == 0)
 	    {
 	      /* We've found our section.  Insert the stub immediately
 		 before its associated input section.  */
@@ -243,8 +253,9 @@ hook_in_stub (struct hook_stub_info *info, lang_statement_union_type **lp)
    immediately before INPUT_SECTION.  */
 
 static asection *
-m68hc11elf_add_stub_section (const char *stub_sec_name,
-			     asection *tramp_section)
+m68hc11elf_add_stub_section (stub_sec_name, tramp_section)
+     const char *stub_sec_name;
+     asection *tramp_section;
 {
   asection *stub_sec;
   flagword flags;
@@ -252,7 +263,7 @@ m68hc11elf_add_stub_section (const char *stub_sec_name,
   const char *secname;
   lang_output_section_statement_type *os;
   struct hook_stub_info info;
-
+  
   stub_sec = bfd_make_section_anyway (stub_file->the_bfd, stub_sec_name);
   if (stub_sec == NULL)
     goto err_ret;
@@ -289,18 +300,18 @@ m68hc11elf_add_stub_section (const char *stub_sec_name,
    to build linker stubs.  */
 
 static void
-gld${EMULATION_NAME}_finish (void)
+gld${EMULATION_NAME}_finish ()
 {
   /* Now build the linker stubs.  */
   if (stub_file->the_bfd->sections != NULL)
     {
       /* Call again the trampoline analyzer to initialize the trampoline
-	 stubs with the correct symbol addresses.  Since there could have
-	 been relaxation, the symbol addresses that were found during
-	 first call may no longer be correct.  */
+         stubs with the correct symbol addresses.  Since there could have
+         been relaxation, the symbol addresses that were found during
+         first call may no longer be correct.  */
       if (!elf32_m68hc11_size_stubs (output_bfd,
-				     stub_file->the_bfd,
-				     &link_info, 0))
+                                     stub_file->the_bfd,
+                                     &link_info, 0))
 	{
 	  einfo ("%X%P: can not size stub section: %E\n");
 	  return;
@@ -314,16 +325,23 @@ gld${EMULATION_NAME}_finish (void)
 /* Avoid processing the fake stub_file in vercheck, stat_needed and
    check_needed routines.  */
 
-static void (*real_func) (lang_input_statement_type *);
+static void m68hc11_for_each_input_file_wrapper
+  PARAMS ((lang_input_statement_type *));
+static void m68hc11_lang_for_each_input_file
+  PARAMS ((void (*) (lang_input_statement_type *)));
 
-static void m68hc11_for_each_input_file_wrapper (lang_input_statement_type *l)
+static void (*real_func) PARAMS ((lang_input_statement_type *));
+
+static void m68hc11_for_each_input_file_wrapper (l)
+     lang_input_statement_type *l;
 {
   if (l != stub_file)
     (*real_func) (l);
 }
 
 static void
-m68hc11_lang_for_each_input_file (void (*func) (lang_input_statement_type *))
+m68hc11_lang_for_each_input_file (func)
+     void (*func) PARAMS ((lang_input_statement_type *));
 {
   real_func = func;
   lang_for_each_input_file (&m68hc11_for_each_input_file_wrapper);
@@ -337,8 +355,8 @@ EOF
 # parse_args and list_options functions.
 #
 PARSE_AND_LIST_PROLOGUE='
-#define OPTION_NO_TRAMPOLINE		300
-#define OPTION_BANK_WINDOW		301
+#define OPTION_NO_TRAMPOLINE            300
+#define OPTION_BANK_WINDOW              301
 '
 
 # The options are repeated below so that no abbreviations are allowed.

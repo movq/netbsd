@@ -1,4 +1,4 @@
-/*	$NetBSD: spr.h,v 1.34 2004/12/06 04:15:03 briggs Exp $	*/
+/*	$NetBSD: spr.h,v 1.32 2003/10/09 20:49:06 matt Exp $	*/
 
 #ifndef _POWERPC_SPR_H_
 #define	_POWERPC_SPR_H_
@@ -69,8 +69,7 @@
 #define	  MPC603e		  0x0006
 #define	  MPC603ev		  0x0007
 #define	  MPC750		  0x0008
-#define	  MPC604e		  0x0009
-#define	  MPC604ev		  0x000a
+#define	  MPC604ev		  0x0009
 #define	  MPC7400		  0x000c
 #define	  MPC620		  0x0014
 #define	  IBM403		  0x0020
@@ -132,7 +131,7 @@
 #define	SPR_IBAT6L		0x235	/* .6. Instruction BAT Reg 6 Lower */
 #define	SPR_IBAT7U		0x236	/* .6. Instruction BAT Reg 7 Upper */
 #define	SPR_IBAT7L		0x237	/* .6. Instruction BAT Reg 7 Lower */
-#define SPR_DC_CST		0x238	/* ..8 Data Cache CSR */
+#define SPR_DC_CST		0x230	/* ..8 Data Cache CSR */
 #define  DC_CST_DEN		0x80000000 /* D cache ENabled (RO) */
 #define  DC_CST_DFWT		0x40000000 /* D cache Force Write-Thru (RO) */
 #define  DC_CST_LES		0x20000000 /* D cache Little Endian Swap (RO) */

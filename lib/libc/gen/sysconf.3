@@ -1,4 +1,4 @@
-.\"	$NetBSD: sysconf.3,v 1.31 2004/11/10 04:21:25 lukem Exp $
+.\"	$NetBSD: sysconf.3,v 1.29 2003/08/07 16:42:57 agc Exp $
 .\"
 .\" Copyright (c) 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -29,7 +29,7 @@
 .\"
 .\"	@(#)sysconf.3	8.3 (Berkeley) 4/19/94
 .\"
-.Dd November 10, 2004
+.Dd July 9, 2003
 .Dt SYSCONF 3
 .Os
 .Sh NAME
@@ -178,7 +178,7 @@ otherwise \-1.
 The version of ISO/IEC 9945 (POSIX 1003.1) with which the system
 attempts to comply.
 .It Li _SC_XOPEN_SHM
-Return 1 if the
+Return 1 if the the
 .St -xpg4.2
 Shared Memory
 option is available on this system,
@@ -244,20 +244,6 @@ otherwise \-1.
 .It Li _SC_2_UPE
 Return 1 if the system supports the User Portability Utilities Option,
 otherwise \-1.
-.It Li _SC_GETGR_R_SIZE_MAX
-The minimum size of the
-.Fa buffer
-passed to
-.Xr getgrgid_r 3
-and
-.Xr getgrnam_r 3 .
-.It Li _SC_GETPW_R_SIZE_MAX
-The minimum size of the
-.Fa buffer
-passed to
-.Xr getpwnam_r 3
-and
-.Xr getpwuid_r 3 .
 .El
 .Sh RETURN VALUES
 If the call to

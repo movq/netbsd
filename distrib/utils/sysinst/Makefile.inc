@@ -1,11 +1,9 @@
-#	$NetBSD: Makefile.inc,v 1.37 2004/11/11 22:21:53 dsl Exp $
+#	$NetBSD: Makefile.inc,v 1.34.2.2 2004/04/28 05:59:06 jmc Exp $
 #
 # Makefile for sysinst
 
 PROG=		sysinst
 NOMAN=		# defined
-
-WARNS=		3
 
 SYSINSTLANG?=	en
 LANGUAGES?=	de en fr pl
@@ -54,6 +52,8 @@ CPPFLAGS+=	-DSYSINST_FTP_DIR=\"${SYSINST_FTP_DIR}\"
 CPPFLAGS+=	-DSYSINST_CDROM_DIR=\"${SYSINST_CDROM_DIR}\"
 .endif
 
+
+WARNS=		3
 
 DPSRCS+=	msg_defs.h menu_defs.h
 

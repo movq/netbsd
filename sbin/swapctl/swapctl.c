@@ -1,4 +1,4 @@
-/*	$NetBSD: swapctl.c,v 1.26 2004/06/08 08:13:16 cjep Exp $	*/
+/*	$NetBSD: swapctl.c,v 1.25.2.1 2004/06/13 08:42:34 jdc Exp $	*/
 
 /*
  * Copyright (c) 1996, 1997, 1999 Matthew R. Green
@@ -58,7 +58,7 @@
 #include <sys/cdefs.h>
 
 #ifndef lint
-__RCSID("$NetBSD: swapctl.c,v 1.26 2004/06/08 08:13:16 cjep Exp $");
+__RCSID("$NetBSD: swapctl.c,v 1.25.2.1 2004/06/13 08:42:34 jdc Exp $");
 #endif
 
 

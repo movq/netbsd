@@ -1,5 +1,3 @@
-/*	$NetBSD: file_limit.c,v 1.1.1.3 2004/05/31 00:24:59 heas Exp $	*/
-
 /*++
 /* NAME
 /*	file_limit 3
@@ -64,8 +62,8 @@ off_t   get_file_limit(void)
 #ifdef USE_ULIMIT
     if ((limit = ulimit(UL_GETFSIZE, 0)) < 0)
 	msg_fatal("ulimit: %m");
-    if (limit > OFF_T_MAX / ULIMIT_BLOCK_SIZE)
-	limit = OFF_T_MAX / ULIMIT_BLOCK_SIZE;
+    if (limit > INT_MAX / ULIMIT_BLOCK_SIZE)
+	limit = INT_MAX / ULIMIT_BLOCK_SIZE;
     return (limit * ULIMIT_BLOCK_SIZE);
 #else
     struct rlimit rlim;
@@ -73,7 +71,7 @@ off_t   get_file_limit(void)
     if (getrlimit(RLIMIT_FSIZE, &rlim) < 0)
 	msg_fatal("getrlimit: %m");
     limit = rlim.rlim_cur;
-    return (limit < 0 ? OFF_T_MAX : rlim.rlim_cur);
+    return (limit < 0 ? INT_MAX : rlim.rlim_cur);
 #endif						/* USE_ULIMIT */
 }
 

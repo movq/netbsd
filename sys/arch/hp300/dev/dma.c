@@ -1,4 +1,4 @@
-/*	$NetBSD: dma.c,v 1.31 2004/08/28 17:37:00 thorpej Exp $	*/
+/*	$NetBSD: dma.c,v 1.30 2003/08/07 16:27:27 agc Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997 The NetBSD Foundation, Inc.
@@ -72,7 +72,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: dma.c,v 1.31 2004/08/28 17:37:00 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dma.c,v 1.30 2003/08/07 16:27:27 agc Exp $");
 
 #include <machine/hp300spu.h>	/* XXX param.h includes cpu.h */
 
@@ -140,13 +140,13 @@ struct dma_softc {
 #define DMAF_VCFLUSH	0x02
 #define DMAF_NOINTR	0x04
 
-static int	dmamatch(struct device *, struct cfdata *, void *);
-static void	dmaattach(struct device *, struct device *, void *);
+int	dmamatch(struct device *, struct cfdata *, void *);
+void	dmaattach(struct device *, struct device *, void *);
 
 CFATTACH_DECL(dma, sizeof(struct dma_softc),
     dmamatch, dmaattach, NULL, NULL);
 
-static int	dmaintr(void *);
+int	dmaintr __P((void *));
 
 #ifdef DEBUG
 int	dmadebug = 0;
@@ -155,7 +155,7 @@ int	dmadebug = 0;
 #define	DDB_FOLLOW	0x04
 #define DDB_IO		0x08
 
-static void	dmatimeout(void *);
+void	dmatimeout __P((void *));
 int	dmatimo[NDMACHAN];
 
 long	dmahits[NDMACHAN];
@@ -167,8 +167,11 @@ long	dmalword[NDMACHAN];
 
 static struct dma_softc *dma_softc;
 
-static int
-dmamatch(struct device *parent, struct cfdata *match, void *aux)
+int
+dmamatch(parent, match, aux)
+	struct device *parent;
+	struct cfdata *match;
+	void *aux;
 {
 	struct intio_attach_args *ia = aux;
 	static int dmafound = 0;                /* can only have one */
@@ -180,8 +183,12 @@ dmamatch(struct device *parent, struct cfdata *match, void *aux)
 	return (1);
 }
 
-static void
-dmaattach(struct device *parent, struct device *self, void *aux)
+
+
+void
+dmaattach(parent, self, aux)
+	struct device *parent, *self;
+	void *aux;
 {
 	struct dma_softc *sc = (struct dma_softc *)self;
 	struct intio_attach_args *ia = aux;
@@ -264,7 +271,7 @@ dmaattach(struct device *parent, struct device *self, void *aux)
  * for the DMA controller.
  */
 void
-dmacomputeipl(void)
+dmacomputeipl()
 {
 	struct dma_softc *sc = dma_softc;
 
@@ -280,7 +287,8 @@ dmacomputeipl(void)
 }
 
 int
-dmareq(struct dmaqueue *dq)
+dmareq(dq)
+	struct dmaqueue *dq;
 {
 	struct dma_softc *sc = dma_softc;
 	int i, chan, s;
@@ -323,7 +331,8 @@ dmareq(struct dmaqueue *dq)
 }
 
 void
-dmafree(struct dmaqueue *dq)
+dmafree(dq)
+	struct dmaqueue *dq;
 {
 	int unit = dq->dq_chan;
 	struct dma_softc *sc = dma_softc;
@@ -393,7 +402,11 @@ dmafree(struct dmaqueue *dq)
 }
 
 void
-dmago(int unit, char *addr, int count, int flags)
+dmago(unit, addr, count, flags)
+	int unit;
+	char *addr;
+	int count;
+	int flags;
 {
 	struct dma_softc *sc = dma_softc;
 	struct dma_channel *dc = &sc->sc_chan[unit];
@@ -536,7 +549,8 @@ dmago(int unit, char *addr, int count, int flags)
 }
 
 void
-dmastop(int unit)
+dmastop(unit)
+	int unit;
 {
 	struct dma_softc *sc = dma_softc;
 	struct dma_channel *dc = &sc->sc_chan[unit];
@@ -580,8 +594,9 @@ dmastop(int unit)
 		(*dc->dm_job->dq_done)(dc->dm_job->dq_softc);
 }
 
-static int
-dmaintr(void *arg)
+int
+dmaintr(arg)
+	void *arg;
 {
 	struct dma_softc *sc = arg;
 	struct dma_channel *dc;
@@ -632,8 +647,9 @@ dmaintr(void *arg)
 }
 
 #ifdef DEBUG
-static void
-dmatimeout(void *arg)
+void
+dmatimeout(arg)
+	void *arg;
 {
 	int i, s;
 	struct dma_softc *sc = arg;

@@ -1,4 +1,4 @@
-/*	$NetBSD: OsdMisc.c,v 1.10 2004/06/07 17:35:14 kochi Exp $	*/
+/*	$NetBSD: OsdMisc.c,v 1.8 2003/07/06 03:50:07 kochi Exp $	*/
 
 /*
  * Copyright 2001 Wasabi Systems, Inc.
@@ -42,7 +42,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: OsdMisc.c,v 1.10 2004/06/07 17:35:14 kochi Exp $");
+__KERNEL_RCSID(0, "$NetBSD: OsdMisc.c,v 1.8 2003/07/06 03:50:07 kochi Exp $");
 
 #include "opt_ddb.h"
 
@@ -58,31 +58,6 @@ __KERNEL_RCSID(0, "$NetBSD: OsdMisc.c,v 1.10 2004/06/07 17:35:14 kochi Exp $");
 #include <dev/acpi/acpi_osd.h>
 
 #include <dev/acpi/acpica/Subsystem/acdebug.h>
-/*
- * for debugging DSDT (try this at your own risk!):
- *
- * 1. dump your raw DSDT (with acpidump(*1) etc.)
- * 2. disassemble with iasl -d (*2)
- * 3. modify the ASL file
- * 4. compile it with iasl -tc
- * 5. copy *.hex to /sys/dev/acpi/acpica/Osd/dsdt.hex
- *    -or-
- *    options ACPI_DSDT_FILE="\"yourdsdt.hex\"" in
- *    your config file and yourdsdt.hex in the build directory
- * 6. uncomment ACPI_DEDT_OVERRIDE or options ACPI_DSDT_OVERRIDE
- *    in your kernel config file and rebuild the kernel
- *
- * (*1) /usr/pkgsrc/sysutils/acpidump
- * (*2) /usr/pkgsrc/sysutils/acpi-iasl
- */
-
-/* #define ACPI_DSDT_OVERRIDE */
-#ifdef ACPI_DSDT_OVERRIDE
-#ifndef ACPI_DSDT_FILE
-#define ACPI_DSDT_FILE "dsdt.hex"
-#endif
-#include ACPI_DSDT_FILE
-#endif
 
 int acpi_indebugger;
 
@@ -116,16 +91,16 @@ AcpiOsSignal(UINT32 Function, void *Info)
 		Debugger();
 #else
 		printf("ACPI: WARNING: DDB not configured into kernel.\n");
-		return AE_NOT_EXIST;
+		return (AE_NOT_EXIST);
 #endif
 		break;
 	    }
 
 	default:
-		return AE_BAD_PARAMETER;
+		return (AE_BAD_PARAMETER);
 	}
 
-	return AE_OK;
+	return (AE_OK);
 }
 
 ACPI_STATUS
@@ -139,10 +114,10 @@ AcpiOsGetLine(char *Buffer)
 		if (*cp == '\n' || *cp == '\r')
 			*cp = 0;
 	db_output_line = 0;
-	return AE_OK;
+	return (AE_OK);
 #else
 	printf("ACPI: WARNING: DDB not configured into kernel.\n");
-	return AE_NOT_EXIST;
+	return (AE_NOT_EXIST);
 #endif
 }
 
@@ -150,15 +125,8 @@ ACPI_STATUS
 AcpiOsTableOverride(ACPI_TABLE_HEADER *ExistingTable,
 		    ACPI_TABLE_HEADER **NewTable)
 {
-#ifndef ACPI_DSDT_OVERRIDE
 	*NewTable = NULL;
-#else
-	if (strncmp(ExistingTable->Signature, "DSDT", 4) == 0)
-		*NewTable = (ACPI_TABLE_HEADER *)AmlCode;
-	else
-		*NewTable = NULL;
-#endif
-	return AE_OK;
+	return (AE_OK);
 }
 
 ACPI_STATUS
@@ -166,10 +134,10 @@ AcpiOsPredefinedOverride(const ACPI_PREDEFINED_NAMES *InitVal,
 			 ACPI_STRING *NewVal)
 {
 	if (!InitVal || !NewVal)
-		return AE_BAD_PARAMETER;
+		return (AE_BAD_PARAMETER);
 
 	*NewVal = NULL;
-	return AE_OK;
+	return (AE_OK);
 }
 
 /*

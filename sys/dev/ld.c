@@ -1,4 +1,4 @@
-/*	$NetBSD: ld.c,v 1.33 2004/10/28 07:07:39 yamt Exp $	*/
+/*	$NetBSD: ld.c,v 1.27.2.1 2004/07/28 11:27:00 tron Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2000 The NetBSD Foundation, Inc.
@@ -41,7 +41,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ld.c,v 1.33 2004/10/28 07:07:39 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ld.c,v 1.27.2.1 2004/07/28 11:27:00 tron Exp $");
 
 #include "rnd.h"
 
@@ -52,7 +52,6 @@ __KERNEL_RCSID(0, "$NetBSD: ld.c,v 1.33 2004/10/28 07:07:39 yamt Exp $");
 #include <sys/queue.h>
 #include <sys/proc.h>
 #include <sys/buf.h>
-#include <sys/bufq.h>
 #include <sys/endian.h>
 #include <sys/disklabel.h>
 #include <sys/disk.h>
@@ -71,20 +70,22 @@ __KERNEL_RCSID(0, "$NetBSD: ld.c,v 1.33 2004/10/28 07:07:39 yamt Exp $");
 
 static void	ldgetdefaultlabel(struct ld_softc *, struct disklabel *);
 static void	ldgetdisklabel(struct ld_softc *);
+static int	ldlock(struct ld_softc *);
 static void	ldminphys(struct buf *bp);
 static void	ldshutdown(void *);
 static void	ldstart(struct ld_softc *);
+static void	ldunlock(struct ld_softc *);
 
 extern struct	cfdriver ld_cd;
 
-static dev_type_open(ldopen);
-static dev_type_close(ldclose);
-static dev_type_read(ldread);
-static dev_type_write(ldwrite);
-static dev_type_ioctl(ldioctl);
-static dev_type_strategy(ldstrategy);
-static dev_type_dump(lddump);
-static dev_type_size(ldsize);
+dev_type_open(ldopen);
+dev_type_close(ldclose);
+dev_type_read(ldread);
+dev_type_write(ldwrite);
+dev_type_ioctl(ldioctl);
+dev_type_strategy(ldstrategy);
+dev_type_dump(lddump);
+dev_type_size(ldsize);
 
 const struct bdevsw ld_bdevsw = {
 	ldopen, ldclose, ldstrategy, ldioctl, lddump, ldsize, D_DISK
@@ -95,7 +96,7 @@ const struct cdevsw ld_cdevsw = {
 	nostop, notty, nopoll, nommap, nokqfilter, D_DISK
 };
 
-static struct	dkdriver lddkdriver = { ldstrategy, ldminphys };
+static struct	dkdriver lddkdriver = { ldstrategy };
 static void	*ld_sdh;
 
 void
@@ -156,9 +157,6 @@ ldattach(struct ld_softc *sc)
 	if (ld_sdh == NULL)
 		ld_sdh = shutdownhook_establish(ldshutdown, NULL);
 	bufq_alloc(&sc->sc_bufq, BUFQ_DISK_DEFAULT_STRAT()|BUFQ_SORT_RAWBLOCK);
-
-	/* Discover wedges on this disk. */
-	dkwedge_discover(&sc->sc_dk);
 }
 
 int
@@ -234,9 +232,6 @@ ldenddetach(struct ld_softc *sc)
 		vdevgone(cmaj, mn, mn, VCHR);
 	}
 
-	/* Delete all of our wedges. */
-	dkwedge_delall(&sc->sc_dk);
-
 	/* Detach from the disk list. */
 	disk_detach(&sc->sc_dk);
 
@@ -276,21 +271,19 @@ ldshutdown(void *cookie)
 }
 
 /* ARGSUSED */
-static int
+int
 ldopen(dev_t dev, int flags, int fmt, struct proc *p)
 {
 	struct ld_softc *sc;
-	int error, unit, part;
+	int unit, part;
 
 	unit = DISKUNIT(dev);
-	if ((sc = device_lookup(&ld_cd, unit)) == NULL)
+	if ((sc = device_lookup(&ld_cd, unit))== NULL)
 		return (ENXIO);
 	if ((sc->sc_flags & LDF_ENABLED) == 0)
 		return (ENODEV);
 	part = DISKPART(dev);
-
-	if ((error = lockmgr(&sc->sc_dk.dk_openlock, LK_EXCLUSIVE, NULL)) != 0)
-		return (error);
+	ldlock(sc);
 
 	if (sc->sc_dk.dk_openmask == 0) {
 		/* Load the partition info if not already loaded. */
@@ -301,8 +294,8 @@ ldopen(dev_t dev, int flags, int fmt, struct proc *p)
 	/* Check that the partition exists. */
 	if (part != RAW_PART && (part >= sc->sc_dk.dk_label->d_npartitions ||
 	    sc->sc_dk.dk_label->d_partitions[part].p_fstype == FS_UNUSED)) {
-		error = ENXIO;
-		goto bad1;
+	     	ldunlock(sc);
+		return (ENXIO);
 	}
 
 	/* Ensure only one open at a time. */
@@ -317,27 +310,21 @@ ldopen(dev_t dev, int flags, int fmt, struct proc *p)
 	sc->sc_dk.dk_openmask =
 	    sc->sc_dk.dk_copenmask | sc->sc_dk.dk_bopenmask;
 
-	(void) lockmgr(&sc->sc_dk.dk_openlock, LK_RELEASE, NULL);
+	ldunlock(sc);
 	return (0);
-
- bad1:
-	(void) lockmgr(&sc->sc_dk.dk_openlock, LK_RELEASE, NULL);
-	return (error);
 }
 
 /* ARGSUSED */
-static int
+int
 ldclose(dev_t dev, int flags, int fmt, struct proc *p)
 {
 	struct ld_softc *sc;
-	int error, part, unit;
+	int part, unit;
 
 	unit = DISKUNIT(dev);
 	part = DISKPART(dev);
 	sc = device_lookup(&ld_cd, unit);
-
-	if ((error = lockmgr(&sc->sc_dk.dk_openlock, LK_EXCLUSIVE, NULL)) != 0)
-		return (error);
+	ldlock(sc);
 
 	switch (fmt) {
 	case S_IFCHR:
@@ -358,12 +345,12 @@ ldclose(dev_t dev, int flags, int fmt, struct proc *p)
 			sc->sc_flags &= ~LDF_VLABEL;
 	}
 
-	(void) lockmgr(&sc->sc_dk.dk_openlock, LK_RELEASE, NULL);
+	ldunlock(sc);
 	return (0);
 }
 
 /* ARGSUSED */
-static int
+int
 ldread(dev_t dev, struct uio *uio, int ioflag)
 {
 
@@ -371,7 +358,7 @@ ldread(dev_t dev, struct uio *uio, int ioflag)
 }
 
 /* ARGSUSED */
-static int
+int
 ldwrite(dev_t dev, struct uio *uio, int ioflag)
 {
 
@@ -379,7 +366,7 @@ ldwrite(dev_t dev, struct uio *uio, int ioflag)
 }
 
 /* ARGSUSED */
-static int
+int
 ldioctl(dev_t dev, u_long cmd, caddr_t addr, int32_t flag, struct proc *p)
 {
 	struct ld_softc *sc;
@@ -431,8 +418,7 @@ ldioctl(dev_t dev, u_long cmd, caddr_t addr, int32_t flag, struct proc *p)
 		if ((flag & FWRITE) == 0)
 			return (EBADF);
 
-		if ((error = lockmgr(&sc->sc_dk.dk_openlock, LK_EXCLUSIVE,
-				     NULL)) != 0)
+		if ((error = ldlock(sc)) != 0)
 			return (error);
 		sc->sc_flags |= LDF_LABELLING;
 
@@ -450,7 +436,7 @@ ldioctl(dev_t dev, u_long cmd, caddr_t addr, int32_t flag, struct proc *p)
 			    sc->sc_dk.dk_cpulabel);
 
 		sc->sc_flags &= ~LDF_LABELLING;
-		(void) lockmgr(&sc->sc_dk.dk_openlock, LK_RELEASE, NULL);
+		ldunlock(sc);
 		break;
 
 	case DIOCKLABEL:
@@ -484,50 +470,6 @@ ldioctl(dev_t dev, u_long cmd, caddr_t addr, int32_t flag, struct proc *p)
 		break;
 #endif
 
-	case DIOCCACHESYNC:
-		/*
-		 * XXX Do we really need to care about having a writable
-		 * file descriptor here?
-		 */
-		if ((flag & FWRITE) == 0)
-			error = EBADF;
-		else if (sc->sc_flush)
-			error = (*sc->sc_flush)(sc);
-		else
-			error = 0;	/* XXX Error out instead? */
-		break;
-
-	case DIOCAWEDGE:
-	    {
-	    	struct dkwedge_info *dkw = (void *) addr;
-
-		if ((flag & FWRITE) == 0)
-			return (EBADF);
-
-		/* If the ioctl happens here, the parent is us. */
-		strcpy(dkw->dkw_parent, sc->sc_dv.dv_xname);
-		return (dkwedge_add(dkw));
-	    }
-	
-	case DIOCDWEDGE:
-	    {
-	    	struct dkwedge_info *dkw = (void *) addr;
-
-		if ((flag & FWRITE) == 0)
-			return (EBADF);
-
-		/* If the ioctl happens here, the parent is us. */
-		strcpy(dkw->dkw_parent, sc->sc_dv.dv_xname);
-		return (dkwedge_del(dkw));
-	    }
-	
-	case DIOCLWEDGES:
-	    {
-	    	struct dkwedge_list *dkwl = (void *) addr;
-
-		return (dkwedge_list(&sc->sc_dk, dkwl, p));
-	    }
-
 	default:
 		error = ENOTTY;
 		break;
@@ -536,7 +478,7 @@ ldioctl(dev_t dev, u_long cmd, caddr_t addr, int32_t flag, struct proc *p)
 	return (error);
 }
 
-static void
+void
 ldstrategy(struct buf *bp)
 {
 	struct ld_softc *sc;
@@ -675,7 +617,7 @@ lddone(struct ld_softc *sc, struct buf *bp)
 	}
 }
 
-static int
+int
 ldsize(dev_t dev)
 {
 	struct ld_softc *sc;
@@ -757,9 +699,42 @@ ldgetdefaultlabel(struct ld_softc *sc, struct disklabel *lp)
 }
 
 /*
- * Take a dump.
+ * Wait interruptibly for an exclusive lock.
+ *
+ * XXX Several drivers do this; it should be abstracted and made MP-safe.
  */
 static int
+ldlock(struct ld_softc *sc)
+{
+	int error;
+
+	while ((sc->sc_flags & LDF_LKHELD) != 0) {
+		sc->sc_flags |= LDF_LKWANTED;
+		if ((error = tsleep(sc, PRIBIO | PCATCH, "ldlck", 0)) != 0)
+			return (error);
+	}
+	sc->sc_flags |= LDF_LKHELD;
+	return (0);
+}
+
+/*
+ * Unlock and wake up any waiters.
+ */
+static void
+ldunlock(struct ld_softc *sc)
+{
+
+	sc->sc_flags &= ~LDF_LKHELD;
+	if ((sc->sc_flags & LDF_LKWANTED) != 0) {
+		sc->sc_flags &= ~LDF_LKWANTED;
+		wakeup(sc);
+	}
+}
+
+/*
+ * Take a dump.
+ */
+int
 lddump(dev_t dev, daddr_t blkno, caddr_t va, size_t size)
 {
 	struct ld_softc *sc;

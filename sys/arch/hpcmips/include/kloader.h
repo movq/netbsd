@@ -1,7 +1,7 @@
-/*	$NetBSD: kloader.h,v 1.2 2004/07/06 13:09:19 uch Exp $	*/
+/*	$NetBSD: kloader.h,v 1.1 2002/01/29 18:47:28 uch Exp $	*/
 
 /*-
- * Copyright (c) 2001, 2002, 2004 The NetBSD Foundation, Inc.
+ * Copyright (c) 2001, 2002 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -33,8 +33,8 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <dev/kloader.h>
+#include <hpc/include/kloader.h>
 
 #define PG_VADDR(pg)	MIPS_PHYS_TO_KSEG0(VM_PAGE_TO_PHYS(pg))
 
-
+void kloader_reboot_setup(const char *);

@@ -1,4 +1,4 @@
-/*	$NetBSD: union_vnops.c,v 1.10 2004/04/27 17:37:31 jrf Exp $	*/
+/*	$NetBSD: union_vnops.c,v 1.8 2004/01/25 18:06:48 hannken Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993, 1994, 1995
@@ -72,7 +72,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: union_vnops.c,v 1.10 2004/04/27 17:37:31 jrf Exp $");
+__KERNEL_RCSID(0, "$NetBSD: union_vnops.c,v 1.8 2004/01/25 18:06:48 hannken Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -918,7 +918,7 @@ union_getattr(v)
 				ap->a_vap->va_nlink += vap->va_nlink;
 		}
 	}
-	ap->a_vap->va_fsid = ap->a_vp->v_mount->mnt_stat.f_fsidx.__fsid_val[0];
+	ap->a_vap->va_fsid = ap->a_vp->v_mount->mnt_stat.f_fsid.val[0];
 	return (0);
 }
 
@@ -1096,7 +1096,7 @@ union_ioctl(v)
 	struct vop_ioctl_args /* {
 		struct vnode *a_vp;
 		int  a_command;
-		void *a_data;
+		caddr_t  a_data;
 		int  a_fflag;
 		struct ucred *a_cred;
 		struct proc *a_p;
@@ -1799,7 +1799,7 @@ start:
 			panic("union: locking against myself");
 #endif
 		un->un_flags |= UN_WANTED;
-		tsleep(&un->un_flags, PINOD, "unionlk2", 0);
+		tsleep((caddr_t)&un->un_flags, PINOD, "unionlk2", 0);
 		goto start;
 	}
 
@@ -1856,7 +1856,7 @@ union_unlock(v)
 
 	if (un->un_flags & UN_WANTED) {
 		un->un_flags &= ~UN_WANTED;
-		wakeup( &un->un_flags);
+		wakeup((caddr_t) &un->un_flags);
 	}
 
 #ifdef DIAGNOSTIC
@@ -1964,7 +1964,7 @@ union_advlock(v)
 {
 	struct vop_advlock_args /* {
 		struct vnode *a_vp;
-		void *a_id;
+		caddr_t  a_id;
 		int  a_op;
 		struct flock *a_fl;
 		int  a_flags;

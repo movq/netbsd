@@ -1,4 +1,4 @@
-/*	$NetBSD: kern.ldscript.head,v 1.1 2004/09/13 09:39:40 chs Exp $	*/
+/*	$NetBSD: kern.ldscript.head,v 1.1.2.2 2004/09/13 17:32:39 tron Exp $	*/
 
 OUTPUT_FORMAT("elf32-littlearm", "elf32-bigarm",
 	      "elf32-littlearm")

@@ -1,5 +1,3 @@
-/*	$NetBSD: valid_hostname.c,v 1.6 2004/05/31 00:46:48 heas Exp $	*/
-
 /*++
 /* NAME
 /*	valid_hostname 3
@@ -236,7 +234,7 @@ int     valid_hostliteral(const char *addr, int gripe)
 	    msg_warn("%s: unexpected text after ']': %.100s", myname, addr);
 	return (0);
     }
-    if (last >= addr + sizeof(buf)) {
+    if (last - addr >= sizeof(buf)) {
 	if (gripe)
 	    msg_warn("%s: too much text: %.100s", myname, addr);
 	return (0);

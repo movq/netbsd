@@ -47,10 +47,11 @@ lex.cpp: eqn_tab.h
 
 all: neqn
 
-neqn: neqn.sh $(SH_DEPS_SED_SCRIPT)
+neqn: neqn.sh
 	-rm -f $@
 	sed -e 's/@g@/$(g)/g' \
-	-f $(SH_DEPS_SED_SCRIPT) \
+	-e 's|@BINDIR@|$(bindir)|g' \
+	-e 's|@SEP@|$(SEP)|g' \
 	-e $(SH_SCRIPT_SED_CMD) $(srcdir)/neqn.sh >$@
 	chmod +x $@
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: cpu.h,v 1.15 2004/09/25 22:08:48 yamt Exp $	*/
+/*	$NetBSD: cpu.h,v 1.13 2004/03/24 15:38:42 wiz Exp $	*/
 
 /*
  * Copyright 2002 Wasabi Systems, Inc.
@@ -82,6 +82,7 @@
 #include "opt_lockdebug.h"
 #endif
 
+#include <sys/sched.h>
 #include <machine/frame.h>
 #include <sh5/conreg.h>
 #include <sh5/pte.h>
@@ -126,9 +127,12 @@
 
 
 #ifdef _KERNEL
-#include <sys/cpu_data.h>
 struct cpu_info {
-	struct cpu_data ci_data;	/* MI per-cpu data */
+	struct schedstate_percpu ci_schedstate; /* scheduler state */
+#if defined(DIAGNOSTIC) || defined(LOCKDEBUG)
+	u_int ci_spin_locks;		/* # of spin locks held */
+	u_int ci_simple_locks;		/* # of simple locks held */
+#endif
 
 	struct lwp *ci_curlwp;		/* current lwp on this cpu */
 	struct pcb *ci_curpcb;		/* current process' pcb */

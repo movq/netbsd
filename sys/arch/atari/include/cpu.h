@@ -1,4 +1,4 @@
-/*	$NetBSD: cpu.h,v 1.45 2004/09/26 21:44:26 yamt Exp $	*/
+/*	$NetBSD: cpu.h,v 1.43 2004/01/04 11:33:30 jdolecek Exp $	*/
 
 /*
  * Copyright (c) 1982, 1990 The Regents of the University of California.
@@ -79,8 +79,6 @@
 #ifndef _MACHINE_CPU_H_
 #define _MACHINE_CPU_H_
 
-#if defined(_KERNEL)
-
 /*
  * Exported definitions unique to atari/68k cpu support.
  */
@@ -95,11 +93,16 @@
 #include <m68k/cpu.h>
 #define	M68K_MMU_MOTOROLA
 
-#include <sys/cpu_data.h>
+#include <sys/sched.h>
 struct cpu_info {
-	struct cpu_data ci_data;	/* MI per-cpu data */
+	struct schedstate_percpu ci_schedstate; /* scheduler state */
+#if defined(DIAGNOSTIC) || defined(LOCKDEBUG)
+	u_long ci_spin_locks;		/* # of spin locks held */
+	u_long ci_simple_locks;		/* # of simple locks held */
+#endif
 };
 
+#ifdef _KERNEL
 extern struct cpu_info cpu_info_store;
 
 #define	curcpu()	(&cpu_info_store)
@@ -163,6 +166,8 @@ struct clockframe {
 extern int	astpending;	/* need trap before returning to user mode */
 extern int	want_resched;	/* resched() was called */
 
+#endif /* _KERNEL */
+
 /* include support for software interrupts */
 #include <machine/mtpr.h>
 
@@ -171,7 +176,6 @@ extern int	want_resched;	/* resched() was called */
  * although some of it could probably be put into generic 68k headers.
  */
 #define	BASEPRI(sr)	((sr & PSL_IPL) == 0)
-#endif /* _KERNEL */
 
 /*
  * Values for machineid.
@@ -194,9 +198,9 @@ extern int	want_resched;	/* resched() was called */
 
 #define	ATARI_ANYMACH	(ATARI_TT|ATARI_FALCON|ATARI_HADES|ATARI_MILAN)
 
-#if defined(_KERNEL)
+#ifdef _KERNEL
 extern int machineid;
-#endif /* _KERNEL */
+#endif
 
 /*
  * CTL_MACHDEP definitions.

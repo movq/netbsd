@@ -1,8 +1,7 @@
-/*	$NetBSD: box.cpp,v 1.1.1.2 2004/07/30 14:45:00 wiz Exp $	*/
+/*	$NetBSD: box.cpp,v 1.1.1.1 2003/06/30 17:52:12 wiz Exp $	*/
 
 // -*- C++ -*-
-/* Copyright (C) 1989, 1990, 1991, 1992, 2002, 2004
-   Free Software Foundation, Inc.
+/* Copyright (C) 1989, 1990, 1991, 1992, 2002 Free Software Foundation, Inc.
      Written by James Clark (jjc@jclark.com)
 
 This file is part of groff.
@@ -83,7 +82,7 @@ int matrix_side_sep = 17;	// = thin space
 
 int nroff = 0;			// should we grok ndefine or tdefine?
 
-struct S {
+struct {
   const char *name;
   int *ptr;
 } param_table[] = {

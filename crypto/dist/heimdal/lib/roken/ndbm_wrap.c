@@ -34,7 +34,7 @@
 #ifdef HAVE_CONFIG_H
 #include <config.h>
 __RCSID("$Heimdal: ndbm_wrap.c,v 1.1.8.1 2003/08/29 17:00:34 lha Exp $"
-        "$NetBSD: ndbm_wrap.c,v 1.1.1.2 2004/04/02 14:47:56 lha Exp $");
+        "$NetBSD: ndbm_wrap.c,v 1.1.1.1.2.1 2004/04/21 04:55:42 jmc Exp $");
 #endif
 
 #include "ndbm_wrap.h"

@@ -1,7 +1,7 @@
-/*	$NetBSD: table.cpp,v 1.1.1.2 2004/07/30 14:44:57 wiz Exp $	*/
+/*	$NetBSD: table.cpp,v 1.1.1.1 2003/06/30 17:52:10 wiz Exp $	*/
 
 // -*- C++ -*-
-/* Copyright (C) 1989, 1990, 1991, 1992, 2000, 2003, 2004
+/* Copyright (C) 1989, 1990, 1991, 1992, 2000, 2003
    Free Software Foundation, Inc.
      Written by James Clark (jjc@jclark.com)
 
@@ -130,14 +130,14 @@ void prints(const string &s)
 
 struct horizontal_span {
   horizontal_span *next;
-  int start_col;
-  int end_col;
+  short start_col;
+  short end_col;
   horizontal_span(int, int, horizontal_span *);
 };
 
-class single_line_entry;
-class double_line_entry;
-class simple_entry;
+struct single_line_entry;
+struct double_line_entry;
+struct simple_entry;
 
 class table_entry {
 friend class table;
@@ -147,8 +147,8 @@ friend class table;
 protected:
   int start_row;
   int end_row;
-  int start_col;
-  int end_col;
+  short start_col;
+  short end_col;
   const entry_modifier *mod;
 public:
   void set_location();
@@ -689,8 +689,8 @@ void block_entry::do_divert(int alphabetic, int ncols, const string *mw,
   if (alphabetic)
     prints("-2n");
   prints("\n");
-  prints(".cp \\n(" COMPATIBLE_REG "\n");
   set_modifier(mod);
+  prints(".cp \\n(" COMPATIBLE_REG "\n");
   set_location();
   prints(contents);
   prints(".br\n.di\n.cp 0\n");
@@ -967,8 +967,6 @@ void set_modifier(const entry_modifier *m)
       prints('-');
     printfs("%1\n", as_string(m->vertical_spacing.val));
   }
-  if (!m->macro.empty())
-    printfs(".%1\n", m->macro);
 }
 
 void set_inline_modifier(const entry_modifier *m)
@@ -1092,7 +1090,7 @@ struct vertical_rule {
   vertical_rule *next;
   int start_row;
   int end_row;
-  int col;
+  short col;
   char is_double;
   string top_adjust;
   string bot_adjust;

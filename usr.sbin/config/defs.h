@@ -1,4 +1,4 @@
-/*	$NetBSD: defs.h,v 1.19 2004/06/04 23:44:35 thorpej Exp $	*/
+/*	$NetBSD: defs.h,v 1.16 2003/11/24 21:44:37 christos Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -118,7 +118,7 @@ struct nvlist {
  */
 struct config {
 	TAILQ_ENTRY(config) cf_next;
-	const char *cf_name;		/* "netbsd" */
+	const char *cf_name;		/* "vmunix" */
 	int	cf_lineno;		/* source line */
 	const char *cf_fstype;		/* file system type */
 	struct	nvlist *cf_root;	/* "root on ra0a" */
@@ -359,8 +359,6 @@ int	maxpartitions;		/* configuration's "maxpartitions" parameter */
 struct	nvlist *options;	/* options */
 struct	nvlist *fsoptions;	/* filesystems */
 struct	nvlist *mkoptions;	/* makeoptions */
-struct	nvlist *appmkoptions;	/* appending mkoptions */
-struct	hashtab *condmkopttab;	/* conditional makeoption table */
 struct	hashtab *devbasetab;	/* devbase lookup */
 struct	hashtab *devatab;	/* devbase attachment lookup */
 struct	hashtab *devitab;	/* device instance lookup */
@@ -436,8 +434,6 @@ int	ht_enumerate(struct hashtab *, ht_callback, void *);
 void	addoption(const char *, const char *);
 void	addfsoption(const char *);
 void	addmkoption(const char *, const char *);
-void	appendmkoption(const char *, const char *);
-void	appendcondmkoption(const char *, const char *, const char *);
 void	deffilesystem(const char *, struct nvlist *);
 void	defoption(const char *, struct nvlist *, struct nvlist *);
 void	defflag(const char *, struct nvlist *, struct nvlist *);

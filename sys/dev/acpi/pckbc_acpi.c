@@ -1,4 +1,4 @@
-/*	$NetBSD: pckbc_acpi.c,v 1.15 2004/05/01 12:03:48 kochi Exp $	*/
+/*	$NetBSD: pckbc_acpi.c,v 1.11 2003/11/03 19:11:41 mycroft Exp $	*/
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -49,7 +49,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pckbc_acpi.c,v 1.15 2004/05/01 12:03:48 kochi Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pckbc_acpi.c,v 1.11 2003/11/03 19:11:41 mycroft Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -71,8 +71,8 @@ __KERNEL_RCSID(0, "$NetBSD: pckbc_acpi.c,v 1.15 2004/05/01 12:03:48 kochi Exp $"
 
 #include <dev/acpi/acpivar.h>
 
-static int	pckbc_acpi_match(struct device *, struct cfdata *, void *);
-static void	pckbc_acpi_attach(struct device *, struct device *, void *);
+int	pckbc_acpi_match(struct device *, struct cfdata *, void *);
+void	pckbc_acpi_attach(struct device *, struct device *, void *);
 
 struct pckbc_acpi_softc {
 	struct pckbc_softc sc_pckbc;
@@ -91,7 +91,7 @@ extern struct cfdriver pckbc_cd;
 CFATTACH_DECL(pckbc_acpi, sizeof(struct pckbc_acpi_softc),
     pckbc_acpi_match, pckbc_acpi_attach, NULL, NULL);
 
-static void	pckbc_acpi_intr_establish(struct pckbc_softc *, pckbc_slot_t);
+void	pckbc_acpi_intr_establish(struct pckbc_softc *, pckbc_slot_t);
 
 /*
  * Supported Device IDs
@@ -116,25 +116,25 @@ static const char * const pckbc_acpi_ids_ms[] = {
 /*
  * pckbc_acpi_match: autoconf(9) match routine
  */
-static int
+int
 pckbc_acpi_match(struct device *parent, struct cfdata *match, void *aux)
 {
 	struct acpi_attach_args *aa = aux;
 	int rv;
 
 	if (aa->aa_node->ad_type != ACPI_TYPE_DEVICE)
-		return 0;
+		return (0);
 
 	rv = acpi_match_hid(aa->aa_node->ad_devinfo, pckbc_acpi_ids_kbd);
 	if (rv)
-		return rv;
+		return (rv);
 	rv = acpi_match_hid(aa->aa_node->ad_devinfo, pckbc_acpi_ids_ms);
 	if (rv)
-		return rv;
-	return 0;
+		return (rv);
+	return (0);
 }
 
-static void
+void
 pckbc_acpi_attach(struct device *parent,
     struct device *self,
     void *aux)
@@ -166,8 +166,8 @@ pckbc_acpi_attach(struct device *parent,
 	printf(": %s port\n", pckbc_slot_names[psc->sc_slot]);
 
 	/* parse resources */
-	rv = acpi_resource_parse(&sc->sc_dv, aa->aa_node->ad_handle, "_CRS",
-	    &res, &acpi_resource_parse_ops_default);
+	rv = acpi_resource_parse(&sc->sc_dv, aa->aa_node, &res,
+	    &acpi_resource_parse_ops_default);
 	if (ACPI_FAILURE(rv))
 		return;
 
@@ -175,7 +175,7 @@ pckbc_acpi_attach(struct device *parent,
 	irq = acpi_res_irq(&res, 0);
 	if (irq == NULL) {
 		printf("%s: unable to find irq resource\n", sc->sc_dv.dv_xname);
-		goto out;
+		return;
 	}
 	psc->sc_irq = irq->ar_irq;
 	psc->sc_ist = (irq->ar_type == ACPI_EDGE_SENSITIVE) ? IST_EDGE : IST_LEVEL;
@@ -190,7 +190,7 @@ pckbc_acpi_attach(struct device *parent,
 		if (io0 == NULL) {
 			printf("%s: unable to find i/o resources\n",
 			    sc->sc_dv.dv_xname);
-			goto out;
+			return;
 		}
 
 		if (pckbc_is_console(aa->aa_iot, io0->ar_base)) {
@@ -204,7 +204,7 @@ pckbc_acpi_attach(struct device *parent,
 			if (io1 == NULL) {
 				printf("%s: unable to find i/o resources\n",
 				    sc->sc_dv.dv_xname);
-				goto out;
+				return;
 			}
 			if (bus_space_map(aa->aa_iot, io0->ar_base,
 					  io0->ar_length, 0, &ioh_d) ||
@@ -230,11 +230,9 @@ pckbc_acpi_attach(struct device *parent,
 		config_defer(&first->sc_pckbc.sc_dv,
 			     (void(*)(struct device *))pckbc_attach);
 	}
- out:
-	acpi_resource_cleanup(&res);
 }
 
-static void
+void
 pckbc_acpi_intr_establish(struct pckbc_softc *sc,
     pckbc_slot_t slot)
 {

@@ -1,4 +1,4 @@
-/*	$NetBSD: ad1848.c,v 1.18 2004/08/24 00:53:28 thorpej Exp $	*/
+/*	$NetBSD: ad1848.c,v 1.17 2003/02/21 17:14:06 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -102,7 +102,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ad1848.c,v 1.18 2004/08/24 00:53:28 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ad1848.c,v 1.17 2003/02/21 17:14:06 tsutsui Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -188,8 +188,16 @@ static const int ad1848_init_values[] = {
 };
 
 
+__inline int ad_read __P((struct ad1848_softc *, int));
+__inline void ad_write __P((struct ad1848_softc *, int, int));
+static void ad_set_MCE __P((struct ad1848_softc *, int));
+static void wait_for_calibration __P((struct ad1848_softc *));
+
+
 int
-ad1848_to_vol(mixer_ctrl_t *cp, struct ad1848_volume *vol)
+ad1848_to_vol(cp, vol)
+	mixer_ctrl_t *cp;
+	struct ad1848_volume *vol;
 {
 	if (cp->un.value.num_channels == 1) {
 		vol->left =
@@ -205,7 +213,9 @@ ad1848_to_vol(mixer_ctrl_t *cp, struct ad1848_volume *vol)
 }
 
 int
-ad1848_from_vol(mixer_ctrl_t *cp, struct ad1848_volume *vol)
+ad1848_from_vol(cp, vol)
+	mixer_ctrl_t *cp;
+	struct ad1848_volume *vol;
 {
 	if (cp->un.value.num_channels == 1) {
 		cp->un.value.level[AUDIO_MIXER_LEVEL_MONO] = vol->left;
@@ -221,7 +231,9 @@ ad1848_from_vol(mixer_ctrl_t *cp, struct ad1848_volume *vol)
 
 
 __inline int
-ad_read(struct ad1848_softc *sc, int reg)
+ad_read(sc, reg)
+	struct ad1848_softc *sc;
+	int reg;
 {
 	int x;
 
@@ -232,7 +244,10 @@ ad_read(struct ad1848_softc *sc, int reg)
 }
 
 __inline void
-ad_write(struct ad1848_softc *sc, int reg, int data)
+ad_write(sc, reg, data)
+	struct ad1848_softc *sc;
+	int reg;
+	int data;
 {
 	ADWRITE(sc, AD1848_IADDR, (reg & 0xff) | sc->MCE_bit);
 	ADWRITE(sc, AD1848_IDATA, data & 0xff);
@@ -245,7 +260,9 @@ ad_write(struct ad1848_softc *sc, int reg, int data)
  */
 
 __inline int
-ad_xread(struct ad1848_softc *sc, int reg)
+ad_xread(sc, reg)
+	struct ad1848_softc *sc;
+	int reg;
 {
 	int x;
 
@@ -257,7 +274,9 @@ ad_xread(struct ad1848_softc *sc, int reg)
 }
 
 __inline void
-ad_xwrite(struct ad1848_softc *sc, int reg, int val)
+ad_xwrite(sc, reg, val)
+	struct ad1848_softc *sc;
+	int reg, val;
 {
 	ADWRITE(sc, AD1848_IADDR, CS_XREG | sc->MCE_bit);
 	ADWRITE(sc, AD1848_IDATA, (reg | ALT_F3_XRAE) & 0xff);
@@ -265,7 +284,9 @@ ad_xwrite(struct ad1848_softc *sc, int reg, int val)
 }
 
 static void
-ad_set_MCE(struct ad1848_softc *sc, int state)
+ad_set_MCE(sc, state)
+	struct ad1848_softc *sc;
+	int state;
 {
 	if (state)
 		sc->MCE_bit = MODE_CHANGE_ENABLE;
@@ -275,7 +296,8 @@ ad_set_MCE(struct ad1848_softc *sc, int state)
 }
 
 static void
-wait_for_calibration(struct ad1848_softc *sc)
+wait_for_calibration(sc)
+	struct ad1848_softc *sc;
 {
 	int timeout;
 
@@ -337,7 +359,8 @@ wait_for_calibration(struct ad1848_softc *sc)
 
 #ifdef AUDIO_DEBUG
 void
-ad1848_dump_regs(struct ad1848_softc *sc)
+ad1848_dump_regs(sc)
+	struct ad1848_softc *sc;
 {
 	int i;
 	u_char r;
@@ -356,7 +379,7 @@ ad1848_dump_regs(struct ad1848_softc *sc)
 	}
 	printf("\n");
 }
-#endif /* AUDIO_DEBUG */
+#endif
 
 
 /*
@@ -364,7 +387,8 @@ ad1848_dump_regs(struct ad1848_softc *sc)
  * pseudo-device driver .
  */
 void
-ad1848_attach(struct ad1848_softc *sc)
+ad1848_attach(sc)
+	struct ad1848_softc *sc;
 {
 	int i;
 	static struct ad1848_volume vol_mid = {220, 220};
@@ -424,7 +448,7 @@ ad1848_attach(struct ad1848_softc *sc)
 /*
  * Various routines to interface to higher level audio driver
  */
-static const struct ad1848_mixerinfo {
+const struct ad1848_mixerinfo {
 	int  left_reg;
 	int  right_reg;
 	int  atten_bits;
@@ -452,7 +476,10 @@ static const struct ad1848_mixerinfo {
  */
 
 void
-ad1848_mute_channel(struct ad1848_softc *sc, int device, int mute)
+ad1848_mute_channel(sc, device, mute)
+	struct ad1848_softc *sc;
+	int device;
+	int mute;
 {
 	u_char reg;
 
@@ -498,8 +525,10 @@ ad1848_mute_channel(struct ad1848_softc *sc, int device, int mute)
 
 
 int
-ad1848_set_channel_gain(struct ad1848_softc *sc, int device,
-    struct ad1848_volume *gp)
+ad1848_set_channel_gain(sc, device, gp)
+	struct ad1848_softc *sc;
+	int device;
+	struct ad1848_volume *gp;
 {
 	const struct ad1848_mixerinfo *info = &mixer_channel_info[device];
 	u_char reg;
@@ -532,22 +561,28 @@ ad1848_set_channel_gain(struct ad1848_softc *sc, int device,
 
 
 int
-ad1848_get_device_gain(struct ad1848_softc *sc, int device,
-    struct ad1848_volume *gp)
+ad1848_get_device_gain(sc, device, gp)
+	struct ad1848_softc *sc;
+	int device;
+	struct ad1848_volume *gp;
 {
 	*gp = sc->gains[device];
 	return(0);
 }
 
 int
-ad1848_get_rec_gain(struct ad1848_softc *sc, struct ad1848_volume *gp)
+ad1848_get_rec_gain(sc, gp)
+	struct ad1848_softc *sc;
+	struct ad1848_volume *gp;
 {
 	*gp = sc->rec_gain;
 	return(0);
 }
 
 int
-ad1848_set_rec_gain(struct ad1848_softc *sc, struct ad1848_volume *gp)
+ad1848_set_rec_gain(sc, gp)
+	struct ad1848_softc *sc;
+	struct ad1848_volume *gp;
 {
 	u_char reg, gain;
 
@@ -570,7 +605,9 @@ ad1848_set_rec_gain(struct ad1848_softc *sc, struct ad1848_volume *gp)
 
 
 void
-ad1848_mute_wave_output(struct ad1848_softc *sc, int mute, int set)
+ad1848_mute_wave_output(sc, mute, set)
+	struct ad1848_softc *sc;
+	int mute, set;
 {
 	int m;
 
@@ -593,7 +630,9 @@ ad1848_mute_wave_output(struct ad1848_softc *sc, int mute, int set)
 }
 
 int
-ad1848_set_mic_gain(struct ad1848_softc *sc, struct ad1848_volume *gp)
+ad1848_set_mic_gain(sc, gp)
+	struct ad1848_softc *sc;
+	struct ad1848_volume *gp;
 {
 	u_char reg;
 
@@ -615,7 +654,9 @@ ad1848_set_mic_gain(struct ad1848_softc *sc, struct ad1848_volume *gp)
 }
 
 int
-ad1848_get_mic_gain(struct ad1848_softc *sc, struct ad1848_volume *gp)
+ad1848_get_mic_gain(sc, gp)
+	struct ad1848_softc *sc;
+	struct ad1848_volume *gp;
 {
 	if (sc->mic_gain_on)
 		gp->left = gp->right = AUDIO_MAX_GAIN;
@@ -626,7 +667,13 @@ ad1848_get_mic_gain(struct ad1848_softc *sc, struct ad1848_volume *gp)
 
 
 static ad1848_devmap_t *
-ad1848_mixer_find_dev(ad1848_devmap_t *map, int cnt, mixer_ctrl_t *cp)
+	ad1848_mixer_find_dev __P((ad1848_devmap_t *, int, mixer_ctrl_t *));
+
+static ad1848_devmap_t *
+ad1848_mixer_find_dev(map, cnt, cp)
+	ad1848_devmap_t *map;
+	int cnt;
+	mixer_ctrl_t *cp;
 {
 	int i;
 
@@ -639,8 +686,11 @@ ad1848_mixer_find_dev(ad1848_devmap_t *map, int cnt, mixer_ctrl_t *cp)
 }
 
 int
-ad1848_mixer_get_port(struct ad1848_softc *ac, struct ad1848_devmap *map,
-    int cnt, mixer_ctrl_t *cp)
+ad1848_mixer_get_port(ac, map, cnt, cp)
+	struct ad1848_softc *ac;
+	struct ad1848_devmap *map;
+	int cnt;
+	mixer_ctrl_t *cp;
 {
 	ad1848_devmap_t *entry;
 	struct ad1848_volume vol;
@@ -711,8 +761,11 @@ ad1848_mixer_get_port(struct ad1848_softc *ac, struct ad1848_devmap *map,
 }
 
 int
-ad1848_mixer_set_port(struct ad1848_softc *ac, struct ad1848_devmap *map,
-    int cnt, mixer_ctrl_t *cp)
+ad1848_mixer_set_port(ac, map, cnt, cp)
+	struct ad1848_softc *ac;
+	struct ad1848_devmap *map;
+	int cnt;
+	mixer_ctrl_t *cp;
 {
 	ad1848_devmap_t *entry;
 	struct ad1848_volume vol;
@@ -779,7 +832,9 @@ ad1848_mixer_set_port(struct ad1848_softc *ac, struct ad1848_devmap *map,
 
 
 int
-ad1848_query_encoding(void *addr, struct audio_encoding *fp)
+ad1848_query_encoding(addr, fp)
+	void *addr;
+	struct audio_encoding *fp;
 {
 	struct ad1848_softc *sc = addr;
 
@@ -856,13 +911,15 @@ ad1848_query_encoding(void *addr, struct audio_encoding *fp)
 }
 
 int
-ad1848_set_params(void *addr, int setmode, int usemode, struct audio_params *p,
-    struct audio_params *r)
+ad1848_set_params(addr, setmode, usemode, p, r)
+	void *addr;
+	int setmode, usemode;
+	struct audio_params *p, *r;
 {
 	struct ad1848_softc *sc = addr;
 	int error, bits, enc;
-	void (*pswcode)(void *, u_char *buf, int cnt);
-	void (*rswcode)(void *, u_char *buf, int cnt);
+	void (*pswcode) __P((void *, u_char *buf, int cnt));
+	void (*rswcode) __P((void *, u_char *buf, int cnt));
 
 	DPRINTF(("ad1848_set_params: %d %d %d %ld\n",
 		 p->encoding, p->precision, p->channels, p->sample_rate));
@@ -961,7 +1018,9 @@ ad1848_set_params(void *addr, int setmode, int usemode, struct audio_params *p,
 }
 
 int
-ad1848_set_rec_port(struct ad1848_softc *sc, int port)
+ad1848_set_rec_port(sc, port)
+	struct ad1848_softc *sc;
+	int port;
 {
 	u_char inp, reg;
 
@@ -992,13 +1051,16 @@ ad1848_set_rec_port(struct ad1848_softc *sc, int port)
 }
 
 int
-ad1848_get_rec_port(struct ad1848_softc *sc)
+ad1848_get_rec_port(sc)
+	struct ad1848_softc *sc;
 {
 	return (sc->rec_port);
 }
 
 int
-ad1848_round_blocksize(void *addr, int blk)
+ad1848_round_blocksize(addr, blk)
+	void *addr;
+	int blk;
 {
 
 	/* Round to a multiple of the biggest sample size. */
@@ -1006,7 +1068,9 @@ ad1848_round_blocksize(void *addr, int blk)
 }
 
 int
-ad1848_open(void *addr, int flags)
+ad1848_open(addr, flags)
+	void *addr;
+	int flags;
 {
 	struct ad1848_softc *sc = addr;
 	u_char reg;
@@ -1036,7 +1100,8 @@ ad1848_open(void *addr, int flags)
  * Close function is called at splaudio().
  */
 void
-ad1848_close(void *addr)
+ad1848_close(addr)
+	void *addr;
 {
 	struct ad1848_softc *sc = addr;
 	u_char reg;
@@ -1060,7 +1125,8 @@ ad1848_close(void *addr)
  * Lower-level routines
  */
 int
-ad1848_commit_settings(void *addr)
+ad1848_commit_settings(addr)
+	void *addr;
 {
 	struct ad1848_softc *sc = addr;
 	int timeout;
@@ -1141,7 +1207,8 @@ ad1848_commit_settings(void *addr)
 }
 
 void
-ad1848_reset(struct ad1848_softc *sc)
+ad1848_reset(sc)
+	struct ad1848_softc *sc;
 {
 	u_char r;
 
@@ -1165,7 +1232,9 @@ ad1848_reset(struct ad1848_softc *sc)
 }
 
 int
-ad1848_set_speed(struct ad1848_softc *sc, u_long *argp)
+ad1848_set_speed(sc, argp)
+	struct ad1848_softc *sc;
+	u_long *argp;
 {
 	/*
 	 * The sampling speed is encoded in the least significant nible of I8.
@@ -1239,7 +1308,8 @@ ad1848_set_speed(struct ad1848_softc *sc, u_long *argp)
  * Halt I/O
  */
 int
-ad1848_halt_output(void *addr)
+ad1848_halt_output(addr)
+	void *addr;
 {
 	struct ad1848_softc *sc = addr;
 	u_char reg;
@@ -1253,7 +1323,8 @@ ad1848_halt_output(void *addr)
 }
 
 int
-ad1848_halt_input(void *addr)
+ad1848_halt_input(addr)
+	void *addr;
 {
 	struct ad1848_softc *sc = addr;
 	u_char reg;

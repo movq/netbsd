@@ -1,4 +1,4 @@
-/*	$NetBSD: db_disasm.c,v 1.30 2004/08/28 22:06:28 thorpej Exp $	*/
+/*	$NetBSD: db_disasm.c,v 1.29 2003/07/15 02:43:12 lukem Exp $	*/
 
 /*
  * Copyright (c) 1994 Christian E. Hopps
@@ -63,7 +63,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: db_disasm.c,v 1.30 2004/08/28 22:06:28 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: db_disasm.c,v 1.29 2003/07/15 02:43:12 lukem Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -74,100 +74,91 @@ __KERNEL_RCSID(0, "$NetBSD: db_disasm.c,v 1.30 2004/08/28 22:06:28 thorpej Exp $
 #include <ddb/db_output.h>
 #include <m68k/m68k/db_disasm.h>
 
-static void	get_modregstr(dis_buffer_t *, int, int, int, int);
-static void	get_modregstr_moto(dis_buffer_t *, int, int, int, int);
-static void	get_modregstr_mit(dis_buffer_t *, int, int, int, int);
-#if 0
-static u_long	get_areg_val(int reg);
-#endif
-static void	get_immed(dis_buffer_t *, int);
-static void	get_fpustdGEN(dis_buffer_t *, u_short, const char *);
-static void	addstr(dis_buffer_t *, const char *s);
-static void	prints(dis_buffer_t *, int, int);
-static void	printu(dis_buffer_t *, u_int, int);
-static void	prints_wb(dis_buffer_t *, int, int, int);
-static void	printu_wb(dis_buffer_t *, u_int, int, int);
-static void	prints_bf(dis_buffer_t *, int, int, int);
-static void	printu_bf(dis_buffer_t *, u_int, int, int);
-static void	iaddstr(dis_buffer_t *, const char *s);
-#if 0
-static void	iprints(dis_buffer_t *, int, int);
-#endif
-static void	iprintu(dis_buffer_t *, u_int, int);
-#if 0
-static void	iprints_wb(dis_buffer_t *, int, int, int);
-#endif
-static void	iprintu_wb(dis_buffer_t *, u_int, int, int);
-static void	make_cond(dis_buffer_t *, int , char *);
-static void	print_fcond(dis_buffer_t *, char);
-static void	print_mcond(dis_buffer_t *, char);
-static void	print_disp(dis_buffer_t *, int, int, int);
-static void	print_addr(dis_buffer_t *, u_long);
-static void	print_reglist(dis_buffer_t *, int, u_short);
-static void	print_freglist(dis_buffer_t *, int, u_short, int);
-static void	print_fcode(dis_buffer_t *, u_short);
+void get_modregstr __P((dis_buffer_t *, int, int, int, int));
+void get_immed __P((dis_buffer_t *, int));
+void get_fpustdGEN __P((dis_buffer_t *, u_short, const char *));
+void addstr __P((dis_buffer_t *, const char *s));
+void prints __P((dis_buffer_t *, int, int));
+void printu __P((dis_buffer_t *, u_int, int));
+void prints_wb __P((dis_buffer_t *, int, int, int));
+void printu_wb __P((dis_buffer_t *, u_int, int, int));
+void prints_bf __P((dis_buffer_t *, int, int, int));
+void printu_bf __P((dis_buffer_t *, u_int, int, int));
+void iaddstr __P((dis_buffer_t *, const char *s));
+void iprints __P((dis_buffer_t *, int, int));
+void iprintu __P((dis_buffer_t *, u_int, int));
+void iprints_wb __P((dis_buffer_t *, int, int, int));
+void iprintu_wb __P((dis_buffer_t *, u_int, int, int));
+void make_cond __P((dis_buffer_t *, int , char *));
+void print_fcond __P((dis_buffer_t *, char));
+void print_mcond __P((dis_buffer_t *, char));
+void print_disp __P((dis_buffer_t *, int, int, int));
+void print_addr __P((dis_buffer_t *, u_long));
+void print_reglist __P((dis_buffer_t *, int, u_short));
+void print_freglist __P((dis_buffer_t *, int, u_short, int));
+void print_fcode __P((dis_buffer_t *, u_short));
 
 /* groups */
-static void	opcode_bitmanip(dis_buffer_t *, u_short);
-static void	opcode_move(dis_buffer_t *, u_short);
-static void	opcode_misc(dis_buffer_t *, u_short);
-static void	opcode_branch(dis_buffer_t *, u_short);
-static void	opcode_coproc(dis_buffer_t *, u_short);
-static void	opcode_0101(dis_buffer_t *, u_short);
-static void	opcode_1000(dis_buffer_t *, u_short);
-static void	opcode_addsub(dis_buffer_t *, u_short);
-static void	opcode_1010(dis_buffer_t *, u_short);
-static void	opcode_1011(dis_buffer_t *, u_short);
-static void	opcode_1100(dis_buffer_t *, u_short);
-static void	opcode_1110(dis_buffer_t *, u_short);
-static void	opcode_fpu(dis_buffer_t *, u_short);
-static void	opcode_mmu(dis_buffer_t *, u_short);
-static void	opcode_mmu040(dis_buffer_t *, u_short);
-static void	opcode_move16(dis_buffer_t *, u_short);
+void opcode_bitmanip __P((dis_buffer_t *, u_short));
+void opcode_move __P((dis_buffer_t *, u_short));
+void opcode_misc __P((dis_buffer_t *, u_short));
+void opcode_branch __P((dis_buffer_t *, u_short));
+void opcode_coproc __P((dis_buffer_t *, u_short));
+void opcode_0101 __P((dis_buffer_t *, u_short));
+void opcode_1000 __P((dis_buffer_t *, u_short));
+void opcode_addsub __P((dis_buffer_t *, u_short));
+void opcode_1010 __P((dis_buffer_t *, u_short));
+void opcode_1011 __P((dis_buffer_t *, u_short));
+void opcode_1100 __P((dis_buffer_t *, u_short));
+void opcode_1110 __P((dis_buffer_t *, u_short));
+void opcode_fpu __P((dis_buffer_t *, u_short));
+void opcode_mmu __P((dis_buffer_t *, u_short));
+void opcode_mmu040 __P((dis_buffer_t *, u_short));
+void opcode_move16 __P((dis_buffer_t *, u_short));
 
 /* subs of groups */
-static void	opcode_movec(dis_buffer_t *, u_short);
-static void	opcode_divmul(dis_buffer_t *, u_short);
-static void	opcode_movem(dis_buffer_t *, u_short);
-static void	opcode_fmove_ext(dis_buffer_t *, u_short, u_short);
-static void	opcode_pmove(dis_buffer_t *, u_short, u_short);
-static void	opcode_pflush(dis_buffer_t *, u_short, u_short);
+void opcode_movec __P((dis_buffer_t *, u_short));
+void opcode_divmul __P((dis_buffer_t *, u_short));
+void opcode_movem __P((dis_buffer_t *, u_short));
+void opcode_fmove_ext __P((dis_buffer_t *, u_short, u_short));
+void opcode_pmove __P((dis_buffer_t *, u_short, u_short));
+void opcode_pflush __P((dis_buffer_t *, u_short, u_short));
 
 #define addchar(ch) (*dbuf->casm++ = ch)
 #define iaddchar(ch) (*dbuf->cinfo++ = ch)
 
-typedef void dis_func_t(dis_buffer_t *, u_short);
+typedef void dis_func_t __P((dis_buffer_t *, u_short));
 
-static dis_func_t *const opcode_map[16] = {
+dis_func_t *const opcode_map[16] = {
 	opcode_bitmanip, opcode_move, opcode_move, opcode_move,
 	opcode_misc, opcode_0101, opcode_branch, opcode_move,
 	opcode_1000, opcode_addsub, opcode_1010, opcode_1011,
 	opcode_1100, opcode_addsub, opcode_1110, opcode_coproc
 };
 
-static const char *const cc_table[16] = {
+const char *const cc_table[16] = {
 	"t", "f", "hi", "ls",
 	"cc", "cs", "ne", "eq",
 	"vc", "vs", "pl", "mi",
 	"ge", "lt", "gt", "le"
 };
 
-static const char *const fpcc_table[32] = {
+const char *const fpcc_table[32] = {
 	"f", "eq", "ogt", "oge", "olt", "ole", "ogl", "or",
 	"un", "ueq", "ugt", "uge", "ult", "ule", "ne", "t",
 	"sf", "seq", "gt", "ge", "lt", "le", "gl", "gle",
 	"ngle", "ngl", "nle", "nlt", "nge", "ngt", "sne", "st" };
 
-static const char *const mmcc_table[16] = {
+const char *const mmcc_table[16] = {
 	"bs", "bc", "ls", "lc", "ss", "sc", "as", "sc",
 	"ws", "wc", "is", "ic", "gs", "gc", "cs", "cc" };
 
 
-static const char *const aregs[8] = {"a0","a1","a2","a3","a4","a5","a6","sp"};
-static const char *const dregs[8] = {"d0","d1","d2","d3","d4","d5","d6","d7"};
-static const char *const fpregs[8] = {
+const char *const aregs[8] = {"a0","a1","a2","a3","a4","a5","a6","sp"};
+const char *const dregs[8] = {"d0","d1","d2","d3","d4","d5","d6","d7"};
+const char *const fpregs[8] = {
 	"fp0","fp1","fp2","fp3","fp4","fp5","fp6","fp7" };
-static const char *const fpcregs[3] = { "fpiar", "fpsr", "fpcr" };
+const char *const fpcregs[3] = { "fpiar", "fpsr", "fpcr" };
 
 /*
  * Disassemble intruction at location ``loc''.
@@ -178,7 +169,9 @@ static char asm_buffer[256];
 static char info_buffer[256];
 
 db_addr_t 
-db_disasm(db_addr_t loc, boolean_t moto_syntax)
+db_disasm(loc, moto_syntax)
+	db_addr_t loc;
+	boolean_t moto_syntax;
 {
 	u_short opc;
 	dis_func_t *func;
@@ -209,8 +202,10 @@ db_disasm(db_addr_t loc, boolean_t moto_syntax)
 /*
  * Bit manipulation/MOVEP/Immediate.
  */
-static void
-opcode_bitmanip(dis_buffer_t *dbuf, u_short opc)
+void
+opcode_bitmanip(dbuf, opc)
+	dis_buffer_t *dbuf;
+	u_short opc;
 {
 	char *tmp;
 	u_short ext;
@@ -507,8 +502,10 @@ opcode_bitmanip(dis_buffer_t *dbuf, u_short opc)
  * move byte/word/long and q
  * 00xx (01==.b 10==.l 11==.w) and 0111(Q)
  */
-static void
-opcode_move(dis_buffer_t *dbuf, u_short opc)
+void
+opcode_move(dbuf, opc)
+	dis_buffer_t *dbuf;
+	u_short opc;
 {
 	int sz, lused;
 
@@ -552,8 +549,10 @@ opcode_move(dis_buffer_t *dbuf, u_short opc)
 /*
  * misc opcodes.
  */
-static void
-opcode_misc(dis_buffer_t *dbuf, u_short opc)
+void
+opcode_misc(dbuf, opc)
+	dis_buffer_t *dbuf;
+	u_short opc;
 {
 	char *tmp;
 	int sz;
@@ -776,8 +775,10 @@ opcode_misc(dis_buffer_t *dbuf, u_short opc)
 /*
  * ADDQ/SUBQ/Scc/DBcc/TRAPcc
  */
-static void
-opcode_0101(dis_buffer_t *dbuf, u_short opc)
+void
+opcode_0101(dbuf, opc)
+	dis_buffer_t *dbuf;
+	u_short opc;
 {
 	int data;
 
@@ -841,8 +842,10 @@ opcode_0101(dis_buffer_t *dbuf, u_short opc)
 /*
  * Bcc/BSR/BRA
  */
-static void
-opcode_branch(dis_buffer_t *dbuf, u_short opc)
+void
+opcode_branch(dbuf, opc)
+	dis_buffer_t *dbuf;
+	u_short opc;
 {
 	int disp, sz;
 
@@ -881,8 +884,10 @@ opcode_branch(dis_buffer_t *dbuf, u_short opc)
 /*
  * ADD/ADDA/ADDX/SUB/SUBA/SUBX
  */
-static void
-opcode_addsub(dis_buffer_t *dbuf, u_short opc)
+void
+opcode_addsub(dbuf, opc)
+	dis_buffer_t *dbuf;
+	u_short opc;
 {
 	int sz, ch, amode;
 	
@@ -961,8 +966,10 @@ opcode_addsub(dis_buffer_t *dbuf, u_short opc)
 /*
  * Shift/Rotate/Bit Field
  */
-static void
-opcode_1110(dis_buffer_t *dbuf, u_short opc)
+void
+opcode_1110(dbuf, opc)
+	dis_buffer_t *dbuf;
+	u_short opc;
 {
 	char *tmp;
 	u_short ext;
@@ -1104,8 +1111,10 @@ opcode_1110(dis_buffer_t *dbuf, u_short opc)
 /*
  * CMP/CMPA/EOR
  */
-static void
-opcode_1011(dis_buffer_t *dbuf, u_short opc)
+void
+opcode_1011(dbuf, opc)
+	dis_buffer_t *dbuf;
+	u_short opc;
 {
 	int sz;
 	
@@ -1162,8 +1171,10 @@ opcode_1011(dis_buffer_t *dbuf, u_short opc)
 /*
  * OR/DIV/SBCD
  */
-static void
-opcode_1000(dis_buffer_t *dbuf, u_short opc)
+void
+opcode_1000(dbuf, opc)
+	dis_buffer_t *dbuf;
+	u_short opc;
 {
 	int sz;
 	
@@ -1234,8 +1245,10 @@ opcode_1000(dis_buffer_t *dbuf, u_short opc)
 /*
  * AND/MUL/ABCD/EXG (1100)
  */
-static void
-opcode_1100(dis_buffer_t *dbuf, u_short opc)
+void
+opcode_1100(dbuf, opc)
+	dis_buffer_t *dbuf;
+	u_short opc;
 {
 	int sz;
 	
@@ -1308,8 +1321,10 @@ opcode_1100(dis_buffer_t *dbuf, u_short opc)
 /*
  * Coprocessor instruction
  */
-static void
-opcode_coproc(dis_buffer_t *dbuf, u_short opc)
+void
+opcode_coproc(dbuf, opc)
+	dis_buffer_t *dbuf;
+	u_short opc;
 {
 	switch (BITFIELD(*dbuf->val,11,9)) {
 	case 1:
@@ -1349,15 +1364,19 @@ opcode_coproc(dis_buffer_t *dbuf, u_short opc)
 /*
  * Resvd
  */
-static void
-opcode_1010(dis_buffer_t *dbuf, u_short opc)
+void
+opcode_1010(dbuf, opc)
+	dis_buffer_t *dbuf;
+	u_short opc;
 {
 	addstr(dbuf, "RSVD");
 	dbuf->used++;
 }
 
-static void
-opcode_fpu(dis_buffer_t *dbuf, u_short opc)
+void
+opcode_fpu(dbuf, opc)
+	dis_buffer_t *dbuf;
+	u_short opc;
 {
 	u_short ext;
 	int type, opmode;
@@ -1567,8 +1586,10 @@ opcode_fpu(dis_buffer_t *dbuf, u_short opc)
 /*
  * XXX - This screws up on:  fmovem  a0@(312),fpcr/fpsr/fpi
  */
-static void
-opcode_fmove_ext(dis_buffer_t *dbuf, u_short opc, u_short ext)
+void
+opcode_fmove_ext(dbuf, opc, ext)
+	dis_buffer_t *dbuf;
+	u_short opc, ext;
 {
 	int sz;
 
@@ -1669,8 +1690,10 @@ opcode_fmove_ext(dis_buffer_t *dbuf, u_short opc, u_short ext)
 	}
 }
 
-static void
-opcode_mmu(dis_buffer_t *dbuf, u_short opc)
+void
+opcode_mmu(dbuf, opc)
+	dis_buffer_t *dbuf;
+	u_short opc;
 {
 	u_short ext;
 	int type;
@@ -1777,8 +1800,10 @@ opcode_mmu(dis_buffer_t *dbuf, u_short opc)
 	}
 }
 
-static void
-opcode_pflush(dis_buffer_t *dbuf, u_short opc, u_short ext)
+void
+opcode_pflush(dbuf, opc, ext)
+	dis_buffer_t *dbuf;
+	u_short opc, ext;
 {
 	u_short mode, mask, fc;
 	
@@ -1826,8 +1851,10 @@ opcode_pflush(dis_buffer_t *dbuf, u_short opc, u_short ext)
 	}
 }
 
-static void
-opcode_pmove(dis_buffer_t *dbuf, u_short opc, u_short ext)
+void
+opcode_pmove(dbuf, opc, ext)
+	dis_buffer_t *dbuf;
+	u_short opc, ext;
 {
 	const char *reg;
 	int rtom, sz, preg;
@@ -1937,8 +1964,10 @@ opcode_pmove(dis_buffer_t *dbuf, u_short opc, u_short ext)
 	return;
 }
 
-static void
-print_fcode(dis_buffer_t *dbuf, u_short fc)
+void
+print_fcode(dbuf, fc)
+	dis_buffer_t *dbuf;
+	u_short fc;
 {
 	if (ISBITSET(fc, 4))
 		printu_bf(dbuf, fc, 3, 0);
@@ -1949,9 +1978,10 @@ print_fcode(dis_buffer_t *dbuf, u_short fc)
 	else
 		addstr(dbuf, "dfc");
 }
-
-static void
-opcode_mmu040(dis_buffer_t *dbuf, u_short opc)
+void
+opcode_mmu040(dbuf, opc)
+	dis_buffer_t *dbuf;
+	u_short opc;
 {
 	if (ISBITSET(opc, 6)) {
 		addstr(dbuf, "ptest");
@@ -1985,12 +2015,15 @@ opcode_mmu040(dis_buffer_t *dbuf, u_short opc)
 	*dbuf->casm = 0;
 }
 
+
 /*
  * disassemble long format (64b) divs/muls divu/mulu opcode.
  * Note: opcode's dbuf->used already accounted for.
  */
-static void
-opcode_divmul(dis_buffer_t *dbuf, u_short opc)
+void
+opcode_divmul(dbuf, opc)
+	dis_buffer_t *dbuf;
+	u_short opc;
 {
 	u_short ext;
 	int iq, hr;
@@ -2029,8 +2062,11 @@ opcode_divmul(dis_buffer_t *dbuf, u_short opc)
 	PRINT_DREG(dbuf, iq);
 }
 
-static void
-print_reglist(dis_buffer_t *dbuf, int mod, u_short rl)
+void
+print_reglist(dbuf, mod, rl)
+	dis_buffer_t *dbuf;
+	int mod;
+	u_short rl;
 {
 	static const char *const regs[16] = {
 		"d0","d1","d2","d3","d4","d5","d6","d7",
@@ -2075,8 +2111,11 @@ print_reglist(dis_buffer_t *dbuf, int mod, u_short rl)
 	*dbuf->casm = 0;
 }
 
-static void
-print_freglist(dis_buffer_t *dbuf, int mod, u_short rl, int cntl)
+void
+print_freglist(dbuf, mod, rl, cntl)
+	dis_buffer_t *dbuf;
+	int mod, cntl;
+	u_short rl;
 {
 	const char *const * regs;
 	int bit, list, upper;
@@ -2124,8 +2163,10 @@ print_freglist(dis_buffer_t *dbuf, int mod, u_short rl, int cntl)
 /*
  * disassemble movem opcode.
  */
-static void
-opcode_movem(dis_buffer_t *dbuf, u_short opc)
+void
+opcode_movem(dbuf, opc)
+	dis_buffer_t *dbuf;
+	u_short opc;
 {
 	u_short rl;
 	
@@ -2150,8 +2191,10 @@ opcode_movem(dis_buffer_t *dbuf, u_short opc)
 /*
  * disassemble movec opcode.
  */
-static void
-opcode_movec(dis_buffer_t *dbuf, u_short opc)
+void
+opcode_movec(dbuf, opc)
+	dis_buffer_t *dbuf;
+	u_short opc;
 {
 	char *tmp;
 	u_short ext;
@@ -2251,8 +2294,10 @@ opcode_movec(dis_buffer_t *dbuf, u_short opc)
 /*
  * disassemble move16 opcode.
  */
-static void
-opcode_move16(dis_buffer_t *dbuf, u_short opc)
+void
+opcode_move16(dbuf, opc)
+dis_buffer_t *dbuf;
+	u_short opc;
 {
 	u_short ext;
 
@@ -2296,8 +2341,10 @@ opcode_move16(dis_buffer_t *dbuf, u_short opc)
 /*
  * copy const string 's' into ``dbuf''->casm
  */
-static void
-addstr(dis_buffer_t *dbuf, const char *s)
+void
+addstr(dbuf, s)
+	dis_buffer_t *dbuf;
+	const char *s;
 {
 	while ((*dbuf->casm++ = *s++))
 		;
@@ -2307,16 +2354,20 @@ addstr(dis_buffer_t *dbuf, const char *s)
 /*
  * copy const string 's' into ``dbuf''->cinfo
  */
-static void
-iaddstr(dis_buffer_t *dbuf, const char *s)
+void
+iaddstr(dbuf, s)
+	dis_buffer_t *dbuf;
+	const char *s;
 {
 	while ((*dbuf->cinfo++ = *s++))
 		;
 	dbuf->cinfo--;
 }
 
-static void
-get_modregstr_moto(dis_buffer_t *dbuf, int bit, int mod, int sz, int dd)
+void
+get_modregstr_moto(dbuf, bit, mod, sz, dd)
+	dis_buffer_t *dbuf;
+	int bit, mod, sz, dd;
 {
 	u_char scale, idx;
 	const short *nval;
@@ -2520,8 +2571,10 @@ get_modregstr_moto(dis_buffer_t *dbuf, int bit, int mod, int sz, int dd)
 }			
 	
 /* mit syntax makes for spaghetti parses */
-static void
-get_modregstr_mit(dis_buffer_t *dbuf, int bit, int mod, int sz, int dd)
+void
+get_modregstr_mit(dbuf, bit, mod, sz, dd)
+	dis_buffer_t *dbuf;
+	int bit, mod, sz, dd;
 {
 	u_char scale, idx;
 	const short *nval;
@@ -2754,8 +2807,9 @@ get_modregstr_mit(dis_buffer_t *dbuf, int bit, int mod, int sz, int dd)
  * GETMOD_BEFORE or GETMOD_AFTER), disassemble and write into ``dbuf''
  * the mod|reg pair.
  */
-static void
-get_modregstr(dis_buffer_t *dbuf, int bit, int mod, int sz, int dispdisp)
+void get_modregstr(dbuf, bit, mod, sz, dispdisp)
+	dis_buffer_t *dbuf;
+	int bit, mod, sz, dispdisp;
 {
 	if (dbuf->mit) 
 		get_modregstr_mit(dbuf,bit,mod,sz,dispdisp);
@@ -2768,8 +2822,11 @@ get_modregstr(dis_buffer_t *dbuf, int bit, int mod, int sz, int dispdisp)
  * and the ``base'' string of the opcode, append the full
  * opcode name including condition found at ``bit''.
  */
-static void
-make_cond(dis_buffer_t *dbuf, int bit, char *base)
+void
+make_cond(dbuf, bit, base)
+	dis_buffer_t *dbuf;
+	int bit;
+	char *base;
 {
 	int cc;
 	const char *ccs;
@@ -2781,14 +2838,18 @@ make_cond(dis_buffer_t *dbuf, int bit, char *base)
 	addstr(dbuf, ccs);
 }
 
-static void
-print_fcond(dis_buffer_t *dbuf, char cp)
+void
+print_fcond(dbuf, cp)
+	dis_buffer_t *dbuf;
+	char cp;
 {
 	addstr(dbuf,fpcc_table[cp&31]); 	/* XXX - not 63 ?*/
 }
 
-static void
-print_mcond(dis_buffer_t *dbuf, char cp)
+void
+print_mcond(dbuf, cp)
+	dis_buffer_t *dbuf;
+	char cp;
 {
 	addstr(dbuf,mmcc_table[cp&15]);
 }
@@ -2799,8 +2860,10 @@ print_mcond(dis_buffer_t *dbuf, char cp)
  * hash (``#'') sign and the value.  Increment the ``dbuf''->used
  * field accordingly.
  */
-static void
-get_immed(dis_buffer_t *dbuf,int sz)
+void
+get_immed(dbuf,sz)
+	dis_buffer_t *dbuf;
+	int sz;
 {
 	addchar('#');
 	switch (sz) {
@@ -2820,8 +2883,11 @@ get_immed(dis_buffer_t *dbuf,int sz)
 	return;
 }
 
-static void
-get_fpustdGEN(dis_buffer_t *dbuf, u_short ext, const char *name)
+void
+get_fpustdGEN(dbuf,ext,name)
+	dis_buffer_t *dbuf;
+	u_short ext;
+	const char *name;
 {
 	int sz;
 	
@@ -2899,21 +2965,22 @@ get_fpustdGEN(dis_buffer_t *dbuf, u_short ext, const char *name)
 	}
 }
 
-#if 0
-static u_long
-get_areg_val(int reg)
+u_long
+get_areg_val(reg)
+	int reg;
 {
 	return (0);
 }
-#endif
 
 /*
  * given value ``disp'' print it to ``dbuf''->buf. ``rel'' is a
  * register number 0-7 (a0-a7), or -1 (pc). Thus possible extra info
  * could be output to the ``dbuf''->info buffer.
  */
-static void
-print_disp(dis_buffer_t *dbuf, int disp, int sz, int rel)
+void
+print_disp(dbuf, disp, sz, rel)
+	dis_buffer_t *dbuf;
+	int disp, sz, rel;
 {
 	db_expr_t diff;
 	db_sym_t sym;
@@ -2943,8 +3010,10 @@ print_disp(dis_buffer_t *dbuf, int disp, int sz, int rel)
 	}
 }
 
-static void
-print_addr(dis_buffer_t *dbuf, u_long addr)
+void
+print_addr(dbuf, addr)
+	dis_buffer_t *dbuf;
+	u_long addr;
 {
 	db_expr_t diff;
 	db_sym_t sym;
@@ -2975,8 +3044,11 @@ print_addr(dis_buffer_t *dbuf, u_long addr)
 	}
 }
 
-static void
-prints(dis_buffer_t *dbuf, int val, int sz)
+void
+prints(dbuf, val, sz)
+	dis_buffer_t *dbuf;
+	int val;
+	int sz;
 {
 	extern int db_radix;
 
@@ -2993,9 +3065,11 @@ prints(dis_buffer_t *dbuf, int val, int sz)
 	dbuf->casm = &dbuf->casm[strlen(dbuf->casm)];
 }
 
-#if 0
-static void
-iprints(dis_buffer_t *dbuf, int val, int sz)
+void
+iprints(dbuf, val, sz)
+	dis_buffer_t *dbuf;
+	int val;
+	int sz;
 {
 	extern int db_radix;
 
@@ -3011,10 +3085,12 @@ iprints(dis_buffer_t *dbuf, int val, int sz)
 	
 	dbuf->cinfo = &dbuf->cinfo[strlen(dbuf->cinfo)];
 }
-#endif
 
-static void
-printu(dis_buffer_t *dbuf, u_int val, int sz)
+void
+printu(dbuf, val, sz)
+	dis_buffer_t *dbuf;
+	u_int val;
+	int sz;
 {
 	extern int db_radix;
 
@@ -3030,8 +3106,11 @@ printu(dis_buffer_t *dbuf, u_int val, int sz)
 	dbuf->casm = &dbuf->casm[strlen(dbuf->casm)];
 }
 
-static void
-iprintu(dis_buffer_t *dbuf, u_int val, int sz)
+void
+iprintu(dbuf, val, sz)
+	dis_buffer_t *dbuf;
+	u_int val;
+	int sz;
 {
 	extern int db_radix;
 
@@ -3047,8 +3126,11 @@ iprintu(dis_buffer_t *dbuf, u_int val, int sz)
 	dbuf->cinfo = &dbuf->cinfo[strlen(dbuf->cinfo)];
 }
 
-static void
-printu_wb(dis_buffer_t *dbuf, u_int val, int sz, int base)
+void
+printu_wb(dbuf, val, sz, base)
+	dis_buffer_t *dbuf;
+	u_int val;
+	int sz, base;
 {
 	static char buf[sizeof(long) * NBBY / 3 + 2];
 	char *p, ch;
@@ -3072,8 +3154,11 @@ printu_wb(dis_buffer_t *dbuf, u_int val, int sz, int base)
 	*dbuf->casm = 0;
 }
 
-static void
-prints_wb(dis_buffer_t *dbuf, int val, int sz, int base)
+void
+prints_wb(dbuf, val, sz, base)
+	dis_buffer_t *dbuf;
+	int val;
+	int sz, base;
 {
 	if (val < 0) {
 		addchar('-');
@@ -3082,8 +3167,11 @@ prints_wb(dis_buffer_t *dbuf, int val, int sz, int base)
 	printu_wb(dbuf, val, sz, base);
 }
 
-static void
-iprintu_wb(dis_buffer_t *dbuf, u_int val, int sz, int base)
+void
+iprintu_wb(dbuf, val, sz, base)
+	dis_buffer_t *dbuf;
+	u_int val;
+	int sz, base;
 {
 	static char buf[sizeof(long) * NBBY / 3 + 2];
 	char *p, ch;
@@ -3107,9 +3195,11 @@ iprintu_wb(dis_buffer_t *dbuf, u_int val, int sz, int base)
 	*dbuf->cinfo = 0;
 }
 
-#if 0
-static void
-iprints_wb(dis_buffer_t *dbuf, int val, int sz, int base)
+void
+iprints_wb(dbuf, val, sz, base)
+	dis_buffer_t *dbuf;
+	int val;
+	int sz, base;
 {
 	if (val < 0) {
 		iaddchar('-');
@@ -3117,10 +3207,12 @@ iprints_wb(dis_buffer_t *dbuf, int val, int sz, int base)
 	}
 	iprintu_wb(dbuf, val, sz, base);
 }
-#endif
 
-static void
-prints_bf(dis_buffer_t *dbuf, int val, int sb, int eb)
+
+void
+prints_bf(dbuf, val, sb, eb)
+	dis_buffer_t *dbuf;
+	int val, sb, eb;
 {
 	if (ISBITSET(val,sb)) 
 		val = (~0 & ~BITFIELD(~0, sb, eb)) | BITFIELD(val, sb, eb);
@@ -3130,8 +3222,11 @@ prints_bf(dis_buffer_t *dbuf, int val, int sb, int eb)
 	prints(dbuf, val, SIZE_LONG);
 }
 
-static void
-printu_bf(dis_buffer_t *dbuf, u_int val, int sb, int eb)
+void
+printu_bf(dbuf, val, sb, eb)
+	dis_buffer_t *dbuf;
+	u_int val;
+	int sb, eb;
 {
 	printu(dbuf,BITFIELD(val,sb,eb),SIZE_LONG);
 }	

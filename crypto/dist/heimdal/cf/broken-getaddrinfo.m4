@@ -1,5 +1,5 @@
 dnl $Heimdal: broken-getaddrinfo.m4,v 1.3.6.1 2004/04/01 07:27:32 joda Exp $
-dnl $NetBSD: broken-getaddrinfo.m4,v 1.1.1.3 2004/04/02 14:48:06 lha Exp $
+dnl $NetBSD: broken-getaddrinfo.m4,v 1.1.1.2.2.1 2004/04/21 04:55:38 jmc Exp $
 dnl
 dnl test if getaddrinfo can handle numeric services
 

@@ -33,7 +33,7 @@
 #include "hdb_locl.h"
 
 __RCSID("$Heimdal: hdb-ldap.c,v 1.10.4.1 2003/09/18 20:49:09 lha Exp $"
-        "$NetBSD: hdb-ldap.c,v 1.1.1.7 2004/04/02 14:47:43 lha Exp $");
+        "$NetBSD: hdb-ldap.c,v 1.1.1.6.2.1 2004/04/21 04:55:41 jmc Exp $");
 
 #ifdef OPENLDAP
 

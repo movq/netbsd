@@ -41,20 +41,21 @@ along with this program; if not, write to the Free Software Foundation, Inc.,
 #define UNKNOWN_INSN_MSG _("*unknown*")
 
 static void print_normal
-  (CGEN_CPU_DESC, void *, long, unsigned int, bfd_vma, int);
+     PARAMS ((CGEN_CPU_DESC, PTR, long, unsigned int, bfd_vma, int));
 static void print_address
-  (CGEN_CPU_DESC, void *, bfd_vma, unsigned int, bfd_vma, int);
+     PARAMS ((CGEN_CPU_DESC, PTR, bfd_vma, unsigned int, bfd_vma, int));
 static void print_keyword
-  (CGEN_CPU_DESC, void *, CGEN_KEYWORD *, long, unsigned int);
+     PARAMS ((CGEN_CPU_DESC, PTR, CGEN_KEYWORD *, long, unsigned int));
 static void print_insn_normal
-  (CGEN_CPU_DESC, void *, const CGEN_INSN *, CGEN_FIELDS *, bfd_vma, int);
+     PARAMS ((CGEN_CPU_DESC, PTR, const CGEN_INSN *, CGEN_FIELDS *,
+	      bfd_vma, int));
 static int print_insn
-  (CGEN_CPU_DESC, bfd_vma,  disassemble_info *, char *, unsigned);
+     PARAMS ((CGEN_CPU_DESC, bfd_vma,  disassemble_info *, char *, unsigned));
 static int default_print_insn
-  (CGEN_CPU_DESC, bfd_vma, disassemble_info *);
+     PARAMS ((CGEN_CPU_DESC, bfd_vma, disassemble_info *));
 static int read_insn
-  (CGEN_CPU_DESC, bfd_vma, disassemble_info *, char *, int, CGEN_EXTRACT_INFO *,
-   unsigned long *);
+     PARAMS ((CGEN_CPU_DESC, bfd_vma, disassemble_info *, char *, int,
+	      CGEN_EXTRACT_INFO *, unsigned long *));
 
 /* -- disassembler routines inserted here */
 
@@ -100,13 +101,10 @@ my_print_insn (cd, pc, info)
   char *buf = buffer;
   int status;
   int buflen = (pc & 3) == 0 ? 4 : 2;
-  int big_p = CGEN_CPU_INSN_ENDIAN (cd) == CGEN_ENDIAN_BIG;
-  char *x;
 
   /* Read the base part of the insn.  */
 
-  status = (*info->read_memory_func) (pc - ((!big_p && (pc & 3) != 0) ? 2 : 0),
-                                      buf, buflen, info);
+  status = (*info->read_memory_func) (pc, buf, buflen, info);
   if (status != 0)
     {
       (*info->memory_error_func) (status, pc, info);
@@ -114,25 +112,22 @@ my_print_insn (cd, pc, info)
     }
 
   /* 32 bit insn?  */
-  x = (big_p ? &buf[0] : &buf[3]);
-  if ((pc & 3) == 0 && (*x & 0x80) != 0)
+  if ((pc & 3) == 0 && (buf[0] & 0x80) != 0)
     return print_insn (cd, pc, info, buf, buflen);
 
   /* Print the first insn.  */
   if ((pc & 3) == 0)
     {
-      buf += (big_p ? 0 : 2);
       if (print_insn (cd, pc, info, buf, 2) == 0)
 	(*info->fprintf_func) (info->stream, UNKNOWN_INSN_MSG);
-      buf += (big_p ? 2 : -2);
+      buf += 2;
     }
 
-  x = (big_p ? &buf[0] : &buf[1]);
-  if (*x & 0x80)
+  if (buf[0] & 0x80)
     {
       /* Parallel.  */
       (*info->fprintf_func) (info->stream, " || ");
-      *x &= 0x7f;
+      buf[0] &= 0x7f;
     }
   else
     (*info->fprintf_func) (info->stream, " -> ");
@@ -241,17 +236,11 @@ m32r_cgen_print_operand (cd, opindex, xinfo, fields, attrs, pc, length)
     case M32R_OPERAND_UIMM24 :
       print_address (cd, info, fields->f_uimm24, 0|(1<<CGEN_OPERAND_HASH_PREFIX)|(1<<CGEN_OPERAND_RELOC)|(1<<CGEN_OPERAND_ABS_ADDR), pc, length);
       break;
-    case M32R_OPERAND_UIMM3 :
-      print_normal (cd, info, fields->f_uimm3, 0|(1<<CGEN_OPERAND_HASH_PREFIX), pc, length);
-      break;
     case M32R_OPERAND_UIMM4 :
       print_normal (cd, info, fields->f_uimm4, 0|(1<<CGEN_OPERAND_HASH_PREFIX), pc, length);
       break;
     case M32R_OPERAND_UIMM5 :
       print_normal (cd, info, fields->f_uimm5, 0|(1<<CGEN_OPERAND_HASH_PREFIX), pc, length);
-      break;
-    case M32R_OPERAND_UIMM8 :
-      print_normal (cd, info, fields->f_uimm8, 0|(1<<CGEN_OPERAND_HASH_PREFIX), pc, length);
       break;
     case M32R_OPERAND_ULO16 :
       print_normal (cd, info, fields->f_uimm16, 0, pc, length);
@@ -285,12 +274,13 @@ m32r_cgen_init_dis (cd)
 /* Default print handler.  */
 
 static void
-print_normal (CGEN_CPU_DESC cd ATTRIBUTE_UNUSED,
-	      void *dis_info,
-	      long value,
-	      unsigned int attrs,
-	      bfd_vma pc ATTRIBUTE_UNUSED,
-	      int length ATTRIBUTE_UNUSED)
+print_normal (cd, dis_info, value, attrs, pc, length)
+     CGEN_CPU_DESC cd ATTRIBUTE_UNUSED;
+     PTR dis_info;
+     long value;
+     unsigned int attrs;
+     bfd_vma pc ATTRIBUTE_UNUSED;
+     int length ATTRIBUTE_UNUSED;
 {
   disassemble_info *info = (disassemble_info *) dis_info;
 
@@ -310,12 +300,13 @@ print_normal (CGEN_CPU_DESC cd ATTRIBUTE_UNUSED,
 /* Default address handler.  */
 
 static void
-print_address (CGEN_CPU_DESC cd ATTRIBUTE_UNUSED,
-	       void *dis_info,
-	       bfd_vma value,
-	       unsigned int attrs,
-	       bfd_vma pc ATTRIBUTE_UNUSED,
-	       int length ATTRIBUTE_UNUSED)
+print_address (cd, dis_info, value, attrs, pc, length)
+     CGEN_CPU_DESC cd ATTRIBUTE_UNUSED;
+     PTR dis_info;
+     bfd_vma value;
+     unsigned int attrs;
+     bfd_vma pc ATTRIBUTE_UNUSED;
+     int length ATTRIBUTE_UNUSED;
 {
   disassemble_info *info = (disassemble_info *) dis_info;
 
@@ -339,11 +330,12 @@ print_address (CGEN_CPU_DESC cd ATTRIBUTE_UNUSED,
 /* Keyword print handler.  */
 
 static void
-print_keyword (CGEN_CPU_DESC cd ATTRIBUTE_UNUSED,
-	       void *dis_info,
-	       CGEN_KEYWORD *keyword_table,
-	       long value,
-	       unsigned int attrs ATTRIBUTE_UNUSED)
+print_keyword (cd, dis_info, keyword_table, value, attrs)
+     CGEN_CPU_DESC cd ATTRIBUTE_UNUSED;
+     PTR dis_info;
+     CGEN_KEYWORD *keyword_table;
+     long value;
+     unsigned int attrs ATTRIBUTE_UNUSED;
 {
   disassemble_info *info = (disassemble_info *) dis_info;
   const CGEN_KEYWORD_ENTRY *ke;
@@ -357,16 +349,17 @@ print_keyword (CGEN_CPU_DESC cd ATTRIBUTE_UNUSED,
 
 /* Default insn printer.
 
-   DIS_INFO is defined as `void *' so the disassembler needn't know anything
+   DIS_INFO is defined as `PTR' so the disassembler needn't know anything
    about disassemble_info.  */
 
 static void
-print_insn_normal (CGEN_CPU_DESC cd,
-		   void *dis_info,
-		   const CGEN_INSN *insn,
-		   CGEN_FIELDS *fields,
-		   bfd_vma pc,
-		   int length)
+print_insn_normal (cd, dis_info, insn, fields, pc, length)
+     CGEN_CPU_DESC cd;
+     PTR dis_info;
+     const CGEN_INSN *insn;
+     CGEN_FIELDS *fields;
+     bfd_vma pc;
+     int length;
 {
   const CGEN_SYNTAX *syntax = CGEN_INSN_SYNTAX (insn);
   disassemble_info *info = (disassemble_info *) dis_info;
@@ -398,13 +391,14 @@ print_insn_normal (CGEN_CPU_DESC cd,
    Returns 0 if all is well, non-zero otherwise.  */
 
 static int
-read_insn (CGEN_CPU_DESC cd ATTRIBUTE_UNUSED,
-	   bfd_vma pc,
-	   disassemble_info *info,
-	   char *buf,
-	   int buflen,
-	   CGEN_EXTRACT_INFO *ex_info,
-	   unsigned long *insn_value)
+read_insn (cd, pc, info, buf, buflen, ex_info, insn_value)
+     CGEN_CPU_DESC cd ATTRIBUTE_UNUSED;
+     bfd_vma pc;
+     disassemble_info *info;
+     char *buf;
+     int buflen;
+     CGEN_EXTRACT_INFO *ex_info;
+     unsigned long *insn_value;
 {
   int status = (*info->read_memory_func) (pc, buf, buflen, info);
   if (status != 0)
@@ -428,11 +422,12 @@ read_insn (CGEN_CPU_DESC cd ATTRIBUTE_UNUSED,
    been called).  */
 
 static int
-print_insn (CGEN_CPU_DESC cd,
-	    bfd_vma pc,
-	    disassemble_info *info,
-	    char *buf,
-	    unsigned int buflen)
+print_insn (cd, pc, info, buf, buflen)
+     CGEN_CPU_DESC cd;
+     bfd_vma pc;
+     disassemble_info *info;
+     char *buf;
+     unsigned int buflen;
 {
   CGEN_INSN_INT insn_value;
   const CGEN_INSN_LIST *insn_list;
@@ -537,7 +532,10 @@ print_insn (CGEN_CPU_DESC cd,
 #endif
 
 static int
-default_print_insn (CGEN_CPU_DESC cd, bfd_vma pc, disassemble_info *info)
+default_print_insn (cd, pc, info)
+     CGEN_CPU_DESC cd;
+     bfd_vma pc;
+     disassemble_info *info;
 {
   char buf[CGEN_MAX_INSN_SIZE];
   int buflen;
@@ -576,7 +574,9 @@ typedef struct cpu_desc_list {
 } cpu_desc_list;
 
 int
-print_insn_m32r (bfd_vma pc, disassemble_info *info)
+print_insn_m32r (pc, info)
+     bfd_vma pc;
+     disassemble_info *info;
 {
   static cpu_desc_list *cd_list = 0;
   cpu_desc_list *cl = 0;

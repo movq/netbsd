@@ -1,5 +1,3 @@
-/*	$NetBSD: qmgr_move.c,v 1.1.1.3 2004/05/31 00:24:44 heas Exp $	*/
-
 /*++
 /* NAME
 /*	qmgr_move 3

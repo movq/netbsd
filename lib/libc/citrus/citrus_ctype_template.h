@@ -1,4 +1,4 @@
-/*	$NetBSD: citrus_ctype_template.h,v 1.31 2004/09/26 00:51:39 yamt Exp $	*/
+/*	$NetBSD: citrus_ctype_template.h,v 1.25.2.1 2004/10/01 03:08:02 jmc Exp $	*/
 
 /*-
  * Copyright (c)2002 Citrus Project,

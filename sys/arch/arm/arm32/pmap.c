@@ -1,4 +1,4 @@
-/*	$NetBSD: pmap.c,v 1.148 2004/04/03 04:35:48 bsh Exp $	*/
+/*	$NetBSD: pmap.c,v 1.147 2004/01/18 13:03:50 scw Exp $	*/
 
 /*
  * Copyright 2003 Wasabi Systems, Inc.
@@ -212,7 +212,7 @@
 #include <machine/param.h>
 #include <arm/arm32/katelib.h>
 
-__KERNEL_RCSID(0, "$NetBSD: pmap.c,v 1.148 2004/04/03 04:35:48 bsh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pmap.c,v 1.147 2004/01/18 13:03:50 scw Exp $");
 
 #ifdef PMAP_DEBUG
 
@@ -4690,7 +4690,7 @@ pmap_pte_init_arm8(void)
 }
 #endif /* CPU_ARM8 */
 
-#if defined(CPU_ARM9) && defined(ARM9_CACHE_WRITE_THROUGH)
+#if defined(CPU_ARM9)
 void
 pmap_pte_init_arm9(void)
 {

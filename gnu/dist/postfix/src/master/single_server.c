@@ -1,5 +1,3 @@
-/*	$NetBSD: single_server.c,v 1.1.1.5 2004/05/31 00:24:39 heas Exp $	*/
-
 /*++
 /* NAME
 /*	single_server 3

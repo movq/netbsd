@@ -34,7 +34,7 @@
 #include <krb5_locl.h>
 
 __RCSID("$Heimdal: get_cred.c,v 1.91.4.3 2004/01/09 00:47:17 lha Exp $"
-        "$NetBSD: get_cred.c,v 1.6 2004/04/02 14:59:48 lha Exp $");
+        "$NetBSD: get_cred.c,v 1.5.2.1 2004/04/21 04:55:41 jmc Exp $");
 
 /*
  * Take the `body' and encode it into `padata' using the credentials

@@ -1,4 +1,4 @@
-/*	$NetBSD: pchb.c,v 1.3 2004/08/30 15:05:18 drochner Exp $	*/
+/*	$NetBSD: pchb.c,v 1.1 2003/09/23 15:30:22 shige Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -36,7 +36,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pchb.c,v 1.3 2004/08/30 15:05:18 drochner Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pchb.c,v 1.1 2003/09/23 15:30:22 shige Exp $");
 
 #include "pci.h"
 #include "opt_pci.h"
@@ -152,7 +152,7 @@ pchbattach(struct device *parent, struct device *self, void *aux)
 	 * possibly chipset-specific.
 	 */
 
-	pci_devinfo(id, class, 0, devinfo, sizeof(devinfo));
+	pci_devinfo(id, class, 0, devinfo);
 	printf("%s: %s (rev. 0x%02x)\n", self->dv_xname, devinfo,
 	    PCI_REVISION(class));
 
@@ -181,6 +181,7 @@ pchbattach(struct device *parent, struct device *self, void *aux)
 #ifdef PCI_CONFIGURE_VERBOSE
 	printf("running config_found PCI\n");
 #endif
+	pba.pba_busname = "pci";
 	/* IO window located @ e8000000 and maps to 0-0xffff */
 	pba.pba_iot = &pchb_io_tag;
 	/* PCI memory window is directly mapped */
@@ -190,7 +191,7 @@ pchbattach(struct device *parent, struct device *self, void *aux)
 	pba.pba_bus = 0;
 	pba.pba_bridgetag = NULL;
 	pba.pba_flags = PCI_FLAGS_MEM_ENABLED | PCI_FLAGS_IO_ENABLED;
-	config_found_ia(self, "pcibus", &pba, pchbprint);
+	config_found(self, &pba, pchbprint);
 }
 
 

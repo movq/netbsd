@@ -1,4 +1,4 @@
-/*	$NetBSD: buf_subs.c,v 1.25 2004/09/22 14:51:12 christos Exp $	*/
+/*	$NetBSD: buf_subs.c,v 1.23.2.2 2004/11/12 05:04:07 jmc Exp $	*/
 
 /*-
  * Copyright (c) 1992 Keith Muller.
@@ -42,7 +42,7 @@
 #if 0
 static char sccsid[] = "@(#)buf_subs.c	8.2 (Berkeley) 4/18/94";
 #else
-__RCSID("$NetBSD: buf_subs.c,v 1.25 2004/09/22 14:51:12 christos Exp $");
+__RCSID("$NetBSD: buf_subs.c,v 1.23.2.2 2004/11/12 05:04:07 jmc Exp $");
 #endif
 #endif /* not lint */
 

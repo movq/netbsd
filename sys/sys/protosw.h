@@ -1,4 +1,4 @@
-/*	$NetBSD: protosw.h,v 1.35 2004/04/22 01:34:17 matt Exp $	*/
+/*	$NetBSD: protosw.h,v 1.31 2003/12/04 19:38:25 atatat Exp $	*/
 
 /*-
  * Copyright (c) 1982, 1986, 1993
@@ -71,29 +71,29 @@ struct protosw {
 
 /* protocol-protocol hooks */
 	void	(*pr_input)		/* input to protocol (from below) */
-			(struct mbuf *, ...);
+			__P((struct mbuf *, ...));
 	int	(*pr_output)		/* output to protocol (from above) */
-			(struct mbuf *, ...);
+			__P((struct mbuf *, ...));
 	void	*(*pr_ctlinput)		/* control input (from below) */
-			(int, struct sockaddr *, void *);
+			__P((int, struct sockaddr *, void *));
 	int	(*pr_ctloutput)		/* control output (from above) */
-			(int, struct socket *, int, int, struct mbuf **);
+			__P((int, struct socket *, int, int, struct mbuf **));
 
 /* user-protocol hook */
 	int	(*pr_usrreq)		/* user request: see list below */
-			(struct socket *, int, struct mbuf *,
-			     struct mbuf *, struct mbuf *, struct proc *);
+			__P((struct socket *, int, struct mbuf *,
+			     struct mbuf *, struct mbuf *, struct proc *));
 
 /* utility hooks */
 	void	(*pr_init)		/* initialization hook */
-			(void);
+			__P((void));
 
 	void	(*pr_fasttimo)		/* fast timeout (200ms) */
-			(void);
+			__P((void));
 	void	(*pr_slowtimo)		/* slow timeout (500ms) */
-			(void);
+			__P((void));
 	void	(*pr_drain)		/* flush any excess space possible */
-			(void);
+			__P((void));
 	int	*pr_wassysctl;		/* @@@ was sysctl for protocol, now obsolete */
 };
 
@@ -156,7 +156,7 @@ struct protosw {
 #define	PRU_NREQ		23
 
 #ifdef PRUREQUESTS
-const char * const prurequests[] = {
+char *prurequests[] = {
 	"ATTACH",	"DETACH",	"BIND",		"LISTEN",
 	"CONNECT",	"ACCEPT",	"DISCONNECT",	"SHUTDOWN",
 	"RCVD",		"SEND",		"ABORT",	"CONTROL",
@@ -199,7 +199,7 @@ const char * const prurequests[] = {
 	((cmd) >= PRC_REDIRECT_NET && (cmd) <= PRC_REDIRECT_TOSHOST)
 
 #ifdef PRCREQUESTS
-const char * const prcrequests[] = {
+char	*prcrequests[] = {
 	"IFDOWN", "ROUTEDEAD", "#2", "DEC-BIT-QUENCH2",
 	"QUENCH", "MSGSIZE", "HOSTDEAD", "#7",
 	"NET-UNREACH", "HOST-UNREACH", "PROTO-UNREACH", "PORT-UNREACH",
@@ -228,15 +228,12 @@ const char * const prcrequests[] = {
 #define	PRCO_NCMDS	2
 
 #ifdef PRCOREQUESTS
-const char * const prcorequests[] = {
+char	*prcorequests[] = {
 	"GETOPT", "SETOPT",
 };
 #endif
 
 #ifdef _KERNEL
-extern const char * const prurequests[];
-extern const char * const prcrequests[];
-extern const char * const prcorequests[];
 /*
  * Monotonically increasing time values for slow and fast timers.
  */
@@ -256,11 +253,12 @@ extern	u_int pffasttimo_now;
 #define	PRT_FAST_ISEXPIRED(t)	(PRT_FAST_ISARMED((t)) && (t) <= pffasttimo_now)
 
 struct sockaddr;
-const struct protosw *pffindproto(int, int, int);
-const struct protosw *pffindtype(int, int);
-struct domain *pffinddomain(int);
-void pfctlinput(int, struct sockaddr *);
-void pfctlinput2(int, struct sockaddr *, void *);
+struct protosw *pffindproto __P((int, int, int));
+struct protosw *pffindtype __P((int, int));
+struct domain *pffinddomain __P((int));
+extern struct protosw inetsw[];
+void pfctlinput __P((int, struct sockaddr *));
+void pfctlinput2 __P((int, struct sockaddr *, void *));
 #endif /* _KERNEL */
 
 #endif /* !_SYS_PROTOSW_H_ */

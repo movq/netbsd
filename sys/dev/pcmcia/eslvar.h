@@ -1,4 +1,4 @@
-/*	$NetBSD: eslvar.h,v 1.5 2004/08/10 19:55:20 mycroft Exp $	*/
+/*	$NetBSD: eslvar.h,v 1.3 2001/12/25 03:46:34 jmcneill Exp $	*/
 
 /*
  * Copyright (c) 2001 Jared D. McNeill <jmcneill@invisible.yi.org>
@@ -55,6 +55,7 @@
 struct esl_softc
 {
 	struct	device sc_dev;		/* base device */
+	u_short	sc_open;		/* reference count of open calls */
 	u_char	gain[ESS_MAX_NDEVS][2];	/* kept in input levels */
 #define ESS_LEFT 0
 #define ESS_RIGHT 1
@@ -75,8 +76,8 @@ struct esl_softc
 
 struct esl_pcmcia_softc {
         struct esl_softc sc_esl;
-	bus_space_tag_t sc_iot;
-	bus_space_handle_t sc_ioh;
+	struct pcmcia_io_handle sc_pcioh;
+	int sc_io_window;
 	struct pcmcia_function *sc_pf;
 	void *sc_ih;
 	struct device *sc_audiodev;
@@ -84,9 +85,6 @@ struct esl_pcmcia_softc {
 
 	int (*sc_enable)(struct esl_pcmcia_softc *);
 	void (*sc_disable)(struct esl_pcmcia_softc *);
-
-	int sc_state;
-#define	ESL_PCMCIA_ATTACHED	3
 };
 
 int     esl_init(struct esl_pcmcia_softc *sc);

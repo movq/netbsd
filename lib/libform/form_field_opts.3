@@ -1,4 +1,4 @@
-.\"	$NetBSD: form_field_opts.3,v 1.10 2004/11/24 12:09:13 wiz Exp $
+.\"	$NetBSD: form_field_opts.3,v 1.8 2003/04/16 13:35:04 wiz Exp $
 .\"
 .\" Copyright (c) 2001
 .\"	Brett Lymn - blymn@baea.com.au, brett_lymn@yahoo.com.au
@@ -29,7 +29,7 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.Dd November 24, 2004
+.Dd January 1, 2001
 .Dt FORMS 3
 .Os
 .Sh NAME
@@ -76,61 +76,38 @@ currently active one.
 .Sh PARAMETERS
 The following options are available for a field:
 .Pp
-.Bl -tag -width O_REFORMAT -compact
-.It Dv O_VISIBLE
+.Bl -tag -width O_AUTOSKIP -compact
+.It O_VISIBLE
 The field is visible, hence is displayed when the form is posted.
-.It Dv O_ACTIVE
+.It O_ACTIVE
 The field is active in the form, meaning that it can be visited during
 form processing.
-.It Dv O_PUBLIC
+.It O_PUBLIC
 The contents of the field are echoed to the screen.
-.It Dv O_EDIT
+.It O_EDIT
 The contents of the field can be modified
-.It Dv O_WRAP
+.It O_WRAP
 The contents of the field are wrapped on a word boundary, if this
 option is off then the field will be wrapped on a character boundary.
-.It Dv O_BLANK
+.It O_BLANK
 Blank the field on new data being entered if and only if the field
 cursor is at the left hand side of the field.
-.It Dv O_AUTOSKIP
+.It O_AUTOSKIP
 Skip to the next field when the current field reaches its maximum
 size.
-.It Dv O_NULLOK
+.It O_NULLOK
 The field is allowed to contain no data
-.It Dv O_STATIC
+.It O_STATIC
 The field is not dynamic, it has a fixed size.
-.It Dv O_PASSOK
+.It O_PASSOK
 An unmodified field is allowed.
-.It Dv O_REFORMAT
-Retain the formatting of a field when the buffer is retrieved.
-If this option is not set then the buffer returned will be a single string
-with no line breaks.
-When this option is set newline characters will be inserted at the point
-where the string has been wrapped in a multiline field.
-This option is an extension to the forms library and must not be used
-in portable code.
-See the
-.Xr field_buffer 3
-man page for how this option modifies the behaviour of
-.Fn field_buffer .
 .El
 .Pp
-The following options are on by default for a field:
-.Dv O_VISIBLE ,
-.Dv O_ACTIVE ,
-.Dv O_PUBLIC ,
-.Dv O_EDIT ,
-.Dv O_WRAP ,
-.Dv O_BLANK ,
-.Dv O_AUTOSKIP ,
-.Dv O_NULLOK ,
-.Dv O_PASSOK ,
-and
-.Dv O_STATIC .
+The following options are on by default for a field: O_VISIBLE,
+O_ACTIVE, O_PUBLIC, O_EDIT, O_WRAP, O_BLANK, O_AUTOSKIP, O_NULLOK,
+O_PASSOK and O_STATIC.
 .Sh RETURN VALUES
-Functions returning pointers will return
-.Dv NULL
-if an error is detected.
+Functions returning pointers will return NULL if an error is detected.
 The functions that return an int will return one of the following error
 values:
 .Pp
@@ -145,13 +122,8 @@ The field specified is the currently active one in the form.
 .Xr forms 3
 .Sh NOTES
 The header
-.Aq Pa form.h
+.Pa \*[Lt]form.h\*[Gt]
 automatically includes both
-.Aq Pa curses.h
+.Pa \*[Lt]curses.h\*[Gt]
 and
-.Aq Pa eti.h .
-The option
-.Dv O_REFORMAT
-is a
-.Nx
- extension and must not be used in portable code.
+.Pa \*[Lt]eti.h\*[Gt] .

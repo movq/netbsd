@@ -1,4 +1,4 @@
-# $NetBSD: mi,v 1.144 2004/11/18 15:34:24 wiz Exp $
+# $NetBSD: mi,v 1.140.2.1 2004/04/27 17:57:20 jdc Exp $
 ./.cshrc					etc-util-etc
 ./.profile					etc-util-etc
 ./dev/MAKEDEV					etc-sys-etc
@@ -85,8 +85,6 @@
 ./etc/obsolete/text				etc-obsolete		obsolete
 ./etc/passwd					etc-sys-etc
 ./etc/passwd.conf				etc-sys-etc
-./etc/pf.conf					etc-net-etc
-./etc/pf.os					etc-net-etc
 ./etc/phones					etc-uucp-etc
 ./etc/postfix/README				etc-postfix-etc
 ./etc/postfix/main.cf				etc-postfix-etc
@@ -129,8 +127,8 @@
 ./etc/rc.d/fsck					etc-sys-rc
 ./etc/rc.d/fsck.sh				etc-obsolete		obsolete
 ./etc/rc.d/gated				etc-obsolete		obsolete
-./etc/rc.d/identd				etc-net-rc
 ./etc/rc.d/ifwatchd				etc-net-rc
+./etc/rc.d/identd				etc-net-rc
 ./etc/rc.d/inetd				etc-net-rc
 ./etc/rc.d/ipfilter				etc-ipf-rc
 ./etc/rc.d/ipfs					etc-ipf-rc
@@ -163,8 +161,6 @@
 ./etc/rc.d/nfslocking				etc-nfsserver-rc
 ./etc/rc.d/ntpd					etc-ntp-rc
 ./etc/rc.d/ntpdate				etc-ntp-rc
-./etc/rc.d/pf					etc-net-rc
-./etc/rc.d/pflogd				etc-net-rc
 ./etc/rc.d/poffd				etc-sys-rc
 ./etc/rc.d/postfix				etc-postfix-rc
 ./etc/rc.d/powerd				etc-sysutil-rc
@@ -218,7 +214,7 @@
 ./etc/rc.subr					etc-sys-rc
 ./etc/rc.wscons					etc-obsolete		obsolete
 ./etc/release					etc-sys-etc
-./etc/release-info				etc-obsolete		obsolete
+./etc/release-info				etc-sys-etc		obsolete
 ./etc/remote					etc-uucp-etc
 ./etc/rmt					etc-sysutil-etc
 ./etc/rpc					etc-net-etc
@@ -231,11 +227,10 @@
 ./etc/skel/.logout				etc-sys-etc
 ./etc/skel/.profile				etc-sys-etc
 ./etc/skeykeys					etc-sys-etc
-./etc/spamd.conf				etc-net-etc
 ./etc/spwd.db					etc-sys-etc
 ./etc/ssh/ssh_config				etc-secsh-etc		crypto
-./etc/ssh/ssh_known_hosts			etc-secsh-etc		crypto
 ./etc/ssh/sshd_config				etc-secsh-etc		crypto
+./etc/ssh/ssh_known_hosts			etc-secsh-etc		crypto
 ./etc/sysctl.conf				etc-sys-etc
 ./etc/syslog.conf				etc-sys-etc
 ./etc/ttys					etc-sys-etc

@@ -1,4 +1,4 @@
-/*	$NetBSD: mbr.c,v 1.67 2004/11/10 02:41:00 christos Exp $ */
+/*	$NetBSD: mbr.c,v 1.61.2.1 2004/04/28 05:59:12 jmc Exp $ */
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -106,7 +106,6 @@ struct part_id {
 	{MBR_PTYPE_FAT32L,	"Windows FAT32, LBA"},
 	{MBR_PTYPE_NTFSVOL,	"NTFS volume set"},
 	{MBR_PTYPE_NTFS,	"NTFS"},
-	{MBR_PTYPE_SOLARIS,	"Solaris"},
 	{-1,			"Unknown"},
 };
 
@@ -486,8 +485,8 @@ edit_mbr_type(menudesc *m, void *arg)
 			type_opts[i].opt_action = set_mbr_type;
 		}
 		type_menu = new_menu(NULL, type_opts, nelem(type_opts),
-			13, 12, 0, 30,
-			MC_SUBMENU | MC_SCROLL | MC_NOEXITOPT | MC_NOCLEAR,
+			15, 12, 0, 30,
+			MC_SCROLL | MC_NOEXITOPT | MC_NOCLEAR,
 			NULL, set_type_label, NULL,
 			NULL, NULL);
 	}
@@ -723,11 +722,11 @@ edit_mbr_size(menudesc *m, void *arg)
 				/* Round end to cylinder boundary */
 				if (sizemult != 1) {
 					new *= sizemult;
-					new += ROUNDDOWN(start,current_cylsize);
-					new = ROUNDUP(new, current_cylsize);
+					new += ROUNDDOWN(start, bcylsize);
+					new = ROUNDUP(new, bcylsize);
 					new -= start;
 					while (new <= 0)
-						new += current_cylsize;
+						new += bcylsize;
 				}
 			}
 		}
@@ -955,7 +954,7 @@ edit_mbr_entry(menudesc *m, void *arg)
 	if (ptn_menu == -1)
 		ptn_menu = new_menu(NULL, ptn_opts, nelem(ptn_opts),
 			15, 6, 0, 50,
-			MC_SUBMENU | MC_SCROLL | MC_NOCLEAR,
+			MC_SCROLL | MC_NOCLEAR,
 			set_ptn_header, set_ptn_label, NULL,
 			NULL, MSG_Partition_OK);
 	if (ptn_menu == -1)
@@ -1271,9 +1270,9 @@ edit_mbr(mbr_info_t *mbri)
 	if (mbr_menu == -1)
 		return 0;
 
-	/* Default to MB, and use bios geometry for cylinder size */
-	set_sizemultname_meg();
-	current_cylsize = bhead * bsec;
+	/* Ask for sizes, which partitions, ... */
+	sizemult = MEG / sectorsize;
+	ask_sizemult(bcylsize);
 
 	for (;;) {
 		ptstart = 0;
@@ -1514,10 +1513,7 @@ write_mbr(const char *disk, mbr_info_t *mbri, int convert)
 	int fd, i, ret = 0;
 	struct mbr_partition *mbrp;
 	u_int32_t pstart, psize;
-#ifdef BOOTSEL
-	struct mbr_sector *mbrs;
-#endif
-	struct mbr_sector mbrsec;
+	struct mbr_sector *mbrs, mbrsec;
 	mbr_info_t *ext;
 	uint sector;
 
@@ -1690,10 +1686,10 @@ guess_biosgeom_from_mbr(mbr_info_t *mbri, int *cyl, int *head, int *sec)
 	for (i = 0; i < MBR_PART_COUNT * 2 - 1; i++) {
 		if (get_mapping(parts, i, &c1, &h1, &s1, &a1) < 0)
 			continue;
-		a1 -= s1;
 		for (j = i + 1; j < MBR_PART_COUNT * 2; j++) {
 			if (get_mapping(parts, j, &c2, &h2, &s2, &a2) < 0)
 				continue;
+			a1 -= s1;
 			a2 -= s2;
 			num = (uint64_t)h1 * a2 - (quad_t)h2 * a1;
 			denom = (uint64_t)c2 * a1 - (quad_t)c1 * a2;

@@ -1,4 +1,4 @@
-/* $NetBSD: atppc.c,v 1.18 2004/09/13 12:55:47 drochner Exp $ */
+/* $NetBSD: atppc.c,v 1.15 2004/02/24 17:41:09 drochner Exp $ */
 
 /*
  * Copyright (c) 2001 Alcove - Nicolas Souchu
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: atppc.c,v 1.18 2004/09/13 12:55:47 drochner Exp $");
+__KERNEL_RCSID(0, "$NetBSD: atppc.c,v 1.15 2004/02/24 17:41:09 drochner Exp $");
 
 #include "opt_atppc.h"
 
@@ -80,7 +80,14 @@ static int (*chipset_detect[])(struct atppc_softc *) = {
 
 /* Prototypes for functions. */
 
-/* Print function for config_found() */
+/* Soft configuration attach */
+void atppc_sc_attach(struct atppc_softc *);
+int atppc_sc_detach(struct atppc_softc *, int);
+
+/* Interrupt handler for atppc device */
+int atppcintr(void *);
+
+/* Print function for config_found_sm() */
 static int atppc_print(void *, const char *);
 
 /* Detection routines */
@@ -147,8 +154,6 @@ atppc_sc_attach(struct atppc_softc *lsc)
 	/* Adapter used to configure ppbus device */
 	struct parport_adapter sc_parport_adapter;
 	char buf[64];
-
-	ATPPC_LOCK_INIT(lsc);
 
 	/* Probe and set up chipset */
 	if (atppc_detect_chipset(lsc) != 0) {
@@ -237,15 +242,14 @@ atppc_sc_attach(struct atppc_softc *lsc)
 	lsc->sc_use = 0;
 
 	/* Configure child of the device. */
-	lsc->child = config_found(&(lsc->sc_dev), &(sc_parport_adapter),
-		atppc_print);
+	lsc->child = config_found_sm(&(lsc->sc_dev), &(sc_parport_adapter),
+		atppc_print, NULL);
 
 	return;
 }
 
 /* Soft configuration detach */
-int
-atppc_sc_detach(struct atppc_softc *lsc, int flag)
+int atppc_sc_detach(struct atppc_softc *lsc, int flag)
 {
 	struct device *dev = (struct device *)lsc;
 
@@ -267,7 +271,7 @@ atppc_sc_detach(struct atppc_softc *lsc, int flag)
 	return 0;
 }
 
-/* Used by config_found() to print out device information */
+/* Used by config_found_sm() to print out device information */
 static int
 atppc_print(void *aux, const char *name)
 {

@@ -1,7 +1,7 @@
-/*	$NetBSD: cmds.c,v 1.108 2004/10/30 17:36:31 dsl Exp $	*/
+/*	$NetBSD: cmds.c,v 1.102 2003/08/07 11:13:52 agc Exp $	*/
 
 /*-
- * Copyright (c) 1996-2004 The NetBSD Foundation, Inc.
+ * Copyright (c) 1996-2002 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -103,7 +103,7 @@
 #if 0
 static char sccsid[] = "@(#)cmds.c	8.6 (Berkeley) 10/9/94";
 #else
-__RCSID("$NetBSD: cmds.c,v 1.108 2004/10/30 17:36:31 dsl Exp $");
+__RCSID("$NetBSD: cmds.c,v 1.102 2003/08/07 11:13:52 agc Exp $");
 #endif
 #endif /* not lint */
 
@@ -146,7 +146,7 @@ struct	types {
 };
 
 sigjmp_buf	 jabort;
-const char	*mname;
+char		*mname;
 
 static int	confirm(const char *, const char *);
 
@@ -166,7 +166,7 @@ confirm(const char *cmd, const char *file)
 			clearerr(stdin);
 			return (0);
 		}
-		switch (tolower((unsigned char)*line)) {
+		switch (tolower(*line)) {
 			case 'a':
 				confirmrest = 1;
 				fprintf(ttyout,
@@ -773,13 +773,13 @@ onoff(int bool)
 void
 status(int argc, char *argv[])
 {
+	int i;
 
 	if (argc == 0) {
 		fprintf(ttyout, "usage: %s\n", argv[0]);
 		code = -1;
 		return;
 	}
-#ifndef NO_STATUS
 	if (connected)
 		fprintf(ttyout, "Connected %sto %s.\n",
 		    connected == -1 ? "and logged in" : "", hostname);
@@ -843,16 +843,13 @@ status(int argc, char *argv[])
 	    onoff(editing)
 #endif	/* !def NO_EDITCOMPLETE */
 	    );
+	fprintf(ttyout, "Version: %s %s\n", FTP_PRODUCT, FTP_VERSION);
 	if (macnum > 0) {
-		int i;
-
 		fputs("Macros:\n", ttyout);
 		for (i=0; i<macnum; i++) {
 			fprintf(ttyout, "\t%s\n", macros[i].mac_name);
 		}
 	}
-#endif /* !def NO_STATUS */
-	fprintf(ttyout, "Version: %s %s\n", FTP_PRODUCT, FTP_VERSION);
 	code = 0;
 }
 
@@ -1325,7 +1322,6 @@ ls(int argc, char *argv[])
 		(void)strlcpy(locfile + 1, p, len - 1);
 		freelocfile = 1;
 	} else if ((strcmp(locfile, "-") != 0) && *locfile != '|') {
-		mname = argv[0];
 		if ((locfile = globulize(locfile)) == NULL ||
 		    !confirm("output to local-file:", locfile)) {
 			code = -1;
@@ -1362,7 +1358,6 @@ mls(int argc, char *argv[])
 	}
 	odest = dest = argv[argc - 1];
 	argv[argc - 1] = NULL;
-	mname = argv[0];
 	if (strcmp(dest, "-") && *dest != '|')
 		if (((dest = globulize(dest)) == NULL) ||
 		    !confirm("output to local-file:", dest)) {
@@ -1370,6 +1365,7 @@ mls(int argc, char *argv[])
 			return;
 	}
 	dolist = strcmp(argv[0], "mls");
+	mname = argv[0];
 	mflag = 1;
 	oldintr = xsignal(SIGINT, mintr);
 	if (sigsetjmp(jabort, 1))
@@ -1401,7 +1397,7 @@ void
 shell(int argc, char *argv[])
 {
 	pid_t pid;
-	sigfunc oldintr;
+	sigfunc old1;
 	char shellnam[MAXPATHLEN], *shell, *namep;
 	int wait_status;
 
@@ -1410,7 +1406,7 @@ shell(int argc, char *argv[])
 		code = -1;
 		return;
 	}
-	oldintr = xsignal(SIGINT, SIG_IGN);
+	old1 = xsignal(SIGINT, SIG_IGN);
 	if ((pid = fork()) == 0) {
 		for (pid = 3; pid < 20; pid++)
 			(void)close(pid);
@@ -1441,7 +1437,7 @@ shell(int argc, char *argv[])
 	if (pid > 0)
 		while (wait(&wait_status) != pid)
 			;
-	(void)xsignal(SIGINT, oldintr);
+	(void)xsignal(SIGINT, old1);
 	if (pid == -1) {
 		warn("Try again later");
 		code = -1;
@@ -1791,7 +1787,6 @@ void
 proxabort(int notused)
 {
 
-	sigint_raised = 1;
 	alarmtimer(0);
 	if (!proxy) {
 		pswitch(1);
@@ -1890,7 +1885,7 @@ docase(char *name)
 	if (dochange) {
 		for (i = 0; new[i] != '\0'; i++)
 			if (isupper((unsigned char)new[i]))
-				new[i] = tolower((unsigned char)new[i]);
+				new[i] = tolower(new[i]);
 	}
 	return (new);
 }

@@ -1,13 +1,13 @@
 #!/bin/sh
 #
-# $NetBSD: ypbind,v 1.8 2004/10/11 15:00:51 christos Exp $
+# $NetBSD: ypbind,v 1.5 2002/03/22 04:34:01 thorpej Exp $
 #
 
 # PROVIDE: ypbind
-# REQUIRE: rpcbind ypserv
+# REQUIRE: ypserv
 # BEFORE:  DAEMON
 
-$_rc_subr_loaded . /etc/rc.subr
+. /etc/rc.subr
 
 name="ypbind"
 rcvar=$name
@@ -16,7 +16,7 @@ start_precmd="ypbind_precmd"
 
 ypbind_precmd()
 {
-	_domain=$(domainname)
+	_domain=`domainname`
 	if [ -z "$_domain" ]; then
 		warn "domainname(1) is not set."
 		return 1

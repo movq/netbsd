@@ -1,4 +1,4 @@
-/*	$NetBSD: uvm_pdaemon.c,v 1.60 2004/10/03 08:47:48 enami Exp $	*/
+/*	$NetBSD: uvm_pdaemon.c,v 1.59.2.1 2004/10/08 03:25:21 jmc Exp $	*/
 
 /*
  * Copyright (c) 1997 Charles D. Cranor and Washington University.
@@ -71,7 +71,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uvm_pdaemon.c,v 1.60 2004/10/03 08:47:48 enami Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uvm_pdaemon.c,v 1.59.2.1 2004/10/08 03:25:21 jmc Exp $");
 
 #include "opt_uvmhist.h"
 

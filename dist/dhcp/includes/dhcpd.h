@@ -722,15 +722,12 @@ struct client_config {
 
 	struct iaddrlist *reject_list;	/* Servers to reject. */
 
+	int omapi_port;			/* port on which to accept OMAPI
+					   connections, or -1 for no
+					   listener. */
 	int do_forward_update;		/* If nonzero, and if we have the
 					   information we need, update the
 					   A record for the address we get. */
-
-	omapi_auth_key_t *omapi_key;	/* Key to use for authenticating
-					   OMAPI connections. */
-	int omapi_port;			/* Port on which to listen for OMAPI
-					   connections. */
-
 };
 
 /* Per-interface state used in the dhcp client... */
@@ -1940,7 +1937,7 @@ ssize_t decode_hw_header PROTO ((struct interface_info *, unsigned char *,
 				 unsigned, struct hardware *));
 ssize_t decode_udp_ip_header PROTO ((struct interface_info *, unsigned char *,
 				     unsigned, struct sockaddr_in *,
-				     unsigned char *, unsigned, unsigned *));
+				     unsigned char *, unsigned));
 
 /* ethernet.c */
 void assemble_ethernet_header PROTO ((struct interface_info *, unsigned char *,

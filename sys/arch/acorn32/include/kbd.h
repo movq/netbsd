@@ -1,4 +1,4 @@
-/*	$NetBSD: kbd.h,v 1.2 2004/05/08 21:04:06 jmc Exp $	*/
+/*	$NetBSD: kbd.h,v 1.1 2001/10/05 22:27:51 reinoud Exp $	*/
 
 /*
  * Copyright (c) 1995 Mark Brinicombe.
@@ -39,9 +39,6 @@
  * Created      : 21/07/95
  */
 
-#ifndef _ACORN32_KBD_H
-#define _ACORN32_KBD_H
-
 struct kbd_data {
 	int keycode;
 	struct timeval event_time;
@@ -66,4 +63,4 @@ void	kbdsetstate __P((int /*state*/));
 int	kbdgetstate __P((void));
 #endif
 
-#endif /* _ACORN32_KBD_H */
+/* End of kbd.h */

@@ -1,4 +1,4 @@
-# $NetBSD: GENERIC,v 1.28 2004/11/10 17:54:04 christos Exp $
+# $NetBSD: GENERIC,v 1.20.2.3 2004/07/15 20:16:09 he Exp $
 #
 # GENERIC machine description file
 # 
@@ -62,7 +62,6 @@ options 	SYSTRACE	# system call vetting via systrace(1)
 #options 	NKMEMCLUSTERS=1024	# 4K pages in kernel malloc pool
 #options 	LKM		# Loadable kernel modules
 options 	COMPAT_SUNOS
-options		COMPAT_BSDPTY	# /dev/[pt]ty?? ptys.
 
 # Filesystems
 #file-system 	FFS		# fast filesystem
@@ -83,7 +82,6 @@ options 	FIFO		# POSIX fifo support (in all filesystems)
 options 	INET		# Internet protocols
 #options 	GATEWAY		# IP forwarding + larger mb_map
 #options 	MROUTING	# Multicast routing
-#options 	PIM		# Protocol Independent Multicast
 #options 	PFIL_HOOKS	# packet filter hooks
 #options 	TCP_DEBUG	# Record last TCP_NDEBUG packets with SO_DEBUG
 
@@ -140,5 +138,3 @@ pseudo-device	loop			# loopback network interface
 pseudo-device	rnd
 pseudo-device	clockctl		# user control of clock subsystem
 pseudo-device	ksyms			# /dev/ksyms
-#pseudo-device	pf			# PF packet filter
-#pseudo-device	pflog			# PF log if

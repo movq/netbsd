@@ -1,4 +1,4 @@
-# $NetBSD: files.wscons,v 1.33 2004/07/29 22:29:37 jmmv Exp $
+# $NetBSD: files.wscons,v 1.28.4.1 2004/06/07 09:38:18 tron Exp $
 
 #
 # "Workstation Console" glue; attaches frame buffer to emulator & keyboard,
@@ -14,13 +14,8 @@
 
 defparam opt_wsemul.h		WSEMUL_DEFAULT
 defflag	opt_wsemul.h		WSEMUL_NO_DUMB WSEMUL_SUN WSEMUL_VT100
-defflag opt_wsdisplay_border.h	WSDISPLAY_CUSTOM_BORDER
-defparam opt_wsdisplay_border.h	WSDISPLAY_BORDER_COLOR
-defflag opt_wsmsgattrs.h	WSDISPLAY_CUSTOM_OUTPUT
-defparam opt_wsmsgattrs.h	WS_DEFAULT_COLATTR WS_DEFAULT_MONOATTR
-				WS_DEFAULT_BG WS_DEFAULT_FG
+defparam opt_wskernattr.h	WS_KERNEL_FG WS_KERNEL_BG
 				WS_KERNEL_COLATTR WS_KERNEL_MONOATTR
-				WS_KERNEL_BG WS_KERNEL_FG
 				WSDISPLAY_SCROLLCOMBO
 defparam opt_wsemul.h		WSEMUL_VT100_HILIT_FG WSEMUL_VT100_UNDERLINE_FG
 				WSEMUL_VT100_HILIT_BG WSEMUL_VT100_UNDERLINE_BG
@@ -65,7 +60,3 @@ file	dev/wscons/wscons_rops.c	wsrasteremulops
 
 defpseudo	wsmux
 file	dev/wscons/wsmux.c		wsmux			needs-flag
-
-define	tpcalib
-file	dev/wscons/tpcalib.c		tpcalib
-file	dev/wscons/mra.c		tpcalib

@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_event.c,v 1.21 2004/11/30 04:25:43 christos Exp $	*/
+/*	$NetBSD: kern_event.c,v 1.19 2004/02/14 11:56:28 jdolecek Exp $	*/
 /*-
  * Copyright (c) 1999,2000,2001 Jonathan Lemon <jlemon@FreeBSD.org>
  * All rights reserved.
@@ -28,7 +28,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_event.c,v 1.21 2004/11/30 04:25:43 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_event.c,v 1.19 2004/02/14 11:56:28 jdolecek Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -72,7 +72,7 @@ static int	kqueue_kqfilter(struct file *fp, struct knote *kn);
 static int	kqueue_stat(struct file *fp, struct stat *sp, struct proc *p);
 static int	kqueue_close(struct file *fp, struct proc *p);
 
-static const struct fileops kqueueops = {
+static struct fileops kqueueops = {
 	kqueue_read, kqueue_write, kqueue_ioctl, kqueue_fcntl, kqueue_poll,
 	kqueue_stat, kqueue_close, kqueue_kqfilter
 };
@@ -103,8 +103,8 @@ static const struct filterops file_filtops =
 static struct filterops timer_filtops =
 	{ 0, filt_timerattach, filt_timerdetach, filt_timer };
 
-POOL_INIT(kqueue_pool, sizeof(struct kqueue), 0, 0, 0, "kqueuepl", NULL);
-POOL_INIT(knote_pool, sizeof(struct knote), 0, 0, 0, "knotepl", NULL);
+struct pool	kqueue_pool;
+struct pool	knote_pool;
 static int	kq_ncallouts = 0;
 static int	kq_calloutmax = (4 * 1024);
 
@@ -150,6 +150,21 @@ static const struct kfilter sys_kfilters[] = {
 static struct kfilter	*user_kfilters;		/* array */
 static int		user_kfilterc;		/* current offset */
 static int		user_kfiltermaxc;	/* max size so far */
+
+/*
+ * kqueue_init:
+ *
+ *	Initialize the kqueue/knote facility.
+ */
+void
+kqueue_init(void)
+{
+
+	pool_init(&kqueue_pool, sizeof(struct kqueue), 0, 0, 0, "kqueuepl",
+	    NULL);
+	pool_init(&knote_pool, sizeof(struct knote), 0, 0, 0, "knotepl",
+	    NULL);
+}
 
 /*
  * Find kfilter entry by name, or NULL if not found.

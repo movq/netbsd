@@ -1,4 +1,4 @@
-/*	$NetBSD: rf_dagutils.c,v 1.44 2004/04/09 23:10:16 oster Exp $	*/
+/*	$NetBSD: rf_dagutils.c,v 1.43.2.1 2004/04/11 11:19:16 tron Exp $	*/
 /*
  * Copyright (c) 1995 Carnegie-Mellon University.
  * All rights reserved.
@@ -33,7 +33,7 @@
  *****************************************************************************/
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rf_dagutils.c,v 1.44 2004/04/09 23:10:16 oster Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rf_dagutils.c,v 1.43.2.1 2004/04/11 11:19:16 tron Exp $");
 
 #include <dev/raidframe/raidframevar.h>
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: tms320av110.c,v 1.15 2004/10/29 12:57:17 yamt Exp $	*/
+/*	$NetBSD: tms320av110.c,v 1.12 2003/01/06 13:05:11 wiz Exp $	*/
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -44,7 +44,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tms320av110.c,v 1.15 2004/10/29 12:57:17 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tms320av110.c,v 1.12 2003/01/06 13:05:11 wiz Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -80,7 +80,7 @@ int tav_get_port __P((void *, mixer_ctrl_t *));
 int tav_query_devinfo __P((void *, mixer_devinfo_t *));
 int tav_get_props __P((void *));
 
-const struct audio_hw_if tav_audio_if = {
+struct audio_hw_if tav_audio_if = {
 	tav_open,
 	tav_close,
 	0 /* tav_drain*/,		/* optional */
@@ -185,6 +185,10 @@ tav_open(hdl, flags)
 	void *hdl;
 	int flags;
 {
+        struct tav_softc *sc;
+
+	sc = hdl;
+
 	/* dummy */
 	return 0;
 }
@@ -356,11 +360,10 @@ tav_getdev(hdl, ret)
 	iot = sc->sc_iot;
 	ioh = sc->sc_ioh;
 
-	strlcpy(ret->name, "tms320av110", sizeof(ret->name));
-	/* guaranteed to be <= 4 in length */
-	snprintf(ret->version, sizeof(ret->version), "%u",
+	strncpy(ret->name, "tms320av110", MAX_AUDIO_DEV_LEN);
+	sprintf(ret->version, "%u", /* guaranteed to be <= 4 in length */
 	    tav_read_byte(iot, ioh, TAV_VERSION));
-	strlcpy(ret->config, sc->sc_dev.dv_xname, sizeof(ret->config));
+	strncpy(ret->config, sc->sc_dev.dv_xname, MAX_AUDIO_DEV_LEN);
 
 	return 0;
 }

@@ -1,4 +1,4 @@
-.\"	$NetBSD: form_post.3,v 1.9 2004/11/24 12:47:20 wiz Exp $
+.\"	$NetBSD: form_post.3,v 1.6 2003/04/16 13:35:05 wiz Exp $
 .\"
 .\" Copyright (c) 2001
 .\"	Brett Lymn - blymn@baea.com.au, brett_lymn@yahoo.com.au
@@ -57,7 +57,9 @@ Conversely, the function
 removes the form from the screen and calls any termination functions
 that were specified.
 .Sh RETURN VALUES
-The functions will return one of the following error values:
+Functions returning pointers will return NULL if an error is detected.
+The functions that return an int will return one of the following error
+values:
 .Pp
 .Bl -tag -width E_UNKNOWN_COMMAND -compact
 .It Er E_OK
@@ -78,8 +80,8 @@ The function was called from within a init or term function.
 .Xr forms 3
 .Sh NOTES
 The header
-.Aq Pa form.h
+.Pa \*[Lt]form.h\*[Gt]
 automatically includes both
-.Aq Pa curses.h
+.Pa \*[Lt]curses.h\*[Gt]
 and
-.Aq Pa eti.h .
+.Pa \*[Lt]eti.h\*[Gt] .

@@ -1,4 +1,4 @@
-/*	$NetBSD: ofb.c,v 1.40 2004/12/15 04:52:05 briggs Exp $	*/
+/*	$NetBSD: ofb.c,v 1.38 2003/11/13 03:09:28 chs Exp $	*/
 
 /*
  * Copyright (c) 1995, 1996 Carnegie-Mellon University.
@@ -28,7 +28,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ofb.c,v 1.40 2004/12/15 04:52:05 briggs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ofb.c,v 1.38 2003/11/13 03:09:28 chs Exp $");
 
 #include <sys/param.h>
 #include <sys/buf.h>
@@ -154,7 +154,7 @@ ofbattach(parent, self, aux)
 		node = dc->dc_node;
 		sc->nscreens = 1;
 	} else {
-		int len;
+		int i, len, screenbytes;
 
 		dc = malloc(sizeof(struct ofb_devconfig), M_DEVBUF, M_WAITOK);
 		memset(dc, 0, sizeof(struct ofb_devconfig));
@@ -172,6 +172,10 @@ ofbattach(parent, self, aux)
 			node = OF_child(node);
 
 		ofb_common_init(node, dc);
+
+		screenbytes = dc->dc_ri.ri_stride * dc->dc_ri.ri_height;
+		for (i = 0; i < screenbytes; i += sizeof(u_int32_t))
+			*(u_int32_t *)(dc->dc_paddr + i) = 0xffffffff;
 	}
 	sc->sc_dc = dc;
 
@@ -191,19 +195,7 @@ ofbattach(parent, self, aux)
 		return;
 	}
 
-	/*
-	 * Clear the screen here, instead of above, in case
-	 * ofb_common_init() failed to map the framebuffer.
-	 */
-	if (!console) {
-		int i, screenbytes;
-
-		screenbytes = dc->dc_ri.ri_stride * dc->dc_ri.ri_height;
-		for (i = 0; i < screenbytes; i += sizeof(u_int32_t))
-			*(u_int32_t *)(dc->dc_paddr + i) = 0xffffffff;
-	}
-
-	pci_devinfo(pa->pa_id, pa->pa_class, 0, devinfo, sizeof(devinfo));
+	pci_devinfo(pa->pa_id, pa->pa_class, 0, devinfo);
 	printf(": %s\n", devinfo);
 	printf("%s: %d x %d, %dbpp\n", self->dv_xname,
 	       dc->dc_ri.ri_width, dc->dc_ri.ri_height, dc->dc_ri.ri_depth);
@@ -235,15 +227,6 @@ ofb_common_init(node, dc)
 
 		memset(name, 0, 64);
 		OF_package_to_path(node, name, sizeof(name));
-
-		/*
-		 * /chaos/control on some boxes hangs up in OF_open.
-		 * If we return here, we get "can't map frame buffer"
-		 * which isn't really a big deal in these cases.
-		 */
-		if (!strncmp(name, "/chaos@F0000000/control@B", sizeof(name)))
-			return;
-
 		dc->dc_ih = OF_open(name);
 	}
 

@@ -1,4 +1,4 @@
-.\"	$NetBSD: restore.8,v 1.47 2004/10/24 17:01:22 wiz Exp $
+.\"	$NetBSD: restore.8,v 1.41 2003/08/07 10:04:37 agc Exp $
 .\"
 .\" Copyright (c) 1985, 1991, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -29,7 +29,7 @@
 .\"
 .\"     @(#)restore.8	8.4 (Berkeley) 5/1/95
 .\"
-.Dd October 22, 2004
+.Dd May 26, 2003
 .Dt RESTORE 8
 .Os
 .Sh NAME
@@ -40,41 +40,33 @@
 .Nm
 .Fl i
 .Op Fl cdhmuvyN
-.Op Fl b Ar bsize
-.Op Fl D Ar algorithm
+.Op Fl b Ar blocksize
 .Op Fl f Ar file
-.Op Fl M Ar mfile
 .Op Fl s Ar fileno
 .Nm
 .Fl R
 .Op Fl cduvyN
-.Op Fl b Ar bsize
-.Op Fl D Ar algorithm
+.Op Fl b Ar blocksize
 .Op Fl f Ar file
-.Op Fl M Ar mfile
 .Op Fl s Ar fileno
 .Nm
 .Fl r
 .Op Fl cduvyN
-.Op Fl b Ar bsize
-.Op Fl D Ar algorithm
+.Op Fl b Ar blocksize
 .Op Fl f Ar file
-.Op Fl M Ar mfile
 .Op Fl s Ar fileno
 .Nm
 .Fl t
 .Op Fl cdhuvy
-.Op Fl b Ar bsize
+.Op Fl b Ar blocksize
 .Op Fl f Ar file
 .Op Fl s Ar fileno
 .Op Ar
 .Nm
 .Fl x
 .Op Fl cdhmuvyN
-.Op Fl b Ar bsize
-.Op Fl D Ar algorithm
+.Op Fl b Ar blocksize
 .Op Fl f Ar file
-.Op Fl M Ar mfile
 .Op Fl s Ar fileno
 .Op Ar
 .Pp
@@ -121,13 +113,12 @@ the default is the current directory.
 .It Ic add Op Ar arg
 The current directory or specified argument is added to the list of
 files to be extracted.
-If a directory is specified, then it and all its descendants are
+If a directory is specified, then it and all its descendents are
 added to the extraction list
 (unless the
 .Fl h
 flag is specified on the command line).
-Files that are on the extraction list are prepended with a
-.Dq *
+Files that are on the extraction list are prepended with a ``*''
 when they are listed by
 .Ic ls .
 .It Ic \&cd Ar arg
@@ -135,7 +126,7 @@ Change the current working directory to the specified argument.
 .It Ic delete Op Ar arg
 The current directory or specified argument is deleted from the list of
 files to be extracted.
-If a directory is specified, then it and all its descendants are
+If a directory is specified, then it and all its descendents are
 deleted from the extraction list
 (unless the
 .Fl h
@@ -154,10 +145,8 @@ start with the last volume, and work towards the first volume.
 List a summary of the available commands.
 .It Ic \&ls Op Ar arg
 List the current or specified directory.
-Entries that are directories are appended with a
-.Dq / .
-Entries that have been marked for extraction are prepended with a
-.Dq * .
+Entries that are directories are appended with a ``/''.
+Entries that have been marked for extraction are prepended with a ``*''.
 If the verbose
 flag is set the inode number of each entry is also listed.
 .It Ic pwd
@@ -272,7 +261,7 @@ flag has been specified.
 .Pp
 The following additional options may be specified:
 .Bl -tag -width Ds
-.It Fl b Ar bsize
+.It Fl b Ar blocksize
 The number of kilobytes per dump record.
 If the
 .Fl b
@@ -288,19 +277,6 @@ The
 .Fl c
 flag disables this check, and only allows reading a dump in the old
 format.
-.It Fl D Ar algorithm
-Computes the digest of each regular files using the
-.Ar algorithm
-and output to standard output.
-The
-.Ar algorithm
-is one of
-.Ar md5 ,
-.Ar rmd160 ,
-or
-.Ar sha1 .
-This option doesn't imply
-.Fl N .
 .It Fl d
 Enable debugging.
 .It Fl f Ar file
@@ -343,23 +319,11 @@ Extract the actual directory,
 rather than the files that it references.
 This prevents hierarchical restoration of complete subtrees
 from the dump.
-.It Fl M Ar mfile
-Do not set the file flags on restore.
-Instead, append an
-.Xr mtree 8
-specification to
-.Ar mfile ,
-which can be used to restore file flags with a command such as
-.Bd -literal -offset indent
-sort mfile | mtree -e -i -u
-.Ed
 .It Fl m
 Extract by inode numbers rather than by file name.
 This is useful if only a few files are being extracted,
 and one wants to avoid regenerating the complete pathname
 to the file.
-.It Fl N
-Do not perform actual writing to disk.
 .It Fl s Ar fileno
 Read from the specified
 .Ar fileno
@@ -388,6 +352,8 @@ preceded by its file type.
 .It Fl y
 Do not ask the user whether to abort the restore in the event of an error.
 Always try to skip over the bad block(s) and continue.
+.It Fl N
+Do not perform actual writing to disk.
 .El
 .Sh ENVIRONMENT
 If the following environment variable exists it will be used by
@@ -443,8 +409,7 @@ start with the last volume, and work towards the first volume.
 .Pp
 There are numerous consistency checks that can be listed by
 .Nm .
-Most checks are self-explanatory or can
-.Dq never happen .
+Most checks are self-explanatory or can ``never happen''.
 Common errors are given below.
 .Pp
 .Bl -tag -width Ds -compact

@@ -1,4 +1,4 @@
-/*	$NetBSD: clock.c,v 1.5 2004/04/07 13:29:26 tsutsui Exp $	*/
+/*	$NetBSD: clock.c,v 1.4.2.1 2004/04/11 02:55:14 jmc Exp $	*/
 
 /*
  * Copyright (c) 1982, 1990, 1993

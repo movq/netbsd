@@ -1,6 +1,6 @@
 /* ldctor.c -- constructor support routines
    Copyright 1991, 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999, 2000, 2001,
-   2002, 2003 Free Software Foundation, Inc.
+   2002 Free Software Foundation, Inc.
    By Steve Chamberlain <sac@cygnus.com>
 
 This file is part of GLD, the Gnu Linker.
@@ -33,6 +33,9 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
 #include "ldmain.h"
 #include "ldctor.h"
 
+static int ctor_prio PARAMS ((const char *));
+static int ctor_cmp PARAMS ((const PTR, const PTR));
+
 /* The list of statements needed to handle constructors.  These are
    invoked by the command CONSTRUCTORS in the linker script.  */
 lang_statement_list_type constructor_list;
@@ -53,23 +56,24 @@ struct set_info *sets;
    function will construct the sets.  */
 
 void
-ldctor_add_set_entry (struct bfd_link_hash_entry *h,
-		      bfd_reloc_code_real_type reloc,
-		      const char *name,
-		      asection *section,
-		      bfd_vma value)
+ldctor_add_set_entry (h, reloc, name, section, value)
+     struct bfd_link_hash_entry *h;
+     bfd_reloc_code_real_type reloc;
+     const char *name;
+     asection *section;
+     bfd_vma value;
 {
   struct set_info *p;
   struct set_element *e;
   struct set_element **epp;
 
-  for (p = sets; p != NULL; p = p->next)
+  for (p = sets; p != (struct set_info *) NULL; p = p->next)
     if (p->h == h)
       break;
 
-  if (p == NULL)
+  if (p == (struct set_info *) NULL)
     {
-      p = xmalloc (sizeof (struct set_info));
+      p = (struct set_info *) xmalloc (sizeof (struct set_info));
       p->next = sets;
       sets = p;
       p->h = h;
@@ -105,7 +109,7 @@ ldctor_add_set_entry (struct bfd_link_hash_entry *h,
 	}
     }
 
-  e = xmalloc (sizeof (struct set_element));
+  e = (struct set_element *) xmalloc (sizeof (struct set_element));
   e->next = NULL;
   e->name = name;
   e->section = section;
@@ -122,7 +126,8 @@ ldctor_add_set_entry (struct bfd_link_hash_entry *h,
    symbol name.  */
 
 static int
-ctor_prio (const char *name)
+ctor_prio (name)
+     const char *name;
 {
   /* The name will look something like _GLOBAL_$I$65535$test02__Fv.
      There might be extra leading underscores, and the $ characters
@@ -150,10 +155,12 @@ ctor_prio (const char *name)
    is called via qsort.  */
 
 static int
-ctor_cmp (const void *p1, const void *p2)
+ctor_cmp (p1, p2)
+     const PTR p1;
+     const PTR p2;
 {
-  const struct set_element * const *pe1 = p1;
-  const struct set_element * const *pe2 = p2;
+  const struct set_element **pe1 = (const struct set_element **) p1;
+  const struct set_element **pe2 = (const struct set_element **) p2;
   const char *n1;
   const char *n2;
   int prio1;
@@ -195,7 +202,7 @@ ctor_cmp (const void *p1, const void *p2)
    themselves into constructor_list.  */
 
 void
-ldctor_build_sets (void)
+ldctor_build_sets ()
 {
   static bfd_boolean called;
   lang_statement_list_type *old;
@@ -223,7 +230,7 @@ ldctor_build_sets (void)
 	  for (e = p->elements; e != NULL; e = e->next)
 	    ++c;
 
-	  array = xmalloc (c * sizeof *array);
+	  array = (struct set_element **) xmalloc (c * sizeof *array);
 
 	  i = 0;
 	  for (e = p->elements; e != NULL; e = e->next)
@@ -250,7 +257,7 @@ ldctor_build_sets (void)
   lang_list_init (stat_ptr);
 
   header_printed = FALSE;
-  for (p = sets; p != NULL; p = p->next)
+  for (p = sets; p != (struct set_info *) NULL; p = p->next)
     {
       struct set_element *e;
       reloc_howto_type *howto;
@@ -271,12 +278,12 @@ ldctor_build_sets (void)
 	     .long elementN
 	     .long 0
 	 except that we use the right size instead of .long.  When
-	 generating relocatable output, we generate relocs instead of
+	 generating relocateable output, we generate relocs instead of
 	 addresses.  */
       howto = bfd_reloc_type_lookup (output_bfd, p->reloc);
-      if (howto == NULL)
+      if (howto == (reloc_howto_type *) NULL)
 	{
-	  if (link_info.relocatable)
+	  if (link_info.relocateable)
 	    {
 	      einfo (_("%P%X: %s does not support reloc %s for set %s\n"),
 		     bfd_get_target (output_bfd),
@@ -285,7 +292,7 @@ ldctor_build_sets (void)
 	      continue;
 	    }
 
-	  /* If this is not a relocatable link, all we need is the
+	  /* If this is not a relocateable link, all we need is the
 	     size, which we can get from the input BFD.  */
 	  if (p->elements->section->owner != NULL)
 	    howto = bfd_reloc_type_lookup (p->elements->section->owner,
@@ -324,9 +331,9 @@ ldctor_build_sets (void)
 						exp_intop (reloc_size))));
       lang_add_assignment (exp_assop ('=', p->h->root.string,
 				      exp_nameop (NAME, ".")));
-      lang_add_data (size, exp_intop (p->count));
+      lang_add_data (size, exp_intop ((bfd_vma) p->count));
 
-      for (e = p->elements; e != NULL; e = e->next)
+      for (e = p->elements; e != (struct set_element *) NULL; e = e->next)
 	{
 	  if (config.map_file != NULL)
 	    {
@@ -362,7 +369,7 @@ ldctor_build_sets (void)
 	  if (! bfd_is_abs_section (e->section))
 	    e->section->flags |= SEC_KEEP;
 
-	  if (link_info.relocatable)
+	  if (link_info.relocateable)
 	    lang_add_reloc (p->reloc, howto, e->section, e->name,
 			    exp_intop (e->value));
 	  else

@@ -34,7 +34,7 @@
 #include "kafs_locl.h"
 
 __RCSID("$Heimdal: afssys.c,v 1.69.2.2 2004/06/22 14:29:48 lha Exp $"
-        "$NetBSD: afssys.c,v 1.1.1.5 2004/09/14 07:46:57 lha Exp $");
+        "$NetBSD: afssys.c,v 1.1.1.4.2.1 2004/09/17 04:36:15 jmc Exp $");
 
 struct procdata {
     unsigned long param4;

@@ -1,4 +1,4 @@
-/*	$NetBSD: vrpciu.c,v 1.16 2004/12/12 21:03:06 abs Exp $	*/
+/*	$NetBSD: vrpciu.c,v 1.14 2003/07/15 02:29:36 lukem Exp $	*/
 
 /*-
  * Copyright (c) 2001 Enami Tsugutomo.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vrpciu.c,v 1.16 2004/12/12 21:03:06 abs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vrpciu.c,v 1.14 2003/07/15 02:29:36 lukem Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -80,6 +80,9 @@ static u_int16_t
 #endif
 static int	vrpciu_match(struct device *, struct cfdata *, void *);
 static void	vrpciu_attach(struct device *, struct device *, void *);
+#if NPCI > 0
+static int	vrpciu_print(void *, const char *);
+#endif
 static int	vrpciu_intr(void *);
 static void	vrpciu_attach_hook(struct device *, struct device *,
 		    struct pcibus_attach_args *);
@@ -278,6 +281,7 @@ vrpciu_attach(struct device *parent, struct device *self, void *aux)
 
 #if NPCI > 0
 	memset(&pba, 0, sizeof(pba));
+	pba.pba_busname = "pci";
 
 	/* For now, just inherit window mappings set by WinCE.  XXX. */
 
@@ -302,7 +306,7 @@ vrpciu_attach(struct device *parent, struct device *self, void *aux)
 
 	if (platid_match(&platid, &platid_mask_MACH_LASER5_L_BOARD)) {
 		/*
-		 * fix PCI device configuration for L-Router.
+		 * fix PCI device configration for L-Router.
 		 */
 		/* change IDE controller to native mode */
 		reg = pci_conf_read(pc, pci_make_tag(pc, 0, 16, 0),
@@ -322,9 +326,24 @@ vrpciu_attach(struct device *parent, struct device *self, void *aux)
 	    PCI_FLAGS_MRL_OKAY;
 	pba.pba_pc = pc;
 
-	config_found_ia(self, "pcibus", &pba, pcibusprint);
+	config_found(self, &pba, vrpciu_print);
 #endif
 }
+
+#if NPCI > 0
+static int
+vrpciu_print(void *aux, const char *pnp)
+{
+	struct pcibus_attach_args *pba = aux;
+
+	if (pnp != NULL)
+		aprint_normal("%s at %s", pba->pba_busname, pnp);
+	else
+		aprint_normal(" bus %d", pba->pba_bus);
+
+	return (UNCONF);
+}
+#endif
 
 /*
  * Handle PCI error interrupts.

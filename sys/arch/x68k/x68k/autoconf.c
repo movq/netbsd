@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.40 2004/12/13 02:14:14 chs Exp $	*/
+/*	$NetBSD: autoconf.c,v 1.38 2003/07/15 01:44:55 lukem Exp $	*/
 
 /*
  * Copyright (c) 1995 Leo Weppelman
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.40 2004/12/13 02:14:14 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.38 2003/07/15 01:44:55 lukem Exp $");
 
 #include "opt_compat_netbsd.h"
 #include "scsibus.h"
@@ -61,6 +61,9 @@ int x68k_config_found __P((struct cfdata *, struct device *,
 
 static struct device *scsi_find __P((dev_t));
 static struct device *find_dev_byname __P((const char *));
+
+struct device *booted_device;
+int booted_partition;
 
 int x68k_realconfig;
 
@@ -154,6 +157,7 @@ config_console()
 }
 
 dev_t	bootdev = 0;
+struct device *booted_device;
 
 static void
 findroot(void)
@@ -307,19 +311,18 @@ find_dev_byname(name)
 CFATTACH_DECL(mainbus, sizeof(struct device),
     mbmatch, mbattach, NULL, NULL);
 
-static int mb_attached;
-
 int
 mbmatch(pdp, cfp, auxp)
 	struct device *pdp;
 	struct cfdata *cfp;
 	void *auxp;
 {
-
-	if (mb_attached)
-		return 0;
-
-	return 1;
+	if (cfp->cf_unit > 0)
+		return(0);
+	/*
+	 * We are always here
+	 */
+	return(1);
 }
 
 /*
@@ -330,10 +333,7 @@ mbattach(pdp, dp, auxp)
 	struct device *pdp, *dp;
 	void *auxp;
 {
-
-	mb_attached = 1;
-
-	printf("\n");
+	printf ("\n");
 
 	config_found(dp, "intio"  , NULL);
 	config_found(dp, "grfbus" , NULL);

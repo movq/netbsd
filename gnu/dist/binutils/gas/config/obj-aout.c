@@ -464,18 +464,14 @@ obj_crawl_symbol_chain (headers)
       if (flag_readonly_data_in_text && (S_GET_SEGMENT (symbolP) == SEG_DATA))
 	{
 	  S_SET_SEGMENT (symbolP, SEG_TEXT);
-	}			/* if pushing data into text */
+	}			/* if pusing data into text */
 
       resolve_symbol_value (symbolP);
 
       /* Skip symbols which were equated to undefined or common
-	 symbols.  Also skip defined uncommon symbols which can
-	 be resolved since in this case they should have been
-	 resolved to a non-symbolic constant.  */
+	 symbols.  */
       if (symbolP->sy_value.X_op == O_symbol
-	  && (! S_IS_DEFINED (symbolP)
-	      || S_IS_COMMON (symbolP)
-	      || symbol_resolved_p (symbolP)))
+	  && (! S_IS_DEFINED (symbolP) || S_IS_COMMON (symbolP)))
 	{
 	  *symbolPP = symbol_next (symbolP);
 	  continue;

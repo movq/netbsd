@@ -32,7 +32,7 @@
  */
 
 /* $Heimdal: der_locl.h,v 1.4.6.1 2004/02/09 17:54:05 lha Exp $
-   $NetBSD: der_locl.h,v 1.1.1.4 2004/04/02 14:47:42 lha Exp $ */
+   $NetBSD: der_locl.h,v 1.1.1.3.2.1 2004/04/21 04:55:40 jmc Exp $ */
 
 #ifndef __DER_LOCL_H__
 #define __DER_LOCL_H__

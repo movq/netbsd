@@ -1,4 +1,4 @@
-/*	$NetBSD: w.c,v 1.64 2004/11/19 13:17:06 christos Exp $	*/
+/*	$NetBSD: w.c,v 1.61 2004/01/03 01:18:14 wiz Exp $	*/
 
 /*-
  * Copyright (c) 1980, 1991, 1993, 1994
@@ -39,7 +39,7 @@ __COPYRIGHT("@(#) Copyright (c) 1980, 1991, 1993, 1994\n\
 #if 0
 static char sccsid[] = "@(#)w.c	8.6 (Berkeley) 6/30/94";
 #else
-__RCSID("$NetBSD: w.c,v 1.64 2004/11/19 13:17:06 christos Exp $");
+__RCSID("$NetBSD: w.c,v 1.61 2004/01/03 01:18:14 wiz Exp $");
 #endif
 #endif /* not lint */
 
@@ -118,14 +118,13 @@ struct	entry {
 	pid_t	pid;			/* pid or ~0 if not known */
 } *ep, *ehead = NULL, **nextp = &ehead;
 
-static void	pr_args(struct kinfo_proc2 *);
-static void	pr_header(time_t *, int);
+static void	 pr_args(struct kinfo_proc2 *);
+static void	 pr_header(time_t *, int);
 #if defined(SUPPORT_UTMP) || defined(SUPPORT_UTMPX)
-static int	ttystat(const char *, struct stat *);
+static struct stat *ttystat(char *);
 static void	process(struct entry *);
 #endif
-static void	usage(int);
-
+static void	 usage(int);
 int	main(int, char **);
 
 int
@@ -210,7 +209,7 @@ main(int argc, char **argv)
 			continue;
 		++nusers;
 		if (sel_user &&
-		    strncmp(utx->ut_name, sel_user, sizeof(utx->ut_name)) != 0)
+		    strncmp(utx->ut_name, sel_user, sizeof(utx->ut_name) != 0))
 			continue;
 		if ((ep = calloc(1, sizeof(struct entry))) == NULL)
 			err(1, NULL);
@@ -241,7 +240,7 @@ main(int argc, char **argv)
 			continue;
 
 		if (sel_user &&
-		    strncmp(ut->ut_name, sel_user, sizeof(ut->ut_name)) != 0)
+		    strncmp(ut->ut_name, sel_user, sizeof(ut->ut_name) != 0))
 			continue;
 
 		/* Don't process entries that we have utmpx for */
@@ -311,7 +310,7 @@ main(int argc, char **argv)
 		}
 	}
 
-	argwidth = printf("%-*s TTY     %-*s %*s  IDLE WHAT\n",
+	argwidth = printf("%-*sTTY %-*s %*s  IDLE WHAT\n",
 	    maxname, "USER", maxhost, "FROM",
 	    7 /* "dddhhXm" */, "LOGIN@");
 	argwidth -= sizeof("WHAT\n") - 1 /* NUL */;
@@ -409,8 +408,11 @@ main(int argc, char **argv)
 			    ep->type, ep->name, ep->line, ep->host);
 			continue;
 		}
-		(void)printf("%-*s %-7.7s %-*.*s ",
-		    maxname, kp->p_login, ep->line,
+		(void)printf("%-*s %-2.2s %-*.*s ",
+		    maxname, kp->p_login,
+		    (strncmp(ep->line, "tty", 3) &&
+		    strncmp(ep->line, "dty", 3)) ?
+		    ep->line : ep->line + 3,
 		    maxhost, maxhost, *p ? p : "-");
 		then = (time_t)ep->tv.tv_sec;
 		pr_attime(&then, &now);
@@ -525,19 +527,22 @@ pr_header(time_t *nowp, int nusers)
 }
 
 #if defined(SUPPORT_UTMP) || defined(SUPPORT_UTMPX)
-static int
-ttystat(const char *line, struct stat *st)
+static struct stat *
+ttystat(char *line)
 {
+	static struct stat sb;
 	char ttybuf[MAXPATHLEN];
 
 	(void)snprintf(ttybuf, sizeof(ttybuf), "%s%s", _PATH_DEV, line);
-	return stat(ttybuf, st);
+	if (stat(ttybuf, &sb))
+		return (NULL);
+	return (&sb);
 }
 
 static void
 process(struct entry *ep)
 {
-	struct stat st;
+	struct stat *stp;
 	time_t touched;
 	int max;
 
@@ -548,15 +553,13 @@ process(struct entry *ep)
 	if ((max = strlen(ep->host)) > maxhost)
 		maxhost = max;
 
-	ep->tdev = 0;
-	ep->idle = (time_t)-1;
 
 #ifdef SUPPORT_UTMP
 	/*
 	 * Hack to recognize and correctly parse
 	 * ut entry made by ftpd. The "tty" used
 	 * by ftpd is not a real tty, just identifier in
-	 * form ftpPID. Pid parsed from the "tty name"
+	 * form ftpSUPPORT_ID. Pid parsed from the "tty name"
 	 * is used later to match corresponding process.
 	 * NB: This is only used for utmp entries. For utmpx,
 	 * we already have the pid.
@@ -566,10 +569,10 @@ process(struct entry *ep)
 		return;
 	}
 #endif
-	if (ttystat(ep->line, &st) == -1)
+	if ((stp = ttystat(ep->line)) == NULL)
 		return;
 
-	ep->tdev = st.st_rdev;
+	ep->tdev = stp->st_rdev;
 	/*
 	 * If this is the console device, attempt to ascertain
 	 * the true console device dev_t.
@@ -584,7 +587,7 @@ process(struct entry *ep)
 		(void) sysctl(mib, 2, &ep->tdev, &size, NULL, 0);
 	}
 
-	touched = st.st_atime;
+	touched = stp->st_atime;
 	if (touched < ep->tv.tv_sec) {
 		/* tty untouched since before login */
 		touched = ep->tv.tv_sec;

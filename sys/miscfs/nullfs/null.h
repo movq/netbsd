@@ -1,4 +1,4 @@
-/*	$NetBSD: null.h,v 1.15 2004/05/20 06:34:30 atatat Exp $	*/
+/*	$NetBSD: null.h,v 1.14.2.1 2004/05/23 10:46:29 tron Exp $	*/
 
 /*
  * Copyright (c) 1999 National Aeronautics & Space Administration

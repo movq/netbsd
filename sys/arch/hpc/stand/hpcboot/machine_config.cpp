@@ -1,7 +1,7 @@
-/* -*-C++-*-	$NetBSD: machine_config.cpp,v 1.10 2004/08/13 15:48:51 uch Exp $	*/
+/* -*-C++-*-	$NetBSD: machine_config.cpp,v 1.8 2003/12/18 12:21:36 uwe Exp $	*/
 
 /*-
- * Copyright (c) 2001, 2002, 2004 The NetBSD Foundation, Inc.
+ * Copyright (c) 2001, 2002 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -102,8 +102,8 @@ FrameBufferInfo::_table[] =
 	{ PLATID_CPU_MIPS_TX_3912, PLATID_MACH_PHILIPS_NINO_312            ,        2,      240,      320,        0, 0x00000000 },
 	{ PLATID_CPU_MIPS_TX_3912, PLATID_MACH_SHARP_MOBILON_HC1200        ,        4,      640,      240,        0, 0x00000000 },
 	{ PLATID_CPU_MIPS_TX_3912, PLATID_MACH_SHARP_MOBILON_HC4100        ,        4,      640,      240,        0, 0x00000000 },
-	{ PLATID_CPU_MIPS_TX_3922, PLATID_MACH_SHARP_TELIOS_HCAJ           ,       16,      800,      600,        0, 0x00000000 },
-	{ PLATID_CPU_MIPS_TX_3922, PLATID_MACH_SHARP_TELIOS_HCVJ           ,       16,      800,      480,        0, 0x00000000 },
+	{ PLATID_CPU_MIPS_TX_3922, PLATID_MACH_SHARP_TELIOS_HCAJ1          ,       16,      800,      600,        0, 0x00000000 },
+	{ PLATID_CPU_MIPS_TX_3922, PLATID_MACH_SHARP_TELIOS_HCVJ1C_JP      ,       16,      800,      480,        0, 0x00000000 },
 	{ PLATID_CPU_MIPS_TX_3922, PLATID_MACH_VICTOR_INTERLINK_MPC101     ,       16,      640,      480,        0, 0x00000000 },
 #endif // MIPS
 #ifdef SHx
@@ -112,7 +112,6 @@ FrameBufferInfo::_table[] =
 	{ PLATID_CPU_SH_3_7709   , PLATID_MACH_HP_LX_620JP                 ,        8,      640,      240,      640, 0xb2000000 },
 	{ PLATID_CPU_SH_3_7709   , PLATID_MACH_HITACHI_PERSONA_HPW50PAD    ,        8,      640,      240,      640, 0xb2000000 },
 	{ PLATID_CPU_SH_3_7709   , PLATID_MACH_HITACHI_PERSONA_HPW230JC    ,        8,      640,      240,      640, 0xb2000000 },
-	{ PLATID_CPU_SH_3_7709   , PLATID_MACH_HITACHI_PERSONA_HPW200EC    ,        8,      640,      240,      640, 0xb2000000 },
 	// SH7709A (P2 address)
 	{ PLATID_CPU_SH_3_7709A  , PLATID_MACH_HP_JORNADA                  ,       16,      640,      240,     1280, 0xb2000000 },
 	// SH7750 (P2 address)

@@ -1,4 +1,4 @@
-/*	$NetBSD: walk.c,v 1.17 2004/06/20 22:20:18 jmc Exp $	*/
+/*	$NetBSD: walk.c,v 1.15.2.1 2004/06/22 07:21:29 tron Exp $	*/
 
 /*
  * Copyright (c) 2001 Wasabi Systems, Inc.
@@ -77,7 +77,7 @@
 
 #include <sys/cdefs.h>
 #if defined(__RCSID) && !defined(__lint)
-__RCSID("$NetBSD: walk.c,v 1.17 2004/06/20 22:20:18 jmc Exp $");
+__RCSID("$NetBSD: walk.c,v 1.15.2.1 2004/06/22 07:21:29 tron Exp $");
 #endif	/* !__lint */
 
 #include <sys/param.h>
@@ -501,7 +501,7 @@ link_check(fsinode *entry)
 {
 	static	struct dupnode {
 		uint32_t	dev;
-		uint64_t	ino;
+		uint32_t	ino;
 		fsinode		*dup;
 	} *dups, *newdups;
 	static	int	ndups, maxdups;

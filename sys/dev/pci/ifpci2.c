@@ -1,4 +1,4 @@
-/* $NetBSD: ifpci2.c,v 1.4 2004/07/06 08:53:16 martin Exp $	*/
+/* $NetBSD: ifpci2.c,v 1.3 2003/10/28 17:01:19 pooka Exp $	*/
 /*
  *   Copyright (c) 1999 Gary Jennejohn. All rights reserved.
  *
@@ -36,14 +36,14 @@
  *	Fritz!Card PCI driver
  *	------------------------------------------------
  *
- *	$Id: ifpci2.c,v 1.4 2004/07/06 08:53:16 martin Exp $
+ *	$Id: ifpci2.c,v 1.3 2003/10/28 17:01:19 pooka Exp $
  *
  *      last edit-date: [Fri Jan  5 11:38:58 2001]
  *
  *---------------------------------------------------------------------------*/
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ifpci2.c,v 1.4 2004/07/06 08:53:16 martin Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ifpci2.c,v 1.3 2003/10/28 17:01:19 pooka Exp $");
 
 
 #include <sys/param.h>
@@ -159,7 +159,6 @@ CFATTACH_DECL(ifritz, sizeof(struct ifpci_softc),
 /*
  *	AVM PCI Status Latch 0 read only bits
  */
-#define	ASL_RESET		0x01
 #define ASL_TIMERRESET 		0x04
 #define ASL_ENABLE_INT		0x08
 
@@ -298,7 +297,7 @@ ifpci2_attach(struct device *parent, struct device *self, void *aux)
 	v = bus_space_read_4(sc->sc_maps[0].t, sc->sc_maps[0].h, 0);
 	bus_space_write_1(sc->sc_maps[0].t, sc->sc_maps[0].h, STAT0_OFFSET, 0);
 	DELAY(SEC_DELAY/20); /* 50 ms */
-	bus_space_write_1(sc->sc_maps[0].t, sc->sc_maps[0].h, STAT0_OFFSET, ASL_RESET);
+	bus_space_write_1(sc->sc_maps[0].t, sc->sc_maps[0].h, STAT0_OFFSET, 1);
 	DELAY(SEC_DELAY/20); /* 50 ms */
 	bus_space_write_1(sc->sc_maps[0].t, sc->sc_maps[0].h, STAT0_OFFSET, 0);
 	DELAY(SEC_DELAY/20); /* 50 ms */

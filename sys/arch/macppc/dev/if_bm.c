@@ -1,4 +1,4 @@
-/*	$NetBSD: if_bm.c,v 1.23 2004/10/30 18:08:34 thorpej Exp $	*/
+/*	$NetBSD: if_bm.c,v 1.21 2003/07/15 02:43:28 lukem Exp $	*/
 
 /*-
  * Copyright (C) 1998, 1999, 2000 Tsubai Masanari.  All rights reserved.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_bm.c,v 1.23 2004/10/30 18:08:34 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_bm.c,v 1.21 2003/07/15 02:43:28 lukem Exp $");
 
 #include "opt_inet.h"
 #include "opt_ns.h"
@@ -45,7 +45,6 @@ __KERNEL_RCSID(0, "$NetBSD: if_bm.c,v 1.23 2004/10/30 18:08:34 thorpej Exp $");
 #include <uvm/uvm_extern.h>
 
 #include <net/if.h>
-#include <net/if_dl.h>
 #include <net/if_ether.h>
 #include <net/if_media.h>
 
@@ -56,11 +55,6 @@ __KERNEL_RCSID(0, "$NetBSD: if_bm.c,v 1.23 2004/10/30 18:08:34 thorpej Exp $");
 #ifdef INET
 #include <netinet/in.h>
 #include <netinet/if_inarp.h>
-#endif
-
-#ifdef NS
-#include <netns/ns.h>
-#include <netns/ns_if.h>
 #endif
 
 #include <dev/ofw/openfirm.h>
@@ -818,10 +812,8 @@ bmac_ioctl(ifp, cmd, data)
 			 * Multicast list has changed; set the hardware filter
 			 * accordingly.
 			 */
-			if (ifp->if_flags & IFF_RUNNING) {
-				bmac_init(sc);
-				bmac_setladrf(sc);
-			}
+			bmac_init(sc);
+			bmac_setladrf(sc);
 			error = 0;
 		}
 		break;

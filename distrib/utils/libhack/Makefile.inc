@@ -1,4 +1,4 @@
-# $NetBSD: Makefile.inc,v 1.18 2004/06/06 07:03:53 christos Exp $
+# $NetBSD: Makefile.inc,v 1.16 2002/04/06 18:12:50 tsutsui Exp $
 #
 # Include this fragment to build libhack.o
 # It is .o and not .a to make sure these are the
@@ -16,10 +16,9 @@
 #					that only supports /etc/hosts
 #			
 
-CPPFLAGS+=	-DSMALL
 HACKOBJS+=	getcap.o getgrent.o getnet.o getnetgr.o getpwent.o \
 		localeconv.o perror.o setlocale.o \
-		strerror.o strsignal.o syslog.o utmp.o yplib.o
+		strerror.o strsignal.o utmp.o yplib.o
 
 libhack.o: ${HACKOBJS}
 	${LD} -r -o $@ ${HACKOBJS}
@@ -27,7 +26,7 @@ libhack.o: ${HACKOBJS}
 
 # XXX .PATH won't work here, because of crunchgen used by various builds
 
-getcap.o:	${HACKSRC}/../../../lib/libc/gen/getcap.c
+getcap.o:	${HACKSRC}/getcap.c
 getgrent.o:	${HACKSRC}/getgrent.c
 gethost.o:	${HACKSRC}/gethost.c
 getnet.o:	${HACKSRC}/getnet.c
@@ -38,6 +37,5 @@ perror.o:	${HACKSRC}/perror.c
 setlocale.o:	${HACKSRC}/setlocale.c
 strerror.o:	${HACKSRC}/strerror.c
 strsignal.o:	${HACKSRC}/strsignal.c
-syslog.o:	${HACKSRC}/syslog.c
 utmp.o:		${HACKSRC}/utmp.c
 yplib.o:	${HACKSRC}/yplib.c

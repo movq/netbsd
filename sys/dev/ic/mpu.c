@@ -1,4 +1,4 @@
-/*	$NetBSD: mpu.c,v 1.8 2004/12/02 09:50:41 xtraeme Exp $	*/
+/*	$NetBSD: mpu.c,v 1.6 2003/12/04 13:57:30 keihan Exp $	*/
 
 /*
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mpu.c,v 1.8 2004/12/02 09:50:41 xtraeme Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mpu.c,v 1.6 2003/12/04 13:57:30 keihan Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -89,7 +89,7 @@ void	mpu_close __P((void *));
 int	mpu_output __P((void *, int));
 void	mpu_getinfo __P((void *, struct midi_info *));
 
-const struct midi_hw_if mpu_midi_hw_if = {
+struct midi_hw_if mpu_midi_hw_if = {
 	mpu_open,
 	mpu_close,
 	mpu_output,
@@ -117,6 +117,8 @@ void
 mpu_attach(sc)
 	struct mpu_softc *sc;
 {
+	printf("\n");
+
 	midi_attach_mi(&mpu_midi_hw_if, sc, &sc->sc_dev);
 }
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: smb_conn.c,v 1.17 2004/06/24 16:45:47 drochner Exp $	*/
+/*	$NetBSD: smb_conn.c,v 1.15 2004/03/21 10:09:52 jdolecek Exp $	*/
 
 /*
  * Copyright (c) 2000-2001 Boris Popov
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: smb_conn.c,v 1.17 2004/06/24 16:45:47 drochner Exp $");
+__KERNEL_RCSID(0, "$NetBSD: smb_conn.c,v 1.15 2004/03/21 10:09:52 jdolecek Exp $");
 
 /*
  * Connection engine.
@@ -126,19 +126,17 @@ static int
 smb_sm_lookupint(struct smb_vcspec *vcspec, struct smb_sharespec *shspec,
 	struct smb_cred *scred,	struct smb_vc **vcpp)
 {
-	struct smb_connobj *ocp;
+	struct smb_vc *vcp;
 	int exact = 1;
 	int fail = 1;
 
 	vcspec->shspec = shspec;
-	SMBCO_FOREACH(ocp, &smb_vclist) {
-		struct smb_vc *vcp = (struct smb_vc *)ocp;
-
+	SMBCO_FOREACH((struct smb_connobj*)vcp, &smb_vclist) {
 		if (smb_vc_lock(vcp, LK_EXCLUSIVE) != 0)
 			continue;
 
 		do {
-			if ((ocp->co_flags & SMBV_PRIVATE) ||
+			if ((vcp->obj.co_flags & SMBV_PRIVATE) ||
 			    !CONNADDREQ(vcp->vc_paddr, vcspec->sap) ||
 			    strcmp(vcp->vc_username, vcspec->username) != 0)
 				break;
@@ -590,14 +588,12 @@ int
 smb_vc_lookupshare(struct smb_vc *vcp, struct smb_sharespec *dp,
 	struct smb_cred *scred,	struct smb_share **sspp)
 {
-	struct smb_connobj *osp;
 	struct smb_share *ssp = NULL;
 	int error;
 
 	*sspp = NULL;
 	dp->scred = scred;
-	SMBCO_FOREACH(osp, VCTOCP(vcp)) {
-		ssp = (struct smb_share *)osp;
+	SMBCO_FOREACH((struct smb_connobj*)ssp, VCTOCP(vcp)) {
 		error = smb_share_lock(ssp, LK_EXCLUSIVE);
 		if (error)
 			continue;
@@ -697,10 +693,14 @@ smb_share_create(struct smb_vc *vcp, struct smb_sharespec *shspec,
 	/*
 	 * Only superuser can create shares with different uid and gid
 	 */
-	if (uid != SMBM_ANY_OWNER && uid != realuid && !isroot)
+	if (uid != SMBM_ANY_OWNER && uid != realuid && !isroot) {
+printf("uid %d realuid %d isroot %d\n", uid, realuid, isroot);
 		return EPERM;
-	if (gid != SMBM_ANY_GROUP && !groupmember(gid, cred) && !isroot)
+	}
+	if (gid != SMBM_ANY_GROUP && !groupmember(gid, cred) && !isroot) {
+printf("gid %d groupmem %d isroot %d\n", uid, groupmember(gid, cred), isroot);
 		return EPERM;
+	}
 	error = smb_vc_lookupshare(vcp, shspec, scred, &ssp);
 	if (!error) {
 		smb_share_put(ssp, scred);

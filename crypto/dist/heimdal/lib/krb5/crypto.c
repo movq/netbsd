@@ -35,7 +35,7 @@
 
 #include "krb5_locl.h"
 __RCSID("$Heimdal: crypto.c,v 1.73.2.4 2004/03/06 16:38:00 lha Exp $"
-        "$NetBSD: crypto.c,v 1.13 2004/04/02 14:59:48 lha Exp $");
+        "$NetBSD: crypto.c,v 1.12.2.1 2004/04/21 04:55:41 jmc Exp $");
 
 #undef CRYPTO_DEBUG
 #ifdef CRYPTO_DEBUG

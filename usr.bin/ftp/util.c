@@ -1,7 +1,7 @@
-/*	$NetBSD: util.c,v 1.116 2004/07/20 10:40:22 lukem Exp $	*/
+/*	$NetBSD: util.c,v 1.114 2003/08/07 11:13:57 agc Exp $	*/
 
 /*-
- * Copyright (c) 1997-2004 The NetBSD Foundation, Inc.
+ * Copyright (c) 1997-2003 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -71,7 +71,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: util.c,v 1.116 2004/07/20 10:40:22 lukem Exp $");
+__RCSID("$NetBSD: util.c,v 1.114 2003/08/07 11:13:57 agc Exp $");
 #endif /* not lint */
 
 /*
@@ -318,10 +318,9 @@ cleanuppeer(void)
  * Top-level signal handler for interrupted commands.
  */
 void
-intr(int signo)
+intr(int dummy)
 {
 
-	sigint_raised = 1;
 	alarmtimer(0);
 	if (fromatty)
 		write(fileno(ttyout), "\n", 1);
@@ -1204,29 +1203,14 @@ isipv6addr(const char *addr)
 
 
 /*
- * Internal version of connect(2); sets socket buffer sizes first and
- * handles the syscall being interrupted.
- * Returns -1 upon failure (with errno set to the problem), or 0 on success.
+ * Internal version of connect(2); sets socket buffer sizes first.
  */
 int
 xconnect(int sock, const struct sockaddr *name, int namelen)
 {
-	int	rv;
 
 	setupsockbufsize(sock);
-	rv = connect(sock, name, namelen);
-	if (rv == -1 && errno == EINTR) {
-		fd_set	connfd;
-
-		FD_ZERO(&connfd);
-		FD_SET(sock, &connfd);
-		do {
-			rv = select(sock + 1, NULL, &connfd, NULL, NULL);
-		} while (rv == -1 && errno == EINTR);
-		if (rv > 0)
-			rv = 0;
-	}
-	return (rv);
+	return (connect(sock, name, namelen));
 }
 
 /*

@@ -1,12 +1,11 @@
-#	$NetBSD: Makefile.inc,v 1.14 2004/10/01 15:26:35 christos Exp $
+#	$NetBSD: Makefile.inc,v 1.11.2.2 2004/04/05 20:41:12 tron Exp $
 
 .include <bsd.own.mk>
 
 CPPFLAGS+=	-I${NETBSDSRCDIR}/dist/ipf
 CPPFLAGS+=	-I${NETBSDSRCDIR}/dist/ipf/tools
 CPPFLAGS+=	-I${NETBSDSRCDIR}/sys
-CPPFLAGS+=	-I${NETBSDSRCDIR}/sys/dist/ipf
-CPPFLAGS+=	-I${NETBSDSRCDIR}/sys/dist/ipf/netinet
+CPPFLAGS+=	-I${NETBSDSRCDIR}/sys/netinet
 CPPFLAGS+=	-DSTATETOP -D__UIO_EXPOSE
 
 IPFOBJDIR!=	cd $(.CURDIR)/../libipf && ${PRINTOBJDIR}

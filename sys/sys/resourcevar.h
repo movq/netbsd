@@ -1,4 +1,4 @@
-/*	$NetBSD: resourcevar.h,v 1.23 2004/05/06 22:20:30 pk Exp $	*/
+/*	$NetBSD: resourcevar.h,v 1.19 2003/08/07 16:34:12 agc Exp $	*/
 
 /*
  * Copyright (c) 1991, 1993
@@ -73,7 +73,6 @@ struct plimit {
 #define	PL_SHAREMOD	0x01		/* modifications are shared */
 	int	p_lflags;
 	int	p_refcnt;		/* number of references */
-	struct simplelock p_slock;	/* mutex for p_refcnt */
 };
 
 /* add user profiling from AST */
@@ -86,22 +85,6 @@ struct plimit {
 	} while (/* CONSTCOND */ 0)
 
 #ifdef _KERNEL
-/*
- * Structure associated with user caching.
- */
-struct uidinfo {
-	LIST_ENTRY(uidinfo) ui_hash;
-	uid_t	ui_uid;
-	long	ui_proccnt;	/* Number of processes */
-	rlim_t	ui_sbsize;	/* socket buffer size */
-
-};
-#define	UIHASH(uid)	(&uihashtbl[(uid) & uihash])
-extern LIST_HEAD(uihashhead, uidinfo) *uihashtbl;
-extern u_long uihash;		/* size of hash table - 1 */
-int       chgproccnt(uid_t, int);
-int       chgsbsize(uid_t, u_long *, u_long, rlim_t);
-
 extern char defcorename[];
 void	 addupc_intr __P((struct proc *, u_long));
 void	 addupc_task __P((struct proc *, u_long, u_int));
@@ -112,7 +95,5 @@ void limfree __P((struct plimit *));
 void	ruadd __P((struct rusage *, struct rusage *));
 struct	pstats *pstatscopy __P((struct pstats *));
 void 	pstatsfree __P((struct pstats *));
-extern rlim_t maxdmap;
-extern rlim_t maxsmap;
 #endif
 #endif	/* !_SYS_RESOURCEVAR_H_ */

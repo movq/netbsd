@@ -34,7 +34,7 @@
 #include "krb5_locl.h"
 
 __RCSID("$Heimdal: transited.c,v 1.10.2.3 2003/10/22 06:07:41 lha Exp $"
-        "$NetBSD: transited.c,v 1.1.1.6 2004/04/02 14:47:53 lha Exp $");
+        "$NetBSD: transited.c,v 1.1.1.5.2.1 2004/04/21 04:55:42 jmc Exp $");
 
 /* this is an attempt at one of the most horrible `compression'
    schemes that has ever been invented; it's so amazingly brain-dead

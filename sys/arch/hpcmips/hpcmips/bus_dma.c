@@ -1,4 +1,4 @@
-/*	$NetBSD: bus_dma.c,v 1.22 2004/11/28 17:34:45 thorpej Exp $	*/
+/*	$NetBSD: bus_dma.c,v 1.20 2003/07/15 02:29:31 lukem Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.
@@ -38,7 +38,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bus_dma.c,v 1.22 2004/11/28 17:34:45 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bus_dma.c,v 1.20 2003/07/15 02:29:31 lukem Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -94,12 +94,12 @@ _hpcmips_bd_map_create(bus_dma_tag_t t, bus_size_t size, int nsegments,
 	size_t mapsize;
 
 	/*
-	 * Allocate and initialize the DMA map.  The end of the map
+	 * Allcoate and initialize the DMA map.  The end of the map
 	 * has two variable-sized array of segments, so we allocate enough
 	 * room for them in one shot.
 	 *
 	 * Note we don't preserve the WAITOK or NOWAIT flags.  Preservation
-	 * of ALLOCNOW notifies others that we've reserved these resources,
+	 * of ALLOCNOW notifes others that we've reserved these resources,
 	 * and they are not to be freed.
 	 */
 	mapsize = sizeof(struct bus_dmamap_hpcmips) +
@@ -296,8 +296,6 @@ _hpcmips_bd_map_load_mbuf(bus_dma_tag_t t, bus_dmamap_t mapx, struct mbuf *m0,
 	seg = 0;
 	error = 0;
 	for (m = m0; m != NULL && error == 0; m = m->m_next) {
-		if (m->m_len == 0)
-			continue;
 		error = _hpcmips_bd_map_load_buffer(mapx,
 		    m->m_data, m->m_len, NULL, flags, &lastaddr, &seg, first);
 		first = 0;

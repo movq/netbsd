@@ -1,4 +1,4 @@
-/*	$NetBSD: sem.c,v 1.44 2004/10/29 20:40:33 dsl Exp $	*/
+/*	$NetBSD: sem.c,v 1.41.2.1 2004/06/22 07:30:06 tron Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -240,12 +240,12 @@ defattr(const char *name, struct nvlist *locs, struct nvlist *deps,
 		strlcat(classenum, name, l);
 		for (cp = classenum + 3; *cp; cp++) {
 			if (!errored &&
-			    (!isalnum((unsigned char)*cp) ||
-			      (isalpha((unsigned char)*cp) && !islower((unsigned char)*cp)))) {
+			    (!isalnum(*cp) ||
+			      (isalpha(*cp) && !islower(*cp)))) {
 				error("device class names must be lower-case alphanumeric characters");
 				errored = 1;
 			}
-			*cp = toupper((unsigned char)*cp);
+			*cp = toupper(*cp);
 		}
 		a->a_devclass = intern(classenum);
 	} else
@@ -724,7 +724,7 @@ resolve(struct nvlist **nvp, const char *name, const char *what,
 	l = i = strlen(nv->nv_str);
 	cp = &nv->nv_str[l];
 	if (l > 1 && *--cp >= 'a' && *cp < 'a' + maxpartitions &&
-	    isdigit((unsigned char)cp[-1])) {
+	    isdigit(cp[-1])) {
 		l--;
 		part = *cp - 'a';
 	}
@@ -911,7 +911,7 @@ adddev(const char *name, const char *at, struct nvlist *loclist, int flags)
 				break;
 			}
 		if (!hit) {
-			error("`%s' cannot attach to the root", ib->d_name);
+			error("A %s cannot attach to the root", ib->d_name);
 			goto bad;
 		}
 		attr = &errattr;	/* a convenient "empty" attr */
@@ -979,7 +979,7 @@ adddev(const char *name, const char *at, struct nvlist *loclist, int flags)
 			if (onlist(attr->a_devs, ib))
 				goto findattachment;
 		}
-		error("`%s' cannot attach to `%s'", ib->d_name, atbuf);
+		error("A %s cannot attach to a %s", ib->d_name, atbuf);
 		goto bad;
 
  findattachment:
@@ -1270,7 +1270,7 @@ split(const char *name, size_t nlen, char *base, size_t bsize, int *aunit)
 	int c, l;
 
 	l = nlen;
-	if (l < 2 || l >= bsize || isdigit((unsigned char)*name))
+	if (l < 2 || l >= bsize || isdigit(*name))
 		return (1);
 	c = (u_char)name[--l];
 	if (!isdigit(c)) {
@@ -1282,7 +1282,7 @@ split(const char *name, size_t nlen, char *base, size_t bsize, int *aunit)
 			return (1);
 	} else {
 		cp = &name[l];
-		while (isdigit((unsigned char)cp[-1]))
+		while (isdigit(cp[-1]))
 			l--, cp--;
 		*aunit = atoi(cp);
 	}

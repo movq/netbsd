@@ -1,4 +1,4 @@
-/*	$NetBSD: disklabel.h,v 1.13 2004/11/08 17:36:07 mbw Exp $	*/
+/*	$NetBSD: disklabel.h,v 1.11 2003/05/10 16:12:04 thorpej Exp $	*/
 
 /*-
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.

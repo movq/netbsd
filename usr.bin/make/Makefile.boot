@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.boot,v 1.17 2004/05/07 00:04:38 ross Exp $
+#	$NetBSD: Makefile.boot,v 1.15.2.2 2004/05/10 15:41:48 tron Exp $
 #
 # a very simple makefile...
 #

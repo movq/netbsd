@@ -1,4 +1,4 @@
-/*	$NetBSD: scsipi_verbose.c,v 1.23 2004/08/21 21:29:39 thorpej Exp $	*/
+/*	$NetBSD: scsipi_verbose.c,v 1.20 2004/03/16 19:10:44 bouyer Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: scsipi_verbose.c,v 1.23 2004/08/21 21:29:39 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: scsipi_verbose.c,v 1.20 2004/03/16 19:10:44 bouyer Exp $");
 
 #include <sys/param.h>
 #include <sys/time.h>
@@ -604,8 +604,12 @@ static const struct {
 { 0x00, 0x00, NULL }
 };
 
-static void
-asc2ascii(u_char asc, u_char ascq, char *result, size_t l)
+static __inline void asc2ascii __P((unsigned char, unsigned char, char *));
+
+static __inline void
+asc2ascii(asc, ascq, result)
+	unsigned char asc, ascq;
+	char *result;
 {
 	int i = 0;
 
@@ -616,18 +620,20 @@ asc2ascii(u_char asc, u_char ascq, char *result, size_t l)
 	}
 	if (adesc[i].description == NULL) {
 		if (asc == 0x40 && ascq != 0)
-			(void)snprintf(result, l,
+			(void)sprintf(result,
 			    "Diagnostic Failure on Component 0x%02x",
 			    ascq & 0xff);
 		else
-			(void)snprintf(result, l, "ASC 0x%02x ASCQ 0x%02x",
+			(void)sprintf(result, "ASC 0x%02x ASCQ 0x%02x",
 			    asc & 0xff, ascq & 0xff);
 	} else
-		(void)strlcpy(result, adesc[i].description, l);
+		(void)strcpy(result, adesc[i].description);
 }
 
 void
-scsipi_print_sense_data(struct scsipi_sense_data *sense, int verbosity)
+scsipi_print_sense_data(sense, verbosity)
+	struct scsipi_sense_data *sense;
+	int verbosity;
 {
 	int32_t info;
 	int i, j, k;
@@ -744,7 +750,9 @@ scsipi_print_sense_data(struct scsipi_sense_data *sense, int verbosity)
 }
 
 char *
-scsipi_decode_sense(void *sinfo, int flag)
+scsipi_decode_sense(sinfo, flag)
+	void *sinfo;
+	int flag;
 {
 	unsigned char *snsbuf;
 	unsigned char skey;
@@ -756,16 +764,15 @@ scsipi_decode_sense(void *sinfo, int flag)
 	if (flag == 0 || flag == 2 || flag == 3)
 		skey = snsbuf[2] & 0xf;
 	if (flag == 0) {			/* Sense Key Only */
-		(void) strlcpy(rqsbuf, sense_keys[skey], sizeof(rqsbuf));
+		(void) strcpy(rqsbuf, sense_keys[skey]);
 		return (rqsbuf);
 	} else if (flag == 1) {			/* ASC/ASCQ Only */
-		asc2ascii(snsbuf[12], snsbuf[13], rqsbuf, sizeof(rqsbuf));
+		asc2ascii(snsbuf[12], snsbuf[13], rqsbuf);
 		return (rqsbuf);
 	} else  if (flag == 2) {		/* Sense Key && ASC/ASCQ */
 		auto char localbuf[64];
-		asc2ascii(snsbuf[12], snsbuf[13], localbuf, sizeof(localbuf));
-		(void) snprintf(rqsbuf, sizeof(rqsbuf), "%s, %s",
-		    sense_keys[skey], localbuf);
+		asc2ascii(snsbuf[12], snsbuf[13], localbuf);
+		(void) sprintf(rqsbuf, "%s, %s", sense_keys[skey], localbuf);
 		return (rqsbuf);
 	} else if (flag == 3 && snsbuf[7] >= 9 && (snsbuf[15] & 0x80)) {
 		/*
@@ -774,13 +781,13 @@ scsipi_decode_sense(void *sinfo, int flag)
 		switch (skey) {
 		case SKEY_ILLEGAL_REQUEST:
 			if (snsbuf[15] & 0x8)
-				(void)snprintf(rqsbuf, sizeof(rqsbuf),
+				(void)sprintf(rqsbuf,
 				    "Error in %s, Offset %d, bit %d",
 				    (snsbuf[15] & 0x40)? "CDB" : "Parameters",
 				    (snsbuf[16] & 0xff) << 8 |
 				    (snsbuf[17] & 0xff), snsbuf[15] & 0x7);
 			else
-				(void)snprintf(rqsbuf, sizeof(rqsbuf),
+				(void)sprintf(rqsbuf,
 				    "Error in %s, Offset %d",
 				    (snsbuf[15] & 0x40)? "CDB" : "Parameters",
 				    (snsbuf[16] & 0xff) << 8 |
@@ -789,13 +796,11 @@ scsipi_decode_sense(void *sinfo, int flag)
 		case SKEY_RECOVERED_ERROR:
 		case SKEY_MEDIUM_ERROR:
 		case SKEY_HARDWARE_ERROR:
-			(void)snprintf(rqsbuf, sizeof(rqsbuf),
-			    "Actual Retry Count: %d",
+			(void)sprintf(rqsbuf, "Actual Retry Count: %d",
 			    (snsbuf[16] & 0xff) << 8 | (snsbuf[17] & 0xff));
 			return (rqsbuf);
 		case SKEY_NOT_READY:
-			(void)snprintf(rqsbuf, sizeof(rqsbuf),
-			    "Progress Indicator: %d",
+			(void)sprintf(rqsbuf, "Progress Indicator: %d",
 			    (snsbuf[16] & 0xff) << 8 | (snsbuf[17] & 0xff));
 			return (rqsbuf);
 		default:
@@ -806,7 +811,9 @@ scsipi_decode_sense(void *sinfo, int flag)
 }
 
 void
-scsipi_print_sense(struct scsipi_xfer *xs, int verbosity)
+scsipi_print_sense(xs, verbosity)
+	struct scsipi_xfer *xs;
+	int verbosity;
 {
 	scsipi_printaddr(xs->xs_periph);
  	printf(" Check Condition on CDB: ");

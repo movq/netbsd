@@ -9,13 +9,13 @@ top \- display and update information about the top CPU processes
 .SH SYNOPSIS
 .B top
 [
-.B \-bIinqSuv
+.B \-SbiInquv
 ] [
 .BI \-d count
 ] [
-.BI \-o field
-] [
 .BI \-s time
+] [
+.BI \-o field
 ] [
 .BI \-U username
 ] [
@@ -178,7 +178,7 @@ is between displays; that is, while it is waiting for
 seconds to elapse.  If this is the case, the command will be
 processed and the display will be updated immediately thereafter
 (reflecting any changes that the command may have specified).  This
-happens even if the command was incorrect.  If a key is pressed while
+happens even if the command was incorrect.  If a key is pressed while 
 .I top
 is in the middle of updating the display, it will finish the update and
 then process the command.  Some commands require additional information,

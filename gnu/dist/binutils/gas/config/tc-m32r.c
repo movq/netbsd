@@ -27,7 +27,6 @@
 #include "opcodes/m32r-desc.h"
 #include "opcodes/m32r-opc.h"
 #include "cgen.h"
-#include "elf/m32r.h"
 
 /* Linked list of symbols that are debugging symbols to be defined as the
    beginning of the current instruction.  */
@@ -70,9 +69,6 @@ static m32r_insn prev_insn;
    alignment request.  */
 static int seen_relaxable_p = 0;
 
-/* Non-zero if we are generating PIC code.  */
-int pic_code;
-
 /* Non-zero if -relax specified, in which case sufficient relocs are output
    for the linker to do relaxing.
    We do simple forms of relaxing internally, but they are always done.
@@ -97,43 +93,20 @@ static const char *m32r_cpu_desc;
    shouldn't assume or require it to).  */
 static int warn_unmatched_high = 0;
 
-/* 1 if -m32rx has been specified, in which case support for
-     the extended M32RX instruction set should be enabled.
-   2 if -m32r2 has been specified, in which case support for
-     the extended M32R2 instruction set should be enabled.  */
-static int enable_m32rx = 0; /* Default to M32R.  */
+/* Non-zero if -m32rx has been specified, in which case support for the
+   extended M32RX instruction set should be enabled.  */
+static int enable_m32rx = 0;
 
 /* Non-zero if -m32rx -hidden has been specified, in which case support for
    the special M32RX instruction set should be enabled.  */
 static int enable_special = 0;
 
-/* Non-zero if -bitinst has been specified, in which case support
-   for extended M32R bit-field instruction set should be enabled.  */
-static int enable_special_m32r = 0;
-
-/* Non-zero if -float has been specified, in which case support for
-   extended M32R floating point instruction set should be enabled.  */
-static int enable_special_float = 0;
-
 /* Non-zero if the programmer should be warned when an explicit parallel
    instruction might have constraint violations.  */
 static int warn_explicit_parallel_conflicts = 1;
 
-/* Non-zero if the programmer should not receive any messages about
-   parallel instruction with potential or real constraint violations.
-   The ability to suppress these messages is intended only for hardware
-   vendors testing the chip.  It superceedes
-   warn_explicit_parallel_conflicts.  */
-static int ignore_parallel_conflicts = 0;
-
 /* Non-zero if insns can be made parallel.  */
-static int use_parallel = 1;
-
-/* Non-zero if optimizations should be performed.  */
 static int optimize;
-
-/* m32r er_flags.  */
-static int m32r_flags = 0;
 
 /* Stuff for .scomm symbols.  */
 static segT     sbss_section;
@@ -142,7 +115,7 @@ static asymbol  scom_symbol;
 
 const char comment_chars[]        = ";";
 const char line_comment_chars[]   = "#";
-const char line_separator_chars[] = "!";
+const char line_separator_chars[] = "";
 const char EXP_CHARS[]            = "eE";
 const char FLT_CHARS[]            = "dD";
 
@@ -173,72 +146,39 @@ struct m32r_hi_fixup
 
 static struct m32r_hi_fixup *m32r_hi_fixup_list;
 
-struct {
-  enum bfd_architecture bfd_mach;
-  int mach_flags;
-} mach_table[] =
-{
-  { bfd_mach_m32r,  (1<<MACH_M32R) },
-  { bfd_mach_m32rx, (1<<MACH_M32RX) },
-  { bfd_mach_m32r2, (1<<MACH_M32R2) }
-};
-
-static void allow_m32rx (int);
+static void allow_m32rx PARAMS ((int));
 
 static void
-allow_m32rx (int on)
+allow_m32rx (on)
+     int on;
 {
   enable_m32rx = on;
 
   if (stdoutput != NULL)
-    bfd_set_arch_mach (stdoutput, TARGET_ARCH, mach_table[on].bfd_mach);
-
-  if (gas_cgen_cpu_desc != NULL)
-    gas_cgen_cpu_desc->machs = mach_table[on].mach_flags;
+    bfd_set_arch_mach (stdoutput, TARGET_ARCH,
+		       enable_m32rx ? bfd_mach_m32rx : bfd_mach_m32r);
 }
 
-#define M32R_SHORTOPTS "O::K:"
+#define M32R_SHORTOPTS "O"
 
 const char *md_shortopts = M32R_SHORTOPTS;
 
 struct option md_longopts[] =
 {
-#define OPTION_M32R		  (OPTION_MD_BASE)
-#define OPTION_M32RX		  (OPTION_M32R + 1)
-#define OPTION_M32R2		  (OPTION_M32RX + 1)
-#define OPTION_BIG                (OPTION_M32R2 + 1)
-#define OPTION_LITTLE             (OPTION_BIG + 1)
-#define OPTION_PARALLEL           (OPTION_LITTLE + 1)
-#define OPTION_NO_PARALLEL        (OPTION_PARALLEL + 1)
-#define OPTION_WARN_PARALLEL	  (OPTION_NO_PARALLEL + 1)
-#define OPTION_NO_WARN_PARALLEL	  (OPTION_WARN_PARALLEL + 1)
-#define OPTION_IGNORE_PARALLEL    (OPTION_NO_WARN_PARALLEL + 1)
-#define OPTION_NO_IGNORE_PARALLEL (OPTION_IGNORE_PARALLEL + 1)
-#define OPTION_SPECIAL		  (OPTION_NO_IGNORE_PARALLEL + 1)
-#define OPTION_SPECIAL_M32R       (OPTION_SPECIAL + 1)
-#define OPTION_SPECIAL_FLOAT      (OPTION_SPECIAL_M32R + 1)
-#define OPTION_WARN_UNMATCHED 	  (OPTION_SPECIAL_FLOAT + 1)
-#define OPTION_NO_WARN_UNMATCHED  (OPTION_WARN_UNMATCHED + 1)
+#define OPTION_M32R		(OPTION_MD_BASE)
+#define OPTION_M32RX		(OPTION_M32R + 1)
+#define OPTION_WARN_PARALLEL	(OPTION_M32RX + 1)
+#define OPTION_NO_WARN_PARALLEL	(OPTION_WARN_PARALLEL + 1)
+#define OPTION_SPECIAL		(OPTION_NO_WARN_PARALLEL + 1)
+#define OPTION_WARN_UNMATCHED 	(OPTION_SPECIAL + 1)
+#define OPTION_NO_WARN_UNMATCHED (OPTION_WARN_UNMATCHED + 1)
   {"m32r",  no_argument, NULL, OPTION_M32R},
   {"m32rx", no_argument, NULL, OPTION_M32RX},
-  {"m32r2", no_argument, NULL, OPTION_M32R2},
-  {"big", no_argument, NULL, OPTION_BIG},
-  {"little", no_argument, NULL, OPTION_LITTLE},
-  {"EB", no_argument, NULL, OPTION_BIG},
-  {"EL", no_argument, NULL, OPTION_LITTLE},
-  {"parallel", no_argument, NULL, OPTION_PARALLEL},
-  {"no-parallel", no_argument, NULL, OPTION_NO_PARALLEL},
   {"warn-explicit-parallel-conflicts", no_argument, NULL, OPTION_WARN_PARALLEL},
   {"Wp", no_argument, NULL, OPTION_WARN_PARALLEL},
   {"no-warn-explicit-parallel-conflicts", no_argument, NULL, OPTION_NO_WARN_PARALLEL},
   {"Wnp", no_argument, NULL, OPTION_NO_WARN_PARALLEL},
-  {"ignore-parallel-conflicts", no_argument, NULL, OPTION_IGNORE_PARALLEL},
-  {"Ip", no_argument, NULL, OPTION_IGNORE_PARALLEL},
-  {"no-ignore-parallel-conflicts", no_argument, NULL, OPTION_NO_IGNORE_PARALLEL},
-  {"nIp", no_argument, NULL, OPTION_NO_IGNORE_PARALLEL},
   {"hidden", no_argument, NULL, OPTION_SPECIAL},
-  {"bitinst", no_argument, NULL, OPTION_SPECIAL_M32R},
-  {"float", no_argument, NULL, OPTION_SPECIAL_FLOAT},
   /* Sigh.  I guess all warnings must now have both variants.  */
   {"warn-unmatched-high", no_argument, NULL, OPTION_WARN_UNMATCHED},
   {"Wuh", no_argument, NULL, OPTION_WARN_UNMATCHED},
@@ -257,29 +197,6 @@ struct option md_longopts[] =
 
 size_t md_longopts_size = sizeof (md_longopts);
 
-static void little (int);
-static int parallel (void);
-
-static void
-little (int on)
-{
-  target_big_endian = ! on;
-}
-
-/* Use parallel execution.  */
-
-static int
-parallel (void)
-{
-  if (! enable_m32rx)
-    return 0;
-
-  if (use_parallel == 1)
-    return 1;
-
-  return 0;
-}
-
 int
 md_parse_option (c, arg)
      int c;
@@ -289,7 +206,6 @@ md_parse_option (c, arg)
     {
     case 'O':
       optimize = 1;
-      use_parallel = 1;
       break;
 
     case OPTION_M32R:
@@ -300,42 +216,12 @@ md_parse_option (c, arg)
       allow_m32rx (1);
       break;
 
-    case OPTION_M32R2:
-      allow_m32rx (2);
-      enable_special = 1;
-      enable_special_m32r = 1;
-      break;
-
-    case OPTION_BIG:
-      target_big_endian = 1;
-      break;
-
-    case OPTION_LITTLE:
-      target_big_endian = 0;
-      break;
-
-    case OPTION_PARALLEL:
-      use_parallel = 1;
-      break;
-
-    case OPTION_NO_PARALLEL:
-      use_parallel = 0;
-      break;
-
     case OPTION_WARN_PARALLEL:
       warn_explicit_parallel_conflicts = 1;
       break;
 
     case OPTION_NO_WARN_PARALLEL:
       warn_explicit_parallel_conflicts = 0;
-      break;
-
-    case OPTION_IGNORE_PARALLEL:
-      ignore_parallel_conflicts = 1;
-      break;
-
-    case OPTION_NO_IGNORE_PARALLEL:
-      ignore_parallel_conflicts = 0;
       break;
 
     case OPTION_SPECIAL:
@@ -349,27 +235,12 @@ md_parse_option (c, arg)
 	}
       break;
 
-    case OPTION_SPECIAL_M32R:
-      enable_special_m32r = 1;
-      break;
-
-    case OPTION_SPECIAL_FLOAT:
-      enable_special_float = 1;
-      break;
-
     case OPTION_WARN_UNMATCHED:
       warn_unmatched_high = 1;
       break;
 
     case OPTION_NO_WARN_UNMATCHED:
       warn_unmatched_high = 0;
-      break;
-
-    case 'K':
-      if (strcmp (arg, "PIC") != 0)
-        as_warn (_("Unrecognized option following -K"));
-      else
-        pic_code = 1;
       break;
 
 #if 0
@@ -400,42 +271,20 @@ md_show_usage (stream)
   fprintf (stream, _("\
   -m32rx                  support the extended m32rx instruction set\n"));
   fprintf (stream, _("\
-  -m32r2                  support the extended m32r2 instruction set\n"));
-  fprintf (stream, _("\
-  -EL,-little             produce little endian code and data\n"));
-  fprintf (stream, _("\
-  -EB,-big                produce big endian code and data\n"));
-  fprintf (stream, _("\
-  -parallel               try to combine instructions in parallel\n"));
-  fprintf (stream, _("\
-  -no-parallel            disable -parallel\n"));
-  fprintf (stream, _("\
-  -O                      try to optimize code.  Implies -parallel\n"));
+  -O                      try to combine instructions in parallel\n"));
 
   fprintf (stream, _("\
   -warn-explicit-parallel-conflicts     warn when parallel instructions\n"));
   fprintf (stream, _("\
-                                         might violate contraints\n"));
+                                         violate contraints\n"));
   fprintf (stream, _("\
   -no-warn-explicit-parallel-conflicts  do not warn when parallel\n"));
   fprintf (stream, _("\
-                                         instructions might violate contraints\n"));
+                                         instructions violate contraints\n"));
   fprintf (stream, _("\
   -Wp                     synonym for -warn-explicit-parallel-conflicts\n"));
   fprintf (stream, _("\
   -Wnp                    synonym for -no-warn-explicit-parallel-conflicts\n"));
-  fprintf (stream, _("\
-  -ignore-parallel-conflicts            do not check parallel instructions\n"));
-  fprintf (stream, _("\
-                                         fo contraint violations\n"));
-  fprintf (stream, _("\
-  -no-ignore-parallel-conflicts         check parallel instructions for\n"));
-  fprintf (stream, _("\
-                                         contraint violations\n"));
-  fprintf (stream, _("\
-  -Ip                     synonym for -ignore-parallel-conflicts\n"));
-  fprintf (stream, _("\
-  -nIp                    synonym for -no-ignore-parallel-conflicts\n"));
 
   fprintf (stream, _("\
   -warn-unmatched-high    warn when an (s)high reloc has no matching low reloc\n"));
@@ -445,9 +294,6 @@ md_show_usage (stream)
   -Wuh                    synonym for -warn-unmatched-high\n"));
   fprintf (stream, _("\
   -Wnuh                   synonym for -no-warn-unmatched-high\n"));
-
-  fprintf (stream, _("\
-  -KPIC                   generate PIC\n"));
 
 #if 0
   fprintf (stream, _("\
@@ -473,16 +319,14 @@ const pseudo_typeS md_pseudo_table[] =
   { "fillinsn", fill_insn,	0 },
   { "scomm",	m32r_scomm,	0 },
   { "debugsym",	debug_sym,	0 },
+  /* Not documented as so far there is no need for them....  */
   { "m32r",	allow_m32rx,	0 },
   { "m32rx",	allow_m32rx,	1 },
-  { "m32r2",	allow_m32rx,	2 },
-  { "little",   little,         1 },
-  { "big",      little,         0 },
   { NULL, NULL, 0 }
 };
 
 /* FIXME: Should be machine generated.  */
-#define NOP_INSN     0x7000
+#define NOP_INSN 0x7000
 #define PAR_NOP_INSN 0xf000 /* Can only be used in 2nd slot.  */
 
 /* This is called from HANDLE_ALIGN in write.c.  Fill in the contents
@@ -571,9 +415,7 @@ debug_sym (ignore)
     }
 
   symbol_table_insert (symbolP);
-  if (S_IS_DEFINED (symbolP) && (S_GET_SEGMENT (symbolP) != reg_section
-                                 || S_IS_EXTERNAL (symbolP)
-                                 || S_IS_WEAK (symbolP)))
+  if (S_IS_DEFINED (symbolP) && S_GET_SEGMENT (symbolP) != reg_section)
     /* xgettext:c-format */
     as_bad (_("symbol `%s' already defined"), S_GET_NAME (symbolP));
 
@@ -617,16 +459,6 @@ expand_debug_syms (syms, align)
   input_line_pointer = save_input_line;
 }
 
-void
-m32r_flush_pending_output()
-{
-  if (debug_sym_link)
-    {
-      expand_debug_syms (debug_sym_link, 1);
-      debug_sym_link = (sym_linkS *) 0;
-    }
-}
-
 /* Cover function to fill_insn called after a label and at end of assembly.
    The result is always 1: we're called in a conditional to see if the
    current line is a label.  */
@@ -656,24 +488,6 @@ m32r_fill_insn (done)
   return 1;
 }
 
-/* The default target format to use.  */
-
-const char *
-m32r_target_format ()
-{
-#ifdef TE_LINUX
-  if (target_big_endian)
-    return "elf32-m32r-linux";
-  else
-    return "elf32-m32rle-linux";
-#else
-  if (target_big_endian)
-    return "elf32-m32r";
-  else
-    return "elf32-m32rle";
-#endif
-}
-
 void
 md_begin ()
 {
@@ -686,8 +500,7 @@ md_begin ()
   /* Set the machine number and endian.  */
   gas_cgen_cpu_desc = m32r_cgen_cpu_open (CGEN_CPU_OPEN_MACHS, 0,
 					  CGEN_CPU_OPEN_ENDIAN,
-					  (target_big_endian ?
-					   CGEN_ENDIAN_BIG : CGEN_ENDIAN_LITTLE),
+					  CGEN_ENDIAN_BIG,
 					  CGEN_CPU_OPEN_END);
   m32r_cgen_init_asm (gas_cgen_cpu_desc);
 
@@ -769,9 +582,6 @@ first_writes_to_seconds_operands (a, b, check_outputs)
   const CGEN_OPINST *a_operands = CGEN_INSN_OPERANDS (a->insn);
   const CGEN_OPINST *b_ops = CGEN_INSN_OPERANDS (b->insn);
   int a_index;
-
-  if (ignore_parallel_conflicts)
-    return 0;
 
   /* If at least one of the instructions takes no operands, then there is
      nothing to check.  There really are instructions without operands,
@@ -887,7 +697,7 @@ can_make_parallel (a, b)
     abort ();
 
   if (first_writes_to_seconds_operands (a, b, TRUE))
-    return _("instructions write to the same destination register.");
+    return _("Instructions write to the same destination register.");
 
   a_pipe = CGEN_INSN_ATTR_VALUE (a->insn, CGEN_INSN_PIPE);
   b_pipe = CGEN_INSN_ATTR_VALUE (b->insn, CGEN_INSN_PIPE);
@@ -901,8 +711,7 @@ can_make_parallel (a, b)
      go away if the instructions are swapped, and we want to make
      sure that any other errors are detected before this happens.  */
   if (a_pipe == PIPE_S
-      || b_pipe == PIPE_O
-      || (b_pipe == PIPE_O_OS && (enable_m32rx != 2)))
+      || b_pipe == PIPE_O)
     return _("Instructions share the same execution pipeline");
 
   return NULL;
@@ -953,7 +762,7 @@ assemble_two_insns (str, str2, parallel_p)
   char *errmsg;
   char save_str2 = *str2;
 
-  /* Separate the two instructions.  */
+  /* Seperate the two instructions.  */
   *str2 = 0;
 
   /* Make sure the two insns begin on a 32 bit boundary.
@@ -982,26 +791,8 @@ assemble_two_insns (str, str2, parallel_p)
       as_bad (_("not a 16 bit instruction '%s'"), str);
       return;
     }
-#ifdef E_M32R2_ARCH
-  else if ((enable_m32rx == 1)
-           /* FIXME: Need standard macro to perform this test.  */
-           && ((CGEN_INSN_ATTR_VALUE (first.insn, CGEN_INSN_MACH)
-                & (1 << MACH_M32R2))
-               && !((CGEN_INSN_ATTR_VALUE (first.insn, CGEN_INSN_MACH)
-                    & (1 << MACH_M32RX)))))
-    {
-      /* xgettext:c-format  */
-      as_bad (_("instruction '%s' is for the M32R2 only"), str);
-      return;
-    }
-  else if ((! enable_special
-            && CGEN_INSN_ATTR_VALUE (first.insn, CGEN_INSN_SPECIAL))
-           || (! enable_special_m32r
-               && CGEN_INSN_ATTR_VALUE (first.insn, CGEN_INSN_SPECIAL_M32R)))
-#else
   else if (! enable_special
       && CGEN_INSN_ATTR_VALUE (first.insn, CGEN_INSN_SPECIAL))
-#endif
     {
       /* xgettext:c-format  */
       as_bad (_("unknown instruction '%s'"), str);
@@ -1096,26 +887,8 @@ assemble_two_insns (str, str2, parallel_p)
       as_bad (_("not a 16 bit instruction '%s'"), str);
       return;
     }
-#ifdef E_M32R2_ARCH
-  else if ((enable_m32rx == 1)
-           /* FIXME: Need standard macro to perform this test.  */
-           && ((CGEN_INSN_ATTR_VALUE (first.insn, CGEN_INSN_MACH)
-                & (1 << MACH_M32R2))
-               && !((CGEN_INSN_ATTR_VALUE (first.insn, CGEN_INSN_MACH)
-                    & (1 << MACH_M32RX)))))
-    {
-      /* xgettext:c-format  */
-      as_bad (_("instruction '%s' is for the M32R2 only"), str);
-      return;
-    }
-  else if ((! enable_special
-            && CGEN_INSN_ATTR_VALUE (second.insn, CGEN_INSN_SPECIAL))
-           || (! enable_special_m32r
-               && CGEN_INSN_ATTR_VALUE (second.insn, CGEN_INSN_SPECIAL_M32R)))
-#else
   else if (! enable_special
       && CGEN_INSN_ATTR_VALUE (second.insn, CGEN_INSN_SPECIAL))
-#endif
     {
       /* xgettext:c-format  */
       as_bad (_("unknown instruction '%s'"), str);
@@ -1228,16 +1001,6 @@ assemble_two_insns (str, str2, parallel_p)
       return;
     }
 
-  if (CGEN_INSN_ATTR_VALUE (first.insn, CGEN_INSN_SPECIAL)
-      || CGEN_INSN_ATTR_VALUE (second.insn, CGEN_INSN_SPECIAL))
-    m32r_flags |= E_M32R_HAS_HIDDEN_INST;
-  if (CGEN_INSN_ATTR_VALUE (first.insn, CGEN_INSN_SPECIAL_M32R)
-      || CGEN_INSN_ATTR_VALUE (second.insn, CGEN_INSN_SPECIAL_M32R))
-    m32r_flags |= E_M32R_HAS_BIT_INST;
-  if (CGEN_INSN_ATTR_VALUE (first.insn, CGEN_INSN_SPECIAL_FLOAT)
-      || CGEN_INSN_ATTR_VALUE (second.insn, CGEN_INSN_SPECIAL_FLOAT))
-    m32r_flags |= E_M32R_HAS_FLOAT_INST;
-
   /* Set these so m32r_fill_insn can use them.  */
   prev_seg    = now_seg;
   prev_subseg = now_subseg;
@@ -1254,15 +1017,14 @@ md_assemble (str)
   /* Initialize GAS's cgen interface for a new instruction.  */
   gas_cgen_init_parse ();
 
-  /* Look for a parallel instruction separator.  */
+  /* Look for a parallel instruction seperator.  */
   if ((str2 = strstr (str, "||")) != NULL)
     {
       assemble_two_insns (str, str2, 1);
-      m32r_flags |= E_M32R_HAS_PARALLEL;
       return;
     }
 
-  /* Also look for a sequential instruction separator.  */
+  /* Also look for a sequential instruction seperator.  */
   if ((str2 = strstr (str, "->")) != NULL)
     {
       assemble_two_insns (str, str2, 0);
@@ -1281,26 +1043,8 @@ md_assemble (str)
       return;
     }
 
-#ifdef E_M32R2_ARCH
-  if ((enable_m32rx == 1)
-       /* FIXME: Need standard macro to perform this test.  */
-      && ((CGEN_INSN_ATTR_VALUE (insn.insn, CGEN_INSN_MACH)
-           & (1 << MACH_M32R2))
-          && !((CGEN_INSN_ATTR_VALUE (insn.insn, CGEN_INSN_MACH)
-               & (1 << MACH_M32RX)))))
-    {
-      /* xgettext:c-format  */
-      as_bad (_("instruction '%s' is for the M32R2 only"), str);
-      return;
-    }
-  else if ((! enable_special
-       && CGEN_INSN_ATTR_VALUE (insn.insn, CGEN_INSN_SPECIAL))
-      || (! enable_special_m32r
-          && CGEN_INSN_ATTR_VALUE (insn.insn, CGEN_INSN_SPECIAL_M32R)))
-#else
   if (! enable_special
       && CGEN_INSN_ATTR_VALUE (insn.insn, CGEN_INSN_SPECIAL))
-#endif
     {
       /* xgettext:c-format  */
       as_bad (_("unknown instruction '%s'"), str);
@@ -1313,13 +1057,6 @@ md_assemble (str)
       as_bad (_("instruction '%s' is for the M32RX only"), str);
       return;
     }
-
-  if (CGEN_INSN_ATTR_VALUE (insn.insn, CGEN_INSN_SPECIAL))
-    m32r_flags |= E_M32R_HAS_HIDDEN_INST;
-  if (CGEN_INSN_ATTR_VALUE (insn.insn, CGEN_INSN_SPECIAL_M32R))
-    m32r_flags |= E_M32R_HAS_BIT_INST;
-  if (CGEN_INSN_ATTR_VALUE (insn.insn, CGEN_INSN_SPECIAL_FLOAT))
-    m32r_flags |= E_M32R_HAS_FLOAT_INST;
 
   if (CGEN_INSN_BITSIZE (insn.insn) == 32)
     {
@@ -1385,7 +1122,8 @@ md_assemble (str)
 	 Otherwise call can_make_parallel() with both orderings of the
 	 instructions to see if they can be combined.  */
       if (! on_32bit_boundary_p
-	  && parallel ()
+	  && enable_m32rx
+	  && optimize
 	  && CGEN_INSN_ATTR_VALUE (insn.orig_insn, CGEN_INSN_RELAXABLE) == 0
 	  && ! writes_to_pc (&prev_insn)
 	  && ! first_writes_to_seconds_operands (&prev_insn, &insn, FALSE))
@@ -1725,9 +1463,7 @@ md_estimate_size_before_relax (fragP, segment)
      However, we can't finish the fragment here and emit the reloc as insn
      alignment requirements may move the insn about.  */
 
-  if (S_GET_SEGMENT (fragP->fr_symbol) != segment
-      || S_IS_EXTERNAL (fragP->fr_symbol)
-      || S_IS_WEAK (fragP->fr_symbol))
+  if (S_GET_SEGMENT (fragP->fr_symbol) != segment)
     {
 #if 0
       int old_fr_fix = fragP->fr_fix;
@@ -1771,7 +1507,7 @@ md_estimate_size_before_relax (fragP, segment)
 	    if ((strcmp (CGEN_INSN_MNEMONIC (insn),
 			 CGEN_INSN_MNEMONIC (fragP->fr_cgen.insn))
 		 == 0)
-		&& CGEN_INSN_ATTR_VALUE (insn, CGEN_INSN_RELAXED))
+		&& CGEN_INSN_ATTR_VALUE (insn, CGEN_INSN_RELAX))
 	      break;
 	  }
 	if (i == 4)
@@ -1833,18 +1569,12 @@ md_convert_frag (abfd, sec, fragP)
       abort ();
     }
 
-  if (S_GET_SEGMENT (fragP->fr_symbol) != sec
-      || S_IS_EXTERNAL (fragP->fr_symbol)
-      || S_IS_WEAK (fragP->fr_symbol))
+  if (S_GET_SEGMENT (fragP->fr_symbol) != sec)
     {
       /* Symbol must be resolved by linker.  */
       if (fragP->fr_offset & 3)
 	as_warn (_("Addend to unresolved symbol not on word boundary."));
-#ifdef USE_M32R_OLD_RELOC
-      addend = fragP->fr_offset >> 2; /* Old M32R used USE_REL. */
-#else
-      addend = 0;
-#endif
+      addend = fragP->fr_offset >> 2;
     }
   else
     {
@@ -1856,9 +1586,7 @@ md_convert_frag (abfd, sec, fragP)
   /* Create a relocation for symbols that must be resolved by the linker.
      Otherwise output the completed insn.  */
 
-  if (S_GET_SEGMENT (fragP->fr_symbol) != sec
-      || S_IS_EXTERNAL (fragP->fr_symbol)
-      || S_IS_WEAK (fragP->fr_symbol))
+  if (S_GET_SEGMENT (fragP->fr_symbol) != sec)
     {
       assert (fragP->fr_subtype != 1);
       assert (fragP->fr_cgen.insn != 0);
@@ -1899,9 +1627,7 @@ md_pcrel_from_section (fixP, sec)
 {
   if (fixP->fx_addsy != (symbolS *) NULL
       && (! S_IS_DEFINED (fixP->fx_addsy)
-	  || S_GET_SEGMENT (fixP->fx_addsy) != sec
-          || S_IS_EXTERNAL (fixP->fx_addsy)
-          || S_IS_WEAK (fixP->fx_addsy)))
+	  || S_GET_SEGMENT (fixP->fx_addsy) != sec))
     {
       /* The symbol is undefined (or is defined but not in this section).
 	 Let the linker figure it out.  */
@@ -2216,131 +1942,10 @@ m32r_fix_adjustable (fixP)
   else
     reloc_type = fixP->fx_r_type;
 
-  if (fixP->fx_addsy == NULL)
-    return 1;
-
-  /* Prevent all adjustments to global symbols.  */
-  if (S_IS_EXTERN (fixP->fx_addsy))
-    return 0;
-  if (S_IS_WEAK (fixP->fx_addsy))
-    return 0;
-
-  if (pic_code
-      && (reloc_type == BFD_RELOC_M32R_24
-          || reloc_type == BFD_RELOC_M32R_26_PCREL
-          || reloc_type == BFD_RELOC_M32R_HI16_SLO
-          || reloc_type == BFD_RELOC_M32R_HI16_ULO
-          || reloc_type == BFD_RELOC_M32R_LO16))
-    return 0;
-
   /* We need the symbol name for the VTABLE entries.  */
   if (reloc_type == BFD_RELOC_VTABLE_INHERIT
       || reloc_type == BFD_RELOC_VTABLE_ENTRY)
     return 0;
 
   return 1;
-}
-
-void
-m32r_elf_final_processing ()
-{
-  if (use_parallel)
-    m32r_flags |= E_M32R_HAS_PARALLEL;
-  elf_elfheader (stdoutput)->e_flags |= m32r_flags;
-}
-
-#define GOT_NAME "_GLOBAL_OFFSET_TABLE_"
- 
-/* Translate internal representation of relocation info to BFD target
-   format. */
-arelent *
-tc_gen_reloc (section, fixP)
-     asection * section;
-     fixS *     fixP;
-{
-  arelent * reloc;
-  bfd_reloc_code_real_type code;
- 
-  reloc = (arelent *) xmalloc (sizeof (arelent));
- 
-  reloc->sym_ptr_ptr = (asymbol **) xmalloc (sizeof (asymbol *));
-  *reloc->sym_ptr_ptr = symbol_get_bfdsym (fixP->fx_addsy);
-  reloc->address = fixP->fx_frag->fr_address + fixP->fx_where;
- 
-  code = fixP->fx_r_type;
-  if (pic_code)
-    {
-#ifdef DEBUG_PIC
-printf("%s",bfd_get_reloc_code_name(code));
-#endif
-      switch (code)
-        {
-        case BFD_RELOC_M32R_26_PCREL:
-            code = BFD_RELOC_M32R_26_PLTREL;
-          break;
-        case BFD_RELOC_M32R_24:
-          if (fixP->fx_addsy != NULL
-              && strcmp (S_GET_NAME (fixP->fx_addsy), GOT_NAME) == 0)
-            code = BFD_RELOC_M32R_GOTPC24;
-          else
-            code = BFD_RELOC_M32R_GOT24;
-          break;
-        case BFD_RELOC_M32R_HI16_ULO:
-          if (fixP->fx_addsy != NULL
-              && strcmp (S_GET_NAME (fixP->fx_addsy), GOT_NAME) == 0)
-            code = BFD_RELOC_M32R_GOTPC_HI_ULO;
-          else
-            code = BFD_RELOC_M32R_GOT16_HI_ULO;
-          break;
-        case BFD_RELOC_M32R_HI16_SLO:
-          if (fixP->fx_addsy != NULL
-              && strcmp (S_GET_NAME (fixP->fx_addsy), GOT_NAME) == 0)
-            code = BFD_RELOC_M32R_GOTPC_HI_SLO;
-          else
-            code = BFD_RELOC_M32R_GOT16_HI_SLO;
-          break;
-        case BFD_RELOC_M32R_LO16:
-          if (fixP->fx_addsy != NULL
-              && strcmp (S_GET_NAME (fixP->fx_addsy), GOT_NAME) == 0)
-            code = BFD_RELOC_M32R_GOTPC_LO;
-          else
-            code = BFD_RELOC_M32R_GOT16_LO;
-          break;
-        default:
-          break;
-        }
-#ifdef DEBUG_PIC
-printf(" => %s",bfd_get_reloc_code_name(code));
-#endif
-    }
- 
-  reloc->howto = bfd_reloc_type_lookup (stdoutput, code);
-#ifdef DEBUG_PIC
-printf(" => %s\n",reloc->howto->name);
-#endif
-  if (reloc->howto == (reloc_howto_type *) NULL)
-    {
-      as_bad_where (fixP->fx_file, fixP->fx_line,
-            _("internal error: can't export reloc type %d (`%s')"),
-            fixP->fx_r_type, bfd_get_reloc_code_name (code));
-      return NULL;
-    }
- 
-  /* Use fx_offset for these cases */
-  if (   fixP->fx_r_type == BFD_RELOC_VTABLE_ENTRY
-      || fixP->fx_r_type == BFD_RELOC_VTABLE_INHERIT)
-    reloc->addend  = fixP->fx_offset;
-  else if (!pic_code
-           && fixP->fx_pcrel
-           && fixP->fx_addsy != NULL
-           && (S_GET_SEGMENT(fixP->fx_addsy) != section)
-           && S_IS_DEFINED (fixP->fx_addsy)
-           && ! S_IS_EXTERNAL(fixP->fx_addsy)
-           && ! S_IS_WEAK(fixP->fx_addsy))
-    /* already used fx_offset in the opcode field itseld. */
-    reloc->addend  = 0;
-  else
-    reloc->addend  = fixP->fx_addnumber;
- 
-  return reloc;
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: symbol.c,v 1.37 2004/10/22 05:39:57 skrll Exp $	 */
+/*	$NetBSD: symbol.c,v 1.35.2.1 2004/07/19 09:07:35 tron Exp $	 */
 
 /*
  * Copyright 1996 John D. Polstra.
@@ -37,11 +37,6 @@
  *
  * John Polstra <jdp@polstra.com>.
  */
-
-#include <sys/cdefs.h>
-#ifndef lint
-__RCSID("$NetBSD: symbol.c,v 1.37 2004/10/22 05:39:57 skrll Exp $");
-#endif /* not lint */
 
 #include <err.h>
 #include <errno.h>

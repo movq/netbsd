@@ -1,5 +1,5 @@
 /* ldfile.h -
-   Copyright 1991, 1992, 1993, 1994, 1995, 2000, 2002, 2003, 2004
+   Copyright 1991, 1992, 1993, 1994, 1995, 2000, 2002, 2003
    Free Software Foundation, Inc.
 
    This file is part of GLD, the Gnu Linker.
@@ -16,8 +16,7 @@
 
    You should have received a copy of the GNU General Public License
    along with GLD; see the file COPYING.  If not, write to
-   the Free Software Foundation, 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   the Free Software Foundation, 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
 
 #ifndef LDFILE_H
 #define LDFILE_H
@@ -45,21 +44,21 @@ typedef struct search_dirs {
 extern search_dirs_type *search_head;
 
 extern void ldfile_add_arch
-  (const char *);
+  PARAMS ((const char *));
 extern void ldfile_add_library_path
-  (const char *, bfd_boolean cmdline);
+  PARAMS ((const char *, bfd_boolean cmdline));
 extern void ldfile_open_command_file
-  (const char *name);
+  PARAMS ((const char *name));
 extern void ldfile_open_file
-  (struct lang_input_statement_struct *);
+  PARAMS ((struct lang_input_statement_struct *));
 extern bfd_boolean ldfile_try_open_bfd
-  (const char *, struct lang_input_statement_struct *);
+  PARAMS ((const char *, struct lang_input_statement_struct *));
 extern FILE *ldfile_find_command_file
-  (const char *name, const char *extend);
+  PARAMS ((const char *name, const char *extend));
 extern void ldfile_set_output_arch
-  (const char *, enum bfd_architecture);
+  PARAMS ((const char *));
 extern bfd_boolean ldfile_open_file_search
-  (const char *arch, struct lang_input_statement_struct *,
-   const char *lib, const char *suffix);
+  PARAMS ((const char *arch, struct lang_input_statement_struct *,
+	   const char *lib, const char *suffix));
 
 #endif

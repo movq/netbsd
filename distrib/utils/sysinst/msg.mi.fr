@@ -1,4 +1,4 @@
-/*	$NetBSD: msg.mi.fr,v 1.82 2004/11/11 21:24:40 dsl Exp $	*/
+/*	$NetBSD: msg.mi.fr,v 1.74.2.5 2004/08/25 03:15:46 jmc Exp $	*/
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -175,8 +175,11 @@ L'installation standard requière au moins %d Mo.
 L'installation standard avec X requière au moins %d Mo.
 }
 
-message Choose_your_size_specifier
-{Si vous choisissez par "Mega-octets", la taille sera proche de votre
+message sizechoice
+{Vous avez choisi de définir vous même vos partitions
+(pour le disklabel BSD ou, pour certains portages, le MBR).
+Vous devez spécifier l'unité que vous voulez utiliser.
+Si vous choisissez par "Mega-octets", la taille sera proche de votre
 choix tout en conservant un nombre entier de cylindres.
 Si vous choisissez par "Secteurs", vous pourrez choisir précisément
 les tailles.
@@ -184,8 +187,7 @@ Sur les disques modernes, la taille réelle des cylindres est variable
 et il y a peu d'intéret à aligner les partitions sur les cylindres.
 Pour les disques plus ancien, il est plus efficace de choisir des tailles
 de partitions multiples de la taille d'un cylindre.
-
-Choisissez votre unité d'espace disque}
+}
 
 message defaultunit
 {Tailles et décalages ("offsets") sont en %s, sauf si vous spécifiez une unitée ('M' pour
@@ -362,12 +364,18 @@ message disksetupdone
 {La première partie de la procédure est terminée.
 Sysinst a écrit, sur votre disque de destination, un disklabel,
 créé (via newfs) et testé (via fsck) vos nouvelles partitions.
+
+L'étape suivant consiste a recopier les différents composants. 
+Appuyer sur <entrée> pour continuer.
 }
 
 message disksetupdoneupdate
 {La première partie de la procédure est terminée.
 Sysinst a écrit, sur votre disque de destination, un disklabel
 et testé (via fsck) vos nouvelles partitions.
+
+L'étape suivant consiste a recopier les différents composants. 
+Appuyer sur <entrée> pour continuer.
 }
 
 message openfail
@@ -473,7 +481,7 @@ composants optionnels.
 }
 
 message ftpsource
-{Vous trouverez ci dessous le site %s, le répertoire, le code utilisateur
+{Vous trouverez ci dessous le site ftp, le répertoire, le code utilisateur
 et le mot de passe prêt à l'emplois actuellement.
 Si l'utilisateur est ftp, alors le mot de passe n'est pas nécessaire.
 Le répertoire des composants est relatif au répertoire de base, et
@@ -656,10 +664,7 @@ message delete_dist_files
 Vous pouvez les conserver pour installer ou mettre a jour d'autre systèmes.}
 
 message verboseextract
-{
-L'étape suivant consiste a recopier les différents composants. 
-
-Pendant la procédure d'extraction des fichiers,
+{Pendant la procédure d'extraction des fichiers,
 voulez-vous voir les noms de fichiers au fur et à mesure ?
 voir pendant qu'ils seront extraits ?
 }
@@ -909,7 +914,7 @@ message upgradeparttype
 NetBSD/386BSD/FreeBSD. Voulez-vous le changer pour le nouveau ? }
 
 message choose_timezone	
-{Sélectionnez votre zone horaire dans la liste suivante. 
+{Sélectionnez votre zone horaire dans la liste suivante.
 Appuyez sur ENTREE pour confirmer votre choix. 
 Appuyez sur 'x' puis ENTREE pour quitter la selection de la zone horaire.
 
@@ -1001,12 +1006,12 @@ message Hit_enter_to_continue {Presser entrée pour continuer}
 message Choose_your_installation {Choisissez votre type d'installation}
 message Set_Sizes {Specifier les tailles de partitions NetBSD}
 message Use_Existing {Utiliser les partitions existantes}
+message Choose_your_size_specifier {Choisissez votre unité d'espace disque}
 message Megabytes {Megaoctets}
 message Cylinders {Cylindres}
 message Sectors {Secteurs}
 message Select_medium {Sélection du media d'installation}
 message ftp {FTP}
-message http {HTTP}
 message nfs {NFS}
 message cdrom {CD-ROM / DVD}
 message floppy {Disquette}

@@ -116,7 +116,7 @@
  *****************************************************************************/
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: exmutex.c,v 1.13 2004/04/07 18:19:34 kochi Exp $");
+__KERNEL_RCSID(0, "$NetBSD: exmutex.c,v 1.12.2.1 2004/04/28 05:22:59 jmc Exp $");
 
 #define __EXMUTEX_C__
 

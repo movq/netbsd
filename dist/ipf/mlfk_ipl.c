@@ -1,4 +1,4 @@
-/*	$NetBSD: mlfk_ipl.c,v 1.1.1.6 2004/07/23 05:34:04 martti Exp $	*/
+/*	$NetBSD: mlfk_ipl.c,v 1.1.1.5.2.1 2004/08/13 03:56:43 jmc Exp $	*/
 
 /*
  * Copyright (C) 2000 by Darren Reed.

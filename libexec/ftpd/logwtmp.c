@@ -1,4 +1,4 @@
-/*	$NetBSD: logwtmp.c,v 1.23 2004/11/11 01:14:10 christos Exp $	*/
+/*	$NetBSD: logwtmp.c,v 1.21.2.1 2004/08/12 20:44:35 jmc Exp $	*/
 
 /*
  * Copyright (c) 1988, 1993
@@ -36,7 +36,7 @@
 #if 0
 static char sccsid[] = "@(#)logwtmp.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: logwtmp.c,v 1.23 2004/11/11 01:14:10 christos Exp $");
+__RCSID("$NetBSD: logwtmp.c,v 1.21.2.1 2004/08/12 20:44:35 jmc Exp $");
 #endif
 #endif /* not lint */
 
@@ -95,8 +95,7 @@ ftpd_logwtmp(const char *line, const char *name, const char *host)
 
 #ifdef SUPPORT_UTMPX
 void
-ftpd_logwtmpx(const char *line, const char *name, const char *host,
-    struct sockinet *haddr, int status, int utx_type)
+ftpd_logwtmpx(const char *line, const char *name, const char *host, int status, int utx_type)
 {
 	struct utmpx ut;
 	struct stat buf;
@@ -107,10 +106,6 @@ ftpd_logwtmpx(const char *line, const char *name, const char *host,
 		(void)strncpy(ut.ut_line, line, sizeof(ut.ut_line));
 		(void)strncpy(ut.ut_name, name, sizeof(ut.ut_name));
 		(void)strncpy(ut.ut_host, host, sizeof(ut.ut_host));
-		if (haddr)
-			(void)memcpy(&ut.ut_ss, &haddr->si_su, haddr->su_len);
-		else
-			(void)memset(&ut.ut_ss, 0, sizeof(ut.ut_ss));
 		ut.ut_type = utx_type;
 		if (WIFEXITED(status))
 			ut.ut_exit.e_exit = (uint16_t)WEXITSTATUS(status);

@@ -1,4 +1,4 @@
-/*	$NetBSD: ieee80211_ioctl.c,v 1.16 2004/07/23 08:31:39 mycroft Exp $	*/
+/*	$NetBSD: ieee80211_ioctl.c,v 1.8 2004/01/16 14:07:32 onoe Exp $	*/
 /*-
  * Copyright (c) 2001 Atsushi Onoe
  * Copyright (c) 2002, 2003 Sam Leffler, Errno Consulting
@@ -33,16 +33,14 @@
 
 #include <sys/cdefs.h>
 #ifdef __FreeBSD__
-__FBSDID("$FreeBSD: src/sys/net80211/ieee80211_ioctl.c,v 1.13 2004/03/30 22:57:57 sam Exp $");
+__FBSDID("$FreeBSD: src/sys/net80211/ieee80211_ioctl.c,v 1.9 2003/11/13 05:23:58 sam Exp $");
 #else
-__KERNEL_RCSID(0, "$NetBSD: ieee80211_ioctl.c,v 1.16 2004/07/23 08:31:39 mycroft Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ieee80211_ioctl.c,v 1.8 2004/01/16 14:07:32 onoe Exp $");
 #endif
 
 /*
  * IEEE 802.11 ioctl support (FreeBSD-specific)
  */
-
-#include "opt_inet.h"
 
 #include <sys/endian.h>
 #include <sys/param.h>
@@ -59,14 +57,6 @@ __KERNEL_RCSID(0, "$NetBSD: ieee80211_ioctl.c,v 1.16 2004/07/23 08:31:39 mycroft
 #include <net/ethernet.h>
 #else
 #include <net/if_ether.h>
-#endif
-
-#ifdef INET
-#include <netinet/in.h>
-#ifdef __FreeBSD__
-#include <netinet/if_ether.h>
-#endif /* __FreeBSD__ */
-#include <netinet/if_inarp.h>
 #endif
 
 #include <net80211/ieee80211_var.h>
@@ -113,8 +103,7 @@ ieee80211_cfgget(struct ifnet *ifp, u_long cmd, caddr_t data)
 		/* nothing appropriate */
 		break;
 	case WI_RID_NODENAME:
-		strlcpy((char *)&wreq.wi_val[1], hostname,
-		    sizeof(wreq.wi_val) - sizeof(wreq.wi_val[0]));
+		strcpy((char *)&wreq.wi_val[1], hostname);
 		wreq.wi_val[0] = htole16(strlen(hostname));
 		wreq.wi_len = (1 + strlen(hostname) + 1) / 2;
 		break;
@@ -251,7 +240,7 @@ ieee80211_cfgget(struct ifnet *ifp, u_long cmd, caddr_t data)
 		break;
 	case WI_RID_ENCRYPTION:
 		wreq.wi_val[0] =
-		    htole16((ic->ic_flags & IEEE80211_F_PRIVACY) ? 1 : 0);
+		    htole16((ic->ic_flags & IEEE80211_F_WEPON) ? 1 : 0);
 		wreq.wi_len = 1;
 		break;
 	case WI_RID_TX_CRYPT_KEY:
@@ -339,8 +328,7 @@ ieee80211_cfgget(struct ifnet *ifp, u_long cmd, caddr_t data)
 		break;
 	case WI_RID_SCAN_RES:			/* compatibility interface */
 		if (ic->ic_opmode != IEEE80211_M_HOSTAP &&
-		    ic->ic_state == IEEE80211_S_SCAN &&
-		    (ic->ic_flags & IEEE80211_F_ASCAN)) {
+		    ic->ic_state == IEEE80211_S_SCAN) {
 			error = EINPROGRESS;
 			break;
 		}
@@ -688,13 +676,13 @@ ieee80211_cfgset(struct ifnet *ifp, u_long cmd, caddr_t data)
 		if (wreq.wi_val[0] != 0) {
 			if ((ic->ic_caps & IEEE80211_C_WEP) == 0)
 				return EINVAL;
-			if ((ic->ic_flags & IEEE80211_F_PRIVACY) == 0) {
-				ic->ic_flags |= IEEE80211_F_PRIVACY;
+			if ((ic->ic_flags & IEEE80211_F_WEPON) == 0) {
+				ic->ic_flags |= IEEE80211_F_WEPON;
 				error = ENETRESET;
 			}
 		} else {
-			if (ic->ic_flags & IEEE80211_F_PRIVACY) {
-				ic->ic_flags &= ~IEEE80211_F_PRIVACY;
+			if (ic->ic_flags & IEEE80211_F_WEPON) {
+				ic->ic_flags &= ~IEEE80211_F_WEPON;
 				error = ENETRESET;
 			}
 		}
@@ -804,7 +792,6 @@ ieee80211_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 	u_int8_t tmpkey[IEEE80211_KEYBUF_SIZE];
 	char tmpssid[IEEE80211_NWID_LEN];
 	struct ieee80211_channel *chan;
-	struct ifaddr *ifa;			/* XXX */
 
 	switch (cmd) {
 	case SIOCSIFMEDIA:
@@ -837,7 +824,7 @@ ieee80211_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 			if ((ic->ic_caps & IEEE80211_C_WEP) == 0) {
 				ireq->i_val = IEEE80211_WEP_NOSUP; 
 			} else {
-				if (ic->ic_flags & IEEE80211_F_PRIVACY) {
+				if (ic->ic_flags & IEEE80211_F_WEPON) {
 					ireq->i_val =
 					    IEEE80211_WEP_MIXED;
 				} else {
@@ -908,18 +895,8 @@ ieee80211_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 		case IEEE80211_IOC_RTSTHRESHOLD:
 			ireq->i_val = ic->ic_rtsthreshold;
 			break;
-		case IEEE80211_IOC_PROTMODE:
-			ireq->i_val = ic->ic_protmode;
-			break;
-		case IEEE80211_IOC_TXPOWER:
-			if ((ic->ic_caps & IEEE80211_C_TXPMGT) == 0)
-				error = EINVAL;
-			else
-				ireq->i_val = ic->ic_txpower;
-			break;
 		default:
 			error = EINVAL;
-			break;
 		}
 		break;
 	case SIOCS80211:
@@ -949,9 +926,9 @@ ieee80211_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 			 * passed in is not OFF.
 			 */
 			if (ireq->i_val == IEEE80211_WEP_OFF) {
-				ic->ic_flags &= ~IEEE80211_F_PRIVACY;
+				ic->ic_flags &= ~IEEE80211_F_WEPON;
 			} else {
-				ic->ic_flags |= IEEE80211_F_PRIVACY;
+				ic->ic_flags |= IEEE80211_F_WEPON;
 			}
 			error = ENETRESET;
 			break;
@@ -1057,29 +1034,6 @@ ieee80211_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 				break;
 			}
 			ic->ic_rtsthreshold = ireq->i_val;
-			error = ENETRESET;
-			break;
-		case IEEE80211_IOC_PROTMODE:
-			if (ireq->i_val > IEEE80211_PROT_RTSCTS) {
-				error = EINVAL;
-				break;
-			}
-			ic->ic_protmode = ireq->i_val;
-			/* NB: if not operating in 11g this can wait */
-			if (ic->ic_curmode == IEEE80211_MODE_11G)
-				error = ENETRESET;
-			break;
-		case IEEE80211_IOC_TXPOWER:
-			if ((ic->ic_caps & IEEE80211_C_TXPMGT) == 0) {
-				error = EINVAL;
-				break;
-			}
-			if (!(IEEE80211_TXPOWER_MIN < ireq->i_val &&
-			      ireq->i_val < IEEE80211_TXPOWER_MAX)) {
-				error = EINVAL;
-				break;
-			}
-			ic->ic_txpower = ireq->i_val;
 			error = ENETRESET;
 			break;
 		default:
@@ -1191,9 +1145,9 @@ ieee80211_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 			ic->ic_wep_txkey = i;
 		/* save the key */
 		if (nwkey->i_wepon == IEEE80211_NWKEY_OPEN)
-			ic->ic_flags &= ~IEEE80211_F_PRIVACY;
+			ic->ic_flags &= ~IEEE80211_F_WEPON;
 		else
-			ic->ic_flags |= IEEE80211_F_PRIVACY;
+			ic->ic_flags |= IEEE80211_F_WEPON;
 		for (i = 0; i < IEEE80211_WEP_NKID; i++) {
 			if (keys[i].wk_len < 0)
 				continue;
@@ -1205,7 +1159,7 @@ ieee80211_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 		break;
 	case SIOCG80211NWKEY:
 		nwkey = (struct ieee80211_nwkey *)data;
-		if (ic->ic_flags & IEEE80211_F_PRIVACY)
+		if (ic->ic_flags & IEEE80211_F_WEPON)
 			nwkey->i_wepon = IEEE80211_NWKEY_WEP;
 		else
 			nwkey->i_wepon = IEEE80211_NWKEY_OPEN;
@@ -1345,14 +1299,6 @@ ieee80211_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 	case SIOCG80211STATS:
 		ifr = (struct ifreq *)data;
 		copyout(&ic->ic_stats, ifr->ifr_data, sizeof (ic->ic_stats));
-		break;
-	case SIOCSIFMTU:
-		ifr = (struct ifreq *)data;
-		if (!(IEEE80211_MTU_MIN <= ifr->ifr_mtu &&
-		    ifr->ifr_mtu <= IEEE80211_MTU_MAX))
-			error = EINVAL;
-		else
-			ifp->if_mtu = ifr->ifr_mtu;
 		break;
 	default:
 		error = ether_ioctl(ifp, cmd, data);

@@ -751,40 +751,43 @@ extern int verbose;
 /* Function declarations.  */
 
 extern struct res_directory *read_rc_file
-  (const char *, const char *, const char *, int, int);
-extern struct res_directory *read_res_file (const char *);
-extern struct res_directory *read_coff_rsrc (const char *, const char *);
-extern void write_rc_file (const char *, const struct res_directory *);
-extern void write_res_file (const char *, const struct res_directory *);
+  PARAMS ((const char *, const char *, const char *, int, int));
+extern struct res_directory *read_res_file PARAMS ((const char *));
+extern struct res_directory *read_coff_rsrc
+  PARAMS ((const char *, const char *));
+extern void write_rc_file
+  PARAMS ((const char *, const struct res_directory *));
+extern void write_res_file
+  PARAMS ((const char *, const struct res_directory *));
 extern void write_coff_file
-  (const char *, const char *, const struct res_directory *);
+  PARAMS ((const char *, const char *, const struct res_directory *));
 
 extern struct res_resource *bin_to_res
-  (struct res_id, const unsigned char *, unsigned long, int);
-extern struct bindata *res_to_bin (const struct res_resource *, int);
+  PARAMS ((struct res_id, const unsigned char *, unsigned long, int));
+extern struct bindata *res_to_bin PARAMS ((const struct res_resource *, int));
 
 extern FILE *open_file_search
-  (const char *, const char *, const char *, char **);
+  PARAMS ((const char *, const char *, const char *, char **));
 
-extern void *res_alloc (size_t);
-extern void *reswr_alloc (size_t);
+extern PTR res_alloc PARAMS ((size_t));
+extern PTR reswr_alloc PARAMS ((size_t));
 
 /* Resource ID handling.  */
 
-extern int res_id_cmp (struct res_id, struct res_id);
-extern void res_id_print (FILE *, struct res_id, int);
-extern void res_ids_print (FILE *, int, const struct res_id *);
-extern void res_string_to_id (struct res_id *, const char *);
+extern int res_id_cmp PARAMS ((struct res_id, struct res_id));
+extern void res_id_print PARAMS ((FILE *, struct res_id, int));
+extern void res_ids_print PARAMS ((FILE *, int, const struct res_id *));
+extern void res_string_to_id PARAMS ((struct res_id *, const char *));
 
 /* Manipulation of the resource tree.  */
 
 extern struct res_resource *define_resource
-  (struct res_directory **, int, const struct res_id *, int);
+  PARAMS ((struct res_directory **, int, const struct res_id *, int));
 extern struct res_resource *define_standard_resource
-  (struct res_directory **, int, struct res_id, int, int);
+  PARAMS ((struct res_directory **, int, struct res_id, int, int));
 
-extern int extended_dialog (const struct dialog *);
-extern int extended_menu (const struct menu *);
+extern int extended_dialog PARAMS ((const struct dialog *));
+extern int extended_menu PARAMS ((const struct menu *));
 
 /* Communication between the rc file support and the parser and lexer.  */
 
@@ -793,59 +796,64 @@ extern FILE *yyin;
 extern char *rc_filename;
 extern int rc_lineno;
 
-extern int yyparse (void);
-extern int yylex (void);
-extern void yyerror (const char *);
-extern void rcparse_warning (const char *);
-extern void rcparse_set_language (int);
-extern void rcparse_discard_strings (void);
-extern void rcparse_rcdata (void);
-extern void rcparse_normal (void);
+extern int yyparse PARAMS ((void));
+extern int yylex PARAMS ((void));
+extern void yyerror PARAMS ((const char *));
+extern void rcparse_warning PARAMS ((const char *));
+extern void rcparse_set_language PARAMS ((int));
+extern void rcparse_discard_strings PARAMS ((void));
+extern void rcparse_rcdata PARAMS ((void));
+extern void rcparse_normal PARAMS ((void));
 
 extern void define_accelerator
-  (struct res_id, const struct res_res_info *, struct accelerator *);
+  PARAMS ((struct res_id, const struct res_res_info *, struct accelerator *));
 extern void define_bitmap
-  (struct res_id, const struct res_res_info *, const char *);
+  PARAMS ((struct res_id, const struct res_res_info *, const char *));
 extern void define_cursor
-  (struct res_id, const struct res_res_info *, const char *);
+  PARAMS ((struct res_id, const struct res_res_info *, const char *));
 extern void define_dialog
-  (struct res_id, const struct res_res_info *, const struct dialog *);
+  PARAMS ((struct res_id, const struct res_res_info *, const struct dialog *));
 extern struct dialog_control *define_control
-  (const struct res_id, unsigned long, unsigned long, unsigned long,
-   unsigned long, unsigned long, unsigned long, unsigned long, unsigned long);
+  PARAMS ((struct res_id, unsigned long, unsigned long, unsigned long,
+	   unsigned long, unsigned long, unsigned long, unsigned long,
+	   unsigned long));
 extern struct dialog_control *define_icon_control
-  (struct res_id, unsigned long, unsigned long, unsigned long, unsigned long,
-   unsigned long, unsigned long, struct rcdata_item *, struct dialog_ex *);
+  PARAMS ((struct res_id, unsigned long, unsigned long,
+	   unsigned long, unsigned long, unsigned long, unsigned long,
+	   struct rcdata_item *, struct dialog_ex *));
 extern void define_font
-  (struct res_id, const struct res_res_info *, const char *);
+  PARAMS ((struct res_id, const struct res_res_info *, const char *));
 extern void define_icon
-  (struct res_id, const struct res_res_info *, const char *);
+  PARAMS ((struct res_id, const struct res_res_info *, const char *));
 extern void define_menu
-  (struct res_id, const struct res_res_info *, struct menuitem *);
+  PARAMS ((struct res_id, const struct res_res_info *, struct menuitem *));
 extern struct menuitem *define_menuitem
-  (const char *, int, unsigned long, unsigned long, unsigned long,
-   struct menuitem *);
+  PARAMS ((const char *, int, unsigned long, unsigned long, unsigned long,
+	   struct menuitem *));
 extern void define_messagetable
-  (struct res_id, const struct res_res_info *, const char *);
+  PARAMS ((struct res_id, const struct res_res_info *, const char *));
 extern void define_rcdata
-  (struct res_id, const struct res_res_info *, struct rcdata_item *);
+  PARAMS ((struct res_id, const struct res_res_info *, struct rcdata_item *));
 extern struct rcdata_item *define_rcdata_string
-  (const char *, unsigned long);
-extern struct rcdata_item *define_rcdata_number (unsigned long, int);
+  PARAMS ((const char *, unsigned long));
+extern struct rcdata_item *define_rcdata_number
+  PARAMS ((unsigned long, int));
 extern void define_stringtable
-  (const struct res_res_info *, unsigned long, const char *);
+  PARAMS ((const struct res_res_info *, unsigned long, const char *));
 extern void define_user_data
-  (struct res_id, struct res_id, const struct res_res_info *,
-   struct rcdata_item *);
+  PARAMS ((struct res_id, struct res_id, const struct res_res_info *,
+	   struct rcdata_item *));
 extern void define_user_file
-  (struct res_id, struct res_id, const struct res_res_info *, const char *);
+  PARAMS ((struct res_id, struct res_id, const struct res_res_info *,
+	   const char *));
 extern void define_versioninfo
-  (struct res_id, int, struct fixed_versioninfo *, struct ver_info *);
+  PARAMS ((struct res_id, int, struct fixed_versioninfo *,
+	   struct ver_info *));
 extern struct ver_info *append_ver_stringfileinfo
-  (struct ver_info *, const char *, struct ver_stringinfo *);
+  PARAMS ((struct ver_info *, const char *, struct ver_stringinfo *));
 extern struct ver_info *append_ver_varfileinfo
-  (struct ver_info *, const char *, struct ver_varinfo *);
+  PARAMS ((struct ver_info *, const char *, struct ver_varinfo *));
 extern struct ver_stringinfo *append_verval
-  (struct ver_stringinfo *, const char *, const char *);
+  PARAMS ((struct ver_stringinfo *, const char *, const char *));
 extern struct ver_varinfo *append_vertrans
-  (struct ver_varinfo *, unsigned long, unsigned long);
+  PARAMS ((struct ver_varinfo *, unsigned long, unsigned long));

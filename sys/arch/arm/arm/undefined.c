@@ -1,4 +1,4 @@
-/*	$NetBSD: undefined.c,v 1.25 2004/10/24 06:58:14 skrll Exp $	*/
+/*	$NetBSD: undefined.c,v 1.22 2003/11/29 22:21:29 bjh21 Exp $	*/
 
 /*
  * Copyright (c) 2001 Ben Harris.
@@ -54,7 +54,7 @@
 #include <sys/kgdb.h>
 #endif
 
-__KERNEL_RCSID(0, "$NetBSD: undefined.c,v 1.25 2004/10/24 06:58:14 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: undefined.c,v 1.22 2003/11/29 22:21:29 bjh21 Exp $");
 
 #include <sys/malloc.h>
 #include <sys/queue.h>
@@ -94,7 +94,7 @@ static int gdb_trapper(u_int, u_int, struct trapframe *, int);
 extern int want_resched;
 #endif
 
-LIST_HEAD(, undefined_handler) undefined_handlers[NUM_UNKNOWN_HANDLERS];
+LIST_HEAD(, undefined_handler) undefined_handlers[MAX_COPROCS];
 
 
 void *
@@ -102,7 +102,7 @@ install_coproc_handler(int coproc, undef_handler_t handler)
 {
 	struct undefined_handler *uh;
 
-	KASSERT(coproc >= 0 && coproc < NUM_UNKNOWN_HANDLERS);
+	KASSERT(coproc >= 0 && coproc < MAX_COPROCS);
 	KASSERT(handler != NULL); /* Used to be legal. */
 
 	/* XXX: M_TEMP??? */
@@ -135,35 +135,23 @@ gdb_trapper(u_int addr, u_int insn, struct trapframe *frame, int code)
 	struct lwp *l;
 	l = (curlwp == NULL) ? &lwp0 : curlwp;
 
-#ifdef THUMB_CODE
-	if (frame->tf_spsr & PSR_T_bit) {
-		if (insn == GDB_THUMB_BREAKPOINT)
-			goto bkpt;
-	}
-	else
-#endif
-	{
-		if (insn == GDB_BREAKPOINT || insn == GDB5_BREAKPOINT) {
-#ifdef THUMB_CODE
-		bkpt:
-#endif
-			if (code == FAULT_USER) {
-				ksiginfo_t ksi;
+	if (insn == GDB_BREAKPOINT || insn == GDB5_BREAKPOINT) {
+		if (code == FAULT_USER) {
+			ksiginfo_t ksi;
 
-				KSI_INIT_TRAP(&ksi);
-				ksi.ksi_signo = SIGTRAP;
-				ksi.ksi_code = TRAP_BRKPT;
-				ksi.ksi_addr = (u_int32_t *)addr;
-				ksi.ksi_trap = 0;
-				KERNEL_PROC_LOCK(l);
-				trapsignal(l, &ksi);
-				KERNEL_PROC_UNLOCK(l);
-				return 0;
-			}
-#ifdef KGDB
-			return !kgdb_trap(T_BREAKPOINT, frame);
-#endif
+			KSI_INIT_TRAP(&ksi);
+			ksi.ksi_signo = SIGTRAP;
+			ksi.ksi_code = TRAP_BRKPT;
+			ksi.ksi_addr = (u_int32_t *)addr;
+			ksi.ksi_trap = 0;
+			KERNEL_PROC_LOCK(l->l_proc);
+			trapsignal(l, &ksi);
+			KERNEL_PROC_UNLOCK(l->l_proc);
+			return 0;
 		}
+#ifdef KGDB
+		return !kgdb_trap(T_BREAKPOINT, frame);
+#endif
 	}
 	return 1;
 }
@@ -176,16 +164,14 @@ undefined_init()
 	int loop;
 
 	/* Not actually necessary -- the initialiser is just NULL */
-	for (loop = 0; loop < NUM_UNKNOWN_HANDLERS; ++loop)
+	for (loop = 0; loop < MAX_COPROCS; ++loop)
 		LIST_INIT(&undefined_handlers[loop]);
 
 	/* Install handler for GDB breakpoints */
 	gdb_uh.uh_handler = gdb_trapper;
-	install_coproc_handler_static(CORE_UNKNOWN_HANDLER, &gdb_uh);
-#ifdef THUMB_CODE
-	install_coproc_handler_static(THUMB_UNKNOWN_HANDLER, &gdb_uh);
-#endif
+	install_coproc_handler_static(0, &gdb_uh);
 }
+
 
 void
 undefinedinstruction(trapframe_t *frame)
@@ -210,14 +196,7 @@ undefinedinstruction(trapframe_t *frame)
 #endif
 
 #ifndef acorn26
-#ifdef THUMB_CODE
-	if (frame->tf_spsr & PSR_T_bit)
-		frame->tf_pc -= THUMB_INSN_SIZE;
-	else
-#endif
-	{
-		frame->tf_pc -= INSN_SIZE;
-	}
+	frame->tf_pc -= INSN_SIZE;
 #endif
 
 #ifdef __PROG26
@@ -229,70 +208,50 @@ undefinedinstruction(trapframe_t *frame)
 	/* Get the current lwp/proc structure or lwp0/proc0 if there is none. */
 	l = curlwp == NULL ? &lwp0 : curlwp;
 
-#ifdef THUMB_CODE
-	if (frame->tf_spsr & PSR_T_bit) {
-		fault_instruction = fusword((void *)(fault_pc & ~1));
+	/*
+	 * Make sure the program counter is correctly aligned so we
+	 * don't take an alignment fault trying to read the opcode.
+	 */
+	if (__predict_false((fault_pc & 3) != 0)) {
+		ksiginfo_t ksi;
+		/* Give the user an illegal instruction signal. */
+		KSI_INIT_TRAP(&ksi);
+		ksi.ksi_signo = SIGILL;
+		ksi.ksi_code = ILL_ILLOPC;
+		ksi.ksi_addr = (u_int32_t *)(intptr_t) fault_pc;
+		KERNEL_PROC_LOCK(l);
+		trapsignal(l, &ksi);
+		KERNEL_PROC_UNLOCK(l);
+		userret(l);
+		return;
 	}
-	else
-#endif
-	{
-		/*
-		 * Make sure the program counter is correctly aligned so we
-		 * don't take an alignment fault trying to read the opcode.
-		 */
-		if (__predict_false((fault_pc & 3) != 0)) {
-			ksiginfo_t ksi;
-			/* Give the user an illegal instruction signal. */
-			KSI_INIT_TRAP(&ksi);
-			ksi.ksi_signo = SIGILL;
-			ksi.ksi_code = ILL_ILLOPC;
-			ksi.ksi_addr = (u_int32_t *)(intptr_t) fault_pc;
-			KERNEL_PROC_LOCK(l);
-			trapsignal(l, &ksi);
-			KERNEL_PROC_UNLOCK(l);
-			userret(l);
-			return;
-		}
-	 	/*
-		 * Should use fuword() here .. but in the interests of
-		 * squeezing every  bit of speed we will just use
-		 * ReadWord(). We know the instruction can be read
-		 * as was just executed so this will never fail unless
-		 * the kernel is screwed up in which case it does
-		 * not really matter does it ?
-		 */
 
-		fault_instruction = *(u_int32_t *)fault_pc;
-	}
+	/*
+	 * Should use fuword() here .. but in the interests of squeezing every
+	 * bit of speed we will just use ReadWord(). We know the instruction
+	 * can be read as was just executed so this will never fail unless the
+	 * kernel is screwed up in which case it does not really matter does
+	 * it ?
+	 */
+
+	fault_instruction = *(u_int32_t *)fault_pc;
 
 	/* Update vmmeter statistics */
 	uvmexp.traps++;
 
-#ifdef THUMB_CODE
-	if (frame->tf_spsr & PSR_T_bit) {
-		coprocessor = THUMB_UNKNOWN_HANDLER;
-	}
+	/* Check for coprocessor instruction */
+
+	/*
+	 * According to the datasheets you only need to look at bit 27 of the
+	 * instruction to tell the difference between and undefined
+	 * instruction and a coprocessor instruction following an undefined
+	 * instruction trap.
+	 */
+
+	if ((fault_instruction & (1 << 27)) != 0)
+		coprocessor = (fault_instruction >> 8) & 0x0f;
 	else
-#endif
-	{
-		/* Check for coprocessor instruction */
-
-		/*
-		 * According to the datasheets you only need to look at
-		 * bit 27 of the instruction to tell the difference
-		 * between and undefined instruction and a coprocessor
-		 * instruction following an undefined instruction trap.
-		 *
-		 * ARMv5 adds undefined instructions in the NV space,
-		 * even when bit 27 is set.
-		 */
-
-		if ((fault_instruction & (1 << 27)) != 0
-		    && (fault_instruction & 0xf0000000) != 0xf0000000)
-			coprocessor = (fault_instruction >> 8) & 0x0f;
-		else
-			coprocessor = CORE_UNKNOWN_HANDLER;
-	}
+		coprocessor = 0;
 
 #ifdef __PROG26
 	if ((frame->tf_r15 & R15_MODE) == R15_MODE_USR) {

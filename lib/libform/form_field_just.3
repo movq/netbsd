@@ -1,4 +1,4 @@
-.\"	$NetBSD: form_field_just.3,v 1.10 2004/11/24 12:47:20 wiz Exp $
+.\"	$NetBSD: form_field_just.3,v 1.7 2003/04/16 13:35:04 wiz Exp $
 .\"
 .\" Copyright (c) 2001
 .\"	Brett Lymn - blymn@baea.com.au, brett_lymn@yahoo.com.au
@@ -75,7 +75,9 @@ The field will be centre justified, padding will be applied to either
 end of the line to make the line centred in the field.
 .El
 .Sh RETURN VALUES
-The functions will return one of the following error values:
+Functions returning pointers will return NULL if an error is detected.
+The functions that return an int will return one of the following error
+values:
 .Pp
 .Bl -tag -width E_UNKNOWN_COMMAND -compact
 .It Er E_OK
@@ -90,8 +92,8 @@ A bad argument was passed to the function.
 .Xr forms 3
 .Sh NOTES
 The header
-.Aq Pa form.h
+.Pa \*[Lt]form.h\*[Gt]
 automatically includes both
-.Aq Pa curses.h
+.Pa \*[Lt]curses.h\*[Gt]
 and
-.Aq Pa eti.h .
+.Pa \*[Lt]eti.h\*[Gt] .

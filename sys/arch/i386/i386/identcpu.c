@@ -1,4 +1,4 @@
-/*	$NetBSD: identcpu.c,v 1.16 2004/08/08 05:21:01 briggs Exp $	*/
+/*	$NetBSD: identcpu.c,v 1.10.2.2 2004/08/12 03:31:15 jmc Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2000, 2001 The NetBSD Foundation, Inc.
@@ -37,10 +37,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: identcpu.c,v 1.16 2004/08/08 05:21:01 briggs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: identcpu.c,v 1.10.2.2 2004/08/12 03:31:15 jmc Exp $");
 
 #include "opt_cputype.h"
-#include "opt_enhanced_speedstep.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -127,7 +126,6 @@ static const char * const amd_brand[] = {
 };
 
 u_int cpu_serial[3];
-char cpu_brand_string[49];
 static char amd_brand_name[48];
 
 void cyrix6x86_cpu_setup(struct cpu_info *);
@@ -241,8 +239,7 @@ const struct cpu_cpuid_nameclass i386_cpuid_cpus[] = {
 				"Pentium III (Coppermine)",
 				"Pentium M (Banias)", 
 				"Pentium III Xeon (Cascades)",
-				"Pentium III (Tualatin)", 0,
-				"Pentium M (Dothan)", 0, 0,
+				"Pentium III (Tualatin)", 0, 0, 0, 0,
 				"Pentium Pro, II or III"	/* Default */
 			},
 			NULL,
@@ -552,7 +549,6 @@ cyrix6x86_cpu_setup(ci)
 	 */
 
 	extern int clock_broken_latch;
-	u_char c3;
 
 	switch (ci->ci_signature) {
 	case 0x440:     /* Cyrix MediaGX */
@@ -565,15 +561,14 @@ cyrix6x86_cpu_setup(ci)
 	/* Enable suspend on halt */
 	cyrix_write_reg(0xc2, cyrix_read_reg(0xc2) | 0x08);
 	/* enable access to ccr4/ccr5 */
-	c3 = cyrix_read_reg(0xC3);
-	cyrix_write_reg(0xC3, c3 | 0x10);
+	cyrix_write_reg(0xC3, cyrix_read_reg(0xC3) | 0x10);
 	/* cyrix's workaround  for the "coma bug" */
 	cyrix_write_reg(0x31, cyrix_read_reg(0x31) | 0xf8);
 	cyrix_write_reg(0x32, cyrix_read_reg(0x32) | 0x7f);
 	cyrix_write_reg(0x33, cyrix_read_reg(0x33) & ~0xff);
 	cyrix_write_reg(0x3c, cyrix_read_reg(0x3c) | 0x87);
 	/* disable access to ccr4/ccr5 */
-	cyrix_write_reg(0xC3, c3);
+	cyrix_write_reg(0xC3, cyrix_read_reg(0xC3) & ~0x10);
 
 	/*
 	 * XXX disable page zero in the idle loop, it seems to
@@ -693,7 +688,6 @@ cpu_probe_base_features(struct cpu_info *ci)
 	int iterations, i, j;
 	u_int8_t desc;
 	u_int32_t dummy1, dummy2, miscbytes;
-	u_int32_t brand[12];
 
 	if (ci->ci_cpuid_level < 0)
 		return;
@@ -704,22 +698,10 @@ cpu_probe_base_features(struct cpu_info *ci)
 	    ci->ci_vendor[1]);
 	ci->ci_vendor[3] = 0;
 
-	CPUID(0x80000000, brand[0], brand[1], brand[2], brand[3]);
-	if (brand[0] >= 0x80000004) {
-		CPUID(0x80000002, brand[0], brand[1], brand[2], brand[3]);
-		CPUID(0x80000003, brand[4], brand[5], brand[6], brand[7]);
-		CPUID(0x80000004, brand[8], brand[9], brand[10], brand[11]);
-		for (i = 0; i < 48; i++)
-			if (((char *) brand)[i] != ' ')
-				break;
-		memcpy(cpu_brand_string, ((char *) brand) + i, 48 - i);
-	}
-
 	if (ci->ci_cpuid_level < 1)
 		return;
 
-	CPUID(1, ci->ci_signature, miscbytes, ci->ci_feature2_flags,
-	    ci->ci_feature_flags);
+	CPUID(1, ci->ci_signature, miscbytes, dummy1, ci->ci_feature_flags);
 
 	/* Brand is low order 8 bits of ebx */
 	ci->ci_brand_id = miscbytes & 0xff;
@@ -815,6 +797,7 @@ amd_family6_probe(struct cpu_info *ci)
 {
 	u_int32_t lfunc;
 	u_int32_t descs[4];
+	u_int32_t brand[12];
 	char *p;
 	int i;
 
@@ -828,13 +811,17 @@ amd_family6_probe(struct cpu_info *ci)
 		ci->ci_feature_flags |= descs[3];
 	}
 
-	if (*cpu_brand_string == '\0')
+	if (lfunc < 0x80000004)
 		return;
 	
+	CPUID(0x80000002, brand[0], brand[1], brand[2], brand[3]);
+	CPUID(0x80000003, brand[4], brand[5], brand[6], brand[7]);
+	CPUID(0x80000004, brand[8], brand[9], brand[10], brand[11]);
+
 	for (i = 1; i < sizeof(amd_brand) / sizeof(amd_brand[0]); i++)
-		if ((p = strstr(cpu_brand_string, amd_brand[i])) != NULL) {
+		if ((p = strstr((char *)brand, amd_brand[i])) != NULL) {
 			ci->ci_brand_id = i;
-			strlcpy(amd_brand_name, p, sizeof(amd_brand_name));
+			strcpy(amd_brand_name, p);
 			break;
 		}
 }
@@ -1230,30 +1217,7 @@ identifycpu(struct cpu_info *ci)
 		}
 	}
 
-	if (ci->ci_feature2_flags) {
-		bitmask_snprintf(ci->ci_feature2_flags,
-		    CPUID2_FLAGS, buf, sizeof(buf));
-		printf("%s: features2 %s\n", cpuname, buf);
-	}
-
-	if (*cpu_brand_string != '\0')
-		printf("%s: \"%s\"\n", cpuname, cpu_brand_string);
-
 	x86_print_cacheinfo(ci);
-
-	if (cpu_feature & CPUID_TM) {
-		if (rdmsr(MSR_MISC_ENABLE) & (1 << 3)) {
-			if ((cpu_feature2 & CPUID2_TM2) &&
-			    (rdmsr(MSR_THERM2_CTL) & (1 << 16)))
-				printf("%s: using thermal monitor 2\n",
-				    cpuname);
-			else
-				printf("%s: using thermal monitor 1\n",
-				    cpuname);
-		} else
-			printf("%s: running without thermal monitor!\n",
-			    cpuname);
-	}
 
 	if (ci->ci_cpuid_level >= 3 && (ci->ci_feature_flags & CPUID_PN)) {
 		printf("%s: serial number %04X-%04X-%04X-%04X-%04X-%04X\n",
@@ -1364,15 +1328,4 @@ identifycpu(struct cpu_info *ci)
 	} else
 		i386_use_fxsave = 0;
 #endif /* I686_CPU */
-
-#ifdef ENHANCED_SPEEDSTEP
-	if (cpu_feature2 & CPUID2_EST) {
-		if (rdmsr(MSR_MISC_ENABLE) & (1 << 16))
-			est_init(ci);
-		else
-			printf("%s: Enhanced SpeedStep disabled by BIOS\n",
-			    cpuname);
-	}
-#endif /* ENHANCED_SPEEDSTEP */
-
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: altivec.c,v 1.7 2004/04/16 23:58:08 matt Exp $	*/
+/*	$NetBSD: altivec.c,v 1.5 2003/07/15 02:54:45 lukem Exp $	*/
 
 /*
  * Copyright (C) 1996 Wolfgang Solfrank.
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: altivec.c,v 1.7 2004/04/16 23:58:08 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: altivec.c,v 1.5 2003/07/15 02:54:45 lukem Exp $");
 
 #include "opt_multiprocessor.h"
 
@@ -51,7 +51,7 @@ __KERNEL_RCSID(0, "$NetBSD: altivec.c,v 1.7 2004/04/16 23:58:08 matt Exp $");
 #include <powerpc/psl.h>
 
 void
-enable_vec(void)
+enable_vec()
 {
 	struct cpu_info *ci = curcpu();
 	struct lwp *l = curlwp;
@@ -109,6 +109,7 @@ enable_vec(void)
 	 * Enable AltiVec when we return to user-mode.
 	 * Record the new ownership of the AltiVec unit.
 	 */
+	tf->srr1 |= PSL_VEC;
 	curcpu()->ci_veclwp = l;
 	pcb->pcb_veccpu = curcpu();
 	__asm __volatile ("sync");
@@ -136,8 +137,9 @@ save_vec_cpu(void)
 	mtmsr((msr & ~PSL_EE) | PSL_VEC);
 	__asm __volatile ("isync");
 	l = ci->ci_veclwp;
-	if (l == NULL)
+	if (l == NULL) {
 		goto out;
+	}
 	pcb = &l->l_addr->u_pcb;
 	vr = &pcb->pcb_vr;
 	tf = trapframe(l);
@@ -174,6 +176,7 @@ save_vec_cpu(void)
 	 * Note that we aren't using any CPU resources and stop any
 	 * data streams.
 	 */
+	tf->srr1 &= ~PSL_VEC;
 	pcb->pcb_veccpu = NULL;
 	ci->ci_veclwp = NULL;
 	__asm __volatile ("dssall; sync");
@@ -193,29 +196,17 @@ save_vec_cpu(void)
  * this function).
  */
 void
-save_vec_lwp(struct lwp *l, int discard)
+save_vec_lwp(l)
+	struct lwp *l;
 {
-	struct pcb * const pcb = &l->l_addr->u_pcb;
-	struct cpu_info * const ci = curcpu();
+	struct pcb *pcb = &l->l_addr->u_pcb;
+	struct cpu_info *ci = curcpu();
 
 	/*
 	 * If it's already in the PCB, there's nothing to do.
 	 */
-	if (pcb->pcb_veccpu == NULL)
-		return;
 
-	/*
-	 * If we simply need to discard the information, then don't
-	 * to save anything.
-	 */
-	if (discard) {
-#ifndef MULTIPROCESSOR
-		KASSERT(ci == pcb->pcb_veccpu);
-#endif
-		KASSERT(l == pcb->pcb_veccpu->ci_veclwp);
-		pcb->pcb_veccpu->ci_veclwp = NULL;
-		pcb->pcb_veccpu = NULL;
-		pcb->pcb_flags &= ~PCB_ALTIVEC;
+	if (pcb->pcb_veccpu == NULL) {
 		return;
 	}
 
@@ -223,13 +214,14 @@ save_vec_lwp(struct lwp *l, int discard)
 	 * If the state is in the current CPU, just flush the current CPU's
 	 * state.
 	 */
+
 	if (l == ci->ci_veclwp) {
 		save_vec_cpu();
 		return;
 	}
 
-
 #ifdef MULTIPROCESSOR
+
 	/*
 	 * It must be on another CPU, flush it from there.
 	 */

@@ -1,4 +1,4 @@
-/*	$NetBSD: darwin_sysctl.c,v 1.33 2004/10/01 16:30:52 yamt Exp $ */
+/*	$NetBSD: darwin_sysctl.c,v 1.23.2.3 2004/05/26 20:04:56 he Exp $ */
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -37,11 +37,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: darwin_sysctl.c,v 1.33 2004/10/01 16:30:52 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: darwin_sysctl.c,v 1.23.2.3 2004/05/26 20:04:56 he Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
-#include <sys/kernel.h>
 #include <sys/systm.h>
 #include <sys/signal.h>
 #include <sys/mount.h> 
@@ -61,12 +60,10 @@ __KERNEL_RCSID(0, "$NetBSD: darwin_sysctl.c,v 1.33 2004/10/01 16:30:52 yamt Exp 
 #include <compat/mach/mach_types.h>
 #include <compat/mach/mach_vm.h>
 
-#include <compat/darwin/darwin_audit.h>
 #include <compat/darwin/darwin_types.h>
 #include <compat/darwin/darwin_exec.h>
 #include <compat/darwin/darwin_sysctl.h>
 #include <compat/darwin/darwin_proc.h>
-#include <compat/darwin/darwin_route.h>
 #include <compat/darwin/darwin_syscallargs.h>
 
 pid_t darwin_init_pid = 0;
@@ -79,8 +76,6 @@ static int darwin_sysctl_dokproc(SYSCTLFN_PROTO);
 static void darwin_fill_kproc(struct proc *, struct darwin_kinfo_proc *);
 static void native_to_darwin_pflag(int *, int);
 static int darwin_sysctl_procargs(SYSCTLFN_PROTO);
-static int darwin_sysctl_net(SYSCTLFN_PROTO);
-static int darwin_sysctl_kdebug(SYSCTLFN_PROTO);
 
 static struct sysctlnode darwin_sysctl_root = {
 	.sysctl_flags = SYSCTL_VERSION|CTLFLAG_ROOT|CTLTYPE_NODE,
@@ -228,11 +223,6 @@ SYSCTL_SETUP(sysctl_darwin_emul_setup, "darwin emulated sysctl tree setup")
 		       CTLTYPE_INT, "maxpartitions", NULL,
 		       darwin_sysctl_redispatch, 0, NULL, 0,
 		       DARWIN_CTL_KERN, DARWIN_KERN_MAXPARTITIONS, CTL_EOL);
-	sysctl_createv(clog, 0, &_root, NULL,
-		       CTLFLAG_PERMANENT,
-		       CTLTYPE_INT, "kdebug", NULL,
-		       darwin_sysctl_kdebug, 0, NULL, 0,
-		       DARWIN_CTL_KERN, DARWIN_KERN_KDEBUG, CTL_EOL);
 
 	sysctl_createv(clog, 0, &_root, NULL,
 		       CTLFLAG_PERMANENT,
@@ -271,14 +261,7 @@ SYSCTL_SETUP(sysctl_darwin_emul_setup, "darwin emulated sysctl tree setup")
 		       CTLTYPE_INT, "pagesize", NULL,
 		       darwin_sysctl_redispatch, 0, NULL, 0,
 		       DARWIN_CTL_HW, DARWIN_HW_PAGESIZE, CTL_EOL);
-
-	sysctl_createv(clog, 0, &_root, NULL,
-		       CTLFLAG_PERMANENT,
-		       CTLTYPE_NODE, "net", NULL,
-		       darwin_sysctl_net, 0, NULL, 0,
-		       DARWIN_CTL_NET, CTL_EOL);
 }
-
 
 int
 darwin_sys___sysctl(struct lwp *l, void *v, register_t *retval)
@@ -308,17 +291,6 @@ darwin_sys___sysctl(struct lwp *l, void *v, register_t *retval)
 		       SCARG(uap, namelen) * sizeof(int));
 	if (error)
 		return (error);
-
-#ifdef DEBUG_DARWIN
-	if (1) {
-		int i;
-	
-		printf("darwin_sys___sysctl: ");
-		for (i = 0; i < SCARG(uap, namelen); i++) 
-			printf("%d ", name[i]);
-		printf("\n");
-	}
-#endif
 
 	/*
 	 * wire old so that copyout() is less likely to fail?
@@ -463,144 +435,6 @@ darwin_sys_getpid(l, v, retval)
 	return 0;
 }
 
-#define DARWIN_ENTROPYMAX	65536
-static int
-darwin_sysctl_kdebug(SYSCTLFN_ARGS) 
-{
-	if (namelen < 1)
-		return EINVAL;
-
-	switch (name[0]) {
-	/*
-	 * Get random dates between now and mstimeout (miliseconds)
-	 */
-	case DARWIN_KERN_KDGETENTROPY: {
-		int count;
-		int mstimeout;
-		int error;
-		struct timespec *buf;
-		struct timeval now, last, timeout;
-		unsigned long long lnow, ltimeout;
-		int i;
-
-		if (namelen != 2)
-			return EINVAL;
-
-		if (name[1] < 10)
-			mstimeout = 10;
-		else
-			mstimeout = name[1];
-
-		count = *oldlenp / sizeof(*buf);
-		if (count > DARWIN_ENTROPYMAX)
-			return ENOMEM;
-
-		buf = malloc(sizeof(*buf) * count, M_TEMP, M_ZERO|M_WAITOK);
-
-		microtime(&now);
-		last.tv_sec = now.tv_sec;
-		last.tv_usec = now.tv_usec;
-		timeout.tv_sec = mstimeout / 1000;
-		timeout.tv_usec = (mstimeout % 1000) * 1000;
-		lnow = (now.tv_sec * 1000000) + now.tv_usec;
-		ltimeout = (timeout.tv_sec * 1000000) + timeout.tv_usec;
-		
-		for (i = 0; i < count; i++) {
-			unsigned long long rnd = random();
-			struct timeval item, new;
-
-			rnd *= (ltimeout / count);
-			rnd >>= 32;
-
-			item.tv_sec = rnd / 1000;
-			item.tv_usec = rnd % 1000;
-			
-			timeradd(&last, &item, &new);
-			TIMEVAL_TO_TIMESPEC(&new, &buf[i]);
-
-			last.tv_sec = new.tv_sec;
-			last.tv_usec = new.tv_usec;
-		}
-
-		tsleep(&timeout, PZERO|PCATCH, "darwin_entropy", 
-			(mstimeout * hz / 1000));
-
-		/* Just in case... */
-		if (sizeof(*buf) * count < *oldlenp)
-			*oldlenp = sizeof(*buf) * count;
-		
-		error = copyout(buf, oldp, *oldlenp);
-		free(buf, M_TEMP);
-
-		/* 
-		 * The return value is the number of record
-		 * instead of the size of the copied data.
-		 */
-		*oldlenp = *oldlenp / sizeof(*buf);
-
-		return error;
-
-		break;
-	}
-
-	default:
-		return EINVAL;
-		break;
-	} 
-	return 0;
-}
-
-static int
-darwin_sysctl_net(SYSCTLFN_ARGS) 
-{
-	int af;
-
-	/* 
-	 * A strange thing: thrid level is zero, but I don't understand 
-	 * what it stands for.
-	 * All nodes here are of form [net.]<address family>.<zero>.* 
-	 */
-	if (namelen < 3)
-		return EINVAL;
-
-	if ((af = name[0]) != AF_ROUTE) {
-		printf("unimplemented sysctl net.%d\n", af);
-		return EINVAL;
-	}
-
-#ifdef DEBUG_DARWIN
-	if (name[1] != 0)
-		printf("sysctl net.af.%d\n", name[1]);
-#endif
-
-	if (namelen < 4)
-		return EINVAL;
-
-	switch (name[3]) {
-	case DARWIN_NET_RT_DUMP:
-		printf("unimplemented sysctl DARWIN_NET_RT_DUMP\n");
-		return EINVAL;
-		break;
-
-	case DARWIN_NET_RT_FLAGS:
-		printf("unimplemented sysctl DARWIN_NET_RT_FLAGS\n");
-		return EINVAL;
-		break;
-
-	case DARWIN_NET_RT_IFLIST:
-		return darwin_ifaddrs(name[2], oldp, oldlenp);
-		break;
-
-	default:
-		return EINVAL;
-		break;
-	}
-
-	/* NOTREACHED */
-	return 0;
-}
-
-
 /*
  * This is stolen from sys/kern/kern_sysctl.c:sysctl_doeproc() 
  */
@@ -652,7 +486,7 @@ darwin_sysctl_dokproc(SYSCTLFN_ARGS)
 
 	pd = proclists;
 again:
-	PROCLIST_FOREACH(p, pd->pd_list) {
+	for (p = LIST_FIRST(pd->pd_list); p != NULL; p = LIST_NEXT(p, p_list)) {
 		/*
 		 * Skip embryonic processes.
 		 */

@@ -1,4 +1,4 @@
-/*	$NetBSD: tp_emit.c,v 1.20 2004/04/21 23:19:49 matt Exp $	*/
+/*	$NetBSD: tp_emit.c,v 1.18 2003/08/11 15:17:29 itojun Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -72,9 +72,7 @@ SOFTWARE.
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tp_emit.c,v 1.20 2004/04/21 23:19:49 matt Exp $");
-
-#include "opt_iso.h"
+__KERNEL_RCSID(0, "$NetBSD: tp_emit.c,v 1.18 2003/08/11 15:17:29 itojun Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -161,12 +159,12 @@ char            tp_delay = 0x00;/* delay to keep token ring from blowing it */
  */
 
 int
-tp_emit(
-	int             dutype,
-	struct tp_pcb  *tpcb,
-	SeqNum          seq,
-	u_int           eot,
-	struct mbuf    *data)
+tp_emit(dutype, tpcb, seq, eot, data)
+	int             dutype;
+	struct tp_pcb  *tpcb;
+	SeqNum          seq;
+	u_int           eot;
+	struct mbuf    *data;
 {
 	struct tpdu *hdr;
 	struct mbuf *m;
@@ -856,16 +854,16 @@ done:
  */
 
 int
-tp_error_emit(
-	int             error,
-	u_long          sref,
-	struct sockaddr_iso *faddr,
-	struct sockaddr_iso *laddr,
-	struct mbuf    *erdata,
-	int             erlen,
-	struct tp_pcb  *tpcb,
-	caddr_t         cons_channel,
-        int 	      (*dgout_routine)(struct mbuf *, ...))
+tp_error_emit(error, sref, faddr, laddr, erdata, erlen, tpcb, cons_channel,
+	      dgout_routine)
+	int             error;
+	u_long          sref;
+	struct sockaddr_iso *faddr, *laddr;
+	struct mbuf    *erdata;
+	int             erlen;
+	struct tp_pcb  *tpcb;
+	caddr_t         cons_channel;
+        int 	      (*dgout_routine) __P((struct mbuf *, ...));
 {
 	int             dutype;
 	int             datalen = 0;
@@ -1069,7 +1067,7 @@ tp_error_emit(
 		lcp->lcd_flags |= X25_DG_CIRCUIT;
 #ifdef ARGO_DEBUG
 		if (argo_debug[D_ERROR_EMIT]) {
-			printf("OUTPUT: dutype %#x channel %p\n",
+			printf("OUTPUT: dutype 0x%x channel 0x%x\n",
 			       dutype, cons_channel);
 		}
 #endif

@@ -1,4 +1,4 @@
-/*	$NetBSD: jobs.c,v 1.8 2004/07/07 19:20:09 mycroft Exp $	*/
+/*	$NetBSD: jobs.c,v 1.7 2003/06/23 11:38:58 agc Exp $	*/
 
 /*
  * Process and job control
@@ -15,7 +15,7 @@
  *
  * Notes regarding the copious ifdefs:
  *	- JOB_SIGS is independent of JOBS - it is defined if there are modern
- *	  signal and wait routines available.  This is preferred, even when
+ *	  signal and wait routines available.  This is prefered, even when
  *	  JOBS is not defined, since the shell will not otherwise notice when
  *	  background jobs die until the shell waits for a foreground process
  *	  to die.
@@ -26,7 +26,7 @@
 #include <sys/cdefs.h>
 
 #ifndef lint
-__RCSID("$NetBSD: jobs.c,v 1.8 2004/07/07 19:20:09 mycroft Exp $");
+__RCSID("$NetBSD: jobs.c,v 1.7 2003/06/23 11:38:58 agc Exp $");
 #endif
 
 
@@ -129,7 +129,7 @@ struct proc {
 #define JF_CHANGED	0x040	/* process has changed state */
 #define JF_KNOWN	0x080	/* $! referenced */
 #define JF_ZOMBIE	0x100	/* known, unwaited process */
-#define JF_REMOVE	0x200	/* flagged for removal (j_jobs()/j_noityf()) */
+#define JF_REMOVE	0x200	/* flaged for removal (j_jobs()/j_noityf()) */
 #define JF_USETTYMODE	0x400	/* tty mode saved if process exits normally */
 #define JF_SAVEDTTYPGRP	0x800	/* j->saved_ttypgrp is valid */
 
@@ -635,10 +635,8 @@ exchild(t, flags, close_fd)
 				SS_RESTORE_IGN|SS_FORCE);
 			if (!(flags & (XPIPEI | XCOPROC))) {
 				int fd = open("/dev/null", 0);
-				if (fd != 0) {
-					(void) ksh_dup2(fd, 0, TRUE);
-					close(fd);
-				}
+				(void) ksh_dup2(fd, 0, TRUE);
+				close(fd);
 			}
 		}
 		remove_job(j, "child");	/* in case of `jobs` command */
@@ -1084,7 +1082,7 @@ j_notify()
 #endif /* JOB_SIGS */
 }
 
-/* Return pid of last process in last asynchronous job */
+/* Return pid of last process in last asynchornous job */
 pid_t
 j_async()
 {
@@ -1228,7 +1226,7 @@ j_waitj(j, flags, where)
 			 * a fork/exec instead of an exec (the fork means
 			 * the execed shell gets a different pid from its
 			 * pgrp, so naturally it sets its pgrp and gets hosed
-			 * when it gets foregrounded by the parent shell, which
+			 * when it gets forgrounded by the parent shell, which
 			 * has restored the tty's pgrp to that of the su
 			 * process).
 			 */
@@ -1296,7 +1294,7 @@ j_waitj(j, flags, where)
 	j_systime = j->systime;
 	rv = j->status;
 
-	if (!(flags & JW_ASYNCNOTIFY)
+	if (!(flags & JW_ASYNCNOTIFY) 
 	    && (!Flag(FMONITOR) || j->state != PSTOPPED))
 	{
 		j_print(j, JP_SHORT, shl_out);
@@ -1437,12 +1435,12 @@ check_job(j)
 
 #ifdef KSH
 	/* Note when co-process dies: can't be done in j_wait() nor
-	 * remove_job() since neither may be called for non-interactive
+	 * remove_job() since neither may be called for non-interactive 
 	 * shells.
 	 */
 	if (j->state == PEXITED || j->state == PSIGNALLED) {
 		/* No need to keep co-process input any more
-		 * (at least, this is what ksh93d thinks)
+		 * (at leasst, this is what ksh93d thinks)
 		 */
 		if (coproc.job == j) {
 			coproc.job = (void *) 0;
@@ -1544,17 +1542,16 @@ j_print(j, how, shf)
 		coredumped = 0;
 		switch (p->state) {
 		case PRUNNING:
-			strlcpy(buf, "Running", sizeof buf);
+			strcpy(buf, "Running");
 			break;
 		case PSTOPPED:
-			strlcpy(buf, sigtraps[WSTOPSIG(p->status)].mess,
-			    sizeof buf);
+			strcpy(buf, sigtraps[WSTOPSIG(p->status)].mess);
 			break;
 		case PEXITED:
 			if (how == JP_SHORT)
 				buf[0] = '\0';
 			else if (WEXITSTATUS(p->status) == 0)
-				strlcpy(buf, "Done", sizeof buf);
+				strcpy(buf, "Done");
 			else
 				shf_snprintf(buf, sizeof(buf), "Done (%d)",
 					WEXITSTATUS(p->status));
@@ -1570,8 +1567,7 @@ j_print(j, how, shf)
 				|| WTERMSIG(p->status) == SIGPIPE)) {
 				buf[0] = '\0';
 			} else
-				strlcpy(buf, sigtraps[WTERMSIG(p->status)].mess,
-				    sizeof buf);
+				strcpy(buf, sigtraps[WTERMSIG(p->status)].mess);
 			break;
 		}
 
@@ -1652,27 +1648,27 @@ j_lookup(cp, ecodep)
 		return (Job *) 0;
 	}
 	switch (*++cp) {
-	case '\0': /* non-standard */
-	case '+':
-	case '%':
+	  case '\0': /* non-standard */
+	  case '+':
+	  case '%':
 		if (job_list != (Job *) 0)
 			return job_list;
 		break;
 
-	case '-':
+	  case '-':
 		if (job_list != (Job *) 0 && job_list->next)
 			return job_list->next;
 		break;
 
-	case '0': case '1': case '2': case '3': case '4':
-	case '5': case '6': case '7': case '8': case '9':
+	  case '0': case '1': case '2': case '3': case '4':
+	  case '5': case '6': case '7': case '8': case '9':
 		job = atoi(cp);
 		for (j = job_list; j != (Job *) 0; j = j->next)
 			if (j->job == job)
 				return j;
 		break;
 
-	case '?':		/* %?string */
+	  case '?':		/* %?string */
 		last_match = (Job *) 0;
 		for (j = job_list; j != (Job *) 0; j = j->next)
 			for (p = j->proc_list; p != (Proc *) 0; p = p->next)
@@ -1688,7 +1684,7 @@ j_lookup(cp, ecodep)
 			return last_match;
 		break;
 
-	default:		/* %string */
+	  default:		/* %string */
 		len = strlen(cp);
 		last_match = (Job *) 0;
 		for (j = job_list; j != (Job *) 0; j = j->next)

@@ -1,4 +1,4 @@
-/* $NetBSD: vga.c,v 1.80 2004/08/13 04:03:38 mycroft Exp $ */
+/* $NetBSD: vga.c,v 1.71.4.5 2004/08/22 13:44:54 tron Exp $ */
 
 /*
  * Copyright (c) 1995, 1996 Carnegie-Mellon University.
@@ -27,15 +27,8 @@
  * rights to redistribute these changes.
  */
 
-/* for WSCONS_SUPPORT_PCVTFONTS and WSDISPLAY_CHARFUNCS */
-#include "opt_wsdisplay_compat.h"
-/* for WSDISPLAY_CUSTOM_BORDER */
-#include "opt_wsdisplay_border.h"
-/* for WSDISPLAY_CUSTOM_OUTPUT */
-#include "opt_wsmsgattrs.h"
-
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vga.c,v 1.80 2004/08/13 04:03:38 mycroft Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vga.c,v 1.71.4.5 2004/08/22 13:44:54 tron Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -57,6 +50,9 @@ __KERNEL_RCSID(0, "$NetBSD: vga.c,v 1.80 2004/08/13 04:03:38 mycroft Exp $");
 #include <dev/wsfont/wsfont.h>
 
 #include <dev/ic/pcdisplay.h>
+
+/* for WSCONS_SUPPORT_PCVTFONTS and WSDISPLAY_CHARFUNCS */
+#include "opt_wsdisplay_compat.h"
 
 int vga_no_builtinfont = 0;
 
@@ -138,12 +134,7 @@ const struct wsdisplay_emulops vga_emulops = {
 	pcdisplay_erasecols,
 	vga_copyrows,
 	pcdisplay_eraserows,
-	vga_allocattr,
-#ifdef WSDISPLAY_CUSTOM_OUTPUT
-	pcdisplay_replaceattr,
-#else
-	NULL,
-#endif
+	vga_allocattr
 };
 
 /*
@@ -274,10 +265,6 @@ static int	vga_load_font(void *, void *, struct wsdisplay_font *);
 static int	vga_getwschar(void *, struct wsdisplay_char *);
 static int	vga_putwschar(void *, struct wsdisplay_char *);
 #endif /* WSDISPLAY_CHARFUNCS */
-#ifdef WSDISPLAY_CUSTOM_BORDER
-static u_int	vga_getborder(void *);
-static int	vga_setborder(void *, u_int);
-#endif /* WSDISPLAY_CUSTOM_BORDER */
 
 void vga_doswitch(struct vga_config *);
 
@@ -301,13 +288,6 @@ const struct wsdisplay_accessops vga_accessops = {
 #else
 	NULL,
 #endif
-#ifdef WSDISPLAY_CUSTOM_BORDER
-	vga_getborder,
-	vga_setborder,
-#else /* WSDISPLAY_CUSTOM_BORDER */
-	NULL,
-	NULL,
-#endif /* WSDISPLAY_CUSTOM_BORDER */
 };
 
 /*
@@ -496,10 +476,6 @@ vga_init_screen(struct vga_config *vc, struct vgascreen *scr,
 	if (!vc->hdl.vh_mono)
 		/*
 		 * DEC firmware uses a blue background.
-		 * XXX These should be specified as kernel options for
-		 * XXX alpha only, not hardcoded here (which is wrong
-		 * XXX anyway because the emulation layer will assume
-		 * XXX the default attribute is white on black).
 		 */
 		res = vga_allocattr(scr, WSCOL_WHITE, WSCOL_BLUE,
 		    WSATTR_WSCOLORS, attrp);
@@ -590,10 +566,6 @@ vga_init(struct vga_config *vc, bus_space_tag_t iot, bus_space_tag_t memt)
 	TAILQ_INSERT_HEAD(&vc->vc_fontlist, &vga_builtinfont, next);
 
 	vc->currentfontset1 = vc->currentfontset2 = 0;
-
-	if (!vh->vh_mono && (u_int)WSDISPLAY_BORDER_COLOR < sizeof(fgansitopc))
-		_vga_attr_write(vh, VGA_ATC_OVERSCAN,
-		                fgansitopc[WSDISPLAY_BORDER_COLOR]);
 }
 
 void
@@ -1420,39 +1392,3 @@ vga_putwschar(void *cookie, struct wsdisplay_char *wschar)
 	return (pcdisplay_putwschar(&scr->pcs, wschar));
 }
 #endif /* WSDISPLAY_CHARFUNCS */
-
-#ifdef WSDISPLAY_CUSTOM_BORDER
-static u_int
-vga_getborder(void *cookie)
-{
-	struct vgascreen *scr = cookie;
-	struct vga_handle *vh;
-	u_int idx;
-	u_int8_t value;
-
-	if (scr == NULL) return EINVAL;
-	vh = &scr->cfg->hdl;
-	if (vh->vh_mono) return ENODEV;
-
-	value = _vga_attr_read(vh, VGA_ATC_OVERSCAN);
-	for (idx = 0; idx < sizeof(fgansitopc); idx++)
-		if (fgansitopc[idx] == value)
-			break;
-	return idx == sizeof(fgansitopc) ? 0 : idx;
-}
-
-static int
-vga_setborder(void *cookie, u_int value)
-{
-	struct vgascreen *scr = cookie;
-	struct vga_handle *vh;
-
-	if (scr == NULL) return EINVAL;
-	vh = &scr->cfg->hdl;
-	if (vh->vh_mono) return ENODEV;
-	if (value >= sizeof(fgansitopc)) return EINVAL;
-
-	_vga_attr_write(vh, VGA_ATC_OVERSCAN, fgansitopc[value]);
-	return (0);
-}
-#endif /* WSDISPLAY_CUSTOM_BORDER */

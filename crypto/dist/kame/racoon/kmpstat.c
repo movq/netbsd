@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: kmpstat.c,v 1.9 2004/06/17 03:42:55 itojun Exp $");
+__RCSID("$NetBSD: kmpstat.c,v 1.8.2.1 2004/06/17 12:38:10 tron Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>

@@ -1,4 +1,4 @@
-/*	$NetBSD: cmpci.c,v 1.26 2004/10/29 12:57:18 yamt Exp $	*/
+/*	$NetBSD: cmpci.c,v 1.23 2003/12/06 09:32:22 itohy Exp $	*/
 
 /*
  * Copyright (c) 2000, 2001 The NetBSD Foundation, Inc.
@@ -43,7 +43,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cmpci.c,v 1.26 2004/10/29 12:57:18 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cmpci.c,v 1.23 2003/12/06 09:32:22 itohy Exp $");
 
 #if defined(AUDIO_DEBUG) || defined(DEBUG)
 #define DPRINTF(x) if (cmpcidebug) printf x
@@ -165,7 +165,7 @@ static int cmpci_trigger_input __P((void *, void *, void *, int,
 				    void (*)(void *), void *,
 				    struct audio_params *));
 
-static const struct audio_hw_if cmpci_hw_if = {
+static struct audio_hw_if cmpci_hw_if = {
 	cmpci_open,		/* open */
 	cmpci_close,		/* close */
 	NULL,			/* drain */
@@ -416,7 +416,7 @@ cmpci_attach(parent, self, aux)
 
 	sc->sc_id = pa->pa_id;
 	sc->sc_class = pa->pa_class;
-	pci_devinfo(pa->pa_id, pa->pa_class, 0, devinfo, sizeof(devinfo));
+	pci_devinfo(pa->pa_id, pa->pa_class, 0, devinfo);
 	aprint_normal(": %s (rev. 0x%02x)\n", devinfo,
 	    PCI_REVISION(sc->sc_class));
 	switch (PCI_PRODUCT(sc->sc_id)) {
@@ -1532,7 +1532,7 @@ cmpci_set_out_ports(sc)
 		cmpci_reg_clear_4(sc, CMPCI_REG_LEGACY_CTRL,
 				CMPCI_REG_XSPDIF_ENABLE);
 
-	/* SPDIF monitor (digital to analog output) */
+	/* SPDIF monitor (digital to alalog output) */
 	if (CMPCI_ISCAP(sc, SPDIN_MONITOR)) {
 		v = sc->sc_gain[CMPCI_MONITOR_DAC][CMPCI_LR];
 		if (!(v & CMPCI_MONDAC_ENABLE))

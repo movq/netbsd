@@ -1,4 +1,4 @@
-/*	$NetBSD: sysctl.c,v 1.95 2004/10/17 11:04:39 jdolecek Exp $ */
+/*	$NetBSD: sysctl.c,v 1.86.2.10 2004/04/28 05:30:41 jmc Exp $ */
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -72,7 +72,7 @@ __COPYRIGHT(
 #if 0
 static char sccsid[] = "@(#)sysctl.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: sysctl.c,v 1.95 2004/10/17 11:04:39 jdolecek Exp $");
+__RCSID("$NetBSD: sysctl.c,v 1.86.2.10 2004/04/28 05:30:41 jmc Exp $");
 #endif
 #endif /* not lint */
 
@@ -124,8 +124,8 @@ __RCSID("$NetBSD: sysctl.c,v 1.95 2004/10/17 11:04:39 jdolecek Exp $");
 /*
  * generic routines
  */
-static const struct handlespec *findprinter(const int *, u_int);
-static const struct handlespec *findwriter(const int *, u_int);
+static struct handlespec *findprinter(const int *, u_int);
+static struct handlespec *findwriter(const int *, u_int);
 static void print_tree(int *, u_int, struct sysctlnode *, u_int, int);
 static void write_number(int *, u_int, struct sysctlnode *, char *);
 static void write_string(int *, u_int, struct sysctlnode *, char *);
@@ -169,7 +169,7 @@ static void proc_limit(HANDLER_PROTO);
 static void machdep_diskinfo(HANDLER_PROTO);
 #endif /* CPU_DISKINFO */
 
-static const struct handlespec {
+struct handlespec {
 	int ps_name[CTL_MAXNAME];
 	void (*ps_p)(HANDLER_PROTO);
 	void (*ps_w)(HANDLER_PROTO);
@@ -367,10 +367,10 @@ main(int argc, char *argv[])
  * writing) of a particular node
  * ********************************************************************
  */
-static const struct handlespec *
+static struct handlespec *
 findprinter(const int *name, u_int namelen)
 {
-	const struct handlespec *p;
+	struct handlespec *p;
 	int i, j;
 
 	if (namelen < 1)
@@ -389,10 +389,10 @@ findprinter(const int *name, u_int namelen)
 	return (NULL);
 }
 
-static const struct handlespec *
+static struct handlespec *
 findwriter(const int *name, u_int namelen)
 {
-	const struct handlespec *p;
+	struct handlespec *p;
 	int i, j;
 
         if (namelen < 1)
@@ -492,7 +492,7 @@ print_tree(int *name, u_int namelen, struct sysctlnode *pnode, u_int type,
 	int rc, ni;
 	size_t sz;
 	char *sp, *dp, n[20];
-	const struct handlespec *p;
+	struct handlespec *p;
 
 	sp = &gsname[strlen(gsname)];
 	dp = &gdname[strlen(gdname)];
@@ -723,7 +723,7 @@ static void
 parse(char *l)
 {
 	struct sysctlnode *node;
-	const struct handlespec *w;
+	struct handlespec *w;
 	int name[CTL_MAXNAME], dodesc = 0;
 	u_int namelen, type;
 	char *key, *value, *dot;

@@ -1,4 +1,4 @@
-/*	$NetBSD: move.c,v 1.12 2004/08/27 09:07:08 christos Exp $	*/
+/*	$NetBSD: move.c,v 1.11 2003/08/07 09:37:36 agc Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)move.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: move.c,v 1.12 2004/08/27 09:07:08 christos Exp $");
+__RCSID("$NetBSD: move.c,v 1.11 2003/08/07 09:37:36 agc Exp $");
 #endif
 #endif /* not lint */
 
@@ -90,13 +90,9 @@ get_move()
 #endif
 		else {
 over:
-			if (Auto_bot) {
+			if (Auto_bot)
 				c = automove();
-				if (!Jump) {
-					usleep(10000);
-					refresh();
-				}
-			} else
+			else
 				c = getchar();
 			if (isdigit(c)) {
 				Count = (c - '0');
@@ -185,7 +181,7 @@ teleport:
 			flush_in();
 			goto ret;
 		  case CTRL('L'):
-			refresh();
+			wrefresh(curscr);
 			break;
 		  case EOF:
 			break;

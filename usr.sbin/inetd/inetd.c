@@ -1,4 +1,4 @@
-/*	$NetBSD: inetd.c,v 1.99 2004/11/28 05:40:47 christos Exp $	*/
+/*	$NetBSD: inetd.c,v 1.95 2004/01/25 10:00:17 cube Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2003 The NetBSD Foundation, Inc.
@@ -73,7 +73,7 @@ __COPYRIGHT("@(#) Copyright (c) 1983, 1991, 1993, 1994\n\
 #if 0
 static char sccsid[] = "@(#)inetd.c	8.4 (Berkeley) 4/13/94";
 #else
-__RCSID("$NetBSD: inetd.c,v 1.99 2004/11/28 05:40:47 christos Exp $");
+__RCSID("$NetBSD: inetd.c,v 1.95 2004/01/25 10:00:17 cube Exp $");
 #endif
 #endif /* not lint */
 
@@ -550,10 +550,9 @@ main(int argc, char *argv[])
 			if (ev->ident != sep->se_fd)
 				continue;
 			if (debug)
-				fprintf(stderr, "someone wants %s\n",
-				    sep->se_service);
+				fprintf(stderr, "someone wants %s\n", sep->se_service);
 			if (!sep->se_wait && sep->se_socktype == SOCK_STREAM) {
-				/* XXX here do the libwrap check-before-accept*/
+				/* XXX here do the libwrap check-before-accept */
 				ctrl = accept(sep->se_fd, NULL, NULL);
 				if (debug)
 					fprintf(stderr, "accept, ctrl %d\n",
@@ -596,10 +595,8 @@ spawn(struct servtab *sep, int ctrl)
 				sep->se_count = 1;
 			} else {
 				syslog(LOG_ERR,
-				    "%s/%s max spawn rate (%d in %d seconds) "
-				    "exceeded; service not started",
-				    sep->se_service, sep->se_proto,
-				    sep->se_max, CNT_INTVL);
+			"%s/%s server failing (looping), service terminated\n",
+				    sep->se_service, sep->se_proto);
 				if (!sep->se_wait && sep->se_socktype ==
 				    SOCK_STREAM)
 					close(ctrl);
@@ -886,8 +883,7 @@ config(void)
 			s = socket(sep->se_family, SOCK_DGRAM, 0);
 			if (s < 0) {
 				syslog(LOG_WARNING,
-				    "%s/%s: %s: the address family is not "
-				    "supported by the kernel",
+"%s/%s: %s: the address family is not supported by the kernel",
 				    sep->se_service, sep->se_proto,
 				    sep->se_hostaddr);
 				sep->se_checked = 0;
@@ -1049,10 +1045,7 @@ goaway(void)
 static void
 setup(struct servtab *sep)
 {
-	int		on = 1;
-#ifdef INET6
-	int		off = 0;
-#endif
+	int		on = 1, off = 0;
 	struct kevent	*ev;
 
 	if ((sep->se_fd = socket(sep->se_family, sep->se_socktype, 0)) < 0) {
@@ -1289,7 +1282,7 @@ more:
 		/* lines starting with #@ is not a comment, but the policy */
 		if (cp[0] == '#' && cp[1] == '@') {
 			char *p;
-			for (p = cp + 2; p && *p && isspace((unsigned char)*p); p++)
+			for (p = cp + 2; p && *p && isspace(*p); p++)
 				;
 			if (*p == '\0') {
 				if (policy)
@@ -1420,7 +1413,7 @@ do { \
 
 #define	GETVAL(arg) \
 do { \
-	if (!isdigit((unsigned char)*(arg))) \
+	if (!isdigit(*(arg))) \
 		MALFORMED(arg); \
 	val = strtol((arg), &cp0, 10); \
 	if (cp0 != NULL) { \
@@ -1762,7 +1755,7 @@ nextline(FILE *fd)
 static char *
 newstr(char *cp)
 {
-	if ((cp = strdup((cp != NULL) ? cp : "")) != NULL)
+	if ((cp = strdup((cp !=NULL )? cp : "")) != NULL)
 		return (cp);
 	syslog(LOG_ERR, "strdup: %m");
 	exit(1);
@@ -1773,14 +1766,15 @@ inetd_setproctitle(char *a, int s)
 {
 	socklen_t size;
 	struct sockaddr_storage ss;
-	char hbuf[NI_MAXHOST], *hp;
+	char hbuf[NI_MAXHOST];
 
 	size = sizeof(ss);
 	if (getpeername(s, (struct sockaddr *)&ss, &size) == 0) {
-		if (getnameinfo((struct sockaddr *)&ss, size, hp = hbuf,
-		    sizeof(hbuf), NULL, 0, niflags) != 0)
-			hp = "?";
-		setproctitle("-%s [%s]", a, hp);
+		if (getnameinfo((struct sockaddr *)&ss, size, hbuf,
+		    sizeof(hbuf), NULL, 0, niflags) == 0)
+			setproctitle("-%s [%s]", a, hbuf);
+		else
+			setproctitle("-%s [?]", a);
 	} else
 		setproctitle("-%s", a);
 }
@@ -2446,9 +2440,7 @@ port_good_dg(struct sockaddr *sa)
 	case AF_INET:
 		in.s_addr = ntohl(((struct sockaddr_in *)sa)->sin_addr.s_addr);
 		port = ntohs(((struct sockaddr_in *)sa)->sin_port);
-#ifdef INET6
 	v4chk:
-#endif
 		if (IN_MULTICAST(in.s_addr))
 			goto bad;
 		switch ((in.s_addr & 0xff000000) >> 24) {

@@ -1,5 +1,5 @@
 %{
-/*	$NetBSD: gram.y,v 1.51 2004/06/05 03:21:53 thorpej Exp $	*/
+/*	$NetBSD: gram.y,v 1.47 2003/11/19 21:10:27 christos Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -99,22 +99,11 @@ static	struct nvlist *mk_ns(const char *, struct nvlist *);
 	int64_t	val;
 }
 
-%token	AND AT ATTACH
-%token	BLOCK BUILD
-%token	CHAR CINCLUDE COMPILE_WITH CONFIG
-%token	DEFFS DEFINE DEFOPT DEFPARAM DEFFLAG DEFPSEUDO DEVICE DEVCLASS DUMPS
-%token	DEVICE_MAJOR
-%token	ENDFILE
-%token	XFILE FILE_SYSTEM FLAGS
-%token	IDENT INCLUDE
-%token	XMACHINE MAJOR MAKEOPTIONS MAXUSERS MAXPARTITIONS MINOR
-%token	NEEDS_COUNT NEEDS_FLAG NO
-%token	XOBJECT ON OPTIONS
-%token	PACKAGE PLUSEQ PREFIX PSEUDO_DEVICE
-%token	ROOT
-%token	SOURCE
-%token	TYPE
-%token	WITH
+%token	AND AT ATTACH BUILD CINCLUDE COMPILE_WITH CONFIG DEFFS DEFINE DEFOPT 
+%token	DEFPARAM DEFFLAG DEFPSEUDO DEVICE DEVCLASS DUMPS ENDFILE XFILE XOBJECT
+%token	FILE_SYSTEM FLAGS IDENT INCLUDE XMACHINE MAJOR MAKEOPTIONS
+%token	MAXUSERS MAXPARTITIONS MINOR ON OPTIONS PACKAGE PREFIX PSEUDO_DEVICE
+%token	ROOT SOURCE TYPE WITH NEEDS_COUNT NEEDS_FLAG NO BLOCK CHAR DEVICE_MAJOR
 %token	<num> NUMBER
 %token	<str> PATHNAME QSTRING WORD EMPTY
 %token	ENDDEFS
@@ -299,7 +288,6 @@ one_def:
 					{ defdevattach($5, $2, $4, $6); } |
 	MAXPARTITIONS NUMBER		{ maxpartitions = $2.val; } |
 	MAXUSERS NUMBER NUMBER NUMBER	{ setdefmaxusers($2.val, $3.val, $4.val); } |
-	MAKEOPTIONS condmkopt_list |
 	DEFPSEUDO devbase interface_opt attrs_opt
 					{ defdev($2, $3, $4, 1); } |
 	MAJOR '{' majorlist '}';
@@ -480,15 +468,7 @@ mkopt_list:
 	mkoption;
 
 mkoption:
-	WORD '=' value			{ addmkoption($1, $3); } |
-	WORD PLUSEQ value		{ appendmkoption($1, $3); };
-
-condmkopt_list:
-	condmkopt_list ',' condmkoption |
-	condmkoption;
-
-condmkoption:
-	WORD WORD PLUSEQ value		{ appendcondmkoption($1, $2, $4); };
+	WORD '=' value			{ addmkoption($1, $3); }
 
 no_mkopt_list:
 	no_mkopt_list ',' no_mkoption |

@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# $NetBSD: postfix,v 1.9 2004/08/13 18:08:03 mycroft Exp $
+# $NetBSD: postfix,v 1.7 2003/01/31 06:47:16 lukem Exp $
 #
 
 # PROVIDE: mail
@@ -8,16 +8,15 @@
 #	we make mail start late, so that things like .forward's are not
 #	processed until the system is fully operational
 
-$_rc_subr_loaded . /etc/rc.subr
+. /etc/rc.subr
 
 name="postfix"
 rcvar=$name
-postfix_command="/usr/sbin/${name}"
 required_files="/etc/${name}/main.cf"
 start_precmd="postfix_precmd"
-start_cmd="postfix_op"
-stop_cmd="postfix_op"
-reload_cmd="postfix_op"
+start_cmd="${name} "'${rc_arg}'
+stop_cmd=$start_cmd
+reload_cmd=$start_cmd
 extra_commands="reload"
 spooletcdir="/var/spool/${name}/etc"
 required_dirs=$spooletcdir
@@ -36,11 +35,6 @@ postfix_precmd()
 			    cp -p /etc/$f ${spooletcdir}/$f
 		fi
 	done
-}
-
-postfix_op()
-{
-	${postfix_command} ${rc_arg}
 }
 
 load_rc_config $name

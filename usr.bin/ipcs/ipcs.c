@@ -1,4 +1,4 @@
-/*	$NetBSD: ipcs.c,v 1.33 2004/09/15 19:45:17 hubertf Exp $	*/
+/*	$NetBSD: ipcs.c,v 1.32.2.1 2004/09/16 03:28:57 jmc Exp $	*/
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.

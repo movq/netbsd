@@ -1,4 +1,4 @@
-/*	$NetBSD: uipc_syscalls.c,v 1.89 2004/11/30 04:25:44 christos Exp $	*/
+/*	$NetBSD: uipc_syscalls.c,v 1.86.2.1 2004/05/20 09:50:51 tron Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1989, 1990, 1993
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uipc_syscalls.c,v 1.89 2004/11/30 04:25:44 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uipc_syscalls.c,v 1.86.2.1 2004/05/20 09:50:51 tron Exp $");
 
 #include "opt_ktrace.h"
 #include "opt_pipe.h"
@@ -64,7 +64,7 @@ __KERNEL_RCSID(0, "$NetBSD: uipc_syscalls.c,v 1.89 2004/11/30 04:25:44 christos 
 /*
  * System call interface to the socket abstraction.
  */
-extern const struct fileops socketops;
+extern	struct fileops socketops;
 
 int
 sys_socket(struct lwp *l, void *v, register_t *retval)
@@ -90,7 +90,7 @@ sys_socket(struct lwp *l, void *v, register_t *retval)
 	fp->f_type = DTYPE_SOCKET;
 	fp->f_ops = &socketops;
 	error = socreate(SCARG(uap, domain), &so, SCARG(uap, type),
-			 SCARG(uap, protocol), p);
+			 SCARG(uap, protocol));
 	if (error) {
 		FILE_UNUSE(fp, p);
 		fdremove(fdp, fd);
@@ -288,7 +288,7 @@ sys_connect(struct lwp *l, void *v, register_t *retval)
 	if (error)
 		goto out;
 	MCLAIM(nam, so->so_mowner);
-	error = soconnect(so, nam, p);
+	error = soconnect(so, nam);
 	if (error)
 		goto bad;
 	if ((so->so_state & SS_NBIO) && (so->so_state & SS_ISCONNECTING)) {
@@ -340,11 +340,11 @@ sys_socketpair(struct lwp *l, void *v, register_t *retval)
 	p = l->l_proc;
 	fdp = p->p_fd;
 	error = socreate(SCARG(uap, domain), &so1, SCARG(uap, type),
-			 SCARG(uap, protocol), p);
+			 SCARG(uap, protocol));
 	if (error)
 		return (error);
 	error = socreate(SCARG(uap, domain), &so2, SCARG(uap, type),
-			 SCARG(uap, protocol), p);
+			 SCARG(uap, protocol));
 	if (error)
 		goto free1;
 	/* falloc() will use the descriptor for us */
@@ -535,7 +535,7 @@ sendit(struct proc *p, int s, struct msghdr *mp, int flags, register_t *retsize)
 	}
 #endif
 	len = auio.uio_resid;
-	error = (*so->so_send)(so, to, &auio, NULL, control, flags, p);
+	error = (*so->so_send)(so, to, &auio, NULL, control, flags);
 	if (error) {
 		if (auio.uio_resid != len && (error == ERESTART ||
 		    error == EINTR || error == EWOULDBLOCK))
@@ -907,9 +907,9 @@ sys_pipe(struct lwp *l, void *v, register_t *retval)
 
 	p = l->l_proc;
 	fdp = p->p_fd;
-	if ((error = socreate(AF_LOCAL, &rso, SOCK_STREAM, 0, p)) != 0)
+	if ((error = socreate(AF_LOCAL, &rso, SOCK_STREAM, 0)) != 0)
 		return (error);
-	if ((error = socreate(AF_LOCAL, &wso, SOCK_STREAM, 0, p)) != 0)
+	if ((error = socreate(AF_LOCAL, &wso, SOCK_STREAM, 0)) != 0)
 		goto free1;
 	/* remember this socket pair implements a pipe */
 	wso->so_state |= SS_ISAPIPE;

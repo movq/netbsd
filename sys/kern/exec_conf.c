@@ -1,4 +1,4 @@
-/*	$NetBSD: exec_conf.c,v 1.87 2004/09/14 17:25:37 jdolecek Exp $	*/
+/*	$NetBSD: exec_conf.c,v 1.84 2003/10/19 07:52:22 manu Exp $	*/
 
 /*
  * Copyright (c) 1993, 1994 Christopher G. Demetriou
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: exec_conf.c,v 1.87 2004/09/14 17:25:37 jdolecek Exp $");
+__KERNEL_RCSID(0, "$NetBSD: exec_conf.c,v 1.84 2003/10/19 07:52:22 manu Exp $");
 
 #include "opt_execfmt.h"
 #include "opt_compat_freebsd.h"
@@ -45,6 +45,7 @@ __KERNEL_RCSID(0, "$NetBSD: exec_conf.c,v 1.87 2004/09/14 17:25:37 jdolecek Exp 
 #include "opt_compat_darwin.h"
 #include "opt_compat_svr4.h"
 #include "opt_compat_netbsd32.h"
+#include "opt_compat_aout.h"
 #include "opt_compat_aout_m68k.h"
 #include "opt_compat_vax1k.h"
 #include "opt_compat_pecoff.h"
@@ -178,6 +179,9 @@ int ELF64NAME2(netbsd,probe)(struct proc *, struct exec_package *,
 #endif
 
 extern const struct emul emul_netbsd;
+#ifdef COMPAT_AOUT
+extern const struct emul emul_netbsd_aout;
+#endif
 #ifdef COMPAT_AOUT_M68K
 extern const struct emul emul_netbsd_aoutm68k;
 #endif
@@ -216,7 +220,9 @@ const struct execsw execsw_builtin[] = {
 	{ sizeof(struct exec),
 	  exec_aout_makecmds,
 	  { NULL },
-#if defined(COMPAT_AOUT_M68K)
+#ifdef COMPAT_AOUT
+	  &emul_netbsd_aout,
+#elif defined(COMPAT_AOUT_M68K)
 	  &emul_netbsd_aoutm68k,
 #else
 	  &emul_netbsd,
@@ -512,7 +518,7 @@ const struct execsw execsw_builtin[] = {
 	  exec_darwin_copyargs,
 	  NULL,
 	  coredump_netbsd,
-	  darwin_exec_setup_stack },
+	  exec_setup_stack },
 #endif
 
 #ifdef COMPAT_MACH

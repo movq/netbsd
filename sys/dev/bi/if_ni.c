@@ -1,4 +1,4 @@
-/*	$NetBSD: if_ni.c,v 1.23 2004/10/30 18:08:35 thorpej Exp $ */
+/*	$NetBSD: if_ni.c,v 1.22 2003/11/06 00:25:50 he Exp $ */
 /*
  * Copyright (c) 2000 Ludd, University of Lule}, Sweden. All rights reserved.
  *
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_ni.c,v 1.23 2004/10/30 18:08:35 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_ni.c,v 1.22 2003/11/06 00:25:50 he Exp $");
 
 #include "opt_inet.h"
 #include "bpfilter.h"
@@ -761,8 +761,7 @@ niioctl(ifp, cmd, data)
 			 * Multicast list has changed; set the hardware filter
 			 * accordingly.
 			 */
-			if (ifp->if_flags & IFF_RUNNING)
-				ni_setup(sc);
+			ni_setup(sc);
 			error = 0;
 		}
 		break;

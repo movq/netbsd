@@ -1,4 +1,4 @@
-#	$NetBSD: ZAO425,v 1.15 2004/11/10 17:54:04 christos Exp $
+#	$NetBSD: ZAO425,v 1.12.2.1 2004/07/15 20:20:20 he Exp $
 #
 #	ZAO425 -- Intel IXP425
 #
@@ -63,7 +63,6 @@ options 	INET6		# IPV6
 #options 	IPSEC_ESP	# IP security (encryption part; define w/ IPSEC)
 #options 	IPSEC_DEBUG	# debug for IP security
 #options 	MROUTING	# IP multicast routing
-#options 	PIM		# Protocol Independent Multicast
 #options 	NS		# XNS
 #options 	NSIP		# XNS tunneling over IP
 #options 	ISO,TPIP	# OSI
@@ -92,7 +91,6 @@ options 	COMPAT_14	# NetBSD 1.4 compatibility.
 #options 	COMPAT_10	# NetBSD 1.0 compatibility.
 #options 	COMPAT_09	# NetBSD 0.9 compatibility.
 #options 	TCP_COMPAT_42	# 4.2BSD TCP/IP bug compat. Not recommended.
-options		COMPAT_BSDPTY	# /dev/[pt]ty?? ptys.
 
 # Shared memory options
 

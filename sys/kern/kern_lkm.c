@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_lkm.c,v 1.78 2004/10/25 23:37:58 peter Exp $	*/
+/*	$NetBSD: kern_lkm.c,v 1.72 2004/03/23 13:22:32 junyoung Exp $	*/
 
 /*
  * Copyright (c) 1994 Christopher G. Demetriou
@@ -41,7 +41,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_lkm.c,v 1.78 2004/10/25 23:37:58 peter Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_lkm.c,v 1.72 2004/03/23 13:22:32 junyoung Exp $");
 
 #include "opt_ddb.h"
 #include "opt_malloclog.h"
@@ -62,7 +62,6 @@ __KERNEL_RCSID(0, "$NetBSD: kern_lkm.c,v 1.78 2004/10/25 23:37:58 peter Exp $");
 #include <sys/syscallargs.h>
 #include <sys/conf.h>
 #include <sys/ksyms.h>
-#include <sys/device.h>
 
 #include <sys/lkm.h>
 #include <sys/syscall.h>
@@ -88,6 +87,8 @@ struct vm_map *lkm_map;
 int	lkmdebug = 0;
 #endif
 
+#define PAGESIZE 1024		/* kmem_alloc() allocation quantum */
+
 #define	LKM_ALLOC	0x01
 
 #define	LKMS_IDLE	0x00
@@ -98,12 +99,13 @@ int	lkmdebug = 0;
 static int	lkm_v = 0;
 static int	lkm_state = LKMS_IDLE;
 
-static TAILQ_HEAD(lkms_head, lkm_table) lkmods;	/* table of loaded modules */
+#ifndef MAXLKMS
+#define	MAXLKMS		20
+#endif
+
+static struct lkm_table	lkmods[MAXLKMS];	/* table of loaded modules */
 static struct lkm_table	*curp;			/* global for in-progress ops */
 
-static struct lkm_table *lkmlookup(int, char *, int *);
-static struct lkm_table *lkmalloc(void);
-static void lkmfree(void);
 static void lkmunreserve(void);
 static int _lkm_syscall(struct lkm_table *, int);
 static int _lkm_vfs(struct lkm_table *, int);
@@ -113,7 +115,6 @@ static int _lkm_strmod(struct lkm_table *, int);
 #endif
 static int _lkm_exec(struct lkm_table *, int);
 static int _lkm_compat(struct lkm_table *, int);
-static int _lkm_drv(struct lkm_table *, int);
 
 static int _lkm_checkver(struct lkm_table *);
 
@@ -135,13 +136,15 @@ lkm_init(void)
 	 */
 	if (lkm_map == NULL)
 		lkm_map = kernel_map;
-
-	TAILQ_INIT(&lkmods);
 }
 
 /*ARGSUSED*/
 int
-lkmopen(dev_t dev, int flag, int devtype, struct proc *p)
+lkmopen(dev, flag, devtype, p)
+	dev_t dev;
+	int flag;
+	int devtype;
+	struct proc *p;
 {
 	int error;
 
@@ -170,101 +173,12 @@ lkmopen(dev_t dev, int flag, int devtype, struct proc *p)
 }
 
 /*
- * Look up for a LKM in the list.
- */
-static struct lkm_table *
-lkmlookup(int i, char *name, int *error)
-{
-	struct lkm_table *p;
-	char istr[MAXLKMNAME];
-
-	/*
-	 * p being NULL here implies the list is empty, so any lookup is
-	 * invalid (name based or otherwise). Since the list of modules is
-	 * kept sorted by id, lowest to highest, the id of the last entry
-	 * will be the highest in use.
-	 */
-	p = TAILQ_LAST(&lkmods, lkms_head);
-	if (p == NULL || i > p->id) {
-		*error = EINVAL;
-		return (NULL);
-	}
-
-	if (i < 0) {		/* unload by name */
-		/*
-		 * Copy name and lookup id from all loaded
-		 * modules.  May fail.
-		 */
-		*error = copyinstr(name, istr, MAXLKMNAME - 1, NULL);
-		if (*error)
-			return (NULL);
-		istr[MAXLKMNAME - 1] = '\0';
-
-		TAILQ_FOREACH(p, &lkmods, link) {
-			if (strcmp(istr, p->private.lkm_any->lkm_name) == 0)
-				break;
-		}
-	} else
-		TAILQ_FOREACH(p, &lkmods, link)
-			if (i == p->id)
-				break;
-
-	if (p == NULL)
-		*error = ENOENT;
-
-	return (p);
-}
-
-/*
- * Allocates memory for a new LKM table entry and inserts in the list.
- * Returns NULL on failure.
- */
-static struct lkm_table *
-lkmalloc(void)
-{
-	struct lkm_table *p, *ret;
-	int id = 0;
-
-	ret = malloc(sizeof(struct lkm_table), M_DEVBUF, M_NOWAIT);
-	if (ret == NULL)
-		return (NULL);
-	ret->refcnt = 0;
-	ret->forced = 0;
-
-	/* find the first unused id */
-	TAILQ_FOREACH(p, &lkmods, link) {
-		if (id != p->id)
-			break;
-		id++;
-	}
-	ret->id = id;
-
-	if (p == NULL)
-		TAILQ_INSERT_TAIL(&lkmods, ret, link);
-	else
-		TAILQ_INSERT_BEFORE(p, ret, link);
-
-	return (ret);
-}
-
-/*
- * Frees the current LKM table entry.
- */
-static void
-lkmfree(void)
-{
-	TAILQ_REMOVE(&lkmods, curp, link);
-	free(curp, M_DEVBUF);
-	curp = NULL;
-}
-
-/*
  * Unreserve the memory associated with the current loaded module; done on
  * a coerced close of the lkm device (close on premature exit of modload)
  * or explicitly by modload as a result of a link failure.
  */
 static void
-lkmunreserve(void)
+lkmunreserve()
 {
 
 	if (lkm_state == LKMS_IDLE)
@@ -290,7 +204,11 @@ lkmunreserve(void)
 }
 
 int
-lkmclose(dev_t dev, int flag, int mode, struct proc *p)
+lkmclose(dev, flag, mode, p)
+	dev_t dev;
+	int flag;
+	int mode;
+	struct proc *p;
 {
 
 	if (!(lkm_v & LKM_ALLOC)) {
@@ -302,14 +220,13 @@ lkmclose(dev_t dev, int flag, int mode, struct proc *p)
 	}
 
 	/* do this before waking the herd... */
-	if (curp != NULL && curp->refcnt == 0) {
+	if (curp && !curp->used) {
 		/*
 		 * If we close before setting used, we have aborted
 		 * by way of error or by way of close-on-exit from
 		 * a premature exit of "modload".
 		 */
 		lkmunreserve();	/* coerce state to LKM_IDLE */
-		lkmfree();
 	}
 
 	lkm_v &= ~LKM_ALLOC;
@@ -320,13 +237,20 @@ lkmclose(dev_t dev, int flag, int mode, struct proc *p)
 
 /*ARGSUSED*/
 int
-lkmioctl(dev_t dev, u_long cmd, caddr_t data, int flag, struct proc *p)
+lkmioctl(dev, cmd, data, flag, p)
+	dev_t dev;
+	u_long cmd;
+	caddr_t data;
+	int flag;
+	struct proc *p;
 {
-	int i, error = 0;
+	int error = 0;
+	int i;
 	struct lmc_resrv *resrvp;
 	struct lmc_loadbuf *loadbufp;
 	struct lmc_unload *unloadp;
 	struct lmc_stat	 *statp;
+	char istr[MAXLKMNAME];
 
 	switch(cmd) {
 	case LMRESERV:		/* reserve pages for a module */
@@ -338,23 +262,32 @@ lkmioctl(dev_t dev, u_long cmd, caddr_t data, int flag, struct proc *p)
 
 		resrvp = (struct lmc_resrv *)data;
 
-		curp = lkmalloc();
-		if (curp == NULL) {
-			error = ENOMEM;
+		/*
+		 * Find a free slot.
+		 */
+		for (i = 0; i < MAXLKMS; i++)
+			if (!lkmods[i].used)
+				break;
+		if (i == MAXLKMS) {
+			error = ENOMEM;		/* no slots available */
 			break;
 		}
-		resrvp->slot = curp->id;	/* return slot */
+		curp = &lkmods[i];
+
+		resrvp->slot = i;		/* return slot */
 
 		/*
 		 * Get memory for module
 		 */
 		curp->size = resrvp->size;
+
 		curp->area = LKM_SPACE_ALLOC(curp->size);
+
 		curp->offset = 0;		/* load offset */
 
-		resrvp->addr = curp->area;	/* ret kernel addr */
+		resrvp->addr = curp->area; /* ret kernel addr */
 
-		if (resrvp->sym_size) {
+		if (cmd == LMRESERV && resrvp->sym_size) {
 			curp->sym_size = resrvp->sym_size;
 			curp->sym_symsize = resrvp->sym_symsize;
 			curp->syms = (u_long) LKM_SPACE_ALLOC(curp->sym_size);
@@ -364,7 +297,8 @@ lkmioctl(dev_t dev, u_long cmd, caddr_t data, int flag, struct proc *p)
 			curp->sym_size = 0;
 			curp->syms = 0;
 			curp->sym_offset = 0;
-			resrvp->sym_addr = 0;
+			if (cmd == LMRESERV)
+				resrvp->sym_addr = 0;
 		}
 
 #ifdef DEBUG
@@ -453,8 +387,6 @@ lkmioctl(dev_t dev, u_long cmd, caddr_t data, int flag, struct proc *p)
 			return EPERM;
 
 		lkmunreserve();	/* coerce state to LKM_IDLE */
-		if (curp != NULL)
-			lkmfree();
 #ifdef DEBUG
 		if (lkmdebug & LKMDB_INFO)
 			printf("LKM: LMUNRESERV\n");
@@ -513,7 +445,7 @@ lkmioctl(dev_t dev, u_long cmd, caddr_t data, int flag, struct proc *p)
 			 */
 			lkm_state = LKMS_UNLOADING;	/* for lkmunreserve */
 			lkmunreserve();			/* free memory */
-			lkmfree();			/* free slot */
+			curp->used = 0;			/* free slot */
 #ifdef DEBUG
 			if (lkmdebug & LKMDB_INFO)
 				printf("lkm entry point failed with error %d\n",
@@ -521,8 +453,8 @@ lkmioctl(dev_t dev, u_long cmd, caddr_t data, int flag, struct proc *p)
 #endif /* DEBUG */
 			break;
 		}
-		curp->refcnt++;
 
+		curp->used = 1;
 #ifdef DEBUG
 		if (lkmdebug & LKMDB_INFO)
 			printf("LKM: LMREADY\n");
@@ -539,9 +471,42 @@ lkmioctl(dev_t dev, u_long cmd, caddr_t data, int flag, struct proc *p)
 
 		unloadp = (struct lmc_unload *)data;
 
-		curp = lkmlookup(unloadp->id, unloadp->name, &error);
-		if (curp == NULL)
+		if ((i = unloadp->id) == -1) {		/* unload by name */
+			/*
+			 * Copy name and lookup id from all loaded
+			 * modules.  May fail.
+			 */
+		 	error = copyinstr(unloadp->name, istr, MAXLKMNAME-1,
+					  NULL);
+			if (error)
+				break;
+
+			/*
+			 * look up id...
+			 */
+			for (i = 0; i < MAXLKMS; i++) {
+				if (!lkmods[i].used)
+					continue;
+				if (!strcmp(istr,
+				        lkmods[i].private.lkm_any->lkm_name))
+					break;
+			}
+		}
+
+		/*
+		 * Range check the value; on failure, return EINVAL
+		 */
+		if (i < 0 || i >= MAXLKMS) {
+			error = EINVAL;
 			break;
+		}
+
+		curp = &lkmods[i];
+
+		if (!curp->used) {
+			error = ENOENT;
+			break;
+		}
 
 		/* call entry(unload) */
 		if ((*(curp->entry))(curp, LKM_E_UNLOAD, LKM_VERSION)) {
@@ -551,7 +516,7 @@ lkmioctl(dev_t dev, u_long cmd, caddr_t data, int flag, struct proc *p)
 
 		lkm_state = LKMS_UNLOADING;	/* non-idle for lkmunreserve */
 		lkmunreserve();			/* free memory */
-		lkmfree();			/* free slot */
+		curp->used = 0;			/* free slot */
 		break;
 
 	case LMSTAT:		/* stat a module by id/name */
@@ -559,8 +524,43 @@ lkmioctl(dev_t dev, u_long cmd, caddr_t data, int flag, struct proc *p)
 
 		statp = (struct lmc_stat *)data;
 
-		if ((curp = lkmlookup(statp->id, statp->name, &error)) == NULL)
+		if ((i = statp->id) == -1) {		/* stat by name */
+			/*
+			 * Copy name and lookup id from all loaded
+			 * modules.
+			 */
+		 	copystr(statp->name, istr, MAXLKMNAME-1, (size_t *)0);
+			/*
+			 * look up id...
+			 */
+			for (i = 0; i < MAXLKMS; i++) {
+				if (!lkmods[i].used)
+					continue;
+				if (!strcmp(istr,
+				        lkmods[i].private.lkm_any->lkm_name))
+					break;
+			}
+
+			if (i == MAXLKMS) {		/* Not found */
+				error = ENOENT;
+				break;
+			}
+		}
+
+		/*
+		 * Range check the value; on failure, return EINVAL
+		 */
+		if (i < 0 || i >= MAXLKMS) {
+			error = EINVAL;
 			break;
+		}
+
+		curp = &lkmods[i];
+
+		if (!curp->used) {			/* Not found */
+			error = ENOENT;
+			break;
+		}
 
 		if ((error = (*curp->entry)(curp, LKM_E_STAT, LKM_VERSION)))
 			break;
@@ -568,11 +568,11 @@ lkmioctl(dev_t dev, u_long cmd, caddr_t data, int flag, struct proc *p)
 		/*
 		 * Copy out stat information for this module...
 		 */
-		statp->id	= curp->id;
+		statp->id	= i;
 		statp->offset	= curp->private.lkm_any->lkm_offset;
 		statp->type	= curp->private.lkm_any->lkm_type;
 		statp->area	= curp->area;
-		statp->size	= curp->size / 1024;
+		statp->size	= curp->size / PAGESIZE;
 		statp->private	= (unsigned long)curp->private.lkm_any;
 		statp->ver	= LKM_VERSION;
 		copystr(curp->private.lkm_any->lkm_name,
@@ -614,7 +614,10 @@ lkmioctl(dev_t dev, u_long cmd, caddr_t data, int flag, struct proc *p)
  * Place holder for system call slots reserved for loadable modules.
  */
 int
-sys_lkmnosys(struct lwp *l, void *v, register_t *retval)
+sys_lkmnosys(l, v, retval)
+	struct lwp *l;
+	void *v;
+	register_t *retval;
 {
 
 	return (sys_nosys(l, v, retval));
@@ -625,21 +628,32 @@ sys_lkmnosys(struct lwp *l, void *v, register_t *retval)
  * Used where people don't want to specify a special function.
  */
 int
-lkm_nofunc(struct lkm_table *lkmtp, int cmd)
+lkm_nofunc(lkmtp, cmd)
+	struct lkm_table *lkmtp;
+	int cmd;
 {
 
 	return (0);
 }
 
 int
-lkmexists(struct lkm_table *lkmtp)
+lkmexists(lkmtp)
+	struct lkm_table *lkmtp;
 {
-	struct lkm_table *p;
+	int i;
 
-	/* see if name exists... */
-	TAILQ_FOREACH(p, &lkmods, link) {
-		if (strcmp(lkmtp->private.lkm_any->lkm_name,
-		    p->private.lkm_any->lkm_name) == 0 && (p->refcnt != 0))
+	/*
+	 * see if name exists...
+	 */
+	for (i = 0; i < MAXLKMS; i++) {
+		/*
+		 * An unused module and the one we are testing are not
+		 * considered.
+		 */
+		if (!lkmods[i].used || &lkmods[i] == lkmtp)
+			continue;
+		if (!strcmp(lkmtp->private.lkm_any->lkm_name,
+			lkmods[i].private.lkm_any->lkm_name))
 			return (1);		/* already loaded... */
 	}
 
@@ -651,7 +665,9 @@ lkmexists(struct lkm_table *lkmtp)
  * by lkmtp, load/unload/stat it depending on the cmd requested.
  */
 static int
-_lkm_syscall(struct lkm_table *lkmtp, int cmd)
+_lkm_syscall(lkmtp, cmd)
+	struct lkm_table *lkmtp;
+	int cmd;
 {
 	struct lkm_syscall *args = lkmtp->private.lkm_syscall;
 	int i;
@@ -714,7 +730,9 @@ _lkm_syscall(struct lkm_table *lkmtp, int cmd)
  * to by lkmtp, load/unload/stat it depending on the cmd requested.
  */
 static int
-_lkm_vfs(struct lkm_table *lkmtp, int cmd)
+_lkm_vfs(lkmtp, cmd)
+	struct lkm_table *lkmtp;
+	int cmd;
 {
 	struct lkm_vfs *args = lkmtp->private.lkm_vfs;
 	int error = 0;
@@ -750,7 +768,9 @@ _lkm_vfs(struct lkm_table *lkmtp, int cmd)
  * by lkmtp, load/unload/stat it depending on the cmd requested.
  */
 static int
-_lkm_dev(struct lkm_table *lkmtp, int cmd)
+_lkm_dev(lkmtp, cmd)
+	struct lkm_table *lkmtp;
+	int cmd;
 {
 	struct lkm_dev *args = lkmtp->private.lkm_dev;
 	int error;
@@ -790,7 +810,9 @@ _lkm_dev(struct lkm_table *lkmtp, int cmd)
  * by lkmtp, load/unload/stat it depending on the cmd requested.
  */
 static int
-_lkm_strmod(struct lkm_table *lkmtp, int cmd)
+_lkm_strmod(lkmtp, cmd)
+	struct lkm_table *lkmtp;
+	int cmd;
 {
 	struct lkm_strmod *args = lkmtp->private.lkm_strmod;
 	int i;
@@ -819,7 +841,9 @@ _lkm_strmod(struct lkm_table *lkmtp, int cmd)
  * by lkmtp, load/unload/stat it depending on the cmd requested.
  */
 static int
-_lkm_exec(struct lkm_table *lkmtp, int cmd)
+_lkm_exec(lkmtp, cmd)
+	struct lkm_table *lkmtp;
+	int cmd;
 {
 	struct lkm_exec *args = lkmtp->private.lkm_exec;
 	int error = 0;
@@ -851,7 +875,9 @@ _lkm_exec(struct lkm_table *lkmtp, int cmd)
  * by lkmtp, load/unload/stat it depending on the cmd requested.
  */
 static int
-_lkm_compat(struct lkm_table *lkmtp, int cmd)
+_lkm_compat(lkmtp, cmd)
+	struct lkm_table *lkmtp;
+	int cmd;
 {
 	struct lkm_compat *args = lkmtp->private.lkm_compat;
 	int error = 0;
@@ -876,129 +902,6 @@ _lkm_compat(struct lkm_table *lkmtp, int cmd)
 	return (error);
 }
 
-static int
-drvlkm_load(struct cfdriver **cd, const struct cfattachlkminit *cai,
-	    struct cfdata *cf)
-{
-	const struct cfattachlkminit *cfai;
-	int i, error, j;
-
-	for (i = 0; cd[i]; i++) {
-		error = config_cfdriver_attach(cd[i]);
-		if (!error)
-			continue;
-		if (error != EEXIST) {
-			printf("%s: unable to register driver\n",
-			       cd[i]->cd_name);
-			/* XXX roll back previous attachments */
-			goto out;
-		}
-		printf("driver %s already present\n", cd[i]->cd_name);
-		/*
-		 * get existing drivers out of the list so we won't try
-		 * to detach them
-		 */
-		for (j = i; cd[j]; j++)
-			cd[j] = cd[j + 1];
-		i--; /* continue at same index */
-	}
-
-	for (cfai = cai; cfai->cfai_name; cfai++) {
-		for (i = 0; cfai->cfai_list[i]; i++) {
-			error = config_cfattach_attach(cfai->cfai_name,
-						       cfai->cfai_list[i]);
-			if (!error)
-				continue;
-			if (error != EEXIST) {
-				printf("%s: unable to register cfattach\n",
-				       cfai->cfai_list[i]->ca_name);
-				/* XXX roll back previous attachments */
-				goto out;
-			}
-			printf("driver attachment %s for %s already present\n",
-			       cfai->cfai_list[i]->ca_name, cfai->cfai_name);
-			/*
-			 * get existing attachments out of the list so we
-			 * won't try to detach them
-			 */
-			for (j = i; cfai->cfai_list[j]; j++)
-				cfai->cfai_list[j] = cfai->cfai_list[j + 1];
-			i--; /* continue at same index */
-		}
-	}
-
-	error = config_cfdata_attach(cf, 1);
-	/* XXX roll back cfdriver / cfattach attachments in error case */
-
-out:
-	return (error);
-}
-
-static int
-drvlkm_unload(struct cfdriver **cd, const struct cfattachlkminit *cai,
-	      struct cfdata *cf)
-{
-	const struct cfattachlkminit *cfai;
-	int i, error;
-
-	error = config_cfdata_detach(cf);
-	if (error)
-		return (error);
-
-	for (cfai = cai; cfai->cfai_name; cfai++) {
-		for (i = 0; cfai->cfai_list[i]; i++) {
-			error = config_cfattach_detach(cfai->cfai_name,
-						       cfai->cfai_list[i]);
-			if (error) {
-				printf("%s: unable to deregister cfattach\n",
-				       cfai->cfai_list[i]->ca_name);
-				return (error);	
-			}
-		}
-	}
-
-	for (i = 0; cd[i]; i++) {
-		error = config_cfdriver_detach(cd[i]);
-		if (error) {
-			printf("%s: unable to deregister cfdriver\n",
-	    			cd[i]->cd_name);
-			return (error);
-		}
-	}
-
-	return (0);
-}
-
-static int
-_lkm_drv(struct lkm_table *lkmtp, int cmd)
-{
-	struct lkm_drv *args = lkmtp->private.lkm_drv;
-	int error = 0;
-
-	switch(cmd) {
-	case LKM_E_LOAD:
-		/* don't load twice! */
-		if (lkmexists(lkmtp))
-			return (EEXIST);
-
-		error = drvlkm_load(args->lkm_cd,
-				    args->lkm_cai,
-				    args->lkm_cf);
-		break;
-
-	case LKM_E_UNLOAD:
-		error = drvlkm_unload(args->lkm_cd,
-				      args->lkm_cai,
-				      args->lkm_cf);
-		break;
-
-	case LKM_E_STAT:	/* no special handling... */
-		break;
-	}
-
-	return (error);
-}
-
 /*
  * This code handles the per-module type "wiring-in" of loadable modules
  * into existing kernel tables.  For "LM_MISC" modules, wiring and unwiring
@@ -1006,7 +909,9 @@ _lkm_drv(struct lkm_table *lkmtp, int cmd)
  * itself.
  */
 int
-lkmdispatch(struct lkm_table *lkmtp, int cmd)
+lkmdispatch(lkmtp, cmd)
+	struct lkm_table *lkmtp;
+	int cmd;
 {
 	int error = 0;		/* default = success */
 #ifdef DEBUG
@@ -1051,10 +956,6 @@ lkmdispatch(struct lkm_table *lkmtp, int cmd)
 		break;
 
 	case LM_MISC:	/* ignore content -- no "misc-specific" procedure */
-		break;
-
-	case LM_DRV:
-		error = _lkm_drv(lkmtp, cmd);
 		break;
 
 	default:

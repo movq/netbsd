@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.48 2004/10/30 20:56:20 dsl Exp $	*/
+/*	$NetBSD: main.c,v 1.43.2.3 2004/07/14 10:19:17 tron Exp $	*/
 
 /*
  * Copyright (c) 1983, 1988, 1993
@@ -39,7 +39,7 @@ __COPYRIGHT("@(#) Copyright (c) 1983, 1988, 1993\n\
 #if 0
 static char sccsid[] = "from: @(#)main.c	8.4 (Berkeley) 3/1/94";
 #else
-__RCSID("$NetBSD: main.c,v 1.48 2004/10/30 20:56:20 dsl Exp $");
+__RCSID("$NetBSD: main.c,v 1.43.2.3 2004/07/14 10:19:17 tron Exp $");
 #endif
 #endif /* not lint */
 
@@ -202,8 +202,6 @@ struct nlist nl[] = {
 	{ "_pkintrq" },
 #define	N_HARDCLOCK_TICKS 67
 	{ "_hardclock_ticks" },
-#define N_PIMSTAT	68
-	{ "_pimstat" },
 	{ "" },
 };
 
@@ -235,8 +233,6 @@ struct protox {
 	{ -1,		N_IPSECSTAT,	1,	0,
 	  ipsec_switch,	NULL,		0,	"ipsec" },
 #endif
-	{ -1,		N_PIMSTAT,	1,	0,
-	  pim_stats,	NULL,		0,	"pim" },
 	{ -1,		-1,		0,	0,
 	  0,		NULL,		0,	0 }
 };
@@ -494,7 +490,7 @@ main(argc, argv)
 #define	BACKWARD_COMPATIBILITY
 #ifdef	BACKWARD_COMPATIBILITY
 	if (*argv) {
-		if (isdigit((unsigned char)**argv)) {
+		if (isdigit(**argv)) {
 			interval = atoi(*argv);
 			if (interval <= 0)
 				usage();

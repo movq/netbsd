@@ -1,4 +1,4 @@
-/*	$NetBSD: rarpd.c,v 1.54 2004/12/01 23:12:11 christos Exp $	*/
+/*	$NetBSD: rarpd.c,v 1.49.2.2 2004/05/22 13:21:36 he Exp $	*/
 
 /*
  * Copyright (c) 1990 The Regents of the University of California.
@@ -28,7 +28,7 @@ __COPYRIGHT(
 #endif /* not lint */
 
 #ifndef lint
-__RCSID("$NetBSD: rarpd.c,v 1.54 2004/12/01 23:12:11 christos Exp $");
+__RCSID("$NetBSD: rarpd.c,v 1.49.2.2 2004/05/22 13:21:36 he Exp $");
 #endif
 
 
@@ -63,7 +63,6 @@ __RCSID("$NetBSD: rarpd.c,v 1.54 2004/12/01 23:12:11 christos Exp $");
 
 #include <errno.h>
 #include <dirent.h>
-#include <paths.h>
 #include <netdb.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -136,9 +135,8 @@ main(int argc, char **argv)
 {
 	int     op;
 
-	setprogname(*argv);
 	/* All error reporting is done through syslogs. */
-	openlog(getprogname(), LOG_PID, LOG_DAEMON);
+	openlog("rarpd", LOG_PID, LOG_DAEMON);
 
 	opterr = 0;
 	while ((op = getopt(argc, argv, "adfl")) != -1) {
@@ -273,9 +271,8 @@ init_some(char *name)
 void
 usage(void)
 {
-	(void) fprintf(stderr, "Usage: %s -a [-d|-f] [-l]\n", getprogname());
-	(void) fprintf(stderr, "\t%s [-d|-f] [-l] interface [...]\n",
-	    getprogname());
+	(void) fprintf(stderr, "usage: rarpd -a [-d|-f] [-l]\n");
+	(void) fprintf(stderr, "       rarpd [-d|-f] [-l] interface [...]\n");
 	exit(1);
 }
 
@@ -283,8 +280,14 @@ static int
 bpf_open(void)
 {
 	int     fd;
-	const char *device = _PATH_BPF;
-	fd = open(device, O_RDWR);
+	int     n = 0;
+	char    device[sizeof "/dev/bpf000"];
+
+	/* Go through all the minors and find one that isn't in use. */
+	do {
+		(void)snprintf(device, sizeof(device), "/dev/bpf%d", n++);
+		fd = open(device, O_RDWR);
+	} while (fd < 0 && errno == EBUSY);
 
 	if (fd < 0) {
 		rarperr(FATAL, "%s: %s", device, strerror(errno));
@@ -334,7 +337,8 @@ rarp_open(char *device)
 	if (ioctl(fd, BIOCSBLEN, &bufsize) < 0) {
 		rarperr(NONFATAL, "BIOCSBLEN:%d: %s", bufsize, strerror(errno));
 	}
-	(void)strlcpy(ifr.ifr_name, device, sizeof(ifr.ifr_name));
+	(void)strncpy(ifr.ifr_name, device, sizeof ifr.ifr_name - 1);
+	ifr.ifr_name[sizeof ifr.ifr_name - 1] = '\0';
 	if (ioctl(fd, BIOCSETIF, (caddr_t) & ifr) < 0) {
 		if (aflag) {	/* for -a skip non-ethernet interfaces */
 			close(fd);
@@ -868,9 +872,9 @@ rarperr(int fatal, const char *fmt,...)
 	va_start(ap, fmt);
 	if (dflag) {
 		if (fatal)
-			(void)fprintf(stderr, "%s: error: ", getprogname());
+			(void)fprintf(stderr, "rarpd: error: ");
 		else
-			(void)fprintf(stderr, "%s: warning: ", getprogname());
+			(void)fprintf(stderr, "rarpd: warning: ");
 		(void)vfprintf(stderr, fmt, ap);
 		va_end(ap);
 		va_start(ap, fmt);
@@ -890,7 +894,7 @@ debug(const char *fmt,...)
 
 	va_start(ap, fmt);
 	if (dflag) {
-		(void)fprintf(stderr, "%s: ", getprogname());
+		(void)fprintf(stderr, "rarpd: ");
 		(void)vfprintf(stderr, fmt, ap);
 		va_end(ap);
 		va_start(ap, fmt);

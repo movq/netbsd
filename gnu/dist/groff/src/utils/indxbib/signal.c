@@ -1,6 +1,6 @@
-/*	$NetBSD: signal.c,v 1.1.1.3 2004/07/30 14:45:07 wiz Exp $	*/
+/*	$NetBSD: signal.c,v 1.1.1.2 2003/06/30 17:52:17 wiz Exp $	*/
 
-/* Copyright (C) 1992, 2001, 2003, 2004 Free Software Foundation, Inc.
+/* Copyright (C) 1992, 2001 Free Software Foundation, Inc.
      Written by James Clark (jjc@jclark.com)
 
 This file is part of groff.
@@ -22,8 +22,6 @@ Foundation, 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA. */
 /* Unfortunately vendors seem to have problems writing a <signal.h>
 that is correct for C++, so we implement all signal handling in C. */
 
-#include <stdlib.h>
-
 #ifdef HAVE_CONFIG_H
 #include <config.h>
 #endif
@@ -34,26 +32,21 @@ that is correct for C++, so we implement all signal handling in C. */
 #include <unistd.h>
 #endif
 
-#ifdef __cplusplus
-extern "C" {
+#ifndef RETSIGTYPE
+#define RETSIGTYPE void
 #endif
 
-extern void cleanup(void);
+extern void cleanup();
 
-static RETSIGTYPE handle_fatal_signal(int signum)
+static RETSIGTYPE handle_fatal_signal(signum)
+     int signum;
 {
   signal(signum, SIG_DFL);
   cleanup();
-#ifdef HAVE_KILL
   kill(getpid(), signum);
-#else
-  /* MS-DOS and Win32 don't have kill(); the best compromise is
-     probably to use exit() instead. */
-  exit(signum);
-#endif
 }
 
-void catch_fatal_signals(void)
+void catch_fatal_signals()
 {
 #ifdef SIGHUP
   signal(SIGHUP, handle_fatal_signal);
@@ -61,10 +54,6 @@ void catch_fatal_signals(void)
   signal(SIGINT, handle_fatal_signal);
   signal(SIGTERM, handle_fatal_signal);
 }
-
-#ifdef __cplusplus
-}
-#endif
 
 #ifndef HAVE_RENAME
 

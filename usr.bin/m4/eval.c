@@ -1,4 +1,4 @@
-/*	$NetBSD: eval.c,v 1.19 2004/07/06 13:19:42 mycroft Exp $	*/
+/*	$NetBSD: eval.c,v 1.17.2.2 2004/07/10 12:40:21 tron Exp $	*/
 /*	$OpenBSD: eval.c,v 1.41 2001/10/10 23:25:31 espie Exp $	*/
 
 /*
@@ -42,7 +42,7 @@
 #if 0
 static char sccsid[] = "@(#)eval.c	8.2 (Berkeley) 4/27/95";
 #else
-__RCSID("$NetBSD: eval.c,v 1.19 2004/07/06 13:19:42 mycroft Exp $");
+__RCSID("$NetBSD: eval.c,v 1.17.2.2 2004/07/10 12:40:21 tron Exp $");
 #endif
 #endif /* not lint */
 

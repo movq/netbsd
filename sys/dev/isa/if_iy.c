@@ -1,4 +1,4 @@
-/*	$NetBSD: if_iy.c,v 1.65 2004/10/30 23:34:23 thorpej Exp $	*/
+/*	$NetBSD: if_iy.c,v 1.63 2003/10/30 01:58:17 simonb Exp $	*/
 /* #define IYDEBUG */
 /* #define IYMEMDEBUG */
 
@@ -46,7 +46,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_iy.c,v 1.65 2004/10/30 23:34:23 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_iy.c,v 1.63 2003/10/30 01:58:17 simonb Exp $");
 
 #include "opt_inet.h"
 #include "opt_ns.h"
@@ -220,7 +220,7 @@ iyprobe(parent, match, aux)
 
 	iot = ia->ia_iot;
 
-	if (ia->ia_io[0].ir_addr == ISA_UNKNOWN_PORT)
+	if (ia->ia_io[0].ir_addr == ISACF_PORT_DEFAULT)
 		return 0;
 
 	if (bus_space_map(iot, ia->ia_io[0].ir_addr, 16, 0, &ioh))
@@ -267,7 +267,7 @@ iyprobe(parent, match, aux)
 	if (eepromreadall(iot, ioh, eaddr, 8))
 		goto out;
 	
-	if (ia->ia_irq[0].ir_irq == ISA_UNKNOWN_IRQ)
+	if (ia->ia_irq[0].ir_irq == ISACF_IRQ_DEFAULT)
 		irq = eepro_irqmap[eaddr[EEPPW1] & EEPP_Int];
 	else
 		irq = ia->ia_irq[0].ir_irq;
@@ -784,13 +784,9 @@ struct ifnet *ifp;
 				--llen;
 				++data;
 			}
-			/*
-			 * XXX ALIGNMENT LOSSAGE HERE.
-			 */
 			if (llen > 1)
 				bus_space_write_multi_stream_2(iot, ioh,
-					MEM_PORT_REG, (u_int16_t *) data,
-					llen>>1);
+					MEM_PORT_REG, data, llen>>1);
 			residual = llen & 1;
 			if (residual) {
 				resval = *(data + llen - 1);
@@ -1061,14 +1057,11 @@ iyget(sc, iot, ioh, rxlen)
 			len = MCLBYTES;
 		}
 		len = min(rxlen, len);
-		/*
-		 * XXX ALIGNMENT LOSSAGE HERE.
-		 */
 		if (len > 1) {
 			len &= ~1;
 
 			bus_space_read_multi_stream_2(iot, ioh, MEM_PORT_REG, 
-			    mtod(m, u_int16_t *), len/2);
+			    mtod(m, caddr_t), len/2);
 		} else {
 #ifdef IYDEBUG
 			printf("%s: received odd mbuf\n", sc->sc_dev.dv_xname);
@@ -1298,11 +1291,8 @@ iyioctl(ifp, cmd, data)
 			 * Multicast list has changed; set the hardware filter
 			 * accordingly.
 			 */
-			if (ifp->if_flags & IFF_RUNNING) {
-				/* XXX can't make it work otherwise */
-				iyreset(sc);
-				iy_mc_reset(sc);
-			}
+			iyreset(sc); /* XXX can't make it work otherwise */
+			iy_mc_reset(sc);
 			error = 0;
 		}
 		break;
@@ -1400,11 +1390,8 @@ iy_mc_setup(sc)
 	
 	ETHER_FIRST_MULTI(step, ecp, enm);
 	while(enm) {
-		/*
-		 * XXX ALIGNMENT LOSSAGE HERE?
-		 */
 		bus_space_write_multi_stream_2(iot, ioh, MEM_PORT_REG,
-		    (u_int16_t *) enm->enm_addrlo, 3);
+		    enm->enm_addrlo, 3);
 
 		ETHER_NEXT_MULTI(step, enm);
 	}

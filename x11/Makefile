@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.13 2004/08/04 09:38:56 lukem Exp $
+#	$NetBSD: Makefile,v 1.10 2004/02/23 05:47:47 rtr Exp $
 
 .include <bsd.own.mk>
 
@@ -14,6 +14,10 @@ BUILDTARGETS+=  obj
 BUILDTARGETS+=	includes
 .endif
 BUILDTARGETS+=	do-tools
+BUILDTARGETS+=	do-lib-X11 do-lib-ICE do-lib-Xau
+BUILDTARGETS+=	do-lib-SM do-lib-Xext
+BUILDTARGETS+=	do-lib-Xt do-lib-Xpm do-lib-Xrender do-lib-GL
+BUILDTARGETS+=	do-lib-Xmu do-lib-dps do-lib-expat
 BUILDTARGETS+=	do-lib
 BUILDTARGETS+=	do-build
 
@@ -24,40 +28,28 @@ START_TIME!=	date
 build: check_X11SRCDIR
 	@echo "X11 build started at: ${START_TIME}"
 .for tgt in ${BUILDTARGETS}
-	${MAKEDIRTARGET} . ${tgt}
+	@(cd ${.CURDIR} && ${MAKE} ${tgt})
 .endfor
 	@echo   "X11 build started at:  ${START_TIME}"
 	@printf "X11 build finished at: " && date
 
 do-build:
 .for targ in dependall install
-	${MAKEDIRTARGET} . ${targ}
+	(cd ${.CURDIR} && ${MAKE} ${targ})
 .endfor
 
 .for dir in	tools lib/X11 lib/ICE lib/Xau lib/SM lib/Xext lib/Xt lib/Xpm \
 		lib/Xrender lib/GL lib/Xmu lib/dps lib/expat lib
 do-${dir:S/\//-/g}:
 .  for targ in dependall install
-	${MAKEDIRTARGET} ${dir} ${targ}
+	(cd ${.CURDIR}/${dir} && ${MAKE} ${targ})
 .  endfor
 .endfor
 
 afterinstall: .PHONY
 .if ${MKMAN} != "no"
-	${MAKEDIRTARGET} ${NETBSDSRCDIR}/share/man makedb \
-	    WHATISDBDIR=${X11MANDIR}
+	(cd ${NETBSDSRCDIR}/share/man && ${MAKE} WHATISDBDIR=${X11MANDIR} makedb)
 .endif
-
-
-DISTRIBTARGETS=	Xserver/Xext/ext \
-		bin/lbxproxy bin/proxymngr bin/rstart bin/twm \
-		bin/xdm/config bin/xfs bin/xinit bin/xsm \
-		lib/fontconfig/etc
-
-distribution: check_X11SRCDIR
-.for tgt in ${DISTRIBTARGETS}
-	${MAKEDIRTARGET} ${tgt} configinstall
-.endfor
 
 
 check_X11SRCDIR: .PHONY .NOTMAIN

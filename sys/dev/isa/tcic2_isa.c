@@ -1,4 +1,4 @@
-/*	$NetBSD: tcic2_isa.c,v 1.11 2004/09/14 20:20:49 drochner Exp $	*/
+/*	$NetBSD: tcic2_isa.c,v 1.9 2002/10/02 03:10:50 thorpej Exp $	*/
 
 /*
  *
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tcic2_isa.c,v 1.11 2004/09/14 20:20:49 drochner Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tcic2_isa.c,v 1.9 2002/10/02 03:10:50 thorpej Exp $");
 
 #undef	TCICISADEBUG
 
@@ -136,7 +136,6 @@ static struct pcmcia_chip_functions tcic_isa_functions = {
 
 	tcic_chip_socket_enable,
 	tcic_chip_socket_disable,
-	tcic_chip_socket_settype,
 };
 
 int
@@ -159,15 +158,15 @@ tcic_isa_probe(parent, match, aux)
 		return (0);
 
 	/* Disallow wildcarded i/o address. */
-	if (ia->ia_io[0].ir_addr == ISA_UNKNOWN_PORT)
+	if (ia->ia_io[0].ir_addr == ISACF_PORT_DEFAULT)
 		return (0);
-	if (ia->ia_iomem[0].ir_addr == ISA_UNKNOWN_IOMEM)
+	if (ia->ia_iomem[0].ir_addr == ISACF_IOMEM_DEFAULT)
 		return (0);
 
 	if (bus_space_map(iot, ia->ia_io[0].ir_addr, TCIC_IOSIZE, 0, &ioh))
 		return (0);
 
-	if (ia->ia_iomem[0].ir_size == ISA_UNKNOWN_IOSIZ)
+	if (ia->ia_iomem[0].ir_size == ISACF_IOSIZ_DEFAULT)
 		msize = TCIC_MEMSIZE;
 	else
 		msize = ia->ia_iomem[0].ir_size;
@@ -267,10 +266,10 @@ tcic_isa_attach(parent, self, aux)
 	 */
 
 	if (ia->ia_nirq < 1)
-		sc->irq = ISA_UNKNOWN_IRQ;
+		sc->irq = ISACF_IRQ_DEFAULT;
 	else
 		sc->irq = ia->ia_irq[0].ir_irq;
-	if (sc->irq == ISA_UNKNOWN_IRQ) {
+	if (sc->irq == ISACF_IRQ_DEFAULT) {
 		if (isa_intr_alloc(ic,
 		    sc->validirqs & (tcic_isa_intr_alloc_mask & 0xff00),
 		    IST_EDGE, &sc->irq)) {

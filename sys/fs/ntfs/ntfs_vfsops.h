@@ -1,4 +1,4 @@
-/*	$NetBSD: ntfs_vfsops.h,v 1.4 2004/05/20 06:34:26 atatat Exp $	*/
+/*	$NetBSD: ntfs_vfsops.h,v 1.3.4.1 2004/05/23 10:45:33 tron Exp $	*/
 
 /*-
  * Copyright (c) 1998, 1999 Semen Ustimenko (semenu@FreeBSD.org)

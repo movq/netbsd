@@ -1,4 +1,4 @@
-/*	$NetBSD: ldd.c,v 1.25 2004/09/07 02:54:40 enami Exp $	*/
+/*	$NetBSD: ldd.c,v 1.21 2003/12/19 19:56:56 jmc Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2000 The NetBSD Foundation, Inc.
@@ -81,7 +81,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include <ctype.h>
 
 #include "debug.h"
 #include "rtld.h"
@@ -101,12 +100,9 @@ Search_Path *_rtld_default_paths;
 Search_Path *_rtld_paths;
 Library_Xform *_rtld_xforms;
 
-static void fmtprint(const char *, Obj_Entry *, const char *, const char *);
-static void print_needed(Obj_Entry *, const char *, const char *);
+static void print_needed(Obj_Entry *);
 static int ldd_aout(char *, char *, char *, int);
-static void usage(void) __attribute__((__noreturn__));
-static char *main_local;
-static char *main_progname;
+static void usage(void);
 
 static void
 usage(void)
@@ -189,11 +185,8 @@ main(int argc, char **argv)
 
 		(void) _rtld_load_needed_objects(_rtld_objmain, 0);
 
-		if (fmt1 == NULL)
-			printf("%s:\n", _rtld_objmain->path);
-		main_local = *argv;
-		main_progname = _rtld_objmain->path;
-		print_needed(_rtld_objmain, fmt1, fmt2);
+		printf("%s:\n", _rtld_objmain->path);
+		print_needed(_rtld_objmain);
 
 		while (_rtld_objlist != NULL) {
 			Obj_Entry *obj = _rtld_objlist;
@@ -245,106 +238,30 @@ dlerror()
 }
 
 static void
-fmtprint(const char *libname, Obj_Entry *obj, const char *fmt1,
-    const char *fmt2)
-{
-	const char *libpath = obj ? obj->path : "not found";
-	char libnamebuf[200];
-	char *libmajor = NULL;
-	const char *fmt;
-	char *cp;
-	int c;
-
-	if (strncmp(libname, "lib", 3) == 0 &&
-	    (cp = strstr(libname, ".so")) != NULL) {
-		int i = cp - (libname + 3);
-
-		if (i >= sizeof(libnamebuf))
-			i = sizeof(libnamebuf) - 1;
-		(void)memcpy(libnamebuf, libname + 3, i);
-		libnamebuf[i] = '\0';
-		if (cp[3] && isdigit((unsigned char)cp[4]))
-			libmajor = &cp[4];
-		libname = libnamebuf;
-	}
-
-	if (fmt1 == NULL)
-		fmt1 = libmajor != NULL ?
-		    "\t-l%o.%m => %p\n" :
-		    "\t-l%o => %p\n";
-	if (fmt2 == NULL)
-		fmt2 = "\t%o => %p\n";
-
-	fmt = libname == libnamebuf ? fmt1 : fmt2;
-	while ((c = *fmt++) != '\0') {
-		switch (c) {
-		default:
-			putchar(c);
-			continue;
-		case '\\':
-			switch (c = *fmt) {
-			case '\0':
-				continue;
-			case 'n':
-				putchar('\n');
-				break;
-			case 't':
-				putchar('\t');
-				break;
-			}
-			break;
-		case '%':
-			switch (c = *fmt) {
-			case '\0':
-				continue;
-			case '%':
-			default:
-				putchar(c);
-				break;
-			case 'A':
-				printf("%s", main_local);
-				break;
-			case 'a':
-				printf("%s", main_progname);
-				break;
-			case 'o':
-				printf("%s", libname);
-				break;
-			case 'm':
-				printf("%s", libmajor);
-				break;
-			case 'n':
-				/* XXX: not supported for elf */
-				break;
-			case 'p':
-				printf("%s", libpath);
-				break;
-			case 'x':
-				printf("%p", obj->mapbase);
-				break;
-			}
-			break;
-		}
-		++fmt;
-	}
-}
-
-static void
-print_needed(Obj_Entry *obj, const char *fmt1, const char *fmt2)
+print_needed(Obj_Entry *obj)
 {
 	const Needed_Entry *needed;
 
 	for (needed = obj->needed; needed != NULL; needed = needed->next) {
-		const char *libname = obj->strtab + needed->name;
+		char libnamebuf[200];
+		const char *libname = obj->strtab + needed->name, *cp;
+		if (strncmp(libname, "lib", 3) == 0
+		    && (cp = strstr(libname, ".so")) != NULL) {
+			strcpy(libnamebuf, "-l");
+			memcpy(&libnamebuf[2], libname + 3, cp - (libname + 3));
+			strcpy(&libnamebuf[cp - (libname + 3) + 2], cp + 3);
+			libname = libnamebuf;
+		}
 
 		if (needed->obj != NULL) {
-			print_needed(needed->obj, fmt1, fmt2);
+			print_needed(needed->obj);
 			if (!needed->obj->printed) {
-				fmtprint(libname, needed->obj, fmt1, fmt2);
+				printf("\t %s => %s\n", libname,
+				    needed->obj->path);
 				needed->obj->printed = 1;
 			}
 		} else {
-			fmtprint(libname, needed->obj, fmt1, fmt2);
+			printf("\t %s => not found\n", libname);
 		}
 	}
 }

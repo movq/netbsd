@@ -1,4 +1,4 @@
-/*	$NetBSD: getproto.c,v 1.2 2004/11/13 19:16:10 he Exp $	*/
+/*	$NetBSD: getproto.c,v 1.1.1.1 2004/03/28 08:56:18 martti Exp $	*/
 
 #include "ipf.h"
 
@@ -9,7 +9,7 @@ char *name;
 	char *s;
 
 	for (s = name; *s != '\0'; s++)
-		if (!ISDIGIT(*s))
+		if (!isdigit(*s))
 			break;
 	if (*s == '\0')
 		return atoi(name);

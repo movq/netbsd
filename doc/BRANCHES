@@ -1,4 +1,4 @@
-#	$NetBSD: BRANCHES,v 1.16 2004/12/07 15:01:46 kent Exp $
+#	$NetBSD: BRANCHES,v 1.12 2003/11/12 13:16:22 grant Exp $
 #
 # This file contains a list of branches that exist in the NetBSD CVS
 # tree and their current state.
@@ -104,7 +104,7 @@ Notes:
 
 Branch:		netbsd-1-4
 Description:	The NetBSD 1.4 release branch
-Status:		Terminated
+Status:		Active
 Start Date:	1 Apr 2000
 End Date:
 Base Tag:	netbsd-1-4-base
@@ -132,17 +132,6 @@ End Date:
 Base Tag:	netbsd-1-6-base
 Maintainer:	1.6 Release Engineering <releng-1-6@NetBSD.org>
 Scope:		Entire tree.
-Notes:
-		Commits restricted to Release Engineering.
-
-Branch:		netbsd-2-0
-Description:	The NetBSD 2.0 release branch
-Status:		Active
-Start Date:	28 Mar 2004
-End Date:
-Base Tag:	netbsd-2-0-base
-Maintainer:	2.0 Release Engineering <releng-2-0@NetBSD.org>
-Scope:		Entire tree. (src + xsrc)
 Notes:
 		Commits restricted to Release Engineering.
 
@@ -293,18 +282,6 @@ Base Tag:	kenh-if-detach-base
 Maintainer:	Ken Hornstein <kenh@NetBSD.org>
 Scope:		kernel
 Notes:
-
-Branch:		kent-audio1
-Description:	Audio converter pipeline
-Status:		Active
-Start Date:	Tue Dec  7 2004
-End Date:	
-Base Tag:	kent-audio1-base
-Maintainer:	TAMURA Kent <kent@NetBSD.org>
-Scope:		kernel (audio device drivers)
-Notes:		http://mail-index.netbsd.org/tech-kern/2004/12/03/0007.html
-		Please consult with the maintainer before committing
-		to this branch.
 
 Branch:		kqueue
 Description:	kqueue kernel event notification mechanism (from FreeBSD)
@@ -618,22 +595,6 @@ Notes:		No longer active due to lack of time, and introduction
 
 		Any other wrstuden-devbsize tag may (and should) go away.
 
-
-Branch:		rtr-xorg-branch
-Description:	xorg & static build alterations to src/x11
-Status:		Active
-Start Date:	Nov 15 2004
-End Date:	
-Base tag:	rtr-xorg-branch-base
-Maintainer:	Tyler R. Retzlaff <rtr@NetBSD.org>
-Scope:		x11
-		distrib/sets/lists
-		share/mk/bsd.x11.mk
-		share/mk/bsd.own.mk
-		etc/mtree/NetBSD.dist
-Notes:		Requires parts of xsrc/xfree (HEAD)
-		xsrc/local, xsrc/xfree/xc/programs/Xserver/hw/netbsd
-		Requires xorg (XORG-6_8_1)
 
 
 # Other:

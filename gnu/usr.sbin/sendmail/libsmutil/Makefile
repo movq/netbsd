@@ -1,6 +1,8 @@
-#	$NetBSD: Makefile,v 1.7 2004/05/23 02:24:51 lukem Exp $
+#	$NetBSD: Makefile,v 1.6 2003/03/24 15:04:07 atatat Exp $
 
-MKPRIVATELIB=	yes
+NOSHARE=	# defined
+NOPIC=		# defined
+NOPROFILE=	# defined
 
 .include <bsd.own.mk>
 
@@ -12,5 +14,7 @@ LIB=		smutil
 CPPFLAGS+=	-DNOT_SENDMAIL
 
 SRCS=		cf.c debug.c err.c lockfile.c safefile.c snprintf.c
+
+libinstall::
 
 .include <bsd.lib.mk>

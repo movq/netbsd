@@ -1,4 +1,4 @@
-# $NetBSD: GENERIC,v 1.126 2004/11/10 17:54:08 christos Exp $
+# $NetBSD: GENERIC,v 1.118.2.3 2004/07/15 20:18:11 he Exp $
 #
 # GENERIC machine description file
 # 
@@ -22,7 +22,7 @@ include		"arch/vax/conf/std.vax"
 
 options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
-#ident 		"GENERIC-$Revision: 1.126 $"
+#ident 		"GENERIC-$Revision: 1.118.2.3 $"
 
 # Here are all different supported CPU types listed.
 #options 	VAX8800		# VAX 8500, 8530, 8550, 8700, 8800
@@ -66,7 +66,6 @@ options 	INET6		# IPV6
 #options 	IPSEC_ESP	# IP security (encryption part; define w/IPSEC)
 #options 	IPSEC_DEBUG	# debug for IP security
 #options 	MROUTING	# IP multicast routing
-#options 	PIM		# Protocol Independent Multicast
 #options 	NS		# XNS
 #options 	NSIP		# XNS tunneling over IP
 #options 	ISO,TPIP	# OSI
@@ -146,7 +145,6 @@ options 	COMPAT_16
 #options 	COMPAT_ULTRIX
 options 	COMPAT_IBCS2	# DEC SVR.3 compatilibity
 #options 	NO_INSN_EMULATE	# CPU does not lack some hardware instructions.
-options		COMPAT_BSDPTY	# /dev/[pt]ty?? ptys.
 
 options 	LKM
 
@@ -314,5 +312,3 @@ pseudo-device	rnd			# /dev/random and in-kernel generator
 pseudo-device	clockctl		# user control of clock subsystem
 pseudo-device	ksyms			# /dev/ksyms
 pseudo-device	wsmux			# mouse & keyboard multiplexor
-#pseudo-device	pf			# PF packet filter
-#pseudo-device	pflog			# PF log if

@@ -1,4 +1,4 @@
-/*	$NetBSD: esis.c,v 1.32 2004/04/19 05:16:45 matt Exp $	*/
+/*	$NetBSD: esis.c,v 1.30 2003/08/07 16:33:35 agc Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -59,7 +59,7 @@ SOFTWARE.
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: esis.c,v 1.32 2004/04/19 05:16:45 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: esis.c,v 1.30 2003/08/07 16:33:35 agc Exp $");
 
 #include "opt_iso.h"
 #ifdef ISO
@@ -135,7 +135,7 @@ struct callout	esis_config_ch;
  * NOTES:
  */
 void
-esis_init(void)
+esis_init()
 {
 	extern struct clnl_protosw clnl_protox[256];
 
@@ -166,8 +166,11 @@ esis_init(void)
  */
 /* ARGSUSED */
 int
-esis_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
-	struct mbuf *control, struct proc *p)
+esis_usrreq(so, req, m, nam, control, p)
+	struct socket *so;
+	int req;
+	struct mbuf *m, *nam, *control;
+	struct proc *p;
 {
 	struct rawcb *rp;
 	int error = 0;
@@ -201,11 +204,12 @@ esis_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
 			if (error)
 				break;
 		}
-		MALLOC(rp, struct rawcb *, sizeof(*rp), M_PCB, M_WAITOK|M_ZERO);
+		MALLOC(rp, struct rawcb *, sizeof(*rp), M_PCB, M_WAITOK);
 		if (rp == 0) {
 			error = ENOBUFS;
 			break;
 		}
+		bzero(rp, sizeof(*rp));
 		rp->rcb_socket = so;
 		LIST_INSERT_HEAD(&esis_pcb, rp, rcb_list);
 		so->so_pcb = rp;
@@ -268,7 +272,13 @@ release:
  * NOTES:
  */
 void
+#if __STDC__
 esis_input(struct mbuf *m0, ...)
+#else
+esis_input(m0, va_alist)
+	struct mbuf    *m0;
+	va_dcl
+#endif
 {
 	struct snpa_hdr *shp;	/* subnetwork header */
 	struct esis_fixed *pdu = mtod(m0, struct esis_fixed *);
@@ -339,13 +349,13 @@ bad:
  *			DA, BSNPA and NET in first mbuf.
  */
 void
-esis_rdoutput(
-	struct snpa_hdr *inbound_shp,	/* snpa hdr from incoming packet */
-	struct mbuf    *inbound_m,	/* incoming pkt itself */
-	struct clnp_optidx *inbound_oidx,	/* clnp options assoc with
+esis_rdoutput(inbound_shp, inbound_m, inbound_oidx, rd_dstnsap, rt)
+	struct snpa_hdr *inbound_shp;	/* snpa hdr from incoming packet */
+	struct mbuf    *inbound_m;	/* incoming pkt itself */
+	struct clnp_optidx *inbound_oidx;	/* clnp options assoc with
 						 * incoming pkt */
-	struct iso_addr *rd_dstnsap,	/* ultimate destination of pkt */
-	struct rtentry *rt)	/* snpa cache info regarding next hop of pkt */
+	struct iso_addr *rd_dstnsap;	/* ultimate destination of pkt */
+	struct rtentry *rt;	/* snpa cache info regarding next hop of pkt */
 {
 	struct mbuf    *m, *m0;
 	caddr_t         cp;
@@ -508,12 +518,12 @@ esis_rdoutput(
  * NOTES:		Plus 1 here is for length byte
  */
 int
-esis_insert_addr(
-	caddr_t *buf,		/* ptr to buffer to put address into */
-	int     *len,		/* ptr to length of buffer so far */
-	struct iso_addr *isoa,	/* ptr to address */
-	struct mbuf *m,		/* determine if there remains space */
-	int     nsellen)
+esis_insert_addr(buf, len, isoa, m, nsellen)
+	caddr_t *buf;	/* ptr to buffer to put address into */
+	int            *len;	/* ptr to length of buffer so far */
+	struct iso_addr *isoa;	/* ptr to address */
+	struct mbuf *m;/* determine if there remains space */
+	int             nsellen;
 {
 	int    newlen, result = 0;
 
@@ -548,9 +558,9 @@ int             ESHonly = 0;
  * NOTES:
  */
 void
-esis_eshinput(
-	struct mbuf    *m,	/* esh pdu */
-	struct snpa_hdr *shp)	/* subnetwork header */
+esis_eshinput(m, shp)
+	struct mbuf    *m;	/* esh pdu */
+	struct snpa_hdr *shp;	/* subnetwork header */
 {
 	struct esis_fixed *pdu = mtod(m, struct esis_fixed *);
 	u_short         ht;	/* holding time */
@@ -650,9 +660,9 @@ bad:
  * NOTES:
  */
 void
-esis_ishinput(
-	struct mbuf    *m,	/* esh pdu */
-	struct snpa_hdr *shp)	/* subnetwork header */
+esis_ishinput(m, shp)
+	struct mbuf    *m;	/* esh pdu */
+	struct snpa_hdr *shp;	/* subnetwork header */
 {
 	struct esis_fixed *pdu = mtod(m, struct esis_fixed *);
 	u_short         ht, newct;	/* holding time */
@@ -723,9 +733,9 @@ bad:
  * NOTES:
  */
 void
-esis_rdinput(
-	struct mbuf    *m0,	/* esh pdu */
-	struct snpa_hdr *shp)	/* subnetwork header */
+esis_rdinput(m0, shp)
+	struct mbuf    *m0;	/* esh pdu */
+	struct snpa_hdr *shp;	/* subnetwork header */
 {
 	struct esis_fixed *pdu = mtod(m0, struct esis_fixed *);
 	u_short         ht;	/* holding time */
@@ -822,7 +832,8 @@ bad:	;	/* Needed by ESIS_NEXT_OPTION */
  */
 /*ARGSUSED*/
 void
-esis_config(void *v)
+esis_config(v)
+	void *v;
 {
 	struct ifnet *ifp;
 
@@ -873,13 +884,13 @@ esis_config(void *v)
  * NOTES:
  */
 void
-esis_shoutput(
-	struct ifnet   *ifp,
-	int             type,
-	int             ht,
-	caddr_t         sn_addr,
-	int             sn_len,
-	struct iso_addr *isoa)
+esis_shoutput(ifp, type, ht, sn_addr, sn_len, isoa)
+	struct ifnet   *ifp;
+	int             type;
+	short           ht;
+	caddr_t         sn_addr;
+	int             sn_len;
+	struct iso_addr *isoa;
 {
 	struct mbuf    *m, *m0;
 	caddr_t         cp, naddrp;
@@ -1029,7 +1040,13 @@ esis_shoutput(
  * NOTES:
  */
 void
+#if __STDC__
 isis_input(struct mbuf *m0, ...)
+#else
+isis_input(m0, va_alist)
+	struct mbuf    *m0;
+	va_dcl
+#endif
 {
 	struct snpa_hdr *shp;	/* subnetwork header */
 	struct rawcb *rp, *first_rp = 0;
@@ -1092,7 +1109,13 @@ isis_input(struct mbuf *m0, ...)
 }
 
 int
+#if __STDC__
 isis_output(struct mbuf *m, ...)
+#else
+isis_output(m, va_alist)
+	struct mbuf    *m;
+	va_dcl
+#endif
 {
 	struct sockaddr_dl *sdl;
 	struct ifnet *ifp;
@@ -1172,10 +1195,10 @@ release:
  *			back in if_down, we knew the ifp...
  */
 void *
-esis_ctlinput(
-	int    req,		/* request: we handle only PRC_IFDOWN */
-	struct sockaddr *siso,	/* address of ifp */
-	void *dummy)
+esis_ctlinput(req, siso, dummy)
+	int             req;	/* request: we handle only PRC_IFDOWN */
+	struct sockaddr *siso;	/* address of ifp */
+	void *dummy;
 {
 	struct iso_ifaddr *ia;	/* scan through interface addresses */
 

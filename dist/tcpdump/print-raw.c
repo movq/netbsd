@@ -1,4 +1,4 @@
-/*	$NetBSD: print-raw.c,v 1.4 2004/09/27 23:04:25 dyoung Exp $	*/
+/*	$NetBSD: print-raw.c,v 1.3 2002/02/18 09:37:09 itojun Exp $	*/
 
 /*
  * Copyright (c) 1996
@@ -24,10 +24,10 @@
 #include <sys/cdefs.h>
 #ifndef lint
 #if 0
-static const char rcsid[] _U_ =
-    "@(#) Header: /tcpdump/master/tcpdump/print-raw.c,v 1.39.2.2 2003/11/16 08:51:40 guy Exp (LBL)";
+static const char rcsid[] =
+    "@(#) Header: /tcpdump/master/tcpdump/print-raw.c,v 1.34 2001/07/05 18:54:17 guy Exp (LBL)";
 #else
-__RCSID("$NetBSD: print-raw.c,v 1.4 2004/09/27 23:04:25 dyoung Exp $");
+__RCSID("$NetBSD: print-raw.c,v 1.3 2002/02/18 09:37:09 itojun Exp $");
 #endif
 #endif
 
@@ -35,7 +35,13 @@ __RCSID("$NetBSD: print-raw.c,v 1.4 2004/09/27 23:04:25 dyoung Exp $");
 #include "config.h"
 #endif
 
-#include <tcpdump-stdinc.h>
+#include <sys/param.h>
+#include <sys/time.h>
+#include <sys/socket.h>
+#include <sys/file.h>
+#include <sys/ioctl.h>
+
+#include <netinet/in.h>
 
 #include <pcap.h>
 #include <stdio.h>
@@ -48,13 +54,32 @@ __RCSID("$NetBSD: print-raw.c,v 1.4 2004/09/27 23:04:25 dyoung Exp $");
  * The DLT_RAW packet has no header. It contains a raw IP packet.
  */
 
-u_int
-raw_if_print(const struct pcap_pkthdr *h, const u_char *p)
+void
+raw_if_print(u_char *user, const struct pcap_pkthdr *h, const u_char *p)
 {
+	u_int length = h->len;
+	u_int caplen = h->caplen;
+
+	++infodelay;
+	ts_print(&h->ts);
+
+	/*
+	 * Some printers want to get back at the link level addresses,
+	 * and/or check that they're not walking off the end of the packet.
+	 * Rather than pass them all the way down, we set these globals.
+	 */
+	packetp = p;
+	snapend = p + caplen;
+
 	if (eflag)
 		printf("ip: ");
 
-	ipN_print(p, h->len);
+	ipN_print(p, length);
 
-	return (0);
+	if (xflag)
+		default_print(p, caplen);
+	putchar('\n');
+	--infodelay;
+	if (infoprint)
+		info(0);
 }

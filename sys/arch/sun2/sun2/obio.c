@@ -1,4 +1,4 @@
-/*	$NetBSD: obio.c,v 1.13 2004/12/13 02:14:13 chs Exp $	*/
+/*	$NetBSD: obio.c,v 1.12 2003/07/15 03:36:13 lukem Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: obio.c,v 1.13 2004/12/13 02:14:13 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: obio.c,v 1.12 2003/07/15 03:36:13 lukem Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -66,8 +66,6 @@ struct obio_softc {
 
 CFATTACH_DECL(obio, sizeof(struct obio_softc),
     obio_match, obio_attach, NULL, NULL);
-
-static int obio_attached;
 
 static	paddr_t obio_bus_mmap __P((bus_space_tag_t, bus_type_t, bus_addr_t,
 			       off_t, int, int));
@@ -102,9 +100,6 @@ obio_match(parent, cf, aux)
 {
 	struct mainbus_attach_args *ma = aux;
 
-	if (obio_attached)
-		return 0;
-
 	return (ma->ma_name == NULL || strcmp(cf->cf_name, ma->ma_name) == 0);
 }
 
@@ -123,8 +118,13 @@ obio_attach(parent, self, aux)
 		NULL
 	};
 
-	obio_attached = 1;
-
+	/*
+	 * There is only one obio bus
+	 */
+	if (self->dv_unit > 0) {
+		printf(" unsupported\n");
+		return;
+	}
 	printf("\n");
 
 	sc->sc_bustag = ma->ma_bustag;

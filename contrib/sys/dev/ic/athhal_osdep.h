@@ -1,6 +1,6 @@
 /*	$NetBSD$	*/
 /*-
- * Copyright (c) 2002-2004 Sam Leffler, Errno Consulting, Atheros
+ * Copyright (c) 2002, 2003 Sam Leffler, Errno Consulting, Atheros
  * Communications, Inc.  All rights reserved.
  *
  * Redistribution and use in source and binary forms are permitted
@@ -34,7 +34,7 @@
  * OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGES.
  *
- * $Id: ah_osdep.h,v 1.1.1.7 2004/06/09 16:25:50 samleffler Exp $
+ * $Id: ah_osdep.h,v 1.10 2003/11/01 01:21:31 sam Exp $
  */
 #ifndef _ATH_AH_OSDEP_H_
 #define _ATH_AH_OSDEP_H_
@@ -58,21 +58,15 @@ typedef bus_addr_t HAL_BUS_ADDR;
 extern	void ath_hal_delay(int);
 #define	OS_DELAY(_n)	ath_hal_delay(_n)
 
-#define	OS_MEMZERO(_a, _n)	__builtin_memset((_a), 0, (_n))
-#define	OS_MEMCPY(_d, _s, _n)	ath_hal_memcpy(_d,_s,_n)
-extern void * ath_hal_memcpy(void *, const void *, size_t);
-
-#define	abs(_a)		__builtin_abs(_a)
+#define	OS_INLINE	__inline
+#define	OS_MEMZERO(_a, _size)		bzero((_a), (_size))
+#define	OS_MEMCPY(_dst, _src, _size)	bcopy((_src), (_dst), (_size))
+#define	OS_MACEQU(_a, _b) \
+	(bcmp((_a), (_b), IEEE80211_ADDR_LEN) == 0)
 
 struct ath_hal;
 extern	u_int32_t ath_hal_getuptime(struct ath_hal *);
 #define	OS_GETUPTIME(_ah)	ath_hal_getuptime(_ah)
-
-/*
- * Byte order/swapping support.
- */
-#define	AH_LITTLE_ENDIAN	1234
-#define	AH_BIG_ENDIAN		4321
 
 /*
  * Register read/write; we assume the registers will always
@@ -81,7 +75,15 @@ extern	u_int32_t ath_hal_getuptime(struct ath_hal *);
  * (AH_DEBUG) or we are explicitly configured this way.  The
  * latter is used on some platforms where the full i/o space
  * cannot be directly mapped.
- *
+ */
+#if defined(AH_DEBUG) || defined(AH_REGOPS_FUNC) || defined(AH_DEBUG_ALQ)
+#define	OS_REG_WRITE(_ah, _reg, _val)	ath_hal_reg_write(_ah, _reg, _val)
+#define	OS_REG_READ(_ah, _reg)		ath_hal_reg_read(_ah, _reg)
+
+extern	void ath_hal_reg_write(struct ath_hal *ah, u_int reg, u_int32_t val);
+extern	u_int32_t ath_hal_reg_read(struct ath_hal *ah, u_int reg);
+#else
+/*
  * The hardware registers are native little-endian byte order.
  * Big-endian hosts are handled by enabling hardware byte-swap
  * of register reads and writes at reset.  But the PCI clock
@@ -90,18 +92,11 @@ extern	u_int32_t ath_hal_getuptime(struct ath_hal *);
  * Most of this code is collapsed at compile time because the
  * register values are constants.
  */
-#if defined(AH_DEBUG) || defined(AH_REGOPS_FUNC)
-/* use functions to do register operations */
-#define	OS_REG_WRITE(_ah, _reg, _val)	ath_hal_reg_write(_ah, _reg, _val)
-#define	OS_REG_READ(_ah, _reg)		ath_hal_reg_read(_ah, _reg)
+#define	AH_LITTLE_ENDIAN	1234
+#define	AH_BIG_ENDIAN		4321
 
-extern	void ath_hal_reg_write(struct ath_hal *ah,
-		u_int reg, u_int32_t val);
-extern	u_int32_t ath_hal_reg_read(struct ath_hal *ah, u_int reg);
-#else
-/* inline register operations */
-#if AH_BYTE_ORDER == AH_BIG_ENDIAN
-#define OS_REG_WRITE(_ah, _reg, _val) do {				    \
+#if _BYTE_ORDER == _BIG_ENDIAN
+#define OS_REG_WRITE(_ah, _reg, _val) do {				\
 	if ( (_reg) >= 0x4000 && (_reg) < 0x5000)			\
 		bus_space_write_4((_ah)->ah_st, (_ah)->ah_sh,		\
 			(_reg), htole32(_val));			\
@@ -109,20 +104,23 @@ extern	u_int32_t ath_hal_reg_read(struct ath_hal *ah, u_int reg);
 		bus_space_write_4((_ah)->ah_st, (_ah)->ah_sh,		\
 			(_reg), (_val));				\
 } while (0)
-#define OS_REG_READ(_ah, _reg) \
+#define OS_REG_READ(_ah, _reg)						\
 	(((_reg) >= 0x4000 && (_reg) < 0x5000) ?			\
 		le32toh(bus_space_read_4((_ah)->ah_st, (_ah)->ah_sh,	\
 			(_reg))) :					\
 		bus_space_read_4((_ah)->ah_st, (_ah)->ah_sh, (_reg)))
-#else /* AH_LITTLE_ENDIAN */
-#define OS_REG_WRITE(_ah, _reg, _val) \
+#else /* _BYTE_ORDER == _LITTLE_ENDIAN */
+#define	OS_REG_WRITE(_ah, _reg, _val)					\
 	bus_space_write_4((_ah)->ah_st, (_ah)->ah_sh, (_reg), (_val))
-#define OS_REG_READ(_ah, _reg) \
+#define	OS_REG_READ(_ah, _reg)						\
 	((u_int32_t) bus_space_read_4((_ah)->ah_st, (_ah)->ah_sh, (_reg)))
-#endif /* AH_BYTE_ORDER */
-#endif /* AH_DEBUG || AH_REGFUNC */
-#define	OS_MARK(_ah, _id, _v)
+#endif /* _BYTE_ORDER */
+#endif /* AH_DEBUG || AH_REGFUNC || AH_DEBUG_ALQ */
 
-extern	void ath_hal_detach(struct ath_hal *);
+#ifdef AH_DEBUG_ALQ
+extern	void OS_MARK(struct ath_hal *, u_int id, u_int32_t value);
+#else
+#define	OS_MARK(_ah, _id, _v)
+#endif
 
 #endif /* _ATH_AH_OSDEP_H_ */

@@ -1,4 +1,4 @@
-/*	$NetBSD: vmstat.c,v 1.56 2004/06/13 08:56:21 mycroft Exp $	*/
+/*	$NetBSD: vmstat.c,v 1.55 2003/09/19 07:08:50 itojun Exp $	*/
 
 /*-
  * Copyright (c) 1983, 1989, 1992, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)vmstat.c	8.2 (Berkeley) 1/12/94";
 #endif
-__RCSID("$NetBSD: vmstat.c,v 1.56 2004/06/13 08:56:21 mycroft Exp $");
+__RCSID("$NetBSD: vmstat.c,v 1.55 2003/09/19 07:08:50 itojun Exp $");
 #endif /* not lint */
 
 /*
@@ -581,10 +581,11 @@ showvmstat(void)
 		else
 			r++;
 		for (j = 0; j < 5; j++) {
+			mvprintw(r, c, "%*s", DISKCOLWIDTH, "");
 			if (disk_horiz)
-				mvprintw(r+j, c, "%*s", DISKCOLWIDTH, "");
+				r++;
 			else
-				mvprintw(r, c+j*DISKCOLWIDTH, "%*s", DISKCOLWIDTH, "");
+				c += DISKCOLWIDTH;
 		}
 	}
 	last_disks = l;

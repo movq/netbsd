@@ -83,3 +83,4 @@ Disassembly of section .text:
 
 00000094 <test_end>:
   94:	26 0d 5e 00 	jmp	r13	||	nop	
+Disassembly of section .data:

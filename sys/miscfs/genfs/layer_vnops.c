@@ -1,4 +1,4 @@
-/*	$NetBSD: layer_vnops.c,v 1.23 2004/06/30 17:42:55 hannken Exp $	*/
+/*	$NetBSD: layer_vnops.c,v 1.14.2.4 2004/07/02 17:55:13 he Exp $	*/
 
 /*
  * Copyright (c) 1999 National Aeronautics & Space Administration
@@ -67,7 +67,7 @@
  *
  * Ancestors:
  *	@(#)lofs_vnops.c	1.2 (Berkeley) 6/18/92
- *	$Id: layer_vnops.c,v 1.23 2004/06/30 17:42:55 hannken Exp $
+ *	$Id: layer_vnops.c,v 1.14.2.4 2004/07/02 17:55:13 he Exp $
  *	...and...
  *	@(#)null_vnodeops.c 1.20 92/07/07 UCLA Ficus project
  */
@@ -232,7 +232,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: layer_vnops.c,v 1.23 2004/06/30 17:42:55 hannken Exp $");
+__KERNEL_RCSID(0, "$NetBSD: layer_vnops.c,v 1.14.2.4 2004/07/02 17:55:13 he Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -288,7 +288,7 @@ layer_bypass(v)
 		struct vnodeop_desc *a_desc;
 		<other random data follows, presumably>
 	} */ *ap = v;
-	int (**our_vnodeop_p) __P((void *));
+	int (**our_vnodeop_p) __P((void *)); 
 	struct vnode **this_vp_p;
 	int error, error1;
 	struct vnode *old_vps[VDESC_MAX_VPS], *vp0;
@@ -303,17 +303,16 @@ layer_bypass(v)
 	 */
 	if (descp->vdesc_vp_offsets == NULL ||
 	    descp->vdesc_vp_offsets[0] == VDESC_NO_OFFSET)
-		panic("%s: no vp's in map.\n", __func__);
+		panic ("layer_bypass: no vp's in map.\n");
 #endif
 
-	vps_p[0] =
-	    VOPARG_OFFSETTO(struct vnode**, descp->vdesc_vp_offsets[0], ap);
+	vps_p[0] = VOPARG_OFFSETTO(struct vnode**,descp->vdesc_vp_offsets[0],ap);
 	vp0 = *vps_p[0];
 	flags = MOUNTTOLAYERMOUNT(vp0->v_mount)->layerm_flags;
 	our_vnodeop_p = vp0->v_op;
 
 	if (flags & LAYERFS_MBYPASSDEBUG)
-		printf("%s: %s\n", __func__, descp->vdesc_name);
+		printf ("layer_bypass: %s\n", descp->vdesc_name);
 
 	/*
 	 * Map the vnodes going in.
@@ -325,8 +324,7 @@ layer_bypass(v)
 		if (descp->vdesc_vp_offsets[i] == VDESC_NO_OFFSET)
 			break;   /* bail out at end of list */
 		vps_p[i] = this_vp_p = 
-		    VOPARG_OFFSETTO(struct vnode**, descp->vdesc_vp_offsets[i],
-		    ap);
+			VOPARG_OFFSETTO(struct vnode**,descp->vdesc_vp_offsets[i],ap);
 		/*
 		 * We're not guaranteed that any but the first vnode
 		 * are of our type.  Check for and don't map any
@@ -390,20 +388,16 @@ layer_bypass(v)
 		if (descp->vdesc_flags & VDESC_VPP_WILLRELE)
 			goto out;
 		vppp = VOPARG_OFFSETTO(struct vnode***,
-				 descp->vdesc_vpp_offset, ap);
+				 descp->vdesc_vpp_offset,ap);
 		/*
 		 * Only vop_lookup, vop_create, vop_makedir, vop_bmap,
 		 * vop_mknod, and vop_symlink return vpp's. vop_bmap
 		 * doesn't call bypass as the lower vpp is fine (we're just
-		 * going to do i/o on it). vop_lookup doesn't call bypass
+		 * going to do i/o on it). vop_loookup doesn't call bypass
 		 * as a lookup on "." would generate a locking error.
 		 * So all the calls which get us here have a locked vpp. :-)
 		 */
 		error = layer_node_create(old_vps[0]->v_mount, **vppp, *vppp);
-		if (error) {
-			vput(**vppp);
-			**vppp = NULL;
-		}
 	}
 
  out:
@@ -470,13 +464,6 @@ layer_lookup(v)
 		vrele(vp);
 	} else if (vp != NULL) {
 		error = layer_node_create(dvp->v_mount, vp, ap->a_vpp);
-		if (error) {
-			vput(vp);
-			if (cnp->cn_flags & PDIRUNLOCK) {
-				if (vn_lock(dvp, LK_EXCLUSIVE | LK_RETRY) == 0)
-					cnp->cn_flags &= ~PDIRUNLOCK;
-			}
-		}
 	}
 	return (error);
 }
@@ -545,7 +532,7 @@ layer_getattr(v)
 	if ((error = LAYERFS_DO_BYPASS(vp, ap)) != 0)
 		return (error);
 	/* Requires that arguments be restored. */
-	ap->a_vap->va_fsid = vp->v_mount->mnt_stat.f_fsidx.__fsid_val[0];
+	ap->a_vap->va_fsid = vp->v_mount->mnt_stat.f_fsid.val[0];
 	return (0);
 }
 
@@ -691,6 +678,10 @@ layer_unlock(v)
 	}
 }
 
+/*
+ * As long as genfs_nolock is in use, don't call VOP_ISLOCKED(lowervp)
+ * if vp->v_vnlock == NULL as genfs_noislocked will always report 0.
+ */
 int
 layer_islocked(v)
 	void *v;
@@ -699,16 +690,11 @@ layer_islocked(v)
 		struct vnode *a_vp;
 	} */ *ap = v;
 	struct vnode *vp = ap->a_vp;
-	int lkstatus;
 
 	if (vp->v_vnlock != NULL)
-		return lockstatus(vp->v_vnlock);
-
-	lkstatus = VOP_ISLOCKED(LAYERVPTOLOWERVP(vp));
-	if (lkstatus)
-		return lkstatus;
-
-	return lockstatus(&vp->v_lock);
+		return (lockstatus(vp->v_vnlock));
+	else
+		return (lockstatus(&vp->v_lock));
 }
 
 /*

@@ -1,4 +1,4 @@
-/*	$NetBSD: print-token.c,v 1.5 2004/09/27 23:04:25 dyoung Exp $	*/
+/*	$NetBSD: print-token.c,v 1.4 2002/05/31 09:45:46 itojun Exp $	*/
 
 /*
  * Copyright (c) 1988, 1989, 1990, 1991, 1992, 1993, 1994, 1995, 1996
@@ -28,10 +28,10 @@
 #include <sys/cdefs.h>
 #ifndef lint
 #if 0
-static const char rcsid[] _U_ =
-    "@(#) Header: /tcpdump/master/tcpdump/print-token.c,v 1.22.2.2 2003/11/16 08:51:51 guy Exp";
+static const char rcsid[] =
+    "@(#) Header: /tcpdump/master/tcpdump/print-token.c,v 1.15 2002/05/29 10:06:27 guy Exp";
 #else
-__RCSID("$NetBSD: print-token.c,v 1.5 2004/09/27 23:04:25 dyoung Exp $");
+__RCSID("$NetBSD: print-token.c,v 1.4 2002/05/31 09:45:46 itojun Exp $");
 #endif
 #endif
 
@@ -39,7 +39,11 @@ __RCSID("$NetBSD: print-token.c,v 1.5 2004/09/27 23:04:25 dyoung Exp $");
 #include "config.h"
 #endif
 
-#include <tcpdump-stdinc.h>
+#include <sys/param.h>
+#include <sys/time.h>
+#include <sys/socket.h>
+
+#include <netinet/in.h>
 
 #include <pcap.h>
 #include <stdio.h>
@@ -110,8 +114,7 @@ token_print(const u_char *p, u_int length, u_int caplen)
 	const struct token_header *trp;
 	u_short extracted_ethertype;
 	struct ether_header ehdr;
-	u_int route_len = 0, hdr_len = TOKEN_HDRLEN;
-	int seg;
+	u_int route_len = 0, hdr_len = TOKEN_HDRLEN, seg;
 
 	trp = (const struct token_header *)p;
 
@@ -119,11 +122,23 @@ token_print(const u_char *p, u_int length, u_int caplen)
 		printf("[|token-ring]");
 		return hdr_len;
 	}
-
 	/*
 	 * Get the TR addresses into a canonical form
 	 */
 	extract_token_addrs(trp, (char*)ESRC(&ehdr), (char*)EDST(&ehdr));
+	/*
+	 * Some printers want to get back at the ethernet addresses,
+	 * and/or check that they're not walking off the end of the packet.
+	 * Rather than pass them all the way down, we set these globals.
+	 */
+	snapend = p + caplen;
+	/*
+	 * Actually, the only printers that use packetp are print-arp.c
+	 * and print-bootp.c, and they assume that packetp points to an
+	 * Ethernet header.  The right thing to do is to fix them to know
+	 * which link type is in use when they excavate. XXX
+	 */
+	packetp = (u_char *)&ehdr;
 
 	/* Adjust for source routing information in the MAC header */
 	if (IS_SOURCE_ROUTED(trp)) {
@@ -137,13 +152,13 @@ token_print(const u_char *p, u_int length, u_int caplen)
 		if (vflag) {
 			printf("%s ", broadcast_indicator[BROADCAST(trp)]);
 			printf("%s", direction[DIRECTION(trp)]);
-
+     
 			for (seg = 0; seg < SEGMENT_COUNT(trp); seg++)
 				printf(" [%d:%d]", RING_NUMBER(trp, seg),
 				    BRIDGE_NUMBER(trp, seg));
 		} else {
 			printf("rt = %x", ntohs(trp->token_rcf));
-
+ 
 			for (seg = 0; seg < SEGMENT_COUNT(trp); seg++)
 				printf(":%x", ntohs(trp->token_rseg[seg]));
 		}
@@ -190,13 +205,33 @@ token_print(const u_char *p, u_int length, u_int caplen)
 }
 
 /*
- * This is the top level routine of the printer.  'p' points
- * to the TR header of the packet, 'h->ts' is the timestamp,
- * 'h->length' is the length of the packet off the wire, and 'h->caplen'
+ * This is the top level routine of the printer.  'p' is the points
+ * to the TR header of the packet, 'tvp' is the timestamp,
+ * 'length' is the length of the packet off the wire, and 'caplen'
  * is the number of bytes actually captured.
  */
-u_int
-token_if_print(const struct pcap_pkthdr *h, const u_char *p)
+void
+token_if_print(u_char *user, const struct pcap_pkthdr *h, const u_char *p)
 {
-	return (token_print(p, h->len, h->caplen));
+	u_int caplen = h->caplen;
+	u_int length = h->len;
+	u_int hdr_len;
+
+	++infodelay;
+	ts_print(&h->ts);
+
+	hdr_len = token_print(p, length, caplen);
+
+	/*
+	 * If "-x" was specified, print stuff past the Token Ring header,
+	 * if there's anything to print.
+	 */
+	if (xflag && caplen > hdr_len)
+		default_print(p + hdr_len, caplen - hdr_len);
+
+	putchar('\n');
+
+	--infodelay;
+	if (infoprint)
+		info(0);
 }

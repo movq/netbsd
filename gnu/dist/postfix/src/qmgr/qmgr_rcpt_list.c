@@ -1,5 +1,3 @@
-/*	$NetBSD: qmgr_rcpt_list.c,v 1.1.1.4 2004/05/31 00:24:44 heas Exp $	*/
-
 /*++
 /* NAME
 /*	qmgr_rcpt_list 3
@@ -77,13 +75,10 @@ void    qmgr_rcpt_list_init(QMGR_RCPT_LIST *list)
 void    qmgr_rcpt_list_add(QMGR_RCPT_LIST *list, long offset,
 			           const char *orcpt, const char *rcpt)
 {
-    int     new_avail;
-
     if (list->len >= list->avail) {
-	new_avail = list->avail * 2;
+	list->avail *= 2;
 	list->info = (QMGR_RCPT *)
-	    myrealloc((char *) list->info, new_avail * sizeof(QMGR_RCPT));
-	list->avail = new_avail;
+	    myrealloc((char *) list->info, list->avail * sizeof(QMGR_RCPT));
     }
     list->info[list->len].orig_rcpt = mystrdup(orcpt);
     list->info[list->len].address = mystrdup(rcpt);

@@ -1,4 +1,4 @@
-/*	$NetBSD: fd.c,v 1.62 2004/10/28 07:07:39 yamt Exp $	*/
+/*	$NetBSD: fd.c,v 1.60 2003/11/15 15:02:08 isaki Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -71,7 +71,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: fd.c,v 1.62 2004/10/28 07:07:39 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: fd.c,v 1.60 2003/11/15 15:02:08 isaki Exp $");
 
 #include "rnd.h"
 #include "opt_ddb.h"
@@ -90,7 +90,6 @@ __KERNEL_RCSID(0, "$NetBSD: fd.c,v 1.62 2004/10/28 07:07:39 yamt Exp $");
 #include <sys/disklabel.h>
 #include <sys/disk.h>
 #include <sys/buf.h>
-#include <sys/bufq.h>
 #include <sys/uio.h>
 #include <sys/syslog.h>
 #include <sys/queue.h>
@@ -107,7 +106,7 @@ __KERNEL_RCSID(0, "$NetBSD: fd.c,v 1.62 2004/10/28 07:07:39 yamt Exp $");
 #include <arch/x68k/dev/intiovar.h>
 #include <arch/x68k/dev/dmacvar.h>
 #include <arch/x68k/dev/fdreg.h>
-#include <arch/x68k/dev/opmvar.h> /* for CT1 access */
+#include <arch/x68k/dev/opmreg.h> /* for CT1 access */
 
 #include "locators.h"
 

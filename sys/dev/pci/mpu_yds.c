@@ -1,4 +1,4 @@
-/*	$NetBSD: mpu_yds.c,v 1.8 2004/12/02 09:50:42 xtraeme Exp $	*/
+/*	$NetBSD: mpu_yds.c,v 1.6 2003/12/04 13:57:31 keihan Exp $	*/
 
 /*
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mpu_yds.c,v 1.8 2004/12/02 09:50:42 xtraeme Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mpu_yds.c,v 1.6 2003/12/04 13:57:31 keihan Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -62,14 +62,17 @@ __KERNEL_RCSID(0, "$NetBSD: mpu_yds.c,v 1.8 2004/12/02 09:50:42 xtraeme Exp $");
 #include <dev/pci/ydsreg.h>
 #include <dev/pci/ydsvar.h>
 
-static int	mpu_yds_match(struct device *, struct cfdata *, void *);
-static void	mpu_yds_attach(struct device *, struct device *, void *);
+static int	mpu_yds_match __P((struct device *, struct cfdata *, void *));
+static void	mpu_yds_attach __P((struct device *, struct device *, void *));
 
 CFATTACH_DECL(mpu_yds, sizeof (struct mpu_softc),
     mpu_yds_match, mpu_yds_attach, NULL, NULL);
 
 static int
-mpu_yds_match(struct device *parent, struct cfdata *match, void *aux)
+mpu_yds_match(parent, match, aux)
+	struct device *parent;
+	struct cfdata *match;
+	void *aux;
 {
 	struct audio_attach_args *aa = (struct audio_attach_args *)aux;
 	struct yds_softc *ysc = (struct yds_softc *)parent;
@@ -84,12 +87,13 @@ mpu_yds_match(struct device *parent, struct cfdata *match, void *aux)
 }
 
 static void
-mpu_yds_attach(struct device *parent, struct device *self, void *aux)
+mpu_yds_attach(parent, self, aux)
+	struct device *parent;
+	struct device *self;
+	void *aux;
 {
 	struct yds_softc *ysc = (struct yds_softc *)parent;
 	struct mpu_softc *sc = (struct mpu_softc *)self;
-
-	printf("\n");
 
 	sc->ioh = ysc->sc_mpu_ioh;
 	sc->iot = ysc->sc_mpu_iot;

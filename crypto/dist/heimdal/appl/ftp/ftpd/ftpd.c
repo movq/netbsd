@@ -35,7 +35,7 @@
 #include "getarg.h"
 
 __RCSID("$Heimdal: ftpd.c,v 1.166.2.3 2004/08/20 15:16:37 lha Exp $"
-        "$NetBSD: ftpd.c,v 1.4 2004/09/14 08:08:20 lha Exp $");
+        "$NetBSD: ftpd.c,v 1.2.2.2 2004/09/17 04:35:02 jmc Exp $");
 
 static char version[] = "Version 6.00";
 

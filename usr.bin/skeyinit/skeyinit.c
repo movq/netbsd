@@ -1,4 +1,4 @@
-/*	$NetBSD: skeyinit.c,v 1.24 2004/11/03 20:10:08 dsl Exp $	*/
+/*	$NetBSD: skeyinit.c,v 1.23 2004/01/05 23:23:37 jmmv Exp $	*/
 
 /* S/KEY v1.1b (skeyinit.c)
  *
@@ -17,7 +17,7 @@
 #include <sys/cdefs.h>
 
 #ifndef lint
-__RCSID("$NetBSD: skeyinit.c,v 1.24 2004/11/03 20:10:08 dsl Exp $");
+__RCSID("$NetBSD: skeyinit.c,v 1.23 2004/01/05 23:23:37 jmmv Exp $");
 #endif
 
 #include <sys/param.h>
@@ -84,7 +84,7 @@ int main(int argc, char **argv)
 			defaultseed[l] = hostname[i];
 			break;
 		}
-		if (isalnum((unsigned char)hostname[i]))
+		if (isalnum(hostname[i]))
 			defaultseed[l++] = hostname[i];
 	}
 
@@ -222,9 +222,10 @@ int main(int argc, char **argv)
 			fgets(seed, sizeof(seed), stdin);
 			rip(seed);
 			for (p = seed; *p; p++) {
-				if (isalpha((unsigned char)*p)) {
-					*p = tolower((unsigned char)*p);
-				} else if (!isdigit((unsigned char)*p)) {
+				if (isalpha(*p)) {
+					if (isupper(*p))
+						*p = tolower(*p);
+				} else if (!isdigit(*p)) {
 					(void)puts("Error: seed may only contain alphanumeric characters");
 					break;
 				}

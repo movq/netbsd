@@ -1,4 +1,4 @@
-/*	$NetBSD: softmagic.c,v 1.1.1.7 2004/12/13 10:24:52 pooka Exp $	*/
+/*	$NetBSD: softmagic.c,v 1.1.1.5 2004/03/23 08:31:45 pooka Exp $	*/
 
 /*
  * Copyright (c) Ian F. Darwin 1986-1995.
@@ -14,6 +14,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *    This product includes software developed by Ian F. Darwin and others.
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
  *  
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND
  * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
@@ -42,9 +47,9 @@
 
 #ifndef	lint
 #if 0
-FILE_RCSID("@(#)Id: softmagic.c,v 1.72 2004/11/24 17:38:25 christos Exp")
+FILE_RCSID("@(#)Id: softmagic.c,v 1.65 2004/03/09 18:49:58 christos Exp")
 #else
-__RCSID("$NetBSD: softmagic.c,v 1.1.1.7 2004/12/13 10:24:52 pooka Exp $");
+__RCSID("$NetBSD: softmagic.c,v 1.1.1.5 2004/03/23 08:31:45 pooka Exp $");
 #endif
 #endif	/* lint */
 
@@ -55,8 +60,6 @@ private int mget(struct magic_set *, union VALUETYPE *, const unsigned char *,
 private int mcheck(struct magic_set *, union VALUETYPE *, struct magic *);
 private int32_t mprint(struct magic_set *, union VALUETYPE *, struct magic *);
 private void mdebug(uint32_t, const char *, size_t);
-private int mcopy(struct magic_set *, union VALUETYPE *, int, int,
-    const unsigned char *, size_t, size_t);
 private int mconvert(struct magic_set *, union VALUETYPE *, struct magic *);
 private int check_mem(struct magic_set *, unsigned int);
 
@@ -279,8 +282,6 @@ mprint(struct magic_set *ms, union VALUETYPE *p, struct magic *m)
 
   	case FILE_STRING:
   	case FILE_PSTRING:
-  	case FILE_BESTRING16:
-  	case FILE_LESTRING16:
 		if (m->reln == '=') {
 			if (file_printf(ms, m->desc, m->value.s) == -1)
 				return -1;
@@ -431,30 +432,28 @@ mconvert(struct magic_set *ms, union VALUETYPE *p, struct magic *m)
 			p->l = ~p->l;
 		return 1;
 	case FILE_STRING:
-	case FILE_BESTRING16:
-	case FILE_LESTRING16:
 		{
-			size_t len;
+			int n;
 
 			/* Null terminate and eat *trailing* return */
 			p->s[sizeof(p->s) - 1] = '\0';
-			len = strlen(p->s);
-			if (len-- && p->s[len] == '\n')
-				p->s[len] = '\0';
+			n = strlen(p->s) - 1;
+			if (p->s[n] == '\n')
+				p->s[n] = '\0';
 			return 1;
 		}
 	case FILE_PSTRING:
 		{
 			char *ptr1 = p->s, *ptr2 = ptr1 + 1;
-			size_t len = *p->s;
-			if (len >= sizeof(p->s))
-				len = sizeof(p->s) - 1;
-			while (len--)
+			unsigned int n = *p->s;
+			if (n >= sizeof(p->s))
+				n = sizeof(p->s) - 1;
+			while (n--)
 				*ptr1++ = *ptr2++;
 			*ptr1 = '\0';
-			len = strlen(p->s);
-			if (len-- && p->s[len] == '\n')
-				p->s[len] = '\0';
+			n = strlen(p->s) - 1;
+			if (p->s[n] == '\n')
+				p->s[n] = '\0';
 			return 1;
 		}
 	case FILE_BESHORT:
@@ -610,10 +609,12 @@ mdebug(uint32_t offset, const char *str, size_t len)
 }
 
 private int
-mcopy(struct magic_set *ms, union VALUETYPE *p, int type, int indir,
-    const unsigned char *s, size_t offset, size_t nbytes)
+mget(struct magic_set *ms, union VALUETYPE *p, const unsigned char *s,
+    struct magic *m, size_t nbytes)
 {
-	if (type == FILE_REGEX && indir == 0) {
+	uint32_t offset = m->offset;
+
+	if (m->type == FILE_REGEX) {
 		/*
 		 * offset is interpreted as last line to search,
 		 * (starting at 1), not as bytes-from start-of-file
@@ -629,58 +630,17 @@ mcopy(struct magic_set *ms, union VALUETYPE *p, int type, int indir,
 			last = b;
 		if (last != NULL)
 			*last = '\0';
-		return 0;
+	} else if (offset + sizeof(union VALUETYPE) <= nbytes)
+		memcpy(p, s + offset, sizeof(union VALUETYPE));
+	else {
+		/*
+		 * the usefulness of padding with zeroes eludes me, it
+		 * might even cause problems
+		 */
+		memset(p, 0, sizeof(union VALUETYPE));
+		if (offset < nbytes)
+			memcpy(p, s + offset, nbytes - offset);
 	}
-
-	if (indir == 0 && (type == FILE_BESTRING16 || type == FILE_LESTRING16))
-	{
-		const char *src = s + offset;
-		const char *esrc = s + nbytes;
-		char *dst = p->s, *edst = &p->s[sizeof(p->s) - 1];
-
-		if (type == FILE_BESTRING16)
-			src++;
-
-		for (;src < esrc; src++, dst++) {
-			if (dst < edst)
-				*dst = *src++;
-			else
-				break;
-			if (*dst == '\0')
-				*dst = ' ';
-		}
-		*edst = '\0';
-		return 0;
-	}
-
-	if (offset >= nbytes) {
-		(void)memset(p, '\0', sizeof(*p));
-		return 0;
-	}
-	if (nbytes - offset < sizeof(*p))
-		nbytes = nbytes - offset;
-	else
-		nbytes = sizeof(*p);
-
-	(void)memcpy(p, s + offset, nbytes);
-
-	/*
-	 * the usefulness of padding with zeroes eludes me, it
-	 * might even cause problems
-	 */
-	if (nbytes < sizeof(*p))
-		(void)memset(((char *)p) + nbytes, '\0', sizeof(*p) - nbytes);
-	return 0;
-}
-
-private int
-mget(struct magic_set *ms, union VALUETYPE *p, const unsigned char *s,
-    struct magic *m, size_t nbytes)
-{
-	uint32_t offset = m->offset;
-
-	if (mcopy(ms, p, m->type, m->flag & INDIR, s, offset, nbytes) == -1)
-		return -1;
 
 	/* Verify we have enough data to match magic type */
 	switch (m->type) {
@@ -724,7 +684,7 @@ mget(struct magic_set *ms, union VALUETYPE *p, const unsigned char *s,
 	if (m->flag & INDIR) {
 		switch (m->in_type) {
 		case FILE_BYTE:
-			if (m->in_offset) {
+			if (m->in_offset)
 				switch (m->in_op&0x7F) {
 				case FILE_OPAND:
 					offset = p->b & m->in_offset;
@@ -751,14 +711,12 @@ mget(struct magic_set *ms, union VALUETYPE *p, const unsigned char *s,
 					offset = p->b % m->in_offset;
 					break;
 				}
-			} else
-				offset = p->b;
 			if (m->in_op & FILE_OPINVERSE)
 				offset = ~offset;
 			break;
 		case FILE_BESHORT:
-			if (m->in_offset) {
-				switch (m->in_op & 0x7F) {
+			if (m->in_offset)
+				switch (m->in_op&0x7F) {
 				case FILE_OPAND:
 					offset = (short)((p->hs[0]<<8)|
 							 (p->hs[1])) &
@@ -800,15 +758,12 @@ mget(struct magic_set *ms, union VALUETYPE *p, const unsigned char *s,
 						 m->in_offset;
 					break;
 				}
-			} else
-				offset = (short)((p->hs[0]<<8)|
-						 (p->hs[1]));
 			if (m->in_op & FILE_OPINVERSE)
 				offset = ~offset;
 			break;
 		case FILE_LESHORT:
-			if (m->in_offset) {
-				switch (m->in_op & 0x7F) {
+			if (m->in_offset)
+				switch (m->in_op&0x7F) {
 				case FILE_OPAND:
 					offset = (short)((p->hs[1]<<8)|
 							 (p->hs[0])) &
@@ -850,15 +805,12 @@ mget(struct magic_set *ms, union VALUETYPE *p, const unsigned char *s,
 						 m->in_offset;
 					break;
 				}
-			} else
-				offset = (short)((p->hs[1]<<8)|
-						 (p->hs[0]));
 			if (m->in_op & FILE_OPINVERSE)
 				offset = ~offset;
 			break;
 		case FILE_SHORT:
-			if (m->in_offset) {
-				switch (m->in_op & 0x7F) {
+			if (m->in_offset)
+				switch (m->in_op&0x7F) {
 				case FILE_OPAND:
 					offset = p->h & m->in_offset;
 					break;
@@ -884,15 +836,12 @@ mget(struct magic_set *ms, union VALUETYPE *p, const unsigned char *s,
 					offset = p->h % m->in_offset;
 					break;
 				}
-			}
-			else
-				offset = p->h;
 			if (m->in_op & FILE_OPINVERSE)
 				offset = ~offset;
 			break;
 		case FILE_BELONG:
-			if (m->in_offset) {
-				switch (m->in_op & 0x7F) {
+			if (m->in_offset)
+				switch (m->in_op&0x7F) {
 				case FILE_OPAND:
 					offset = (int32_t)((p->hl[0]<<24)|
 							 (p->hl[1]<<16)|
@@ -950,17 +899,12 @@ mget(struct magic_set *ms, union VALUETYPE *p, const unsigned char *s,
 						 m->in_offset;
 					break;
 				}
-			} else
-				offset = (int32_t)((p->hl[0]<<24)|
-						 (p->hl[1]<<16)|
-						 (p->hl[2]<<8)|
-						 (p->hl[3]));
 			if (m->in_op & FILE_OPINVERSE)
 				offset = ~offset;
 			break;
 		case FILE_LELONG:
-			if (m->in_offset) {
-				switch (m->in_op & 0x7F) {
+			if (m->in_offset)
+				switch (m->in_op&0x7F) {
 				case FILE_OPAND:
 					offset = (int32_t)((p->hl[3]<<24)|
 							 (p->hl[2]<<16)|
@@ -1018,17 +962,12 @@ mget(struct magic_set *ms, union VALUETYPE *p, const unsigned char *s,
 						 m->in_offset;
 					break;
 				}
-			} else
-				offset = (int32_t)((p->hl[3]<<24)|
-						 (p->hl[2]<<16)|
-						 (p->hl[1]<<8)|
-						 (p->hl[0]));
 			if (m->in_op & FILE_OPINVERSE)
 				offset = ~offset;
 			break;
 		case FILE_LONG:
-			if (m->in_offset) {
-				switch (m->in_op & 0x7F) {
+			if (m->in_offset)
+				switch (m->in_op&0x7F) {
 				case FILE_OPAND:
 					offset = p->l & m->in_offset;
 					break;
@@ -1061,15 +1000,16 @@ mget(struct magic_set *ms, union VALUETYPE *p, const unsigned char *s,
 			 *		sleep;
 			 */
 				}
-			} else
-				offset = p->l;
 			if (m->in_op & FILE_OPINVERSE)
 				offset = ~offset;
 			break;
 		}
 
-		if (mcopy(ms, p, m->type, 0, s, offset, nbytes) == -1)
-			return -1;
+		if (nbytes < sizeof(union VALUETYPE) ||
+		    nbytes - sizeof(union VALUETYPE) < offset)
+			return 0;
+
+		memcpy(p, s + offset, sizeof(union VALUETYPE));
 
 		if ((ms->flags & MAGIC_DEBUG) != 0) {
 			mdebug(offset, (char *)(void *)p,
@@ -1118,8 +1058,6 @@ mcheck(struct magic_set *ms, union VALUETYPE *p, struct magic *m)
 		break;
 
 	case FILE_STRING:
-	case FILE_BESTRING16:
-	case FILE_LESTRING16:
 	case FILE_PSTRING:
 	{
 		/*

@@ -1,4 +1,4 @@
-/*	$NetBSD: adosfs.h,v 1.4 2004/09/13 19:25:48 jdolecek Exp $	*/
+/*	$NetBSD: adosfs.h,v 1.2.4.1 2004/05/23 10:45:17 tron Exp $	*/
 
 /*
  * Copyright (c) 1994 Christian E. Hopps
@@ -60,9 +60,6 @@ struct datestamp {
 
 enum anode_type { AROOT, ADIR, AFILE, ALDIR, ALFILE, ASLINK };
 
-/* Maximum file/directory name */
-#define ADMAXNAMELEN		30
-
 /* 
  * similar to inode's, we use to represent:
  * the root dir, reg dirs, reg files and extension blocks
@@ -73,7 +70,7 @@ struct anode {
 	struct genfs_node gnode;
 	LIST_ENTRY(anode) link;
 	enum anode_type type;
-	char name[ADMAXNAMELEN+1];	/* (r/d/f) name for object */
+	char name[31];		/* (r/d/f) name for object */
 	struct datestamp mtimev;	/* (r) volume modified */
 	struct datestamp created;	/* (r) volume created */
 	struct datestamp mtime;	/* (r/d/f) last modified */

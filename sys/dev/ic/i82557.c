@@ -1,4 +1,4 @@
-/*	$NetBSD: i82557.c,v 1.89 2004/11/23 21:41:57 thorpej Exp $	*/
+/*	$NetBSD: i82557.c,v 1.81.2.2 2004/04/28 07:04:42 tron Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998, 1999, 2001, 2002 The NetBSD Foundation, Inc.
@@ -73,7 +73,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: i82557.c,v 1.89 2004/11/23 21:41:57 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: i82557.c,v 1.81.2.2 2004/04/28 07:04:42 tron Exp $");
 
 #include "bpfilter.h"
 #include "rnd.h"
@@ -88,7 +88,6 @@ __KERNEL_RCSID(0, "$NetBSD: i82557.c,v 1.89 2004/11/23 21:41:57 thorpej Exp $");
 #include <sys/ioctl.h>
 #include <sys/errno.h>
 #include <sys/device.h>
-#include <sys/syslog.h>
 
 #include <machine/endian.h>
 
@@ -245,8 +244,7 @@ fxp_scb_wait(struct fxp_softc *sc)
 	while (CSR_READ_1(sc, FXP_CSR_SCB_COMMAND) && --i)
 		delay(2);
 	if (i == 0)
-		log(LOG_WARNING,
-		    "%s: WARNING: SCB timed out!\n", sc->sc_dev.dv_xname);
+		printf("%s: WARNING: SCB timed out!\n", sc->sc_dev.dv_xname);
 }
 
 /*
@@ -431,12 +429,6 @@ fxp_attach(struct fxp_softc *sc)
 	    NULL, sc->sc_dev.dv_xname, "txintr");
 	evcnt_attach_dynamic(&sc->sc_ev_rxintr, EVCNT_TYPE_INTR,
 	    NULL, sc->sc_dev.dv_xname, "rxintr");
-	if (sc->sc_rev >= FXP_REV_82558_A4) {
-		evcnt_attach_dynamic(&sc->sc_ev_txpause, EVCNT_TYPE_MISC,
-		    NULL, sc->sc_dev.dv_xname, "txpause");
-		evcnt_attach_dynamic(&sc->sc_ev_rxpause, EVCNT_TYPE_MISC,
-		    NULL, sc->sc_dev.dv_xname, "rxpause");
-	}
 #endif /* FXP_EVENT_COUNTERS */
 
 	/*
@@ -662,14 +654,6 @@ fxp_get_info(struct fxp_softc *sc, u_int8_t *enaddr)
 			fxp_eeprom_update_cksum(sc);
 		}
 	}
-
-	/* Receiver lock-up workaround detection. */
-	fxp_read_eeprom(sc, &data, 3, 1);
-	if ((data & 0x03) != 0x03) {
-		aprint_verbose("%s: Enabling receiver lock-up workaround\n",
-		    sc->sc_dev.dv_xname);
-		sc->sc_flags |= FXPF_RECV_WORKAROUND;
-	}
 }
 
 static void
@@ -865,7 +849,7 @@ fxp_eeprom_update_cksum(struct fxp_softc *sc)
 	cksum = 0xbaba - cksum;
 	fxp_read_eeprom(sc, &data, i, 1);
 	fxp_write_eeprom(sc, &cksum, i, 1);
-	log(LOG_INFO, "%s: EEPROM checksum @ 0x%x: 0x%04x -> 0x%04x\n",
+	printf("%s: EEPROM checksum @ 0x%x: 0x%04x -> 0x%04x\n",
 	    sc->sc_dev.dv_xname, i, data, cksum);
 }
 
@@ -939,7 +923,7 @@ fxp_start(struct ifnet *ifp)
 		    BUS_DMA_WRITE|BUS_DMA_NOWAIT) != 0) {
 			MGETHDR(m, M_DONTWAIT, MT_DATA);
 			if (m == NULL) {
-				log(LOG_ERR, "%s: unable to allocate Tx mbuf\n",
+				printf("%s: unable to allocate Tx mbuf\n",
 				    sc->sc_dev.dv_xname);
 				break;
 			}
@@ -947,8 +931,7 @@ fxp_start(struct ifnet *ifp)
 			if (m0->m_pkthdr.len > MHLEN) {
 				MCLGET(m, M_DONTWAIT);
 				if ((m->m_flags & M_EXT) == 0) {
-					log(LOG_ERR,
-					    "%s: unable to allocate Tx "
+					printf("%s: unable to allocate Tx "
 					    "cluster\n", sc->sc_dev.dv_xname);
 					m_freem(m);
 					break;
@@ -959,7 +942,7 @@ fxp_start(struct ifnet *ifp)
 			error = bus_dmamap_load_mbuf(sc->sc_dmat, dmamap,
 			    m, BUS_DMA_WRITE|BUS_DMA_NOWAIT);
 			if (error) {
-				log(LOG_ERR, "%s: unable to load Tx buffer, "
+				printf("%s: unable to load Tx buffer, "
 				    "error = %d\n", sc->sc_dev.dv_xname, error);
 				break;
 			}
@@ -1161,8 +1144,6 @@ fxp_intr(void *arg)
 		}
 
 		if (statack & FXP_SCB_STATACK_RNR) {
-			fxp_scb_wait(sc);
-			fxp_scb_cmd(sc, FXP_SCB_COMMAND_RU_ABORT);
 			rxmap = M_GETCTX(sc->sc_rxq.ifq_head, bus_dmamap_t);
 			fxp_scb_wait(sc);
 			CSR_WRITE_4(sc, FXP_CSR_SCB_GENERAL,
@@ -1448,7 +1429,7 @@ fxp_tick(void *arg)
 	if (sp->rx_good) {
 		ifp->if_ipackets += le32toh(sp->rx_good);
 		sc->sc_rxidle = 0;
-	} else if (sc->sc_flags & FXPF_RECV_WORKAROUND) {
+	} else {
 		sc->sc_rxidle++;
 	}
 	ifp->if_ierrors +=
@@ -1465,15 +1446,9 @@ fxp_tick(void *arg)
 		if (tx_threshold < 192)
 			tx_threshold += 64;
 	}
-#ifdef FXP_EVENT_COUNTERS
-	if (sc->sc_rev >= FXP_REV_82558_A4) {
-		sc->sc_ev_txpause.ev_count += sp->tx_pauseframes;
-		sc->sc_ev_rxpause.ev_count += sp->rx_pauseframes;
-	}
-#endif
 
 	/*
-	 * If we haven't received any packets in FXP_MAX_RX_IDLE seconds,
+	 * If we haven't received any packets in FXP_MAC_RX_IDLE seconds,
 	 * then assume the receiver has locked up and attempt to clear
 	 * the condition by reprogramming the multicast filter (actually,
 	 * resetting the interface). This is a work-around for a bug in
@@ -1514,10 +1489,6 @@ fxp_tick(void *arg)
 		sp->rx_alignment_errors = 0;
 		sp->rx_rnr_errors = 0;
 		sp->rx_overrun_errors = 0;
-		if (sc->sc_rev >= FXP_REV_82558_A4) {
-			sp->tx_pauseframes = 0;
-			sp->rx_pauseframes = 0;
-		}
 	}
 
 	if (sc->sc_flags & FXPF_MII) {
@@ -1619,7 +1590,7 @@ fxp_watchdog(struct ifnet *ifp)
 {
 	struct fxp_softc *sc = ifp->if_softc;
 
-	log(LOG_ERR, "%s: device timeout\n", sc->sc_dev.dv_xname);
+	printf("%s: device timeout\n", sc->sc_dev.dv_xname);
 	ifp->if_oerrors++;
 
 	(void) fxp_init(ifp);
@@ -1805,7 +1776,6 @@ fxp_init(struct ifnet *ifp)
 		cbp->rx_fc_restart =	1;	/* enable FC restart frames */
 		cbp->fc_filter =	!prm;	/* drop FC frames to host */
 		cbp->pri_fc_loc =	1;	/* FC pri location (byte31) */
-		cbp->ext_stats_dis =	0;	/* enable extended stats */
 	}
 
 	FXP_CDCONFIGSYNC(sc, BUS_DMASYNC_PREREAD|BUS_DMASYNC_PREWRITE);
@@ -1824,7 +1794,7 @@ fxp_init(struct ifnet *ifp)
 		DELAY(1);
 	} while ((le16toh(cbp->cb_status) & FXP_CB_STATUS_C) == 0 && --i);
 	if (i == 0) {
-		log(LOG_WARNING, "%s: line %d: dmasync timeout\n",
+		printf("%s at line %d: dmasync timeout\n",
 		    sc->sc_dev.dv_xname, __LINE__);
 		return (ETIMEDOUT);
 	}
@@ -1856,7 +1826,7 @@ fxp_init(struct ifnet *ifp)
 		DELAY(1);
 	} while ((le16toh(cb_ias->cb_status) & FXP_CB_STATUS_C) == 0 && --i);
 	if (i == 0) {
-		log(LOG_WARNING, "%s: line %d: dmasync timeout\n",
+		printf("%s at line %d: dmasync timeout\n",
 		    sc->sc_dev.dv_xname, __LINE__);
 		return (ETIMEDOUT);
 	}
@@ -1893,7 +1863,7 @@ fxp_init(struct ifnet *ifp)
 	while (sc->sc_rxq.ifq_len < FXP_NRFABUFS) {
 		rxmap = FXP_RXMAP_GET(sc);
 		if ((error = fxp_add_rfabuf(sc, rxmap, 0)) != 0) {
-			log(LOG_ERR, "%s: unable to allocate or map rx "
+			printf("%s: unable to allocate or map rx "
 			    "buffer %d, error = %d\n",
 			    sc->sc_dev.dv_xname,
 			    sc->sc_rxq.ifq_len, error);
@@ -1954,8 +1924,7 @@ fxp_init(struct ifnet *ifp)
 	if (error) {
 		ifp->if_flags &= ~(IFF_RUNNING | IFF_OACTIVE);
 		ifp->if_timer = 0;
-		log(LOG_ERR, "%s: interface not running\n",
-		    sc->sc_dev.dv_xname);
+		printf("%s: interface not running\n", sc->sc_dev.dv_xname);
 	}
 	return (error);
 }
@@ -1990,14 +1959,6 @@ fxp_mii_mediastatus(struct ifnet *ifp, struct ifmediareq *ifmr)
 	mii_pollstat(&sc->sc_mii);
 	ifmr->ifm_status = sc->sc_mii.mii_media_status;
 	ifmr->ifm_active = sc->sc_mii.mii_media_active;
-
-	/*
-	 * XXX Flow control is always turned on if the chip supports
-	 * XXX it; we can't easily control it dynamically, since it
-	 * XXX requires sending a setup packet.
-	 */
-	if (sc->sc_rev >= FXP_REV_82558_A4)
-		ifmr->ifm_active |= IFM_FLOW|IFM_ETH_TXPAUSE|IFM_ETH_RXPAUSE;
 }
 
 int
@@ -2054,10 +2015,9 @@ fxp_add_rfabuf(struct fxp_softc *sc, bus_dmamap_t rxmap, int unload)
 	error = bus_dmamap_load_mbuf(sc->sc_dmat, rxmap, m,
 	    BUS_DMA_READ|BUS_DMA_NOWAIT);
 	if (error) {
-		/* XXX XXX XXX */
 		printf("%s: can't load rx DMA map %d, error = %d\n",
 		    sc->sc_dev.dv_xname, sc->sc_rxq.ifq_len, error);
-		panic("fxp_add_rfabuf");
+		panic("fxp_add_rfabuf");		/* XXX */
 	}
 
 	FXP_INIT_RFABUF(sc, m);
@@ -2080,8 +2040,7 @@ fxp_mdi_read(struct device *self, int phy, int reg)
 		DELAY(10);
 
 	if (count <= 0)
-		log(LOG_WARNING,
-		    "%s: fxp_mdi_read: timed out\n", sc->sc_dev.dv_xname);
+		printf("%s: fxp_mdi_read: timed out\n", sc->sc_dev.dv_xname);
 
 	return (value & 0xffff);
 }
@@ -2108,8 +2067,7 @@ fxp_mdi_write(struct device *self, int phy, int reg, int value)
 		DELAY(10);
 
 	if (count <= 0)
-		log(LOG_WARNING,
-		    "%s: fxp_mdi_write: timed out\n", sc->sc_dev.dv_xname);
+		printf("%s: fxp_mdi_write: timed out\n", sc->sc_dev.dv_xname);
 }
 
 int
@@ -2130,7 +2088,7 @@ fxp_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 	default:
 		error = ether_ioctl(ifp, cmd, data);
 		if (error == ENETRESET) {
-			if (ifp->if_flags & IFF_RUNNING) {
+			if (sc->sc_enabled) {
 				/*
 				 * Multicast list has changed; set the
 				 * hardware filter accordingly.
@@ -2225,7 +2183,7 @@ fxp_mc_setup(struct fxp_softc *sc)
 	    FXP_SCB_CUS_ACTIVE && --count)
 		DELAY(1);
 	if (count == 0) {
-		log(LOG_WARNING, "%s: line %d: command queue timeout\n",
+		printf("%s at line %d: command queue timeout\n",
 		    sc->sc_dev.dv_xname, __LINE__);
 		return;
 	}
@@ -2245,7 +2203,7 @@ fxp_mc_setup(struct fxp_softc *sc)
 		DELAY(1);
 	} while ((le16toh(mcsp->cb_status) & FXP_CB_STATUS_C) == 0 && --count);
 	if (count == 0) {
-		log(LOG_WARNING, "%s: line %d: dmasync timeout\n",
+		printf("%s at line %d: dmasync timeout\n",
 		    sc->sc_dev.dv_xname, __LINE__);
 		return;
 	}
@@ -2348,7 +2306,7 @@ fxp_load_ucode(struct fxp_softc *sc)
 	if (count == 0) {
 		sc->sc_int_delay = 0;
 		sc->sc_bundle_max = 0;
-		log(LOG_WARNING, "%s: timeout loading microcode\n",
+		printf("%s: timeout loading microcode\n",
 		    sc->sc_dev.dv_xname);
 		return;
 	}
@@ -2357,7 +2315,7 @@ fxp_load_ucode(struct fxp_softc *sc)
 	    sc->sc_bundle_max != fxp_bundle_max) {
 		sc->sc_int_delay = fxp_int_delay;
 		sc->sc_bundle_max = fxp_bundle_max;
-		log(LOG_INFO, "%s: Microcode loaded: int delay: %d usec, "
+		printf("%s: Microcode loaded: int delay: %d usec, "
 		    "max bundle: %d\n", sc->sc_dev.dv_xname,
 		    sc->sc_int_delay,
 		    uc->bundle_max_offset == 0 ? 0 : sc->sc_bundle_max);
@@ -2372,7 +2330,7 @@ fxp_enable(struct fxp_softc *sc)
 
 	if (sc->sc_enabled == 0 && sc->sc_enable != NULL) {
 		if ((*sc->sc_enable)(sc) != 0) {
-			log(LOG_ERR, "%s: device enable failed\n",
+			printf("%s: device enable failed\n",
 			    sc->sc_dev.dv_xname);
 			return (EIO);
 		}

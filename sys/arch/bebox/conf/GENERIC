@@ -1,4 +1,4 @@
-# $NetBSD: GENERIC,v 1.75 2004/11/10 17:54:03 christos Exp $
+# $NetBSD: GENERIC,v 1.69.2.2 2004/07/15 20:17:54 he Exp $
 #
 # GENERIC machine description file
 # 
@@ -22,7 +22,7 @@ include 	"arch/bebox/conf/std.bebox"
 
 options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
-#ident 		"GENERIC-$Revision: 1.75 $"
+#ident 		"GENERIC-$Revision: 1.69.2.2 $"
 
 maxusers	32
 
@@ -57,7 +57,6 @@ options 	COMPAT_13
 options 	COMPAT_14
 options 	COMPAT_386BSD_MBRPART	# recognize old partition ID
 #options 	COMPAT_LINUX		# Linux binary compatibility
-options		COMPAT_BSDPTY	# /dev/[pt]ty?? ptys.
 
 file-system 	FFS
 file-system 	MFS
@@ -133,8 +132,6 @@ pseudo-device	clockctl		# user control of clock subsystem
 pseudo-device	rnd			# /dev/random and in-kernel generator
 #options 	RND_COM			# use "com" randomness as well (BROKEN)
 pseudo-device	ksyms			# /dev/ksyms
-#pseudo-device	pf			# PF packet filter
-#pseudo-device	pflog			# PF log if
 
 #
 # device

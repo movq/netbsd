@@ -1,4 +1,4 @@
-/*	$NetBSD: pthread.c,v 1.36 2004/08/12 10:54:13 yamt Exp $	*/
+/*	$NetBSD: pthread.c,v 1.33.2.1 2004/08/30 10:01:22 tron Exp $	*/
 
 /*-
  * Copyright (c) 2001,2002,2003 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: pthread.c,v 1.36 2004/08/12 10:54:13 yamt Exp $");
+__RCSID("$NetBSD: pthread.c,v 1.33.2.1 2004/08/30 10:01:22 tron Exp $");
 
 #include <err.h>
 #include <errno.h>
@@ -67,16 +67,16 @@ static void	pthread__dead(pthread_t, pthread_t);
 
 int pthread__started;
 
-pthread_spin_t pthread__allqueue_lock = __SIMPLELOCK_UNLOCKED;
+pthread_spin_t pthread__allqueue_lock;
 struct pthread_queue_t pthread__allqueue;
 
-pthread_spin_t pthread__deadqueue_lock = __SIMPLELOCK_UNLOCKED;
+pthread_spin_t pthread__deadqueue_lock;
 struct pthread_queue_t pthread__deadqueue;
 struct pthread_queue_t *pthread__reidlequeue;
 
 static int nthreads;
 static int nextthread;
-static pthread_spin_t nextthread_lock = __SIMPLELOCK_UNLOCKED;
+static pthread_spin_t nextthread_lock;
 static pthread_attr_t pthread_default_attr;
 
 enum {
@@ -87,7 +87,7 @@ enum {
 
 static int pthread__diagassert = DIAGASSERT_ABORT | DIAGASSERT_STDERR;
 
-pthread_spin_t pthread__runqueue_lock = __SIMPLELOCK_UNLOCKED;
+pthread_spin_t pthread__runqueue_lock;
 struct pthread_queue_t pthread__runqueue;
 struct pthread_queue_t pthread__idlequeue;
 struct pthread_queue_t pthread__suspqueue;
@@ -411,7 +411,7 @@ pthread__create_tramp(void *(*start)(void *), void *arg)
 {
 	void *retval;
 
-	retval = (*start)(arg);
+	retval = start(arg);
 
 	pthread_exit(retval);
 
@@ -1071,8 +1071,7 @@ pthread__errno(void)
 ssize_t	_sys_write(int, const void *, size_t);
 
 void
-pthread__assertfunc(const char *file, int line, const char *function,
-		    const char *expr)
+pthread__assertfunc(char *file, int line, char *function, char *expr)
 {
 	char buf[1024];
 	int len;
@@ -1096,8 +1095,7 @@ pthread__assertfunc(const char *file, int line, const char *function,
 
 
 void
-pthread__errorfunc(const char *file, int line, const char *function,
-		   const char *msg)
+pthread__errorfunc(char *file, int line, char *function, char *msg)
 {
 	char buf[1024];
 	size_t len;

@@ -1,4 +1,4 @@
-/*	$NetBSD: vector.S,v 1.4 2004/05/07 14:15:11 cl Exp $	*/
+/*	$NetBSD: vector.S,v 1.1.2.1 2004/05/22 15:57:16 he Exp $	*/
 /*	NetBSD: 1.13 2004/03/11 11:39:26 yamt Exp 	*/
 
 /*

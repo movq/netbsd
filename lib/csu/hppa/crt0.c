@@ -1,4 +1,4 @@
-/*	$NetBSD: crt0.c,v 1.7 2004/08/26 21:07:14 thorpej Exp $	*/
+/*	$NetBSD: crt0.c,v 1.4 2003/10/06 05:28:05 matt Exp $	*/
 
 /*
  * Copyright (c) 2002 Matt Fredette
@@ -38,10 +38,12 @@
 
 #include "common.h"
 
-static void ___start(struct ps_strings *,
-    void (*cleanup)(void), const Obj_Entry *, int)
+int	__global __asm ("$global$") = 0;
+
+static void ___start __P((struct ps_strings *,
+    void (*cleanup) __P((void)), const Obj_Entry *, int)) 
 #ifdef __GNUC__
-    __attribute__((__used__))
+    __attribute__((__unused__))
 #endif
     ;
 
@@ -49,26 +51,24 @@ __asm("\n"
 "	.text				\n"
 "	.align	4			\n"
 "	.globl	_start			\n"
-"	.globl	__start			\n"
-"	.type	_start,@function	\n"
+"	.globl	_start			\n"
+"	.type	__start,@function	\n"
 "	.type	__start,@function	\n"
 "_start:				\n"
 "__start:				\n"
-"	.import	_GLOBAL_OFFSET_TABLE_	\n"
-"\n"
-"	bl      L$lpc, %r27		\n"
-"	depi    0, 31, 2, %r27		\n"
-"L$lpc:	addil   L'_GLOBAL_OFFSET_TABLE_ - ($PIC_pcrel$0 - 8), %r27	\n"
-"	ldo     R'_GLOBAL_OFFSET_TABLE_ - ($PIC_pcrel$0 - 12)(%r1),%r27	\n"
+"	.import	$global$, data		\n"
+"	ldil	L%$global$, %r27	\n"
+"	ldo	R%$global$(%r27), %r27	\n"
 "	copy	%r27, %r19		\n"
 "	b	___start		\n"
 "	copy	%r27, %arg3		\n");
 
 static void
-___start(struct ps_strings *ps_strings,
-    void (*cleanup)(void),			/* from shared loader */
-    const Obj_Entry *obj,			/* from shared loader */
-    int dp)
+___start(ps_strings, cleanup, obj, dp)
+	struct ps_strings *ps_strings;
+	void (*cleanup) __P((void));		/* from shared loader */
+	const Obj_Entry *obj;			/* from shared loader */
+	int dp;
 {
 	int argc;
 	char **argv;
@@ -152,7 +152,7 @@ ___start(struct ps_strings *ps_strings,
  * NOTE: Leave the RCS ID _after_ __start(), in case it gets placed in .text.
  */
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: crt0.c,v 1.7 2004/08/26 21:07:14 thorpej Exp $");
+__RCSID("$NetBSD: crt0.c,v 1.4 2003/10/06 05:28:05 matt Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include "common.c"

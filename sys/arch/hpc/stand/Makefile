@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.16 2004/08/13 15:51:45 uch Exp $
+#	$NetBSD: Makefile,v 1.13.2.1 2004/06/22 07:54:31 tron Exp $
 #
 
 .include <bsd.sys.mk>		# for HOST_SH
@@ -70,15 +70,13 @@ install:
 		cp $$file binary/$$a/hpcboot.exe;			\
 	done
 # WCE200 or earlier binary
-install200:
-	cp compile/SHRelease/hpcboot.exe binary/SH3/hpcboot200.exe
-
-install101:
-	cp compile/MIPSRelease/hpcboot.exe binary/MIPS/hpcboot101.exe
+install1:
+	cp compile/MIPSRelease/hpcboot.exe binary/MIPS/hpcboot1.exe
+	cp compile/SHRelease/hpcboot.exe binary/SH3/hpcboot1.exe
 
 uuencode:
 	find binary -name "hpcboot*.exe" -print | \
-	awk '{ print "uuencode", $$1, $$1, ">", $$1".uue ; rm -f", $$1 }' \
+	awk '{ print "uuencode", $$1, $$1, ">", $$1".uu ; rm -f", $$1 }' \
 	    | ${HOST_SH}
 	cp binary/build_number.h build_number.h
 	awk '{if (/HPCBOOT_BUILD_NUMBER/)				\

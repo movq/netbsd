@@ -1,4 +1,4 @@
-/*	$NetBSD: mpacpi.c,v 1.31 2004/11/29 00:07:22 ws Exp $	*/
+/*	$NetBSD: mpacpi.c,v 1.19.2.1 2004/06/01 04:30:44 jmc Exp $	*/
 
 /*
  * Copyright (c) 2003 Wasabi Systems, Inc.
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mpacpi.c,v 1.31 2004/11/29 00:07:22 ws Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mpacpi.c,v 1.19.2.1 2004/06/01 04:30:44 jmc Exp $");
 
 #include "opt_acpi.h"
 #include "opt_mpbios.h"
@@ -93,8 +93,7 @@ static TAILQ_HEAD(, mpacpi_pcibus) mpacpi_pcibusses;
 #endif
 
 static int mpacpi_print(void *, const char *);
-static int mpacpi_submatch(struct device *, struct cfdata *,
-	const locdesc_t *, void *);
+static int mpacpi_match(struct device *, struct cfdata *, void *);
 
 /* acpi_madt_walk callbacks */
 static ACPI_STATUS mpacpi_count(APIC_HEADER *, void *);
@@ -142,8 +141,7 @@ mpacpi_print(void *aux, const char *pnp)
 }
 
 static int
-mpacpi_submatch(struct device *parent, struct cfdata *cf,
-	const locdesc_t *ldesc, void *aux)
+mpacpi_match(struct device *parent, struct cfdata *cf, void *aux)
 {
 	struct cpu_attach_args * caa = (struct cpu_attach_args *) aux;
 	if (strcmp(caa->caa_name, cf->cf_name))
@@ -298,8 +296,8 @@ mpacpi_config_cpu(APIC_HEADER *hdrp, void *aux)
 			caa.caa_name = "cpu";
 			caa.cpu_number = p->LocalApicId;
 			caa.cpu_func = &mp_cpu_funcs;
-			config_found_sm_loc(parent, "cpubus", NULL,
-				&caa, mpacpi_print, mpacpi_submatch);
+			config_found_sm(parent, &caa, mpacpi_print,
+			    mpacpi_match);
 		}
 	}
 	return AE_OK;
@@ -320,8 +318,7 @@ mpacpi_config_ioapic(APIC_HEADER *hdrp, void *aux)
 		aaa.apic_version = -1;
 		aaa.flags = IOAPIC_VWIRE;
 		aaa.apic_vecbase = p->Interrupt;
-		config_found_sm_loc(parent, "cpubus", NULL, &aaa,
-			mpacpi_print, mpacpi_submatch);
+		config_found_sm(parent, &aaa, mpacpi_print, mpacpi_match);
 	}
 	return AE_OK;
 }
@@ -442,7 +439,7 @@ mpacpi_derive_bus(ACPI_HANDLE handle, struct acpi_softc *acpi)
 
 		devinfo = buf.Pointer;
 		if (acpi_match_hid(devinfo, pciroot_hid)) {
-			rv = acpi_eval_integer(parent, METHOD_NAME__BBN, &val);
+			rv = acpi_eval_integer(current, METHOD_NAME__BBN, &val);
 			AcpiOsFree(buf.Pointer);
 			if (ACPI_SUCCESS(rv))
 				bus = ACPI_LOWORD(val);
@@ -958,7 +955,7 @@ mpacpi_scan_pci(struct device *self, struct pcibus_attach_args *pba,
 			continue;
 		if (!strcmp(mpb->mb_name, "pci") && mpb->mb_configured == 0) {
 			pba->pba_bus = i;
-			config_found_ia(self, "pcibus", pba, print);
+			config_found(self, pba, print);
 		}
 	}
 	return 0;

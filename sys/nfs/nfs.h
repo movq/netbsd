@@ -1,4 +1,4 @@
-/*	$NetBSD: nfs.h,v 1.48 2004/10/26 00:58:54 yamt Exp $	*/
+/*	$NetBSD: nfs.h,v 1.44 2003/12/06 02:48:35 jonathan Exp $	*/
 /*
  * Copyright (c) 1989, 1993, 1995
  *	The Regents of the University of California.  All rights reserved.
@@ -129,6 +129,7 @@ extern int nfs_niothreads;              /* Number of async_daemons desired */
 /*
  * Oddballs
  */
+#define	NMOD(a)		((a) % nfs_asyncdaemons)
 #define NFS_CMPFH(n, f, s) \
 	((n)->n_fhsize == (s) && !memcmp((caddr_t)(n)->n_fhp,  (caddr_t)(f),  (s)))
 #ifdef NFS_V2_ONLY
@@ -139,6 +140,16 @@ extern int nfs_niothreads;              /* Number of async_daemons desired */
 #define NFS_SRVMAXDATA(n) \
 		(((n)->nd_flag & ND_NFSV3) ? (((n)->nd_nam2) ? \
 		 NFS_MAXDGRAMDATA : NFS_MAXDATA) : NFS_V2MAXDATA)
+
+/*
+ * The VA_EXCLUSIVE flag should be added for va_vaflags and set for an
+ * exclusive create.
+ */
+#if 0
+#ifndef VA_EXCLUSIVE
+#define VA_EXCLUSIVE	0
+#endif
+#endif
 
 /*
  * Use the vm_page flag reserved for pager use to indicate pages
@@ -162,6 +173,20 @@ extern int nfs_niothreads;              /* Number of async_daemons desired */
 	 (time.tv_sec - (np)->n_mtime.tv_sec) / 10 < NFS_MINATTRTIMO) ? NFS_MINATTRTIMO : \
 	 ((time.tv_sec - (np)->n_mtime.tv_sec) / 10 > NFS_MAXATTRTIMO ? NFS_MAXATTRTIMO : \
 	  (time.tv_sec - (np)->n_mtime.tv_sec) / 10))
+
+/*
+ * Expected allocation sizes for major data structures. If the actual size
+ * of the structure exceeds these sizes, then malloc() will be allocating
+ * almost twice the memory required. This is used in nfs_init() to warn
+ * the sysadmin that the size of a structure should be reduced.
+ * (These sizes are always a power of 2. If the kernel malloc() changes
+ *  to one that does not allocate space in powers of 2 size, then this all
+ *  becomes bunk!)
+ */
+#define NFS_NODEALLOC	256
+#define NFS_MNTALLOC	512
+#define NFS_SVCALLOC	256
+#define NFS_UIDALLOC	128
 
 /*
  * Structures for the nfssvc(2) syscall. Not that anyone but nfsd and mount_nfs
@@ -315,7 +340,6 @@ extern TAILQ_HEAD(nfsreqhead, nfsreq) nfs_reqq;
 #define	R_TPRINTFMSG	0x20		/* Did a tprintf msg. */
 #define	R_MUSTRESEND	0x40		/* Must resend request */
 #define	R_GETONEREP	0x80		/* Probe for one reply only */
-#define	R_REXMITTED	0x100		/* retransmitted after reconnect */
 
 /*
  * A list of nfssvc_sock structures is maintained with all the sockets

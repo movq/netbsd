@@ -1,13 +1,11 @@
-#	$NetBSD: Makefile,v 1.34 2004/10/13 23:28:35 gavan Exp $
+#	$NetBSD: Makefile,v 1.32 2003/10/10 23:51:46 mbw Exp $
 #
-
-.include <bsd.own.mk>
 
 TARGETS+=	release
 
 .ifndef ALLNOTES
-.if exists(${RELEASEMACHINE}/Makefile)
-SUBDIR=	${RELEASEMACHINE}
+.if exists(${MACHINE}/Makefile)
+SUBDIR=	${MACHINE}
 .endif
 .else
 SUBDIR+= acorn26
@@ -24,7 +22,6 @@ SUBDIR+= hp700
 SUBDIR+= hpcmips
 SUBDIR+= hpcsh
 SUBDIR+= i386
-# SUBDIR+= iyonix	# not yet
 SUBDIR+= mac68k
 SUBDIR+= macppc
 SUBDIR+= mmeye
@@ -44,7 +41,6 @@ SUBDIR+= sun2
 SUBDIR+= sun3
 SUBDIR+= vax
 SUBDIR+= x68k
-SUBDIR+= xen
 .endif
 
 .include <bsd.subdir.mk>

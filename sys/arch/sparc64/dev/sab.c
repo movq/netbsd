@@ -1,4 +1,4 @@
-/*	$NetBSD: sab.c,v 1.20 2004/09/13 14:32:38 drochner Exp $	*/
+/*	$NetBSD: sab.c,v 1.16 2004/03/21 15:08:24 pk Exp $	*/
 /*	$OpenBSD: sab.c,v 1.7 2002/04/08 17:49:42 jason Exp $	*/
 
 /*
@@ -42,7 +42,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sab.c,v 1.20 2004/09/13 14:32:38 drochner Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sab.c,v 1.16 2004/03/21 15:08:24 pk Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -64,8 +64,6 @@ __KERNEL_RCSID(0, "$NetBSD: sab.c,v 1.20 2004/09/13 14:32:38 drochner Exp $");
 #include <dev/ebus/ebusreg.h>
 #include <dev/ebus/ebusvar.h>
 #include <sparc64/dev/sab82532reg.h>
-
-#include "locators.h"
 
 #define SABUNIT(x)		(minor(x) & 0x7ffff)
 #define SABDIALOUT(x)		(minor(x) & 0x80000)
@@ -125,8 +123,6 @@ struct sabtty_softc *sabtty_cons_output;
 
 int sab_match(struct device *, struct cfdata *, void *);
 void sab_attach(struct device *, struct device *, void *);
-int sab_submatch(struct device *, struct cfdata *,
-		 const locdesc_t *, void *);
 int sab_print(void *, const char *);
 int sab_intr(void *);
 
@@ -154,6 +150,7 @@ int sabttyparam(struct sabtty_softc *, struct tty *, struct termios *);
 
 void sabtty_cnputc(struct sabtty_softc *, int);
 int sabtty_cngetc(struct sabtty_softc *);
+void sabtty_abort(struct sabtty_softc *);
 
 CFATTACH_DECL(sab, sizeof(struct sab_softc),
     sab_match, sab_attach, NULL, NULL);
@@ -173,8 +170,6 @@ dev_type_ioctl(sabioctl);
 dev_type_stop(sabstop);
 dev_type_tty(sabtty);
 dev_type_poll(sabpoll);
-
-static struct cnm_state sabtty_cnm_state;
 
 const struct cdevsw sabtty_cdevsw = {
 	sabopen, sabclose, sabread, sabwrite, sabioctl,
@@ -242,8 +237,6 @@ sab_attach(parent, self, aux)
 	struct ebus_attach_args *ea = aux;
 	u_int8_t r;
 	u_int i;
-	int help[2];
-	locdesc_t *ldesc = (void *)help; /* XXX */
 
 	sc->sc_bt = ea->ea_bustag;
 	sc->sc_node = ea->ea_node;
@@ -270,23 +263,23 @@ sab_attach(parent, self, aux)
 		return;
 	}
 
-	aprint_normal(": rev ");
+	printf(": rev ");
 	r = SAB_READ(sc, SAB_VSTR) & SAB_VSTR_VMASK;
 	switch (r) {
 	case SAB_VSTR_V_1:
-		aprint_normal("1");
+		printf("1");
 		break;
 	case SAB_VSTR_V_2:
-		aprint_normal("2");
+		printf("2");
 		break;
 	case SAB_VSTR_V_32:
-		aprint_normal("3.2");
+		printf("3.2");
 		break;
 	default:
-		aprint_normal("unknown(0x%x)", r);
+		printf("unknown(0x%x)", r);
 		break;
 	}
-	aprint_normal("\n");
+	printf("\n");
 
 	/* Let current output drain */
 	DELAY(100000);
@@ -302,28 +295,11 @@ sab_attach(parent, self, aux)
 		struct sabtty_attach_args sta;
 
 		sta.sbt_portno = i;
-
-		ldesc->len = 1;
-		ldesc->locs[SABCF_CHANNEL] = i;
-
-		sc->sc_child[i] =
-		    (struct sabtty_softc *)config_found_sm_loc(self,
-		     "sab", ldesc, &sta, sab_print, sab_submatch);
+		sc->sc_child[i] = (struct sabtty_softc *)config_found_sm(self,
+		    &sta, sab_print, sabtty_match);
 		if (sc->sc_child[i] != NULL)
 			sc->sc_nchild++;
 	}
-}
-
-int
-sab_submatch(struct device *parent, struct cfdata *cf,
-	     const locdesc_t *ldesc, void *aux)
-{
-
-        if (cf->cf_loc[SABCF_CHANNEL] != SABCF_CHANNEL_DEFAULT &&
-            cf->cf_loc[SABCF_CHANNEL] != ldesc->locs[SABCF_CHANNEL])
-                return (0);
-
-        return (config_match(parent, cf, aux));
 }
 
 int
@@ -335,7 +311,7 @@ sab_print(args, name)
 
 	if (name)
 		aprint_normal("sabtty at %s", name);
-	aprint_normal(" port %u", sa->sbt_portno);
+	aprint_normal(" port %d", sa->sbt_portno);
 	return (UNCONF);
 }
 
@@ -383,8 +359,11 @@ sabtty_match(parent, match, aux)
 	struct cfdata *match;
 	void *aux;
 {
+	struct sabtty_attach_args *sa = aux;
 
-	return (1);
+	if (sa->sbt_portno < SAB_NCHAN)
+		return (1);
+	return (0);
 }
 
 void
@@ -400,7 +379,7 @@ sabtty_attach(parent, self, aux)
 
 	sc->sc_tty = ttymalloc();
 	if (sc->sc_tty == NULL) {
-		aprint_normal(": failed to allocate tty\n");
+		printf(": failed to allocate tty\n");
 		return;
 	}
 	tty_attach(sc->sc_tty);
@@ -426,11 +405,11 @@ sabtty_attach(parent, self, aux)
 		    SAB_CHAN_B, SAB_CHANLEN, &sc->sc_bh);
 		break;
 	default:
-		aprint_normal(": invalid channel: %u\n", sa->sbt_portno);
+		printf(": invalid channel: %u\n", sa->sbt_portno);
 		return;
 	}
 	if (r != 0) {
-		aprint_normal(": failed to allocate register subregion\n");
+		printf(": failed to allocate register subregion\n");
 		return;
 	}
 
@@ -439,9 +418,6 @@ sabtty_attach(parent, self, aux)
 	if (sc->sc_flags & (SABTTYF_CONS_IN | SABTTYF_CONS_OUT)) {
 		struct termios t;
 		char *acc;
-
-		/* Let residual prom output drain */
-		DELAY(100000);
 
 		switch (sc->sc_flags & (SABTTYF_CONS_IN | SABTTYF_CONS_OUT)) {
 		case SABTTYF_CONS_IN:
@@ -469,24 +445,21 @@ sabtty_attach(parent, self, aux)
 			maj = cdevsw_lookup_major(&sabtty_cdevsw);
 			cn_tab->cn_dev = makedev(maj, self->dv_unit);
 			shutdownhook_establish(sabtty_shutdown, sc);
-			cn_init_magic(&sabtty_cnm_state);
-			cn_set_magic("\047\001"); /* default magic is BREAK */
 		}
 
 		if (sc->sc_flags & SABTTYF_CONS_OUT) {
-			sabtty_tec_wait(sc);
 			sabtty_cons_output = sc;
 			cn_tab->cn_putc = sab_cnputc;
 			maj = cdevsw_lookup_major(&sabtty_cdevsw);
 			cn_tab->cn_dev = makedev(maj, self->dv_unit);
 		}
-		aprint_normal(": console %s", acc);
+		printf(": console %s", acc);
 	} else {
 		/* Not a console... */
 		sabtty_reset(sc);
 	}
 
-	aprint_normal("\n");
+	printf("\n");
 }
 
 int
@@ -520,15 +493,11 @@ sabtty_intr(sc, needsoftp)
 		clearfifo = 1;
 	}
 	if (len != 0) {
-		u_int8_t *ptr, b;
+		u_int8_t *ptr;
 
 		ptr = sc->sc_rput;
 		for (i = 0; i < len; i++) {
-			b = SAB_READ(sc, SAB_RFIFO);
-			if (i % 2 == 0) /* skip status byte */
-				cn_check_magic(sc->sc_tty->t_dev,
-					       b, sabtty_cnm_state);
-			*ptr++ = b;
+			*ptr++ = SAB_READ(sc, SAB_RFIFO);
 			if (ptr == sc->sc_rend)
 				ptr = sc->sc_rbuf;
 			if (ptr == sc->sc_rget) {
@@ -553,8 +522,7 @@ sabtty_intr(sc, needsoftp)
 	}
 
 	if (isr1 & SAB_ISR1_BRKT)
-		cn_check_magic(sc->sc_tty->t_dev,
-			       CNC_BREAK, sabtty_cnm_state);
+		sabtty_abort(sc);
 
 	if (isr1 & (SAB_ISR1_XPR | SAB_ISR1_ALLS)) {
 		if ((SAB_READ(sc, SAB_STAR) & SAB_STAR_XFW) &&
@@ -566,7 +534,7 @@ sabtty_intr(sc, needsoftp)
 
 			if (len > 0) {
 				SAB_WRITE_BLOCK(sc, SAB_XFIFO, sc->sc_txp, len);
-				sc->sc_txp += len;
+				sc->sc_txp += len; 
 				sc->sc_txc -= len;
 
 				sabtty_cec_wait(sc);
@@ -1359,6 +1327,20 @@ sabtty_console_flags(sc)
 
 		if (channel == cookie)
 			sc->sc_flags |= SABTTYF_CONS_OUT;
+	}
+}
+
+void
+sabtty_abort(sc)
+	struct sabtty_softc *sc;
+{
+
+	if (sc->sc_flags & SABTTYF_CONS_IN) {
+#ifdef DDB
+		cn_trap();
+#else
+		callrom();
+#endif
 	}
 }
 

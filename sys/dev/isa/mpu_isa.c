@@ -1,4 +1,4 @@
-/*	$NetBSD: mpu_isa.c,v 1.11 2004/12/02 09:50:42 xtraeme Exp $	*/
+/*	$NetBSD: mpu_isa.c,v 1.9 2002/10/02 03:10:49 thorpej Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mpu_isa.c,v 1.11 2004/12/02 09:50:42 xtraeme Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mpu_isa.c,v 1.9 2002/10/02 03:10:49 thorpej Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -84,9 +84,9 @@ mpu_isa_match(parent, match, aux)
 	if (ISA_DIRECT_CONFIG(ia))
 		return (0);
 
-	if (ia->ia_io[0].ir_addr == ISA_UNKNOWN_PORT)
+	if (ia->ia_io[0].ir_addr == ISACF_PORT_DEFAULT)
 		return (0);
-	if (ia->ia_irq[0].ir_irq == ISA_UNKNOWN_IRQ)
+	if (ia->ia_irq[0].ir_irq == ISACF_IRQ_DEFAULT)
 		return (0);
 
 	memset(&sc, 0, sizeof sc);
@@ -118,7 +118,7 @@ mpu_isa_attach(parent, self, aux)
 	struct isa_attach_args *ia = aux;
 
 	printf("\n");
-
+	
 	if (bus_space_map(sc->sc_mpu.iot, ia->ia_io[0].ir_addr, MPU401_NPORT,
 	    0, &sc->sc_mpu.ioh)) {
 		printf("mpu_isa_attach: bus_space_map failed\n");

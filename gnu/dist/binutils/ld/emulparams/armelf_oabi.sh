@@ -18,6 +18,3 @@ EMBEDDED=yes
  
 # This sets the stack to the top of the simulator memory (2^19 bytes).
 STACK_ADDR=0x80000
-
-# ARM does not support .s* sections.
-NO_SMALL_DATA=yes

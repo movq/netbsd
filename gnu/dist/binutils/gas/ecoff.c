@@ -1408,74 +1408,76 @@ static char stabs_symbol[] = STABS_SYMBOL;
 
 /* Prototypes for functions defined in this file.  */
 
-static void add_varray_page (varray_t *vp);
-static symint_t add_string (varray_t *vp,
-			    struct hash_control *hash_tbl,
-			    const char *str,
-			    shash_t **ret_hash);
-static localsym_t *add_ecoff_symbol (const char *str, st_t type,
-				     sc_t storage, symbolS *sym,
-				     bfd_vma addend, symint_t value,
-				     symint_t indx);
-static symint_t add_aux_sym_symint (symint_t aux_word);
-static symint_t add_aux_sym_rndx (int file_index, symint_t sym_index);
-static symint_t add_aux_sym_tir (type_info_t *t,
-				 hash_state_t state,
-				 thash_t **hash_tbl);
-static tag_t *get_tag (const char *tag, localsym_t *sym, bt_t basic_type);
-static void add_unknown_tag (tag_t *ptag);
-static void add_procedure (char *func);
-static void add_file (const char *file_name, int indx, int fake);
+static void add_varray_page PARAMS ((varray_t *vp));
+static symint_t add_string PARAMS ((varray_t *vp,
+				    struct hash_control *hash_tbl,
+				    const char *str,
+				    shash_t **ret_hash));
+static localsym_t *add_ecoff_symbol PARAMS ((const char *str, st_t type,
+					     sc_t storage, symbolS *sym,
+					     bfd_vma addend, symint_t value,
+					     symint_t indx));
+static symint_t add_aux_sym_symint PARAMS ((symint_t aux_word));
+static symint_t add_aux_sym_rndx PARAMS ((int file_index,
+					  symint_t sym_index));
+static symint_t add_aux_sym_tir PARAMS ((type_info_t *t,
+					 hash_state_t state,
+					 thash_t **hash_tbl));
+static tag_t *get_tag PARAMS ((const char *tag, localsym_t *sym,
+			       bt_t basic_type));
+static void add_unknown_tag PARAMS ((tag_t *ptag));
+static void add_procedure PARAMS ((char *func));
+static void add_file PARAMS ((const char *file_name, int indx, int fake));
 #ifdef ECOFF_DEBUG
-static char *sc_to_string (sc_t storage_class);
-static char *st_to_string (st_t symbol_type);
+static char *sc_to_string PARAMS ((sc_t storage_class));
+static char *st_to_string PARAMS ((st_t symbol_type));
 #endif
-static void mark_stabs (int);
-static char *ecoff_add_bytes (char **buf, char **bufend,
-			      char *bufptr, unsigned long need);
+static void mark_stabs PARAMS ((int));
+static char *ecoff_add_bytes PARAMS ((char **buf, char **bufend,
+				      char *bufptr, unsigned long need));
 static unsigned long ecoff_padding_adjust
-  (const struct ecoff_debug_swap *backend, char **buf, char **bufend,
-   unsigned long offset, char **bufptrptr);
+  PARAMS ((const struct ecoff_debug_swap *backend, char **buf, char **bufend,
+	   unsigned long offset, char **bufptrptr));
 static unsigned long ecoff_build_lineno
-  (const struct ecoff_debug_swap *backend, char **buf, char **bufend,
-   unsigned long offset, long *linecntptr);
+  PARAMS ((const struct ecoff_debug_swap *backend, char **buf, char **bufend,
+	   unsigned long offset, long *linecntptr));
 static unsigned long ecoff_build_symbols
-  (const struct ecoff_debug_swap *backend, char **buf, char **bufend,
-   unsigned long offset);
+  PARAMS ((const struct ecoff_debug_swap *backend, char **buf, char **bufend,
+	   unsigned long offset));
 static unsigned long ecoff_build_procs
-  (const struct ecoff_debug_swap *backend, char **buf, char **bufend,
-   unsigned long offset);
+  PARAMS ((const struct ecoff_debug_swap *backend, char **buf, char **bufend,
+	   unsigned long offset));
 static unsigned long ecoff_build_aux
-  (const struct ecoff_debug_swap *backend, char **buf, char **bufend,
-   unsigned long offset);
-static unsigned long ecoff_build_strings (char **buf, char **bufend,
-					  unsigned long offset,
-					  varray_t *vp);
+  PARAMS ((const struct ecoff_debug_swap *backend, char **buf, char **bufend,
+	   unsigned long offset));
+static unsigned long ecoff_build_strings PARAMS ((char **buf, char **bufend,
+						  unsigned long offset,
+						  varray_t *vp));
 static unsigned long ecoff_build_ss
-  (const struct ecoff_debug_swap *backend, char **buf, char **bufend,
-   unsigned long offset);
+  PARAMS ((const struct ecoff_debug_swap *backend, char **buf, char **bufend,
+	   unsigned long offset));
 static unsigned long ecoff_build_fdr
-  (const struct ecoff_debug_swap *backend, char **buf, char **bufend,
-   unsigned long offset);
-static void ecoff_setup_ext (void);
-static page_type *allocate_cluster (unsigned long npages);
-static page_type *allocate_page (void);
-static scope_t *allocate_scope (void);
-static void free_scope (scope_t *ptr);
-static vlinks_t *allocate_vlinks (void);
-static shash_t *allocate_shash (void);
-static thash_t *allocate_thash (void);
-static tag_t *allocate_tag (void);
-static void free_tag (tag_t *ptr);
-static forward_t *allocate_forward (void);
-static thead_t *allocate_thead (void);
-static void free_thead (thead_t *ptr);
-static lineno_list_t *allocate_lineno_list (void);
+  PARAMS ((const struct ecoff_debug_swap *backend, char **buf, char **bufend,
+	   unsigned long offset));
+static void ecoff_setup_ext PARAMS ((void));
+static page_type *allocate_cluster PARAMS ((unsigned long npages));
+static page_type *allocate_page PARAMS ((void));
+static scope_t *allocate_scope PARAMS ((void));
+static void free_scope PARAMS ((scope_t *ptr));
+static vlinks_t *allocate_vlinks PARAMS ((void));
+static shash_t *allocate_shash PARAMS ((void));
+static thash_t *allocate_thash PARAMS ((void));
+static tag_t *allocate_tag PARAMS ((void));
+static void free_tag PARAMS ((tag_t *ptr));
+static forward_t *allocate_forward PARAMS ((void));
+static thead_t *allocate_thead PARAMS ((void));
+static void free_thead PARAMS ((thead_t *ptr));
+static lineno_list_t *allocate_lineno_list PARAMS ((void));
 
 /* This function should be called when the assembler starts up.  */
 
 void
-ecoff_read_begin_hook (void)
+ecoff_read_begin_hook ()
 {
   tag_hash = hash_new ();
   top_tag_head = allocate_thead ();
@@ -1488,7 +1490,8 @@ ecoff_read_begin_hook (void)
 /* This function should be called when a symbol is created.  */
 
 void
-ecoff_symbol_new_hook (symbolS *symbolP)
+ecoff_symbol_new_hook (symbolP)
+     symbolS *symbolP;
 {
   OBJ_SYMFIELD_TYPE *obj;
 
@@ -1509,7 +1512,8 @@ ecoff_symbol_new_hook (symbolS *symbolP)
 /* Add a page to a varray object.  */
 
 static void
-add_varray_page (varray_t *vp /* varray to add page to */)
+add_varray_page (vp)
+     varray_t *vp;				/* varray to add page to */
 {
   vlinks_t *new_links = allocate_vlinks ();
 
@@ -1539,10 +1543,11 @@ add_varray_page (varray_t *vp /* varray to add page to */)
 /* Add a string (and null pad) to one of the string tables.  */
 
 static symint_t
-add_string (varray_t *vp,			/* string obstack */
-	    struct hash_control *hash_tbl,	/* ptr to hash table */
-	    const char *str,			/* string */
-	    shash_t **ret_hash			/* return hash pointer */)
+add_string (vp, hash_tbl, str, ret_hash)
+     varray_t *vp;			/* string obstack */
+     struct hash_control *hash_tbl;	/* ptr to hash table */
+     const char *str;			/* string */
+     shash_t **ret_hash;		/* return hash pointer */
 {
   register unsigned long len = strlen (str);
   register shash_t *hash_ptr;
@@ -1587,13 +1592,14 @@ add_string (varray_t *vp,			/* string obstack */
 /* Add debugging information for a symbol.  */
 
 static localsym_t *
-add_ecoff_symbol (const char *str,	/* symbol name */
-		  st_t type,		/* symbol type */
-		  sc_t storage,		/* storage class */
-		  symbolS *sym_value,	/* associated symbol.  */
-		  bfd_vma addend,	/* addend to sym_value.  */
-		  symint_t value,	/* value of symbol */
-		  symint_t indx		/* index to local/aux. syms */)
+add_ecoff_symbol (str, type, storage, sym_value, addend, value, indx)
+     const char *str;			/* symbol name */
+     st_t type;				/* symbol type */
+     sc_t storage;			/* storage class */
+     symbolS *sym_value;		/* associated symbol.  */
+     bfd_vma addend;			/* addend to sym_value.  */
+     symint_t value;			/* value of symbol */
+     symint_t indx;			/* index to local/aux. syms */
 {
   localsym_t *psym;
   register scope_t *pscope;
@@ -1792,7 +1798,8 @@ add_ecoff_symbol (const char *str,	/* symbol name */
    for integral aux types, not just symints.  */
 
 static symint_t
-add_aux_sym_symint (symint_t aux_word /* auxiliary information word */)
+add_aux_sym_symint (aux_word)
+     symint_t aux_word;		/* auxiliary information word */
 {
   register varray_t *vp;
   register aux_t *aux_ptr;
@@ -1815,7 +1822,9 @@ add_aux_sym_symint (symint_t aux_word /* auxiliary information word */)
 /* Add an auxiliary symbol (passing a file/symbol index combo).  */
 
 static symint_t
-add_aux_sym_rndx (int file_index, symint_t sym_index)
+add_aux_sym_rndx (file_index, sym_index)
+     int file_index;
+     symint_t sym_index;
 {
   register varray_t *vp;
   register aux_t *aux_ptr;
@@ -1840,9 +1849,10 @@ add_aux_sym_rndx (int file_index, symint_t sym_index)
    type qualifiers).  */
 
 static symint_t
-add_aux_sym_tir (type_info_t *t,	/* current type information */
-		 hash_state_t state,	/* whether to hash type or not */
-		 thash_t **hash_tbl	/* pointer to hash table to use */)
+add_aux_sym_tir (t, state, hash_tbl)
+     type_info_t *t;		/* current type information */
+     hash_state_t state;	/* whether to hash type or not */
+     thash_t **hash_tbl;	/* pointer to hash table to use */
 {
   register varray_t *vp;
   register aux_t *aux_ptr;
@@ -1996,9 +2006,10 @@ add_aux_sym_tir (type_info_t *t,	/* current type information */
 /* Add a tag to the tag table (unless it already exists).  */
 
 static tag_t *
-get_tag (const char *tag,	/* tag name */
-	 localsym_t *sym,	/* tag start block */
-	 bt_t basic_type	/* bt_Struct, bt_Union, or bt_Enum */)
+get_tag (tag, sym, basic_type)
+     const char *tag;			/* tag name */
+     localsym_t *sym;			/* tag start block */
+     bt_t basic_type;			/* bt_Struct, bt_Union, or bt_Enum */
 {
   shash_t *hash_ptr;
   const char *err;
@@ -2055,7 +2066,8 @@ get_tag (const char *tag,	/* tag name */
 /* Add an unknown {struct, union, enum} tag.  */
 
 static void
-add_unknown_tag (tag_t *ptag /* pointer to tag information */)
+add_unknown_tag (ptag)
+     tag_t *ptag;		/* pointer to tag information */
 {
   shash_t *hash_ptr	= ptag->hash_ptr;
   char *name		= hash_ptr->string;
@@ -2104,7 +2116,8 @@ add_unknown_tag (tag_t *ptag /* pointer to tag information */)
    this is the current procedure.  */
 
 static void
-add_procedure (char *func /* func name */)
+add_procedure (func)
+     char *func;			/* func name */
 {
   register varray_t *vp;
   register proc_t *new_proc_ptr;
@@ -2164,7 +2177,7 @@ add_procedure (char *func /* func name */)
 }
 
 symbolS *
-ecoff_get_cur_proc_sym (void)
+ecoff_get_cur_proc_sym ()
 {
   return (cur_proc_ptr ? cur_proc_ptr->sym->as_sym : NULL);
 }
@@ -2174,7 +2187,10 @@ ecoff_get_cur_proc_sym (void)
    where the current file structure lives.  */
 
 static void
-add_file (const char *file_name, int indx ATTRIBUTE_UNUSED, int fake)
+add_file (file_name, indx, fake)
+     const char *file_name;		/* file name */
+     int indx ATTRIBUTE_UNUSED;
+     int fake;
 {
   register int first_ch;
   register efdr_t *fil_ptr;
@@ -2312,7 +2328,8 @@ add_file (const char *file_name, int indx ATTRIBUTE_UNUSED, int fake)
    compiler output, only in hand coded assembler.  */
 
 void
-ecoff_new_file (const char *name)
+ecoff_new_file (name)
+     const char *name;
 {
   if (cur_file_ptr != NULL && strcmp (cur_file_ptr->name, name) == 0)
     return;
@@ -2407,7 +2424,8 @@ st_to_string (symbol_type)
    which gives the location of the start of the block.  */
 
 void
-ecoff_directive_begin (int ignore ATTRIBUTE_UNUSED)
+ecoff_directive_begin (ignore)
+     int ignore ATTRIBUTE_UNUSED;
 {
   char *name;
   char name_end;
@@ -2444,7 +2462,8 @@ ecoff_directive_begin (int ignore ATTRIBUTE_UNUSED)
    which gives the location of the end of the block.  */
 
 void
-ecoff_directive_bend (int ignore ATTRIBUTE_UNUSED)
+ecoff_directive_bend (ignore)
+     int ignore ATTRIBUTE_UNUSED;
 {
   char *name;
   char name_end;
@@ -2502,7 +2521,8 @@ static int coff_inside_enumeration;
 /* Handle a .def directive: start defining a symbol.  */
 
 void
-ecoff_directive_def (int ignore ATTRIBUTE_UNUSED)
+ecoff_directive_def (ignore)
+     int ignore ATTRIBUTE_UNUSED;
 {
   char *name;
   char name_end;
@@ -2547,7 +2567,8 @@ ecoff_directive_def (int ignore ATTRIBUTE_UNUSED)
    more than that anyhow, so I will also make that assumption.  */
 
 void
-ecoff_directive_dim (int ignore ATTRIBUTE_UNUSED)
+ecoff_directive_dim (ignore)
+     int ignore ATTRIBUTE_UNUSED;
 {
   int dimens[N_TQ];
   int i;
@@ -2596,7 +2617,8 @@ ecoff_directive_dim (int ignore ATTRIBUTE_UNUSED)
    symbol.  */
 
 void
-ecoff_directive_scl (int ignore ATTRIBUTE_UNUSED)
+ecoff_directive_scl (ignore)
+     int ignore ATTRIBUTE_UNUSED;
 {
   long val;
 
@@ -2620,7 +2642,8 @@ ecoff_directive_scl (int ignore ATTRIBUTE_UNUSED)
    never generate more than one argument.  */
 
 void
-ecoff_directive_size (int ignore ATTRIBUTE_UNUSED)
+ecoff_directive_size (ignore)
+     int ignore ATTRIBUTE_UNUSED;
 {
   int sizes[N_TQ];
   int i;
@@ -2669,7 +2692,8 @@ ecoff_directive_size (int ignore ATTRIBUTE_UNUSED)
    symbol.  */
 
 void
-ecoff_directive_type (int ignore ATTRIBUTE_UNUSED)
+ecoff_directive_type (ignore)
+     int ignore ATTRIBUTE_UNUSED;
 {
   long val;
   tq_t *tq_ptr;
@@ -2737,7 +2761,8 @@ ecoff_directive_type (int ignore ATTRIBUTE_UNUSED)
    union or enum.  */
 
 void
-ecoff_directive_tag (int ignore ATTRIBUTE_UNUSED)
+ecoff_directive_tag (ignore)
+     int ignore ATTRIBUTE_UNUSED;
 {
   char *name;
   char name_end;
@@ -2763,7 +2788,8 @@ ecoff_directive_tag (int ignore ATTRIBUTE_UNUSED)
    may be the name of a static or global symbol.  */
 
 void
-ecoff_directive_val (int ignore ATTRIBUTE_UNUSED)
+ecoff_directive_val (ignore)
+     int ignore ATTRIBUTE_UNUSED;
 {
   expressionS exp;
 
@@ -2797,7 +2823,8 @@ ecoff_directive_val (int ignore ATTRIBUTE_UNUSED)
    debugging information for a symbol.  */
 
 void
-ecoff_directive_endef (int ignore ATTRIBUTE_UNUSED)
+ecoff_directive_endef (ignore)
+     int ignore ATTRIBUTE_UNUSED;
 {
   char *name;
   symint_t indx;
@@ -2863,7 +2890,7 @@ ecoff_directive_endef (int ignore ATTRIBUTE_UNUSED)
   else if (coff_symbol_typ == st_Member
 	   && coff_type.num_sizes - coff_type.extra_sizes == 1)
     {
-      /* Is this a bitfield?  This is indicated by a structure member
+      /* Is this a bitfield?  This is indicated by a structure memeber
          having a size field that isn't an array.  */
       coff_type.bitfield = 1;
     }
@@ -2976,7 +3003,8 @@ ecoff_directive_endef (int ignore ATTRIBUTE_UNUSED)
 /* Parse .end directives.  */
 
 void
-ecoff_directive_end (int ignore ATTRIBUTE_UNUSED)
+ecoff_directive_end (ignore)
+     int ignore ATTRIBUTE_UNUSED;
 {
   char *name;
   char name_end;
@@ -3030,7 +3058,8 @@ ecoff_directive_end (int ignore ATTRIBUTE_UNUSED)
 /* Parse .ent directives.  */
 
 void
-ecoff_directive_ent (int ignore ATTRIBUTE_UNUSED)
+ecoff_directive_ent (ignore)
+     int ignore ATTRIBUTE_UNUSED;
 {
   char *name;
   char name_end;
@@ -3080,7 +3109,8 @@ ecoff_directive_ent (int ignore ATTRIBUTE_UNUSED)
 /* Parse .extern directives.  */
 
 void
-ecoff_directive_extern (int ignore ATTRIBUTE_UNUSED)
+ecoff_directive_extern (ignore)
+     int ignore ATTRIBUTE_UNUSED;
 {
   char *name;
   int c;
@@ -3104,7 +3134,8 @@ ecoff_directive_extern (int ignore ATTRIBUTE_UNUSED)
 /* Parse .file directives.  */
 
 void
-ecoff_directive_file (int ignore ATTRIBUTE_UNUSED)
+ecoff_directive_file (ignore)
+     int ignore ATTRIBUTE_UNUSED;
 {
   int indx;
   char *name;
@@ -3130,7 +3161,8 @@ ecoff_directive_file (int ignore ATTRIBUTE_UNUSED)
 /* Parse .fmask directives.  */
 
 void
-ecoff_directive_fmask (int ignore ATTRIBUTE_UNUSED)
+ecoff_directive_fmask (ignore)
+     int ignore ATTRIBUTE_UNUSED;
 {
   long val;
 
@@ -3158,7 +3190,8 @@ ecoff_directive_fmask (int ignore ATTRIBUTE_UNUSED)
 /* Parse .frame directives.  */
 
 void
-ecoff_directive_frame (int ignore ATTRIBUTE_UNUSED)
+ecoff_directive_frame (ignore)
+     int ignore ATTRIBUTE_UNUSED;
 {
   long val;
 
@@ -3198,7 +3231,8 @@ ecoff_directive_frame (int ignore ATTRIBUTE_UNUSED)
 /* Parse .mask directives.  */
 
 void
-ecoff_directive_mask (int ignore ATTRIBUTE_UNUSED)
+ecoff_directive_mask (ignore)
+     int ignore ATTRIBUTE_UNUSED;
 {
   long val;
 
@@ -3226,7 +3260,8 @@ ecoff_directive_mask (int ignore ATTRIBUTE_UNUSED)
 /* Parse .loc directives.  */
 
 void
-ecoff_directive_loc (int ignore ATTRIBUTE_UNUSED)
+ecoff_directive_loc (ignore)
+     int ignore ATTRIBUTE_UNUSED;
 {
   lineno_list_t *list;
   symint_t lineno;
@@ -3306,7 +3341,9 @@ ecoff_directive_loc (int ignore ATTRIBUTE_UNUSED)
    information so that it points to the instruction after the nop.  */
 
 void
-ecoff_fix_loc (fragS *old_frag, unsigned long old_frag_offset)
+ecoff_fix_loc (old_frag, old_frag_offset)
+     fragS *old_frag;
+     unsigned long old_frag_offset;
 {
   if (last_lineno != NULL
       && last_lineno->frag == old_frag
@@ -3320,7 +3357,8 @@ ecoff_fix_loc (fragS *old_frag, unsigned long old_frag_offset)
 /* Make sure the @stabs symbol is emitted.  */
 
 static void
-mark_stabs (int ignore ATTRIBUTE_UNUSED)
+mark_stabs (ignore)
+     int ignore ATTRIBUTE_UNUSED;
 {
   if (! stabs_seen)
     {
@@ -3337,7 +3375,8 @@ mark_stabs (int ignore ATTRIBUTE_UNUSED)
 #ifndef TC_MIPS
 /* For TC_MIPS use the version in tc-mips.c.  */
 void
-ecoff_directive_weakext (int ignore ATTRIBUTE_UNUSED)
+ecoff_directive_weakext (ignore)
+     int ignore ATTRIBUTE_UNUSED;
 {
   char *name;
   int c;
@@ -3415,12 +3454,13 @@ ecoff_directive_weakext (int ignore ATTRIBUTE_UNUSED)
 	value		a numeric value or an address.  */
 
 void
-ecoff_stab (segT sec ATTRIBUTE_UNUSED,
-	    int what,
-	    const char *string,
-	    int type,
-	    int other,
-	    int desc)
+ecoff_stab (sec, what, string, type, other, desc)
+     segT sec ATTRIBUTE_UNUSED;
+     int what;
+     const char *string;
+     int type;
+     int other;
+     int desc;
 {
   efdr_t *save_file_ptr = cur_file_ptr;
   symbolS *sym;
@@ -3569,7 +3609,8 @@ ecoff_stab (segT sec ATTRIBUTE_UNUSED,
    .scommon section rather than bfd_com_section.  */
 
 void
-ecoff_frob_symbol (symbolS *sym)
+ecoff_frob_symbol (sym)
+     symbolS *sym;
 {
   if (S_IS_COMMON (sym)
       && S_GET_VALUE (sym) > 0
@@ -3606,10 +3647,11 @@ ecoff_frob_symbol (symbolS *sym)
 /* Add bytes to the symbolic information buffer.  */
 
 static char *
-ecoff_add_bytes (char **buf,
-		 char **bufend,
-		 char *bufptr,
-		 unsigned long need)
+ecoff_add_bytes (buf, bufend, bufptr, need)
+     char **buf;
+     char **bufend;
+     char *bufptr;
+     unsigned long need;
 {
   unsigned long at;
   unsigned long want;
@@ -3628,11 +3670,12 @@ ecoff_add_bytes (char **buf,
    for the ECOFF target debugging information.  */
 
 static unsigned long
-ecoff_padding_adjust (const struct ecoff_debug_swap *backend,
-		      char **buf,
-		      char **bufend,
-		      unsigned long offset,
-		      char **bufptrptr)
+ecoff_padding_adjust (backend, buf, bufend, offset, bufptrptr)
+     const struct ecoff_debug_swap *backend;
+     char **buf;
+     char **bufend;
+     unsigned long offset;
+     char **bufptrptr;
 {
   bfd_size_type align;
 
@@ -3656,11 +3699,12 @@ ecoff_padding_adjust (const struct ecoff_debug_swap *backend,
 /* Build the line number information.  */
 
 static unsigned long
-ecoff_build_lineno (const struct ecoff_debug_swap *backend,
-		    char **buf,
-		    char **bufend,
-		    unsigned long offset,
-		    long *linecntptr)
+ecoff_build_lineno (backend, buf, bufend, offset, linecntptr)
+     const struct ecoff_debug_swap *backend;
+     char **buf;
+     char **bufend;
+     unsigned long offset;
+     long *linecntptr;
 {
   char *bufptr;
   register lineno_list_t *l;
@@ -3885,13 +3929,14 @@ ecoff_build_lineno (const struct ecoff_debug_swap *backend,
 /* Build and swap out the symbols.  */
 
 static unsigned long
-ecoff_build_symbols (const struct ecoff_debug_swap *backend,
-		     char **buf,
-		     char **bufend,
-		     unsigned long offset)
+ecoff_build_symbols (backend, buf, bufend, offset)
+     const struct ecoff_debug_swap *backend;
+     char **buf;
+     char **bufend;
+     unsigned long offset;
 {
   const bfd_size_type external_sym_size = backend->external_sym_size;
-  void (* const swap_sym_out) (bfd *, const SYMR *, PTR)
+  void (* const swap_sym_out) PARAMS ((bfd *, const SYMR *, PTR))
     = backend->swap_sym_out;
   char *sym_out;
   long isym;
@@ -4250,13 +4295,14 @@ ecoff_build_symbols (const struct ecoff_debug_swap *backend,
 /* Swap out the procedure information.  */
 
 static unsigned long
-ecoff_build_procs (const struct ecoff_debug_swap *backend,
-		   char **buf,
-		   char **bufend,
-		   unsigned long offset)
+ecoff_build_procs (backend, buf, bufend, offset)
+     const struct ecoff_debug_swap *backend;
+     char **buf;
+     char **bufend;
+     unsigned long offset;
 {
   const bfd_size_type external_pdr_size = backend->external_pdr_size;
-  void (* const swap_pdr_out) (bfd *, const PDR *, PTR)
+  void (* const swap_pdr_out) PARAMS ((bfd *, const PDR *, PTR))
     = backend->swap_pdr_out;
   char *pdr_out;
   long iproc;
@@ -4340,10 +4386,11 @@ ecoff_build_procs (const struct ecoff_debug_swap *backend,
 /* Swap out the aux information.  */
 
 static unsigned long
-ecoff_build_aux (const struct ecoff_debug_swap *backend,
-		 char **buf,
-		 char **bufend,
-		 unsigned long offset)
+ecoff_build_aux (backend, buf, bufend, offset)
+     const struct ecoff_debug_swap *backend;
+     char **buf;
+     char **bufend;
+     unsigned long offset;
 {
   int bigendian;
   union aux_ext *aux_out;
@@ -4454,10 +4501,11 @@ ecoff_build_aux (const struct ecoff_debug_swap *backend,
    bytes copied, rather than the new offset.  */
 
 static unsigned long
-ecoff_build_strings (char **buf,
-		     char **bufend,
-		     unsigned long offset,
-		     varray_t *vp)
+ecoff_build_strings (buf, bufend, offset, vp)
+     char **buf;
+     char **bufend;
+     unsigned long offset;
+     varray_t *vp;
 {
   unsigned long istr;
   char *str_out;
@@ -4492,10 +4540,11 @@ ecoff_build_strings (char **buf,
 /* Dump out the local strings.  */
 
 static unsigned long
-ecoff_build_ss (const struct ecoff_debug_swap *backend,
-		char **buf,
-		char **bufend,
-		unsigned long offset)
+ecoff_build_ss (backend, buf, bufend, offset)
+     const struct ecoff_debug_swap *backend;
+     char **buf;
+     char **bufend;
+     unsigned long offset;
 {
   long iss;
   vlinks_t *file_link;
@@ -4535,13 +4584,14 @@ ecoff_build_ss (const struct ecoff_debug_swap *backend,
 /* Swap out the file descriptors.  */
 
 static unsigned long
-ecoff_build_fdr (const struct ecoff_debug_swap *backend,
-		 char **buf,
-		 char **bufend,
-		 unsigned long offset)
+ecoff_build_fdr (backend, buf, bufend, offset)
+     const struct ecoff_debug_swap *backend;
+     char **buf;
+     char **bufend;
+     unsigned long offset;
 {
   const bfd_size_type external_fdr_size = backend->external_fdr_size;
-  void (* const swap_fdr_out) (bfd *, const FDR *, PTR)
+  void (* const swap_fdr_out) PARAMS ((bfd *, const FDR *, PTR))
     = backend->swap_fdr_out;
   long ifile;
   char *fdr_out;
@@ -4584,7 +4634,7 @@ ecoff_build_fdr (const struct ecoff_debug_swap *backend,
    calls a backend function to deal with it.  */
 
 static void
-ecoff_setup_ext (void)
+ecoff_setup_ext ()
 {
   register symbolS *sym;
 
@@ -4614,9 +4664,10 @@ ecoff_setup_ext (void)
 /* Build the ECOFF debugging information.  */
 
 unsigned long
-ecoff_build_debug (HDRR *hdr,
-		   char **bufp,
-		   const struct ecoff_debug_swap *backend)
+ecoff_build_debug (hdr, bufp, backend)
+     HDRR *hdr;
+     char **bufp;
+     const struct ecoff_debug_swap *backend;
 {
   const bfd_size_type external_pdr_size = backend->external_pdr_size;
   tag_t *ptag;
@@ -4780,7 +4831,8 @@ ecoff_build_debug (HDRR *hdr,
 #ifndef MALLOC_CHECK
 
 static page_type *
-allocate_cluster (unsigned long npages)
+allocate_cluster (npages)
+     unsigned long npages;
 {
   register page_type *value = (page_type *) xmalloc (npages * PAGE_USIZE);
 
@@ -4802,7 +4854,7 @@ static unsigned long pages_left = 0;
 /* Allocate one page (which is initialized to 0).  */
 
 static page_type *
-allocate_page (void)
+allocate_page ()
 {
 #ifndef MALLOC_CHECK
 
@@ -4829,7 +4881,7 @@ allocate_page (void)
 /* Allocate scoping information.  */
 
 static scope_t *
-allocate_scope (void)
+allocate_scope ()
 {
   register scope_t *ptr;
   static scope_t initial_scope;
@@ -4869,7 +4921,8 @@ allocate_scope (void)
 /* Free scoping information.  */
 
 static void
-free_scope (scope_t *ptr)
+free_scope (ptr)
+     scope_t *ptr;
 {
   alloc_counts[(int) alloc_type_scope].total_free++;
 
@@ -4884,7 +4937,7 @@ free_scope (scope_t *ptr)
 /* Allocate links for pages in a virtual array.  */
 
 static vlinks_t *
-allocate_vlinks (void)
+allocate_vlinks ()
 {
   register vlinks_t *ptr;
   static vlinks_t initial_vlinks;
@@ -4918,7 +4971,7 @@ allocate_vlinks (void)
 /* Allocate string hash buckets.  */
 
 static shash_t *
-allocate_shash (void)
+allocate_shash ()
 {
   register shash_t *ptr;
   static shash_t initial_shash;
@@ -4952,7 +5005,7 @@ allocate_shash (void)
 /* Allocate type hash buckets.  */
 
 static thash_t *
-allocate_thash (void)
+allocate_thash ()
 {
   register thash_t *ptr;
   static thash_t initial_thash;
@@ -4986,7 +5039,7 @@ allocate_thash (void)
 /* Allocate structure, union, or enum tag information.  */
 
 static tag_t *
-allocate_tag (void)
+allocate_tag ()
 {
   register tag_t *ptr;
   static tag_t initial_tag;
@@ -5026,7 +5079,8 @@ allocate_tag (void)
 /* Free scoping information.  */
 
 static void
-free_tag (tag_t *ptr)
+free_tag (ptr)
+     tag_t *ptr;
 {
   alloc_counts[(int) alloc_type_tag].total_free++;
 
@@ -5041,7 +5095,7 @@ free_tag (tag_t *ptr)
 /* Allocate forward reference to a yet unknown tag.  */
 
 static forward_t *
-allocate_forward (void)
+allocate_forward ()
 {
   register forward_t *ptr;
   static forward_t initial_forward;
@@ -5075,7 +5129,7 @@ allocate_forward (void)
 /* Allocate head of type hash list.  */
 
 static thead_t *
-allocate_thead (void)
+allocate_thead ()
 {
   register thead_t *ptr;
   static thead_t initial_thead;
@@ -5115,7 +5169,8 @@ allocate_thead (void)
 /* Free scoping information.  */
 
 static void
-free_thead (thead_t *ptr)
+free_thead (ptr)
+     thead_t *ptr;
 {
   alloc_counts[(int) alloc_type_thead].total_free++;
 
@@ -5128,7 +5183,7 @@ free_thead (thead_t *ptr)
 }
 
 static lineno_list_t *
-allocate_lineno_list (void)
+allocate_lineno_list ()
 {
   register lineno_list_t *ptr;
   static lineno_list_t initial_lineno_list;
@@ -5160,7 +5215,8 @@ allocate_lineno_list (void)
 }
 
 void
-ecoff_set_gp_prolog_size (int sz)
+ecoff_set_gp_prolog_size (sz)
+     int sz;
 {
   if (cur_proc_ptr == 0)
     return;
@@ -5176,13 +5232,13 @@ ecoff_set_gp_prolog_size (int sz)
 }
 
 int
-ecoff_no_current_file (void)
+ecoff_no_current_file ()
 {
   return cur_file_ptr == (efdr_t *) NULL;
 }
 
 void
-ecoff_generate_asm_lineno (void)
+ecoff_generate_asm_lineno ()
 {
   unsigned int lineno;
   char *filename;
@@ -5229,7 +5285,7 @@ ecoff_generate_asm_lineno (void)
 #else
 
 void
-ecoff_generate_asm_lineno (void)
+ecoff_generate_asm_lineno ()
 {
 }
 

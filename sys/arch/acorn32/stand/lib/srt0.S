@@ -1,4 +1,4 @@
-/*	$NetBSD: srt0.S,v 1.3 2004/06/13 20:50:14 abs Exp $	*/
+/*	$NetBSD: srt0.S,v 1.1.6.2 2004/06/17 08:39:10 tron Exp $	*/
 
 /*-
  * Copyright (c) 2001 Ben Harris

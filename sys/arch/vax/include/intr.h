@@ -1,4 +1,4 @@
-/* 	$NetBSD: intr.h,v 1.15 2004/07/01 22:58:12 kleink Exp $	*/
+/* 	$NetBSD: intr.h,v 1.14.4.1 2004/07/02 18:25:16 he Exp $	*/
 
 /*
  * Copyright (c) 1998 Matt Thomas.

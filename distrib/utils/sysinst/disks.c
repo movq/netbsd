@@ -1,4 +1,4 @@
-/*	$NetBSD: disks.c,v 1.87 2004/10/16 13:20:10 dsl Exp $ */
+/*	$NetBSD: disks.c,v 1.76.2.4 2004/06/17 09:15:45 tron Exp $ */
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -624,6 +624,7 @@ mount_disks(void)
 {
 	char *fstab;
 	int   fstabsize;
+	int   i;
 	int   error;
 
 	static struct lookfor fstabbuf[] = {

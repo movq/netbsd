@@ -1,4 +1,4 @@
-/*	$NetBSD: compare.c,v 1.45 2004/07/22 16:51:45 lukem Exp $	*/
+/*	$NetBSD: compare.c,v 1.43.2.1 2004/06/22 07:30:28 tron Exp $	*/
 
 /*-
  * Copyright (c) 1989, 1993
@@ -38,7 +38,7 @@
 #if 0
 static char sccsid[] = "@(#)compare.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: compare.c,v 1.45 2004/07/22 16:51:45 lukem Exp $");
+__RCSID("$NetBSD: compare.c,v 1.43.2.1 2004/06/22 07:30:28 tron Exp $");
 #endif
 #endif /* not lint */
 
@@ -165,7 +165,7 @@ typeerr:		LABEL;
 		    nodetype(s->type), inotype(p->fts_statp->st_mode));
 		return (label);
 	}
-	if (mtree_Wflag)
+	if (Wflag)
 		goto afterpermwhack;
 #if HAVE_STRUCT_STAT_ST_FLAGS
 	if (iflag && !uflag) {

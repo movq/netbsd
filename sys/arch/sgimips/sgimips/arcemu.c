@@ -1,4 +1,4 @@
-/*	$NetBSD: arcemu.c,v 1.8 2004/11/12 23:28:05 sekiya Exp $	*/
+/*	$NetBSD: arcemu.c,v 1.6.2.6 2004/07/23 07:05:39 tron Exp $	*/
 
 /*
  * Copyright (c) 2004 Steve Rumble 
@@ -29,7 +29,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: arcemu.c,v 1.8 2004/11/12 23:28:05 sekiya Exp $");
+__KERNEL_RCSID(0, "$NetBSD: arcemu.c,v 1.6.2.6 2004/07/23 07:05:39 tron Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -140,12 +140,6 @@ arcemu_identify()
  * IP12 specific
  */
 
-/* Prom Vectors */
-static void   (*ip12_prom_reset)(void) = (void *)MIPS_PHYS_TO_KSEG1(0x1fc00000);
-static void   (*ip12_prom_reinit)(void) =(void *)MIPS_PHYS_TO_KSEG1(0x1fc00018);
-static int    (*ip12_prom_printf)(const char *, ...) =
-					 (void *)MIPS_PHYS_TO_KSEG1(0x1fc00080);
-
 /*
  * The following matches IP12 NVRAM memory layout
  */
@@ -177,7 +171,7 @@ arcemu_ip12_eeprom_read()
 	struct seeprom_descriptor sd;
 	bus_space_handle_t bsh;
 	bus_space_tag_t tag;
-	paddr_t reg;
+	uint32_t reg;
 
 	tag = SGIMIPS_BUS_SPACE_NORMAL;
 	bus_space_map(tag, 0x1fa00000 + 0x1801bf, 1, 0, &bsh);
@@ -188,22 +182,11 @@ arcemu_ip12_eeprom_read()
 	 * case, but the seeprom driver has to know how many addressing
 	 * bits to feed the chip.
 	 */
-
-	/* 
-	 * This appears to not be the case on my 4D/35.  We'll assume that
-	 * we use eight-bit addressing mode for all IP12 variants.
-	 */
-
 	reg = *(volatile u_int32_t *)MIPS_PHYS_TO_KSEG1(0x1fbd0000);
-
-#if 0
 	if ((reg & 0x8000) == 0)
 		sd.sd_chip = C46;
 	else
 		sd.sd_chip = C56_66;
-#endif
-
-	sd.sd_chip = C56_66;
 
 	sd.sd_tag = tag;
 	sd.sd_bsh = bsh;
@@ -241,9 +224,9 @@ arcemu_ip12_init()
 	arcemu_v.GetChild =		  arcemu_ip12_GetChild;
 	arcemu_v.GetEnvironmentVariable = arcemu_ip12_GetEnvironmentVariable;
 	arcemu_v.GetMemoryDescriptor =    arcemu_ip12_GetMemoryDescriptor;
-	arcemu_v.Reboot =                 (void *)ip12_prom_reset; 
-	arcemu_v.PowerDown =		  (void *)ip12_prom_reinit; 
-	arcemu_v.EnterInteractiveMode =   (void *)ip12_prom_reinit;	
+	arcemu_v.Reboot =                 IP12_PROM_REBOOT; 
+	arcemu_v.PowerDown =              IP12_PROM_POWER_DOWN;
+	arcemu_v.EnterInteractiveMode =   IP12_PROM_INTERACTIVE_MODE;
 
 	cn_tab = &arcemu_ip12_cn;
 	arcemu_ip12_eeprom_read();
@@ -288,8 +271,6 @@ arcemu_ip12_GetEnvironmentVariable(char *var)
 {
 
 	/* 'd'ebug (serial), 'g'raphics, 'G'raphics w/ logo */
-
-	/* XXX This does not indicate the actual current console */
 	if (strcasecmp("ConsoleOut", var) == 0) {
 		switch (ip12nvram.console) {
 		case 'd':
@@ -301,9 +282,8 @@ arcemu_ip12_GetEnvironmentVariable(char *var)
 		case 'G':
 			return "video()";
 		default:
-			printf("arcemu: unknown console \"%c\", using serial\n",
+			printf("arcemu: unknown console type %c\n",
 			    ip12nvram.console);
-			return "serial(0)";
 		}
 	}
 
@@ -406,7 +386,13 @@ arcemu_ip12_GetMemoryDescriptor(void *mem)
 static void
 arcemu_ip12_putc(dev_t dummy, int c)
 {
-	ip12_prom_printf("%c", c);
+	static void (*ip12write)(char *, int, int, int) = IP12_PROM_PRINT;
+	char t[2];
+
+	t[0] = c;
+	t[1] = '\0';
+
+	ip12write(t, 0, 0, 0);
 }
 
 /*
@@ -447,31 +433,31 @@ arcemu_unimpl_voidptr_voidptr(void *a)
 	return (NULL);
 }
 
-static paddr_t
-arcemu_unimpl_Load(char *a, paddr_t b, paddr_t c, paddr_t *d)
+static uint32_t
+arcemu_unimpl_Load(char *a, uint32_t b, uint32_t c, uint32_t *d)
 {
 	arcemu_unimpl();
 
 	return (0);
 }
 
-static paddr_t
-arcemu_unimpl_Invoke(paddr_t a, paddr_t b, paddr_t c, char **d, char **e)
+static uint32_t
+arcemu_unimpl_Invoke(uint32_t a, uint32_t b, uint32_t c, char **d, char **e)
 {
 	arcemu_unimpl();	
 
 	return (0);
 }
 
-static paddr_t
-arcemu_unimpl_Execute(char *a, paddr_t b, char **c, char **d)
+static uint32_t
+arcemu_unimpl_Execute(char *a, uint32_t b, char **c, char **d)
 {
 	arcemu_unimpl();	
 
 	return (0);
 }
 
-static paddr_t
+static uint32_t
 arcemu_unimpl_GetConfigurationData(void *a, void *b)
 {
 	arcemu_unimpl();	
@@ -487,7 +473,7 @@ arcemu_unimpl_AddChild(void *a, void *b)
 	return (NULL);
 }
 
-static paddr_t
+static uint32_t
 arcemu_unimpl_DeleteComponent(void *a)
 {
 	arcemu_unimpl();
@@ -495,7 +481,7 @@ arcemu_unimpl_DeleteComponent(void *a)
 	return (0);
 }
 
-static paddr_t
+static uint32_t
 arcemu_unimpl_GetComponent(char *a)
 {
 	arcemu_unimpl();
@@ -503,7 +489,7 @@ arcemu_unimpl_GetComponent(char *a)
 	return (0);
 }
 
-static paddr_t
+static uint32_t
 arcemu_unimpl_SaveConfiguration()
 {
 	arcemu_unimpl();
@@ -519,7 +505,7 @@ arcemu_unimpl_GetMemoryDescriptor(void *a)
 	return (NULL);
 }
 
-static paddr_t
+static uint32_t
 arcemu_unimpl_GetRelativeTime()
 {
 	arcemu_unimpl();
@@ -527,48 +513,48 @@ arcemu_unimpl_GetRelativeTime()
 	return (0);
 }
 
-static paddr_t
-arcemu_unimpl_GetDirectoryEntry(paddr_t a, void *b, paddr_t c, paddr_t *d)
+static uint32_t
+arcemu_unimpl_GetDirectoryEntry(uint32_t a, void *b, uint32_t c, uint32_t *d)
 {
 	arcemu_unimpl();
 
 	return (0);
 }
 
-static paddr_t
-arcemu_unimpl_Open(char *a, paddr_t b, paddr_t *c)
+static uint32_t
+arcemu_unimpl_Open(char *a, uint32_t b, uint32_t *c)
 {
 	arcemu_unimpl();
 
 	return (0);
 }
 
-static paddr_t
-arcemu_unimpl_Close(paddr_t a)
+static uint32_t
+arcemu_unimpl_Close(uint32_t a)
 {
 	arcemu_unimpl();
 
 	return (0);
 }
 
-static paddr_t
-arcemu_unimpl_GetReadStatus(paddr_t a)
+static uint32_t
+arcemu_unimpl_GetReadStatus(uint32_t a)
 {
 	arcemu_unimpl();
 
 	return (0);
 }
 
-static paddr_t
-arcemu_unimpl_Seek(paddr_t a, int64_t *b, paddr_t c)
+static uint32_t
+arcemu_unimpl_Seek(uint32_t a, int64_t *b, uint32_t c)
 {
 	arcemu_unimpl();
 
 	return (0);
 }
 
-static paddr_t
-arcemu_unimpl_Mount(char *a, paddr_t b)
+static uint32_t
+arcemu_unimpl_Mount(char *a, uint32_t b)
 {
 	arcemu_unimpl();
 
@@ -583,7 +569,7 @@ arcemu_unimpl_GetEnvironmentVariable(char *a)
 	return (NULL);
 }
 
-static paddr_t
+static uint32_t
 arcemu_unimpl_SetEnvironmentVariable(char *a, char *b)
 {
 	arcemu_unimpl();
@@ -591,16 +577,16 @@ arcemu_unimpl_SetEnvironmentVariable(char *a, char *b)
 	return (0);
 }
 
-static paddr_t
-arcemu_unimpl_GetFileInformation(paddr_t a, void *b)
+static uint32_t
+arcemu_unimpl_GetFileInformation(uint32_t a, void *b)
 {
 	arcemu_unimpl();
 
 	return (0);
 }
 
-static paddr_t
-arcemu_unimpl_SetFileInformation(paddr_t a, paddr_t b, paddr_t c)
+static uint32_t
+arcemu_unimpl_SetFileInformation(uint32_t a, uint32_t b, uint32_t c)
 {
 	arcemu_unimpl();
 

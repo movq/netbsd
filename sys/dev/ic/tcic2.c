@@ -1,4 +1,4 @@
-/*	$NetBSD: tcic2.c,v 1.17 2004/09/13 12:34:00 drochner Exp $	*/
+/*	$NetBSD: tcic2.c,v 1.14 2003/12/28 01:21:37 christos Exp $	*/
 
 /*
  * Copyright (c) 1998, 1999 Christoph Badura.  All rights reserved.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tcic2.c,v 1.17 2004/09/13 12:34:00 drochner Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tcic2.c,v 1.14 2003/12/28 01:21:37 christos Exp $");
 
 #undef	TCICDEBUG
 
@@ -70,8 +70,7 @@ int	tcic_debug = 1;
 void	tcic_attach_socket __P((struct tcic_handle *));
 void	tcic_init_socket __P((struct tcic_handle *));
 
-int	tcic_submatch __P((struct device *, struct cfdata *,
-			   const locdesc_t *, void *));
+int	tcic_submatch __P((struct device *, struct cfdata *, void *));
 int	tcic_print  __P((void *arg, const char *pnp));
 int	tcic_intr_socket __P((struct tcic_handle *));
 
@@ -412,8 +411,6 @@ tcic_attach_socket(h)
 	struct tcic_handle *h;
 {
 	struct pcmciabus_attach_args paa;
-	int help[3];
-	locdesc_t *ldesc = (void *)help; /* XXX */
 
 	/* initialize the rest of the handle */
 
@@ -430,12 +427,8 @@ tcic_attach_socket(h)
 	paa.iobase = h->sc->iobase;
 	paa.iosize = h->sc->iosize;
 
-	ldesc->len = 2;
-	ldesc->locs[PCMCIABUSCF_CONTROLLER] = 0;
-	ldesc->locs[PCMCIABUSCF_SOCKET] = h->sock;
-
-	h->pcmcia = config_found_sm_loc(&h->sc->dev, "pcmciabus", ldesc, &paa,
-					tcic_print, tcic_submatch);
+	h->pcmcia = config_found_sm(&h->sc->dev, &paa, tcic_print,
+	    tcic_submatch);
 
 	/* if there's actually a pcmcia device attached, initialize the slot */
 
@@ -538,19 +531,41 @@ tcic_init_socket(h)
 }
 
 int
-tcic_submatch(parent, cf, ldesc, aux)
+tcic_submatch(parent, cf, aux)
 	struct device *parent;
 	struct cfdata *cf;
-	const locdesc_t *ldesc;
 	void *aux;
 {
 
-	if (cf->cf_loc[PCMCIABUSCF_CONTROLLER] != PCMCIABUSCF_CONTROLLER_DEFAULT &&
-	    cf->cf_loc[PCMCIABUSCF_CONTROLLER] != ldesc->locs[PCMCIABUSCF_CONTROLLER])
-		return 0;
-	if (cf->cf_loc[PCMCIABUSCF_SOCKET] != PCMCIABUSCF_SOCKET_DEFAULT &&
-	    cf->cf_loc[PCMCIABUSCF_SOCKET] != ldesc->locs[PCMCIABUSCF_SOCKET])
-		return 0;
+	struct pcmciabus_attach_args *paa = aux;
+	struct tcic_handle *h = (struct tcic_handle *) paa->pch;
+
+	switch (h->sock) {
+	case 0:
+		if (cf->cf_loc[PCMCIABUSCF_CONTROLLER] !=
+		    PCMCIABUSCF_CONTROLLER_DEFAULT &&
+		    cf->cf_loc[PCMCIABUSCF_CONTROLLER] != 0)
+			return 0;
+		if (cf->cf_loc[PCMCIABUSCF_SOCKET] !=
+		    PCMCIABUSCF_SOCKET_DEFAULT &&
+		    cf->cf_loc[PCMCIABUSCF_SOCKET] != 0)
+			return 0;
+
+		break;
+	case 1:
+		if (cf->cf_loc[PCMCIABUSCF_CONTROLLER] !=
+		    PCMCIABUSCF_CONTROLLER_DEFAULT &&
+		    cf->cf_loc[PCMCIABUSCF_CONTROLLER] != 0)
+			return 0;
+		if (cf->cf_loc[PCMCIABUSCF_SOCKET] !=
+		    PCMCIABUSCF_SOCKET_DEFAULT &&
+		    cf->cf_loc[PCMCIABUSCF_SOCKET] != 1)
+			return 0;
+
+		break;
+	default:
+		panic("unknown tcic socket");
+	}
 
 	return (config_match(parent, cf, aux));
 }
@@ -567,8 +582,16 @@ tcic_print(arg, pnp)
 	if (pnp)
 		aprint_normal("pcmcia at %s", pnp);
 
-	aprint_normal(" socket %d", h->sock);
-
+	switch (h->sock) {
+	case 0:
+		aprint_normal(" socket 0");
+		break;
+	case 1:
+		aprint_normal(" socket 1");
+		break;
+	default:
+		panic("unknown tcic socket");
+	}
 	return (UNCONF);
 }
 
@@ -990,13 +1013,15 @@ tcic_chip_mem_unmap(pch, window)
 	int window;
 {
 	struct tcic_handle *h = (struct tcic_handle *) pch;
-	int hwwin;
+	int reg, hwwin;
 
 	if (window >= h->memwins)
 		panic("tcic_chip_mem_unmap: window out of range");
 
 	hwwin = (window << 1) + h->sock;
-	tcic_write_ind_2(h, TCIC_WR_MCTL_N(hwwin), 0);
+	reg = tcic_read_ind_2(h, TCIC_WR_MCTL_N(hwwin));
+	reg &= ~TCIC_MCTL_ENA;
+	tcic_write_ind_2(h, TCIC_WR_MCTL_N(hwwin), reg);
 
 	h->memalloc &= ~(1 << window);
 }
@@ -1205,13 +1230,15 @@ tcic_chip_io_unmap(pch, window)
 	int window;
 {
 	struct tcic_handle *h = (struct tcic_handle *) pch;
-	int hwwin;
+	int reg, hwwin;
 
 	if (window >= TCIC_IO_WINS)
 		panic("tcic_chip_io_unmap: window out of range");
 
 	hwwin = (window << 1) + h->sock;
-	tcic_write_ind_2(h, TCIC_WR_ICTL_N(hwwin), 0);
+	reg = tcic_read_ind_2(h, TCIC_WR_ICTL_N(hwwin));
+	reg &= ~TCIC_ICTL_ENA;
+	tcic_write_ind_2(h, TCIC_WR_ICTL_N(hwwin), reg);
 
 	h->ioalloc &= ~(1 << window);
 }
@@ -1221,7 +1248,7 @@ tcic_chip_socket_enable(pch)
 	pcmcia_chipset_handle_t pch;
 {
 	struct tcic_handle *h = (struct tcic_handle *) pch;
-	int reg, win;
+	int cardtype, reg, win;
 
 	tcic_sel_sock(h);
 
@@ -1236,18 +1263,6 @@ tcic_chip_socket_enable(pch)
 	reg &= ~(TCIC_ILOCK_CRESET|TCIC_ILOCK_CRESENA);
 	tcic_write_aux_2(h->sc->iot, h->sc->ioh, TCIC_AR_ILOCK, reg);
 	tcic_write_1(h, TCIC_R_SCTRL, 0);	/* clear TCIC_SCTRL_ENA */
-
-	/* zero out the address windows */
-
-	tcic_write_ind_2(h, TCIC_IR_SCF1_N(h->sock), 0);
-	/* writing to WR_MBASE_N disables the window */
-	for (win = 0; win < h->memwins; win++) {
-		tcic_write_ind_2(h, TCIC_WR_MBASE_N((win << 1) + h->sock), 0);
-	}
-	/* writing to WR_IBASE_N disables the window */
-	for (win = 0; win < TCIC_IO_WINS; win++) {
-		tcic_write_ind_2(h, TCIC_WR_IBASE_N((win << 1) + h->sock), 0);
-	}
 
 	/* power up the socket */
 
@@ -1281,6 +1296,36 @@ tcic_chip_socket_enable(pch)
 	tcic_wait_ready(h);
 
 	/* WWW */
+	/* zero out the address windows */
+
+	/* writing to WR_MBASE_N disables the window */
+	for (win = 0; win < h->memwins; win++) {
+		tcic_write_ind_2(h, TCIC_WR_MBASE_N((win<<1)+h->sock), 0);
+	}
+	/* writing to WR_IBASE_N disables the window */
+	for (win = 0; win < TCIC_IO_WINS; win++) {
+		tcic_write_ind_2(h, TCIC_WR_IBASE_N((win<<1)+h->sock), 0);
+	}
+
+	/* set the card type */
+
+	cardtype = pcmcia_card_gettype(h->pcmcia);
+
+#if 0
+	reg = tcic_read_ind_2(h, TCIC_IR_SCF1_N(h->sock));
+	reg &= ~TCIC_SCF1_IRQ_MASK;
+#else
+	reg = 0;
+#endif
+	reg |= ((cardtype == PCMCIA_IFTYPE_IO) ?
+		TCIC_SCF1_IOSTS : 0);
+	reg |= tcic_irqmap[h->ih_irq];		/* enable interrupts */
+	reg &= ~TCIC_SCF1_IRQOD;
+	tcic_write_ind_2(h, TCIC_IR_SCF1_N(h->sock), reg);
+
+	DPRINTF(("%s: tcic_chip_socket_enable %d cardtype %s 0x%02x\n",
+	    h->sc->dev.dv_xname, h->sock,
+	    ((cardtype == PCMCIA_IFTYPE_IO) ? "io" : "mem"), reg));
 
 	/* reinstall all the memory and io mappings */
 
@@ -1291,30 +1336,6 @@ tcic_chip_socket_enable(pch)
 	for (win = 0; win < TCIC_IO_WINS; win++)
 		if (h->ioalloc & (1 << win))
 			tcic_chip_do_io_map(h, win);
-}
-
-void
-tcic_chip_socket_settype(pch, type)
-	pcmcia_chipset_handle_t pch;
-	int type;
-{
-	struct tcic_handle *h = (struct tcic_handle *) pch;
-	int reg;
-
-	tcic_sel_sock(h);
-
-	/* set the card type */
-
-	reg = 0;
-	if (type == PCMCIA_IFTYPE_IO) {
-		reg |= TCIC_SCF1_IOSTS;
-		reg |= tcic_irqmap[h->ih_irq];		/* enable interrupts */
-	}
-	tcic_write_ind_2(h, TCIC_IR_SCF1_N(h->sock), reg);
-
-	DPRINTF(("%s: tcic_chip_socket_enable %d cardtype %s 0x%02x\n",
-	    h->sc->dev.dv_xname, h->sock,
-	    ((type == PCMCIA_IFTYPE_IO) ? "io" : "mem"), reg));
 }
 
 void

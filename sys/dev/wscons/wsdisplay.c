@@ -1,4 +1,4 @@
-/* $NetBSD: wsdisplay.c,v 1.81 2004/07/29 22:29:37 jmmv Exp $ */
+/* $NetBSD: wsdisplay.c,v 1.76.2.2 2004/06/07 09:57:37 tron Exp $ */
 
 /*
  * Copyright (c) 1996, 1997 Christopher G. Demetriou.  All rights reserved.
@@ -31,11 +31,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: wsdisplay.c,v 1.81 2004/07/29 22:29:37 jmmv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: wsdisplay.c,v 1.76.2.2 2004/06/07 09:57:37 tron Exp $");
 
-#include "opt_wsdisplay_border.h"
 #include "opt_wsdisplay_compat.h"
-#include "opt_wsmsgattrs.h"
 #include "opt_compat_netbsd.h"
 #include "wskbd.h"
 #include "wsmux.h"
@@ -86,7 +84,6 @@ struct wsscreen {
 #define SCR_OPEN 1		/* is it open? */
 #define SCR_WAITACTIVE 2	/* someone waiting on activation */
 #define SCR_GRAPHICS 4		/* graphics mode, no text (emulation) output */
-#define	SCR_DUMBFB 8		/* in use as a dumb fb (iff SCR_GRAPHICS) */
 	const struct wscons_syncops *scr_syncops;
 	void *scr_synccookie;
 
@@ -1050,28 +1047,21 @@ wsdisplay_internal_ioctl(struct wsdisplay_softc *sc, struct wsscreen *scr,
 
 	switch (cmd) {
 	case WSDISPLAYIO_GMODE:
-		if (scr->scr_flags & SCR_GRAPHICS) {
-			if (scr->scr_flags & SCR_DUMBFB)
-				*(u_int *)data = WSDISPLAYIO_MODE_DUMBFB;
-			else
-				*(u_int *)data = WSDISPLAYIO_MODE_MAPPED;
-		} else
-			*(u_int *)data = WSDISPLAYIO_MODE_EMUL;
+		*(u_int *)data = (scr->scr_flags & SCR_GRAPHICS ?
+				  WSDISPLAYIO_MODE_MAPPED :
+				  WSDISPLAYIO_MODE_EMUL);
 		return (0);
 
 	case WSDISPLAYIO_SMODE:
 #define d (*(int *)data)
 		if (d != WSDISPLAYIO_MODE_EMUL &&
-		    d != WSDISPLAYIO_MODE_MAPPED &&
-		    d != WSDISPLAYIO_MODE_DUMBFB)
+		    d != WSDISPLAYIO_MODE_MAPPED)
 			return (EINVAL);
 
 	    if (WSSCREEN_HAS_EMULATOR(scr)) {
 		    scr->scr_flags &= ~SCR_GRAPHICS;
-		    if (d == WSDISPLAYIO_MODE_MAPPED ||
-			d == WSDISPLAYIO_MODE_DUMBFB)
-			    scr->scr_flags |= SCR_GRAPHICS |
-				    ((d == WSDISPLAYIO_MODE_DUMBFB) ? SCR_DUMBFB : 0);
+		    if (d == WSDISPLAYIO_MODE_MAPPED)
+			    scr->scr_flags |= SCR_GRAPHICS;
 	    } else if (d == WSDISPLAYIO_MODE_EMUL)
 		    return (EINVAL);
 
@@ -1152,50 +1142,6 @@ wsdisplay_internal_ioctl(struct wsdisplay_softc *sc, struct wsscreen *scr,
 	case WSDISPLAYIO_GETWSCHAR:
 		return ENODEV;
 #endif /* WSDISPLAY_CHARFUNCS */
-
-#ifdef WSDISPLAY_CUSTOM_OUTPUT
-	case WSDISPLAYIO_GMSGATTRS:
-#define d ((struct wsdisplay_msgattrs *)data)
-		(*scr->scr_dconf->wsemul->getmsgattrs)
-		    (scr->scr_dconf->wsemulcookie, d);
-		return (0);
-#undef d
-
-	case WSDISPLAYIO_SMSGATTRS: {
-#define d ((struct wsdisplay_msgattrs *)data)
-		int i;
-		for (i = 0; i < WSDISPLAY_MAXSCREEN; i++)
-			if (sc->sc_scr[i] != NULL)
-				(*sc->sc_scr[i]->scr_dconf->wsemul->setmsgattrs)
-				    (sc->sc_scr[i]->scr_dconf->wsemulcookie,
-				     sc->sc_scr[i]->scr_dconf->scrdata,
-				     d);
-		}
-		return (0);
-#undef d
-#else
-	case WSDISPLAYIO_GMSGATTRS:
-	case WSDISPLAYIO_SMSGATTRS:
-		return (ENODEV);
-#endif
-
-#ifdef WSDISPLAY_CUSTOM_BORDER
-	case WSDISPLAYIO_GBORDER:
-		if (!sc->sc_accessops->getborder)
-			return (EINVAL);
-		*(u_int *)data = (*sc->sc_accessops->getborder)
-			       (scr->scr_dconf->emulcookie);
-		return (0);
-	case WSDISPLAYIO_SBORDER:
-		if (!sc->sc_accessops->setborder)
-			return (EINVAL);
-		return (*sc->sc_accessops->setborder)
-		    (scr->scr_dconf->emulcookie, (*(u_int *)data));
-#else /* WSDISPLAY_CUSTOM_BORDER */
-	case WSDISPLAYIO_GBORDER:
-	case WSDISPLAYIO_SBORDER:
-		return (ENODEV);
-#endif /* WSDISPLAY_CUSTOM_BORDER */
 
 	}
 

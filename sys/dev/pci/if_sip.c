@@ -1,4 +1,4 @@
-/*	$NetBSD: if_sip.c,v 1.96 2004/10/30 18:09:22 thorpej Exp $	*/
+/*	$NetBSD: if_sip.c,v 1.87.2.1 2004/05/28 07:10:38 tron Exp $	*/
 
 /*-
  * Copyright (c) 2001, 2002 The NetBSD Foundation, Inc.
@@ -80,7 +80,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_sip.c,v 1.96 2004/10/30 18:09:22 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_sip.c,v 1.87.2.1 2004/05/28 07:10:38 tron Exp $");
 
 #include "bpfilter.h"
 #include "rnd.h"
@@ -137,17 +137,10 @@ __KERNEL_RCSID(0, "$NetBSD: if_sip.c,v 1.96 2004/10/30 18:09:22 thorpej Exp $");
 /*
  * Transmit descriptor list size.  This is arbitrary, but allocate
  * enough descriptors for 128 pending transmissions, and 8 segments
- * per packet (64 for DP83820 for jumbo frames).
- *
- * This MUST work out to a power of 2.
+ * per packet.  This MUST work out to a power of 2.
  */
-#ifdef DP83820
-#define	SIP_NTXSEGS		64
-#define	SIP_NTXSEGS_ALLOC	16
-#else
 #define	SIP_NTXSEGS		16
 #define	SIP_NTXSEGS_ALLOC	8
-#endif
 
 #define	SIP_TXQUEUELEN		256
 #define	SIP_NTXDESC		(SIP_TXQUEUELEN * SIP_NTXSEGS_ALLOC)
@@ -267,9 +260,7 @@ struct sip_softc {
 	struct evcnt sc_ev_txiintr;	/* Tx idle interrupts */
 	struct evcnt sc_ev_rxintr;	/* Rx interrupts */
 	struct evcnt sc_ev_hiberr;	/* HIBERR interrupts */
-	struct evcnt sc_ev_rxpause;	/* PAUSE received */
 #ifdef DP83820
-	struct evcnt sc_ev_txpause;	/* PAUSE transmitted */
 	struct evcnt sc_ev_rxipsum;	/* IP checksums checked in-bound */
 	struct evcnt sc_ev_rxtcpsum;	/* TCP checksums checked in-bound */
 	struct evcnt sc_ev_rxudpsum;	/* UDP checksums checked in-boudn */
@@ -295,12 +286,7 @@ struct sip_softc {
 
 	u_int32_t sc_rx_drain_thresh;	/* receive drain threshold */
 
-	int	sc_flowflags;		/* 802.3x flow control flags */
-#ifdef DP83820
-	int	sc_rx_flow_thresh;	/* Rx FIFO threshold for flow control */
-#else
-	int	sc_paused;		/* paused indication */
-#endif
+	int	sc_flags;		/* misc. flags; see below */
 
 	int	sc_txfree;		/* number of free Tx descriptors */
 	int	sc_txnext;		/* next ready Tx descriptor */
@@ -322,6 +308,9 @@ struct sip_softc {
 	rndsource_element_t rnd_source;	/* random source */
 #endif
 };
+
+/* sc_flags */
+#define	SIPF_PAUSED	0x00000001	/* paused (802.3x flow control) */
 
 #ifdef DP83820
 #define	SIP_RXCHAIN_RESET(sc)						\
@@ -374,7 +363,7 @@ do {									\
 
 #ifdef DP83820
 #define	SIP_INIT_RXDESC_EXTSTS	__sipd->sipd_extsts = 0;
-#define	SIP_RXBUF_LEN		(MCLBYTES - 8)
+#define	SIP_RXBUF_LEN		(MCLBYTES - 4)
 #else
 #define	SIP_INIT_RXDESC_EXTSTS	/* nothing */
 #define	SIP_RXBUF_LEN		(MCLBYTES - 1)	/* field width */
@@ -410,60 +399,59 @@ do {									\
 
 #define SIP_TIMEOUT 1000
 
-static void	SIP_DECL(start)(struct ifnet *);
-static void	SIP_DECL(watchdog)(struct ifnet *);
-static int	SIP_DECL(ioctl)(struct ifnet *, u_long, caddr_t);
-static int	SIP_DECL(init)(struct ifnet *);
-static void	SIP_DECL(stop)(struct ifnet *, int);
+void	SIP_DECL(start)(struct ifnet *);
+void	SIP_DECL(watchdog)(struct ifnet *);
+int	SIP_DECL(ioctl)(struct ifnet *, u_long, caddr_t);
+int	SIP_DECL(init)(struct ifnet *);
+void	SIP_DECL(stop)(struct ifnet *, int);
 
-static void	SIP_DECL(shutdown)(void *);
+void	SIP_DECL(shutdown)(void *);
 
-static void	SIP_DECL(reset)(struct sip_softc *);
-static void	SIP_DECL(rxdrain)(struct sip_softc *);
-static int	SIP_DECL(add_rxbuf)(struct sip_softc *, int);
-static void	SIP_DECL(read_eeprom)(struct sip_softc *, int, int,
-				      u_int16_t *);
-static void	SIP_DECL(tick)(void *);
+void	SIP_DECL(reset)(struct sip_softc *);
+void	SIP_DECL(rxdrain)(struct sip_softc *);
+int	SIP_DECL(add_rxbuf)(struct sip_softc *, int);
+void	SIP_DECL(read_eeprom)(struct sip_softc *, int, int, u_int16_t *);
+void	SIP_DECL(tick)(void *);
 
 #if !defined(DP83820)
-static void	SIP_DECL(sis900_set_filter)(struct sip_softc *);
+void	SIP_DECL(sis900_set_filter)(struct sip_softc *);
 #endif /* ! DP83820 */
-static void	SIP_DECL(dp83815_set_filter)(struct sip_softc *);
+void	SIP_DECL(dp83815_set_filter)(struct sip_softc *);
 
 #if defined(DP83820)
-static void	SIP_DECL(dp83820_read_macaddr)(struct sip_softc *,
-		    const struct pci_attach_args *, u_int8_t *);
+void	SIP_DECL(dp83820_read_macaddr)(struct sip_softc *,
+	    const struct pci_attach_args *, u_int8_t *);
 #else
 static void	SIP_DECL(sis900_eeprom_delay)(struct sip_softc *sc);
-static void	SIP_DECL(sis900_read_macaddr)(struct sip_softc *,
-		    const struct pci_attach_args *, u_int8_t *);
-static void	SIP_DECL(dp83815_read_macaddr)(struct sip_softc *,
-		    const struct pci_attach_args *, u_int8_t *);
+void	SIP_DECL(sis900_read_macaddr)(struct sip_softc *,
+	    const struct pci_attach_args *, u_int8_t *);
+void	SIP_DECL(dp83815_read_macaddr)(struct sip_softc *,
+	    const struct pci_attach_args *, u_int8_t *);
 #endif /* DP83820 */
 
-static int	SIP_DECL(intr)(void *);
-static void	SIP_DECL(txintr)(struct sip_softc *);
-static void	SIP_DECL(rxintr)(struct sip_softc *);
+int	SIP_DECL(intr)(void *);
+void	SIP_DECL(txintr)(struct sip_softc *);
+void	SIP_DECL(rxintr)(struct sip_softc *);
 
 #if defined(DP83820)
-static int	SIP_DECL(dp83820_mii_readreg)(struct device *, int, int);
-static void	SIP_DECL(dp83820_mii_writereg)(struct device *, int, int, int);
-static void	SIP_DECL(dp83820_mii_statchg)(struct device *);
+int	SIP_DECL(dp83820_mii_readreg)(struct device *, int, int);
+void	SIP_DECL(dp83820_mii_writereg)(struct device *, int, int, int);
+void	SIP_DECL(dp83820_mii_statchg)(struct device *);
 #else
-static int	SIP_DECL(sis900_mii_readreg)(struct device *, int, int);
-static void	SIP_DECL(sis900_mii_writereg)(struct device *, int, int, int);
-static void	SIP_DECL(sis900_mii_statchg)(struct device *);
+int	SIP_DECL(sis900_mii_readreg)(struct device *, int, int);
+void	SIP_DECL(sis900_mii_writereg)(struct device *, int, int, int);
+void	SIP_DECL(sis900_mii_statchg)(struct device *);
 
-static int	SIP_DECL(dp83815_mii_readreg)(struct device *, int, int);
-static void	SIP_DECL(dp83815_mii_writereg)(struct device *, int, int, int);
-static void	SIP_DECL(dp83815_mii_statchg)(struct device *);
+int	SIP_DECL(dp83815_mii_readreg)(struct device *, int, int);
+void	SIP_DECL(dp83815_mii_writereg)(struct device *, int, int, int);
+void	SIP_DECL(dp83815_mii_statchg)(struct device *);
 #endif /* DP83820 */
 
-static int	SIP_DECL(mediachange)(struct ifnet *);
-static void	SIP_DECL(mediastatus)(struct ifnet *, struct ifmediareq *);
+int	SIP_DECL(mediachange)(struct ifnet *);
+void	SIP_DECL(mediastatus)(struct ifnet *, struct ifmediareq *);
 
-static int	SIP_DECL(match)(struct device *, struct cfdata *, void *);
-static void	SIP_DECL(attach)(struct device *, struct device *, void *);
+int	SIP_DECL(match)(struct device *, struct cfdata *, void *);
+void	SIP_DECL(attach)(struct device *, struct device *, void *);
 
 int	SIP_DECL(copy_small) = 0;
 
@@ -487,10 +475,10 @@ struct sip_variant {
 		    const struct pci_attach_args *, u_int8_t *);
 };
 
-static u_int32_t SIP_DECL(mii_bitbang_read)(struct device *);
-static void	SIP_DECL(mii_bitbang_write)(struct device *, u_int32_t);
+u_int32_t SIP_DECL(mii_bitbang_read)(struct device *);
+void	SIP_DECL(mii_bitbang_write)(struct device *, u_int32_t);
 
-static const struct mii_bitbang_ops SIP_DECL(mii_bitbang_ops) = {
+const struct mii_bitbang_ops SIP_DECL(mii_bitbang_ops) = {
 	SIP_DECL(mii_bitbang_read),
 	SIP_DECL(mii_bitbang_write),
 	{
@@ -503,7 +491,7 @@ static const struct mii_bitbang_ops SIP_DECL(mii_bitbang_ops) = {
 };
 
 #if defined(DP83820)
-static const struct sip_variant SIP_DECL(variant_dp83820) = {
+const struct sip_variant SIP_DECL(variant_dp83820) = {
 	SIP_DECL(dp83820_mii_readreg),
 	SIP_DECL(dp83820_mii_writereg),
 	SIP_DECL(dp83820_mii_statchg),
@@ -511,7 +499,7 @@ static const struct sip_variant SIP_DECL(variant_dp83820) = {
 	SIP_DECL(dp83820_read_macaddr),
 };
 #else
-static const struct sip_variant SIP_DECL(variant_sis900) = {
+const struct sip_variant SIP_DECL(variant_sis900) = {
 	SIP_DECL(sis900_mii_readreg),
 	SIP_DECL(sis900_mii_writereg),
 	SIP_DECL(sis900_mii_statchg),
@@ -519,7 +507,7 @@ static const struct sip_variant SIP_DECL(variant_sis900) = {
 	SIP_DECL(sis900_read_macaddr),
 };
 
-static const struct sip_variant SIP_DECL(variant_dp83815) = {
+const struct sip_variant SIP_DECL(variant_dp83815) = {
 	SIP_DECL(dp83815_mii_readreg),
 	SIP_DECL(dp83815_mii_writereg),
 	SIP_DECL(dp83815_mii_statchg),
@@ -531,7 +519,7 @@ static const struct sip_variant SIP_DECL(variant_dp83815) = {
 /*
  * Devices supported by this driver.
  */
-static const struct sip_product {
+const struct sip_product {
 	pci_vendor_id_t		sip_vendor;
 	pci_product_id_t	sip_product;
 	const char		*sip_name;
@@ -624,7 +612,7 @@ SIP_DECL(check_64bit)(const struct pci_attach_args *pa)
 }
 #endif /* DP83820 */
 
-static int
+int
 SIP_DECL(match)(struct device *parent, struct cfdata *cf, void *aux)
 {
 	struct pci_attach_args *pa = aux;
@@ -635,7 +623,7 @@ SIP_DECL(match)(struct device *parent, struct cfdata *cf, void *aux)
 	return (0);
 }
 
-static void
+void
 SIP_DECL(attach)(struct device *parent, struct device *self, void *aux)
 {
 	struct sip_softc *sc = (struct sip_softc *) self;
@@ -849,12 +837,6 @@ SIP_DECL(attach)(struct device *parent, struct device *self, void *aux)
 	if (SIP_SIS900_REV(sc,SIS_REV_635) ||
 	    SIP_SIS900_REV(sc,SIS_REV_900B))
 		sc->sc_cfg |= (CFG_PESEL | CFG_RNDCNT);
-
-	if (SIP_SIS900_REV(sc,SIS_REV_635) ||
-	    SIP_SIS900_REV(sc,SIS_REV_960) ||
-	    SIP_SIS900_REV(sc,SIS_REV_900B))
-		sc->sc_cfg |= (bus_space_read_4(sc->sc_st, sc->sc_sh,
-						SIP_CFG) & CFG_EDBMASTEN);
 #endif
 
 	(*sip->sip_variant->sipv_read_macaddr)(sc, pa, enaddr);
@@ -960,15 +942,8 @@ SIP_DECL(attach)(struct device *parent, struct device *self, void *aux)
 	ifmedia_init(&sc->sc_mii.mii_media, IFM_IMASK, SIP_DECL(mediachange),
 	    SIP_DECL(mediastatus));
 
-	/*
-	 * XXX We cannot handle flow control on the DP83815.
-	 */
-	if (SIP_CHIP_MODEL(sc, PCI_VENDOR_NS, PCI_PRODUCT_NS_DP83815))
-		mii_attach(&sc->sc_dev, &sc->sc_mii, 0xffffffff, MII_PHY_ANY,
-			   MII_OFFSET_ANY, 0);
-	else
-		mii_attach(&sc->sc_dev, &sc->sc_mii, 0xffffffff, MII_PHY_ANY,
-			   MII_OFFSET_ANY, MIIF_DOPAUSE);
+	mii_attach(&sc->sc_dev, &sc->sc_mii, 0xffffffff, MII_PHY_ANY,
+	    MII_OFFSET_ANY, 0);
 	if (LIST_FIRST(&sc->sc_mii.mii_phys) == NULL) {
 		ifmedia_add(&sc->sc_mii.mii_media, IFM_ETHER|IFM_NONE, 0, NULL);
 		ifmedia_set(&sc->sc_mii.mii_media, IFM_ETHER|IFM_NONE);
@@ -1034,11 +1009,7 @@ SIP_DECL(attach)(struct device *parent, struct device *self, void *aux)
 	 * may trash the first few outgoing packets if the
 	 * PCI bus is saturated.
 	 */
-#ifdef DP83820
-	sc->sc_tx_drain_thresh = 6400 / 32;	/* from FreeBSD nge(4) */
-#else
 	sc->sc_tx_drain_thresh = 1504 / 32;
-#endif
 
 	/*
 	 * Initialize the Rx FIFO drain threshold.
@@ -1068,15 +1039,7 @@ SIP_DECL(attach)(struct device *parent, struct device *self, void *aux)
 	    NULL, sc->sc_dev.dv_xname, "rxintr");
 	evcnt_attach_dynamic(&sc->sc_ev_hiberr, EVCNT_TYPE_INTR,
 	    NULL, sc->sc_dev.dv_xname, "hiberr");
-#ifndef DP83820
-	evcnt_attach_dynamic(&sc->sc_ev_rxpause, EVCNT_TYPE_INTR,
-	    NULL, sc->sc_dev.dv_xname, "rxpause");
-#endif /* !DP83820 */
 #ifdef DP83820
-	evcnt_attach_dynamic(&sc->sc_ev_rxpause, EVCNT_TYPE_MISC,
-	    NULL, sc->sc_dev.dv_xname, "rxpause");
-	evcnt_attach_dynamic(&sc->sc_ev_txpause, EVCNT_TYPE_MISC,
-	    NULL, sc->sc_dev.dv_xname, "txpause");
 	evcnt_attach_dynamic(&sc->sc_ev_rxipsum, EVCNT_TYPE_MISC,
 	    NULL, sc->sc_dev.dv_xname, "rxipsum");
 	evcnt_attach_dynamic(&sc->sc_ev_rxtcpsum, EVCNT_TYPE_MISC,
@@ -1134,7 +1097,7 @@ SIP_DECL(attach)(struct device *parent, struct device *self, void *aux)
  *
  *	Make sure the interface is stopped at reboot time.
  */
-static void
+void
 SIP_DECL(shutdown)(void *arg)
 {
 	struct sip_softc *sc = arg;
@@ -1147,7 +1110,7 @@ SIP_DECL(shutdown)(void *arg)
  *
  *	Start packet transmission on the interface.
  */
-static void
+void
 SIP_DECL(start)(struct ifnet *ifp)
 {
 	struct sip_softc *sc = ifp->if_softc;
@@ -1167,13 +1130,11 @@ SIP_DECL(start)(struct ifnet *ifp)
 	u_int32_t extsts;
 #endif
 
-#ifndef DP83820
 	/*
 	 * If we've been told to pause, don't transmit any more packets.
 	 */
-	if (sc->sc_paused)
+	if (sc->sc_flags & SIPF_PAUSED)
 		ifp->if_flags |= IFF_OACTIVE;
-#endif
 
 	if ((ifp->if_flags & (IFF_RUNNING|IFF_OACTIVE)) != IFF_RUNNING)
 		return;
@@ -1457,12 +1418,7 @@ SIP_DECL(start)(struct ifnet *ifp)
 #endif
 
 		/* Set a watchdog timer in case the chip flakes out. */
-#ifdef DP83820
-		/* Gigabit autonegotiation takes 5 seconds. */
-		ifp->if_timer = 10;
-#else
 		ifp->if_timer = 5;
-#endif
 	}
 }
 
@@ -1471,7 +1427,7 @@ SIP_DECL(start)(struct ifnet *ifp)
  *
  *	Watchdog timer handler.
  */
-static void
+void
 SIP_DECL(watchdog)(struct ifnet *ifp)
 {
 	struct sip_softc *sc = ifp->if_softc;
@@ -1503,7 +1459,7 @@ SIP_DECL(watchdog)(struct ifnet *ifp)
  *
  *	Handle control requests from the operator.
  */
-static int
+int
 SIP_DECL(ioctl)(struct ifnet *ifp, u_long cmd, caddr_t data)
 {
 	struct sip_softc *sc = ifp->if_softc;
@@ -1514,40 +1470,6 @@ SIP_DECL(ioctl)(struct ifnet *ifp, u_long cmd, caddr_t data)
 
 	switch (cmd) {
 	case SIOCSIFMEDIA:
-		/* Flow control requires full-duplex mode. */
-		if (IFM_SUBTYPE(ifr->ifr_media) == IFM_AUTO ||
-		    (ifr->ifr_media & IFM_FDX) == 0)
-		    	ifr->ifr_media &= ~IFM_ETH_FMASK;
-#ifdef DP83820
-		if (IFM_SUBTYPE(ifr->ifr_media) != IFM_AUTO) {
-			if ((ifr->ifr_media & IFM_ETH_FMASK) == IFM_FLOW) {
-				/* We can do both TXPAUSE and RXPAUSE. */
-				ifr->ifr_media |=
-				    IFM_ETH_TXPAUSE | IFM_ETH_RXPAUSE;
-			}
-			sc->sc_flowflags = ifr->ifr_media & IFM_ETH_FMASK;
-		}
-#else
-		/* XXX */
-		if (SIP_CHIP_MODEL(sc, PCI_VENDOR_NS, PCI_PRODUCT_NS_DP83815))
-			ifr->ifr_media &= ~IFM_ETH_FMASK;
-
-		if (IFM_SUBTYPE(ifr->ifr_media) != IFM_AUTO) {
-			if (ifr->ifr_media & IFM_FLOW) {
-				/*
-				 * Both TXPAUSE and RXPAUSE must be set.
-				 * (SiS900 and DP83815 don't have PAUSE_ASYM
-				 * feature.)
-				 *
-				 * XXX Can SiS900 and DP83815 send PAUSE?
-				 */
-				ifr->ifr_media |=
-				    IFM_ETH_TXPAUSE | IFM_ETH_RXPAUSE;
-			}
-			sc->sc_flowflags = ifr->ifr_media & IFM_ETH_FMASK;
-		}
-#endif
-		/* FALLTHROUGH */
 	case SIOCGIFMEDIA:
 		error = ifmedia_ioctl(ifp, ifr, &sc->sc_mii.mii_media, cmd);
 		break;
@@ -1559,8 +1481,7 @@ SIP_DECL(ioctl)(struct ifnet *ifp, u_long cmd, caddr_t data)
 			 * Multicast list has changed; set the hardware filter
 			 * accordingly.
 			 */
-			if (ifp->if_flags & IFF_RUNNING)
-			    (*sc->sc_model->sip_variant->sipv_set_filter)(sc);
+			(*sc->sc_model->sip_variant->sipv_set_filter)(sc);
 			error = 0;
 		}
 		break;
@@ -1578,16 +1499,13 @@ SIP_DECL(ioctl)(struct ifnet *ifp, u_long cmd, caddr_t data)
  *
  *	Interrupt service routine.
  */
-static int
+int
 SIP_DECL(intr)(void *arg)
 {
 	struct sip_softc *sc = arg;
 	struct ifnet *ifp = &sc->sc_ethercom.ec_if;
 	u_int32_t isr;
 	int handled = 0;
-
-	/* Disable interrupts. */
-	bus_space_write_4(sc->sc_st, sc->sc_sh, SIP_IER, 0);
 
 	for (;;) {
 		/* Reading clears interrupt. */
@@ -1663,12 +1581,11 @@ SIP_DECL(intr)(void *arg)
 #if !defined(DP83820)
 		if (sc->sc_imr & (ISR_PAUSE_END|ISR_PAUSE_ST)) {
 			if (isr & ISR_PAUSE_ST) {
-				sc->sc_paused = 1;
-				SIP_EVCNT_INCR(&sc->sc_ev_rxpause);
+				sc->sc_flags |= SIPF_PAUSED;
 				ifp->if_flags |= IFF_OACTIVE;
 			}
 			if (isr & ISR_PAUSE_END) {
-				sc->sc_paused = 0;
+				sc->sc_flags &= ~SIPF_PAUSED;
 				ifp->if_flags &= ~IFF_OACTIVE;
 			}
 		}
@@ -1705,9 +1622,6 @@ SIP_DECL(intr)(void *arg)
 		}
 	}
 
-	/* Re-enable interrupts. */
-	bus_space_write_4(sc->sc_st, sc->sc_sh, SIP_IER, IER_IE);
-
 	/* Try to get more packets going. */
 	SIP_DECL(start)(ifp);
 
@@ -1719,16 +1633,14 @@ SIP_DECL(intr)(void *arg)
  *
  *	Helper; handle transmit interrupts.
  */
-static void
+void
 SIP_DECL(txintr)(struct sip_softc *sc)
 {
 	struct ifnet *ifp = &sc->sc_ethercom.ec_if;
 	struct sip_txsoft *txs;
 	u_int32_t cmdsts;
 
-#ifndef DP83820
-	if (sc->sc_paused == 0)
-#endif
+	if ((sc->sc_flags & SIPF_PAUSED) == 0)
 		ifp->if_flags &= ~IFF_OACTIVE;
 
 	/*
@@ -1794,14 +1706,14 @@ SIP_DECL(txintr)(struct sip_softc *sc)
  *
  *	Helper; handle receive interrupts.
  */
-static void
+void
 SIP_DECL(rxintr)(struct sip_softc *sc)
 {
 	struct ifnet *ifp = &sc->sc_ethercom.ec_if;
 	struct sip_rxsoft *rxs;
 	struct mbuf *m, *tailm;
 	u_int32_t cmdsts, extsts;
-	int i, len, frame_len;
+	int i, len;
 
 	for (i = sc->sc_rxptr;; i = SIP_NEXTRX(i)) {
 		rxs = &sc->sc_rxsoft[i];
@@ -1874,7 +1786,6 @@ SIP_DECL(rxintr)(struct sip_softc *sc)
 		*sc->sc_rxtailp = NULL;
 		m = sc->sc_rxhead;
 		tailm = sc->sc_rxtail;
-		frame_len = sc->sc_rxlen;
 
 		SIP_RXCHAIN_RESET(sc);
 
@@ -1910,8 +1821,7 @@ SIP_DECL(rxintr)(struct sip_softc *sc)
 		 * every packet.
 		 */
 		len = CMDSTS_SIZE(cmdsts);
-		frame_len += len;
-		tailm->m_len = len;
+		tailm->m_len = len - sc->sc_rxlen;
 
 		/*
 		 * If the packet is small enough to fit in a
@@ -1999,7 +1909,7 @@ SIP_DECL(rxintr)(struct sip_softc *sc)
 		ifp->if_ipackets++;
 		m->m_flags |= M_HASFCS;
 		m->m_pkthdr.rcvif = ifp;
-		m->m_pkthdr.len = frame_len;
+		m->m_pkthdr.len = len;
 
 #if NBPFILTER > 0
 		/*
@@ -2023,7 +1933,7 @@ SIP_DECL(rxintr)(struct sip_softc *sc)
  *
  *	Helper; handle receive interrupts.
  */
-static void
+void
 SIP_DECL(rxintr)(struct sip_softc *sc)
 {
 	struct ifnet *ifp = &sc->sc_ethercom.ec_if;
@@ -2193,25 +2103,13 @@ SIP_DECL(rxintr)(struct sip_softc *sc)
  *
  *	One second timer, used to tick the MII.
  */
-static void
+void
 SIP_DECL(tick)(void *arg)
 {
 	struct sip_softc *sc = arg;
 	int s;
 
 	s = splnet();
-#ifdef DP83820
-#ifdef SIP_EVENT_COUNTERS
-	/* Read PAUSE related counts from MIB registers. */
-	sc->sc_ev_rxpause.ev_count +=
-	    bus_space_read_4(sc->sc_st, sc->sc_sh,
-			     SIP_NS_MIB(MIB_RXPauseFrames)) & 0xffff;
-	sc->sc_ev_txpause.ev_count +=
-	    bus_space_read_4(sc->sc_st, sc->sc_sh,
-			     SIP_NS_MIB(MIB_TXPauseFrames)) & 0xffff;
-	bus_space_write_4(sc->sc_st, sc->sc_sh, SIP_NS_MIBC, MIBC_ACLR);
-#endif /* SIP_EVENT_COUNTERS */
-#endif /* DP83820 */
 	mii_tick(&sc->sc_mii);
 	splx(s);
 
@@ -2223,7 +2121,7 @@ SIP_DECL(tick)(void *arg)
  *
  *	Perform a soft reset on the SiS 900.
  */
-static void
+void
 SIP_DECL(reset)(struct sip_softc *sc)
 {
 	bus_space_tag_t st = sc->sc_st;
@@ -2261,7 +2159,7 @@ SIP_DECL(reset)(struct sip_softc *sc)
  *
  *	Initialize the interface.  Must be called at splnet().
  */
-static int
+int
 SIP_DECL(init)(struct ifnet *ifp)
 {
 	struct sip_softc *sc = ifp->if_softc;
@@ -2384,7 +2282,7 @@ SIP_DECL(init)(struct ifnet *ifp)
 	if ((SIP_SIS900_REV(sc, SIS_REV_635) ||
 	     SIP_SIS900_REV(sc, SIS_REV_960) ||
 	     SIP_SIS900_REV(sc, SIS_REV_900B)) &&
-	    (sc->sc_cfg & CFG_EDBMASTEN)) {
+	    (bus_space_read_4(sc->sc_st, sc->sc_sh, SIP_CFG) & CFG_EDBMASTEN)) {
 		sc->sc_txcfg = TXCFG_MXDMA_64;
 		sc->sc_rxcfg = RXCFG_MXDMA_64;
 	} else {
@@ -2417,32 +2315,7 @@ SIP_DECL(init)(struct ifnet *ifp)
 	 * Initialize the prototype RXCFG register.
 	 */
 	sc->sc_rxcfg |= (sc->sc_rx_drain_thresh << RXCFG_DRTH_SHIFT);
-#ifdef DP83820
-	/*
-	 * Accept long packets (including FCS) so we can handle
-	 * 802.1q-tagged frames and jumbo frames properly.
-	 */
-	if (ifp->if_mtu > ETHERMTU ||
-	    (sc->sc_ethercom.ec_capenable & ETHERCAP_VLAN_MTU))
-		sc->sc_rxcfg |= RXCFG_ALP;
-
-	/*
-	 * Checksum offloading is disabled if the user selects an MTU
-	 * larger than 8109.  (FreeBSD says 8152, but there is emperical
-	 * evidence that >8109 does not work on some boards, such as the
-	 * Planex GN-1000TE).
-	 */
-	if (ifp->if_mtu > 8109 &&
-	    (ifp->if_capenable &
-	     (IFCAP_CSUM_IPv4|IFCAP_CSUM_TCPv4|IFCAP_CSUM_UDPv4))) {
-		printf("%s: Checksum offloading does not work if MTU > 8109 - "
-		       "disabled.\n", sc->sc_dev.dv_xname);
-		ifp->if_capenable &= ~(IFCAP_CSUM_IPv4|IFCAP_CSUM_TCPv4|
-				       IFCAP_CSUM_UDPv4);
-		ifp->if_csum_flags_tx = 0;
-		ifp->if_csum_flags_rx = 0;
-	}
-#else
+#ifndef DP83820
 	/*
 	 * Accept packets >1518 bytes (including FCS) so we can handle
 	 * 802.1q-tagged frames properly.
@@ -2504,30 +2377,12 @@ SIP_DECL(init)(struct ifnet *ifp)
 	/* Set up the receive filter. */
 	(*sc->sc_model->sip_variant->sipv_set_filter)(sc);
 
-#ifdef DP83820
-	/*
-	 * Tune sc_rx_flow_thresh.
-	 * XXX "More than 8KB" is too short for jumbo frames.
-	 * XXX TODO: Threshold value should be user-settable.
-	 */
-	sc->sc_rx_flow_thresh = (PCR_PS_STHI_8 | PCR_PS_STLO_4 |
-				 PCR_PS_FFHI_8 | PCR_PS_FFLO_4 |
-				 (PCR_PAUSE_CNT & PCR_PAUSE_CNT_MASK));
-#endif
-
 	/*
 	 * Set the current media.  Do this after initializing the prototype
 	 * IMR, since sip_mii_statchg() modifies the IMR for 802.3x flow
 	 * control.
 	 */
 	mii_mediachg(&sc->sc_mii);
-
-#ifdef DP83820
-	/*
-	 * Set the interrupt hold-off timer to 100us.
-	 */
-	bus_space_write_4(st, sh, SIP_IHR, 0x01);
-#endif
 
 	/*
 	 * Enable interrupts.
@@ -2561,7 +2416,7 @@ SIP_DECL(init)(struct ifnet *ifp)
  *
  *	Drain the receive queue.
  */
-static void
+void
 SIP_DECL(rxdrain)(struct sip_softc *sc)
 {
 	struct sip_rxsoft *rxs;
@@ -2582,7 +2437,7 @@ SIP_DECL(rxdrain)(struct sip_softc *sc)
  *
  *	Stop transmission on the interface.
  */
-static void
+void
 SIP_DECL(stop)(struct ifnet *ifp, int disable)
 {
 	struct sip_softc *sc = ifp->if_softc;
@@ -2655,7 +2510,7 @@ SIP_DECL(stop)(struct ifnet *ifp, int disable)
  *
  *	Read data from the serial EEPROM.
  */
-static void
+void
 SIP_DECL(read_eeprom)(struct sip_softc *sc, int word, int wordcnt,
     u_int16_t *data)
 {
@@ -2721,7 +2576,7 @@ SIP_DECL(read_eeprom)(struct sip_softc *sc, int word, int wordcnt,
  *
  *	Add a receive buffer to the indicated descriptor.
  */
-static int
+int
 SIP_DECL(add_rxbuf)(struct sip_softc *sc, int idx)
 {
 	struct sip_rxsoft *rxs = &sc->sc_rxsoft[idx];
@@ -2770,7 +2625,7 @@ SIP_DECL(add_rxbuf)(struct sip_softc *sc, int idx)
  *
  *	Set up the receive filter.
  */
-static void
+void
 SIP_DECL(sis900_set_filter)(struct sip_softc *sc)
 {
 	bus_space_tag_t st = sc->sc_st;
@@ -2803,25 +2658,6 @@ SIP_DECL(sis900_set_filter)(struct sip_softc *sc)
 	 */
 
 	memset(mchash, 0, sizeof(mchash));
-
-	/*
-	 * SiS900 (at least SiS963) requires us to register the address of
-	 * the PAUSE packet (01:80:c2:00:00:01) into the address filter.
-	 */
-	crc = 0x0ed423f9;
-
-	if (SIP_SIS900_REV(sc, SIS_REV_635) ||
-	    SIP_SIS900_REV(sc, SIS_REV_960) ||
-	    SIP_SIS900_REV(sc, SIS_REV_900B)) {
-		/* Just want the 8 most significant bits. */
-		crc >>= 24;
-	} else {
-		/* Just want the 7 most significant bits. */
-		crc >>= 25;
-	}
-
-	/* Set the corresponding bit in the hash table. */
-	mchash[crc >> 4] |= 1 << (crc & 0xf);
 
 	ETHER_FIRST_MULTI(step, ec, enm);
 	while (enm != NULL) {
@@ -2916,7 +2752,7 @@ SIP_DECL(sis900_set_filter)(struct sip_softc *sc)
  *
  *	Set up the receive filter.
  */
-static void
+void
 SIP_DECL(dp83815_set_filter)(struct sip_softc *sc)
 {
 	bus_space_tag_t st = sc->sc_st;
@@ -3054,7 +2890,7 @@ SIP_DECL(dp83815_set_filter)(struct sip_softc *sc)
  *
  *	Read a PHY register on the MII of the DP83820.
  */
-static int
+int
 SIP_DECL(dp83820_mii_readreg)(struct device *self, int phy, int reg)
 {
 	struct sip_softc *sc = (void *) self;
@@ -3119,7 +2955,7 @@ SIP_DECL(dp83820_mii_readreg)(struct device *self, int phy, int reg)
  *
  *	Write a PHY register on the MII of the DP83820.
  */
-static void
+void
 SIP_DECL(dp83820_mii_writereg)(struct device *self, int phy, int reg, int val)
 {
 	struct sip_softc *sc = (void *) self;
@@ -3147,30 +2983,20 @@ SIP_DECL(dp83820_mii_writereg)(struct device *self, int phy, int reg, int val)
 }
 
 /*
- * sip_dp83820_mii_statchg:	[mii interface function]
+ * sip_dp83815_mii_statchg:	[mii interface function]
  *
  *	Callback from MII layer when media changes.
  */
-static void
+void
 SIP_DECL(dp83820_mii_statchg)(struct device *self)
 {
 	struct sip_softc *sc = (struct sip_softc *) self;
-	struct mii_data *mii = &sc->sc_mii;
-	u_int32_t cfg, pcr;
-
-	/*
-	 * Get flow control negotiation result.
-	 */
-	if (IFM_SUBTYPE(mii->mii_media.ifm_cur->ifm_media) == IFM_AUTO &&
-	    (mii->mii_media_active & IFM_ETH_FMASK) != sc->sc_flowflags) {
-		sc->sc_flowflags = mii->mii_media_active & IFM_ETH_FMASK;
-		mii->mii_media_active &= ~IFM_ETH_FMASK;
-	}
+	u_int32_t cfg;
 
 	/*
 	 * Update TXCFG for full-duplex operation.
 	 */
-	if ((mii->mii_media_active & IFM_FDX) != 0)
+	if ((sc->sc_mii.mii_media_active & IFM_FDX) != 0)
 		sc->sc_txcfg |= (TXCFG_CSI | TXCFG_HBI);
 	else
 		sc->sc_txcfg &= ~(TXCFG_CSI | TXCFG_HBI);
@@ -3178,8 +3004,8 @@ SIP_DECL(dp83820_mii_statchg)(struct device *self)
 	/*
 	 * Update RXCFG for full-duplex or loopback.
 	 */
-	if ((mii->mii_media_active & IFM_FDX) != 0 ||
-	    IFM_SUBTYPE(mii->mii_media_active) == IFM_LOOP)
+	if ((sc->sc_mii.mii_media_active & IFM_FDX) != 0 ||
+	    IFM_SUBTYPE(sc->sc_mii.mii_media_active) == IFM_LOOP)
 		sc->sc_rxcfg |= RXCFG_ATX;
 	else
 		sc->sc_rxcfg &= ~RXCFG_ATX;
@@ -3193,20 +3019,12 @@ SIP_DECL(dp83820_mii_statchg)(struct device *self)
 		cfg = sc->sc_cfg;
 
 	/*
-	 * 802.3x flow control.
+	 * XXX 802.3x flow control.
 	 */
-	pcr = 0;
-	if (sc->sc_flowflags & IFM_FLOW) {
-		if (sc->sc_flowflags & IFM_ETH_TXPAUSE)
-			pcr |= sc->sc_rx_flow_thresh;
-		if (sc->sc_flowflags & IFM_ETH_RXPAUSE)
-			pcr |= PCR_PSEN | PCR_PS_MCAST;
-	}
 
 	bus_space_write_4(sc->sc_st, sc->sc_sh, SIP_CFG, cfg);
 	bus_space_write_4(sc->sc_st, sc->sc_sh, SIP_TXCFG, sc->sc_txcfg);
 	bus_space_write_4(sc->sc_st, sc->sc_sh, SIP_RXCFG, sc->sc_rxcfg);
-	bus_space_write_4(sc->sc_st, sc->sc_sh, SIP_NS_PCR, pcr);
 }
 #endif /* ! DP83820 */
 
@@ -3215,7 +3033,7 @@ SIP_DECL(dp83820_mii_statchg)(struct device *self)
  *
  *	Read the MII serial port for the MII bit-bang module.
  */
-static u_int32_t
+u_int32_t
 SIP_DECL(mii_bitbang_read)(struct device *self)
 {
 	struct sip_softc *sc = (void *) self;
@@ -3228,7 +3046,7 @@ SIP_DECL(mii_bitbang_read)(struct device *self)
  *
  *	Write the MII serial port for the MII bit-bang module.
  */
-static void
+void
 SIP_DECL(mii_bitbang_write)(struct device *self, u_int32_t val)
 {
 	struct sip_softc *sc = (void *) self;
@@ -3242,7 +3060,7 @@ SIP_DECL(mii_bitbang_write)(struct device *self, u_int32_t val)
  *
  *	Read a PHY register on the MII.
  */
-static int
+int
 SIP_DECL(sis900_mii_readreg)(struct device *self, int phy, int reg)
 {
 	struct sip_softc *sc = (struct sip_softc *) self;
@@ -3279,7 +3097,7 @@ SIP_DECL(sis900_mii_readreg)(struct device *self, int phy, int reg)
  *
  *	Write a PHY register on the MII.
  */
-static void
+void
 SIP_DECL(sis900_mii_writereg)(struct device *self, int phy, int reg, int val)
 {
 	struct sip_softc *sc = (struct sip_softc *) self;
@@ -3313,26 +3131,16 @@ SIP_DECL(sis900_mii_writereg)(struct device *self, int phy, int reg, int val)
  *
  *	Callback from MII layer when media changes.
  */
-static void
+void
 SIP_DECL(sis900_mii_statchg)(struct device *self)
 {
 	struct sip_softc *sc = (struct sip_softc *) self;
-	struct mii_data *mii = &sc->sc_mii;
 	u_int32_t flowctl;
-
-	/*
-	 * Get flow control negotiation result.
-	 */
-	if (IFM_SUBTYPE(mii->mii_media.ifm_cur->ifm_media) == IFM_AUTO &&
-	    (mii->mii_media_active & IFM_ETH_FMASK) != sc->sc_flowflags) {
-		sc->sc_flowflags = mii->mii_media_active & IFM_ETH_FMASK;
-		mii->mii_media_active &= ~IFM_ETH_FMASK;
-	}
 
 	/*
 	 * Update TXCFG for full-duplex operation.
 	 */
-	if ((mii->mii_media_active & IFM_FDX) != 0)
+	if ((sc->sc_mii.mii_media_active & IFM_FDX) != 0)
 		sc->sc_txcfg |= (TXCFG_CSI | TXCFG_HBI);
 	else
 		sc->sc_txcfg &= ~(TXCFG_CSI | TXCFG_HBI);
@@ -3340,8 +3148,8 @@ SIP_DECL(sis900_mii_statchg)(struct device *self)
 	/*
 	 * Update RXCFG for full-duplex or loopback.
 	 */
-	if ((mii->mii_media_active & IFM_FDX) != 0 ||
-	    IFM_SUBTYPE(mii->mii_media_active) == IFM_LOOP)
+	if ((sc->sc_mii.mii_media_active & IFM_FDX) != 0 ||
+	    IFM_SUBTYPE(sc->sc_mii.mii_media_active) == IFM_LOOP)
 		sc->sc_rxcfg |= RXCFG_ATX;
 	else
 		sc->sc_rxcfg &= ~RXCFG_ATX;
@@ -3349,7 +3157,7 @@ SIP_DECL(sis900_mii_statchg)(struct device *self)
 	/*
 	 * Update IMR for use of 802.3x flow control.
 	 */
-	if (sc->sc_flowflags & IFM_FLOW) {
+	if ((sc->sc_mii.mii_media_active & IFM_FLOW) != 0) {
 		sc->sc_imr |= (ISR_PAUSE_END|ISR_PAUSE_ST);
 		flowctl = FLOWCTL_FLOWEN;
 	} else {
@@ -3368,7 +3176,7 @@ SIP_DECL(sis900_mii_statchg)(struct device *self)
  *
  *	Read a PHY register on the MII.
  */
-static int
+int
 SIP_DECL(dp83815_mii_readreg)(struct device *self, int phy, int reg)
 {
 	struct sip_softc *sc = (struct sip_softc *) self;
@@ -3403,7 +3211,7 @@ SIP_DECL(dp83815_mii_readreg)(struct device *self, int phy, int reg)
  *
  *	Write a PHY register to the MII.
  */
-static void
+void
 SIP_DECL(dp83815_mii_writereg)(struct device *self, int phy, int reg, int val)
 {
 	struct sip_softc *sc = (struct sip_softc *) self;
@@ -3423,7 +3231,7 @@ SIP_DECL(dp83815_mii_writereg)(struct device *self, int phy, int reg, int val)
  *
  *	Callback from MII layer when media changes.
  */
-static void
+void
 SIP_DECL(dp83815_mii_statchg)(struct device *self)
 {
 	struct sip_softc *sc = (struct sip_softc *) self;
@@ -3483,7 +3291,7 @@ SIP_DECL(dp83815_mii_statchg)(struct device *self)
 #endif /* DP83820 */
 
 #if defined(DP83820)
-static void
+void
 SIP_DECL(dp83820_read_macaddr)(struct sip_softc *sc,
     const struct pci_attach_args *pa, u_int8_t *enaddr)
 {
@@ -3532,7 +3340,7 @@ SIP_DECL(sis900_eeprom_delay)(struct sip_softc *sc)
 		bus_space_read_4(sc->sc_st, sc->sc_sh, SIP_CR);
 }
 
-static void
+void
 SIP_DECL(sis900_read_macaddr)(struct sip_softc *sc,
     const struct pci_attach_args *pa, u_int8_t *enaddr)
 {
@@ -3637,7 +3445,7 @@ SIP_DECL(sis900_read_macaddr)(struct sip_softc *sc,
 static const u_int8_t bbr4[] = {0,8,4,12,2,10,6,14,1,9,5,13,3,11,7,15};
 #define bbr(v)	((bbr4[(v)&0xf] << 4) | bbr4[((v)>>4) & 0xf])
 
-static void
+void
 SIP_DECL(dp83815_read_macaddr)(struct sip_softc *sc,
     const struct pci_attach_args *pa, u_int8_t *enaddr)
 {
@@ -3697,15 +3505,14 @@ SIP_DECL(dp83815_read_macaddr)(struct sip_softc *sc,
  *
  *	Get the current interface media status.
  */
-static void
+void
 SIP_DECL(mediastatus)(struct ifnet *ifp, struct ifmediareq *ifmr)
 {
 	struct sip_softc *sc = ifp->if_softc;
 
 	mii_pollstat(&sc->sc_mii);
 	ifmr->ifm_status = sc->sc_mii.mii_media_status;
-	ifmr->ifm_active = (sc->sc_mii.mii_media_active & ~IFM_ETH_FMASK) |
-			   sc->sc_flowflags;
+	ifmr->ifm_active = sc->sc_mii.mii_media_active;
 }
 
 /*
@@ -3713,7 +3520,7 @@ SIP_DECL(mediastatus)(struct ifnet *ifp, struct ifmediareq *ifmr)
  *
  *	Set hardware to newly-selected media.
  */
-static int
+int
 SIP_DECL(mediachange)(struct ifnet *ifp)
 {
 	struct sip_softc *sc = ifp->if_softc;

@@ -1,4 +1,4 @@
-#	$NetBSD: bsd.lib.mk,v 1.257 2004/12/02 00:00:41 simonb Exp $
+#	$NetBSD: bsd.lib.mk,v 1.250 2004/02/23 21:12:13 skrll Exp $
 #	@(#)bsd.lib.mk	8.3 (Berkeley) 4/22/94
 
 .include <bsd.init.mk>
@@ -20,24 +20,12 @@ LDADD+=     ${LDADD.lib${LIB}}
 LDFLAGS+=   ${LDFLAGS.lib${LIB}}
 LDSTATIC+=  ${LDSTATIC.lib${LIB}}
 
-##### Libraries that this may depend upon.
-.if defined(LIBDPLIBS) && ${MKPIC} != "no"				# {
-.for _lib _dir in ${LIBDPLIBS}
-.if !defined(LIBDO.${_lib})
-LIBDO.${_lib}!=	cd ${_dir} && ${PRINTOBJDIR}
-.MAKEOVERRIDES+=LIBDO.${_lib}
-.endif
-LDADD+=		-L${LIBDO.${_lib}} -l${_lib}
-DPADD+=		${LIBDO.${_lib}}/lib${_lib}.so
-.endfor
-.endif									# }
-
 ##### Build and install rules
 MKDEP_SUFFIXES?=	.o .po .so .ln
 CPPFLAGS+=	${DESTDIR:D-nostdinc ${CPPFLAG_ISYSTEM} ${DESTDIR}/usr/include}
 CXXFLAGS+=	${DESTDIR:D-nostdinc++ ${CPPFLAG_ISYSTEMXX} ${DESTDIR}/usr/include/g++}
 
-.if !defined(SHLIB_MAJOR) && exists(${SHLIB_VERSION_FILE})		# {
+.if !defined(SHLIB_MAJOR) && exists(${SHLIB_VERSION_FILE})
 SHLIB_MAJOR != . ${SHLIB_VERSION_FILE} ; echo $$major
 SHLIB_MINOR != . ${SHLIB_VERSION_FILE} ; echo $$minor
 SHLIB_TEENY != . ${SHLIB_VERSION_FILE} ; echo $$teeny
@@ -50,7 +38,7 @@ checkver:
 	    ${HOST_SH} ${NETBSDSRCDIR}/lib/checkver -v ${SHLIB_VERSION_FILE} \
 		    -d ${DESTDIR}${_LIBSODIR} ${LIB})
 .endif
-.endif									# }
+.endif
 
 .if !target(checkver)
 checkver:
@@ -77,7 +65,7 @@ print-shlib-teeny:
 	@false
 .endif
 
-.if defined(SHLIB_MAJOR) && !empty(SHLIB_MAJOR)				# {
+.if defined(SHLIB_MAJOR) && !empty(SHLIB_MAJOR)
 .if defined(SHLIB_MINOR) && !empty(SHLIB_MINOR)
 .if defined(SHLIB_TEENY) && !empty(SHLIB_TEENY)
 SHLIB_FULLVERSION=${SHLIB_MAJOR}.${SHLIB_MINOR}.${SHLIB_TEENY}
@@ -87,7 +75,7 @@ SHLIB_FULLVERSION=${SHLIB_MAJOR}.${SHLIB_MINOR}
 .else
 SHLIB_FULLVERSION=${SHLIB_MAJOR}
 .endif
-.endif									# }
+.endif
 
 # add additional suffixes not exported.
 # .po is used for profiling object files.
@@ -119,7 +107,7 @@ SHLIB_FULLVERSION=${SHLIB_MAJOR}
 #		 	(usually just ${CPPPICFLAGS} ${CPICFLAGS})
 # APICFLAGS:		flags for ${AS} to assemble .[sS] to .so objects.
 
-.if ${MACHINE_ARCH} == "alpha"						# {
+.if ${MACHINE_ARCH} == "alpha"
 
 FPICFLAGS ?= -fPIC
 CPICFLAGS ?= -fPIC -DPIC
@@ -128,7 +116,7 @@ CAPICFLAGS?= ${CPPPICFLAGS} ${CPICFLAGS}
 APICFLAGS ?=
 
 .elif (${MACHINE_ARCH} == "sparc" || ${MACHINE_ARCH} == "sparc64") && \
-       ${OBJECT_FMT} == "ELF"						# } {
+       ${OBJECT_FMT} == "ELF"
 
 # If you use -fPIC you need to define BIGPIC to turn on 32-bit
 # relocations in asm code
@@ -138,7 +126,7 @@ CPPPICFLAGS?= -DPIC -DBIGPIC
 CAPICFLAGS?= ${CPPPICFLAGS} ${CPICFLAGS}
 APICFLAGS ?= -KPIC
 
-.elif ${MACHINE_ARCH} == "ns32k"					# } {
+.elif ${MACHINE_ARCH} == "ns32k"
 
 # XXX no shared libraries yet on ns32k
 FPICFLAGS?=
@@ -147,7 +135,7 @@ CPPPICFLAGS?=
 CAPICFLAGS?=
 APICFLAGS?=
 
-.else									# } {
+.else
 
 # Platform-independent flags for NetBSD shared libraries
 SHLIB_SOVERSION=${SHLIB_FULLVERSION}
@@ -158,7 +146,7 @@ CPPPICFLAGS?= -DPIC
 CAPICFLAGS?= ${CPPPICFLAGS} ${CPICFLAGS}
 APICFLAGS?= -k
 
-.endif									# }
+.endif
 
 .if ${MKPICLIB} != "no"
 CSHLIBFLAGS+= ${CPICFLAGS}
@@ -179,7 +167,6 @@ SHLIB_LDENDFILE?=	${_GCC_CRTENDS} ${DESTDIR}/usr/lib/crtn.o
 .endif
 
 CFLAGS+=	${COPTS}
-AFLAGS+=	${COPTS}
 FFLAGS+=	${FOPTS}
 
 .c.o:
@@ -211,6 +198,13 @@ FFLAGS+=	${FOPTS}
 	${LD} -x -r ${.TARGET}.tmp -o ${.TARGET}
 	rm -f ${.TARGET}.tmp
 .endif
+
+.c.ln:
+	${_MKTARGET_COMPILE}
+	${LINT} ${LINTFLAGS} \
+	    ${CPPFLAGS:C/-([IDU])[  ]*/-\1/Wg:M-[IDU]*} \
+	    ${CPPFLAGS.${.IMPSRC:T}:C/-([IDU])[  ]*/-\1/Wg:M-[IDU]*} \
+	    -i ${.IMPSRC}
 
 .cc.o .cpp.o .cxx.o .C.o:
 	${_MKTARGET_COMPILE}
@@ -306,43 +300,31 @@ FFLAGS+=	${FOPTS}
 	rm -f ${.TARGET}.tmp
 .endif
 
-.s.o:
+.S.o .s.o:
 	${_MKTARGET_COMPILE}
-	${COMPILE.s} ${COPTS.${.IMPSRC:T}} ${CPUFLAGS.${.IMPSRC:T}} ${CPPFLAGS.${.IMPSRC:T}} ${.IMPSRC} -o ${.TARGET}.tmp
+	${COMPILE.S} \
+	    ${CFLAGS:C/-([IDU])[  ]*/-\1/Wg:M-[IDU]*} \
+	    ${AINC} ${.IMPSRC} -o ${.TARGET}.tmp
 	${LD} -x -r ${.TARGET}.tmp -o ${.TARGET}
 	rm -f ${.TARGET}.tmp
 
-.S.o:
+.S.po .s.po:
 	${_MKTARGET_COMPILE}
-	${COMPILE.S} ${COPTS.${.IMPSRC:T}} ${CPUFLAGS.${.IMPSRC:T}} ${CPPFLAGS.${.IMPSRC:T}} ${.IMPSRC} -o ${.TARGET}.tmp
-	${LD} -x -r ${.TARGET}.tmp -o ${.TARGET}
-	rm -f ${.TARGET}.tmp
-
-.s.po:
-	${_MKTARGET_COMPILE}
-	${COMPILE.s} -DGPROF -DPROF ${COPTS.${.IMPSRC:T}} ${CPUFLAGS.${.IMPSRC:T}} ${CPPFLAGS.${.IMPSRC:T}} ${.IMPSRC} -o ${.TARGET}.tmp
+	${COMPILE.S} -DGPROF -DPROF \
+	    ${CFLAGS:C/-([IDU])[  ]*/-\1/Wg:M-[IDU]*} \
+	    ${AINC} ${.IMPSRC} -o ${.TARGET}.tmp
 	${LD} -X -r ${.TARGET}.tmp -o ${.TARGET}
 	rm -f ${.TARGET}.tmp
 
-.S.po:
+.S.so .s.so:
 	${_MKTARGET_COMPILE}
-	${COMPILE.S} -DGPROF -DPROF ${COPTS.${.IMPSRC:T}} ${CPUFLAGS.${.IMPSRC:T}} ${CPPFLAGS.${.IMPSRC:T}} ${.IMPSRC} -o ${.TARGET}.tmp
-	${LD} -X -r ${.TARGET}.tmp -o ${.TARGET}
-	rm -f ${.TARGET}.tmp
-
-.s.so:
-	${_MKTARGET_COMPILE}
-	${COMPILE.s} ${CAPICFLAGS} ${COPTS.${.IMPSRC:T}} ${CPUFLAGS.${.IMPSRC:T}} ${CPPFLAGS.${.IMPSRC:T}} ${.IMPSRC} -o ${.TARGET}.tmp
+	${COMPILE.S} ${CAPICFLAGS} \
+	    ${CFLAGS:C/-([IDU])[  ]*/-\1/Wg:M-[IDU]*} \
+	    ${AINC} ${.IMPSRC} -o ${.TARGET}.tmp
 	${LD} -x -r ${.TARGET}.tmp -o ${.TARGET}
 	rm -f ${.TARGET}.tmp
 
-.S.so:
-	${_MKTARGET_COMPILE}
-	${COMPILE.S} ${CAPICFLAGS} ${COPTS.${.IMPSRC:T}} ${CPUFLAGS.${.IMPSRC:T}} ${CPPFLAGS.${.IMPSRC:T}} ${.IMPSRC} -o ${.TARGET}.tmp
-	${LD} -x -r ${.TARGET}.tmp -o ${.TARGET}
-	rm -f ${.TARGET}.tmp
-
-.if defined(LIB)							# {
+.if defined(LIB)
 .if (${MKPIC} == "no" || (defined(LDSTATIC) && ${LDSTATIC} != "") \
 	|| ${MKLINKLIB} != "no") && ${MKSTATICLIB} != "no"
 _LIBS=lib${LIB}.a
@@ -352,19 +334,12 @@ _LIBS=
 
 OBJS+=${SRCS:N*.h:N*.sh:R:S/$/.o/g}
 
-STOBJS+=${OBJS}
-
-.if ${MKPRIVATELIB} != "no"
-# No installation is required
-libinstall::
-.else	# ${MKPRIVATELIB} == "no"					# {
-
 .if ${MKPROFILE} != "no"
 _LIBS+=lib${LIB}_p.a
 POBJS+=${OBJS:.o=.po}
 .endif
 
-.if ${MKPIC} != "no"							# {
+.if ${MKPIC} != "no"
 .if ${MKPICLIB} == "no"
 .if ${MKSHLIBOBJS} != "no"
 # make _pic.a, which isn't really pic,
@@ -383,32 +358,28 @@ SOBJS+=${OBJS:.o=.so}
 .if defined(SHLIB_FULLVERSION)
 _LIBS+=lib${LIB}.so.${SHLIB_FULLVERSION}
 .endif
-.endif									# }
+.endif
 
 LOBJS+=${LSRCS:.c=.ln} ${SRCS:M*.c:.c=.ln}
 .if ${MKLINT} != "no" && ${MKLINKLIB} != "no" && !empty(LOBJS)
 _LIBS+=llib-l${LIB}.ln
 .endif
 
-.endif	# ${MKPRIVATELIB} == "no"					# }
-
 ALLOBJS=
 .if (${MKPIC} == "no" || (defined(LDSTATIC) && ${LDSTATIC} != "") \
 	|| ${MKLINKLIB} != "no") && ${MKSTATICLIB} != "no"
-ALLOBJS+=${STOBJS}
+ALLOBJS+=${OBJS}
 .endif
 ALLOBJS+=${POBJS} ${SOBJS}
 .if ${MKLINT} != "no" && ${MKLINKLIB} != "no" && !empty(LOBJS)
 ALLOBJS+=${LOBJS}
 .endif
-.else	# !defined(LIB)							# } {
+.else
 LOBJS=
 SOBJS=
-.endif	# !defined(LIB)							# }
+.endif
 
-_YLSRCS=	${SRCS:M*.[ly]:C/\..$/.c/} ${YHEADER:D${SRCS:M*.y:.y=.h}}
-
-.NOPATH: ${ALLOBJS} ${_LIBS} ${_YLSRCS}
+.NOPATH: ${ALLOBJS} ${_LIBS} ${SRCS:M*.[ly]:C/\..$/.c/} ${YHEADER:D${SRCS:M*.y:.y=.h}}
 
 realall: ${SRCS} ${ALLOBJS:O} ${_LIBS}
 
@@ -431,12 +402,13 @@ __archivesymlinkpic: .USE
 	${_MKTARGET_INSTALL}
 	${INSTALL_SYMLINK} ${SYSPKGTAG} ${.ALLSRC} ${.TARGET}
 
-DPSRCS+=	${_YLSRCS}
-CLEANFILES+=	${_YLSRCS}
+DPSRCS+=	${SRCS:M*.l:.l=.c} ${SRCS:M*.y:.y=.c}
+CLEANFILES+=	${SRCS:M*.l:.l=.c} ${SRCS:M*.y:.y=.c}
+CLEANFILES+=	${YHEADER:D${SRCS:M*.y:.y=.h}}
 
-${STOBJS} ${POBJS} ${SOBJS} ${LOBJS}: ${DPSRCS}
+${OBJS} ${POBJS} ${SOBJS} ${LOBJS}: ${DPSRCS}
 
-lib${LIB}.a:: ${STOBJS} __archivebuild
+lib${LIB}.a:: ${OBJS} __archivebuild
 
 lib${LIB}_p.a:: ${POBJS} __archivebuild
 
@@ -479,7 +451,7 @@ lib${LIB}.so.${SHLIB_FULLVERSION}: ${SOLIB} ${DPADD} \
 	mv -f lib${LIB}.so.tmp lib${LIB}.so
 .endif
 
-.if !empty(LOBJS)							# {
+.if !empty(LOBJS)
 LLIBS?=		-lc
 llib-l${LIB}.ln: ${LOBJS}
 	${_MKTARGET_COMPILE}
@@ -489,18 +461,17 @@ llib-l${LIB}.ln: ${LOBJS}
 .else
 	${LINT} -C${LIB} ${.ALLSRC} ${LLIBS}
 .endif
-.endif									# }
+.endif
 
 cleanlib: .PHONY
 	rm -f a.out [Ee]rrs mklog core *.core ${CLEANFILES}
-	rm -f lib${LIB}.a ${STOBJS}
+	rm -f lib${LIB}.a ${OBJS}
 	rm -f lib${LIB}_p.a ${POBJS}
 	rm -f lib${LIB}_pic.a lib${LIB}.so.* lib${LIB}.so ${SOBJS}
-	rm -f ${STOBJS:=.tmp} ${POBJS:=.tmp} ${SOBJS:=.tmp}
+	rm -f ${OBJS:=.tmp} ${POBJS:=.tmp} ${SOBJS:=.tmp}
 	rm -f llib-l${LIB}.ln ${LOBJS}
 
-
-.if !target(libinstall)							# {
+.if !target(libinstall)
 # Make sure it gets defined, in case MKPIC==no && MKLINKLIB==no
 libinstall::
 
@@ -630,7 +601,7 @@ ${DESTDIR}${LINTLIBDIR}/llib-l${LIB}.ln: llib-l${LIB}.ln
 	${INSTALL_FILE} -o ${LIBOWN} -g ${LIBGRP} -m ${LIBMODE} \
 		${SYSPKGTAG} ${.ALLSRC} ${DESTDIR}${LINTLIBDIR}
 .endif
-.endif	# !target(libinstall)						# }
+.endif
 
 ##### Pull in related .mk logic
 .include <bsd.man.mk>

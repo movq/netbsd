@@ -1,4 +1,4 @@
-/*	$NetBSD: if_vlan.c,v 1.42 2004/12/04 18:31:43 peter Exp $	*/
+/*	$NetBSD: if_vlan.c,v 1.38.2.1 2004/07/23 22:54:44 he Exp $	*/
 
 /*-
  * Copyright (c) 2000, 2001 The NetBSD Foundation, Inc.
@@ -85,7 +85,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_vlan.c,v 1.42 2004/12/04 18:31:43 peter Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_vlan.c,v 1.38.2.1 2004/07/23 22:54:44 he Exp $");
 
 #include "opt_inet.h"
 #include "bpfilter.h"
@@ -175,7 +175,7 @@ const struct vlan_multisw vlan_ether_multisw = {
 };
 
 static int	vlan_clone_create(struct if_clone *, int);
-static int	vlan_clone_destroy(struct ifnet *);
+static void	vlan_clone_destroy(struct ifnet *);
 static int	vlan_config(struct ifvlan *, struct ifnet *);
 static int	vlan_ioctl(struct ifnet *, u_long, caddr_t);
 static void	vlan_start(struct ifnet *);
@@ -233,8 +233,7 @@ vlan_clone_create(struct if_clone *ifc, int unit)
 	LIST_INSERT_HEAD(&ifv_list, ifv, ifv_list);
 	splx(s);
 
-	snprintf(ifp->if_xname, sizeof(ifp->if_xname), "%s%d", ifc->ifc_name,
-	    unit);
+	sprintf(ifp->if_xname, "%s%d", ifc->ifc_name, unit);
 	ifp->if_softc = ifv;
 	ifp->if_flags = IFF_BROADCAST | IFF_SIMPLEX | IFF_MULTICAST;
 	ifp->if_start = vlan_start;
@@ -247,7 +246,7 @@ vlan_clone_create(struct if_clone *ifc, int unit)
 	return (0);
 }
 
-static int
+static void
 vlan_clone_destroy(struct ifnet *ifp)
 {
 	struct ifvlan *ifv = ifp->if_softc;
@@ -260,8 +259,6 @@ vlan_clone_destroy(struct ifnet *ifp)
 
 	if_detach(ifp);
 	free(ifv, M_DEVBUF);
-
-	return (0);
 }
 
 /*
@@ -835,8 +832,8 @@ vlan_start(struct ifnet *ifp)
 
 /*
  * Given an Ethernet frame, find a valid vlan interface corresponding to the
- * given source interface and tag, then run the real packet through the 
- * parent's input routine.
+ * given source interface and tag, then run the the real packet through
+ * the parent's input routine.
  */
 void
 vlan_input(struct ifnet *ifp, struct mbuf *m)

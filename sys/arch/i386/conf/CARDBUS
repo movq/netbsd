@@ -1,4 +1,4 @@
-# $NetBSD: CARDBUS,v 1.73 2004/08/26 14:33:01 itohy Exp $
+# $NetBSD: CARDBUS,v 1.72.2.1 2004/08/30 09:52:58 tron Exp $
 #
 #	CARDBUS: GENERIC + CardBus support
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: if_bridge.c,v 1.27 2004/12/04 18:31:43 peter Exp $	*/
+/*	$NetBSD: if_bridge.c,v 1.22.2.1 2004/10/08 03:11:13 jmc Exp $	*/
 
 /*
  * Copyright 2001 Wasabi Systems, Inc.
@@ -80,7 +80,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_bridge.c,v 1.27 2004/12/04 18:31:43 peter Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_bridge.c,v 1.22.2.1 2004/10/08 03:11:13 jmc Exp $");
 
 #include "opt_bridge_ipf.h"
 #include "opt_inet.h"
@@ -108,8 +108,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_bridge.c,v 1.27 2004/12/04 18:31:43 peter Exp $")
 #include <net/if_ether.h>
 #include <net/if_bridgevar.h>
 
-#if defined(BRIDGE_IPF) && defined(PFIL_HOOKS)
-/* Used for bridge_ip[6]_checkbasic */
+#ifdef BRIDGE_IPF /* Used for bridge_ip[6]_checkbasic */
 #include <netinet/in.h>
 #include <netinet/in_systm.h>
 #include <netinet/ip.h>
@@ -118,7 +117,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_bridge.c,v 1.27 2004/12/04 18:31:43 peter Exp $")
 #include <netinet/ip6.h>
 #include <netinet6/in6_var.h>
 #include <netinet6/ip6_var.h>
-#endif /* BRIDGE_IPF && PFIL_HOOKS */
+#endif /* BRIDGE_IPF */
 
 /*
  * Size of the route hash table.  Must be a power of two.
@@ -168,7 +167,7 @@ struct pool bridge_rtnode_pool;
 void	bridgeattach(int);
 
 int	bridge_clone_create(struct if_clone *, int);
-int	bridge_clone_destroy(struct ifnet *);
+void	bridge_clone_destroy(struct ifnet *);
 
 int	bridge_ioctl(struct ifnet *, u_long, caddr_t);
 int	bridge_init(struct ifnet *);
@@ -227,7 +226,7 @@ int	bridge_ioctl_gma(struct bridge_softc *, void *);
 int	bridge_ioctl_sma(struct bridge_softc *, void *);
 int	bridge_ioctl_sifprio(struct bridge_softc *, void *);
 int	bridge_ioctl_sifcost(struct bridge_softc *, void *);
-#if defined(BRIDGE_IPF) && defined(PFIL_HOOKS)
+#ifdef BRIDGE_IPF
 int	bridge_ioctl_gfilt(struct bridge_softc *, void *);
 int	bridge_ioctl_sfilt(struct bridge_softc *, void *);
 static int bridge_ipf(void *, struct mbuf **, struct ifnet *, int);
@@ -235,7 +234,7 @@ static int bridge_ip_checkbasic(struct mbuf **mp);
 # ifdef INET6
 static int bridge_ip6_checkbasic(struct mbuf **mp);
 # endif /* INET6 */
-#endif /* BRIDGE_IPF && PFIL_HOOKS */
+#endif /* BRIDGE_IPF */
 
 struct bridge_control {
 	int	(*bc_func)(struct bridge_softc *, void *);
@@ -307,12 +306,12 @@ const struct bridge_control bridge_control_table[] = {
 
 	{ bridge_ioctl_sifcost,		sizeof(struct ifbreq),
 	  BC_F_COPYIN|BC_F_SUSER },
-#if defined(BRIDGE_IPF) && defined(PFIL_HOOKS)
+#ifdef BRIDGE_IPF
 	{ bridge_ioctl_gfilt,		sizeof(struct ifbrparam),
 	  BC_F_COPYOUT },
 	{ bridge_ioctl_sfilt,		sizeof(struct ifbrparam),
 	  BC_F_COPYIN|BC_F_SUSER },
-#endif /* BRIDGE_IPF && PFIL_HOOKS */
+#endif /* BRIDGE_IPF */
 };
 const int bridge_control_table_size =
     sizeof(bridge_control_table) / sizeof(bridge_control_table[0]);
@@ -371,8 +370,7 @@ bridge_clone_create(struct if_clone *ifc, int unit)
 
 	LIST_INIT(&sc->sc_iflist);
 
-	snprintf(ifp->if_xname, sizeof(ifp->if_xname), "%s%d", ifc->ifc_name,
-	    unit);
+	sprintf(ifp->if_xname, "%s%d", ifc->ifc_name, unit);
 	ifp->if_softc = sc;
 	ifp->if_mtu = ETHERMTU;
 	ifp->if_ioctl = bridge_ioctl;
@@ -401,7 +399,7 @@ bridge_clone_create(struct if_clone *ifc, int unit)
  *
  *	Destroy a bridge instance.
  */
-int
+void
 bridge_clone_destroy(struct ifnet *ifp)
 {
 	struct bridge_softc *sc = ifp->if_softc;
@@ -425,8 +423,6 @@ bridge_clone_destroy(struct ifnet *ifp)
 	bridge_rtable_fini(sc);
 
 	free(sc, M_DEVBUF);
-
-	return (0);
 }
 
 /*
@@ -992,7 +988,7 @@ bridge_ioctl_sifprio(struct bridge_softc *sc, void *arg)
 	return (0);
 }
 
-#if defined(BRIDGE_IPF) && defined(PFIL_HOOKS)
+#ifdef BRIDGE_IPF
 int
 bridge_ioctl_gfilt(struct bridge_softc *sc, void *arg)
 {
@@ -1028,7 +1024,7 @@ bridge_ioctl_sfilt(struct bridge_softc *sc, void *arg)
 
 	return (0);
 }
-#endif /* BRIDGE_IPF && PFIL_HOOKS */
+#endif /* BRIDGE_IPF */
 
 int
 bridge_ioctl_sifcost(struct bridge_softc *sc, void *arg)
@@ -1061,7 +1057,7 @@ bridge_ifdetach(struct ifnet *ifp)
 	struct ifbreq breq;
 
 	memset(&breq, 0, sizeof(breq));
-	snprintf(breq.ifbr_ifsname, sizeof(breq.ifbr_ifsname), ifp->if_xname);
+	sprintf(breq.ifbr_ifsname, ifp->if_xname);
 
 	(void) bridge_ioctl_del(sc, &breq);
 }
@@ -1923,7 +1919,7 @@ bridge_rtnode_destroy(struct bridge_softc *sc, struct bridge_rtnode *brt)
 	pool_put(&bridge_rtnode_pool, brt);
 }
 
-#if defined(BRIDGE_IPF) && defined(PFIL_HOOKS)
+#ifdef BRIDGE_IPF
 extern struct pfil_head inet_pfil_hook;                 /* XXX */
 extern struct pfil_head inet6_pfil_hook;                /* XXX */
 
@@ -2202,4 +2198,4 @@ bridge_ip6_checkbasic(struct mbuf **mp)
 	return -1;
 }
 # endif /* INET6 */
-#endif /* BRIDGE_IPF && PFIL_HOOKS */
+#endif /* BRIDGE_IPF */

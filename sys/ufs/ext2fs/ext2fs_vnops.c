@@ -1,4 +1,4 @@
-/*	$NetBSD: ext2fs_vnops.c,v 1.57 2004/09/21 03:10:35 thorpej Exp $	*/
+/*	$NetBSD: ext2fs_vnops.c,v 1.52.2.1 2004/05/23 11:56:04 grant Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1989, 1993
@@ -70,7 +70,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ext2fs_vnops.c,v 1.57 2004/09/21 03:10:35 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ext2fs_vnops.c,v 1.52.2.1 2004/05/23 11:56:04 grant Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -979,7 +979,7 @@ abortit:
 			error = vn_rdwr(UIO_READ, fvp, (caddr_t)&dirbuf,
 				sizeof (struct ext2fs_dirtemplate), (off_t)0,
 				UIO_SYSSPACE, IO_NODELOCKED, 
-				tcnp->cn_cred, (size_t *)0, NULL);
+				tcnp->cn_cred, (size_t *)0, (struct proc *)0);
 			if (error == 0) {
 					namlen = dirbuf.dotdot_namlen;
 				if (namlen != 2 ||
@@ -995,7 +995,7 @@ abortit:
 					    (off_t)0, UIO_SYSSPACE,
 					    IO_NODELOCKED|IO_SYNC,
 					    tcnp->cn_cred, (size_t *)0,
-					    NULL);
+					    (struct proc *)0);
 					cache_purge(fdvp);
 				}
 			}
@@ -1044,18 +1044,19 @@ ext2fs_mkdir(v)
 		struct componentname *a_cnp;
 		struct vattr *a_vap;
 	} */ *ap = v;
-	struct vnode		*dvp = ap->a_dvp;
-	struct vattr		*vap = ap->a_vap;
-	struct componentname	*cnp = ap->a_cnp;
-	struct inode		*ip, *dp = VTOI(dvp);
-	struct vnode		*tvp;
+	struct vnode *dvp = ap->a_dvp;
+	struct vattr *vap = ap->a_vap;
+	struct componentname *cnp = ap->a_cnp;
+	struct inode *ip, *dp;
+	struct vnode *tvp;
 	struct ext2fs_dirtemplate dirtemplate;
-	int			error, dmode;
+	int error, dmode;
 
 #ifdef DIAGNOSTIC
 	if ((cnp->cn_flags & HASBUF) == 0)
 		panic("ext2fs_mkdir: no name");
 #endif
+	dp = VTOI(dvp);
 	if ((nlink_t)dp->i_e2fs_nlink >= LINK_MAX) {
 		error = EMLINK;
 		goto out;
@@ -1076,6 +1077,7 @@ ext2fs_mkdir(v)
 	ip->i_e2fs_mode = dmode;
 	tvp->v_type = VDIR;	/* Rest init'd in getnewvnode(). */
 	ip->i_e2fs_nlink = 2;
+	error = VOP_UPDATE(tvp, NULL, NULL, UPDATE_WAIT);
 
 	/*
 	 * Bump link count in parent directory
@@ -1085,7 +1087,7 @@ ext2fs_mkdir(v)
 	 */
 	dp->i_e2fs_nlink++;
 	dp->i_flag |= IN_CHANGE;
-	if ((error = VOP_UPDATE(dvp, NULL, NULL, UPDATE_DIROP)) != 0)
+	if ((error = VOP_UPDATE(dvp, NULL, NULL, UPDATE_WAIT)) != 0)
 		goto bad;
 
 	/* Initialize directory with "." and ".." from static template. */
@@ -1108,13 +1110,14 @@ ext2fs_mkdir(v)
 	dirtemplate.dotdot_name[0] = dirtemplate.dotdot_name[1] = '.';
 	error = vn_rdwr(UIO_WRITE, tvp, (caddr_t)&dirtemplate,
 	    sizeof (dirtemplate), (off_t)0, UIO_SYSSPACE,
-	    IO_NODELOCKED|IO_SYNC, cnp->cn_cred, (size_t *)0, NULL);
+	    IO_NODELOCKED|IO_SYNC, cnp->cn_cred, (size_t *)0, (struct proc *)0);
 	if (error) {
 		dp->i_e2fs_nlink--;
 		dp->i_flag |= IN_CHANGE;
 		goto bad;
 	}
-	if (VTOI(dvp)->i_e2fs->e2fs_bsize > dvp->v_mount->mnt_stat.f_bsize)
+	if (VTOI(dvp)->i_e2fs->e2fs_bsize >
+							VFSTOUFS(dvp->v_mount)->um_mountp->mnt_stat.f_bsize)
 		panic("ext2fs_mkdir: blksize"); /* XXX should grow with balloc() */
 	else {
 		ip->i_e2fs_size = VTOI(dvp)->i_e2fs->e2fs_bsize;
@@ -1243,11 +1246,10 @@ ext2fs_symlink(v)
 		struct vattr *a_vap;
 		char *a_target;
 	} */ *ap = v;
-	struct vnode	*vp, **vpp;
-	struct inode	*ip;
-	int		len, error;
+	struct vnode *vp, **vpp = ap->a_vpp;
+	struct inode *ip;
+	int len, error;
 
-	vpp = ap->a_vpp;
 	error = ext2fs_makeinode(IFLNK | ap->a_vap->va_mode, ap->a_dvp,
 			      vpp, ap->a_cnp);
 	if (error)
@@ -1255,15 +1257,15 @@ ext2fs_symlink(v)
 	VN_KNOTE(ap->a_dvp, NOTE_WRITE);
 	vp = *vpp;
 	len = strlen(ap->a_target);
-	ip = VTOI(vp);
-	if (len < ip->i_ump->um_maxsymlinklen) {
+	if (len < vp->v_mount->mnt_maxsymlinklen) {
+		ip = VTOI(vp);
 		memcpy((char *)ip->i_din.e2fs_din->e2di_shortlink, ap->a_target, len);
 		ip->i_e2fs_size = len;
 		ip->i_flag |= IN_CHANGE | IN_UPDATE;
 	} else
 		error = vn_rdwr(UIO_WRITE, vp, ap->a_target, len, (off_t)0,
 		    UIO_SYSSPACE, IO_NODELOCKED, ap->a_cnp->cn_cred,
-		    (size_t *)0, NULL);
+		    (size_t *)0, (struct proc *)0);
 	if (error)
 		vput(vp);
 	return (error);
@@ -1281,14 +1283,13 @@ ext2fs_readlink(v)
 		struct uio *a_uio;
 		struct ucred *a_cred;
 	} */ *ap = v;
-	struct vnode	*vp = ap->a_vp;
-	struct inode	*ip = VTOI(vp);
-	struct ufsmount	*ump = ip->i_ump;
-	int		isize;
+	struct vnode *vp = ap->a_vp;
+	struct inode *ip = VTOI(vp);
+	int isize;
 
 	isize = ip->i_e2fs_size;
-	if (isize < ump->um_maxsymlinklen ||
-	    (ump->um_maxsymlinklen == 0 && ip->i_e2fs_nblock == 0)) {
+	if (isize < vp->v_mount->mnt_maxsymlinklen ||
+	    (vp->v_mount->mnt_maxsymlinklen == 0 && ip->i_e2fs_nblock == 0)) {
 		uiomove((char *)ip->i_din.e2fs_din->e2di_shortlink, isize, ap->a_uio);
 		return (0);
 	}
@@ -1343,7 +1344,6 @@ ext2fs_vinit(mntp, specops, fifoops, vpp)
 			vp->v_data = NULL;
 			VOP_UNLOCK(vp, 0);
 			vp->v_op = spec_vnodeop_p;
-			vp->v_flag &= ~VLOCKSWORK;
 			vrele(vp);
 			vgone(vp);
 			lockmgr(&nvp->v_lock, LK_EXCLUSIVE, &nvp->v_interlock);
@@ -1455,13 +1455,27 @@ ext2fs_reclaim(v)
 		struct vnode *a_vp;
 	} */ *ap = v;
 	struct vnode *vp = ap->a_vp;
-	struct inode *ip = VTOI(vp);
-	int error;
+	struct inode *ip;
 
-	if ((error = ufs_reclaim(vp, ap->a_p)) != 0)
-		return (error);
+	if (prtactive && vp->v_usecount != 0) 
+		vprint("ext2fs_reclaim: pushing active", vp);
+	/*
+	 * Remove the inode from its hash chain.
+	 */
+	ip = VTOI(vp);
+	ufs_ihashrem(ip);
+	/*
+	 * Purge old data structures associated with the inode.
+	 */
+	cache_purge(vp);
+	if (ip->i_devvp) {
+		vrele(ip->i_devvp);
+		ip->i_devvp = 0;
+	}
+
 	if (ip->i_din.e2fs_din != NULL)
 		pool_put(&ext2fs_dinode_pool, ip->i_din.e2fs_din);
+
 	pool_put(&ext2fs_inode_pool, vp->v_data);
 	vp->v_data = NULL;
 	return (0);

@@ -1,6 +1,8 @@
-#	$NetBSD: Makefile,v 1.9 2004/05/23 02:24:52 lukem Exp $
+#	$NetBSD: Makefile,v 1.8 2003/10/21 10:01:22 lukem Exp $
 
-MKPRIVATELIB=	yes
+NOLINT=		# defined
+NOPIC=		# defined
+NOPROFILE=	# defined
 
 LIB=	common
 SRCS=	cmp.c device.c dl.c file.c get.c log.c loop-bsd.c mopdef.c nma.c pf.c \
@@ -11,5 +13,8 @@ version.c: VERSION
 	${_MKTARGET_CREATE}
 	rm -f version.c; \
 	sed 's/.*/char version[] = "&";/' ${.ALLSRC} > version.c
+
+# only needed during build
+libinstall::
 
 .include <bsd.lib.mk>

@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_misc.c,v 1.134 2004/11/13 07:19:27 christos Exp $	*/
+/*	$NetBSD: linux_misc.c,v 1.122.2.4 2004/11/12 06:18:59 jmc Exp $	*/
 
 /*-
  * Copyright (c) 1995, 1998, 1999 The NetBSD Foundation, Inc.
@@ -64,7 +64,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: linux_misc.c,v 1.134 2004/11/13 07:19:27 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux_misc.c,v 1.122.2.4 2004/11/12 06:18:59 jmc Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -132,7 +132,10 @@ const int linux_ptrace_request_map[] = {
 	-1
 };
 
-const struct linux_mnttypes linux_fstypes[] = {
+static const struct mnttypes {
+	char *bsd;
+	int linux;
+} fstypes[] = {
 	{ MOUNT_FFS,		LINUX_DEFAULT_SUPER_MAGIC	},
 	{ MOUNT_NFS,		LINUX_NFS_SUPER_MAGIC 		},
 	{ MOUNT_MFS,		LINUX_DEFAULT_SUPER_MAGIC	},
@@ -154,10 +157,9 @@ const struct linux_mnttypes linux_fstypes[] = {
 	{ MOUNT_CODA,		LINUX_CODA_SUPER_MAGIC		},
 	{ MOUNT_FILECORE,	LINUX_DEFAULT_SUPER_MAGIC	},
 	{ MOUNT_NTFS,		LINUX_DEFAULT_SUPER_MAGIC	},
-	{ MOUNT_SMBFS,		LINUX_SMB_SUPER_MAGIC		},
-	{ MOUNT_PTYFS,		LINUX_DEVPTS_SUPER_MAGIC	}
+	{ MOUNT_SMBFS,		LINUX_SMB_SUPER_MAGIC		}
 };
-const int linux_fstypes_cnt = sizeof(linux_fstypes) / sizeof(linux_fstypes[0]);
+#define FSTYPESSIZE (sizeof(fstypes) / sizeof(fstypes[0]))
 
 #ifdef DEBUG_LINUX
 #define DPRINTF(a)	uprintf a
@@ -166,8 +168,7 @@ const int linux_fstypes_cnt = sizeof(linux_fstypes) / sizeof(linux_fstypes[0]);
 #endif
 
 /* Local linux_misc.c functions: */
-static void bsd_to_linux_statfs __P((const struct statvfs *,
-    struct linux_statfs *));
+static void bsd_to_linux_statfs __P((struct statfs *, struct linux_statfs *));
 static int linux_to_bsd_limit __P((int));
 static void linux_to_bsd_mmap_args __P((struct sys_mmap_args *,
     const struct linux_sys_mmap_args *));
@@ -301,53 +302,40 @@ linux_sys_brk(l, v, retval)
 }
 
 /*
- * Convert NetBSD statvfs structure to Linux statfs structure.
- * Linux doesn't have f_flag, and we can't set f_frsize due
- * to glibc statvfs() bug (see below).
+ * Convert BSD statfs structure to Linux statfs structure.
+ * The Linux structure has less fields, and it also wants
+ * the length of a name in a dir entry in a field, which
+ * we fake (probably the wrong way).
  */
 static void
 bsd_to_linux_statfs(bsp, lsp)
-	const struct statvfs *bsp;
+	struct statfs *bsp;
 	struct linux_statfs *lsp;
 {
 	int i;
 
-	for (i = 0; i < linux_fstypes_cnt; i++) {
-		if (strcmp(bsp->f_fstypename, linux_fstypes[i].bsd) == 0) {
-			lsp->l_ftype = linux_fstypes[i].linux;
+	for (i = 0; i < FSTYPESSIZE; i++)
+		if (strcmp(bsp->f_fstypename, fstypes[i].bsd) == 0)
 			break;
-		}
-	}
 
-	if (i == linux_fstypes_cnt) {
+	if (i == FSTYPESSIZE) {
 		DPRINTF(("unhandled fstype in linux emulation: %s\n",
 		    bsp->f_fstypename));
 		lsp->l_ftype = LINUX_DEFAULT_SUPER_MAGIC;
+	} else {
+		lsp->l_ftype = fstypes[i].linux;
 	}
 
-	/*
-	 * The sizes are expressed in number of blocks. The block
-	 * size used for the size is f_frsize for POSIX-compliant
-	 * statvfs. Linux statfs uses f_bsize as the block size
-	 * (f_frsize used to not be available in Linux struct statfs).
-	 * However, glibc 2.3.3 statvfs() wrapper fails to adjust the block
-	 * counts for different f_frsize if f_frsize is provided by the kernel.
-	 * POSIX conforming apps thus get wrong size if f_frsize
-	 * is different to f_bsize. Thus, we just pretend we don't
-	 * support f_frsize.
-	 */
-
-	lsp->l_fbsize = bsp->f_frsize;
-	lsp->l_ffrsize = 0;			/* compat */
+	lsp->l_fbsize = bsp->f_bsize;
 	lsp->l_fblocks = bsp->f_blocks;
 	lsp->l_fbfree = bsp->f_bfree;
 	lsp->l_fbavail = bsp->f_bavail;
 	lsp->l_ffiles = bsp->f_files;
 	lsp->l_fffree = bsp->f_ffree;
 	/* Linux sets the fsid to 0..., we don't */
-	lsp->l_ffsid.val[0] = bsp->f_fsidx.__fsid_val[0];
-	lsp->l_ffsid.val[1] = bsp->f_fsidx.__fsid_val[1];
-	lsp->l_fnamelen = bsp->f_namemax;
+	lsp->l_ffsid.val[0] = bsp->f_fsid.val[0];
+	lsp->l_ffsid.val[1] = bsp->f_fsid.val[1];
+	lsp->l_fnamelen = MAXNAMLEN;	/* XXX */
 	(void)memset(lsp->l_fspare, 0, sizeof(lsp->l_fspare));
 }
 
@@ -365,22 +353,21 @@ linux_sys_statfs(l, v, retval)
 		syscallarg(struct linux_statfs *) sp;
 	} */ *uap = v;
 	struct proc *p = l->l_proc;
-	struct statvfs btmp, *bsp;
+	struct statfs btmp, *bsp;
 	struct linux_statfs ltmp;
-	struct sys_statvfs1_args bsa;
+	struct sys_statfs_args bsa;
 	caddr_t sg;
 	int error;
 
 	sg = stackgap_init(p, 0);
-	bsp = (struct statvfs *) stackgap_alloc(p, &sg, sizeof (struct statvfs));
+	bsp = (struct statfs *) stackgap_alloc(p, &sg, sizeof (struct statfs));
 
 	CHECK_ALT_EXIST(p, &sg, SCARG(uap, path));
 
 	SCARG(&bsa, path) = SCARG(uap, path);
 	SCARG(&bsa, buf) = bsp;
-	SCARG(&bsa, flags) = ST_WAIT;
 
-	if ((error = sys_statvfs1(l, &bsa, retval)))
+	if ((error = sys_statfs(l, &bsa, retval)))
 		return error;
 
 	if ((error = copyin((caddr_t) bsp, (caddr_t) &btmp, sizeof btmp)))
@@ -402,20 +389,19 @@ linux_sys_fstatfs(l, v, retval)
 		syscallarg(struct linux_statfs *) sp;
 	} */ *uap = v;
 	struct proc *p = l->l_proc;
-	struct statvfs btmp, *bsp;
+	struct statfs btmp, *bsp;
 	struct linux_statfs ltmp;
-	struct sys_fstatvfs1_args bsa;
+	struct sys_fstatfs_args bsa;
 	caddr_t sg;
 	int error;
 
 	sg = stackgap_init(p, 0);
-	bsp = (struct statvfs *) stackgap_alloc(p, &sg, sizeof (struct statvfs));
+	bsp = (struct statfs *) stackgap_alloc(p, &sg, sizeof (struct statfs));
 
 	SCARG(&bsa, fd) = SCARG(uap, fd);
 	SCARG(&bsa, buf) = bsp;
-	SCARG(&bsa, flags) = ST_WAIT;
 
-	if ((error = sys_fstatvfs1(l, &bsa, retval)))
+	if ((error = sys_fstatfs(l, &bsa, retval)))
 		return error;
 
 	if ((error = copyin((caddr_t) bsp, (caddr_t) &btmp, sizeof btmp)))
@@ -826,7 +812,7 @@ again:
 	auio.uio_iovcnt = 1;
 	auio.uio_rw = UIO_READ;
 	auio.uio_segflg = UIO_SYSSPACE;
-	auio.uio_procp = NULL;
+	auio.uio_procp = p;
 	auio.uio_resid = buflen;
 	auio.uio_offset = off;
 	/*

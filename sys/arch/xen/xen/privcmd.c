@@ -1,4 +1,4 @@
-/* $NetBSD: privcmd.c,v 1.1 2004/05/07 15:51:04 cl Exp $ */
+/* $NetBSD: privcmd.c,v 1.1.2.2 2004/05/22 15:59:21 he Exp $ */
 
 /*
  *
@@ -33,7 +33,7 @@
 
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: privcmd.c,v 1.1 2004/05/07 15:51:04 cl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: privcmd.c,v 1.1.2.2 2004/05/22 15:59:21 he Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

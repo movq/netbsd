@@ -1,4 +1,4 @@
-/*	$NetBSD: advnops.c,v 1.13 2004/09/14 16:59:40 jdolecek Exp $	*/
+/*	$NetBSD: advnops.c,v 1.8 2004/01/26 10:39:29 hannken Exp $	*/
 
 /*
  * Copyright (c) 1994 Christian E. Hopps
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: advnops.c,v 1.13 2004/09/14 16:59:40 jdolecek Exp $");
+__KERNEL_RCSID(0, "$NetBSD: advnops.c,v 1.8 2004/01/26 10:39:29 hannken Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_quota.h"
@@ -179,7 +179,7 @@ adosfs_getattr(v)
 	vattr_null(vap);
 	vap->va_uid = ap->uid;
 	vap->va_gid = ap->gid;
-	vap->va_fsid = sp->a_vp->v_mount->mnt_stat.f_fsidx.__fsid_val[0];
+	vap->va_fsid = sp->a_vp->v_mount->mnt_stat.f_fsid.val[0];
 	vap->va_atime.tv_sec = vap->va_mtime.tv_sec = vap->va_ctime.tv_sec =
 		ap->mtime.days * 24 * 60 * 60 + ap->mtime.mins * 60 +
 		ap->mtime.ticks / 50 + (8 * 365 + 2) * 24 * 60 * 60;
@@ -606,7 +606,7 @@ struct adirent {
 	u_short reclen;
 	char    type;
 	char    namlen;
-	char    name[ADMAXNAMELEN+2];	/* maxlen plus 2 NUL's */
+	char    name[32];	/* maxlen of 30 plus 2 NUL's */
 };
 	
 int 
@@ -756,7 +756,7 @@ adosfs_readdir(v)
 		memcpy(adp->name, ap->name, adp->namlen);
 		vput(vp);
 
-		error = uiomove(adp, sizeof(struct adirent), uio);
+		error = uiomove((caddr_t) adp, sizeof(struct adirent), uio);
 		if (error)
 			break;
 		if (sp->a_ncookies) {
@@ -926,32 +926,26 @@ adosfs_pathconf(v)
 		struct vnode *a_vp;
 		int a_name;
 		register_t *a_retval;
-	} */ *ap = v;
+	} */ *sp = v;
 
-	switch (ap->a_name) {
+	switch (sp->a_name) {
 	case _PC_LINK_MAX:
-		*ap->a_retval = LINK_MAX;
-		return (0);
-	case _PC_NAME_MAX:
-		*ap->a_retval = ap->a_vp->v_mount->mnt_stat.f_namemax;
-		return (0);
-	case _PC_PATH_MAX:
-		*ap->a_retval = PATH_MAX;
+		*sp->a_retval = LINK_MAX;
 		return (0);
 	case _PC_PIPE_BUF:
-		*ap->a_retval = PIPE_BUF;
+		*sp->a_retval = PIPE_BUF;
 		return (0);
 	case _PC_CHOWN_RESTRICTED:
-		*ap->a_retval = 1;
+		*sp->a_retval = 1;
 		return (0);
 	case _PC_VDISABLE:
-		*ap->a_retval = _POSIX_VDISABLE;
+		*sp->a_retval = _POSIX_VDISABLE;
 		return (0);
 	case _PC_SYNC_IO:
-		*ap->a_retval = 1;
+		*sp->a_retval = 1;
 		return (0);
 	case _PC_FILESIZEBITS:
-		*ap->a_retval = 32;
+		*sp->a_retval = 32;
 		return (0);
 	default:
 		return (EINVAL);

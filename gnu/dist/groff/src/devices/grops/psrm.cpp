@@ -1,7 +1,7 @@
-/*	$NetBSD: psrm.cpp,v 1.1.1.2 2004/07/30 14:45:04 wiz Exp $	*/
+/*	$NetBSD: psrm.cpp,v 1.1.1.1 2003/06/30 17:52:15 wiz Exp $	*/
 
 // -*- C++ -*-
-/* Copyright (C) 1989, 1990, 1991, 1992, 2000, 2001, 2002, 2003, 2004
+/* Copyright (C) 1989, 1990, 1991, 1992, 2000, 2001, 2002, 2003
    Free Software Foundation, Inc.
      Written by James Clark (jjc@jclark.com)
 
@@ -349,7 +349,7 @@ void resource_manager::supply_resource(resource *r, int rank, FILE *outfp,
   r->flags |= resource::BUSY;
   if (rank > r->rank)
     r->rank = rank;
-  char *path = 0;		// pacify compiler
+  char *path;
   FILE *fp = 0;
   if (r->filename != 0) {
     if (r->type == RESOURCE_FONT) {
@@ -362,7 +362,7 @@ void resource_manager::supply_resource(resource *r, int rank, FILE *outfp,
     }
     else {
       errno = 0;
-      fp = include_search_path.open_file_cautious(r->filename);
+      fp = fopen(r->filename, "r");
       if (!fp) {
 	error("can't open `%1': %2", r->filename, strerror(errno));
 	a_delete r->filename;

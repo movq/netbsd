@@ -1,4 +1,4 @@
-/*	$FreeBSD: /usr/local/www/cvsroot/FreeBSD/src/usr.sbin/setkey/token.l,v 1.2.2.4 2004/02/14 22:28:29 bms Exp $	*/
+/*	$NetBSD: token.l,v 1.15 2003/10/21 02:38:15 fvdl Exp $	*/
 /*	$KAME: token.l,v 1.43 2003/07/25 09:35:28 itojun Exp $	*/
 
 /*
@@ -143,7 +143,6 @@ esp		{ yylval.num = 0; return(PR_ESP); }
 ah-old		{ yylval.num = 1; return(PR_AH); }
 esp-old		{ yylval.num = 1; return(PR_ESP); }
 ipcomp		{ yylval.num = 0; return(PR_IPCOMP); }
-tcp		{ yylval.num = 0; return(PR_TCP); }
 
 	/* authentication alogorithm */
 {hyphen}A	{ BEGIN S_AUTHALG; return(F_AUTH); }
@@ -156,7 +155,6 @@ tcp		{ yylval.num = 0; return(PR_TCP); }
 <S_AUTHALG>hmac-sha2-512 { yylval.num = SADB_X_AALG_SHA2_512; BEGIN INITIAL; return(ALG_AUTH); }
 <S_AUTHALG>hmac-ripemd160 { yylval.num = SADB_X_AALG_RIPEMD160HMAC; BEGIN INITIAL; return(ALG_AUTH); }
 <S_AUTHALG>aes-xcbc-mac { yylval.num = SADB_X_AALG_AES_XCBC_MAC; BEGIN INITIAL; return(ALG_AUTH); }
-<S_AUTHALG>tcp-md5	{ yylval.num = SADB_X_AALG_TCP_MD5; BEGIN INITIAL; return(ALG_AUTH); }
 <S_AUTHALG>null { yylval.num = SADB_X_AALG_NULL; BEGIN INITIAL; return(ALG_AUTH_NOKEY); }
 
 	/* encryption alogorithm */

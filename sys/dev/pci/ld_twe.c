@@ -1,4 +1,4 @@
-/*	$NetBSD: ld_twe.c,v 1.21 2004/10/28 07:07:41 yamt Exp $	*/
+/*	$NetBSD: ld_twe.c,v 1.18.2.1 2004/05/30 07:12:11 tron Exp $	*/
 
 /*-
  * Copyright (c) 2000, 2001, 2002, 2003 The NetBSD Foundation, Inc.
@@ -41,7 +41,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ld_twe.c,v 1.21 2004/10/28 07:07:41 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ld_twe.c,v 1.18.2.1 2004/05/30 07:12:11 tron Exp $");
 
 #include "rnd.h"
 
@@ -50,7 +50,6 @@ __KERNEL_RCSID(0, "$NetBSD: ld_twe.c,v 1.21 2004/10/28 07:07:41 yamt Exp $");
 #include <sys/kernel.h>
 #include <sys/device.h>
 #include <sys/buf.h>
-#include <sys/bufq.h>
 #include <sys/endian.h>
 #include <sys/dkio.h>
 #include <sys/disk.h>
@@ -131,7 +130,7 @@ ld_twe_attach(struct device *parent, struct device *self, void *aux)
 
 	typestr = twe_describe_code(twe_table_unittype, td->td_type);
 	if (typestr == NULL) {
-		snprintf(unktype, sizeof(unktype), "<0x%02x>", td->td_type);
+		sprintf(unktype, "<0x%02x>", td->td_type);
 		typestr = unktype;
 	}
 	switch (td->td_type) {
@@ -141,11 +140,10 @@ ld_twe_attach(struct device *parent, struct device *self, void *aux)
 		stripestr = twe_describe_code(twe_table_stripedepth,
 		    td->td_stripe);
 		if (stripestr == NULL)
-			snprintf(stripebuf, sizeof(stripebuf),
-			    "<stripe code 0x%02x> ", td->td_stripe);
+			sprintf(stripebuf, "<stripe code 0x%02x> ",
+			    td->td_stripe);
 		else
-			snprintf(stripebuf, sizeof(stripebuf), "%s stripe ",
-			    stripestr);
+			sprintf(stripebuf, "%s stripe ", stripestr);
 		break;
 	default:
 		stripebuf[0] = '\0';
@@ -155,12 +153,11 @@ ld_twe_attach(struct device *parent, struct device *self, void *aux)
 	    TWE_PARAM_UNITINFO_Status, &status);
 	status &= TWE_PARAM_UNITSTATUS_MASK;
 	if (error) {
-		snprintf(unkstat, sizeof(unkstat), "<unknown>");
+		sprintf(unkstat, "<unknown>");
 		statstr = unkstat;
 	} else if ((statstr =
 		    twe_describe_code(twe_table_unitstate, status)) == NULL) {
-		snprintf(unkstat, sizeof(unkstat), "<status code 0x%02x>",
-		    status);
+		sprintf(unkstat, "<status code 0x%02x>", status);
 		statstr = unkstat;
 	}
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: trm.c,v 1.15 2004/09/25 11:58:19 tsutsui Exp $	*/
+/*	$NetBSD: trm.c,v 1.14 2003/10/30 01:58:17 simonb Exp $	*/
 /*
  * Device Driver for Tekram DC395U/UW/F, DC315/U
  * PCI SCSI Bus Master Host Adapter
@@ -42,7 +42,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: trm.c,v 1.15 2004/09/25 11:58:19 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: trm.c,v 1.14 2003/10/30 01:58:17 simonb Exp $");
 
 /* #define TRM_DEBUG */
 #ifdef TRM_DEBUG
@@ -365,7 +365,10 @@ static const u_int8_t trm_clock_period[] = {
 #define NPERIOD	(sizeof(trm_clock_period)/sizeof(trm_clock_period[0]))
 
 static int
-trm_probe(struct device *parent, struct cfdata *match, void *aux)
+trm_probe(parent, match, aux)
+	struct device *parent;
+	struct cfdata *match;
+	void *aux;
 {
 	struct pci_attach_args *pa = aux;
 
@@ -381,7 +384,10 @@ trm_probe(struct device *parent, struct cfdata *match, void *aux)
  * attach and init a host adapter
  */
 static void
-trm_attach(struct device *parent, struct device *self, void *aux)
+trm_attach(parent, self, aux)
+	struct device *parent;
+	struct device *self;
+	void *aux;
 {
 	struct pci_attach_args *const pa = aux;
 	struct trm_softc *sc = (struct trm_softc *)self;
@@ -477,7 +483,8 @@ trm_attach(struct device *parent, struct device *self, void *aux)
  * initialize the internal structures for a given SCSI host
  */
 static int
-trm_init(struct trm_softc *sc)
+trm_init(sc)
+	struct trm_softc *sc;
 {
 	bus_space_tag_t iot = sc->sc_iot;
 	bus_space_handle_t ioh = sc->sc_ioh;
@@ -656,8 +663,10 @@ trm_init(struct trm_softc *sc)
  * called by the higher level SCSI driver
  */
 static void
-trm_scsipi_request(struct scsipi_channel *chan, scsipi_adapter_req_t req,
-    void *arg)
+trm_scsipi_request(chan, req, arg)
+	struct scsipi_channel *chan;
+	scsipi_adapter_req_t req;
+	void *arg;
 {
 	bus_space_tag_t iot;
 	bus_space_handle_t ioh;
@@ -823,7 +832,9 @@ trm_scsipi_request(struct scsipi_channel *chan, scsipi_adapter_req_t req,
 }
 
 static void
-trm_update_xfer_mode(struct trm_softc *sc, int target)
+trm_update_xfer_mode(sc, target)
+	struct trm_softc *sc;
+	int target;
 {
 	struct scsipi_xfer_mode xm;
 	struct trm_tinfo *ti;
@@ -852,7 +863,8 @@ trm_update_xfer_mode(struct trm_softc *sc, int target)
 }
 
 static void
-trm_sched(struct trm_softc *sc)
+trm_sched(sc)
+	struct trm_softc *sc;
 {
 	struct trm_srb *srb;
 	struct scsipi_periph *periph;
@@ -937,7 +949,9 @@ trm_sched(struct trm_softc *sc)
 }
 
 static int
-trm_select(struct trm_softc *sc, struct trm_srb *srb)
+trm_select(sc, srb)
+	struct trm_softc *sc;
+	struct trm_srb *srb;
 {
 	bus_space_tag_t iot = sc->sc_iot;
 	bus_space_handle_t ioh = sc->sc_ioh;
@@ -1025,7 +1039,8 @@ trm_select(struct trm_softc *sc, struct trm_srb *srb)
  * perform a hard reset on the SCSI bus (and TRM_S1040 chip).
  */
 static void
-trm_reset(struct trm_softc *sc)
+trm_reset(sc)
+	struct trm_softc *sc;
 {
 	bus_space_tag_t iot = sc->sc_iot;
 	bus_space_handle_t ioh = sc->sc_ioh;
@@ -1063,7 +1078,8 @@ trm_reset(struct trm_softc *sc)
 }
 
 static void
-trm_timeout(void *arg)
+trm_timeout(arg)
+	void *arg;
 {
 	struct trm_srb *srb = (struct trm_srb *)arg;
 	struct scsipi_xfer *xs = srb->xs;
@@ -1094,7 +1110,8 @@ trm_timeout(void *arg)
  * Process pending device interrupts.
  */
 static int
-trm_intr(void *arg)
+trm_intr(arg)
+	void *arg;
 {
 	bus_space_tag_t iot;
 	bus_space_handle_t ioh;
@@ -1208,7 +1225,8 @@ trm_intr(void *arg)
 }
 
 static void
-trm_msgout_phase1(struct trm_softc *sc)
+trm_msgout_phase1(sc)
+	struct trm_softc *sc;
 {
 	bus_space_tag_t iot = sc->sc_iot;
 	bus_space_handle_t ioh = sc->sc_ioh;
@@ -1282,7 +1300,8 @@ trm_msgout_phase1(struct trm_softc *sc)
 }
 
 static void
-trm_command_phase1(struct trm_softc *sc)
+trm_command_phase1(sc)
+	struct trm_softc *sc;
 {
 	bus_space_tag_t iot = sc->sc_iot;
 	bus_space_handle_t ioh = sc->sc_ioh;
@@ -1308,7 +1327,9 @@ trm_command_phase1(struct trm_softc *sc)
 }
 
 static void
-trm_dataout_phase0(struct trm_softc *sc, int stat)
+trm_dataout_phase0(sc, stat)
+	struct trm_softc *sc;
+	int stat;
 {
 	bus_space_tag_t iot = sc->sc_iot;
 	bus_space_handle_t ioh = sc->sc_ioh;
@@ -1421,7 +1442,9 @@ trm_dataout_phase0(struct trm_softc *sc, int stat)
 }
 
 static void
-trm_datain_phase0(struct trm_softc *sc, int stat)
+trm_datain_phase0(sc, stat)
+	struct trm_softc *sc;
+	int stat;
 {
 	bus_space_tag_t iot = sc->sc_iot;
 	bus_space_handle_t ioh = sc->sc_ioh;
@@ -1506,7 +1529,9 @@ trm_datain_phase0(struct trm_softc *sc, int stat)
 }
 
 static void
-trm_dataio_xfer(struct trm_softc *sc, int iodir)
+trm_dataio_xfer(sc, iodir)
+	struct trm_softc *sc;
+	int iodir;
 {
 	bus_space_tag_t iot = sc->sc_iot;
 	bus_space_handle_t ioh = sc->sc_ioh;
@@ -1588,7 +1613,8 @@ trm_dataio_xfer(struct trm_softc *sc, int iodir)
 }
 
 static void
-trm_status_phase0(struct trm_softc *sc)
+trm_status_phase0(sc)
+	struct trm_softc *sc;
 {
 	bus_space_tag_t iot = sc->sc_iot;
 	bus_space_handle_t ioh = sc->sc_ioh;
@@ -1611,7 +1637,8 @@ trm_status_phase0(struct trm_softc *sc)
 }
 
 static void
-trm_status_phase1(struct trm_softc *sc)
+trm_status_phase1(sc)
+	struct trm_softc *sc;
 {
 	bus_space_tag_t iot = sc->sc_iot;
 	bus_space_handle_t ioh = sc->sc_ioh;
@@ -1644,7 +1671,8 @@ trm_status_phase1(struct trm_softc *sc)
 }
 
 static void
-trm_msgin_phase0(struct trm_softc *sc)
+trm_msgin_phase0(sc)
+	struct trm_softc *sc;
 {
 	bus_space_tag_t iot = sc->sc_iot;
 	bus_space_handle_t ioh = sc->sc_ioh;
@@ -1943,7 +1971,8 @@ trm_msgin_phase0(struct trm_softc *sc)
 }
 
 static void
-trm_msgin_phase1(struct trm_softc *sc)
+trm_msgin_phase1(sc)
+	struct trm_softc *sc;
 {
 	bus_space_tag_t iot = sc->sc_iot;
 	bus_space_handle_t ioh = sc->sc_ioh;
@@ -1964,7 +1993,8 @@ trm_msgin_phase1(struct trm_softc *sc)
 }
 
 static void
-trm_disconnect(struct trm_softc *sc)
+trm_disconnect(sc)
+	struct trm_softc *sc;
 {
 	bus_space_tag_t iot = sc->sc_iot;
 	bus_space_handle_t ioh = sc->sc_ioh;
@@ -2047,7 +2077,8 @@ trm_disconnect(struct trm_softc *sc)
 }
 
 static void
-trm_reselect(struct trm_softc *sc)
+trm_reselect(sc)
+	struct trm_softc *sc;
 {
 	bus_space_tag_t iot = sc->sc_iot;
 	bus_space_handle_t ioh = sc->sc_ioh;
@@ -2128,7 +2159,9 @@ trm_reselect(struct trm_softc *sc)
  * Signal completion to the generic SCSI driver
  */
 static void
-trm_done(struct trm_softc *sc, struct trm_srb *srb)
+trm_done(sc, srb)
+	struct trm_softc *sc;
+	struct trm_srb *srb;
 {
 	struct scsipi_xfer *xs = srb->xs;
 
@@ -2240,7 +2273,9 @@ trm_done(struct trm_softc *sc, struct trm_srb *srb)
 }
 
 static int
-trm_request_sense(struct trm_softc *sc, struct trm_srb *srb)
+trm_request_sense(sc, srb)
+	struct trm_softc *sc;
+	struct trm_srb *srb;
 {
 	struct scsipi_xfer *xs;
 	struct scsipi_periph *periph;
@@ -2303,7 +2338,9 @@ trm_request_sense(struct trm_softc *sc, struct trm_srb *srb)
 }
 
 static void
-trm_dequeue(struct trm_softc *sc, struct trm_srb *srb)
+trm_dequeue(sc, srb)
+	struct trm_softc *sc;
+	struct trm_srb *srb;
 {
 	struct scsipi_periph *periph;
 	struct trm_tinfo *ti;
@@ -2324,7 +2361,8 @@ trm_dequeue(struct trm_softc *sc, struct trm_srb *srb)
 }
 
 static void
-trm_reset_scsi_bus(struct trm_softc *sc)
+trm_reset_scsi_bus(sc)
+	struct trm_softc *sc;
 {
 	bus_space_tag_t iot = sc->sc_iot;
 	bus_space_handle_t ioh = sc->sc_ioh;
@@ -2349,7 +2387,8 @@ trm_reset_scsi_bus(struct trm_softc *sc)
 }
 
 static void
-trm_scsi_reset_detect(struct trm_softc *sc)
+trm_scsi_reset_detect(sc)
+	struct trm_softc *sc;
 {
 	bus_space_tag_t iot = sc->sc_iot;
 	bus_space_handle_t ioh = sc->sc_ioh;
@@ -2379,7 +2418,9 @@ trm_scsi_reset_detect(struct trm_softc *sc)
  * If it is wrong, update with default value.
  */
 static void
-trm_check_eeprom(struct trm_softc *sc, struct trm_nvram *eeprom)
+trm_check_eeprom(sc, eeprom)
+	struct trm_softc *sc;
+	struct trm_nvram *eeprom;
 {
 	struct nvram_target *target;
 	u_int16_t *ep;
@@ -2445,7 +2486,9 @@ trm_check_eeprom(struct trm_softc *sc, struct trm_nvram *eeprom)
  * write struct eeprom 128 bytes to seeprom
  */
 static void
-trm_eeprom_write_all(struct trm_softc *sc, struct trm_nvram *eeprom)
+trm_eeprom_write_all(sc, eeprom)
+	struct trm_softc *sc;
+	struct trm_nvram *eeprom;
 {
 	bus_space_tag_t iot = sc->sc_iot;
 	bus_space_handle_t ioh = sc->sc_ioh;
@@ -2482,7 +2525,10 @@ trm_eeprom_write_all(struct trm_softc *sc, struct trm_nvram *eeprom)
  * write one byte to seeprom
  */
 static void
-trm_eeprom_set_data(struct trm_softc *sc, u_int8_t addr, u_int8_t data)
+trm_eeprom_set_data(sc, addr, data)
+	struct trm_softc *sc;
+	u_int8_t addr;
+	u_int8_t data;
 {
 	bus_space_tag_t iot = sc->sc_iot;
 	bus_space_handle_t ioh = sc->sc_ioh;
@@ -2537,7 +2583,9 @@ trm_eeprom_set_data(struct trm_softc *sc, u_int8_t addr, u_int8_t data)
  * read seeprom 128 bytes to struct eeprom
  */
 static void
-trm_eeprom_read_all(struct trm_softc *sc, struct trm_nvram *eeprom)
+trm_eeprom_read_all(sc, eeprom)
+	struct trm_softc *sc;
+	struct trm_nvram *eeprom;
 {
 	bus_space_tag_t iot = sc->sc_iot;
 	bus_space_handle_t ioh = sc->sc_ioh;
@@ -2564,7 +2612,9 @@ trm_eeprom_read_all(struct trm_softc *sc, struct trm_nvram *eeprom)
  * read one byte from seeprom
  */
 static u_int8_t
-trm_eeprom_get_data(struct trm_softc *sc, u_int8_t addr)
+trm_eeprom_get_data(sc, addr)
+	struct trm_softc *sc;
+	u_int8_t addr;
 {
 	bus_space_tag_t iot = sc->sc_iot;
 	bus_space_handle_t ioh = sc->sc_ioh;
@@ -2602,7 +2652,10 @@ trm_eeprom_get_data(struct trm_softc *sc, u_int8_t addr)
  * write SB and Op Code into seeprom
  */
 static void
-trm_eeprom_write_cmd(struct trm_softc *sc, u_int8_t cmd, u_int8_t addr)
+trm_eeprom_write_cmd(sc, cmd, addr)
+	struct trm_softc *sc;
+	u_int8_t cmd;
+	u_int8_t addr;
 {
 	bus_space_tag_t iot = sc->sc_iot;
 	bus_space_handle_t ioh = sc->sc_ioh;

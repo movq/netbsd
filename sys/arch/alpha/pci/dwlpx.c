@@ -1,4 +1,4 @@
-/* $NetBSD: dwlpx.c,v 1.30 2004/11/04 19:22:28 ragge Exp $ */
+/* $NetBSD: dwlpx.c,v 1.28 2003/06/15 23:08:54 fvdl Exp $ */
 
 /*
  * Copyright (c) 1997 by Matthew Jacob
@@ -32,7 +32,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: dwlpx.c,v 1.30 2004/11/04 19:22:28 ragge Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dwlpx.c,v 1.28 2003/06/15 23:08:54 fvdl Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -58,10 +58,6 @@ __KERNEL_RCSID(0, "$NetBSD: dwlpx.c,v 1.30 2004/11/04 19:22:28 ragge Exp $");
 	    ((((unsigned long)((sc)->dwlpx_node - 4))	<< 36) |	\
 	     (((unsigned long) (sc)->dwlpx_hosenum)	<< 34) |	\
 	     (1LL					<< 39))
-#define	DWLPX_SYSBASE1(node, hosenum)	\
-	    ((((unsigned long)(node - 4))	<< 36) |	\
-	     (((unsigned long) hosenum)	        << 34) |	\
-	     (1LL					<< 39))
 
 
 static int	dwlpxmatch __P((struct device *, struct cfdata *, void *));
@@ -71,7 +67,22 @@ CFATTACH_DECL(dwlpx, sizeof(struct dwlpx_softc),
 
 extern struct cfdriver dwlpx_cd;
 
+static int	dwlpxprint __P((void *, const char *));
+
 void	dwlpx_errintr(void *, u_long vec);
+
+static int
+dwlpxprint(aux, pnp)
+	void *aux;
+	const char *pnp;
+{
+	register struct pcibus_attach_args *pba = aux;
+	/* only PCIs can attach to DWLPX's; easy. */
+	if (pnp)
+		aprint_normal("%s at %s", pba->pba_busname, pnp);
+	aprint_normal(" bus %d", pba->pba_bus);
+	return (UNCONF);
+}
 
 static int
 dwlpxmatch(parent, cf, aux)
@@ -80,29 +91,9 @@ dwlpxmatch(parent, cf, aux)
 	void *aux;
 {
 	struct kft_dev_attach_args *ka = aux;
-	unsigned long ls;
-	u_int32_t ctl;
 
 	if (strcmp(ka->ka_name, dwlpx_cd.cd_name) != 0)
 		return (0);
-
-	ls = DWLPX_SYSBASE1(ka->ka_node, ka->ka_hosenum);
-	
-	/*
-	 * Probe the first HPC to make sure this really is a dwlpx and
-	 * nothing else.
-	 */ 
-	if (badaddr(KV(PCIA_CTL(1) + ls), sizeof (ctl)) != 0) {
-		/*
-		 * If we are here something went wrong. One reason
-		 * could be that this is a dwlma and not a dwlpx.
-		 *
-		 * We can not clear potential illegal CSR errors here
-		 * since it is unknown hardware. 
-		 */
-		return (0);
-	}
-
 	return (1);
 }
 
@@ -175,6 +166,7 @@ dwlpxattach(parent, self, aux)
 	/*
 	 * Attach PCI bus
 	 */
+	pba.pba_busname = "pci";
 	pba.pba_iot = &sc->dwlpx_cc.cc_iot;
 	pba.pba_memt = &sc->dwlpx_cc.cc_memt;
 	pba.pba_dmat =	/* start with direct, may change... */
@@ -185,7 +177,7 @@ dwlpxattach(parent, self, aux)
 	pba.pba_bridgetag = NULL;
 	pba.pba_flags = PCI_FLAGS_IO_ENABLED | PCI_FLAGS_MEM_ENABLED |
 	    PCI_FLAGS_MRL_OKAY | PCI_FLAGS_MRM_OKAY | PCI_FLAGS_MWI_OKAY;
-	config_found_ia(self, "pcibus", &pba, pcibusprint);
+	config_found(self, &pba, dwlpxprint);
 }
 
 void

@@ -1,4 +1,4 @@
-/*	$NetBSD: ptrace.h,v 1.8 2004/05/06 22:53:02 matt Exp $	*/
+/*	$NetBSD: ptrace.h,v 1.7.4.1 2004/05/10 14:45:03 tron Exp $	*/
 
 #ifndef _POWERPC_PTRACE_H
 #define	_POWERPC_PTRACE_H

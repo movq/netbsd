@@ -1,4 +1,4 @@
-/*	$NetBSD: ata_raid.c,v 1.11 2004/10/28 07:07:39 yamt Exp $	*/
+/*	$NetBSD: ata_raid.c,v 1.8 2004/01/25 18:06:48 hannken Exp $	*/
 
 /*
  * Copyright (c) 2003 Wasabi Systems, Inc.
@@ -40,11 +40,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ata_raid.c,v 1.11 2004/10/28 07:07:39 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ata_raid.c,v 1.8 2004/01/25 18:06:48 hannken Exp $");
 
 #include <sys/param.h>
 #include <sys/buf.h>
-#include <sys/bufq.h>
 #include <sys/conf.h>
 #include <sys/device.h>
 #include <sys/disk.h>
@@ -76,8 +75,7 @@ static int	ataraid_match(struct device *, struct cfdata *, void *);
 static void	ataraid_attach(struct device *, struct device *, void *);
 static int	ataraid_print(void *, const char *);
 
-static int	ataraid_submatch(struct device *, struct cfdata *,
-				 const locdesc_t *, void *);
+static int	ataraid_submatch(struct device *, struct cfdata *, void *);
 
 static int	ata_raid_finalize(struct device *);
 
@@ -131,12 +129,6 @@ ata_raid_type_name(u_int type)
 static int
 ata_raid_finalize(struct device *self)
 {
-	static struct cfdata ataraid_cfdata = {
-		.cf_name = "ataraid",
-		.cf_atname = "ataraid",
-		.cf_unit = DVUNIT_ANY,
-		.cf_fstate = FSTATE_STAR,
-	};
 	extern struct cfdriver ataraid_cd;
 	static int done_once;
 	int error;
@@ -160,7 +152,7 @@ ata_raid_finalize(struct device *self)
 		goto out;
 	}
 
-	if (config_attach_pseudo(&ataraid_cfdata) == NULL)
+	if (config_attach_pseudo(ataraid_cd.cd_name, -1) == NULL)
 		printf("%s: unable to attach an instance\n",
 		    ataraid_cd.cd_name);
 
@@ -190,8 +182,6 @@ static void
 ataraid_attach(struct device *parent, struct device *self, void *aux)
 {
 	struct ataraid_array_info *aai;
-	int help[3];
-	locdesc_t *ldesc = (void *)help; /* XXX */
 
 	/*
 	 * We're a pseudo-device, so we get to announce our own
@@ -202,12 +192,7 @@ ataraid_attach(struct device *parent, struct device *self, void *aux)
 	    ataraid_array_info_count == 1 ? "" : "s");
 
 	TAILQ_FOREACH(aai, &ataraid_array_info_list, aai_list) {
-		ldesc->len = 2;
-		ldesc->locs[ATARAIDCF_VENDTYPE] = aai->aai_type;
-		ldesc->locs[ATARAIDCF_UNIT] = aai->aai_arrayno;
-
-		config_found_sm_loc(self, "ataraid", NULL, aai,
-				    ataraid_print, ataraid_submatch);
+		config_found_sm(self, aai, ataraid_print, ataraid_submatch);
 	}
 }
 
@@ -233,16 +218,16 @@ ataraid_print(void *aux, const char *pnp)
  *	Submatch routine for ATA RAID logical disks.
  */
 static int
-ataraid_submatch(struct device *parent, struct cfdata *cf,
-		 const locdesc_t *ldesc, void *aux)
+ataraid_submatch(struct device *parent, struct cfdata *cf, void *aux)
 {
+	struct ataraid_array_info *aai = aux;
 
 	if (cf->cf_loc[ATARAIDCF_VENDTYPE] != ATARAIDCF_VENDTYPE_DEFAULT &&
-	    cf->cf_loc[ATARAIDCF_VENDTYPE] != ldesc->locs[ATARAIDCF_VENDTYPE])
+	    cf->cf_loc[ATARAIDCF_VENDTYPE] != aai->aai_type)
 		return (0);
 
 	if (cf->cf_loc[ATARAIDCF_UNIT] != ATARAIDCF_UNIT_DEFAULT &&
-	    cf->cf_loc[ATARAIDCF_UNIT] != ldesc->locs[ATARAIDCF_UNIT])
+	    cf->cf_loc[ATARAIDCF_UNIT] != aai->aai_arrayno)
 		return (0);
 
 	return (config_match(parent, cf, aux));
