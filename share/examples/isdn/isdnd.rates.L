@@ -3,7 +3,7 @@
 #	i4b - Luxembourg PT charging rates config file
 #	-------------------------------------------------
 #
-#	$Id: isdnd.rates.L,v 1.1 2001/01/06 13:26:27 martin Exp $
+#	$Id: isdnd.rates.L,v 1.1.1.1 2001/01/06 13:26:27 martin Exp $
 #
 # $FreeBSD$
 #

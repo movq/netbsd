@@ -3,7 +3,7 @@
 #	i4b - Tarifs France Telecom
 #	---------------------------
 #
-#	$Id: isdnd.rates.F,v 1.1 2001/01/06 13:26:27 martin Exp $
+#	$Id: isdnd.rates.F,v 1.1.1.1 2001/01/06 13:26:27 martin Exp $
 #
 # $FreeBSD$
 #
