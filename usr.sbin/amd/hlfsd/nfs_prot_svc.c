@@ -38,7 +38,7 @@
  *
  *      %W% (Berkeley) %G%
  *
- * $Id: nfs_prot_svc.c,v 1.1 1997/07/24 21:22:41 christos Exp $
+ * $Id: nfs_prot_svc.c,v 1.1.1.1 1997/07/24 21:22:41 christos Exp $
  *
  */
 

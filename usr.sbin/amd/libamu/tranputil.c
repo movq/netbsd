@@ -38,7 +38,7 @@
  *
  *      %W% (Berkeley) %G%
  *
- * $Id: tranputil.c,v 1.1 1997/07/24 21:20:10 christos Exp $
+ * $Id: tranputil.c,v 1.1.1.1 1997/07/24 21:20:10 christos Exp $
  *
  * Socket specific utilities.
  *      -Erez Zadok <ezk@cs.columbia.edu>

@@ -38,7 +38,7 @@
  *
  *      %W% (Berkeley) %G%
  *
- * $Id: amu.h,v 1.1 1997/07/24 21:20:10 christos Exp $
+ * $Id: amu.h,v 1.1.1.1 1997/07/24 21:20:10 christos Exp $
  *
  */
 

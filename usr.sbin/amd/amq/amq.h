@@ -38,7 +38,7 @@
  *
  *      %W% (Berkeley) %G%
  *
- * $Id: amq.h,v 1.1 1997/07/24 21:22:53 christos Exp $
+ * $Id: amq.h,v 1.1.1.1 1997/07/24 21:22:53 christos Exp $
  *
  */
 

@@ -38,7 +38,7 @@
  *
  *      %W% (Berkeley) %G%
  *
- * $Id: wire.c,v 1.1 1997/07/24 21:20:09 christos Exp $
+ * $Id: wire.c,v 1.1.1.1 1997/07/24 21:20:09 christos Exp $
  *
  */
 

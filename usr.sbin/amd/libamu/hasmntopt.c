@@ -38,7 +38,7 @@ n * modification, are permitted provided that the following conditions
  *
  *      %W% (Berkeley) %G%
  *
- * $Id: hasmntopt.c,v 1.1 1997/07/24 21:20:07 christos Exp $
+ * $Id: hasmntopt.c,v 1.1.1.1 1997/07/24 21:20:07 christos Exp $
  *
  */
 
