@@ -1,4 +1,4 @@
-#	$NetBSD: list.md,v 1.1 1996/05/19 19:43:37 leo Exp $
+#	$NetBSD: list.md,v 1.1.1.1 1996/05/19 19:43:37 leo Exp $
 
 # Atari extra's
 SYMLINK	instbin			sbin/edahdi

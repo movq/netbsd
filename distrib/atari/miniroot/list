@@ -1,4 +1,4 @@
-#	$NetBSD: list,v 1.1 1996/05/19 19:43:37 leo Exp $
+#	$NetBSD: list,v 1.1.1.1 1996/05/19 19:43:37 leo Exp $
 
 SRCDIRS usr.bin bin sbin usr.sbin gnu/usr.bin
 

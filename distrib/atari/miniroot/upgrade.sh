@@ -1,5 +1,5 @@
 #!/bin/sh
-#	$NetBSD: upgrade.sh,v 1.1 1996/05/19 19:43:39 leo Exp $
+#	$NetBSD: upgrade.sh,v 1.1.1.1 1996/05/19 19:43:39 leo Exp $
 #
 # Copyright (c) 1996 The NetBSD Foundation, Inc.
 # All rights reserved.
