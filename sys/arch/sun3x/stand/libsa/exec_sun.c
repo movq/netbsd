@@ -1,4 +1,4 @@
-/*	$NetBSD: exec_sun.c,v 1.1 1997/03/13 16:27:28 gwr Exp $ */
+/*	$NetBSD: exec_sun.c,v 1.1.1.1 1997/03/13 16:27:28 gwr Exp $ */
 
 /*-
  * Copyright (c) 1982, 1986, 1990, 1993

@@ -1,4 +1,4 @@
-/*	$NetBSD: gets.c,v 1.1 1997/03/13 16:27:28 gwr Exp $	*/
+/*	$NetBSD: gets.c,v 1.1.1.1 1997/03/13 16:27:28 gwr Exp $	*/
 
 /*-
  * Copyright (c) 1993

@@ -1,4 +1,4 @@
-/*	$NetBSD: rawfs.h,v 1.1 1997/03/13 16:27:28 gwr Exp $	*/
+/*	$NetBSD: rawfs.h,v 1.1.1.1 1997/03/13 16:27:28 gwr Exp $	*/
 
 /*
  * Raw file system - for stream devices like tapes.

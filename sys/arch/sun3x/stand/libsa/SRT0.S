@@ -1,4 +1,4 @@
-|	$NetBSD: SRT0.S,v 1.1 1997/03/13 16:27:27 gwr Exp $
+|	$NetBSD: SRT0.S,v 1.1.1.1 1997/03/13 16:27:27 gwr Exp $
 
 | Copyright (c) 1995 Gordon W. Ross
 | All rights reserved.
