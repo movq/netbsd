@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 2001/10/13 20:06:57 leo Exp $
+#	$NetBSD: Makefile,v 1.1.1.1 2001/10/13 20:06:57 leo Exp $
 
 # for OBJECT_FMT
 .include <bsd.own.mk>
