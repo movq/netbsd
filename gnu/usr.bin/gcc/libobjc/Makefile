@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 1995/12/01 18:00:02 phil Exp $
+#	$NetBSD: Makefile,v 1.1.1.1 1995/12/01 18:00:02 phil Exp $
 
 LIB=	objc
 NOPROFILE=

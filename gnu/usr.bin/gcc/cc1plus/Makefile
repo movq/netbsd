@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 1995/12/01 17:59:56 phil Exp $
+#	$NetBSD: Makefile,v 1.1.1.1 1995/12/01 17:59:56 phil Exp $
 
 PROG=	cc1plus
 
