@@ -1,4 +1,4 @@
-/*	$NetBSD: setjmp.S,v 1.2 1998/09/13 23:54:44 eeh Exp $	*/
+/*	$NetBSD: setjmp.S,v 1.3 1998/10/08 02:27:59 eeh Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -39,12 +39,14 @@
  * from: Header: setjmp.s,v 1.2 92/06/25 03:18:43 torek Exp
  */
 
+#define _LOCORE
 #include <machine/asm.h>
+#include <machine/frame.h>
 #if defined(LIBC_SCCS) && !defined(lint)
 #if 0
 	.asciz "@(#)setjmp.s	8.1 (Berkeley) 6/4/93"
 #else
-	RCSID("$NetBSD: setjmp.S,v 1.2 1998/09/13 23:54:44 eeh Exp $")
+	RCSID("$NetBSD: setjmp.S,v 1.3 1998/10/08 02:27:59 eeh Exp $")
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -61,34 +63,38 @@
 
 #include "SYS.h"
 
+#define STACK_T_SZ
 ENTRY(setjmp)
 	/*
-	 * We use the caller's `arg dump' area (%sp+0x44; there are 6 ints
-	 * reserved there for us) to avoid having to allocate stack space
-	 * here.
+	 * We use the part of the sigcontext structure, the sp, pc, and npc fields,
+	 * for the sigstack call so we don't need to get our own stackframe.  It 
+	 * won't be filled out till later anyway.
 	 */
-	mov	%o0, %o2	/* build sigcontext in [%o2] */
-	mov	1, %o0		/* SIG_BLOCK */
-	mov	SYS___sigprocmask14, %g1
-	clr	%o1		/* sigprocmask(SIG_BLOCK, (sigset_t *)NULL) */
+	mov	%o0, %o3		/* Save our jmp_buf in %o3 */
+	add	%o0, 0x38, %o2		/* build sigcontext in [%o2]->sc.sc_mask */
+	mov	1, %o0			/* SIG_BLOCK */
+	mov	SYS_compat_13_sigprocmask13, %g1
+	clr	%o1			/* sigprocmask(SIG_BLOCK, (sigset_t *)NULL, (sigset_t *)a) */
 	t	ST_SYSCALL
-	st	%o0, [%o2 + 4]	/* sc.sc_mask = current mask; */
+	
+	st	%o0, [%o3 + 0x04]	/* sc.sc_mask = current mask; */
 	mov	SYS___sigaltstack14, %g1
-	clr	%o0		/* sigstack(NULL, &foo) */
-	add	%sp, 0x48, %o1	/* (foo being in arg dump area) */
+	clr	%o0			/* sigstack(NULL, &foo) */
+	add	%o2, 8, %o1		/* (foo being at the bottom of the stack) */
 	t	ST_SYSCALL
-	ld	[%sp + 0x50], %o0	/* foo.ss_flags */
-	and	%o0, 1, %o1	/* onstack = foo.ss_flags & 1; */
-	st	%o0, [%o2 + 0]	/* sc.sc_onstack = current onstack; */
-	st	%sp, [%o2 + 8]	/* sc.sc_sp = sp (both ours and caller's) */
+	
+	lduw	[%o3 + 8 + 0x10], %o0	/* foo.ss_flags */
+	and	%o0, 1, %o1		/* onstack = foo.ss_flags & 1; */
+	st	%o0, [%o3 + 0x00]	/* sc.sc_onstack = current onstack; */
+	stx	%sp, [%o3 + 0x08]	/* sc.sc_sp = sp (both ours and caller's) */
 	add	%o7, 8, %o0
-	st	%o0, [%o2 + 12]	/* sc.sc_pc = return_pc */
+	stx	%o0, [%o3 + 0x10]	/* sc.sc_pc = return_pc */
 	add	%o7, 12, %o0
-	st	%o0, [%o2 + 16]	/* sc.sc_npc = return_pc + 4 */
-	st	%g0, [%o2 + 20]	/* sc.sc_psr = (clean psr) */
-	st	%fp, [%o2 + 24]	/* sc.sc_g1 = %fp (misuse, but what the heck) */
-				/* sc.sc_o0 = random(), set in longjmp */
-	retl			/* return 0 */
+	stx	%o0, [%o3 + 0x18]	/* sc.sc_npc = return_pc + 4 */
+	stx	%g0, [%o3 + 0x20]	/* sc.sc_psr = (clean psr) */
+	stx	%fp, [%o3 + 0x28]	/* sc.sc_g1 = %fp (misuse, but what the heck) */
+					/* sc.sc_o0 = random(), set in longjmp */
+	retl				/* return 0 */
 	 clr	%o0
 
 /*
@@ -99,19 +105,16 @@ ENTRY(setjmp)
  * the window pointer in the psr, hence it must force all windows to reload).
  */
 ENTRY(longjmp)
-	save	%sp, -96, %sp
-	ld	[%i0 + 8], %o2	/* make sure sc->sc_sp, sc->sc_fp nonzero */
-	ld	[%i0 + 24], %o3
+	save	%sp, -CC64FSZ, %sp
+	ldx	[%i0 + 0x08], %o2	/* make sure sc->sc_sp, sc->sc_fp nonzero */
+	ldx	[%i0 + 0x28], %o3
 	orcc	%o2, %o3, %g0
-	bz	Lbotch
-	 tst	%i1		/* if (v == 0) v = 1; */
-	bz,a	1f
-	 mov	1, %i1
-1:
-	st	%i1, [%i0 + 28]	/* sc.sc_o0 = v; */
-	mov	SYS___sigreturn14, %g1
+	bz,pn	%xcc, Lbotch
+	 movrz	%i1, 1, %i1		/* if (v == 0) v = 1; */
+	st	%i1, [%i0 + 0x30]	/* sc.sc_o0 = v; */
+	mov	SYS_compat_13_sigreturn13, %g1
 	mov	%i0, %o0
-	t	ST_SYSCALL	/* sigreturn(scp); */
+	t	ST_SYSCALL		/* sigreturn(scp); */
 
 Lbotch:
 	/* oops, caller botched it */
