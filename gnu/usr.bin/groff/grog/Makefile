@@ -1,8 +1,8 @@
-#	$NetBSD: Makefile,v 1.9 1997/05/09 04:46:29 mycroft Exp $
+MAN1=		grog.0
 
-MAN=		grog.1
-SCRIPTS=	grog.sh
+afterinstall:
+	install -c -o ${BINOWN} -g ${BINGRP} -m ${BINMODE} \
+		$(.CURDIR)/grog.pl $(DESTDIR)$(BINDIR)/grog
 
-.include "../../Makefile.inc"
-.include "../Makefile.cfg"
 .include <bsd.prog.mk>
+.include <../../Makefile.inc>

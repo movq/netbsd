@@ -1,3 +1,0 @@
-# $NetBSD: md.luna68k,v 1.1 2000/09/10 05:51:21 nisimura Exp $
-./etc/fstab.sd
-./etc/ld.so.conf

@@ -1,17 +1,13 @@
-#	$NetBSD: Makefile,v 1.3 2000/10/23 04:38:38 simonb Exp $
+#	$NetBSD: Makefile,v 1.1 2000/02/08 13:45:34 tron Exp $
 
 .include <bsd.own.mk>
 
-SUBDIR=		libsmdb libsmutil sendmail mailstats makemap praliases smrsh
-
-.if ${MKDOC} != "no"
-SUBDIR+=	doc
-.endif
+SUBDIR=		sendmail mailstats makemap praliases smrsh
 
 .if ${MKSHARE} != "no"
 SUBDIR+=	cf/cf
 .if make(install)
-SUBDIR+=	cf
+SUBDIR+=	doc/intro doc/op cf
 .endif
 .endif
 

@@ -1,8 +1,9 @@
-#	$NetBSD: Makefile,v 1.7 1997/05/09 04:46:29 mycroft Exp $
+MAN1=		afmtodit.0
 
-MAN=		afmtodit.1
-SCRIPT=afmtodit.pl
+afterinstall:
+	install -c -o ${BINOWN} -g ${BINGRP} -m ${BINMODE} \
+		$(.CURDIR)/afmtodit.pl $(DESTDIR)$(BINDIR)/afmtodit
 
-.include "../../Makefile.inc"
-.include "../Makefile.cfg"
 .include <bsd.prog.mk>
+.include <../../Makefile.inc>
+.include <../Makefile.cfg>

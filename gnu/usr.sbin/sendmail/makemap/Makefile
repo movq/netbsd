@@ -1,19 +1,14 @@
-#	$NetBSD: Makefile,v 1.4 2000/07/07 04:26:57 cgd Exp $
+#	$NetBSD: Makefile,v 1.1 2000/02/08 13:45:35 tron Exp $
 
 .include <bsd.own.mk>
 
 DIST=		${.CURDIR}/../../../dist
-.PATH: ${DIST}/sendmail/makemap
+.PATH: ${DIST}/sendmail/makemap ${DIST}/sendmail/src
 
 PROG=		makemap
 
-LIBSMUTILDIR!=	cd ${.CURDIR}/../libsmutil; ${MAKE} print-objdir
-LIBSMDBDIR!=	cd ${.CURDIR}/../libsmdb; ${MAKE} print-objdir
-
-CPPFLAGS+=	-DNOT_SENDMAIL
-LDADD+=		-L${LIBSMDBDIR} -lsmdb -L${LIBSMUTILDIR} -lsmutil
-DPADD+=		${LIBSMDBDIR}/libsmdb.a ${LIBSMUTILDIR}/libsmutil.a
-
+SRCS=		makemap.c safefile.c
 MAN=		makemap.8
+CPPFLAGS+=	-I${DIST}/sendmail/src ${DBMDEF} -DNOT_SENDMAIL
 
 .include <bsd.prog.mk>

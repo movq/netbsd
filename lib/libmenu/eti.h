@@ -1,7 +1,7 @@
-/*	$NetBSD: eti.h,v 1.5 1999/12/22 14:38:12 kleink Exp $	*/
+/*      $Id: eti.h,v 1.1 1999/11/23 11:12:34 blymn Exp $ */
 
 /*-
- * Copyright (c) 1998-1999 Brett Lymn (blymn@baea.com.au, brett_lymn@yahoo.com.au)
+ * Copyright (c) 1998-1999 Brett Lymn (blymn@baea.com.au, brett_lymn@yahoo.com)
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -26,8 +26,8 @@
  *
  */
 
-#ifndef	_ETI_H_
-#define	_ETI_H_
+#ifndef ETI_H
+#define ETI_H
 
 /* common return codes for libmenu and libpanel functions */
 
@@ -45,4 +45,4 @@
 #define E_NOT_CONNECTED   (-11)
 #define E_REQUEST_DENIED  (-12)
 
-#endif /* !_ETI_H_ */
+#endif

@@ -1,16 +1,16 @@
 #!/bin/sh
 #
-# $NetBSD: ppp,v 1.4 2000/08/02 11:07:51 hubertf Exp $
+# $NetBSD: ppp,v 1.1 2000/03/10 11:53:24 lukem Exp $
 #
 
+#	should provide `network' perhaps?
 # PROVIDE: ppp
-# REQUIRE: mountcritremote syslogd
-#
-#	Note that this means that syslogd will not be listening on
-#	any PPP addresses.  This is considered a feature.
-#
+#	note that this means that syslogd will not be listening on
+#	any PPP addresses.  this is considered a feature.
+# REQUIRE: systemfs syslogd
 
 . /etc/rc.subr
+. /etc/rc.conf
 
 name="ppp"
 start_cmd="ppp_start"
@@ -21,7 +21,7 @@ ppp_start()
 	#	/etc/ppp/peers and $ppp_peers contain boot configuration
 	#	information for pppd.  each value in $ppp_peers that has a
 	#	file in /etc/ppp/peers of the same name, will be run as
-	#	`pppd call <peer>'.
+	#	`pppd <peer>'.
 	#
 	if [ -n "$ppp_peers" ]; then
 		set -- $ppp_peers
@@ -38,5 +38,4 @@ ppp_start()
 	fi
 }
 
-load_rc_config $name
 run_rc_command "$1"

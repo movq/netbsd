@@ -1,18 +1,17 @@
 #!/bin/sh
 #
-# $NetBSD: dhcpd,v 1.4 2000/09/19 13:04:38 lukem Exp $
+# $NetBSD: dhcpd,v 1.1 2000/03/10 11:53:25 lukem Exp $
 #
 
 # PROVIDE: dhcpd
-# REQUIRE: DAEMON
+# REQUIRE: daemon
 
 . /etc/rc.subr
+. /etc/rc.conf
 
 name="dhcpd"
-rcvar=$name
 command="/usr/sbin/${name}"
 pidfile="/var/run/${name}.pid"
 required_files="/etc/${name}.conf /var/db/${name}.leases"
 
-load_rc_config $name
 run_rc_command "$1"

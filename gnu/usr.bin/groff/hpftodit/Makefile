@@ -1,8 +1,8 @@
-#	$NetBSD: Makefile,v 1.3 1997/10/25 10:11:56 lukem Exp $
+#	$Id: Makefile,v 1.1 1996/08/13 07:05:03 explorer Exp $
 
 PROG=		hpftodit
 SRCS=		hpftodit.cc
-CPPFLAGS+=	-I$(.CURDIR)/../include
+CFLAGS+=	-I$(.CURDIR)/../include
 LDADD+=		$(LIBGROFF) -lm
 DPADD+=		$(LIBGROFF) $(LIBM)
 

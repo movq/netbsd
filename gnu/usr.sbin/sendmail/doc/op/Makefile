@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.3 2000/05/03 10:50:58 itojun Exp $
+#	$NetBSD: Makefile,v 1.1 2000/02/08 13:45:36 tron Exp $
 
 DIST=	${.CURDIR}/../../../../dist
 .PATH: ${DIST}/sendmail/doc/op
@@ -8,12 +8,10 @@ SRCS=	op.me
 MACROS=	-me
 RM=	rm -f
 
-CLEANFILES+=	op.ps
-
 all: op.ps
 
 op.ps: ${SRCS}
 	${RM} ${.TARGET}
-	${PIC} ${.ALLSRC} | ${ROFF} >${.TARGET}
+	${PIC} ${SRCS} | ${ROFF} >${.TARGET}
 
 .include <bsd.doc.mk>

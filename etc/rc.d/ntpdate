@@ -1,15 +1,15 @@
 #!/bin/sh
 #
-# $NetBSD: ntpdate,v 1.6 2000/09/19 13:04:39 lukem Exp $
+# $NetBSD: ntpdate,v 1.1 2000/03/10 11:53:24 lukem Exp $
 #
 
 # PROVIDE: ntpdate
-# REQUIRE: NETWORK syslogd
+# REQUIRE: syslogd network
 
 . /etc/rc.subr
+. /etc/rc.conf
 
 name="ntpdate"
-rcvar=$name
 start_cmd="ntpdate_start"
 stop_cmd=":"
 
@@ -23,9 +23,8 @@ ntpdate_start()
 	fi
 	if [ -n "$ntpdate_hosts"  ]; then
 		echo "Setting date via ntp."
-		ntpdate $ntpdate_flags $ntpdate_hosts
+		ntpdate -b -s $ntpdate_hosts
 	fi
 }
 
-load_rc_config $name
 run_rc_command "$1"

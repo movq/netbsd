@@ -1,8 +1,11 @@
-#	$NetBSD: Makefile,v 1.8 1997/10/18 05:59:21 lukem Exp $
+MAN1=		nroff.0
 
-MAN=		nroff.1
-SCRIPTS=	nroff.sh psroff.sh
+afterinstall:
+	install -c -o ${BINOWN} -g ${BINGRP} -m ${BINMODE} \
+		$(.CURDIR)/nroff.sh $(DESTDIR)$(BINDIR)/nroff
+	install -c -o ${BINOWN} -g ${BINGRP} -m ${BINMODE} \
+		$(.CURDIR)/psroff.sh $(DESTDIR)$(BINDIR)/psroff
 
-.include "../../Makefile.inc"
-.include "../Makefile.cfg"
 .include <bsd.prog.mk>
+.include <../../Makefile.inc>
+.include <../Makefile.cfg>

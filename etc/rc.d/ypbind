@@ -1,26 +1,24 @@
 #!/bin/sh
 #
-# $NetBSD: ypbind,v 1.4 2000/09/19 13:04:39 lukem Exp $
+# $NetBSD: ypbind,v 1.1 2000/03/10 11:53:23 lukem Exp $
 #
 
 # PROVIDE: ypbind
 # REQUIRE: ypserv
 
 . /etc/rc.subr
+. /etc/rc.conf
 
 name="ypbind"
-rcvar=$name
 command="/usr/sbin/${name}"
 start_precmd="ypbind_precmd"
 
 ypbind_precmd()
 {
-	_domain=`domainname`
-	if [ -z "$_domain" ]; then
-		warn "domainname(1) is not set."
+	if [ -z "$domainname" ]; then
+		warn "\$domainname is not set; ${name} not started"
 		return 1
 	fi
 }
 
-load_rc_config $name
 run_rc_command "$1"

@@ -1,8 +1,8 @@
-#	$NetBSD: Makefile,v 1.3 1997/10/25 10:11:46 lukem Exp $
+#	$Id: Makefile,v 1.1 1996/08/13 07:04:46 explorer Exp $
 
 PROG=		grolj4
 SRCS=		lj4.cc
-CPPFLAGS+=	-I$(.CURDIR)/../include
+CFLAGS+=	-I$(.CURDIR)/../include
 LDADD+=		$(LIBDRIVER) $(LIBGROFF) -lm
 DPADD+=		$(LIBDRIVER) $(LIBGROFF) $(LIBM)
 

@@ -1,16 +1,15 @@
 #!/bin/sh
 #
-# $NetBSD: apmd,v 1.4 2000/09/19 13:04:38 lukem Exp $
+# $NetBSD: apmd,v 1.1 2000/03/10 11:53:25 lukem Exp $
 #
 
 # PROVIDE: apmd
-# REQUIRE: DAEMON
+# REQUIRE: daemon
 
 . /etc/rc.subr
+. /etc/rc.conf
 
 name="apmd"
-rcvar=$name
 command="/usr/sbin/${name}"
 
-load_rc_config $name
 run_rc_command "$1"

@@ -1,7 +1,7 @@
-/*	$NetBSD: driver.c,v 1.6 2000/07/11 06:07:26 itohy Exp $	*/
+/*      $Id: driver.c,v 1.1 1999/11/23 11:12:34 blymn Exp $ */
 
 /*-
- * Copyright (c) 1998-1999 Brett Lymn (blymn@baea.com.au, brett_lymn@yahoo.com.au)
+ * Copyright (c) 1998-1999 Brett Lymn (blymn@baea.com.au, brett_lymn@yahoo.com)
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -40,10 +40,12 @@
  * request and is not printable then it assumed to be a user defined command.
  */
 int
-menu_driver(MENU *menu, int c)
+menu_driver(menu, c)
+	MENU *menu;
+	int c;
 {
-	int drv_top_row, drv_scroll, it, status = E_OK;
-	ITEM *drv_new_item;
+	int top_row, scroll, it, status = E_OK;
+	ITEM *new_item;
 	
 	if (menu == NULL)
 		return E_BAD_ARGUMENT;
@@ -57,12 +59,11 @@ menu_driver(MENU *menu, int c)
 		return E_BAD_STATE;
 
 	  /* this one should never happen but just in case.... */
-	if (menu->items[menu->cur_item] == NULL)
-		return E_SYSTEM_ERROR;
+	if (menu->items[menu->cur_item] == NULL) return E_SYSTEM_ERROR;
 
-	drv_new_item = menu->items[menu->cur_item];
+	new_item = menu->items[menu->cur_item];
 	it = menu->cur_item;
-	drv_top_row = menu->top_row;
+	top_row = menu->top_row;
 	
 	if ((c > REQ_BASE_NUM) && (c <= MAX_COMMAND)) {
 		  /* is a known driver request  - first check if the pattern
@@ -82,62 +83,62 @@ menu_driver(MENU *menu, int c)
 		
 		switch (c) {
 		  case REQ_LEFT_ITEM:
-			  drv_new_item = drv_new_item->left;
+			  new_item = new_item->left;
 			  break;
 		  case REQ_RIGHT_ITEM:
-			  drv_new_item = drv_new_item->right;
+			  new_item = new_item->right;
 			  break;
 		  case REQ_UP_ITEM:
-			  drv_new_item = drv_new_item->up;
+			  new_item = new_item->up;
 			  break;
 		  case REQ_DOWN_ITEM:
-			  drv_new_item = drv_new_item->down;
+			  new_item = new_item->down;
 			  break;
 		  case REQ_SCR_ULINE:
-			  if (drv_top_row == 0)
+			  if (top_row == 0)
 				  return E_REQUEST_DENIED;
-			  drv_top_row--;
-			  drv_new_item = drv_new_item->up;
+			  top_row--;
+			  new_item = new_item->up;
 			  break;
 		  case REQ_SCR_DLINE:
-			  drv_top_row++;
-			  if ((drv_top_row + menu->rows - 1)> menu->item_rows)
+			  top_row++;
+			  if ((top_row + menu->rows - 1)> menu->item_rows)
 				  return E_REQUEST_DENIED;
-			  drv_new_item = drv_new_item->down;
+			  new_item = new_item->down;
 			  break;
 		  case REQ_SCR_DPAGE:
-			  drv_scroll = menu->item_rows - menu->rows
+			  scroll = menu->item_rows - menu->rows
 				  - menu->top_row;
-			  if (drv_scroll > menu->rows) {
-				  drv_scroll = menu->rows;
+			  if (scroll > menu->rows) {
+				  scroll = menu->rows;
 			  }
 			  
-			  if (drv_scroll <= 0) {
+			  if (scroll <= 0) {
 				  return E_REQUEST_DENIED;
 			  } else {
-				  drv_top_row += drv_scroll;
-				  while (drv_scroll-- > 0)
-					  drv_new_item = drv_new_item->down;
+				  top_row += scroll;
+				  while (scroll-- > 0)
+					  new_item = new_item->down;
 			  }
 			  break;
 		  case REQ_SCR_UPAGE:
 			  if (menu->rows < menu->top_row) {
-				  drv_scroll = menu->rows;
+				  scroll = menu->rows;
 			  } else {
-				  drv_scroll = menu->top_row;
+				  scroll = menu->top_row;
 			  }
-			  if (drv_scroll == 0)
+			  if (scroll == 0)
 				  return E_REQUEST_DENIED;
 
-			  drv_top_row -= drv_scroll;
-			  while (drv_scroll-- > 0)
-				  drv_new_item = drv_new_item->up;
+			  top_row -= scroll;
+			  while (scroll-- > 0)
+				  new_item = new_item->up;
 			  break;
 		  case REQ_FIRST_ITEM:
-			  drv_new_item = menu->items[0];
+			  new_item = menu->items[0];
 			  break;
 		  case REQ_LAST_ITEM:
-			  drv_new_item = menu->items[menu->item_count - 1];
+			  new_item = menu->items[menu->item_count - 1];
 			  break;
 		  case REQ_NEXT_ITEM:
 			  if ((menu->cur_item + 1) >= menu->item_count) {
@@ -145,11 +146,10 @@ menu_driver(MENU *menu, int c)
 				      == O_NONCYCLIC) {
 					  return E_REQUEST_DENIED;
 				  } else {
-					  drv_new_item = menu->items[0];
+					  new_item = menu->items[0];
 				  }
 			  } else {
-				  drv_new_item =
-					  menu->items[menu->cur_item + 1];
+				  new_item = menu->items[menu->cur_item + 1];
 			  }
 			  break;
 		  case REQ_PREV_ITEM:
@@ -158,25 +158,24 @@ menu_driver(MENU *menu, int c)
 				      == O_NONCYCLIC) {
 					  return E_REQUEST_DENIED;
 				  } else {
-					  drv_new_item = menu->items[
+					  new_item = menu->items[
 						  menu->item_count - 1];
 				  }
 			  } else {
-				  drv_new_item =
-					  menu->items[menu->cur_item - 1];
+				  new_item = menu->items[menu->cur_item - 1];
 			  }
 			  break;
 		  case REQ_TOGGLE_ITEM:
 			  if ((menu->opts & O_ONEVALUE) == O_ONEVALUE) {
 				  return E_REQUEST_DENIED;
 			  } else {
-				  if ((drv_new_item->opts
+				  if ((new_item->opts
 				       & O_SELECTABLE) == O_SELECTABLE) {
 					    /* toggle select flag */
-					  drv_new_item->selected ^= 1;
+					  new_item->selected ^= 1;
 					    /* update item in menu */
-					  _menui_draw_item(menu,
-							    drv_new_item->index);
+					  __menui_draw_item(menu,
+							    new_item->index);
 				  } else {
 					  return E_NOT_SELECTABLE;
 				  }
@@ -198,29 +197,29 @@ menu_driver(MENU *menu, int c)
 			  if (menu->pattern == NULL)
 				  return E_REQUEST_DENIED;
 
-			  status = _menui_match_pattern(menu, 0,
+			  status = __menui_match_pattern(menu, 0,
 							 MATCH_NEXT_FORWARD,
 							 &it);
-			  drv_new_item = menu->items[it];
+			  new_item = menu->items[it];
 			  break;
 		  case REQ_PREV_MATCH:
 			  if (menu->pattern == NULL)
 				  return E_REQUEST_DENIED;
 
-			  status = _menui_match_pattern(menu, 0,
+			  status = __menui_match_pattern(menu, 0,
 							 MATCH_NEXT_REVERSE,
 							 &it);
-			  drv_new_item = menu->items[it];
+			  new_item = menu->items[it];
 			  break; 
 		}
 	} else if (c > MAX_COMMAND) {
 		  /* must be a user command */
 		return E_UNKNOWN_COMMAND;
-	} else if (isprint((unsigned char) c)) {
+	} else if (isprint((char) c)) {
 		  /* otherwise search items for the character. */
-		status = _menui_match_pattern(menu, (unsigned char) c,
-					       MATCH_FORWARD, &it);
-		drv_new_item = menu->items[it];
+		status = __menui_match_pattern(menu, c, MATCH_FORWARD,
+					       &it);
+		new_item = menu->items[it];
 
 		  /* update the position of the cursor if we are doing
 		   * show match and the current item has not changed.  If
@@ -228,7 +227,7 @@ menu_driver(MENU *menu, int c)
 		   * display will not be updated due to the current item
 		   * not changing.
 		   */
-		if ((drv_new_item->index == menu->cur_item)
+		if ((new_item->index == menu->cur_item)
 		    && ((menu->opts & O_SHOWMATCH) == O_SHOWMATCH)) {
 			pos_menu_cursor(menu);
 		}
@@ -239,16 +238,14 @@ menu_driver(MENU *menu, int c)
 		return E_BAD_ARGUMENT;
 	}
 
-	if (drv_new_item == NULL)
-		return E_REQUEST_DENIED;
+	if (new_item == NULL) return E_REQUEST_DENIED;
 
-	if (drv_new_item->row < drv_top_row) drv_top_row = drv_new_item->row;
-	if (drv_new_item->row >= (drv_top_row + menu->rows))
-		drv_top_row = drv_new_item->row - menu->rows + 1;
+	if (new_item->row < top_row) top_row = new_item->row;
+	if (new_item->row >= (top_row + menu->rows))
+		top_row = new_item->row - menu->rows + 1;
 	
-	if ((drv_new_item->index != menu->cur_item)
-	    || (drv_top_row != menu->top_row))
-		_menui_goto_item(menu, drv_new_item, drv_top_row);
+	if ((new_item->index != menu->cur_item) || (top_row != menu->top_row))
+		__menui_goto_item(menu, new_item, top_row);
 
 	return status;
 }

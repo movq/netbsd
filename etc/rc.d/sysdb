@@ -1,12 +1,13 @@
 #!/bin/sh
 #
-# $NetBSD: sysdb,v 1.7 2000/10/14 07:33:39 nisimura Exp $
+# $NetBSD: sysdb,v 1.1 2000/03/10 11:53:24 lukem Exp $
 #
 
-# PROVIDE: sysdb
-# REQUIRE: mountcritremote
+# PROVIDE: databases
+# REQUIRE: systemfs
 
 . /etc/rc.subr
+. /etc/rc.conf
 
 name="sysdb"
 start_cmd="sysdb_start"
@@ -19,16 +20,13 @@ sysdb_start()
 	#	will run work when we boot /netbsd.new, etc.
 	#
 	echo "Building databases..."
-	booted_kernel=`sysctl -n machdep.booted_kernel 2>/dev/null`
-	kvm_mkdb ${booted_kernel:-/netbsd}
+	sysctl machdep 2>/dev/null | grep -q booted_kernel
+	if [ $? -eq 0 ] ; then
+		kvm_mkdb `sysctl -n machdep.booted_kernel` || kvm_mkdb /netbsd
+	else
+		kvm_mkdb /netbsd
+	fi
 	dev_mkdb
-
-	#	Re-create /var/run/utmp, which is deleted by mountcritlocal
-	#	but can't be recreated by it because install and chown may
-	#	not be available then (possibly no /usr).
-	#
-	install -c -m 664 -g utmp /dev/null /var/run/utmp
 }
 
-load_rc_config $name
 run_rc_command "$1"

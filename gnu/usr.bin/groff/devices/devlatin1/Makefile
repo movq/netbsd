@@ -1,6 +1,5 @@
-#	$NetBSD: Makefile,v 1.4 1997/10/18 05:58:41 lukem Exp $
+#	@(#)Makefile	6.1 (Berkeley) 3/3/91
 
 DEVICE=		latin1
 
 .include "../Makefile.tty"
-.include "../Makefile.dev"

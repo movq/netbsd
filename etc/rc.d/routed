@@ -1,16 +1,16 @@
 #!/bin/sh
 #
-# $NetBSD: routed,v 1.5 2000/09/19 13:04:39 lukem Exp $
+# $NetBSD: routed,v 1.1 2000/03/10 11:53:24 lukem Exp $
 #
 
 # PROVIDE: routed
-# REQUIRE: DAEMON gated
+# REQUIRE: daemon gated
 
 . /etc/rc.subr
+. /etc/rc.conf
 
 name="routed"
-rcvar=$name
-command="/sbin/${name}"
+command="/usr/sbin/${name}"
 start_precmd="routed_precmd"
 
 routed_precmd()
@@ -21,5 +21,4 @@ routed_precmd()
 	fi
 }
 
-load_rc_config $name
 run_rc_command "$1"

@@ -1,21 +1,19 @@
 #!/bin/sh
 #
-# $NetBSD: amd,v 1.6 2000/09/19 13:04:38 lukem Exp $
+# $NetBSD: amd,v 1.1 2000/03/10 11:53:25 lukem Exp $
 #
 
 # PROVIDE: amd
-# REQUIRE: rpcbind mountall ypbind
+# REQUIRE: nfsiod portmap mountall ypbind
 
 . /etc/rc.subr
+. /etc/rc.conf
 
 name="amd"
-rcvar=$name
 command="/usr/sbin/${name}"
-load_rc_config $name
-
 command_args='-p -a '$amd_dir' `sed s/#.*$// <'$amd_master'` >/var/run/amd.pid'
 required_files="$amd_master"
 required_dirs="$amd_dir"
-required_vars="rpcbind"
+required_vars="portmap"
 
 run_rc_command "$1"

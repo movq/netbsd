@@ -1,7 +1,10 @@
-#	$NetBSD: Makefile,v 1.7 1997/07/24 23:18:55 christos Exp $
+#	%W% (Berkeley) %G%
 
-PROG= mk-amd-map
-SRCS=	mk-amd-map.c 
-MAN+= mk-amd-map.8
+PROG=	mk-amd-map
+NOMAN=	true
+CFLAGS+=-I${.CURDIR}/../config
+CFLAGS+=-I${.CURDIR}/../include
+CFLAGS+=-DOS_HDR=\"os-netbsd.h\"
 
+.include "../../Makefile.inc"
 .include <bsd.prog.mk>

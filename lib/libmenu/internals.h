@@ -1,7 +1,7 @@
-/*	$NetBSD: internals.h,v 1.7 2000/07/11 06:07:26 itohy Exp $	*/
+/*      $Id: internals.h,v 1.1 1999/11/23 11:12:34 blymn Exp $ */
 
 /*-
- * Copyright (c) 1998-1999 Brett Lymn (blymn@baea.com.au, brett_lymn@yahoo.com.au)
+ * Copyright (c) 1998-1999 Brett Lymn (blymn@baea.com.au, brett_lymn@yahoo.com)
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -36,18 +36,13 @@
 #define MATCH_NEXT_FORWARD 3
 #define MATCH_NEXT_REVERSE 4
 
-/* stole this from curses.h */
-#define max(a,b)        ((a) > (b) ? a : b)
-
 /* function prototypes */
 
-void _menui_draw_item(MENU *menu, int item);
-int _menui_draw_menu(MENU *menu);
-int _menui_goto_item(MENU *menu, ITEM *item, int new_top_row);
-int _menui_match_pattern(MENU *menu, int c, int direction ,
-			 int *item_matched);
-int _menui_match_items(MENU *menu, int direction, int *item_matched);
-void _menui_max_item_size(MENU *menu);
-int _menui_stitch_items(MENU *menu);
+int __menui_stitch_items __P((MENU *));
+int __menui_goto_item __P((MENU *, ITEM *, int));
+int __menui_match_pattern __P((MENU *, char, int, int *));
+int __menui_match_items __P((MENU *, int, int *));
+int __menui_draw_menu __P((MENU *));
+void __menui_max_item_size __P((MENU *));
 
 #endif

@@ -1,20 +1,19 @@
 #!/bin/sh
 #
-# $NetBSD: syslogd,v 1.7 2000/09/19 13:04:39 lukem Exp $
+# $NetBSD: syslogd,v 1.1 2000/03/10 11:53:24 lukem Exp $
 #
 
 # PROVIDE: syslogd
-# REQUIRE: mountcritremote sysdb wscons
+# REQUIRE: systemfs
 
 . /etc/rc.subr
+. /etc/rc.conf
 
 name="syslogd"
-rcvar=$name
 command="/usr/sbin/${name}"
 pidfile="/var/run/${name}.pid"
 required_files="/etc/syslog.conf"
 start_precmd="syslogd_precmd"
-extra_commands="reload"
 
 syslogd_precmd()
 {
@@ -27,5 +26,4 @@ syslogd_precmd()
 	return 0
 }
 
-load_rc_config $name
-run_rc_command "$1"
+run_rc_command "$1" "reload"

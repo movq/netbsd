@@ -3,12 +3,7 @@
 
 prog="$0"
 # Default device.
-if test "X$LC_CTYPE" = "Xiso_8859_1" || test "X$LESSCHARSET" = "Xlatin1"
-then
-	T=-Tlatin1
-else
-	T=-Tascii
-fi
+T=-Tascii
 opts=
 
 for i
@@ -24,7 +19,7 @@ do
 		echo "$prog: option $1 requires an argument" >&2
 		exit 1
 		;;
-	-S|-i|-[mrno]*)
+	-i|-[mrno]*)
 		opts="$opts $1";
 		;;
 
@@ -33,10 +28,6 @@ do
 		;;
 	-T*)
 		# ignore other devices
-		;;
-	-u*)
-		# Solaris 2.2 `man' uses -u0; ignore it,
-		# since `less' and `more' can use the emboldening info.
 		;;
 	--)
 		shift
