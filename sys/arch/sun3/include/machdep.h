@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.h,v 1.2 1997/01/27 16:58:59 gwr Exp $	*/
+/*	$NetBSD: machdep.h,v 1.3 1997/01/27 21:48:37 gwr Exp $	*/
 
 /*
  * Copyright (c) 1994 Gordon W. Ross
@@ -146,6 +146,11 @@ void	setvbr __P((void **));
 
 void	sun3_pmeg_init __P((void));
 void	sun3_reserve_pmeg __P((int pmeg_num));
+
+void	sunmon_abort __P((void));
+void	sunmon_halt __P((void));
+void	sunmon_init __P((void));
+void	sunmon_reboot __P((char *));
 
 void	swapconf __P((void));
 void	swapgeneric __P((void));
