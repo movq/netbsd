@@ -1,7 +1,6 @@
 			    Sendmail Version 8
 			Frequently Asked Questions
-			     VERY EARLY DRAFT
-		       Last Update: October 18, 1993
+		       Last Update: January 12, 1994
 
 
 This FAQ is specific to Version 8 of sendmail.
@@ -36,6 +35,10 @@ This FAQ is specific to Version 8 of sendmail.
 		gatekeeper.dec.com	/.0/BSD/net2
 		ucquais.cba.uc.edu	/pub/net2
 		ftp.luth.se		/pub/unix/4.3bsd/net2
+
+	Diffs and instructions for building this version of make under
+	SunOS 4.1.x are available on ftp.css.itd.umich.edu in
+	/pub/systems/sun/Net2-make.sun4.diff.Z.
 ----------------------------------------------------------------------
   * What macro package do I use to format the V8 man pages?
 
@@ -46,24 +49,35 @@ This FAQ is specific to Version 8 of sendmail.
 	format under the new mandoc macros.
 
 	Get the new macros with the BSD Net2 release.
+
+	This macro set is also available with newer versions of groff.
 ----------------------------------------------------------------------
   * What books are available describing sendmail?
 
-	There are currently no books available devoted to sendmail.
-	However, there are several books that have sendmail chapters.
+	There is one book available devoted to sendmail, and
+	several books that have sendmail chapters.
 
 	Nemeth, Snyder, and Seebass, _Unix System Administration
 		Handbook_.  Prentice-Hall.
 	Carl-Mitchell and Quarterman, _Practical Internetworking with
 		TCP/IP and UNIX_.  Addison-Wesley.
 	Hunt, _TCP/IP Network Administration_.  O'Reilly & Associates.
-
-|	At least two books are due out "soon":
-
 	Costales, Allman, and Rickert, _Sendmail_.  O'Reilly &
-|		Associates (to appear 11/93).
+		Associates.
+
+	Another book is due out "soon":
+
 	Avolio & Vixie, _Sendmail Theory and Practice_.  Digital
-|		Press (release date unknown).
+		Press (release date unknown).
+----------------------------------------------------------------------
+  * Why does the Costales book have a bat on the cover?
+
+	Do you want the real answer or the fun answer?  The real
+	answer is that Bryan Costales was presented with a choice
+	of three pictures, and he picked the bat because it appealed
+	to him the most.  The fun answer is that, although sendmail
+	has a reputation for being scary, like a bat, it is really
+	a rather friendly and intelligent beast.
 ----------------------------------------------------------------------
   * How do I make all my addresses appear to be from a single host?
 
@@ -182,32 +196,127 @@ This FAQ is specific to Version 8 of sendmail.
 	ends.  If they disagree, large packets will be trashed and
 	the connection will hang.
 ----------------------------------------------------------------------
-+ * How can I get sendmail to deliver local mail to $HOME/.mail
-+   instead of into /usr/spool/mail (or /usr/mail)?
-+
-+	This is a local mailer issue, not a sendmail issue.  Either
-+	modify your local mailer (source code will be required) or
-+	change the program called in the "local" mailer configuration
-+	description to be a new program that does this local delivery.
-+	I understand that "procmail" works well, although I haven't
-+	used it myself.
+  * I just upgraded to 8.x and suddenly I'm getting messages in my
+    syslog of the form "collect: I/O error on connection".  What is
+    going wrong?
+
+    	Nothing.  This is just a diagnosis of a condition that had
+    	not been diagnosed before.  If you are getting a lot of these
+    	from a single host, there is probably some incompatibility
+    	between 8.x and that host.  If you get a lot of them in general,
+    	you may have network problems that are causing connections to
+    	get reset.
 ----------------------------------------------------------------------
-+ * Under V8, the "From " header gets mysteriously munged when I send
-+   to an alias.
+  * How can I get sendmail to deliver local mail to $HOME/.mail
+    instead of into /usr/spool/mail (or /usr/mail)?
+
+	This is a local mailer issue, not a sendmail issue.  Either
+	modify your local mailer (source code will be required) or
+	change the program called in the "local" mailer configuration
+	description to be a new program that does this local delivery.
+	I understand that "procmail" works well, although I haven't
+	used it myself.
+----------------------------------------------------------------------
+  * Under V8, the "From " header gets mysteriously munged when I send
+    to an alias.
+
+	``It's not a bug, it's a feature.''  This happens when you have
+	a "owner-list" alias and you send to "list".  V8 propogates the
+	owner information into the envelope sender field (which appears
+	as the "From " header on UNIX mail or as the Return-Path: header)
+	so that downstream errors are properly returned to the mailing
+	list owner instead of to the sender.  In order to make this
+	appear as sensible as possible to end users, I recommend making
+	the owner point to a "request" address -- for example:
+
+		list:		:include:/path/name/list.list
+		owner-list:	list-request
+		list-request:	eric
+
+	This will make message sent to "list" come out as being
+	"From list-request" instead of "From eric".
+----------------------------------------------------------------------
+  * There are four UUCP mailers listed in the configuration files.
+    Which one should I use?
+
+	The choice is partly a matter of local preferences and what is
+	running at the other end of your UUCP connection.  Unlike good
+	protocols that define what will go over the wire, UUCP uses
+	the policy that you should do what is right for the other end;
+	if they change, you have to change.  This makes it hard to
+	do the right thing, and discourages people from updating their
+	software.  In general, if you can avoid UUCP, please do.
+
+	If you can't avoid it, you'll have to find the version that is
+	closest to what the other end accepts.  Following is a summary
+	of the UUCP mailers available.
+
+	uucp-old (obsolete name: "uucp")
+	  This is the oldest, the worst (but the closest to UUCP) way of
+	  sending messages accros UUCP connections.  It does bangify
+	  everything and prepends $U (your UUCP name) to the sender's
+	  address (which can already be a bang path itself).  It can
+	  only send to one address at a time, so it spends a lot of
+	  time copying duplicates of messages.  Avoid this if at all
+	  possible.
+
+	uucp-new (obsolete name: "suucp")
+	  The same as above, except that it assumes that in one rmail
+	  command you can specify several recipients.  It still has a
+	  lot of other problems.
+
+	uucp-dom
+	  This UUCP mailer keeps everything as domain addresses.
+	  Basically, it uses the SMTP mailer rewriting rules.
+
+	  Unfortunately, a lot of UUCP mailer transport agents require
+	  bangified addresses in the envelope, although you can use
+	  domain-based addresses in the message header.  (The envelope
+	  shows up as the From_ line on UNIX mail.)  So....
+
+	uucp-uudom
+	  This is a cross between uucp-new (for the envelope addresses)
+	  and uucp-dom (for the header addresses).  It bangifies the
+	  envelope sender (From_ line in messages) without adding the
+	  local hostname, unless there is no host name on the address
+	  at all (e.g., "wolf") or the host component is a UUCP host name
+	  instead of a domain name ("somehost!wolf" instead of
+	  "some.dom.ain!wolf").
+
+	Examples:
+
+	We are on host grasp.insa-lyon.fr (UUCP host name "grasp").  The
+	following summarizes the sender rewriting for various mailers.
+
+	Mailer          sender		rewriting in the envelope
+	------		------		-------------------------
+	uucp-{old,new}	wolf		grasp!wolf
+	uucp-dom	wolf		wolf@grasp.insa-lyon.fr
+	uucp-uudom	wolf		grasp.insa-lyon.fr!wolf
+
+	uucp-{old,new}	wolf@fr.net	grasp!fr.net!wolf
+	uucp-dom	wolf@fr.net	wolf@fr.net
+	uucp-uudom	wolf@fr.net	fr.net!wolf
+
+	uucp-{old,new}	somehost!wolf	grasp!somehost!wolf
+	uucp-dom	somehost!wolf	somehost!wolf@grasp.insa-lyon.fr
+	uucp-uudom	somehost!wolf	grasp.insa-lyon.fr!somehost!wolf
+----------------------------------------------------------------------
++ * I'm trying to to get my mail to go into queue only mode, and it
++   delivers the mail interactively anyway.  (Or, I'm trying to use
++   the "don't deliver to expensive mailer" flag, and it doesn't
++   delivers the mail interactively anyway.)  I can see it does it:
++   here's the output of "sendmail -v foo@somehost" (or Mail -v or
++   equivalent).
 +
-+	``It's not a bug, it's a feature.''  This happens when you have
-+	a "owner-list" alias and you send to "list".  V8 propogates the
-+	owner information into the envelope sender field (which appears
-+	as the "From " header on UNIX mail or as the Return-Path: header)
-+	so that downstream errors are properly returned to the mailing
-+	list owner instead of to the sender.  In order to make this
-+	appear as sensible as possible to end users, I recommend making
-+	the owner point to a "request" address -- for example:
++	The -v flag to sendmail (which is implied by the -v flag to
++	Mail and other programs in that family) tells sendmail to
++	watch the transaction.  Since you have explicitly asked to
++	see what's going on, it assumes that you do not want to to
++	auto-queue, and turns that feature off.  Remove the -v flag
++	and use a "tail -f" of the log instead to see what's going on.
 +
-+		list:		:include:/path/name/list.list
-+		owner-list:	list-request
-+		list-request:	eric
-+
-+	This will make message sent to "list" come out as being
-+	"From list-request" instead of "From eric".
++	If you are trying to use the "don't deliver to expensive mailer"
++	flag (mailer flag "e"), be sure you also turn on global option
++	"c" -- otherwise it ignores the mailer flag.
 ----------------------------------------------------------------------

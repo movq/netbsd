@@ -33,8 +33,10 @@ divert(-1)
 # SUCH DAMAGE.
 #
 divert(0)
-VERSIONID(`@(#)Berkeley.m4	8.1 (Berkeley) 6/7/93')
+VERSIONID(`@(#)Berkeley.m4	8.4 (Berkeley) 12/20/93')
 define(`UUCP_RELAY', `ucbvax.Berkeley.EDU')dnl
 define(`BITNET_RELAY', `jade.Berkeley.EDU')dnl
-define(`CSNET_RELAY', `Relay.Prime.COM')dnl
+define(`confFORWARD_PATH', `$z/.forward.$w:$z/.forward')dnl
+define(`confCW_FILE', `-o /etc/sendmail.cw')dnl
 FEATURE(redirect)dnl
+FEATURE(use_cw_file)dnl
