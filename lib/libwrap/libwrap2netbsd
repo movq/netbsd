@@ -1,6 +1,6 @@
 #! /bin/sh
 #
-#	$NetBSD: libwrap2netbsd,v 1.1 1996/11/26 16:48:09 mrg Exp $
+#	$NetBSD: libwrap2netbsd,v 1.1.1.1 1996/11/26 16:48:09 mrg Exp $
 #
 # Copyright (c) 1996 Matthew R. Green
 # All rights reserved.
@@ -60,7 +60,7 @@ cd $d
 
 echo creating Makefile
 cat > Makefile<<'__eof_makefile'
-#	$NetBSD: libwrap2netbsd,v 1.1 1996/11/26 16:48:09 mrg Exp $
+#	$NetBSD: libwrap2netbsd,v 1.1.1.1 1996/11/26 16:48:09 mrg Exp $
 
 LIB=	wrap 
 
