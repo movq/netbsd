@@ -1,4 +1,4 @@
-/*	$NetBSD: pci_machdep.c,v 1.1 1996/10/05 21:41:36 leo Exp $	*/
+/*	$NetBSD: pci_machdep.c,v 1.1.1.1 1996/10/05 21:41:36 leo Exp $	*/
 
 /*
  * Copyright (c) 1996 Leo Weppelman.  All rights reserved.
