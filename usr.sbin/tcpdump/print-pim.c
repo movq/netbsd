@@ -1,4 +1,4 @@
-/*	$NetBSD: print-pim.c,v 1.1 1997/10/03 17:24:34 christos Exp $	*/
+/*	$NetBSD: print-pim.c,v 1.1.1.1 1997/10/03 17:24:34 christos Exp $	*/
 
 /*
  * Copyright (c) 1995, 1996
@@ -27,7 +27,7 @@
 static const char rcsid[] =
     "@(#) Header: print-pim.c,v 1.7 96/09/26 23:36:48 leres Exp  (LBL)";
 #else
-__RCSID("$NetBSD: print-pim.c,v 1.1 1997/10/03 17:24:34 christos Exp $");
+__RCSID("$NetBSD: print-pim.c,v 1.1.1.1 1997/10/03 17:24:34 christos Exp $");
 #endif
 #endif
 

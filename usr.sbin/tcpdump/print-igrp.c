@@ -1,4 +1,4 @@
-/*	$NetBSD: print-igrp.c,v 1.1 1997/10/03 17:24:22 christos Exp $	*/
+/*	$NetBSD: print-igrp.c,v 1.1.1.1 1997/10/03 17:24:22 christos Exp $	*/
 
 /*
  * Copyright (c) 1996, 1997
@@ -29,7 +29,7 @@
 static const char rcsid[] =
     "@(#) Header: print-igrp.c,v 1.8 97/05/28 12:52:47 leres Exp  (LBL)";
 #else
-__RCSID("$NetBSD: print-igrp.c,v 1.1 1997/10/03 17:24:22 christos Exp $");
+__RCSID("$NetBSD: print-igrp.c,v 1.1.1.1 1997/10/03 17:24:22 christos Exp $");
 #endif
 #endif
 

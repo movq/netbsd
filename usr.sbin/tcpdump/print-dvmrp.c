@@ -1,4 +1,4 @@
-/*	$NetBSD: print-dvmrp.c,v 1.1 1997/10/03 17:24:17 christos Exp $	*/
+/*	$NetBSD: print-dvmrp.c,v 1.1.1.1 1997/10/03 17:24:17 christos Exp $	*/
 
 /*
  * Copyright (c) 1995, 1996
@@ -27,7 +27,7 @@
 static const char rcsid[] =
     "@(#) Header: print-dvmrp.c,v 1.13 96/12/10 23:16:30 leres Exp  (LBL)";
 #else
-__RCSID("$NetBSD: print-dvmrp.c,v 1.1 1997/10/03 17:24:17 christos Exp $");
+__RCSID("$NetBSD: print-dvmrp.c,v 1.1.1.1 1997/10/03 17:24:17 christos Exp $");
 #endif
 #endif
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: print-krb.c,v 1.1 1997/10/03 17:24:25 christos Exp $	*/
+/*	$NetBSD: print-krb.c,v 1.1.1.1 1997/10/03 17:24:25 christos Exp $	*/
 
 /*
  * Copyright (c) 1995, 1996, 1997
@@ -29,7 +29,7 @@
 static const char rcsid[] =
     "@(#) Header: print-krb.c,v 1.9 97/04/26 14:01:45 leres Exp ";
 #else
-__RCSID("$NetBSD: print-krb.c,v 1.1 1997/10/03 17:24:25 christos Exp $");
+__RCSID("$NetBSD: print-krb.c,v 1.1.1.1 1997/10/03 17:24:25 christos Exp $");
 #endif
 #endif
 

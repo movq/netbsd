@@ -1,32 +1,27 @@
-# $Id: Makefile,v 1.1 1993/11/14 21:19:50 deraadt Exp $
-#
-# Possible Options:
-#  -DCSLIP	include support for kernel slip interface
-#  -DPPP	include support for point to point protocol
-#  -DIBMRTPC	enable the MERIT additions to the Stanford Enetfilter
-#  -DNOVFPRINTF	simulate vfprintf() on systems that don't have it
-#
-# CSLIP and PPP work only under BPF.
-#
+#	$NetBSD: Makefile,v 1.1.1.1 1997/10/03 17:25:30 christos Exp $	
+
+WARNS?=	1
 PROG=	tcpdump
-MAN8=	tcpdump.0
-DEFINES = -DCSLIP -DPPP -DFDDI
-CFLAGS+=-I. -I${.CURDIR} ${DEFINES}
+MAN=	tcpdump.8 
 
-SRCS=	tcpdump.c addrtoname.c \
-	print-ether.c print-ip.c print-arp.c print-tcp.c print-udp.c \
-	print-atalk.c print-domain.c print-tftp.c print-bootp.c print-nfs.c \
-	print-icmp.c nametoaddr.c print-sl.c print-ppp.c print-rip.c \
-	print-snmp.c print-ntp.c print-null.c print-egp.c print-ospf.c \
-	print-fddi.c print-sunrpc.c savefile.c util.c etherent.c inet.c \
-	gencode.c optimize.c bpf_dump.c bpf_filter.c \
-	bpf_image.c tcpgram.y tcplex.l md.c pcap.c version.c
-.PATH:	${.CURDIR}/../../sys/net
+CFLAGS+=-DHAVE_FCNTL_H=1 -DHAVE_MALLOC_H=1 -DHAVE_MEMORY_H=1
+CFLAGS+=-DTIME_WITH_SYS_TIME=1 -DHAVE_NET_SLIP_H=1 -DHAVE_VFPRINTF=1
+CFLAGS+=-DHAVE_STRCASECMP=1 -DHAVE_ETHER_NTOA=1 -DHAVE_SETLINEBUF=1
+CFLAGS+=-DRETSIGTYPE=void -DRETSIGVAL= -DHAVE_SIGACTION=1
+CFLAGS+=-DHAVE_SOCKADDR_SA_LEN=1 -DHAVE_FDDI
 
-CLEANFILES+= y.tab.h
+LDADD+=	-lpcap -ll
+DPADD+=	${LIBPCAP} ${LIBL}
 
+SRCS=	util.c tcpdump.c setsignal.c savestr.c print-wb.c print-udp.c \
+print-tftp.c print-tcp.c print-sunrpc.c print-snmp.c print-sl.c print-rip.c \
+print-raw.c print-ppp.c print-pim.c print-ospf.c print-null.c print-ntp.c \
+print-nfs.c print-netbios.c print-llc.c print-krb.c print-isoclns.c print-ipx.c \
+print-ip.c print-igrp.c print-icmp.c print-gre.c print-fddi.c print-ether.c \
+print-egp.c print-dvmrp.c print-domain.c print-decnet.c print-bootp.c print-atm.c \
+print-atalk.c print-arp.c parsenfsfh.c machdep.c gmt2local.c bpf_dump.c \
+addrtoname.c 
+SRCS+= version.c
 
-#SRCS2 = tcpslice.o gwtm2secs.o search.o savefile.o bpf_filter.o md.o util.o
-#tcpslice:	SRSC2
-
+AWKS=	
 .include <bsd.prog.mk>

@@ -1,4 +1,4 @@
-/*	$NetBSD: setsignal.h,v 1.1 1997/10/03 17:25:18 christos Exp $	*/
+/*	$NetBSD: setsignal.h,v 1.1.1.1 1997/10/03 17:25:18 christos Exp $	*/
 
 /*
  * Copyright (c) 1997
