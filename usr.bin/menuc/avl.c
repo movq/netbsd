@@ -1,4 +1,4 @@
-/*	$NetBSD: avl.c,v 1.1 1997/09/26 17:54:09 phil Exp $	*/
+/*	$NetBSD: avl.c,v 1.1.1.1 1997/09/26 17:54:09 phil Exp $	*/
 
 /*
  * Copyright (c) 1997 Philip A. Nelson.

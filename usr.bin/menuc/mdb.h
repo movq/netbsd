@@ -1,4 +1,4 @@
-/*	$NetBSD: mdb.h,v 1.1 1997/09/26 17:54:09 phil Exp $	*/
+/*	$NetBSD: mdb.h,v 1.1.1.1 1997/09/26 17:54:09 phil Exp $	*/
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
