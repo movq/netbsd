@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 2004/03/06 11:36:05 rtr Exp $
+#	$NetBSD: Makefile,v 1.2 2004/03/06 11:44:41 rtr Exp $
 
 .include <bsd.own.mk>
 
@@ -20,6 +20,5 @@ opt_drm.h:
 
 CPPFLAGS+=	-I${X11SRCDIR.xc}/programs/Xserver/hw/xfree86/os-support/bsd/drm/kernel \
 		-I${X11SRCDIR.xc}/programs/Xserver/hw/xfree86/os-support/shared/drm/kernel
-COPTS+=	-DDDB
 
 .include <bsd.kmod.mk>
