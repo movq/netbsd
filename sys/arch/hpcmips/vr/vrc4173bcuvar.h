@@ -1,4 +1,4 @@
-/*	$NetBSD: vrc4173bcuvar.h,v 1.1 2001/06/13 07:32:48 enami Exp $	*/
+/*	$NetBSD: vrc4173bcuvar.h,v 1.2 2001/10/21 09:38:11 takemura Exp $	*/
 
 /*-
  * Copyright (c) 2001 Enami Tsugutomo.
@@ -37,6 +37,7 @@ struct vrc4173bcu_softc {
 	bus_size_t sc_size;
 
 	bus_space_handle_t sc_icuh;	/* I/O handle for ICU. */
+	bus_space_handle_t sc_cmuh;	/* I/O handle for CMU. */
 	void *sc_ih;
 
 #define	VRC4173BCU_NINTRHAND	(16)	/* XXX */
