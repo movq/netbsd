@@ -1,4 +1,4 @@
-/*	$NetBSD: pathnames.h,v 1.1 2000/10/31 10:45:04 itojun Exp $	*/
+/*	$NetBSD: pathnames.h,v 1.1.1.1 2000/10/31 10:45:04 itojun Exp $	*/
 
 /*-
  * Copyright (c) 2000 Citrus Project,
