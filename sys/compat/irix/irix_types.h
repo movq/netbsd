@@ -1,4 +1,4 @@
-/*	$NetBSD: irix_types.h,v 1.1 2001/09/22 18:51:36 manu Exp $ */
+/*	$NetBSD: irix_types.h,v 1.2 2001/11/28 12:00:54 manu Exp $ */
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -17,8 +17,8 @@
  *    documentation and/or other materials provided with the distribution.
  * 3. All advertising materials mentioning features or use of this software
  *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
+ *	This product includes software developed by the NetBSD
+ *	Foundation, Inc. and its contributors.
  * 4. Neither the name of The NetBSD Foundation nor the names of its
  *    contributors may be used to endorse or promote products derived
  *    from this software without specific prior written permission.
@@ -36,13 +36,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef	_MACH_TYPES_H_
-#define	_MACH_TYPES_H_
+#ifndef _IRIX_TYPES_H_
+#define _IRIX_TYPES_H_
 
-#ifdef DEBUG_IRIX
-#define DPRINTF(a) uprintf a
-#else
-#define DPRINTF(a)
-#endif /* DEBUG_IRIX */
-
-#endif /* !_IRIX_TYPES_H_ */
+#endif /* _IRIX_TYPES_H_ */
