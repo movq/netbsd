@@ -38,7 +38,7 @@ static char rcsid[] = "";
 
 
 /*
- *	$Id: crt0.c,v 1.1 1993/09/17 18:42:10 phil Exp $
+ *	$Id: crt0.c,v 1.1.1.1 1993/09/17 18:42:11 phil Exp $
  *
  *	C start up routine.
  *	Robert Henry, UCB, 20 Oct 81
