@@ -33,50 +33,25 @@
  * OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGES.
  *
- * $NetBSD$
- * $Id: ah_osdep.c,v 1.28 2003/11/01 01:43:21 sam Exp $
+ * $Id: ah_osdep.c,v 1.22 2003/07/26 14:58:00 sam Exp $
  */
-#ifdef __FreeBSD__
 #include "opt_ah.h"
-#endif
-#ifdef __NetBSD__
-#include <../contrib/sys/arch/i386/dev/athhal_opt.h>
-#endif
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
 #include <sys/sysctl.h>
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <sys/malloc.h>
 #include <sys/proc.h>
+
 #include <machine/stdarg.h>
-#include <machine/param.h>
 
-#include <net/if.h>
-#include <net/if_ether.h>		/* XXX for ether_sprintf */
+#include <net/ethernet.h>		/* XXX for ether_sprintf */
 
-#include <../contrib/sys/dev/ic/athhal.h>
+#include <contrib/dev/ath/ah.h>
 
 #define	AH_TIMEOUT	1000
-
-#ifdef bcopy
-#undef bcopy
-#endif
-
-#ifdef bzero
-#undef bzero
-#endif
-
-#ifdef __NetBSD__
-#define __va_list va_list
-#define __printflike(x, y)
-#endif
-
-extern	void ath_hal_delay(int);
-extern	u_int32_t ath_hal_getuptime(struct ath_hal *);
-void	bcopy(const void *, void *, size_t);
-void	bzero(void *, size_t);
 
 extern	HAL_BOOL ath_hal_wait(struct ath_hal *, u_int reg,
 		u_int32_t mask, u_int32_t val);
@@ -96,80 +71,52 @@ extern	void HALDEBUG(struct ath_hal *ah, const char* fmt, ...);
 extern	void HALDEBUGn(struct ath_hal *ah, u_int level, const char* fmt, ...);
 #endif /* AH_DEBUG */
 
+/* NB: put this here instead of the driver to avoid circular references */
+SYSCTL_NODE(_hw, OID_AUTO, ath, CTLFLAG_RD, 0, "Atheros driver parameters");
+SYSCTL_NODE(_hw_ath, OID_AUTO, hal, CTLFLAG_RD, 0, "Atheros HAL parameters");
+
 #ifdef AH_DEBUG
 static	int ath_hal_debug = 0;		/* XXX */
+SYSCTL_INT(_hw_ath_hal, OID_AUTO, debug, CTLFLAG_RW, &ath_hal_debug,
+	    0, "Atheros HAL debugging printfs");
 #endif /* AH_DEBUG */
 
-#ifdef __FreeBSD__
+#include "version.h"
+static char ath_hal_version[] = ATH_HAL_VERSION;
 SYSCTL_STRING(_hw_ath_hal, OID_AUTO, version, CTLFLAG_RD, ath_hal_version, 0,
 	"Atheros HAL version");
-#endif /* __FreeBSD__ */
 
 int	ath_hal_dma_beacon_response_time = 2;	/* in TU's */
+SYSCTL_INT(_hw_ath_hal, OID_AUTO, dma_brt, CTLFLAG_RW,
+	   &ath_hal_dma_beacon_response_time, 0,
+	   "Atheros HAL DMA beacon response time");
 int	ath_hal_sw_beacon_response_time = 10;	/* in TU's */
+SYSCTL_INT(_hw_ath_hal, OID_AUTO, sw_brt, CTLFLAG_RW,
+	   &ath_hal_sw_beacon_response_time, 0,
+	   "Atheros HAL software beacon response time");
 int	ath_hal_additional_swba_backoff = 0;	/* in TU's */
+SYSCTL_INT(_hw_ath_hal, OID_AUTO, swba_backoff, CTLFLAG_RW,
+	   &ath_hal_additional_swba_backoff, 0,
+	   "Atheros HAL additional SWBA backoff time");
 
-#ifdef __NetBSD__
 /*
- * Setup sysctl(3) MIB, ath.hal.*.
- *
- * TBD condition SYSCTL_PERMANENT on being an LKM or not
+ * Poll the register looking for a specific value.
  */
-SYSCTL_SETUP(sysctl_ath_hal, "sysctl ath.hal subtree setup")
+HAL_BOOL
+ath_hal_wait(struct ath_hal *ah, u_int reg, u_int32_t mask, u_int32_t val)
 {
-	int rc;
-#ifdef AH_DEBUG
-	int debug_nodenum;
-#endif /* AH_DEBUG */
-	int ath_nodenum, hal_nodenum, version_nodenum;
-	struct sysctlnode *node;
+	int i;
 
-	if ((rc = sysctl_createv(clog, 0, NULL, NULL,
-	    CTLFLAG_PERMANENT, CTLTYPE_NODE, "hw", NULL,
-	    NULL, 0, NULL, 0, CTL_HW, CTL_EOL)) != 0)
-		goto err;
-
-	if ((rc = sysctl_createv(clog, 0, NULL, &node,
-	    CTLFLAG_PERMANENT, CTLTYPE_NODE, "ath", NULL,
-	    NULL, 0, NULL, 0, CTL_HW, CTL_CREATE, CTL_EOL)) != 0)
-		goto err;
-
-	ath_nodenum = node->sysctl_num;
-
-	if ((rc = sysctl_createv(clog, 0, NULL, &node,
-	    CTLFLAG_PERMANENT, CTLTYPE_NODE, "hal", NULL,
-	    NULL, 0, NULL, 0, CTL_HW, ath_nodenum, CTL_CREATE,
-	    CTL_EOL)) != 0)
-		goto err;
-
-	hal_nodenum = node->sysctl_num;
-
-	/* HAL version */
-	if ((rc = sysctl_createv(clog, 0, NULL, &node,
-	    CTLFLAG_PERMANENT|CTLFLAG_READONLY,
-	    CTLTYPE_STRING, "version", NULL, NULL, 0, &ath_hal_version, 0,
-	    CTL_HW, ath_nodenum, hal_nodenum, CTL_CREATE, CTL_EOL)) != 0)
-		goto err;
-
-	version_nodenum = node->sysctl_num;
-
-#ifdef AH_DEBUG
-
-	/* control debugging printfs */
-	if ((rc = sysctl_createv(clog, 0, NULL, &node,
-	    CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
-	    CTLTYPE_INT, "debug", NULL, NULL, 0, &ath_hal_debug, 0,
-	    CTL_HW, ath_nodenum, hal_nodenum, CTL_CREATE, CTL_EOL)) != 0)
-		goto err;
-
-	debug_nodenum = node->sysctl_num;
-
-#endif /* AH_DEBUG */
-	return;
-err:
-	printf("%s: sysctl_createv failed (rc = %d)\n", __func__, rc);
+	for (i = 0; i < AH_TIMEOUT; i++) {
+		if ((OS_REG_READ(ah, reg) & mask) == val)
+			return AH_TRUE;
+		DELAY(10);
+	}
+	ath_hal_printf(ah, "ath_hal_wait: timeout on reg 0x%x: "
+		"0x%08x & 0x%08x != 0x%08x\n", reg, OS_REG_READ(ah, reg),
+		 mask, val);
+	return AH_FALSE;
 }
-#endif /* __NetBSD__ */
 
 void*
 ath_hal_malloc(size_t size)
@@ -209,7 +156,7 @@ void
 HALDEBUG(struct ath_hal *ah, const char* fmt, ...)
 {
 	if (ath_hal_debug) {
-		va_list ap;
+		__va_list ap;
 		va_start(ap, fmt);
 		ath_hal_vprintf(ah, fmt, ap);
 		va_end(ap);
@@ -220,7 +167,7 @@ void
 HALDEBUGn(struct ath_hal *ah, u_int level, const char* fmt, ...)
 {
 	if (ath_hal_debug >= level) {
-		va_list ap;
+		__va_list ap;
 		va_start(ap, fmt);
 		ath_hal_vprintf(ah, fmt, ap);
 		va_end(ap);
@@ -284,9 +231,9 @@ sysctl_hw_ath_hal_log(SYSCTL_HANDLER_ARGS)
 	int error, enable;
 
 	enable = (ath_hal_alq != NULL);
-	error = sysctl_handle_int(oidp, &enable, 0, req);
-	if (error || !req->newptr)
-	        return (error);
+        error = sysctl_handle_int(oidp, &enable, 0, req);
+        if (error || !req->newptr)
+                return (error);
 	else
 		return (ath_hal_setlogging(enable));
 }
@@ -322,7 +269,7 @@ ath_hal_alq_get(struct ath_hal *ah)
 }
 
 void
-ath_hal_reg_write(struct ath_hal *ah, u_int32_t reg, u_int32_t val)
+OS_REG_WRITE(struct ath_hal *ah, u_int32_t reg, u_int32_t val)
 {
 	if (ath_hal_alq) {
 		struct ale *ale = ath_hal_alq_get(ah);
@@ -334,24 +281,15 @@ ath_hal_reg_write(struct ath_hal *ah, u_int32_t reg, u_int32_t val)
 			alq_post(ath_hal_alq, ale);
 		}
 	}
-#if _BYTE_ORDER == _BIG_ENDIAN
-	if (reg >= 0x4000 && reg < 0x5000)
-		bus_space_write_4(ah->ah_st, ah->ah_sh, reg, htole32(val));
-	else
-#endif
-		bus_space_write_4(ah->ah_st, ah->ah_sh, reg, val);
+	bus_space_write_4(ah->ah_st, ah->ah_sh, reg, val);
 }
 
 u_int32_t
-ath_hal_reg_read(struct ath_hal *ah, u_int32_t reg)
+OS_REG_READ(struct ath_hal *ah, u_int32_t reg)
 {
 	u_int32_t val;
 
 	val = bus_space_read_4(ah->ah_st, ah->ah_sh, reg);
-#if _BYTE_ORDER == _BIG_ENDIAN
-	if (reg >= 0x4000 && reg < 0x5000)
-		val = le32toh(val);
-#endif
 	if (ath_hal_alq) {
 		struct ale *ale = ath_hal_alq_get(ah);
 		if (ale) {
@@ -379,42 +317,7 @@ OS_MARK(struct ath_hal *ah, u_int id, u_int32_t v)
 		}
 	}
 }
-#elif defined(AH_DEBUG) || defined(AH_REGOPS_FUNC)
-/*
- * Memory-mapped device register read/write.  These are here
- * as routines when debugging support is enabled and/or when
- * explicitly configured to use function calls.  The latter is
- * for architectures that might need to do something before
- * referencing memory (e.g. remap an i/o window).
- *
- * NB: see the comments in ah_osdep.h about byte-swapping register
- *     reads and writes to understand what's going on below.
- */
-
-void
-ath_hal_reg_write(struct ath_hal *ah, u_int32_t reg, u_int32_t val)
-{
-#if _BYTE_ORDER == _BIG_ENDIAN
-	if (reg >= 0x4000 && reg < 0x5000)
-		bus_space_write_4(ah->ah_st, ah->ah_sh, reg, htole32(val));
-	else
-#endif
-		bus_space_write_4(ah->ah_st, ah->ah_sh, reg, val);
-}
-
-u_int32_t
-ath_hal_reg_read(struct ath_hal *ah, u_int32_t reg)
-{
-	u_int32_t val;
-
-	val = bus_space_read_4(ah->ah_st, ah->ah_sh, reg);
-#if _BYTE_ORDER == _BIG_ENDIAN
-	if (reg >= 0x4000 && reg < 0x5000)
-		val = le32toh(val);
-#endif
-	return val;
-}
-#endif /* AH_DEBUG || AH_REGOPS_FUNC */
+#endif /* AH_DEBUG_ALQ */
 
 #ifdef AH_ASSERT
 void
@@ -426,35 +329,39 @@ ath_hal_assert_failed(const char* filename, int lineno, const char *msg)
 }
 #endif /* AH_ASSERT */
 
-/*
- * Delay n microseconds.
- */
-void
-ath_hal_delay(int n)
-{
-	DELAY(n);
-}
-
 u_int32_t
-ath_hal_getuptime(struct ath_hal *ah)
+OS_GETUPTIME(struct ath_hal *ah)
 {
-	struct timeval tv;
-	int s;
-	s = splclock();
-	tv = mono_time;
-	splx(s);
-
-	return (tv.tv_sec * 1000) + (tv.tv_usec / 1000);
+	struct bintime bt;
+	getbinuptime(&bt);
+	return (bt.sec * 1000) +
+		(((uint64_t)1000 * (uint32_t)(bt.frac >> 32)) >> 32);
 }
 
-void
-bcopy(const void *src, void *dst, size_t len)
+/*
+ * Module glue.
+ */
+
+static int
+ath_hal_modevent(module_t mod, int type, void *unused)
 {
-	(void)memmove(dst, src, len);
+	switch (type) {
+	case MOD_LOAD:
+		if (bootverbose)
+			printf("ath_hal: <Atheros Hardware Access Layer>"
+				"version %s\n", ath_hal_version);
+		return 0;
+	case MOD_UNLOAD:
+		return 0;
+	}
+	return EINVAL;
 }
 
-void
-bzero(void *dst, size_t len)
-{
-	(void)memset(dst, 0, len);
-}
+static moduledata_t ath_hal_mod = {
+	"ath_hal",
+	ath_hal_modevent,
+	0
+};
+DECLARE_MODULE(ath_hal, ath_hal_mod, SI_SUB_DRIVERS, SI_ORDER_ANY);
+MODULE_VERSION(ath_hal, 1);
+MODULE_DEPEND(ath_hal, wlan, 1,1,1);
