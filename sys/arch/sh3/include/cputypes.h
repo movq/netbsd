@@ -1,4 +1,4 @@
-/*	$NetBSD: cputypes.h,v 1.2 2002/02/17 20:59:33 uch Exp $	*/
+/*	$NetBSD: cputypes.h,v 1.3 2002/03/24 18:04:40 uch Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -40,7 +40,6 @@
 #define CPU_ARCH_SH3		3
 #define CPU_ARCH_SH4		4
 
-#define CPU_PRODUCT_UNKNOWN	0
 /* SH3 series */
 #define CPU_PRODUCT_7708	1
 #define CPU_PRODUCT_7708S	2
