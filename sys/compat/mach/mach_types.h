@@ -1,4 +1,4 @@
-/*	$NetBSD: mach_types.h,v 1.4 2002/11/10 02:18:03 manu Exp $	 */
+/*	$NetBSD: mach_types.h,v 1.5 2002/11/10 21:53:41 manu Exp $	 */
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -43,6 +43,7 @@ typedef int mach_port_t;
 typedef int mach_port_name_t;
 typedef int mach_kern_return_t;
 typedef int mach_clock_res_t;
+typedef int mach_clock_id_t;
 typedef int mach_boolean_t;
 typedef int mach_sleep_type_t;
 typedef int mach_timespec_t;
@@ -50,7 +51,11 @@ typedef int mach_absolute_time_t;
 typedef int mach_integer_t;
 typedef int mach_cpu_type_t;
 typedef int mach_cpu_subtype_t;
-typedef unsigned int mach_msg_type_number_t;
+typedef int mach_port_right_t;
+typedef int mach_vm_address_t;
+typedef int mach_vm_inherit_t;
+typedef int mach_vm_prot_t;
+typedef unsigned int mach_natural_t;
 typedef unsigned int mach_vm_size_t;
 typedef unsigned long mach_vm_offset_t;
 typedef void *mach_cproc_t;	/* Unkown, see xnu/osfmk/ppc/hw_exception.s */
