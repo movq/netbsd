@@ -1,4 +1,4 @@
-/*	$NetBSD: video.h,v 1.1 1995/03/26 07:12:08 leo Exp $	*/
+/*	$NetBSD: video.h,v 1.1.1.1 1995/03/26 07:12:08 leo Exp $	*/
 
 /*
  * Copyright (c) 1995 Leo Weppelman.

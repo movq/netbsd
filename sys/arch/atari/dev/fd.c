@@ -1,4 +1,4 @@
-/*	$NetBSD: fd.c,v 1.1 1995/03/26 07:12:11 leo Exp $	*/
+/*	$NetBSD: fd.c,v 1.1.1.1 1995/03/26 07:12:11 leo Exp $	*/
 
 /*
  * Copyright (c) 1995 Leo Weppelman.

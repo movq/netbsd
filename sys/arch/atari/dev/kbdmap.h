@@ -1,4 +1,4 @@
-/*	$NetBSD: kbdmap.h,v 1.1 1995/03/26 07:12:11 leo Exp $	*/
+/*	$NetBSD: kbdmap.h,v 1.1.1.1 1995/03/26 07:12:11 leo Exp $	*/
 
 /*
  * Copyright (c) 1993 Markus Wild

@@ -1,4 +1,4 @@
-/*	$NetBSD: genassym.c,v 1.1 1995/03/26 07:12:21 leo Exp $	*/
+/*	$NetBSD: genassym.c,v 1.1.1.1 1995/03/26 07:12:21 leo Exp $	*/
 
 /*
  * Copyright (c) 1982, 1990 The Regents of the University of California.

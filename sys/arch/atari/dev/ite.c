@@ -1,4 +1,4 @@
-/*	$NetBSD: ite.c,v 1.1 1995/03/26 07:12:10 leo Exp $	*/
+/*	$NetBSD: ite.c,v 1.1.1.1 1995/03/26 07:12:10 leo Exp $	*/
 
 /*
  * Copyright (c) 1988 University of Utah.

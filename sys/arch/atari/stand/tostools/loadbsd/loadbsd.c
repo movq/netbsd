@@ -1,4 +1,4 @@
-/*	$NetBSD: loadbsd.c,v 1.1 1995/03/26 07:12:04 leo Exp $	*/
+/*	$NetBSD: loadbsd.c,v 1.1.1.1 1995/03/26 07:12:04 leo Exp $	*/
 
 /*
  * Copyright (c) 1995 L. Weppelman
