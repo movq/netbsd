@@ -25,7 +25,7 @@
  *        Arne Helme <arne@acm.org>
  *          moto kawasaki <kawasaki@sphere.ad.jp>
  *
- * $Id: m_netbsd132.c,v 1.1 1999/02/14 23:54:07 simonb Exp $
+ * $Id: m_netbsd132.c,v 1.1.1.1 1999/02/14 23:54:07 simonb Exp $
  */
 
 
