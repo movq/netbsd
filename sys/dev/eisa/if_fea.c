@@ -1,4 +1,4 @@
-/*	$NetBSD: if_fea.c,v 1.1 1996/05/20 00:20:39 thorpej Exp $	*/
+/*	$NetBSD: if_fea.c,v 1.1.1.1 1996/05/20 00:20:39 thorpej Exp $	*/
 
 /*-
  * Copyright (c) 1995, 1996 Matt Thomas <matt@3am-software.com>
