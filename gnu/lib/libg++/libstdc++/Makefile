@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 1996/03/09 00:01:40 phil Exp $
+#	$NetBSD: Makefile,v 1.1.1.1 1996/03/09 00:01:40 phil Exp $
 
 LIB=	stdc++
 

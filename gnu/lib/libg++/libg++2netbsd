@@ -1,6 +1,6 @@
 #!/usr/gnu/bin/perl
 #
-#	$NetBSD: libg++2netbsd,v 1.1 1996/03/09 00:00:57 phil Exp $
+#	$NetBSD: libg++2netbsd,v 1.1.1.1 1996/03/09 00:00:57 phil Exp $
 #
 #  Perl script to convert a standard distribution directory for libg++ into
 #	a NetBSD source tree.
