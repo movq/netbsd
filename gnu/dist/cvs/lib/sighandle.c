@@ -384,16 +384,6 @@ void SIG_beginCrSect()
 }
 
 /*
- * Return nonzero if currently in a critical section.
- * Otherwise return zero.
- */
-
-int SIG_inCrSect()
-{
-	return SIG_crSectNest > 0;
-}
-
-/*
  * The following ends a critical section.
  */
 

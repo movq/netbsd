@@ -8,19 +8,8 @@
  * Various useful functions for the CVS support code.
  */
 
-#include <assert.h>
 #include "cvs.h"
 #include "getline.h"
-#include <stdarg.h>
-
-#ifdef HAVE_NANOSLEEP
-# include "xtime.h"
-#else /* HAVE_NANOSLEEP */
-# if !defined HAVE_USLEEP && defined HAVE_SELECT
-    /* use select as a workaround */
-#   include "xselect.h"
-# endif /* !defined HAVE_USLEEP && defined HAVE_SELECT */
-#endif /* !HAVE_NANOSLEEP */
 
 extern char *getlogin ();
 
@@ -53,7 +42,7 @@ xmalloc (bytes)
 /*
  * realloc data and die if it fails [I've always wanted to have "realloc" do
  * a "malloc" if the argument is NULL, but you can't depend on it.  Here, I
- * can *force* it.]
+ * can *force* it.
  */
 void *
 xrealloc (ptr, bytes)
@@ -75,21 +64,6 @@ xrealloc (ptr, bytes)
 	error (1, 0, buf);
     }
     return (cp);
-}
-
-int
-xasprintf(char **buf, const char *fmt, ...)
-{
-    int len;
-    va_list ap;
-
-    va_start(ap, fmt);
-    len = vasprintf(buf, fmt, ap);
-    va_end(ap);
-
-    if (len == -1)
-	error(1, 0, "out of memory: xasprintf(..., \"%s\", ...) failed", fmt);
-    return len;
 }
 
 /* Two constants which tune expand_string.  Having MIN_INCR as large
@@ -137,19 +111,6 @@ expand_string (strptr, n, newsize)
     }
 }
 
-/* *STR is a pointer to a malloc'd string.  *LENP is its allocated
-   length.  Add SRC to the end of it, reallocating if necessary.  */
-void
-xrealloc_and_strcat (str, lenp, src)
-    char **str;
-    size_t *lenp;
-    const char *src;
-{
-
-    expand_string (str, lenp, strlen (*str) + strlen (src) + 1);
-    strcat (*str, src);
-}
-
 /*
  * Duplicate a string, calling xmalloc to allocate some dynamic space
  */
@@ -166,70 +127,60 @@ xstrdup (str)
     return (s);
 }
 
-
-
-/* Remove trailing newlines from STRING, destructively.
- *
- * RETURNS
- *
- *   True if any newlines were removed, false otherwise.
- */
-int
+/* Remove trailing newlines from STRING, destructively. */
+void
 strip_trailing_newlines (str)
-    char *str;
+     char *str;
 {
-    size_t index, origlen;
-    index = origlen = strlen (str);
+    int len;
+    len = strlen (str) - 1;
 
-    while (index > 0 && str[index-1] == '\n')
-	str[--index] = '\0';
-
-    return index != origlen;
+    while (str[len] == '\n')
+	str[len--] = '\0';
 }
 
-
-
-/* Return the number of levels that PATH ascends above where it starts.
- * For example:
- *
- *   "../../foo" -> 2
- *   "foo/../../bar" -> 1
- */
+/* Return the number of levels that path ascends above where it starts.
+   For example:
+   "../../foo" -> 2
+   "foo/../../bar" -> 1
+   */
+/* FIXME: Should be using ISDIRSEP, last_component, or some other
+   mechanism which is more general than just looking at slashes,
+   particularly for the client.c caller.  The server.c caller might
+   want something different, so be careful.  */
 int
-pathname_levels (p)
-    const char *p;
+pathname_levels (path)
+    char *path;
 {
+    char *p;
+    char *q;
     int level;
     int max_level;
 
-    if (p == NULL) return 0;
-
     max_level = 0;
+    p = path;
     level = 0;
     do
     {
-	/* Now look for pathname level-ups.  */
-	if (p[0] == '.' && p[1] == '.' && (p[2] == '\0' || ISDIRSEP (p[2])))
+	q = strchr (p, '/');
+	if (q != NULL)
+	    ++q;
+	if (p[0] == '.' && p[1] == '.' && (p[2] == '\0' || p[2] == '/'))
 	{
 	    --level;
 	    if (-level > max_level)
 		max_level = -level;
 	}
-	else if (p[0] == '\0' || ISDIRSEP (p[0]) ||
-		 (p[0] == '.' && (p[1] == '\0' || ISDIRSEP (p[1]))))
+	else if (p[0] == '.' && (p[1] == '\0' || p[1] == '/'))
 	    ;
 	else
 	    ++level;
-
-	/* q = strchr (p, '/'); but sub ISDIRSEP() for '/': */
-	while (*p != '\0' && !ISDIRSEP (*p)) p++;
-	if (*p != '\0') p++;
-    } while (*p != '\0');
+	p = q;
+    } while (p != NULL);
     return max_level;
 }
 
-
-
+
 /* Free a vector, where (*ARGV)[0], (*ARGV)[1], ... (*ARGV)[*PARGC - 1]
    are malloc'd and so is *ARGV itself.  Such a vector is allocated by
    line2argv or expand_wild, for example.  */
@@ -267,7 +218,9 @@ line2argv (pargc, argv, line, sepchars)
     int argv_allocated;
 
     /* Small for testing.  */
-    argv_allocated = 1;
+    /* argv_allocated must be at least 3 because at some places
+       (e.g. checkout_proc) cvs alters argv[2].  */
+    argv_allocated = 4;
     *argv = (char **) xmalloc (argv_allocated * sizeof (**argv));
 
     *pargc = 0;
@@ -309,12 +262,13 @@ compare_revnums (rev1, rev2)
     const char *rev1;
     const char *rev2;
 {
-    const char *sp, *tp;
+    const char *s, *sp;
+    const char *t, *tp;
     char *snext, *tnext;
     int result = 0;
 
-    sp = rev1;
-    tp = rev2;
+    sp = s = rev1;
+    tp = t = rev2;
     while (result == 0)
     {
 	result = strtoul (sp, &snext, 10) - strtoul (tp, &tnext, 10);
@@ -418,71 +372,6 @@ get_date (date, now)
 #endif
 #endif
 
-
-
-/* Given some revision, REV, return the first prior revision that exists in the
- * RCS file, RCS.
- *
- * ASSUMPTIONS
- *   REV exists.
- *
- * INPUTS
- *   RCS	The RCS node pointer.
- *   REV	An existing revision in the RCS file referred to by RCS.
- *
- * RETURNS
- *   The first prior revision that exists in the RCS file, or NULL if no prior
- *   revision exists.  The caller is responsible for disposing of this string.
- *
- * NOTES
- *   This function currently neglects the case where we are on the trunk with
- *   rev = X.1, where X != 1.  If rev = X.Y, where X != 1 and Y > 1, then this
- *   function should work fine, as revision X.1 must exist, due to RCS rules.
- */
-char *
-previous_rev (rcs, rev)
-    RCSNode *rcs;
-    const char *rev;
-{
-    char *p;
-    char *tmp = xstrdup (rev);
-    long r1;
-    char *retval;
-
-    /* Our retval can have no more digits and dots than our input revision.  */
-    retval = xmalloc (strlen (rev) + 1);
-    p = strrchr (tmp, '.');
-    *p = '\0';
-    r1 = strtol (p+1, NULL, 10);
-    do {
-	if (--r1 == 0)
-	{
-		/* If r1 == 0, then we must be on a branch and our parent must
-		 * exist, or we must be on the trunk with a REV like X.1.
-		 * We are neglecting the X.1 with X != 1 case by assuming that
-		 * there is no previous revision when we discover we were on
-		 * the trunk.
-		 */
-		p = strrchr (tmp, '.');
-		if (p == NULL)
-		    /* We are on the trunk.  */
-		    retval = NULL;
-		else
-		{
-		    *p = '\0';
-		    sprintf (retval, "%s", tmp);
-		}
-		break;
-	}
-	sprintf (retval, "%s.%ld", tmp, r1);
-    } while (!RCS_exist_rev (rcs, retval));
-
-    free (tmp);
-    return retval;
-}
-
-
-
 /* Given two revisions, find their greatest common ancestor.  If the
    two input revisions exist, then rcs guarantees that the gca will
    exist.  */
@@ -493,9 +382,9 @@ gca (rev1, rev2)
     const char *rev2;
 {
     int dots;
-    char *gca, *g;
-    const char *p1, *p2;
-    int r1, r2;
+    char *gca;
+    const char *p[2];
+    int j[2];
     char *retval;
 
     if (rev1 == NULL || rev2 == NULL)
@@ -507,27 +396,52 @@ gca (rev1, rev2)
     /* The greatest common ancestor will have no more dots, and numbers
        of digits for each component no greater than the arguments.  Therefore
        this string will be big enough.  */
-    g = gca = xmalloc (strlen (rev1) + strlen (rev2) + 100);
+    gca = xmalloc (strlen (rev1) + strlen (rev2) + 100);
 
     /* walk the strings, reading the common parts. */
-    p1 = rev1;
-    p2 = rev2;
+    gca[0] = '\0';
+    p[0] = rev1;
+    p[1] = rev2;
     do
     {
-	r1 = strtol (p1, (char **) &p1, 10);
-	r2 = strtol (p2, (char **) &p2, 10);
+	int i;
+	char c[2];
+	char *s[2];
+	
+	for (i = 0; i < 2; ++i)
+	{
+	    /* swap out the dot */
+	    s[i] = strchr (p[i], '.');
+	    if (s[i] != NULL) {
+		c[i] = *s[i];
+	    }
+	    
+	    /* read an int */
+	    j[i] = atoi (p[i]);
+	    
+	    /* swap back the dot... */
+	    if (s[i] != NULL) {
+		*s[i] = c[i];
+		p[i] = s[i] + 1;
+	    }
+	    else
+	    {
+		/* or mark us at the end */
+		p[i] = NULL;
+	    }
+	    
+	}
 	
 	/* use the lowest. */
-	(void) sprintf (g, "%d.", r1 < r2 ? r1 : r2);
-	g += strlen (g);
-	if (*p1 == '.') ++p1;
-	else break;
-	if (*p2 == '.') ++p2;
-	else break;
-    } while (r1 == r2);
+	(void) sprintf (gca + strlen (gca), "%d.",
+			j[0] < j[1] ? j[0] : j[1]);
 
-    /* erase that last dot. */
-    *--g = '\0';
+    } while (j[0] == j[1]
+	     && p[0] != NULL
+	     && p[1] != NULL);
+
+    /* back up over that last dot. */
+    gca[strlen(gca) - 1] = '\0';
 
     /* numbers differ, or we ran out of strings.  we're done with the
        common parts.  */
@@ -537,8 +451,12 @@ gca (rev1, rev2)
     {
 	/* revisions differ in trunk major number.  */
 
-	if (r2 < r1) p1 = p2;
-	if (*p1 == '\0')
+	char *q;
+	const char *s;
+
+	s = (j[0] < j[1]) ? p[0] : p[1];
+
+	if (s == NULL)
 	{
 	    /* we only got one number.  this is strange.  */
 	    error (0, 0, "bad revisions %s or %s", rev1, rev2);
@@ -547,10 +465,13 @@ gca (rev1, rev2)
 	else
 	{
 	    /* we have a minor number.  use it.  */
-	    *g++ = '.';
-	    while (*p1 != '.' && *p1 != '\0')
-		*g++ = *p1++;
-	    *g = '\0';
+	    q = gca + strlen (gca);
+	    
+	    *q++ = '.';
+	    for ( ; *s != '.' && *s != '\0'; )
+		*q++ = *s++;
+	    
+	    *q = '\0';
 	}
     }
     else if ((dots & 1) == 0)
@@ -558,8 +479,10 @@ gca (rev1, rev2)
 	/* if we have an even number of dots, then we have a branch.
 	   remove the last number in order to make it a revision.  */
 	
-	g = strrchr (gca, '.');
-	*g = '\0';
+	char *s;
+
+	s = strrchr(gca, '.');
+	*s = '\0';
     }
 
     retval = xstrdup (gca);
@@ -608,10 +531,9 @@ check_numeric (rev, argc, argv)
  */
 char *
 make_message_rcslegal (message)
-     const char *message;
+     char *message;
 {
-    char *dst, *dp;
-    const char *mp;
+    char *dst, *dp, *mp;
 
     if (message == NULL) message = "";
 
@@ -644,61 +566,6 @@ make_message_rcslegal (message)
     return dst;
 }
 
-
-
-/*
- * file_has_conflict
- *
- * This function compares the timestamp of a file with ts_conflict set
- * to the timestamp on the actual file and returns TRUE or FALSE based
- * on the results.
- *
- * This function does not check for actual markers in the file and
- * file_has_markers() function should be called when that is interesting.
- *
- * ASSUMPTIONS
- *  The ts_conflict field is not NULL.
- *
- * RETURNS
- *  TRUE	ts_conflict matches the current timestamp.
- *  FALSE	The ts_conflict field does not match the file's
- *		timestamp.
- */
-int
-file_has_conflict (finfo, ts_conflict)
-    const struct file_info *finfo;
-    const char *ts_conflict;
-{
-    char *filestamp;
-    int retcode;
-
-    /* If ts_conflict is NULL, there was no merge since the last
-     * commit and there can be no conflict.
-     */
-    assert (ts_conflict);
-
-    /*
-     * If the timestamp has changed and no
-     * conflict indicators are found, it isn't a
-     * conflict any more.
-     */
-
-#ifdef SERVER_SUPPORT
-    if (server_active)
-	retcode = ts_conflict[0] == '=';
-    else 
-#endif /* SERVER_SUPPORT */
-    {
-	filestamp = time_stamp (finfo->file);
-	retcode = !strcmp (ts_conflict, filestamp);
-	free (filestamp);
-    }
-
-    return retcode;
-}
-
-
-
 /* Does the file FINFO contain conflict markers?  The whole concept
    of looking at the contents of the file to figure out whether there are
    unresolved conflicts is kind of bogus (people do want to manage files
@@ -719,9 +586,7 @@ file_has_markers (finfo)
 	error (1, errno, "cannot open %s", finfo->fullname);
     while (getline (&line, &line_allocated, fp) > 0)
     {
-	if (strncmp (line, RCS_MERGE_PAT_1, sizeof RCS_MERGE_PAT_1 - 1) == 0 ||
-	    strncmp (line, RCS_MERGE_PAT_2, sizeof RCS_MERGE_PAT_2 - 1) == 0 ||
-	    strncmp (line, RCS_MERGE_PAT_3, sizeof RCS_MERGE_PAT_3 - 1) == 0)
+	if (strncmp (line, RCS_MERGE_PAT, sizeof RCS_MERGE_PAT - 1) == 0)
 	{
 	    result = 1;
 	    goto out;
@@ -782,9 +647,9 @@ get_file (name, fullname, mode, buf, bufsize, len)
 	e = open_file (name, mode);
     }
 
-    if (*buf == NULL || *bufsize <= filesize)
+    if (*bufsize < filesize)
     {
-	*bufsize = filesize + 1;
+	*bufsize = filesize;
 	*buf = xrealloc (*buf, *bufsize);
     }
 
@@ -826,9 +691,12 @@ get_file (name, fullname, mode, buf, bufsize, len)
     *len = nread;
 
     /* Force *BUF to be large enough to hold a null terminator. */
-    if (nread == *bufsize)
-	expand_string (buf, bufsize, *bufsize + 1);
-    (*buf)[nread] = '\0';
+    if (*buf != NULL)
+    {
+	if (nread == *bufsize)
+	    expand_string (buf, bufsize, *bufsize + 1);
+	(*buf)[nread] = '\0';
+    }
 }
 
 
@@ -841,18 +709,22 @@ void
 resolve_symlink (filename)
      char **filename;
 {
-    if (filename == NULL || *filename == NULL)
+    if ((! filename) || (! *filename))
 	return;
 
     while (islink (*filename))
     {
+	char *newname;
 #ifdef HAVE_READLINK
 	/* The clean thing to do is probably to have each filesubr.c
 	   implement this (with an error if not supported by the
 	   platform, in which case islink would presumably return 0).
 	   But that would require editing each filesubr.c and so the
 	   expedient hack seems to be looking at HAVE_READLINK.  */
-	char *newname = xreadlink (*filename);
+	newname = xreadlink (*filename);
+#else
+	error (1, 0, "internal error: islink doesn't like readlink");
+#endif
 	
 	if (isabsolute (newname))
 	{
@@ -861,7 +733,7 @@ resolve_symlink (filename)
 	}
 	else
 	{
-	    const char *oldname = last_component (*filename);
+	    char *oldname = last_component (*filename);
 	    int dirlen = oldname - *filename;
 	    char *fullnewname = xmalloc (dirlen + strlen (newname) + 1);
 	    strncpy (fullnewname, *filename, dirlen);
@@ -870,9 +742,6 @@ resolve_symlink (filename)
 	    free (*filename);
 	    *filename = fullnewname;
 	}
-#else
-	error (1, 0, "internal error: islink doesn't like readlink");
-#endif
     }
 }
 
@@ -909,110 +778,3 @@ backup_file (filename, suffix)
     return backup_name;
 }
 
-/*
- * Copy a string into a buffer escaping any shell metacharacters.  The
- * buffer should be at least twice as long as the string.
- *
- * Returns a pointer to the terminating NUL byte in buffer.
- */
-
-char *
-shell_escape(buf, str)
-    char *buf;
-    const char *str;
-{
-    static const char meta[] = "$`\\\"";
-    const char *p;
-
-    for (;;)
-    {
-	p = strpbrk(str, meta);
-	if (!p) p = str + strlen(str);
-	if (p > str)
-	{
-	    memcpy(buf, str, p - str);
-	    buf += p - str;
-	}
-	if (!*p) break;
-	*buf++ = '\\';
-	*buf++ = *p++;
-	str = p;
-    }
-    *buf = '\0';
-    return buf;
-}
-
-
-
-/*
- * We can only travel forwards in time, not backwards.  :)
- */
-void
-sleep_past (desttime)
-    time_t desttime;
-{
-    time_t t;
-    long s;
-    long us;
-
-    while (time (&t) <= desttime)
-    {
-#ifdef HAVE_GETTIMEOFDAY
-	struct timeval tv;
-	gettimeofday (&tv, NULL);
-	if (tv.tv_sec > desttime)
-	    break;
-	s = desttime - tv.tv_sec;
-	if (tv.tv_usec > 0)
-	    us = 1000000 - tv.tv_usec;
-	else
-	{
-	    s++;
-	    us = 0;
-	}
-#else
-	/* default to 20 ms increments */
-	s = desttime - t;
-	us = 20000;
-#endif
-
-#if defined(HAVE_NANOSLEEP)
-	{
-	    struct timespec ts;
-	    ts.tv_sec = s;
-	    ts.tv_nsec = us * 1000;
-	    (void)nanosleep (&ts, NULL);
-	}
-#elif defined(HAVE_USLEEP)
-	if (s > 0)
-	    (void)sleep (s);
-	else
-	    (void)usleep (us);
-#elif defined(HAVE_SELECT)
-	{
-	    /* use select instead of sleep since it is a fairly portable way of
-	     * sleeping for ms.
-	     */
-	    struct timeval tv;
-	    tv.tv_sec = s;
-	    tv.tv_usec = us;
-	    (void)select (0, (fd_set *)NULL, (fd_set *)NULL, (fd_set *)NULL,
-                          &tv);
-	}
-#else
-	if (us > 0) s++;
-	(void)sleep(s);
-#endif
-    }
-}
-
-
-
-/* Return non-zero iff FILENAME is absolute.
-   Trivial under Unix, but more complicated under other systems.  */
-int
-isabsolute (filename)
-    const char *filename;
-{
-    return ISABSOLUTE (filename);
-}

@@ -9,10 +9,8 @@
 #include "cvs.h"
 
 #ifdef SERVER_SUPPORT
-static void time_stamp_server PROTO((const char *, Vers_TS *, Entnode *));
+static void time_stamp_server PROTO((char *, Vers_TS *, Entnode *));
 #endif
-
-
 
 /* Fill in and return a Vers_TS structure for the file FINFO.  TAG and
    DATE are from the command line.  */
@@ -57,13 +55,13 @@ Version_TS (finfo, options, tag, date, force_tag_match, set_time)
     else
     {
 	p = findnode_fn (finfo->entries, finfo->file);
-	sdtp = finfo->entries->list->data; /* list-private */
+	sdtp = (struct stickydirtag *) finfo->entries->list->data; /* list-private */
     }
 
     entdata = NULL;
     if (p != NULL)
     {
-	entdata = p->data;
+	entdata = (Entnode *) p->data;
 
 	if (entdata->type == ENT_SUBDIR)
 	{
@@ -89,17 +87,22 @@ Version_TS (finfo, options, tag, date, force_tag_match, set_time)
 	    vers_ts->vn_user = xstrdup (entdata->version);
 	    vers_ts->ts_rcs = xstrdup (entdata->timestamp);
 	    vers_ts->ts_conflict = xstrdup (entdata->conflict);
-	    if (!(tag || date) && !(sdtp && sdtp->aflag))
+	    if (!tag)
 	    {
-		vers_ts->tag = xstrdup (entdata->tag);
-		vers_ts->date = xstrdup (entdata->date);
+		if (!(sdtp && sdtp->aflag))
+		    vers_ts->tag = xstrdup (entdata->tag);
+	    }
+	    if (!date)
+	    {
+		if (!(sdtp && sdtp->aflag))
+		    vers_ts->date = xstrdup (entdata->date);
 	    }
 	    vers_ts->entdata = entdata;
 	}
 	/* Even if we don't have an "entries line" as such
 	   (vers_ts->entdata), we want to pick up options which could
 	   have been from a Kopt protocol request.  */
-	if (!options || *options == '\0')
+	if (!options || (options && *options == '\0'))
 	{
 	    if (!(sdtp && sdtp->aflag))
 		vers_ts->options = xstrdup (entdata->options);
@@ -123,8 +126,6 @@ Version_TS (finfo, options, tag, date, force_tag_match, set_time)
 	    char *rcsexpand = RCS_getexpand (finfo->rcs);
 	    if (rcsexpand != NULL)
 	    {
-		if (vers_ts->options != NULL)
-		    free (vers_ts->options);
 		vers_ts->options = xmalloc (strlen (rcsexpand) + 3);
 		strcpy (vers_ts->options, "-k");
 		strcat (vers_ts->options, rcsexpand);
@@ -206,10 +207,11 @@ Version_TS (finfo, options, tag, date, force_tag_match, set_time)
 		struct utimbuf t;
 
 		memset (&t, 0, sizeof (t));
-		t.modtime = RCS_getrevtime (rcsdata, vers_ts->vn_rcs, 0, 0);
+		t.modtime =
+		    RCS_getrevtime (rcsdata, vers_ts->vn_rcs, 0, 0);
 		if (t.modtime != (time_t) -1)
 		{
-		    (void) time (&t.actime);
+		    t.actime = t.modtime;
 
 #ifdef UTIME_EXPECTS_WRITABLE
 		    if (!iswritable (finfo->file))
@@ -227,7 +229,7 @@ Version_TS (finfo, options, tag, date, force_tag_match, set_time)
 		    (void) utime (finfo->file, &t);
 
 #ifdef UTIME_EXPECTS_WRITABLE
-		    if (change_it_back)
+		    if (change_it_back == 1)
 		    {
 			xchmod (finfo->file, 0);
 			change_it_back = 0;
@@ -262,7 +264,7 @@ Version_TS (finfo, options, tag, date, force_tag_match, set_time)
 
 static void
 time_stamp_server (file, vers_ts, entdata)
-    const char *file;
+    char *file;
     Vers_TS *vers_ts;
     Entnode *entdata;
 {
@@ -287,7 +289,7 @@ time_stamp_server (file, vers_ts, entdata)
 	else if (entdata->timestamp
 		 && entdata->timestamp[0] == '=')
 	    mark_unchanged (vers_ts);
-	else if (entdata->timestamp
+	else if (entdata->timestamp != NULL
 		 && (entdata->timestamp[0] == 'M'
 		     || entdata->timestamp[0] == 'D')
 		 && entdata->timestamp[1] == '\0')
@@ -303,6 +305,7 @@ time_stamp_server (file, vers_ts, entdata)
     else
     {
         struct tm *tm_p;
+        struct tm local_tm;
 
 	vers_ts->ts_user = xmalloc (25);
 	/* We want to use the same timestamp format as is stored in the
@@ -313,10 +316,15 @@ time_stamp_server (file, vers_ts, entdata)
 	   stored in local time, and therefore it is not possible to cause
 	   st_mtime to be out of sync by changing the timezone.  */
 	tm_p = gmtime (&sb.st_mtime);
-	cp = tm_p ? asctime (tm_p) : ctime (&sb.st_mtime);
+	if (tm_p)
+	{
+	    memcpy (&local_tm, tm_p, sizeof (local_tm));
+	    cp = asctime (&local_tm);	/* copy in the modify time */
+	}
+	else
+	    cp = ctime (&sb.st_mtime);
+
 	cp[24] = 0;
-	/* Fix non-standard format.  */
-	if (cp[8] == '0') cp[8] = ' ';
 	(void) strcpy (vers_ts->ts_user, cp);
     }
 }
@@ -328,28 +336,20 @@ time_stamp_server (file, vers_ts, entdata)
  */
 char *
 time_stamp (file)
-    const char *file;
+    char *file;
 {
     struct stat sb;
     char *cp;
-    char *ts = NULL;
-    time_t mtime = 0L;
+    char *ts;
 
-    if (!CVS_LSTAT (file, &sb))
+    if (CVS_LSTAT (file, &sb) < 0)
     {
-	mtime = sb.st_mtime;
+	ts = NULL;
     }
-    /* If it's a symlink, return whichever is the newest mtime of
-       the link and its target, for safety.
-    */
-    if (!CVS_STAT (file, &sb))
-    {
-        if (mtime < sb.st_mtime)
-	    mtime = sb.st_mtime;
-    }
-    if (mtime)
+    else
     {
 	struct tm *tm_p;
+        struct tm local_tm;
 	ts = xmalloc (25);
 	/* We want to use the same timestamp format as is stored in the
 	   st_mtime.  For unix (and NT I think) this *must* be universal
@@ -359,10 +359,15 @@ time_stamp (file)
 	   stored in local time, and therefore it is not possible to cause
 	   st_mtime to be out of sync by changing the timezone.  */
 	tm_p = gmtime (&sb.st_mtime);
-	cp = tm_p ? asctime (tm_p) : ctime (&sb.st_mtime);
+	if (tm_p)
+	{
+	    memcpy (&local_tm, tm_p, sizeof (local_tm));
+	    cp = asctime (&local_tm);	/* copy in the modify time */
+	}
+	else
+	    cp = ctime(&sb.st_mtime);
+
 	cp[24] = 0;
-	/* Fix non-standard format.  */
-	if (cp[8] == '0') cp[8] = ' ';
 	(void) strcpy (ts, cp);
     }
 

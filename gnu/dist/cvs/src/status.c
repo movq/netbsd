@@ -10,8 +10,8 @@
 
 #include "cvs.h"
 
-static Dtype status_dirproc PROTO ((void *callerdat, const char *dir,
-				    const char *repos, const char *update_dir,
+static Dtype status_dirproc PROTO ((void *callerdat, char *dir,
+				    char *repos, char *update_dir,
 				    List *entries));
 static int status_fileproc PROTO ((void *callerdat, struct file_info *finfo));
 static int tag_list_proc PROTO((Node * p, void *closure));
@@ -67,7 +67,7 @@ cvsstatus (argc, argv)
     wrap_setup ();
 
 #ifdef CLIENT_SUPPORT
-    if (current_parsed_root->isremote)
+    if (client_active)
     {
 	start_server ();
 
@@ -77,7 +77,6 @@ cvsstatus (argc, argv)
 	    send_arg("-v");
 	if (local)
 	    send_arg("-l");
-	send_arg ("--");
 
 	/* For a while, we tried setting SEND_NO_CONTENTS here so this
 	   could be a fast operation.  That prevents the
@@ -107,8 +106,7 @@ cvsstatus (argc, argv)
     err = start_recursion (status_fileproc, (FILESDONEPROC) NULL,
 			   status_dirproc, (DIRLEAVEPROC) NULL, NULL,
 			   argc, argv, local,
-			   W_LOCAL, 0, CVS_LOCK_READ, (char *) NULL, 1,
-			   (char *) NULL);
+			   W_LOCAL, 0, 1, (char *) NULL, 1);
 
     return (err);
 }
@@ -137,9 +135,11 @@ status_fileproc (callerdat, finfo)
 	case T_CHECKOUT:
 	    sstat = "Needs Checkout";
 	    break;
+#ifdef SERVER_SUPPORT
 	case T_PATCH:
 	    sstat = "Needs Patch";
 	    break;
+#endif
 	case T_CONFLICT:
 	    /* I _think_ that "unresolved" is correct; that if it has
 	       been resolved then the status will change.  But I'm not
@@ -153,15 +153,9 @@ status_fileproc (callerdat, finfo)
 	    sstat = "Locally Removed";
 	    break;
 	case T_MODIFIED:
-	    if ( vers->ts_conflict
-		 && ( file_has_conflict ( finfo, vers->ts_conflict )
-		       || file_has_markers ( finfo ) ) )
+	    if (vers->ts_conflict)
 		sstat = "File had conflicts on merge";
 	    else
-		/* Note that we do not re Register() the file when we spot
-		 * a resolved conflict like update_fileproc() does on the
-		 * premise that status should not alter the sandbox.
-		 */
 		sstat = "Locally Modified";
 	    break;
 	case T_REMOVE_ENTRY:
@@ -323,9 +317,9 @@ status_fileproc (callerdat, finfo)
 static Dtype
 status_dirproc (callerdat, dir, repos, update_dir, entries)
     void *callerdat;
-    const char *dir;
-    const char *repos;
-    const char *update_dir;
+    char *dir;
+    char *repos;
+    char *update_dir;
     List *entries;
 {
     if (!quiet)
@@ -351,7 +345,7 @@ tag_list_proc (p, closure)
 		   + (branch ? strlen (branch) : strlen (p->data)));
     sprintf (buf, "\t%-25s\t(%s: %s)\n", p->key,
 	     branch ? "branch" : "revision",
-	     branch ? branch : (char *)p->data);
+	     branch ? branch : p->data);
     cvs_output (buf, 0);
     free (buf);
 

@@ -300,7 +300,7 @@ finish_output ()
   if (paginate_flag && outfile != 0 && outfile != stdout)
     {
 #ifdef PR_PROGRAM
-      int wstatus, w;
+      int wstatus;
       if (ferror (outfile))
 	fatal ("write error");
 # if ! HAVE_FORK
@@ -308,9 +308,7 @@ finish_output ()
 # else /* HAVE_FORK */
       if (fclose (outfile) != 0)
 	pfatal_with_name ("write error");
-      while ((w = waitpid (pr_pid, &wstatus, 0)) < 0 && errno == EINTR)
-	;
-      if (w < 0)
+      if (waitpid (pr_pid, &wstatus, 0) < 0)
 	pfatal_with_name ("waitpid");
 # endif /* HAVE_FORK */
       if (wstatus != 0)
@@ -368,7 +366,7 @@ printf_output (format, va_alist)
       char *str;
       int num;
       int ch;
-      char buf[100];
+      unsigned char buf[100];
 
       while ((q = strchr (p, '%')) != NULL)
 	{

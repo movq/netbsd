@@ -10,20 +10,17 @@
 #include "getline.h"
 #include <assert.h>
 
-extern char *logHistory;
-
 /*
  * Parse the INFOFILE file for the specified REPOSITORY.  Invoke CALLPROC for
- * the first line in the file that matches the REPOSITORY, or if ALL != 0, any
- * lines matching "ALL", or if no lines match, the last line matching
- * "DEFAULT".
+ * the first line in the file that matches the REPOSITORY, or if ALL != 0, any lines
+ * matching "ALL", or if no lines match, the last line matching "DEFAULT".
  *
  * Return 0 for success, -1 if there was not an INFOFILE, and >0 for failure.
  */
 int
 Parse_Info (infofile, repository, callproc, all)
-    const char *infofile;
-    const char *repository;
+    char *infofile;
+    char *repository;
     CALLPROC callproc;
     int all;
 {
@@ -33,14 +30,12 @@ Parse_Info (infofile, repository, callproc, all)
     char *line = NULL;
     size_t line_allocated = 0;
     char *default_value = NULL;
-    int default_line = 0;
-    char *expanded_value;
+    char *expanded_value= NULL;
     int callback_done, line_number;
-    char *cp, *exp, *value;
-    const char *srepos;
+    char *cp, *exp, *value, *srepos;
     const char *regex_err;
 
-    if (current_parsed_root == NULL)
+    if (CVSroot_original == NULL)
     {
 	/* XXX - should be error maybe? */
 	error (0, 0, "CVSROOT variable not set");
@@ -48,11 +43,11 @@ Parse_Info (infofile, repository, callproc, all)
     }
 
     /* find the info file and open it */
-    infopath = xmalloc (strlen (current_parsed_root->directory)
+    infopath = xmalloc (strlen (CVSroot_directory)
 			+ strlen (infofile)
 			+ sizeof (CVSROOTADM)
-			+ 3);
-    (void) sprintf (infopath, "%s/%s/%s", current_parsed_root->directory,
+			+ 10);
+    (void) sprintf (infopath, "%s/%s/%s", CVSroot_directory,
 		    CVSROOTADM, infofile);
     fp_info = CVS_FOPEN (infopath, "r");
     if (fp_info == NULL)
@@ -68,12 +63,7 @@ Parse_Info (infofile, repository, callproc, all)
     srepos = Short_Repository (repository);
 
     if (trace)
-	(void) fprintf (stderr, "%s-> Parse_Info (%s, %s, %s)\n",
-#ifdef SERVER_SUPPORT
-			server_active ? "S" : " ",
-#else
-			"",
-#endif
+	(void) fprintf (stderr, " -> ParseInfo(%s, %s, %s)\n",
 			infopath, srepos, all ? "ALL" : "not ALL");
 
     /* search the info file for lines that match */
@@ -117,6 +107,14 @@ Parse_Info (infofile, repository, callproc, all)
 	if ((cp = strrchr (value, '\n')) != NULL)
 	    *cp = '\0';
 
+	if (expanded_value != NULL)
+	    free (expanded_value);
+	expanded_value = expand_path (value, infofile, line_number);
+	if (!expanded_value)
+	{
+	    continue;
+	}
+
 	/*
 	 * At this point, exp points to the regular expression, and value
 	 * points to the value to call the callback routine with.  Evaluate
@@ -127,14 +125,11 @@ Parse_Info (infofile, repository, callproc, all)
 	/* save the default value so we have it later if we need it */
 	if (strcmp (exp, "DEFAULT") == 0)
 	{
+	    /* Is it OK to silently ignore all but the last DEFAULT
+               expression?  */
 	    if (default_value != NULL)
-	    {
-		error (0, 0, "Multiple `DEFAULT' lines (%d and %d) in %s file",
-		       default_line, line_number, infofile);
 		free (default_value);
-	    }
-	    default_value = xstrdup(value);
-	    default_line = line_number;
+	    default_value = xstrdup (expanded_value);
 	    continue;
 	}
 
@@ -145,17 +140,11 @@ Parse_Info (infofile, repository, callproc, all)
 	 */
 	if (strcmp (exp, "ALL") == 0)
 	{
-	    if (!all)
+	    if (all)
+		err += callproc (repository, expanded_value);
+	    else
 		error(0, 0, "Keyword `ALL' is ignored at line %d in %s file",
 		      line_number, infofile);
-	    else if ((expanded_value = expand_path (value, infofile,
-                                                    line_number)) != NULL)
-	    {
-		err += callproc (repository, expanded_value);
-		free (expanded_value);
-	    }
-	    else
-		err++;
 	    continue;
 	}
 
@@ -174,13 +163,7 @@ Parse_Info (infofile, repository, callproc, all)
 	    continue;				/* no match */
 
 	/* it did, so do the callback and note that we did one */
-	if ((expanded_value = expand_path (value, infofile, line_number)) != NULL)
-	{
-	    err += callproc (repository, expanded_value);
-	    free (expanded_value);
-	}
-	else
-	    err++;
+	err += callproc (repository, expanded_value);
 	callback_done = 1;
     }
     if (ferror (fp_info))
@@ -190,19 +173,13 @@ Parse_Info (infofile, repository, callproc, all)
 
     /* if we fell through and didn't callback at all, do the default */
     if (callback_done == 0 && default_value != NULL)
-    {
-	if ((expanded_value = expand_path (default_value, infofile, default_line)) != NULL)
-	{
-	    err += callproc (repository, expanded_value);
-	    free (expanded_value);
-	}
-	else
-	    err++;
-    }
+	err += callproc (repository, default_value);
 
     /* free up space if necessary */
     if (default_value != NULL)
 	free (default_value);
+    if (expanded_value != NULL)
+	free (expanded_value);
     free (infopath);
     if (line != NULL)
 	free (line);
@@ -218,9 +195,8 @@ Parse_Info (infofile, repository, callproc, all)
    KEYWORD=VALUE.  There is currently no way to have a multi-line
    VALUE (would be nice if there was, probably).
 
-   CVSROOT is the $CVSROOT directory
-   (current_parsed_root->directory might not be set yet, so this
-   function takes the cvsroot as a function argument).
+   CVSROOT is the $CVSROOT directory (CVSroot_directory might not be
+   set yet).
 
    Returns 0 for success, negative value for failure.  Call
    error(0, ...) on errors in addition to the return value.  */
@@ -244,7 +220,7 @@ parse_config (cvsroot)
 	return 0;
     parsed = 1;
 
-    infopath = xmalloc (strlen (cvsroot)
+    infopath = malloc (strlen (cvsroot)
 			+ sizeof (CVSROOTADM_CONFIG)
 			+ sizeof (CVSROOTADM)
 			+ 10);
@@ -295,7 +271,7 @@ parse_config (cvsroot)
 	   for making sure the syntax is consistent.  Any good examples
 	   to follow there (Apache?)?  */
 
-	/* Strip the trailing newline.  There will be one unless we
+	/* Strip the training newline.  There will be one unless we
 	   read a partial line without a newline, and then got end of
 	   file (or error?).  */
 
@@ -350,14 +326,6 @@ parse_config (cvsroot)
 		goto error_return;
 	    }
 	}
-	else if (strcmp (line, "tag") == 0) {
-	    RCS_citag = xstrdup(p);
-	    if (RCS_citag == NULL) {
-		error (0, 0, "%s: no memory for local tag '%s'",
-		       infopath, p);
-		goto error_return;
-	    }
-	}
 	else if (strcmp (line, "PreservePermissions") == 0)
 	{
 	    if (strcmp (p, "no") == 0)
@@ -398,23 +366,6 @@ warning: this CVS does not support PreservePermissions");
 	    /* Could try some validity checking, like whether we can
 	       opendir it or something, but I don't see any particular
 	       reason to do that now rather than waiting until lock.c.  */
-	}
-	else if (strcmp (line, "LogHistory") == 0)
-	{
-	    if (strcmp (p, "all") != 0)
-	    {
-		logHistory=xmalloc(strlen (p) + 1);
-		strcpy (logHistory, p);
-	    }
-	}
-	else if (strcmp (line, "RereadLogAfterVerify") == 0)
-	{
-	    if (strcmp (p, "no") == 0 || strcmp (p, "never") == 0)
-	      RereadLogAfterVerify = LOGMSG_REREAD_NEVER;
-	    else if (strcmp (p, "yes") == 0 || strcmp (p, "always") == 0)
-	      RereadLogAfterVerify = LOGMSG_REREAD_ALWAYS;
-	    else if (strcmp (p, "stat") == 0)
-	      RereadLogAfterVerify = LOGMSG_REREAD_STAT;
 	}
 	else
 	{

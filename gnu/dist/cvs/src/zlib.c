@@ -51,8 +51,8 @@ static int compress_buffer_input PROTO((void *, char *, int, int, int *));
 static int compress_buffer_output PROTO((void *, const char *, int, int *));
 static int compress_buffer_flush PROTO((void *));
 static int compress_buffer_block PROTO((void *, int));
-static int compress_buffer_shutdown_input PROTO((struct buffer *));
-static int compress_buffer_shutdown_output PROTO((struct buffer *));
+static int compress_buffer_shutdown_input PROTO((void *));
+static int compress_buffer_shutdown_output PROTO((void *));
 
 /* Report an error from one of the zlib functions.  */
 
@@ -153,10 +153,10 @@ compress_buffer_input (closure, data, need, size, got)
     bd = cb->buf->data;
     if (bd == NULL)
     {
-	bd = ((struct buffer_data *) xmalloc (sizeof (struct buffer_data)));
+	bd = ((struct buffer_data *) malloc (sizeof (struct buffer_data)));
 	if (bd == NULL)
 	    return -2;
-	bd->text = (char *) xmalloc (BUFFER_DATA_SIZE);
+	bd->text = (char *) malloc (BUFFER_DATA_SIZE);
 	if (bd->text == NULL)
 	{
 	    free (bd);
@@ -355,10 +355,10 @@ compress_buffer_block (closure, block)
 /* Shut down an input buffer.  */
 
 static int
-compress_buffer_shutdown_input (buf)
-     struct buffer *buf;
+compress_buffer_shutdown_input (closure)
+     void *closure;
 {
-    struct compress_buffer *cb = (struct compress_buffer *) buf->closure;
+    struct compress_buffer *cb = (struct compress_buffer *) closure;
     int zstatus;
 
     /* Pick up any trailing data, such as the checksum.  */
@@ -387,10 +387,10 @@ compress_buffer_shutdown_input (buf)
 /* Shut down an output buffer.  */
 
 static int
-compress_buffer_shutdown_output (buf)
-     struct buffer *buf;
+compress_buffer_shutdown_output (closure)
+     void *closure;
 {
-    struct compress_buffer *cb = (struct compress_buffer *) buf->closure;
+    struct compress_buffer *cb = (struct compress_buffer *) closure;
     int zstatus, status;
 
     do
@@ -431,20 +431,6 @@ compress_buffer_shutdown_output (buf)
 /* Here is our librarified gzip implementation.  It is very minimal
    but attempts to be RFC1952 compliant.  */
 
-/* GZIP ID byte values */
-#define GZIP_ID1	31
-#define GZIP_ID2	139
-
-/* Compression methods */
-#define GZIP_CDEFLATE	8
-
-/* Flags */
-#define GZIP_FTEXT	1
-#define GZIP_FHCRC	2
-#define GZIP_FEXTRA	4
-#define GZIP_FNAME	8
-#define GZIP_FCOMMENT	16
-
 /* BUF should contain SIZE bytes of gzipped data (RFC1952/RFC1951).
    We are to uncompress the data and write the result to the file
    descriptor FD.  If something goes wrong, give a nonfatal error message
@@ -464,78 +450,28 @@ gunzip_and_write (fd, fullname, buf, size)
     unsigned char outbuf[32768];
     unsigned long crc;
 
-    if (size < 10)
-    {
-	error (0, 0, "gzipped data too small - lacks complete header");
-	return 1;
-    }
-    if (buf[0] != GZIP_ID1 || buf[1] != GZIP_ID2)
+    if (buf[0] != 31 || buf[1] != 139)
     {
 	error (0, 0, "gzipped data does not start with gzip identification");
 	return 1;
     }
-    if (buf[2] != GZIP_CDEFLATE)
+    if (buf[2] != 8)
     {
 	error (0, 0, "only the deflate compression method is supported");
 	return 1;
     }
 
     /* Skip over the fixed header, and then skip any of the variable-length
-       fields.  As we skip each field, we keep pos <= size. The checks
-       on positions and lengths are really checks for malformed or 
-       incomplete gzip data.  */
+       fields.  */
     pos = 10;
-    if (buf[3] & GZIP_FEXTRA)
-    {
-	if (pos + 2 >= size) 
-	{
-	    error (0, 0, "%s lacks proper gzip XLEN field", fullname);
-	    return 1;
-	}
+    if (buf[3] & 4)
 	pos += buf[pos] + (buf[pos + 1] << 8) + 2;
-	if (pos > size) 
-	{
-	    error (0, 0, "%s lacks proper gzip \"extra field\"", fullname);
-	    return 1;
-	}
-
-    }
-    if (buf[3] & GZIP_FNAME)
-    {
-	unsigned char *p = memchr(buf + pos, '\0', size - pos);
-	if (p == NULL)
-	{
-	    error (0, 0, "%s has bad gzip filename field", fullname);
-	    return 1;
-	}
-	pos = p - buf + 1;
-    }
-    if (buf[3] & GZIP_FCOMMENT)
-    {
-	unsigned char *p = memchr(buf + pos, '\0', size - pos);
-	if (p == NULL)
-	{
-	    error (0, 0, "%s has bad gzip comment field", fullname);
-	    return 1;
-	}
-	pos = p - buf + 1;
-    }
-    if (buf[3] & GZIP_FHCRC)
-    {
+    if (buf[3] & 8)
+	pos += strlen (buf + pos) + 1;
+    if (buf[3] & 16)
+	pos += strlen (buf + pos) + 1;
+    if (buf[3] & 2)
 	pos += 2;
-	if (pos > size) 
-	{
-	    error (0, 0, "%s has bad gzip CRC16 field", fullname);
-	    return 1;
-	}
-    }
-
-    /* There could be no data to decompress - check and short circuit.  */
-    if (pos >= size)
-    {
-	error (0, 0, "gzip data incomplete for %s (no data)", fullname);
-	return 1;
-    }
 
     memset (&zstr, 0, sizeof zstr);
     /* Passing a negative argument tells zlib not to look for a zlib
@@ -577,29 +513,19 @@ gunzip_and_write (fd, fullname, buf, size)
     if (zstatus != Z_OK)
 	compress_error (0, zstatus, &zstr, fullname);
 
-    /* Check that there is still 8 trailer bytes remaining (CRC32
-       and ISIZE).  Check total decomp. data, plus header len (pos)
-       against input buffer total size.  */
-    pos += zstr.total_in;
-    if (size - pos != 8)
-    {
-	error (0, 0, "gzip data incomplete for %s (no trailer)", fullname);
-	return 1;
-    }
-
-    if (crc != ((unsigned long)buf[pos]
-		+ ((unsigned long)buf[pos + 1] << 8)
-		+ ((unsigned long)buf[pos + 2] << 16)
-		+ ((unsigned long)buf[pos + 3] << 24)))
+    if (crc != (buf[zstr.total_in + 10]
+		+ (buf[zstr.total_in + 11] << 8)
+		+ (buf[zstr.total_in + 12] << 16)
+		+ (buf[zstr.total_in + 13] << 24)))
     {
 	error (0, 0, "CRC error uncompressing %s", fullname);
 	return 1;
     }
 
-    if (zstr.total_out != ((unsigned long)buf[pos + 4]
-			   + ((unsigned long)buf[pos + 5] << 8)
-			   + ((unsigned long)buf[pos + 6] << 16)
-			   + ((unsigned long)buf[pos + 7] << 24)))
+    if (zstr.total_out != (buf[zstr.total_in + 14]
+			   + (buf[zstr.total_in + 15] << 8)
+			   + (buf[zstr.total_in + 16] << 16)
+			   + (buf[zstr.total_in + 17] << 24)))
     {
 	error (0, 0, "invalid length uncompressing %s", fullname);
 	return 1;
@@ -609,7 +535,7 @@ gunzip_and_write (fd, fullname, buf, size)
 }
 
 /* Read all of FD and put the gzipped data (RFC1952/RFC1951) into *BUF,
-   replacing previous contents of *BUF.  *BUF is xmalloc'd and *SIZE is
+   replacing previous contents of *BUF.  *BUF is malloc'd and *SIZE is
    its allocated size.  Put the actual number of bytes of data in
    *LEN.  If something goes wrong, give a nonfatal error mentioning
    FULLNAME as the name of the file for FD, and return 1 if we can't
@@ -618,7 +544,7 @@ gunzip_and_write (fd, fullname, buf, size)
 int
 read_and_gzip (fd, fullname, buf, size, len, level)
     int fd;
-    const char *fullname;
+    char *fullname;
     unsigned char **buf;
     size_t *size;
     size_t *len;
@@ -635,7 +561,7 @@ read_and_gzip (fd, fullname, buf, size, len, level)
 	unsigned char *newbuf;
 
 	*size = 1024;
-	newbuf = xrealloc (*buf, *size);
+	newbuf = realloc (*buf, *size);
 	if (newbuf == NULL)
 	{
 	    error (0, 0, "out of memory");
@@ -643,9 +569,9 @@ read_and_gzip (fd, fullname, buf, size, len, level)
 	}
 	*buf = newbuf;
     }
-    (*buf)[0] = GZIP_ID1;
-    (*buf)[1] = GZIP_ID2;
-    (*buf)[2] = GZIP_CDEFLATE;
+    (*buf)[0] = 31;
+    (*buf)[1] = 139;
+    (*buf)[2] = 8;
     (*buf)[3] = 0;
     (*buf)[4] = (*buf)[5] = (*buf)[6] = (*buf)[7] = 0;
     /* Could set this based on level, but why bother?  */
@@ -661,10 +587,7 @@ read_and_gzip (fd, fullname, buf, size, len, level)
 	compress_error (0, zstatus, &zstr, fullname);
 	return 1;
     }
-    
-    /* Adjust for 10-byte output header (filled in above) */
-    zstr.total_out = 10;
-    zstr.avail_out = *size - 10;
+    zstr.avail_out = *size;
     zstr.next_out = *buf + 10;
 
     while (1)
@@ -686,6 +609,8 @@ read_and_gzip (fd, fullname, buf, size, len, level)
 
 	do
 	{
+	    size_t offset;
+
 	    /* I don't see this documented anywhere, but deflate seems
 	       to tend to dump core sometimes if we pass it Z_FINISH and
 	       a small (e.g. 2147 byte) avail_out.  So we insist on at
@@ -695,20 +620,17 @@ read_and_gzip (fd, fullname, buf, size, len, level)
 	    {
 		unsigned char *newbuf;
 
-		assert(zstr.avail_out + zstr.total_out == *size);
-		assert(zstr.next_out == *buf + zstr.total_out);
+		offset = zstr.next_out - *buf;
 		*size *= 2;
-		newbuf = xrealloc (*buf, *size);
+		newbuf = realloc (*buf, *size);
 		if (newbuf == NULL)
 		{
 		    error (0, 0, "out of memory");
 		    return 1;
 		}
 		*buf = newbuf;
-		zstr.next_out = *buf + zstr.total_out;
-		zstr.avail_out = *size - zstr.total_out;
-		assert(zstr.avail_out + zstr.total_out == *size);
-		assert(zstr.next_out == *buf + zstr.total_out);
+		zstr.next_out = *buf + offset;
+		zstr.avail_out = *size - offset;
 	    }
 
 	    zstatus = deflate (&zstr, finish ? Z_FINISH : 0);
@@ -719,45 +641,17 @@ read_and_gzip (fd, fullname, buf, size, len, level)
 	} while (zstr.avail_out == 0);
     }
  done:
-    /* Need to add the CRC information (8 bytes)
-       to the end of the gzip'd output.
-       Ensure there is enough space in the output buffer
-       to do so.  */
-    if (zstr.avail_out < 8)
-    {
-	unsigned char *newbuf;
+    *(*buf + zstr.total_out + 10) = crc & 0xff;
+    *(*buf + zstr.total_out + 11) = (crc >> 8) & 0xff;
+    *(*buf + zstr.total_out + 12) = (crc >> 16) & 0xff;
+    *(*buf + zstr.total_out + 13) = (crc >> 24) & 0xff;
 
-	assert(zstr.avail_out + zstr.total_out == *size);
-	assert(zstr.next_out == *buf + zstr.total_out);
-	*size += 8 - zstr.avail_out;
-	newbuf = realloc (*buf, *size);
-	if (newbuf == NULL)
-	{
-	    error (0, 0, "out of memory");
-	    return 1;
-	}
-	*buf = newbuf;
-	zstr.next_out = *buf + zstr.total_out;
-	zstr.avail_out = *size - zstr.total_out;
-	assert(zstr.avail_out + zstr.total_out == *size);
-	assert(zstr.next_out == *buf + zstr.total_out);
-    } 
-    *zstr.next_out++ = (unsigned char)(crc & 0xff);
-    *zstr.next_out++ = (unsigned char)((crc >> 8) & 0xff);
-    *zstr.next_out++ = (unsigned char)((crc >> 16) & 0xff);
-    *zstr.next_out++ = (unsigned char)((crc >> 24) & 0xff);
+    *(*buf + zstr.total_out + 14) = zstr.total_in & 0xff;
+    *(*buf + zstr.total_out + 15) = (zstr.total_in >> 8) & 0xff;
+    *(*buf + zstr.total_out + 16) = (zstr.total_in >> 16) & 0xff;
+    *(*buf + zstr.total_out + 17) = (zstr.total_in >> 24) & 0xff;
 
-    *zstr.next_out++ = (unsigned char)(zstr.total_in & 0xff);
-    *zstr.next_out++ = (unsigned char)((zstr.total_in >> 8) & 0xff);
-    *zstr.next_out++ = (unsigned char)((zstr.total_in >> 16) & 0xff);
-    *zstr.next_out++ = (unsigned char)((zstr.total_in >> 24) & 0xff);
-
-    zstr.total_out += 8;
-    zstr.avail_out -= 8;
-    assert(zstr.avail_out + zstr.total_out == *size);
-    assert(zstr.next_out == *buf + zstr.total_out);
-
-    *len = zstr.total_out;
+    *len = zstr.total_out + 18;
 
     zstatus = deflateEnd (&zstr);
     if (zstatus != Z_OK)

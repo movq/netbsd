@@ -7,7 +7,7 @@
 #include "system.h"
 
 #ifndef HAVE_GETPAGESIZE
-# include "getpagesize.h"
+#define getpagesize() 4096
 #endif
 
 void *

@@ -30,7 +30,7 @@ void
 read_cvsrc (argc, argv, cmdname)
     int *argc;
     char ***argv;
-    const char *cmdname;
+    char *cmdname;
 {
     char *homedir;
     char *homeinit;
@@ -73,7 +73,10 @@ read_cvsrc (argc, argv, cmdname)
     if (!homedir)
 	return;
 
-    homeinit = strcat_filename_onto_homedir (homedir, cvsrc);
+    homeinit = (char *) xmalloc (strlen (homedir) + strlen (cvsrc) + 10);
+    strcpy (homeinit, homedir);
+    strcat (homeinit, "/");
+    strcat (homeinit, cvsrc);
 
     /* if it can't be read, there's no point to continuing */
 
