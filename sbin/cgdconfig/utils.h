@@ -1,7 +1,7 @@
-/* $NetBSD: utils.h,v 1.1 2002/10/04 18:37:21 elric Exp $ */
+/* $NetBSD: utils.h,v 1.2 2003/03/24 02:02:52 elric Exp $ */
 
 /*-
- * Copyright (c) 2002 The NetBSD Foundation, Inc.
+ * Copyright (c) 2002, 2003 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -36,9 +36,59 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-char	**words(const char *, int *);
-void	  words_free(char **, int);
+#ifndef CGDUTILS_H
+#define CGDUTILS_H
 
-void	memxor(void *, const void *, size_t);
+#include <stdio.h>
 
 #define BITS2BYTES(n)	(((n) + 7) / 8)
+
+struct string;
+typedef struct string string_t;
+
+struct bits;
+typedef struct bits bits_t;
+
+__BEGIN_DECLS
+char		**words(const char *, int *);
+void	  	  words_free(char **, int);
+
+void		  memxor(void *, const void *, size_t);
+
+void		  free_notnull(void *);
+
+string_t	 *string_new(const char *, int);
+string_t	 *string_dup(const string_t *);
+void		  string_assign(string_t **, string_t *);
+void		  string_free(string_t *);
+string_t	 *string_add(const string_t *, const string_t *);
+string_t	 *string_add_d(string_t *, string_t *);
+string_t	 *string_fromcharstar(const char *);
+const char	 *string_tocharstar(const string_t *);
+string_t	 *string_fromint(int);
+
+void		  string_fprint(FILE *, const string_t *);
+
+bits_t		 *bits_new(const void *, int);
+bits_t		 *bits_dup(const bits_t *);
+void		  bits_assign(bits_t **, bits_t *);
+void		  bits_free(bits_t *);
+const void	 *bits_getbuf(bits_t *);
+int		  bits_len(bits_t *);
+
+bits_t		 *bits_xor(const bits_t *, const bits_t *);
+bits_t		 *bits_xor_d(bits_t *, bits_t *);
+
+bits_t		 *bits_decode(const string_t *);
+bits_t		 *bits_decode_d(string_t *);
+string_t	 *bits_encode(const bits_t *);
+string_t	 *bits_encode_d(bits_t *);
+
+bits_t		 *bits_cget(const char *, int);
+bits_t		 *bits_fget(FILE *, int);
+bits_t		 *bits_getrandombits(int);
+
+void		  bits_fprint(FILE *, const bits_t *);
+__END_DECLS
+
+#endif
