@@ -1,4 +1,4 @@
-/*	$NetBSD: log.c,v 1.1 2003/07/03 14:59:12 wiz Exp $	*/
+/*	$NetBSD: log.c,v 1.1.1.1 2003/07/03 14:59:12 wiz Exp $	*/
 
 /* Log file output.
    Copyright (C) 2003 Free Software Foundation, Inc.
