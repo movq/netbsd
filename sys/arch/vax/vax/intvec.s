@@ -1,4 +1,4 @@
-/*	$NetBSD: intvec.s,v 1.37 1999/02/02 18:37:20 ragge Exp $   */
+/*	$NetBSD: intvec.s,v 1.37.6.1 1999/07/06 11:02:37 itojun Exp $   */
 
 /*
  * Copyright (c) 1994, 1997 Ludd, University of Lule}, Sweden.
@@ -312,6 +312,9 @@ ENTRY(netint)
 	bbcc	$NETISR_ARP,_netisr,1f; calls $0,_arpintr; 1:
 #endif
 	bbcc	$NETISR_IP,_netisr,1f; calls $0,_ipintr; 1:
+#endif
+#ifdef INET6
+	bbcc	$NETISR_IPV6,_netisr,1f; calls $0,_ip6intr; 1:
 #endif
 #ifdef NETATALK
 	bbcc	$NETISR_ATALK,_netisr,1f; calls $0,_atintr; 1:
