@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 1997/04/18 13:22:53 christos Exp $
+#	$NetBSD: Makefile,v 1.1.1.1 1997/04/18 13:22:53 christos Exp $
 
 LIB=	ntp
 SRCS=	a_md512crypt.c a_md5decrypt.c a_md5encrypt.c adjtime.c atoint.c atolfp.c \
