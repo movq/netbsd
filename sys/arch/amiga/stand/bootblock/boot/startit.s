@@ -1,4 +1,4 @@
-/*	$NetBSD: startit.s,v 1.1 1996/11/29 23:36:29 is Exp $	*/
+/*	$NetBSD: startit.s,v 1.1.1.1 1996/11/29 23:36:29 is Exp $	*/
 
 /*
  * Copyright (c) 1996 Ignatios Souvatzis
@@ -31,7 +31,7 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  *
- * From: $NetBSD: startit.s,v 1.1 1996/11/29 23:36:29 is Exp $
+ * From: $NetBSD: startit.s,v 1.1.1.1 1996/11/29 23:36:29 is Exp $
  */
 
 	.set	ABSEXECBASE,4

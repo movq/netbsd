@@ -1,4 +1,4 @@
-/*	$NetBSD: twiddle.c,v 1.1 1996/11/29 23:36:29 is Exp $	*/
+/*	$NetBSD: twiddle.c,v 1.1.1.1 1996/11/29 23:36:29 is Exp $	*/
 
 /*-
  * Copyright (c) 1993
@@ -35,7 +35,7 @@
  *	@(#)printf.c	8.1 (Berkeley) 6/11/93
  */
 
-/*	From: $NetBSD: twiddle.c,v 1.1 1996/11/29 23:36:29 is Exp $	*/
+/*	From: $NetBSD: twiddle.c,v 1.1.1.1 1996/11/29 23:36:29 is Exp $	*/
 
 #include "stand.h"
 

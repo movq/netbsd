@@ -1,5 +1,5 @@
 /*
- * $NetBSD: libstubs.s,v 1.1 1996/11/29 23:36:29 is Exp $
+ * $NetBSD: libstubs.s,v 1.1.1.1 1996/11/29 23:36:29 is Exp $
  *
  *
  * Copyright (c) 1996 Ignatios Souvatzis
