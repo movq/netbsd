@@ -2,7 +2,7 @@
 .ds Rv \\$3
 .ds Dt \\$4
 ..
-.Id $Id: rcsclean.1,v 1.3 1995/02/24 02:25:31 mycroft Exp $
+.Id rcsclean.1,v 1.1.1.1 1993/06/18 04:22:15 jkh Exp
 .ds r \&\s-1RCS\s0
 .if n .ds - \%--
 .if t .ds - \(em
@@ -14,11 +14,7 @@ rcsclean \- clean up working files
 .RI [ options "] [ " file " .\|.\|. ]"
 .SH DESCRIPTION
 .B rcsclean
-removes files that are not being worked on.
-.B "rcsclean \-u"
-also unlocks and removes files that are being worked on
-but have not changed.
-.PP
+removes working files that were checked out and never modified.
 For each
 .I file
 given,
@@ -36,13 +32,13 @@ and
 .B "rm \-f"
 commands on the standard output.
 .PP
-Files are paired as explained in
-.BR ci (1).
 If no
 .I file
 is given, all working files in the current directory are cleaned.
 Pathnames matching an \*r suffix denote \*r files;
 all others denote working files.
+Names are paired as explained in
+.BR ci (1).
 .PP
 The number of the revision to which the working file is compared
 may be attached to any of the options
@@ -62,15 +58,15 @@ uses the latest revision on the default branch, normally the root.
 .B rcsclean
 is useful for
 .B clean
-targets in makefiles.
+targets in Makefiles.
 See also
 .BR rcsdiff (1),
 which prints out the differences,
 and
 .BR ci (1),
 which
-normally reverts to the previous revision
-if a file was not changed.
+normally asks whether to check in a file
+if it was not changed.
 .SH OPTIONS
 .TP
 .BI \-k subst
@@ -93,21 +89,8 @@ Do not log the actions taken on standard output.
 .BR \-r [\f2rev\fP]
 This option has no effect other than specifying the revision for comparison.
 .TP
-.B \-T
-Preserve the modification time on the \*r file
-even if the \*r file changes because a lock is removed.
-This option can suppress extensive recompilation caused by a
-.BR make (1)
-dependency of some other copy of the working file on the \*r file.
-Use this option with care; it can suppress recompilation even when it is needed,
-i.e. when the lock removal
-would mean a change to keyword strings in the other working file.
-.TP
 .BR \-u [\f2rev\fP]
 Unlock the revision if it is locked and no difference is found.
-.TP
-.BI \-V
-Print \*r's version number.
 .TP
 .BI \-V n
 Emulate \*r version
@@ -122,14 +105,6 @@ Use
 to characterize \*r files.
 See
 .BR ci (1)
-for details.
-.TP
-.BI \-z zone
-Use
-.I zone
-as the time zone for keyword substitution;
-see
-.BR co (1)
 for details.
 .SH EXAMPLES
 .LP
@@ -172,20 +147,19 @@ Useful
 options include
 .BR \-q ,
 .BR \-V ,
-.BR \-x ,
 and
-.BR \-z .
+.BR \-x .
 .SH DIAGNOSTICS
 The exit status is zero if and only if all operations were successful.
 Missing working files and \*r files are silently ignored.
 .SH IDENTIFICATION
 Author: Walter F. Tichy.
 .br
-Manual Page Revision: \*(Rv; Release Date: \*(Dt.
+Revision Number: \*(Rv; Release Date: \*(Dt.
 .br
-Copyright \(co 1982, 1988, 1989 Walter F. Tichy.
+Copyright \(co 1982, 1988, 1989 by Walter F. Tichy.
 .br
-Copyright \(co 1990, 1991, 1992, 1993 Paul Eggert.
+Copyright \(co 1990, 1991 by Paul Eggert.
 .SH "SEE ALSO"
 ci(1), co(1), ident(1), rcs(1), rcsdiff(1), rcsintro(1), rcsmerge(1), rlog(1),
 rcsfile(5)

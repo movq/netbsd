@@ -1,13 +1,14 @@
-/* Compare working files, ignoring RCS keyword strings.  */
-
+/*
+ *                     RCS file comparison
+ */
 /*****************************************************************************
  *                       rcsfcmp()
  *                       Testprogram: define FCMPTEST
  *****************************************************************************
  */
 
-/* Copyright 1982, 1988, 1989 Walter Tichy
-   Copyright 1990, 1991, 1992, 1993, 1994 Paul Eggert
+/* Copyright (C) 1982, 1988, 1989 Walter Tichy
+   Copyright 1990, 1991 by Paul Eggert
    Distributed under license by the Free Software Foundation, Inc.
 
 This file is part of RCS.
@@ -36,21 +37,9 @@ Report problems and direct all questions to:
 
 
 
-/*
- * $Log: rcsfcmp.c,v $
- * Revision 1.3  1995/02/24 02:25:03  mycroft
- * RCS 5.6.7.4
- *
- * Revision 5.12  1994/03/17 14:05:48  eggert
- * Normally calculate the $Log prefix from context, not from RCS file.
- * Calculate line numbers correctly even if the $Log prefix contains newlines.
- * Remove lint.
- *
- * Revision 5.11  1993/11/03 17:42:27  eggert
- * Fix yet another off-by-one error when comparing Log string expansions.
- *
- * Revision 5.10  1992/07/28 16:12:44  eggert
- * Statement macro names now end in _.
+/* rcsfcmp.c,v
+ * Revision 1.1.1.1  1993/06/18  04:22:13  jkh
+ * Updated GNU utilities
  *
  * Revision 5.9  1991/10/07  17:32:46  eggert
  * Count log lines correctly.
@@ -115,9 +104,8 @@ Report problems and direct all questions to:
 
 #include  "rcsbase.h"
 
-libId(fcmpId, "$Id: rcsfcmp.c,v 1.3 1995/02/24 02:25:03 mycroft Exp $")
+libId(fcmpId, "rcsfcmp.c,v 1.1.1.1 1993/06/18 04:22:13 jkh Exp")
 
-	static int discardkeyval P((int,RILE*));
 	static int
 discardkeyval(c, f)
 	register int c;
@@ -129,24 +117,24 @@ discardkeyval(c, f)
 			case '\n':
 				return c;
 			default:
-				Igeteof_(f, c, return EOF;)
+				Igeteof(f, c, return EOF;);
 				break;
 		}
 }
 
 	int
-rcsfcmp(xfp, xstatp, uname, delta)
+rcsfcmp(xfp, xstatp, ufname, delta)
 	register RILE *xfp;
 	struct stat const *xstatp;
-	char const *uname;
+	char const *ufname;
 	struct hshentry const *delta;
-/* Compare the files xfp and uname.  Return zero
- * if xfp has the same contents as uname and neither has keywords,
+/* Compare the files xfp and ufname.  Return zero
+ * if xfp has the same contents as ufname and neither has keywords,
  * otherwise -1 if they are the same ignoring keyword values,
  * and 1 if they differ even ignoring
  * keyword values. For the LOG-keyword, rcsfcmp skips the log message
  * given by the parameter delta in xfp.  Thus, rcsfcmp returns nonpositive
- * if xfp contains the same as uname, with the keywords expanded.
+ * if xfp contains the same as ufname, with the keywords expanded.
  * Implementation: character-by-character comparison until $ is found.
  * If a $ is found, read in the marker keywords; if they are real keywords
  * and identical, read in keyword value. If value is terminated properly,
@@ -160,13 +148,12 @@ rcsfcmp(xfp, xstatp, uname, delta)
     register int xeof, ueof;
     register char * tp;
     register char const *sp;
-    register size_t leaderlen;
     int result;
     enum markers match1;
     struct stat ustat;
 
-    if (!(ufp = Iopen(uname, FOPEN_R_WORK, &ustat))) {
-       efaterror(uname);
+    if (!(ufp = Iopen(ufname, FOPEN_R_WORK, &ustat))) {
+       efaterror(ufname);
     }
     xeof = ueof = false;
     if (Expand==OLD_EXPAND) {
@@ -176,8 +163,8 @@ rcsfcmp(xfp, xstatp, uname, delta)
 #	    else
 		for (;;) {
 		    /* get the next characters */
-		    Igeteof_(xfp, xc, xeof=true;)
-		    Igeteof_(ufp, uc, ueof=true;)
+		    Igeteof(xfp, xc, xeof=true;);
+		    Igeteof(ufp, uc, ueof=true;);
 		    if (xeof | ueof)
 			goto eof;
 		    if (xc != uc)
@@ -188,22 +175,21 @@ rcsfcmp(xfp, xstatp, uname, delta)
     } else {
 	xc = 0;
 	uc = 0; /* Keep lint happy.  */
-	leaderlen = 0;
 	result = 0;
 
 	for (;;) {
 	  if (xc != KDELIM) {
 	    /* get the next characters */
-	    Igeteof_(xfp, xc, xeof=true;)
-	    Igeteof_(ufp, uc, ueof=true;)
+	    Igeteof(xfp, xc, xeof=true;);
+	    Igeteof(ufp, uc, ueof=true;);
 	    if (xeof | ueof)
 		goto eof;
 	  } else {
 	    /* try to get both keywords */
 	    tp = xkeyword;
 	    for (;;) {
-		Igeteof_(xfp, xc, xeof=true;)
-		Igeteof_(ufp, uc, ueof=true;)
+		Igeteof(xfp, xc, xeof=true;);
+		Igeteof(ufp, uc, ueof=true;);
 		if (xeof | ueof)
 		    goto eof;
 		if (xc != uc)
@@ -238,8 +224,8 @@ rcsfcmp(xfp, xstatp, uname, delta)
 		  }
 		  switch (xc) {
 		      default:
-			  Igeteof_(xfp, xc, xeof=true;)
-			  Igeteof_(ufp, uc, ueof=true;)
+			  Igeteof(xfp, xc, xeof=true;);
+			  Igeteof(ufp, uc, ueof=true;);
 			  if (xeof | ueof)
 			      goto eof;
 			  continue;
@@ -254,47 +240,38 @@ rcsfcmp(xfp, xstatp, uname, delta)
 		  goto return1;
 	      if (xc==KDELIM) {
 		  /* Skip closing KDELIM.  */
-		  Igeteof_(xfp, xc, xeof=true;)
-		  Igeteof_(ufp, uc, ueof=true;)
+		  Igeteof(xfp, xc, xeof=true;);
+		  Igeteof(ufp, uc, ueof=true;);
 		  if (xeof | ueof)
 		      goto eof;
 		  /* if the keyword is LOG, also skip the log message in xfp*/
 		  if (match1==Log) {
 		      /* first, compute the number of line feeds in log msg */
-		      int lncnt;
+		      unsigned lncnt;
 		      size_t ls, ccnt;
 		      sp = delta->log.string;
 		      ls = delta->log.size;
 		      if (ls<sizeof(ciklog)-1 || memcmp(sp,ciklog,sizeof(ciklog)-1)) {
-			/*
-			* This log message was inserted.  Skip its header.
-			* The number of newlines to skip is
-			* 1 + (C+1)*(1+L+1), where C is the number of newlines
-			* in the comment leader, and L is the number of
-			* newlines in the log string.
-			*/
-			int c1 = 1;
-			for (ccnt=Comment.size; ccnt--; )
-			    c1 += Comment.string[ccnt] == '\n';
-			lncnt = 2*c1 + 1;
-			while (ls--) if (*sp++=='\n') lncnt += c1;
+			/* This log message was inserted.  */
+			lncnt = 3;
+			while (ls--) if (*sp++=='\n') lncnt++;
 			for (;;) {
 			    if (xc=='\n')
 				if(--lncnt==0) break;
-			    Igeteof_(xfp, xc, goto returnresult;)
+			    Igeteof(xfp, xc, goto returnresult;);
 			}
 			/* skip last comment leader */
 			/* Can't just skip another line here, because there may be */
 			/* additional characters on the line (after the Log....$)  */
-			ccnt = RCSversion<VERSION(5) ? Comment.size : leaderlen;
-			do {
-			    Igeteof_(xfp, xc, goto returnresult;)
+			for (ccnt=Comment.size; ccnt--; ) {
+			    Igeteof(xfp, xc, goto returnresult;);
+			    if(xc=='\n') break;
 			    /*
 			     * Read to the end of the comment leader or '\n',
-			     * whatever comes first, because the leader's
-			     * trailing white space was probably stripped.
+			     * whatever comes first.  Some editors strip
+			     * trailing white space from a leader like " * ".
 			     */
-			} while (ccnt-- && (xc!='\n' || --c1));
+			}
 		      }
 		  }
 	      } else {
@@ -310,10 +287,6 @@ rcsfcmp(xfp, xstatp, uname, delta)
 	  }
 	  if (xc != uc)
 	      goto return1;
-	  if (xc == '\n')
-	      leaderlen = 0;
-	  else
-	      leaderlen++;
 	}
     }
 

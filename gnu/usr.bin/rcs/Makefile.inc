@@ -1,4 +1,7 @@
-#	$Id: Makefile.inc,v 1.4 1994/01/24 18:39:52 cgd Exp $
+# Location of librcs
 
-LIBRCS!=cd $(.CURDIR)/../lib; \
-	printf "xxx:\n\techo \$${.OBJDIR}/librcs.a\n" | ${MAKE} -r -s -f - xxx
+.if exists(${.CURDIR}/../lib/obj)
+LIBRCS=	${.CURDIR}/../lib/obj/librcs.a
+.else
+LIBRCS=	${.CURDIR}/../lib/librcs.a
+.endif

@@ -1,15 +1,16 @@
-/* RCS file syntactic analysis */
-
-/******************************************************************************
+/*
+ *                     RCS file input
+ */
+/*********************************************************************************
  *                       Syntax Analysis.
  *                       Keyword table
  *                       Testprogram: define SYNTEST
  *                       Compatibility with Release 2: define COMPAT2=1
- ******************************************************************************
+ *********************************************************************************
  */
 
-/* Copyright 1982, 1988, 1989 Walter Tichy
-   Copyright 1990, 1991, 1992, 1993, 1994 Paul Eggert
+/* Copyright (C) 1982, 1988, 1989 Walter Tichy
+   Copyright 1990, 1991 by Paul Eggert
    Distributed under license by the Free Software Foundation, Inc.
 
 This file is part of RCS.
@@ -34,27 +35,10 @@ Report problems and direct all questions to:
 
 */
 
-/*
- * $Log: rcssyn.c,v $
- * Revision 1.3  1995/02/24 02:25:14  mycroft
- * RCS 5.6.7.4
- *
- * Revision 5.13  1994/03/20 04:52:58  eggert
- * Remove lint.
- *
- * Revision 5.12  1993/11/03 17:42:27  eggert
- * Parse MKS RCS dates; ignore \r in diff control lines.
- * Don't discard ignored phrases.  Improve quality of diagnostics.
- *
- * Revision 5.11  1992/07/28  16:12:44  eggert
- * Avoid `unsigned'.  Statement macro names now end in _.
- *
- * Revision 5.10  1992/01/24  18:44:19  eggert
- * Move put routines to rcsgen.c.
- *
- * Revision 5.9  1992/01/06  02:42:34  eggert
- * ULONG_MAX/10 -> ULONG_MAX_OVER_10
- * while (E) ; -> while (E) continue;
+
+/* rcssyn.c,v
+ * Revision 1.1.1.1  1993/06/18  04:22:12  jkh
+ * Updated GNU utilities
  *
  * Revision 5.8  1991/08/19  03:13:55  eggert
  * Tune.
@@ -146,47 +130,46 @@ Report problems and direct all questions to:
  * generates files of release 3 format. Need not be defined if no
  * old RCS files generated with release 2 exist.
  */
+/* version SYNTEST inputs a RCS file and then prints out its internal
+ * data structures.
+*/
 
 #include "rcsbase.h"
 
-libId(synId, "$Id: rcssyn.c,v 1.3 1995/02/24 02:25:14 mycroft Exp $")
+libId(synId, "rcssyn.c,v 1.1.1.1 1993/06/18 04:22:12 jkh Exp")
 
+/* forward */
 static char const *getkeyval P((char const*,enum tokens,int));
-static int getdelta P((void));
 static int strn2expmode P((char const*,size_t));
-static struct hshentry *getdnum P((void));
-static void badDiffOutput P((char const*)) exiting;
-static void diffLineNumberTooLarge P((char const*)) exiting;
-static void getsemi P((char const*));
 
 /* keyword table */
 
 char const
-	Kaccess[]   = "access",
-	Kauthor[]   = "author",
-	Kbranch[]   = "branch",
-	Kcomment[]  = "comment",
-	Kdate[]     = "date",
 	Kdesc[]     = "desc",
-	Kexpand[]   = "expand",
-	Khead[]     = "head",
-	Klocks[]    = "locks",
 	Klog[]      = "log",
-	Knext[]     = "next",
-	Kstate[]    = "state",
-	Kstrict[]   = "strict",
-	Ksymbols[]  = "symbols",
 	Ktext[]     = "text";
 
 static char const
+	Kaccess[]   = "access",
+	Kauthor[]   = "author",
+	Kbranch[]   = "branch",
+	K_branches[]= "branches",
+	Kcomment[]  = "comment",
+	Kdate[]     = "date",
+	Kexpand[]   = "expand",
+	Khead[]     = "head",
+	Klocks[]    = "locks",
+	Knext[]     = "next",
+	Kstate[]    = "state",
+	Kstrict[]   = "strict",
 #if COMPAT2
 	Ksuffix[]   = "suffix",
 #endif
-	K_branches[]= "branches";
+	Ksymbols[]  = "symbols";
 
 static struct buf Commleader;
+static struct cbuf Ignored;
 struct cbuf Comment;
-struct cbuf Ignored;
 struct access   * AccessList;
 struct assoc    * Symbols;
 struct lock     * Locks;
@@ -194,7 +177,7 @@ int		  Expand;
 int               StrictLocks;
 struct hshentry * Head;
 char const      * Dbranch;
-int TotalDeltas;
+unsigned TotalDeltas;
 
 
 	static void
@@ -238,7 +221,7 @@ getadmin()
 	Head = getdnum();
 	getsemi(Khead);
 
-	Dbranch = 0;
+	Dbranch = nil;
 	if (getkeyopt(Kbranch)) {
 		if ((delta = getnum()))
 			Dbranch = delta->num;
@@ -260,18 +243,18 @@ getadmin()
 
 	getkey(Kaccess);
 	LastAccess = &AccessList;
-	while ((id = getid())) {
+        while (id=getid()) {
 		newaccess = ftalloc(struct access);
                 newaccess->login = id;
 		*LastAccess = newaccess;
 		LastAccess = &newaccess->nextaccess;
         }
-	*LastAccess = 0;
+	*LastAccess = nil;
 	getsemi(Kaccess);
 
 	getkey(Ksymbols);
 	LastSymbol = &Symbols;
-        while ((id = getid())) {
+        while (id = getid()) {
                 if (!getlex(COLON))
 			fatserror("missing ':' in symbolic name definition");
                 if (!(delta=getnum())) {
@@ -284,12 +267,12 @@ getadmin()
 			LastSymbol = &newassoc->nextassoc;
                 }
         }
-	*LastSymbol = 0;
+	*LastSymbol = nil;
 	getsemi(Ksymbols);
 
 	getkey(Klocks);
 	LastLock = &Locks;
-        while ((id = getid())) {
+        while (id = getid()) {
                 if (!getlex(COLON))
 			fatserror("missing ':' in lock");
 		if (!(delta=getdnum())) {
@@ -302,13 +285,13 @@ getadmin()
 			LastLock = &newlock->nextlock;
                 }
         }
-	*LastLock = 0;
+	*LastLock = nil;
 	getsemi(Klocks);
 
 	if ((StrictLocks = getkeyopt(Kstrict)))
 		getsemi(Kstrict);
 
-	clear_buf(&Comment);
+	Comment.size = 0;
 	if (getkeyopt(Kcomment)) {
 		if (nexttok==STRING) {
 			Comment = savestring(&Commleader);
@@ -363,30 +346,20 @@ strn2expmode(s, n)
 
 
 	void
-ignorephrases(key)
-	const char *key;
-/*
-* Ignore a series of phrases that do not start with KEY.
-* Stop when the next phrase starts with a token that is not an identifier,
-* or is KEY.
-*/
+ignorephrase()
+/* Ignore a phrase introduced by a later version of RCS.  */
 {
+	warnignore();
+	hshenter=false;
 	for (;;) {
-		nextlex();
-		if (nexttok != ID  ||  strcmp(NextString,key) == 0)
-			break;
-		warnignore();
-		hshenter=false;
-		for (;; nextlex()) {
-			switch (nexttok) {
-				case SEMI: hshenter=true; break;
-				case ID:
-				case NUM: ffree1(NextString); continue;
-				case STRING: readstring(); continue;
-				default: continue;
-			}
-			break;
-		}
+	    switch (nexttok) {
+		case SEMI: hshenter=true; nextlex(); return;
+		case ID:
+		case NUM: ffree1(NextString); break;
+		case STRING: readstring(); break;
+		default: break;
+	    }
+	    nextlex();
 	}
 }
 
@@ -404,17 +377,7 @@ getdelta()
 		return false;
 
         hshenter = false; /*Don't enter dates into hashtable*/
-	{
-	  char const *date = getkeyval(Kdate, NUM, false);
-	  /* Strip any leading "19" from dates generated by MKS RCS.  */
-	  Delta->date = date + 2*(
-		date[0] == '1'  &&
-		date[1] == '9'  &&
-		isdigit(date[2])  &&
-		isdigit(date[3])  &&
-		date[4] == '.'
-	  );
-	}
+        Delta->date = getkeyval(Kdate, NUM, false);
         hshenter=true;    /*reset hshenter for revision numbers.*/
 
         Delta->author = getkeyval(Kauthor, ID, false);
@@ -429,13 +392,13 @@ getdelta()
 		*LastBranch = NewBranch;
 		LastBranch = &NewBranch->nextbranch;
         }
-	*LastBranch = 0;
+	*LastBranch = nil;
 	getsemi(K_branches);
 
 	getkey(Knext);
 	Delta->next = num = getdnum();
 	getsemi(Knext);
-	Delta->lockedby = 0;
+	Delta->lockedby = nil;
 	Delta->log.string = 0;
 	Delta->selector = true;
 	Delta->ig = getphrases(Kdesc);
@@ -452,8 +415,7 @@ gettree()
 {
 	struct lock const *currlock;
 
-	while (getdelta())
-		continue;
+        while (getdelta());
         currlock=Locks;
         while (currlock) {
                 currlock->delta->lockedby = currlock->login;
@@ -494,7 +456,7 @@ getkeyval(keyword, token, optional)
  * the actual character string of <id> or <num> is returned.
  */
 {
-	register char const *val = 0;
+	register char const *val = nil;
 
 	getkey(keyword);
         if (nexttok==token) {
@@ -509,10 +471,220 @@ getkeyval(keyword, token, optional)
 }
 
 
+
+
 	void
+putadmin(fout)
+register FILE * fout;
+/* Function: Print the <admin> node read with getadmin() to file fout.
+ * Assumption: Variables AccessList, Symbols, Locks, StrictLocks,
+ * and Head have been set.
+ */
+{
+	struct assoc const *curassoc;
+	struct lock const *curlock;
+	struct access const *curaccess;
+
+	aprintf(fout, "%s\t%s;\n", Khead, Head?Head->num:"");
+	if (Dbranch && VERSION(4)<=RCSversion)
+		aprintf(fout, "%s\t%s;\n", Kbranch, Dbranch);
+
+	aputs(Kaccess, fout);
+        curaccess = AccessList;
+        while (curaccess) {
+	       aprintf(fout, "\n\t%s", curaccess->login);
+               curaccess = curaccess->nextaccess;
+        }
+	aprintf(fout, ";\n%s", Ksymbols);
+        curassoc = Symbols;
+        while (curassoc) {
+	       aprintf(fout, "\n\t%s:%s", curassoc->symbol, curassoc->num);
+               curassoc = curassoc->nextassoc;
+        }
+	aprintf(fout, ";\n%s", Klocks);
+        curlock = Locks;
+        while (curlock) {
+	       aprintf(fout, "\n\t%s:%s", curlock->login, curlock->delta->num);
+               curlock = curlock->nextlock;
+        }
+	if (StrictLocks) aprintf(fout, "; %s", Kstrict);
+	aprintf(fout, ";\n");
+	if (Comment.size) {
+		aprintf(fout, "%s\t", Kcomment);
+		putstring(fout, true, Comment, false);
+		aprintf(fout, ";\n");
+        }
+	if (Expand != KEYVAL_EXPAND)
+		aprintf(fout, "%s\t%c%s%c;\n",
+			Kexpand, SDELIM, expand_names[Expand], SDELIM
+		);
+	awrite(Ignored.string, Ignored.size, fout);
+	aputc('\n', fout);
+}
+
+
+
+
+	static void
+putdelta(node,fout)
+register struct hshentry const *node;
+register FILE * fout;
+/* Function: prints a <delta> node to fout;
+ */
+{
+	struct branchhead const *nextbranch;
+
+        if (node == nil) return;
+
+	aprintf(fout, "\n%s\n%s\t%s;\t%s %s;\t%s %s;\nbranches",
+		node->num,
+		Kdate, node->date,
+		Kauthor, node->author,
+		Kstate, node->state?node->state:""
+	);
+        nextbranch = node->branches;
+        while (nextbranch) {
+	       aprintf(fout, "\n\t%s", nextbranch->hsh->num);
+               nextbranch = nextbranch->nextbranch;
+        }
+
+	aprintf(fout, ";\n%s\t%s;\n", Knext, node->next?node->next->num:"");
+	awrite(node->ig.string, node->ig.size, fout);
+}
+
+
+
+
+	void
+puttree(root,fout)
+struct hshentry const *root;
+register FILE * fout;
+/* Function: prints the delta tree in preorder to fout, starting with root.
+ */
+{
+	struct branchhead const *nextbranch;
+
+        if (root==nil) return;
+
+	if (root->selector)
+		putdelta(root,fout);
+
+        puttree(root->next,fout);
+
+        nextbranch = root->branches;
+        while (nextbranch) {
+             puttree(nextbranch->hsh,fout);
+             nextbranch = nextbranch->nextbranch;
+        }
+}
+
+
+	static exiting void
 unexpected_EOF()
 {
-	rcsfaterror("unexpected EOF in diff output");
+	faterror("unexpected EOF in diff output");
+}
+
+int putdtext(num,log,srcfilename,fout,diffmt)
+	char const *num, *srcfilename;
+	struct cbuf log;
+	FILE *fout;
+	int diffmt;
+/* Function: write a deltatext-node to fout.
+ * num points to the deltanumber, log to the logmessage, and
+ * sourcefile contains the text. Doubles up all SDELIMs in both the
+ * log and the text; Makes sure the log message ends in \n.
+ * returns false on error.
+ * If diffmt is true, also checks that text is valid diff -n output.
+ */
+{
+	RILE *fin;
+	int result;
+	if (!(fin = Iopen(srcfilename, "r", (struct stat*)0))) {
+		eerror(srcfilename);
+		return false;
+	}
+	result = putdftext(num,log,fin,fout,diffmt);
+	Ifclose(fin);
+	return result;
+}
+
+	void
+putstring(out, delim, s, log)
+	register FILE *out;
+	struct cbuf s;
+	int delim, log;
+/*
+ * Output to OUT one SDELIM if DELIM, then the string S with SDELIMs doubled.
+ * If LOG is set then S is a log string; append a newline if S is nonempty.
+ */
+{
+	register char const *sp;
+	register size_t ss;
+
+	if (delim)
+		aputc(SDELIM, out);
+	sp = s.string;
+	for (ss = s.size;  ss;  --ss) {
+		if (*sp == SDELIM)
+			aputc(SDELIM, out);
+		aputc(*sp++, out);
+	}
+	if (s.size && log)
+		aputc('\n', out);
+	aputc(SDELIM, out);
+}
+
+	int
+putdftext(num,log,finfile,foutfile,diffmt)
+	char const *num;
+	struct cbuf log;
+	RILE *finfile;
+	FILE *foutfile;
+	int diffmt;
+/* like putdtext(), except the source file is already open */
+{
+	declarecache;
+	register FILE *fout;
+	register int c;
+	register RILE *fin;
+	int ed;
+	struct diffcmd dc;
+
+	fout = foutfile;
+	aprintf(fout,DELNUMFORM,num,Klog);
+        /* put log */
+	putstring(fout, true, log, true);
+        /* put text */
+	aprintf(fout, "\n%s\n%c", Ktext, SDELIM);
+	fin = finfile;
+	setupcache(fin);
+	if (!diffmt) {
+	    /* Copy the file */
+	    cache(fin);
+	    for (;;) {
+		cachegeteof(c, break;);
+		if (c==SDELIM) aputc(SDELIM,fout);   /*double up SDELIM*/
+		aputc(c,fout);
+	    }
+	} else {
+	    initdiffcmd(&dc);
+	    while (0  <=  (ed = getdiffcmd(fin,false,fout,&dc)))
+		if (ed) {
+		    cache(fin);
+		    while (dc.nlines--)
+			do {
+			    cachegeteof(c, { if (!dc.nlines) goto OK_EOF; unexpected_EOF(); });
+			    if (c == SDELIM)
+				aputc(SDELIM,fout);
+			    aputc(c,fout);
+			} while (c != '\n');
+		    uncache(fin);
+		}
+	}
+    OK_EOF:
+	aprintf(fout, "%c\n", SDELIM);
+	return true;
 }
 
 	void
@@ -524,18 +696,18 @@ initdiffcmd(dc)
 	dc->dafter = 0;
 }
 
-	static void
+	static exiting void
 badDiffOutput(buf)
 	char const *buf;
 {
-	rcsfaterror("bad diff output line: %s", buf);
+	faterror("bad diff output line: %s", buf);
 }
 
-	static void
+	static exiting void
 diffLineNumberTooLarge(buf)
 	char const *buf;
 {
-	rcsfaterror("diff line number too large: %s", buf);
+	faterror("diff line number too large: %s", buf);
 }
 
 	int
@@ -557,16 +729,16 @@ getdiffcmd(finfile, delimiter, foutfile, dc)
 	register FILE *fout;
 	register char *p;
 	register RILE *fin;
-	long line1, nlines, t;
+	unsigned long line1, nlines, t;
 	char buf[BUFSIZ];
 
 	fin = finfile;
 	fout = foutfile;
 	setupcache(fin); cache(fin);
-	cachegeteof_(c, { if (delimiter) unexpected_EOF(); return -1; } )
+	cachegeteof(c, { if (delimiter) unexpected_EOF(); return -1; } );
 	if (delimiter) {
 		if (c==SDELIM) {
-			cacheget_(c)
+			cacheget(c);
 			if (c==SDELIM) {
 				buf[0] = c;
 				buf[1] = 0;
@@ -582,22 +754,23 @@ getdiffcmd(finfile, delimiter, foutfile, dc)
 	p = buf;
 	do {
 		if (buf+BUFSIZ-2 <= p) {
-			rcsfaterror("diff output command line too long");
+			faterror("diff output command line too long");
 		}
 		*p++ = c;
-		cachegeteof_(c, unexpected_EOF();)
+		cachegeteof(c, unexpected_EOF();) ;
 	} while (c != '\n');
 	uncache(fin);
 	if (delimiter)
 		++rcsline;
 	*p = '\0';
 	for (p = buf+1;  (c = *p++) == ' ';  )
-		continue;
+		;
 	line1 = 0;
 	while (isdigit(c)) {
+		t = line1 * 10;
 		if (
-			LONG_MAX/10 < line1  ||
-			(t = line1 * 10,   (line1 = t + (c - '0'))  <  t)
+			ULONG_MAX/10 < line1  ||
+			(line1 = t + (c - '0'))  <  t
 		)
 			diffLineNumberTooLarge(buf);
 		c = *p++;
@@ -606,15 +779,14 @@ getdiffcmd(finfile, delimiter, foutfile, dc)
 		c = *p++;
 	nlines = 0;
 	while (isdigit(c)) {
+		t = nlines * 10;
 		if (
-			LONG_MAX/10 < nlines  ||
-			(t = nlines * 10,   (nlines = t + (c - '0'))  <  t)
+			ULONG_MAX/10 < nlines  ||
+			(nlines = t + (c - '0'))  <  t
 		)
 			diffLineNumberTooLarge(buf);
 		c = *p++;
 	}
-	if (c == '\r')
-		c = *p++;
 	if (c || !nlines) {
 		badDiffOutput(buf);
 	}
@@ -623,13 +795,13 @@ getdiffcmd(finfile, delimiter, foutfile, dc)
 	switch (buf[0]) {
 	    case 'a':
 		if (line1 < dc->adprev) {
-		    rcsfaterror("backward insertion in diff output: %s", buf);
+			faterror("backward insertion in diff output: %s", buf);
 		}
 		dc->adprev = line1 + 1;
 		break;
 	    case 'd':
 		if (line1 < dc->adprev  ||  line1 < dc->dafter) {
-		    rcsfaterror("backward deletion in diff output: %s", buf);
+			faterror("backward deletion in diff output: %s", buf);
 		}
 		dc->adprev = line1;
 		dc->dafter = line1 + nlines;
@@ -649,8 +821,6 @@ getdiffcmd(finfile, delimiter, foutfile, dc)
 
 #ifdef SYNTEST
 
-/* Input an RCS file and print its internal data structures.  */
-
 char const cmdid[] = "syntest";
 
 	int
@@ -667,10 +837,10 @@ int argc; char * argv[];
         }
         Lexinit();
         getadmin();
-	fdlock = STDOUT_FILENO;
-	putadmin();
+        putadmin(stdout);
 
         gettree();
+        puttree(Head,stdout);
 
         getdesc(true);
 
@@ -682,6 +852,9 @@ int argc; char * argv[];
 	exitmain(EXIT_SUCCESS);
 }
 
-void exiterr() { _exit(EXIT_FAILURE); }
+
+exiting void exiterr() { _exit(EXIT_FAILURE); }
+
 
 #endif
+

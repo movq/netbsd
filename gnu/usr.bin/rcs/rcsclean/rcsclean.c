@@ -1,6 +1,6 @@
-/* Clean up working files.  */
+/* rcsclean - clean up working files */
 
-/* Copyright 1991, 1992, 1993, 1994 Paul Eggert
+/* Copyright 1991 by Paul Eggert
    Distributed under license by the Free Software Foundation, Inc.
 
 This file is part of RCS.
@@ -37,17 +37,16 @@ static void cleanup P((void));
 static RILE *workptr;
 static int exitstatus;
 
-mainProg(rcscleanId, "rcsclean", "$Id: rcsclean.c,v 1.3 1995/02/24 02:25:32 mycroft Exp $")
+mainProg(rcscleanId, "rcsclean", "rcsclean.c,v 1.1.1.1 1993/06/18 04:22:15 jkh Exp")
 {
 	static char const usage[] =
-		"\nrcsclean: usage: rcsclean -ksubst -{nqru}[rev] -T -Vn -xsuff -zzone file ...";
+		"\nrcsclean: usage: rcsclean [-ksubst] [-{nqru}[rev]] [-Vn] [-xsuffixes] [file ...]";
 
 	static struct buf revision;
 
 	char *a, **newargv;
 	char const *rev, *p;
-	int dounlock, expmode, perform, unlocked, unlockflag, waslocked;
-	int Ttimeflag;
+	int changelock, expmode, perform, unlocked, unlockflag, waslocked;
 	struct hshentries *deltas;
 	struct hshentry *delta;
 	struct stat workstat;
@@ -55,26 +54,25 @@ mainProg(rcscleanId, "rcsclean", "$Id: rcsclean.c,v 1.3 1995/02/24 02:25:32 mycr
 	setrid();
 
 	expmode = -1;
-	rev = 0;
+	rev = nil;
 	suffixes = X_DEFAULT;
 	perform = true;
 	unlockflag = false;
-	Ttimeflag = false;
 
 	argc = getRCSINIT(argc, argv, &newargv);
 	argv = newargv;
 	for (;;) {
-		if (--argc < 1) {
+		if (--argc <= 0) {
 #			if has_dirent
 				argc = get_directory(".", &newargv);
 				argv = newargv;
 				break;
 #			else
-				faterror("no pathnames specified");
+				faterror("no file names specified");
 #			endif
 		}
 		a = *++argv;
-		if (!*a  ||  *a++ != '-')
+		if (*a++ != '-')
 			break;
 		switch (*a++) {
 			case 'k':
@@ -100,12 +98,6 @@ mainProg(rcscleanId, "rcsclean", "$Id: rcsclean.c,v 1.3 1995/02/24 02:25:32 mycr
 				}
 				break;
 
-			case 'T':
-				if (*a)
-					goto unknown;
-				Ttimeflag = true;
-				break;
-
 			case 'u':
 				unlockflag = true;
 				goto handle_revision;
@@ -118,41 +110,24 @@ mainProg(rcscleanId, "rcsclean", "$Id: rcsclean.c,v 1.3 1995/02/24 02:25:32 mycr
 				suffixes = a;
 				break;
 
-			case 'z':
-				zone_set(a);
-				break;
-
 			default:
 			unknown:
-				error("unknown option: %s%s", *argv, usage);
+				faterror("unknown option: %s%s", *argv, usage);
 		}
 	}
 
-	dounlock = perform & unlockflag;
-
-	if (nerror)
-	  cleanup();
-	else
-	  for (;  0 < argc;  cleanup(), ++argv, --argc) {
-
+	do {
 		ffree();
 
 		if (!(
-			0 < pairnames(
+			0 < pairfilenames(
 				argc, argv,
-				dounlock ? rcswriteopen : rcsreadopen,
+				unlockflag&perform ? rcswriteopen : rcsreadopen,
 				true, true
 			) &&
-			(workptr = Iopen(workname, FOPEN_R_WORK, &workstat))
+			(workptr = Iopen(workfilename,FOPEN_R_WORK,&workstat))
 		))
 			continue;
-
-		if (same_file(RCSstat, workstat, 0)) {
-			rcserror("RCS file is the same as working file %s.",
-				workname
-			);
-			continue;
-		}
 
 		gettree();
 
@@ -180,13 +155,11 @@ mainProg(rcscleanId, "rcsclean", "$Id: rcsclean.c,v 1.3 1995/02/24 02:25:32 mycr
 		waslocked = delta && delta->lockedby;
 		locker_expansion = unlock(delta);
 		unlocked = locker_expansion & unlockflag;
+		changelock = unlocked & perform;
 		if (unlocked<waslocked  &&  workstat.st_mode&(S_IWUSR|S_IWGRP|S_IWOTH))
 			continue;
 
-		if (unlocked && !checkaccesslist())
-			continue;
-
-		if (dorewrite(dounlock, unlocked) != 0)
+		if (!dorewrite(unlockflag, changelock))
 			continue;
 
 		if (0 <= expmode)
@@ -201,33 +174,31 @@ mainProg(rcscleanId, "rcsclean", "$Id: rcsclean.c,v 1.3 1995/02/24 02:25:32 mycr
 		getdesc(false);
 
 		if (
-			!delta ? workstat.st_size!=0 :
+		    !delta ? workstat.st_size!=0 :
 			0 < rcsfcmp(
-				workptr, &workstat,
-				buildrevision(deltas, delta, (FILE*)0, false),
-				delta
+			    workptr, &workstat,
+			    buildrevision(deltas, delta, (FILE*)0, false),
+			    delta
 			)
 		)
 			continue;
 
 		if (quietflag < unlocked)
-			aprintf(stdout, "rcs -u%s %s\n", delta->num, RCSname);
+			aprintf(stdout, "rcs -u%s %s\n", delta->num, RCSfilename);
 
-		if (perform & unlocked) {
-			if_advise_access(deltas->first != delta, finptr, MADV_SEQUENTIAL);
-			if (donerewrite(true,
-				Ttimeflag ? RCSstat.st_mtime : (time_t)-1
-			) != 0)
-				continue;
-		}
+		if_advise_access(changelock  &&  deltas->first != delta,
+			finptr, MADV_SEQUENTIAL
+		);
+		if (!donerewrite(changelock))
+			continue;
 
 		if (!quietflag)
-			aprintf(stdout, "rm -f %s\n", workname);
+			aprintf(stdout, "rm -f %s\n", workfilename);
 		Izclose(&workptr);
-		if (perform  &&  un_link(workname) != 0)
-			eerror(workname);
+		if (perform  &&  un_link(workfilename) != 0)
+			eerror(workfilename);
 
-	  }
+	} while (cleanup(),  ++argv,  0 < --argc);
 
 	tempunlink();
 	if (!quietflag)
@@ -242,17 +213,16 @@ cleanup()
 	Izclose(&finptr);
 	Izclose(&workptr);
 	Ozclose(&fcopy);
-	ORCSclose();
+	Ozclose(&frewrite);
 	dirtempunlink();
 }
 
-#if RCS_lint
-#	define exiterr rcscleanExit
+#if lint
+#       define exiterr rcscleanExit
 #endif
-	void
+	exiting void
 exiterr()
 {
-	ORCSerror();
 	dirtempunlink();
 	tempunlink();
 	_exit(EXIT_FAILURE);
@@ -299,7 +269,7 @@ get_directory(dirname, aargv)
 	while ((errno = 0,  e = readdir(d))) {
 		char const *en = e->d_name;
 		size_t s = strlen(en) + 1;
-		if (en[0]=='.'   &&   (!en[1]  ||  (en[1]=='.' && !en[2])))
+		if (en[0]=='.'   &&   (!en[1]  ||  en[1]=='.' && !en[2]))
 			continue;
 		if (rcssuffix(en))
 			continue;
@@ -311,12 +281,7 @@ get_directory(dirname, aargv)
 		VOID strcpy(a+chars, en);
 		chars += s;
 	}
-#	if void_closedir
-#		define close_directory(d) (closedir(d), 0)
-#	else
-#		define close_directory(d) closedir(d)
-#	endif
-	if (errno  ||  close_directory(d) != 0)
+	if (errno  ||  closedir(d) != 0)
 		efaterror(dirname);
 	if (chars)
 		a = trealloc(char, a, chars);

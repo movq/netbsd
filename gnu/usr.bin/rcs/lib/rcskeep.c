@@ -1,7 +1,14 @@
-/* Extract RCS keyword string values from working files.  */
+/*
+ *                     RCS keyword extraction
+ */
+/*****************************************************************************
+ *                       main routine: getoldkeys()
+ *                       Testprogram: define KEEPTEST
+ *****************************************************************************
+ */
 
-/* Copyright 1982, 1988, 1989 Walter Tichy
-   Copyright 1990, 1991, 1992, 1993, 1994 Paul Eggert
+/* Copyright (C) 1982, 1988, 1989 Walter Tichy
+   Copyright 1990, 1991 by Paul Eggert
    Distributed under license by the Free Software Foundation, Inc.
 
 This file is part of RCS.
@@ -26,22 +33,11 @@ Report problems and direct all questions to:
 
 */
 
-/*
- * $Log: rcskeep.c,v $
- * Revision 1.5  1995/02/24 02:25:07  mycroft
- * RCS 5.6.7.4
- *
- * Revision 5.8  1994/03/17 14:05:48  eggert
- * Remove lint.
- *
- * Revision 5.7  1993/11/09 17:40:15  eggert
- * Use simpler timezone parsing strategy now that we're using ISO 8601 format.
- *
- * Revision 5.6  1993/11/03 17:42:27  eggert
- * Scan for Name keyword.  Improve quality of diagnostics.
- *
- * Revision 5.5  1992/07/28  16:12:44  eggert
- * Statement macro names now end in _.
+
+
+/* rcskeep.c,v
+ * Revision 1.1.1.1  1993/06/18  04:22:13  jkh
+ * Updated GNU utilities
  *
  * Revision 5.4  1991/08/19  03:13:55  eggert
  * Tune.
@@ -93,29 +89,33 @@ Report problems and direct all questions to:
  *
  */
 
+/*
+#define KEEPTEST
+*/
+/* Testprogram; prints out the keyword values found. */
+
 #include  "rcsbase.h"
 
-libId(keepId, "$Id: rcskeep.c,v 1.5 1995/02/24 02:25:07 mycroft Exp $")
+libId(keepId, "rcskeep.c,v 1.1.1.1 1993/06/18 04:22:13 jkh Exp")
 
-static int badly_terminated P((void));
-static int checknum P((char const*));
-static int get0val P((int,RILE*,struct buf*,int));
+static int checknum P((char const*,int));
 static int getval P((RILE*,struct buf*,int));
+static int get0val P((int,RILE*,struct buf*,int));
 static int keepdate P((RILE*));
 static int keepid P((int,RILE*,struct buf*));
 static int keeprev P((RILE*));
 
 int prevkeys;
-struct buf prevauthor, prevdate, prevname, prevrev, prevstate;
+struct buf prevauthor, prevdate, prevrev, prevstate;
 
 	int
 getoldkeys(fp)
 	register RILE *fp;
 /* Function: Tries to read keyword values for author, date,
  * revision number, and state out of the file fp.
- * If fp is null, workname is opened and closed instead of using fp.
+ * If FNAME is nonnull, it is opened and closed instead of using FP.
  * The results are placed into
- * prevauthor, prevdate, prevname, prevrev, prevstate.
+ * prevauthor, prevdate, prevrev, prevstate.
  * Aborts immediately if it finds an error and returns false.
  * If it returns true, it doesn't mean that any of the
  * values were found; instead, check to see whether the corresponding arrays
@@ -126,15 +126,14 @@ getoldkeys(fp)
     char keyword[keylength+1];
     register char * tp;
     int needs_closing;
-    int prevname_found;
 
     if (prevkeys)
 	return true;
 
     needs_closing = false;
     if (!fp) {
-	if (!(fp = Iopen(workname, FOPEN_R_WORK, (struct stat*)0))) {
-	    eerror(workname);
+	if (!(fp = Iopen(workfilename, FOPEN_R_WORK, (struct stat*)0))) {
+	    eerror(workfilename);
 	    return false;
 	}
 	needs_closing = true;
@@ -143,7 +142,6 @@ getoldkeys(fp)
     /* initialize to empty */
     bufscpy(&prevauthor, "");
     bufscpy(&prevdate, "");
-    bufscpy(&prevname, "");  prevname_found = 0;
     bufscpy(&prevrev, "");
     bufscpy(&prevstate, "");
 
@@ -154,7 +152,7 @@ getoldkeys(fp)
 		/* try to get keyword */
 		tp = keyword;
 		for (;;) {
-		    Igeteof_(fp, c, goto ok;)
+		    Igeteof(fp, c, goto ok;);
 		    switch (c) {
 			default:
 			    if (keyword+keylength <= tp)
@@ -170,7 +168,7 @@ getoldkeys(fp)
 	    } while (c==KDELIM);
             if (c!=VDELIM) continue;
 	    *tp = c;
-	    Igeteof_(fp, c, break;)
+	    Igeteof(fp, c, break;);
 	    switch (c) {
 		case ' ': case '\t': break;
 		default: continue;
@@ -188,11 +186,8 @@ getoldkeys(fp)
                 break;
             case Header:
             case Id:
-#ifdef LOCALID
-	    case LocalId:
-#endif
 		if (!(
-		      getval(fp, (struct buf*)0, false) &&
+		      getval(fp, (struct buf*)nil, false) &&
 		      keeprev(fp) &&
 		      (c = keepdate(fp)) &&
 		      keepid(c, fp, &prevauthor) &&
@@ -200,8 +195,8 @@ getoldkeys(fp)
 		))
 		    return false;
 		/* Skip either ``who'' (new form) or ``Locker: who'' (old).  */
-		if (getval(fp, (struct buf*)0, true) &&
-		    getval(fp, (struct buf*)0, true))
+		if (getval(fp, (struct buf*)nil, true) &&
+		    getval(fp, (struct buf*)nil, true))
 			c = 0;
 		else if (nerror)
 			return false;
@@ -209,24 +204,13 @@ getoldkeys(fp)
 			c = KDELIM;
 		break;
             case Locker:
-		(void) getval(fp, (struct buf*)0, false);
-		c = 0;
-		break;
             case Log:
             case RCSfile:
             case Source:
-		if (!getval(fp, (struct buf*)0, false))
+		if (!getval(fp, (struct buf*)nil, false))
 		    return false;
 		c = 0;
                 break;
-	    case Name:
-		if (!getval(fp, &prevname, false))
-		    return false;
-		if (*prevname.string)
-		    checkssym(prevname.string);
-		prevname_found = 1;
-		c = 0;
-		break;
             case Revision:
 		if (!keeprev(fp))
 		    return false;
@@ -241,18 +225,16 @@ getoldkeys(fp)
                continue;
             }
 	    if (!c)
-		Igeteof_(fp, c, c=0;)
+		Igeteof(fp, c, c=0;);
 	    if (c != KDELIM) {
-		workerror("closing %c missing on keyword", KDELIM);
+		error("closing %c missing on keyword", KDELIM);
 		return false;
 	    }
-	    if (prevname_found &&
-		*prevauthor.string && *prevdate.string &&
-		*prevrev.string && *prevstate.string
-	    )
+	    if (*prevauthor.string && *prevdate.string && *prevrev.string && *prevstate.string) {
                 break;
+           }
         }
-	Igeteof_(fp, c, break;)
+	Igeteof(fp, c, break;);
     }
 
  ok:
@@ -267,7 +249,7 @@ getoldkeys(fp)
 	static int
 badly_terminated()
 {
-	workerror("badly terminated keyword value");
+	error("badly terminated keyword value");
 	return false;
 }
 
@@ -278,12 +260,12 @@ getval(fp, target, optional)
 	int optional;
 /* Reads a keyword value from FP into TARGET.
  * Returns true if one is found, false otherwise.
- * Does not modify target if it is 0.
+ * Does not modify target if it is nil.
  * Do not report an error if OPTIONAL is set and KDELIM is found instead.
  */
 {
 	int c;
-	Igeteof_(fp, c, return badly_terminated();)
+	Igeteof(fp, c, return badly_terminated(););
 	return get0val(c, fp, target, optional);
 }
 
@@ -326,6 +308,8 @@ get0val(c, fp, target, optional)
 			VOID printf("getval: %s\n", target);
 #		    endif
 		}
+		if (!got1)
+		    error("too much white space in keyword value");
 		return got1;
 
 	    case KDELIM:
@@ -336,7 +320,7 @@ get0val(c, fp, target, optional)
 	    case 0:
 		return badly_terminated();
 	}
-	Igeteof_(fp, c, return badly_terminated();)
+	Igeteof(fp, c, return badly_terminated(););
     }
 }
 
@@ -348,7 +332,8 @@ keepdate(fp)
  * Return 0 on error, lookahead character otherwise.
  */
 {
-    struct buf prevday, prevtime;
+    struct buf prevday, prevtime, prevzone;
+    register char const *p;
     register int c;
 
     c = 0;
@@ -356,18 +341,24 @@ keepdate(fp)
     if (getval(fp,&prevday,false)) {
 	bufautobegin(&prevtime);
 	if (getval(fp,&prevtime,false)) {
-	    Igeteof_(fp, c, c=0;)
+	    bufautobegin(&prevzone);
+	    bufscpy(&prevzone, "");
+	    Igeteof(fp, c, c=0;);
+	    if (c=='-' || c=='+')
+		if (!get0val(c,fp,&prevzone,false))
+		    c = 0;
+		else
+		    Igeteof(fp, c, c=0;);
 	    if (c) {
-		register char const *d = prevday.string, *t = prevtime.string;
-		bufalloc(&prevdate, strlen(d) + strlen(t) + 9);
-		VOID sprintf(prevdate.string, "%s%s %s%s",
+		p = prevday.string;
+		bufalloc(&prevdate, strlen(p) + strlen(prevtime.string) + strlen(prevzone.string) + 5);
+		VOID sprintf(prevdate.string, "%s%s %s %s",
 		    /* Parse dates put out by old versions of RCS.  */
-		      isdigit(d[0]) && isdigit(d[1]) && !isdigit(d[2])
-		    ? "19" : "",
-		    d, t,
-		    strchr(t,'-') || strchr(t,'+')  ?  ""  :  "+0000"
+		    isdigit(p[0]) && isdigit(p[1]) && p[2]=='/'  ?  "19"  :  "",
+		    p, prevtime.string, prevzone.string
 		);
 	    }
+	    bufautoend(&prevzone);
 	}
 	bufautoend(&prevtime);
     }
@@ -383,11 +374,11 @@ keepid(c, fp, b)
 /* Get previous identifier from C+FP into B.  */
 {
 	if (!c)
-	    Igeteof_(fp, c, return false;)
+	    Igeteof(fp, c, return false;);
 	if (!get0val(c, fp, b, false))
 	    return false;
 	checksid(b->string);
-	return !nerror;
+	return true;
 }
 
 	static int
@@ -395,44 +386,27 @@ keeprev(fp)
 	RILE *fp;
 /* Get previous revision from FP into prevrev.  */
 {
-	return getval(fp,&prevrev,false) && checknum(prevrev.string);
+	return getval(fp,&prevrev,false) && checknum(prevrev.string,-1);
 }
 
 
 	static int
-checknum(s)
-	char const *s;
-{
-    register char const *sp;
-    register int dotcount = 0;
-    for (sp=s; ; sp++) {
-	switch (*sp) {
-	    case 0:
-		if (dotcount & 1)
-		    return true;
-		else
-		    break;
-	    
-	    case '.':
-		dotcount++;
-		continue;
-	    
-	    default:
-		if (isdigit(*sp))
-		    continue;
-		break;
-	}
-	break;
-    }
-    workerror("%s is not a revision number", s);
-    return false;
+checknum(sp,fields)
+	register char const *sp;
+	int fields;
+{    register int dotcount;
+     dotcount=0;
+     while(*sp) {
+        if (*sp=='.') dotcount++;
+	else if (!isdigit(*sp)) return false;
+        sp++;
+     }
+     return fields<0 ? dotcount&1 : dotcount==fields;
 }
 
 
 
 #ifdef KEEPTEST
-
-/* Print the keyword values found.  */
 
 char const cmdid[] ="keeptest";
 
@@ -441,10 +415,10 @@ main(argc, argv)
 int  argc; char  *argv[];
 {
         while (*(++argv)) {
-		workname = *argv;
+		workfilename = *argv;
 		getoldkeys((RILE*)0);
-                VOID printf("%s:  revision: %s, date: %s, author: %s, name: %s, state: %s\n",
-			    *argv, prevrev.string, prevdate.string, prevauthor.string, prevname.string, prevstate.string);
+                VOID printf("%s:  revision: %s, date: %s, author: %s, state: %s\n",
+			    *argv, prevrev.string, prevdate.string, prevauthor.string, prevstate.string);
 	}
 	exitmain(EXIT_SUCCESS);
 }

@@ -1,7 +1,5 @@
-/* Identify RCS keyword strings in files.  */
-
-/* Copyright 1982, 1988, 1989 Walter Tichy
-   Copyright 1990, 1991, 1992, 1993, 1994 Paul Eggert
+/* Copyright (C) 1982, 1988, 1989 Walter Tichy
+   Copyright 1990, 1991 by Paul Eggert
    Distributed under license by the Free Software Foundation, Inc.
 
 This file is part of RCS.
@@ -27,21 +25,12 @@ Report problems and direct all questions to:
 */
 
 /*
- * $Log: ident.c,v $
- * Revision 1.3  1995/02/24 02:07:55  mycroft
- * RCS 5.6.7.4
- *
- * Revision 5.7  1994/03/20 04:52:58  eggert
- * Remove `exiting' from identExit.
- *
- * Revision 5.6  1993/11/09 17:40:15  eggert
- * Add -V.
- *
- * Revision 5.5  1993/11/03 17:42:27  eggert
- * Test for char == EOF, not char < 0.
- *
- * Revision 5.4  1992/01/24  18:44:19  eggert
- * lint -> RCS_lint
+ *                     RCS identification operation
+ */
+
+/* ident.c,v
+ * Revision 1.1.1.1  1993/06/18  04:22:11  jkh
+ * Updated GNU utilities
  *
  * Revision 5.3  1991/09/10  22:15:46  eggert
  * Open files with FOPEN_R, not FOPEN_R_WORK,
@@ -97,49 +86,33 @@ Report problems and direct all questions to:
 static int match P((FILE*));
 static void scanfile P((FILE*,char const*,int));
 
-mainProg(identId, "ident", "$Id: ident.c,v 1.3 1995/02/24 02:07:55 mycroft Exp $")
+mainProg(identId, "ident", "ident.c,v 1.1.1.1 1993/06/18 04:22:11 jkh Exp")
 /*  Ident searches the named files for all occurrences
- *  of the pattern $keyword: text $.
+ *  of the pattern $keyword:...$, where the keywords are
+ *  Author, Date, Header, Id, Log, RCSfile, Revision, Source, and State.
  */
 
 {
    FILE *fp;
-   int quiet = 0;
+   int quiet;
    int status = EXIT_SUCCESS;
-   char const *a;
 
-   while ((a = *++argv)  &&  *a=='-')
-	while (*++a)
-	    switch (*a) {
-		case 'q':
-		    quiet = 1;
-		    break;
+   if ((quiet  =  argc > 1 && strcmp("-q",argv[1])==0)) {
+        argc--; argv++;
+   }
 
-		case 'V':
-		    VOID printf("RCS version %s\n", RCS_version_string);
-		    exitmain(0);
-
-		default:
-		    VOID fprintf(stderr,
-			"ident: usage: ident -{qV} [file...]\n"
-		    );
-		    exitmain(1);
-		    break;
-	    }
-
-   if (!a)
+   if (argc<2)
 	scanfile(stdin, (char*)0, quiet);
-   else
-	do {
-	    if (!(fp = fopen(a, FOPEN_R))) {
-		VOID fprintf(stderr,  "%s error: can't open %s\n", cmdid, a);
-		status = EXIT_FAILURE;
-	    } else {
-		scanfile(fp, a, quiet);
-		if (argv[1]) VOID putchar('\n');
-	    }
-	} while ((a = *++argv));
 
+   while ( --argc > 0 ) {
+      if (!(fp = fopen(*++argv, FOPEN_R))) {
+	 VOID fprintf(stderr,  "%s error: can't open %s\n", cmdid, *argv);
+	 status = EXIT_FAILURE;
+      } else {
+	 scanfile(fp, *argv, quiet);
+	 if (argc>1) VOID putchar('\n');
+      }
+   }
    if (ferror(stdout) || fclose(stdout)!=0) {
       VOID fprintf(stderr,  "%s error: write error\n", cmdid);
       status = EXIT_FAILURE;
@@ -147,8 +120,8 @@ mainProg(identId, "ident", "$Id: ident.c,v 1.3 1995/02/24 02:07:55 mycroft Exp $
    exitmain(status);
 }
 
-#if RCS_lint
-	void identExit() { _exit(EXIT_FAILURE); }
+#if lint
+	exiting void identExit() { _exit(EXIT_FAILURE); }
 #endif
 
 
@@ -169,7 +142,7 @@ scanfile(file, name, quiet)
       name = "input";
    c = 0;
    for (;;) {
-      if (c == EOF) {
+      if (c < 0) {
 	 if (feof(file))
 	    break;
 	 if (ferror(file))
@@ -204,7 +177,7 @@ match(fp)   /* group substring between two KDELIM's; then do pattern match */
 
    tp = line;
    while ((c = getc(fp)) != VDELIM) {
-      if (c == EOF  &&  feof(fp) | ferror(fp))
+      if (c < 0)
 	 return c;
       switch (ctab[c]) {
 	 case LETTER: case Letter:
@@ -223,7 +196,7 @@ match(fp)   /* group substring between two KDELIM's; then do pattern match */
       return c ? c : '\n';
    *tp++ = c;
    while( (c = getc(fp)) != KDELIM ) {
-      if (c == EOF  &&  feof(fp) | ferror(fp))
+      if (c < 0  &&  feof(fp) | ferror(fp))
 	    return c;
       switch (ctab[c]) {
 	 default:

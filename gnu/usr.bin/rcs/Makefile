@@ -1,6 +1,3 @@
-#	$Id: Makefile,v 1.4 1995/02/24 02:07:40 mycroft Exp $
-
-SUBDIR+=lib
-SUBDIR+=ci co ident merge rcs rcsclean rcsdiff rcsfreeze rcsmerge rlog
+SUBDIR= lib ci co ident merge rcs rcsclean rcsdiff rcsmerge rlog rcsfreeze
 
 .include <bsd.subdir.mk>

@@ -1,6 +1,4 @@
-#	$Id: Makefile,v 1.3 1994/12/22 09:45:36 cgd Exp $
-
-MAN=	rcsfreeze.1
+MAN1=	rcsfreeze.0
 
 afterinstall:
 	install -c -o ${BINOWN} -g ${BINGRP} -m ${BINMODE} \

@@ -1,6 +1,6 @@
-/* three-way file merge internals */
+/* merger - three-way file merge internals */
 
-/* Copyright 1991, 1992, 1993, 1994 Paul Eggert
+/* Copyright 1991 by Paul Eggert
    Distributed under license by the Free Software Foundation, Inc.
 
 This file is part of RCS.
@@ -27,9 +27,8 @@ Report problems and direct all questions to:
 
 #include "rcsbase.h"
 
-libId(mergerId, "$Id: merger.c,v 1.3 1995/02/24 02:24:54 mycroft Exp $")
+libId(mergerId, "merger.c,v 1.1.1.1 1993/06/18 04:22:13 jkh Exp")
 
-	static char const *normalize_arg P((char const*,char**));
 	static char const *
 normalize_arg(s, b)
 	char const *s;
@@ -52,16 +51,14 @@ normalize_arg(s, b)
 }
 
 	int
-merge(tostdout, edarg, label, argv)
+merge(tostdout, label, argv)
 	int tostdout;
-	char const *edarg;
-	char const *const label[3];
+	char const *const label[2];
 	char const *const argv[3];
 /*
- * Do `merge [-p] EDARG -L l0 -L l1 -L l2 a0 a1 a2',
+ * Do `merge [-p] -L l0 -L l1 a0 a1 a2',
  * where TOSTDOUT specifies whether -p is present,
- * EDARG gives the editing type (e.g. "-A", or null for the default),
- * LABEL gives l0, l1 and l2, and ARGV gives a0, a1 and a2.
+ * LABEL gives l0 and l1, and ARGV gives a0, a1, and a2.
  * Yield DIFF_SUCCESS or DIFF_FAILURE.
  */
 {
@@ -77,32 +74,22 @@ merge(tostdout, edarg, label, argv)
 
 	for (i=3; 0<=--i; )
 		a[i] = normalize_arg(argv[i], &b[i]);
-	
-	if (!edarg)
-#		if DIFF3_A
-			edarg = "-A";
-#		else
-			edarg = "-E";
-#		endif
 
 #if DIFF3_BIN
 	t = 0;
 	if (!tostdout)
 		t = maketemp(0);
 	s = run(
-		-1, t,
-		DIFF3, edarg, "-am", "-L", label[0],
-#		if DIFF3_A
-			"-L", label[1],
-#		endif
-		"-L", label[2],
+		(char*)0, t,
+		DIFF3, "-am", "-L", label[0], "-L", label[1],
 		a[0], a[1], a[2], (char*)0
 	);
 	switch (s) {
 		case DIFF_SUCCESS:
 			break;
 		case DIFF_FAILURE:
-			warn("conflicts during merge");
+			if (!quietflag)
+				warn("overlaps during merge");
 			break;
 		default:
 			exiterr();
@@ -119,30 +106,29 @@ merge(tostdout, edarg, label, argv)
 #else
 	for (i=0; i<2; i++)
 		switch (run(
-			-1, d[i]=maketemp(i),
+			(char*)0, d[i]=maketemp(i),
 			DIFF, a[i], a[2], (char*)0
 		)) {
 			case DIFF_FAILURE: case DIFF_SUCCESS: break;
-			default: faterror("diff failed");
+			default: exiterr();
 		}
 	t = maketemp(2);
 	s = run(
-		-1, t,
-		DIFF3, edarg, d[0], d[1], a[0], a[1], a[2],
-		label[0], label[2], (char*)0
+		(char*)0, t,
+		DIFF3, "-E", d[0], d[1], a[0], a[1], a[2],
+		label[0], label[1], (char*)0
 	);
 	if (s != DIFF_SUCCESS) {
 		s = DIFF_FAILURE;
-		warn("overlaps or other problems during merge");
+		if (!quietflag)
+			warn("overlaps or other problems during merge");
 	}
-	if (!(f = fopen(t, "a+")))
+	if (!(f = fopen(t, "a")))
 		efaterror(t);
 	aputs(tostdout ? "1,$p\n" : "w\n",  f);
-	Orewind(f);
-	aflush(f);
-	if (run(fileno(f), (char*)0, ED, "-", a[0], (char*)0))
-		exiterr();
 	Ofclose(f);
+	if (run(t, (char*)0, ED, "-", a[0], (char*)0))
+		exiterr();
 #endif
 
 	tempunlink();
