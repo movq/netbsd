@@ -1,4 +1,4 @@
-/*	$NetBSD: iplang.h,v 1.1 1999/12/11 22:24:06 veego Exp $	*/
+/*	$NetBSD: iplang.h,v 1.1.1.1 1999/12/11 22:24:06 veego Exp $	*/
 
 /*
  * Copyright (C) 1997-1998 by Darren Reed.

@@ -1,4 +1,4 @@
-/*	$NetBSD: inet_addr.c,v 1.1 1999/12/11 22:23:58 veego Exp $	*/
+/*	$NetBSD: inet_addr.c,v 1.1.1.1 1999/12/11 22:23:58 veego Exp $	*/
 
 /*
  * ++Copyright++ 1983, 1990, 1993

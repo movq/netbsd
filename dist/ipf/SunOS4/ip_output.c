@@ -1,4 +1,4 @@
-/*	$NetBSD: ip_output.c,v 1.1 1999/12/11 22:24:05 veego Exp $	*/
+/*	$NetBSD: ip_output.c,v 1.1.1.1 1999/12/11 22:24:05 veego Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1988, 1993
