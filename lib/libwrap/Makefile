@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 1996/11/26 16:48:09 mrg Exp $
+#	$NetBSD: Makefile,v 1.1.1.1 1996/11/26 16:48:09 mrg Exp $
 
 LIB=	wrap 
 
