@@ -1,4 +1,4 @@
-/*	$NetBSD: vm_machdep.c,v 1.20 2002/08/22 01:13:55 thorpej Exp $	*/
+/*	$NetBSD: vm_machdep.c,v 1.22 2002/10/19 00:10:53 bjh21 Exp $	*/
 
 /*
  * Copyright (c) 1994-1998 Mark Brinicombe.

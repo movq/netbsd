@@ -1,4 +1,4 @@
-#	$NetBSD: genassym.cf,v 1.17 2002/10/12 12:20:10 bjh21 Exp $
+#	$NetBSD: genassym.cf,v 1.19 2002/10/19 00:10:53 bjh21 Exp $
 
 # Copyright (c) 1982, 1990 The Regents of the University of California.
 # All rights reserved.
