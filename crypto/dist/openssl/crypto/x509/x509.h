@@ -60,30 +60,18 @@
 #define HEADER_X509_H
 
 #include <openssl/symhacks.h>
-#ifndef NO_BUFFER
 #include <openssl/buffer.h>
-#endif
-#ifndef NO_EVP
 #include <openssl/evp.h>
-#endif
-#ifndef NO_BIO
 #include <openssl/bio.h>
-#endif
 #include <openssl/stack.h>
 #include <openssl/asn1.h>
 #include <openssl/safestack.h>
 
-#ifndef NO_RSA
 #include <openssl/rsa.h>
-#endif
 
-#ifndef NO_DSA
 #include <openssl/dsa.h>
-#endif
 
-#ifndef NO_DH
 #include <openssl/dh.h>
-#endif
 
 #include <openssl/evp.h>
 
@@ -167,11 +155,7 @@ typedef struct X509_name_st
 	{
 	STACK_OF(X509_NAME_ENTRY) *entries;
 	int modified;	/* true if 'bytes' needs to be built */
-#ifndef NO_BUFFER
 	BUF_MEM *bytes;
-#else
-	char *bytes;
-#endif
 	unsigned long hash; /* Keep the hash around for lookups */
 	} X509_NAME;
 
@@ -273,9 +257,7 @@ typedef struct x509_st
 	unsigned long ex_nscert;
 	ASN1_OCTET_STRING *skid;
 	struct AUTHORITY_KEYID_st *akid;
-#ifndef NO_SHA
 	unsigned char sha1_hash[SHA_DIGEST_LENGTH];
-#endif
 	X509_CERT_AUX *aux;
 	} X509;
 
@@ -430,7 +412,6 @@ typedef struct private_key_st
 	int references;
 	} X509_PKEY;
 
-#ifndef NO_EVP
 typedef struct X509_info_st
 	{
 	X509 *x509;
@@ -445,7 +426,6 @@ typedef struct X509_info_st
 	} X509_INFO;
 
 DECLARE_STACK_OF(X509_INFO)
-#endif
 
 /* The next 2 structures and their 8 routines were sent to me by
  * Pat Richard <patr@x509.com> and are used to manipulate
@@ -686,7 +666,6 @@ extern "C" {
 const char *X509_verify_cert_error_string(long n);
 
 #ifndef SSLEAY_MACROS
-#ifndef NO_EVP
 int X509_verify(X509 *a, EVP_PKEY *r);
 
 int X509_REQ_verify(X509_REQ *a, EVP_PKEY *r);
@@ -713,29 +692,23 @@ int X509_REQ_digest(const X509_REQ *data,const EVP_MD *type,
 		unsigned char *md, unsigned int *len);
 int X509_NAME_digest(const X509_NAME *data,const EVP_MD *type,
 		unsigned char *md, unsigned int *len);
-#endif
 
-#ifndef NO_FP_API
 X509 *d2i_X509_fp(FILE *fp, X509 **x509);
 int i2d_X509_fp(FILE *fp,X509 *x509);
 X509_CRL *d2i_X509_CRL_fp(FILE *fp,X509_CRL **crl);
 int i2d_X509_CRL_fp(FILE *fp,X509_CRL *crl);
 X509_REQ *d2i_X509_REQ_fp(FILE *fp,X509_REQ **req);
 int i2d_X509_REQ_fp(FILE *fp,X509_REQ *req);
-#ifndef NO_RSA
 RSA *d2i_RSAPrivateKey_fp(FILE *fp,RSA **rsa);
 int i2d_RSAPrivateKey_fp(FILE *fp,RSA *rsa);
 RSA *d2i_RSAPublicKey_fp(FILE *fp,RSA **rsa);
 int i2d_RSAPublicKey_fp(FILE *fp,RSA *rsa);
 RSA *d2i_RSA_PUBKEY_fp(FILE *fp,RSA **rsa);
 int i2d_RSA_PUBKEY_fp(FILE *fp,RSA *rsa);
-#endif
-#ifndef NO_DSA
 DSA *d2i_DSA_PUBKEY_fp(FILE *fp, DSA **dsa);
 int i2d_DSA_PUBKEY_fp(FILE *fp, DSA *dsa);
 DSA *d2i_DSAPrivateKey_fp(FILE *fp, DSA **dsa);
 int i2d_DSAPrivateKey_fp(FILE *fp, DSA *dsa);
-#endif
 X509_SIG *d2i_PKCS8_fp(FILE *fp,X509_SIG **p8);
 int i2d_PKCS8_fp(FILE *fp,X509_SIG *p8);
 PKCS8_PRIV_KEY_INFO *d2i_PKCS8_PRIV_KEY_INFO_fp(FILE *fp,
@@ -746,29 +719,23 @@ int i2d_PrivateKey_fp(FILE *fp, EVP_PKEY *pkey);
 EVP_PKEY *d2i_PrivateKey_fp(FILE *fp, EVP_PKEY **a);
 int i2d_PUBKEY_fp(FILE *fp, EVP_PKEY *pkey);
 EVP_PKEY *d2i_PUBKEY_fp(FILE *fp, EVP_PKEY **a);
-#endif
 
-#ifndef NO_BIO
 X509 *d2i_X509_bio(BIO *bp,X509 **x509);
 int i2d_X509_bio(BIO *bp,X509 *x509);
 X509_CRL *d2i_X509_CRL_bio(BIO *bp,X509_CRL **crl);
 int i2d_X509_CRL_bio(BIO *bp,X509_CRL *crl);
 X509_REQ *d2i_X509_REQ_bio(BIO *bp,X509_REQ **req);
 int i2d_X509_REQ_bio(BIO *bp,X509_REQ *req);
-#ifndef NO_RSA
 RSA *d2i_RSAPrivateKey_bio(BIO *bp,RSA **rsa);
 int i2d_RSAPrivateKey_bio(BIO *bp,RSA *rsa);
 RSA *d2i_RSAPublicKey_bio(BIO *bp,RSA **rsa);
 int i2d_RSAPublicKey_bio(BIO *bp,RSA *rsa);
 RSA *d2i_RSA_PUBKEY_bio(BIO *bp,RSA **rsa);
 int i2d_RSA_PUBKEY_bio(BIO *bp,RSA *rsa);
-#endif
-#ifndef NO_DSA
 DSA *d2i_DSA_PUBKEY_bio(BIO *bp, DSA **dsa);
 int i2d_DSA_PUBKEY_bio(BIO *bp, DSA *dsa);
 DSA *d2i_DSAPrivateKey_bio(BIO *bp, DSA **dsa);
 int i2d_DSAPrivateKey_bio(BIO *bp, DSA *dsa);
-#endif
 X509_SIG *d2i_PKCS8_bio(BIO *bp,X509_SIG **p8);
 int i2d_PKCS8_bio(BIO *bp,X509_SIG *p8);
 PKCS8_PRIV_KEY_INFO *d2i_PKCS8_PRIV_KEY_INFO_bio(BIO *bp,
@@ -779,7 +746,6 @@ int i2d_PrivateKey_bio(BIO *bp, EVP_PKEY *pkey);
 EVP_PKEY *d2i_PrivateKey_bio(BIO *bp, EVP_PKEY **a);
 int i2d_PUBKEY_bio(BIO *bp, EVP_PKEY *pkey);
 EVP_PKEY *d2i_PUBKEY_bio(BIO *bp, EVP_PKEY **a);
-#endif
 
 X509 *X509_dup(X509 *x509);
 X509_ATTRIBUTE *X509_ATTRIBUTE_dup(X509_ATTRIBUTE *xa);
@@ -789,10 +755,8 @@ X509_REQ *X509_REQ_dup(X509_REQ *req);
 X509_ALGOR *X509_ALGOR_dup(X509_ALGOR *xn);
 X509_NAME *X509_NAME_dup(X509_NAME *xn);
 X509_NAME_ENTRY *X509_NAME_ENTRY_dup(X509_NAME_ENTRY *ne);
-#ifndef NO_RSA
 RSA *RSAPublicKey_dup(RSA *rsa);
 RSA *RSAPrivateKey_dup(RSA *rsa);
-#endif
 
 #endif /* !SSLEAY_MACROS */
 
@@ -810,7 +774,6 @@ const char *	X509_get_default_private_dir(void );
 
 X509_REQ *	X509_to_X509_REQ(X509 *x, EVP_PKEY *pkey, const EVP_MD *md);
 X509 *		X509_REQ_to_X509(X509_REQ *r, int days,EVP_PKEY *pkey);
-void ERR_load_X509_strings(void );
 
 X509_ALGOR *	X509_ALGOR_new(void );
 void		X509_ALGOR_free(X509_ALGOR *a);
@@ -836,16 +799,12 @@ int		X509_get_pubkey_parameters(EVP_PKEY *pkey,
 int		i2d_PUBKEY(EVP_PKEY *a,unsigned char **pp);
 EVP_PKEY *	d2i_PUBKEY(EVP_PKEY **a,unsigned char **pp,
 			long length);
-#ifndef NO_RSA
 int		i2d_RSA_PUBKEY(RSA *a,unsigned char **pp);
 RSA *		d2i_RSA_PUBKEY(RSA **a,unsigned char **pp,
 			long length);
-#endif
-#ifndef NO_DSA
 int		i2d_DSA_PUBKEY(DSA *a,unsigned char **pp);
 DSA *		d2i_DSA_PUBKEY(DSA **a,unsigned char **pp,
 			long length);
-#endif
 
 X509_SIG *	X509_SIG_new(void );
 void		X509_SIG_free(X509_SIG *a);
@@ -959,7 +918,6 @@ NETSCAPE_CERT_SEQUENCE *NETSCAPE_CERT_SEQUENCE_new(void);
 NETSCAPE_CERT_SEQUENCE *d2i_NETSCAPE_CERT_SEQUENCE(NETSCAPE_CERT_SEQUENCE **a, unsigned char **pp, long length);
 void NETSCAPE_CERT_SEQUENCE_free(NETSCAPE_CERT_SEQUENCE *a);
 
-#ifndef NO_EVP
 X509_INFO *	X509_INFO_new(void);
 void		X509_INFO_free(X509_INFO *a);
 char *		X509_NAME_oneline(X509_NAME *a,char *buf,int size);
@@ -973,7 +931,6 @@ int ASN1_digest(int (*i2d)(),const EVP_MD *type,char *data,
 int ASN1_sign(int (*i2d)(), X509_ALGOR *algor1, X509_ALGOR *algor2,
 	ASN1_BIT_STRING *signature,
 	char *data,EVP_PKEY *pkey, const EVP_MD *type);
-#endif
 
 int 		X509_set_version(X509 *x,long version);
 int 		X509_set_serialNumber(X509 *x, ASN1_INTEGER *serial);
@@ -1033,21 +990,17 @@ int		X509_NAME_cmp(const X509_NAME *a, const X509_NAME *b);
 unsigned long	X509_NAME_hash(X509_NAME *x);
 
 int		X509_CRL_cmp(const X509_CRL *a, const X509_CRL *b);
-#ifndef NO_FP_API
 int		X509_print_fp(FILE *bp,X509 *x);
 int		X509_CRL_print_fp(FILE *bp,X509_CRL *x);
 int		X509_REQ_print_fp(FILE *bp,X509_REQ *req);
 int X509_NAME_print_ex_fp(FILE *fp, X509_NAME *nm, int indent, unsigned long flags);
-#endif
 
-#ifndef NO_BIO
 int		X509_NAME_print(BIO *bp, X509_NAME *name, int obase);
 int X509_NAME_print_ex(BIO *out, X509_NAME *nm, int indent, unsigned long flags);
 int		X509_print(BIO *bp,X509 *x);
 int		X509_CERT_AUX_print(BIO *bp,X509_CERT_AUX *x, int indent);
 int		X509_CRL_print(BIO *bp,X509_CRL *x);
 int		X509_REQ_print(BIO *bp,X509_REQ *req);
-#endif
 
 int 		X509_NAME_entry_count(X509_NAME *name);
 int 		X509_NAME_get_text_by_NID(X509_NAME *name, int nid,
@@ -1220,6 +1173,7 @@ int X509_TRUST_get_trust(X509_TRUST *xp);
 /* The following lines are auto generated by the script mkerr.pl. Any changes
  * made after this point may be overwritten when the script is next run.
  */
+void ERR_load_X509_strings(void);
 
 /* Error codes for the X509 functions. */
 
@@ -1291,4 +1245,3 @@ int X509_TRUST_get_trust(X509_TRUST *xp);
 }
 #endif
 #endif
-

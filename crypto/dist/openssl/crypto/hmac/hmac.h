@@ -58,9 +58,6 @@
 #ifndef HEADER_HMAC_H
 #define HEADER_HMAC_H
 
-#ifdef NO_HMAC
-#error HMAC is disabled.
-#endif
 
 #include <openssl/evp.h>
 

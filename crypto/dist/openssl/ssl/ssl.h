@@ -55,19 +55,66 @@
  * copied and put under another distribution licence
  * [including the GNU Public Licence.]
  */
+/* ====================================================================
+ * Copyright (c) 1998-2002 The OpenSSL Project.  All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ *
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer. 
+ *
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in
+ *    the documentation and/or other materials provided with the
+ *    distribution.
+ *
+ * 3. All advertising materials mentioning features or use of this
+ *    software must display the following acknowledgment:
+ *    "This product includes software developed by the OpenSSL Project
+ *    for use in the OpenSSL Toolkit. (http://www.openssl.org/)"
+ *
+ * 4. The names "OpenSSL Toolkit" and "OpenSSL Project" must not be used to
+ *    endorse or promote products derived from this software without
+ *    prior written permission. For written permission, please contact
+ *    openssl-core@openssl.org.
+ *
+ * 5. Products derived from this software may not be called "OpenSSL"
+ *    nor may "OpenSSL" appear in their names without prior written
+ *    permission of the OpenSSL Project.
+ *
+ * 6. Redistributions of any form whatsoever must retain the following
+ *    acknowledgment:
+ *    "This product includes software developed by the OpenSSL Project
+ *    for use in the OpenSSL Toolkit (http://www.openssl.org/)"
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE OpenSSL PROJECT ``AS IS'' AND ANY
+ * EXPRESSED OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+ * PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE OpenSSL PROJECT OR
+ * ITS CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+ * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+ * STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED
+ * OF THE POSSIBILITY OF SUCH DAMAGE.
+ * ====================================================================
+ *
+ * This product includes cryptographic software written by Eric Young
+ * (eay@cryptsoft.com).  This product includes software written by Tim
+ * Hudson (tjh@cryptsoft.com).
+ *
+ */
 
 #ifndef HEADER_SSL_H 
 #define HEADER_SSL_H 
 
-#ifndef NO_COMP
 #include <openssl/comp.h>
-#endif
-#ifndef NO_BIO
 #include <openssl/bio.h>
-#endif
-#ifndef NO_X509
 #include <openssl/x509.h>
-#endif
 #include <openssl/safestack.h>
 
 #ifdef  __cplusplus
@@ -366,11 +413,7 @@ typedef struct ssl_comp_st
 	{
 	int id;
 	char *name;
-#ifndef NO_COMP
 	COMP_METHOD *method;
-#else
-	char *method;
-#endif
 	} SSL_COMP;
 
 DECLARE_STACK_OF(SSL_COMP)
@@ -553,16 +596,10 @@ struct ssl_st
 	 * same.  This is so data can be read and written to different
 	 * handlers */
 
-#ifndef NO_BIO
 	BIO *rbio; /* used by SSL_read */
 	BIO *wbio; /* used by SSL_write */
 	BIO *bbio; /* used during session-id reuse to concatenate
 		    * messages */
-#else
-	char *rbio; /* used by SSL_read */
-	char *wbio; /* used by SSL_write */
-	char *bbio;
-#endif
 	/* This holds a variable that indicates what we were doing
 	 * when a 0 or -1 is returned.  This is needed for
 	 * non-blocking IO so we know what request needs re-doing when
@@ -583,7 +620,11 @@ struct ssl_st
 
 	int server;	/* are we the server side? - mostly used by SSL_clear*/
 
-	int new_session;/* 1 if we are to use a new session */
+	int new_session;/* 1 if we are to use a new session.
+	                 * 2 if we are a server and are inside a handshake
+	                 *   (i.e. not just sending a HelloRequest)
+	                 * NB: For servers, the 'new' session may actually be a previously
+	                 * cached session or even the previous session */
 	int quiet_shutdown;/* don't send shutdown packets */
 	int shutdown;	/* we have shut things down, 0x01 sent, 0x02
 			 * for received */
@@ -617,19 +658,11 @@ struct ssl_st
 
 	EVP_CIPHER_CTX *enc_read_ctx;		/* cryptographic state */
 	const EVP_MD *read_hash;		/* used for mac generation */
-#ifndef NO_COMP
 	COMP_CTX *expand;			/* uncompress */
-#else
-	char *expand;
-#endif
 
 	EVP_CIPHER_CTX *enc_write_ctx;		/* cryptographic state */
 	const EVP_MD *write_hash;		/* used for mac generation */
-#ifndef NO_COMP
 	COMP_CTX *compress;			/* compression */
-#else
-	char *compress;	
-#endif
 
 	/* session info */
 
@@ -911,7 +944,6 @@ size_t SSL_get_peer_finished(SSL *s, void *buf, size_t count);
 #define SSL_add_dir_cert_subjects_to_stack SSL_add_dir_cert_sub_to_stack
 #endif
 
-#ifndef NO_BIO
 BIO_METHOD *BIO_f_ssl(void);
 BIO *BIO_new_ssl(SSL_CTX *ctx,int client);
 BIO *BIO_new_ssl_connect(SSL_CTX *ctx);
@@ -919,7 +951,6 @@ BIO *BIO_new_buffer_ssl_connect(SSL_CTX *ctx);
 int BIO_ssl_copy_session_id(BIO *to,BIO *from);
 void BIO_ssl_shutdown(BIO *ssl_bio);
 
-#endif
 
 int	SSL_CTX_set_cipher_list(SSL_CTX *,const char *str);
 SSL_CTX *SSL_CTX_new(SSL_METHOD *meth);
@@ -939,20 +970,18 @@ char *	SSL_CIPHER_get_version(SSL_CIPHER *c);
 const char *	SSL_CIPHER_get_name(SSL_CIPHER *c);
 
 int	SSL_get_fd(SSL *s);
+int	SSL_get_rfd(SSL *s);
+int	SSL_get_wfd(SSL *s);
 const char  * SSL_get_cipher_list(SSL *s,int n);
 char *	SSL_get_shared_ciphers(SSL *s, char *buf, int len);
 int	SSL_get_read_ahead(SSL * s);
 int	SSL_pending(SSL *s);
-#ifndef NO_SOCK
 int	SSL_set_fd(SSL *s, int fd);
 int	SSL_set_rfd(SSL *s, int fd);
 int	SSL_set_wfd(SSL *s, int fd);
-#endif
-#ifndef NO_BIO
 void	SSL_set_bio(SSL *s, BIO *rbio,BIO *wbio);
 BIO *	SSL_get_rbio(SSL *s);
 BIO *	SSL_get_wbio(SSL *s);
-#endif
 int	SSL_set_cipher_list(SSL *s, const char *str);
 void	SSL_set_read_ahead(SSL *s, int yes);
 int	SSL_get_verify_mode(SSL *s);
@@ -961,16 +990,13 @@ int	(*SSL_get_verify_callback(SSL *s))(int,X509_STORE_CTX *);
 void	SSL_set_verify(SSL *s, int mode,
 		       int (*callback)(int ok,X509_STORE_CTX *ctx));
 void	SSL_set_verify_depth(SSL *s, int depth);
-#ifndef NO_RSA
 int	SSL_use_RSAPrivateKey(SSL *ssl, RSA *rsa);
-#endif
 int	SSL_use_RSAPrivateKey_ASN1(SSL *ssl, unsigned char *d, long len);
 int	SSL_use_PrivateKey(SSL *ssl, EVP_PKEY *pkey);
 int	SSL_use_PrivateKey_ASN1(int pk,SSL *ssl, unsigned char *d, long len);
 int	SSL_use_certificate(SSL *ssl, X509 *x);
 int	SSL_use_certificate_ASN1(SSL *ssl, unsigned char *d, int len);
 
-#ifndef NO_STDIO
 int	SSL_use_RSAPrivateKey_file(SSL *ssl, const char *file, int type);
 int	SSL_use_PrivateKey_file(SSL *ssl, const char *file, int type);
 int	SSL_use_certificate_file(SSL *ssl, const char *file, int type);
@@ -983,9 +1009,7 @@ int	SSL_add_file_cert_subjects_to_stack(STACK_OF(X509_NAME) *stackCAs,
 					    const char *file);
 int	SSL_add_dir_cert_subjects_to_stack(STACK_OF(X509_NAME) *stackCAs,
 					   const char *dir);
-#endif
 
-void	ERR_load_SSL_strings(void );
 void	SSL_load_error_strings(void );
 char * 	SSL_state_string(SSL *s);
 char * 	SSL_rstate_string(SSL *s);
@@ -1000,12 +1024,8 @@ void	SSL_copy_session_id(SSL *to,SSL *from);
 SSL_SESSION *SSL_SESSION_new(void);
 unsigned long SSL_SESSION_hash(SSL_SESSION *a);
 int	SSL_SESSION_cmp(SSL_SESSION *a,SSL_SESSION *b);
-#ifndef NO_FP_API
 int	SSL_SESSION_print_fp(FILE *fp,SSL_SESSION *ses);
-#endif
-#ifndef NO_BIO
 int	SSL_SESSION_print(BIO *fp,SSL_SESSION *ses);
-#endif
 void	SSL_SESSION_free(SSL_SESSION *ses);
 int	i2d_SSL_SESSION(SSL_SESSION *in,unsigned char **pp);
 int	SSL_set_session(SSL *to, SSL_SESSION *session);
@@ -1030,9 +1050,7 @@ void SSL_CTX_set_verify(SSL_CTX *ctx,int mode,
 			int (*callback)(int, X509_STORE_CTX *));
 void SSL_CTX_set_verify_depth(SSL_CTX *ctx,int depth);
 void SSL_CTX_set_cert_verify_callback(SSL_CTX *ctx, int (*cb)(),char *arg);
-#ifndef NO_RSA
 int SSL_CTX_use_RSAPrivateKey(SSL_CTX *ctx, RSA *rsa);
-#endif
 int SSL_CTX_use_RSAPrivateKey_ASN1(SSL_CTX *ctx, unsigned char *d, long len);
 int SSL_CTX_use_PrivateKey(SSL_CTX *ctx, EVP_PKEY *pkey);
 int SSL_CTX_use_PrivateKey_ASN1(int pk,SSL_CTX *ctx,
@@ -1181,7 +1199,6 @@ int SSL_get_ex_data_X509_STORE_CTX_idx(void );
 	SSL_CTX_ctrl(ctx,SSL_CTRL_SET_READ_AHEAD,m,NULL)
 
      /* NB: the keylength is only applicable when is_export is true */
-#ifndef NO_RSA
 void SSL_CTX_set_tmp_rsa_callback(SSL_CTX *ctx,
 				  RSA *(*cb)(SSL *ssl,int is_export,
 					     int keylength));
@@ -1189,21 +1206,14 @@ void SSL_CTX_set_tmp_rsa_callback(SSL_CTX *ctx,
 void SSL_set_tmp_rsa_callback(SSL *ssl,
 				  RSA *(*cb)(SSL *ssl,int is_export,
 					     int keylength));
-#endif
-#ifndef NO_DH
 void SSL_CTX_set_tmp_dh_callback(SSL_CTX *ctx,
 				 DH *(*dh)(SSL *ssl,int is_export,
 					   int keylength));
 void SSL_set_tmp_dh_callback(SSL *ssl,
 				 DH *(*dh)(SSL *ssl,int is_export,
 					   int keylength));
-#endif
 
-#ifndef NO_COMP
 int SSL_COMP_add_compression_method(int id,COMP_METHOD *cm);
-#else
-int SSL_COMP_add_compression_method(int id,char *cm);
-#endif
 
 /* BEGIN ERROR CODES */
 /* The following lines are auto generated by the script mkerr.pl. Any changes
@@ -1403,6 +1413,7 @@ void ERR_load_SSL_strings(void);
 #define SSL_R_DATA_BETWEEN_CCS_AND_FINISHED		 145
 #define SSL_R_DATA_LENGTH_TOO_LONG			 146
 #define SSL_R_DECRYPTION_FAILED				 147
+#define SSL_R_DECRYPTION_FAILED_OR_BAD_RECORD_MAC	 1109
 #define SSL_R_DH_PUBLIC_VALUE_LENGTH_IS_WRONG		 148
 #define SSL_R_DIGEST_CHECK_FAILED			 149
 #define SSL_R_ENCRYPTED_LENGTH_TOO_LONG			 150
@@ -1413,6 +1424,7 @@ void ERR_load_SSL_strings(void);
 #define SSL_R_GOT_A_FIN_BEFORE_A_CCS			 154
 #define SSL_R_HTTPS_PROXY_REQUEST			 155
 #define SSL_R_HTTP_REQUEST				 156
+#define SSL_R_ILLEGAL_PADDING				 1110
 #define SSL_R_INTERNAL_ERROR				 157
 #define SSL_R_INVALID_CHALLENGE_LENGTH			 158
 #define SSL_R_INVALID_COMMAND				 280
@@ -1422,6 +1434,7 @@ void ERR_load_SSL_strings(void);
 #define SSL_R_LENGTH_TOO_SHORT				 160
 #define SSL_R_LIBRARY_BUG				 274
 #define SSL_R_LIBRARY_HAS_NO_CIPHERS			 161
+#define SSL_R_MESSAGE_TOO_LONG				 1111
 #define SSL_R_MISSING_DH_DSA_CERT			 162
 #define SSL_R_MISSING_DH_KEY				 163
 #define SSL_R_MISSING_DH_RSA_CERT			 164
