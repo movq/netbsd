@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 2001/10/26 06:56:13 lukem Exp $
+#	$NetBSD: Makefile,v 1.1.1.1 2001/10/26 06:56:13 lukem Exp $
 #
 
 PROG=	makefs
