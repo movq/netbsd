@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.enc,v 1.1 2003/09/11 18:58:23 lukem Exp $
+#	$NetBSD: Makefile.enc,v 1.1.1.1 2003/09/11 18:58:23 lukem Exp $
 
 FILESDIR=	${X11FONTDIR}/${ENCDIR}
 .PATH:  	${X11SRCDIR.xc}/fonts/${ENCDIR}

@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.bdf,v 1.1 2003/09/11 18:55:44 lukem Exp $
+#	$NetBSD: Makefile.bdf,v 1.1.1.1 2003/09/11 18:55:44 lukem Exp $
 
 FILESDIR=	${X11FONTDIR}/${FONTSUBDIR}
 .PATH:  	${X11SRCDIR.xc}/fonts/bdf/${FONTSUBDIR}
