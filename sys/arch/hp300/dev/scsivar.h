@@ -1,6 +1,6 @@
 /*
- * Copyright (c) 1990 The Regents of the University of California.
- * All rights reserved.
+ * Copyright (c) 1990, 1993
+ *	The Regents of the University of California.  All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Van Jacobson of Lawrence Berkeley Laboratory.
@@ -33,8 +33,8 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	from: @(#)scsivar.h	7.1 (Berkeley) 5/8/90
- *	$Id: scsivar.h,v 1.2 1993/05/22 07:56:51 cgd Exp $
+ *	from: @(#)scsivar.h	8.1 (Berkeley) 6/10/93
+ *	$Id: scsivar.h,v 1.3 1994/05/23 05:59:23 mycroft Exp $
  */
 
 struct	scsi_softc {
@@ -51,7 +51,8 @@ struct	scsi_softc {
 /* sc_flags */
 #define	SCSI_IO		0x80	/* DMA I/O in progress */
 #define	SCSI_DMA32	0x40	/* 32-bit DMA should be used */
-#define	SCSI_ALIVE	0x01	/* controller initialized */
+#define	SCSI_HAVEDMA	0x04	/* controller has DMA channel */
 #ifdef DEBUG
 #define	SCSI_PAD	0x02	/* 'padded' transfer in progress */
 #endif
+#define	SCSI_ALIVE	0x01	/* controller initialized */
