@@ -1,4 +1,4 @@
-/*	$NetBSD: bdes.c,v 1.1 2000/06/16 16:50:39 thorpej Exp $	*/
+/*	$NetBSD: bdes.c,v 1.1.1.1 2000/06/16 16:50:39 thorpej Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -50,7 +50,7 @@ static char copyright[] =
 #if 0
 static char sccsid[] = "@(#)bdes.c	8.1 (Berkeley) 6/6/93";
 #else
-static char rcsid[] = "$NetBSD: bdes.c,v 1.1 2000/06/16 16:50:39 thorpej Exp $";
+static char rcsid[] = "$NetBSD: bdes.c,v 1.1.1.1 2000/06/16 16:50:39 thorpej Exp $";
 #endif
 #endif /* not lint */
 
