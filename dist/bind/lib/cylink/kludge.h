@@ -1,4 +1,4 @@
-/*	$NetBSD: kludge.h,v 1.1 2001/05/17 20:46:51 itojun Exp $	*/
+/*	$NetBSD: kludge.h,v 1.1.1.1 2001/05/17 20:46:51 itojun Exp $	*/
 
 #ifndef KLUDGE_H
 #define KLUDGE_H

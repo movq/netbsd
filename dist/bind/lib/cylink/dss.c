@@ -1,4 +1,4 @@
-/*	$NetBSD: dss.c,v 1.1 2001/05/17 20:46:50 itojun Exp $	*/
+/*	$NetBSD: dss.c,v 1.1.1.1 2001/05/17 20:46:50 itojun Exp $	*/
 
 /*
  * Cylink Corporation © 1998
