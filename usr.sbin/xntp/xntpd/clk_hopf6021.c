@@ -1,8 +1,8 @@
 /*
  *
- * /src/NTP/REPOSITORY/v4/libparse/clk_hopf6021.c,v 3.5 1997/01/19 12:44:37 kardel Exp
+ * /src/NTP/REPOSITORY/v4/libparse/clk_hopf6021.c,v 3.6 1997/04/06 17:36:57 kardel Exp
  *
- * clk_hopf6021.c,v 3.5 1997/01/19 12:44:37 kardel Exp
+ * clk_hopf6021.c,v 3.6 1997/04/06 17:36:57 kardel Exp
  *
  * Radiocode Clocks HOPF Funkuhr 6021 mit serieller Schnittstelle
  * base code version from 24th Nov 1995 - history at end
@@ -125,7 +125,7 @@ clockformat_t clock_hopf6021 =
   (void *)&hopf6021_fmt,        /* conversion configuration */
   "hopf Funkuhr 6021",          /* clock format name */
   19,                           /* string buffer */
-  F_END|SYNC_END,               /* END delimiter, END synchronisation */
+  CVT_FIXEDONLY|F_END|SYNC_END, /* Fixed format, END delimiter & synchronisation */
   0,                            /* private data length, no private data */
   { 0, 0},                      /* buffer restart after timeout (us) */
   0,                            /* start symbol */
@@ -220,6 +220,9 @@ int clk_hopf6021_bs;
  * History:
  *
  * clk_hopf6021.c,v
+ * Revision 3.6  1997/04/06 17:36:57  kardel
+ * Make Hopf clock a fixed format to cope with Meinberg clocks
+ *
  * Revision 3.5  1997/01/19 12:44:37  kardel
  * 3-5.88.1 reconcilation
  *

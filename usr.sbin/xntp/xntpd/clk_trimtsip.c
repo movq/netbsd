@@ -1,5 +1,5 @@
 /*
- * /src/NTP/REPOSITORY/v4/libparse/clk_trimtsip.c,v 1.7 1997/01/19 12:44:42 kardel Exp
+ * /src/NTP/REPOSITORY/v4/libparse/clk_trimtsip.c,v 1.8 1997/04/13 10:05:23 kardel Exp
  *
  * Trimble TSIP support - CURRENTLY VERY MUCH UNDER CONSTRUCTION
  */
@@ -511,6 +511,9 @@ int clk_trimtsip_bs;
  * History:
  *
  * clk_trimtsip.c,v
+ * Revision 1.8  1997/04/13 10:05:23  kardel
+ * 3.5.90 reconcilation
+ *
  * Revision 1.7  1997/01/19 12:44:42  kardel
  * 3-5.88.1 reconcilation
  *

@@ -44,6 +44,10 @@
 # endif /* NOT NTP_SYSCALLS_STD */
 #endif /* KERNEL_PLL */
 
+#ifndef SHIFT_USEC
+# define SHIFT_USEC 16		/* frequency offset scale (shift) */
+#endif
+
 #ifdef NTP_SYSCALLS_STD
 # ifdef DECL_SYSCALL
 extern int syscall      P((int, void *, ...));
@@ -68,6 +72,7 @@ extern int syscall	P((int, void *, ...));
 #endif /* NTP_SYSCALLS_LIBC */
 char *sprintb		P((u_int, char *));
 char *timex_state	P((int));
+int debug = 0;
 
 #ifdef SIGSYS
 void pll_trap		P((int));
@@ -79,8 +84,8 @@ static sigjmp_buf env;		/* environment var. for pll_trap() */
 
 static volatile int pll_control; /* (0) daemon, (1) kernel loop */
 
-static char* progname;
-static char optargs[] = "ce:f:hm:o:rs:t:";
+char* progname;
+static char optargs[] = "cde:f:hm:o:rs:t:";
 
 void
 main(argc, argv)
@@ -105,6 +110,9 @@ main(argc, argv)
   while ((c = ntp_getopt(argc, argv, optargs)) != EOF) switch (c) {
   case 'c':
     cost++;
+    break;
+  case 'd':
+    debug++;
     break;
   case 'e':
     ntx.modes |= MOD_ESTERROR;
@@ -193,24 +201,25 @@ main(argc, argv)
 #endif /* BADCALL */
 
   if (cost) {
-    for (c = 0; c < sizeof times / sizeof times[0]; c++)
-      {
 #ifdef SIGSYS
-	if (sigsetjmp(env, 1) == 0)
-	  {
+    if (sigsetjmp(env, 1) == 0)
+      {
 #endif
+        for (c = 0; c < sizeof times / sizeof times[0]; c++)
+          {
 	    status = ntp_gettime(&ntv);
 	    if ((status < 0) && (errno == ENOSYS))
 	      {
 		--pll_control;
 	      }
-#ifdef SIGSYS
+	    if (pll_control < 0)
+	      break;
+	    times[c] = ntv.time.tv_usec;
 	  }
-#endif
-	if (pll_control < 0)
-	  break;
-	times[c] = ntv.time.tv_usec;
+#ifdef SIGSYS
       }
+#endif
+
     if (pll_control >= 0) {
       printf("[ us %06d:", times[0]);
       for (c = 1; c < sizeof times / sizeof times[0]; c++)
@@ -291,7 +300,7 @@ main(argc, argv)
     printf("  time constant %ld, precision %ld us, tolerance %.0f ppm,\n",
 	   ntx.constant, ntx.precision, ftemp);
     if (ntx.shift == 0)
-      return;
+      exit(0);
     ftemp = ntx.ppsfreq;
     ftemp /= (1 << SHIFT_USEC);
     gtemp = ntx.stabil;
