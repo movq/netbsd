@@ -34,7 +34,7 @@
  * SUCH DAMAGE.
  *
  *	from: @(#)genassym.c	8.2 (Berkeley) 9/23/93
- *      $Id: genassym.c,v 1.1 1996/03/13 04:58:11 jonathan Exp $
+ *      $Id: genassym.c,v 1.1.1.1 1996/03/13 04:58:11 jonathan Exp $
  */
 
 #define _KERNEL

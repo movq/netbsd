@@ -38,7 +38,7 @@
  * from: Utah Hdr: clock.c 1.18 91/01/21
  *
  *	from: @(#)clock.c	8.1 (Berkeley) 6/10/93
- *      $Id: clock.c,v 1.1 1996/03/13 04:58:10 jonathan Exp $
+ *      $Id: clock.c,v 1.1.1.1 1996/03/13 04:58:10 jonathan Exp $
  */
 
 #include <sys/param.h>

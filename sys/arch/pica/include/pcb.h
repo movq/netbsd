@@ -38,7 +38,7 @@
  * from: Utah Hdr: pcb.h 1.13 89/04/23
  *
  *	from: @(#)pcb.h	8.1 (Berkeley) 6/10/93
- *      $Id: pcb.h,v 1.1 1996/03/13 04:58:08 jonathan Exp $
+ *      $Id: pcb.h,v 1.1.1.1 1996/03/13 04:58:08 jonathan Exp $
  */
 
 /*

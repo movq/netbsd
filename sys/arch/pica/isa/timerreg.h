@@ -1,4 +1,4 @@
-/*	$NetBSD: timerreg.h,v 1.1 1996/03/13 04:58:09 jonathan Exp $	*/
+/*	$NetBSD: timerreg.h,v 1.1.1.1 1996/03/13 04:58:09 jonathan Exp $	*/
 
 /*-
  * Copyright (c) 1993 The Regents of the University of California.

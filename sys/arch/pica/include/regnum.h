@@ -1,4 +1,4 @@
-/*	$NetBSD: regnum.h,v 1.1 1996/03/13 04:58:09 jonathan Exp $	*/
+/*	$NetBSD: regnum.h,v 1.1.1.1 1996/03/13 04:58:09 jonathan Exp $	*/
 
 /*
  * Copyright (c) 1988 University of Utah.

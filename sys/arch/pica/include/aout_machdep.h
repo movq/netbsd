@@ -1,4 +1,4 @@
-/*	$NetBSD: aout_machdep.h,v 1.1 1996/03/13 04:58:07 jonathan Exp $	*/
+/*	$NetBSD: aout_machdep.h,v 1.1.1.1 1996/03/13 04:58:07 jonathan Exp $	*/
 
 /*-
  * Copyright (c) 1992, 1993

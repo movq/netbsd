@@ -1,7 +1,7 @@
 /*
  * Keyboard definitions
  *
- *	$Id: kbdreg.h,v 1.1 1996/03/13 04:58:07 jonathan Exp $
+ *	$Id: kbdreg.h,v 1.1.1.1 1996/03/13 04:58:07 jonathan Exp $
  */
 
 #define	KBSTATP		(PICA_SYS_KBD + 0x61)	/* controller status port (I) */

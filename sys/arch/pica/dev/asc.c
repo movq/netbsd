@@ -1,4 +1,4 @@
-/*	$NetBSD: asc.c,v 1.1 1996/03/13 04:58:05 jonathan Exp $	*/
+/*	$NetBSD: asc.c,v 1.1.1.1 1996/03/13 04:58:05 jonathan Exp $	*/
 
 /*-
  * Copyright (c) 1992, 1993

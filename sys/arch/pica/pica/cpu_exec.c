@@ -1,4 +1,4 @@
-/*	$NetBSD: cpu_exec.c,v 1.1 1996/03/13 04:58:10 jonathan Exp $	*/
+/*	$NetBSD: cpu_exec.c,v 1.1.1.1 1996/03/13 04:58:10 jonathan Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993

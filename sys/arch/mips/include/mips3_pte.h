@@ -38,7 +38,7 @@
  * from: Utah Hdr: pte.h 1.11 89/09/03
  *
  *	from: @(#)pte.h	8.1 (Berkeley) 6/10/93
- *      $Id: mips3_pte.h,v 1.1 1996/03/13 04:58:08 jonathan Exp $
+ *      $Id: mips3_pte.h,v 1.1.1.1 1996/03/13 04:58:08 jonathan Exp $
  */
 
 /*

@@ -1,4 +1,4 @@
-/*	$NetBSD: pccons.c,v 1.1 1996/03/13 04:58:06 jonathan Exp $	*/
+/*	$NetBSD: pccons.c,v 1.1.1.1 1996/03/13 04:58:06 jonathan Exp $	*/
 
 /*-
  * Copyright (c) 1993, 1994, 1995 Charles Hannum.  All rights reserved.
@@ -1859,7 +1859,7 @@ pc_xmode_off()
 #endif
 	async_update();
 }
-/*	$NetBSD: pccons.c,v 1.1 1996/03/13 04:58:06 jonathan Exp $	*/
+/*	$NetBSD: pccons.c,v 1.1.1.1 1996/03/13 04:58:06 jonathan Exp $	*/
 
 #include <machine/mouse.h>
 

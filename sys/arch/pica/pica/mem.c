@@ -1,4 +1,4 @@
-/*	$NetBSD: mem.c,v 1.1 1996/03/13 04:58:12 jonathan Exp $	*/
+/*	$NetBSD: mem.c,v 1.1.1.1 1996/03/13 04:58:12 jonathan Exp $	*/
 
 /*
  * Copyright (c) 1988 University of Utah.

@@ -1,4 +1,4 @@
-/*	$NetBSD: swapgeneric.c,v 1.1 1996/03/13 04:58:13 jonathan Exp $	*/
+/*	$NetBSD: swapgeneric.c,v 1.1.1.1 1996/03/13 04:58:13 jonathan Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.

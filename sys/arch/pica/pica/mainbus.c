@@ -1,4 +1,4 @@
-/*	$NetBSD: mainbus.c,v 1.1 1996/03/13 04:58:12 jonathan Exp $	*/
+/*	$NetBSD: mainbus.c,v 1.1.1.1 1996/03/13 04:58:12 jonathan Exp $	*/
 
 /*
  * Copyright (c) 1994, 1995 Carnegie-Mellon University.

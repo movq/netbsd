@@ -1,7 +1,7 @@
 /*
  * pccons.h -- pccons ioctl definitions
  *
- *	$Id: pccons.h,v 1.1 1996/03/13 04:58:08 jonathan Exp $
+ *	$Id: pccons.h,v 1.1.1.1 1996/03/13 04:58:08 jonathan Exp $
  */
 
 #ifndef _PCCONS_H_

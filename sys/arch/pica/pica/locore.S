@@ -49,7 +49,7 @@
  *	v 1.1 89/07/10 14:27:41 nelson Exp  SPRITE (DECWRL)
  *
  *	from: @(#)locore.s	8.5 (Berkeley) 1/4/94
- *	$Id: locore.S,v 1.1 1996/03/13 04:58:11 jonathan Exp $
+ *	$Id: locore.S,v 1.1.1.1 1996/03/13 04:58:11 jonathan Exp $
  */
 
 /*
