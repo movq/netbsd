@@ -1,4 +1,4 @@
-/*	$NetBSD: monitor_fdpass.c,v 1.1 2002/04/22 07:38:02 itojun Exp $	*/
+/*	$NetBSD: monitor_fdpass.c,v 1.1.1.1 2002/04/22 07:38:02 itojun Exp $	*/
 /*
  * Copyright 2001 Niels Provos <provos@citi.umich.edu>
  * All rights reserved.
