@@ -3,7 +3,7 @@
 /*
  * $Author: garbled $
  * $Date: 2001/01/04 19:58:09 $
- * $Revision: 1.1 $
+ * $Revision: 1.1.1.1 $
  */
 
 DeclareCDKObjects(my_funcs,Graph);

@@ -1,5 +1,5 @@
 /* 
- * $Id: config.hin,v 1.1 2001/01/04 19:58:46 garbled Exp $
+ * $Id: config.hin,v 1.1.1.1 2001/01/04 19:58:46 garbled Exp $
  */
 
 #ifndef CDK_CONFIG_H

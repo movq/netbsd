@@ -1,6 +1,6 @@
 /* include/cdk_config.h.  Generated automatically by configure.  */
 /* 
- * $Id: cdk_config.h,v 1.1 2001/01/04 19:58:54 garbled Exp $
+ * $Id: cdk_config.h,v 1.1.1.1 2001/01/04 19:58:54 garbled Exp $
  */
 
 #ifndef CDK_CONFIG_H
