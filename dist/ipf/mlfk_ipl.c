@@ -1,4 +1,4 @@
-/*	$NetBSD: mlfk_ipl.c,v 1.1 2000/05/03 10:55:53 veego Exp $	*/
+/*	$NetBSD: mlfk_ipl.c,v 1.1.1.1 2000/05/03 10:55:53 veego Exp $	*/
 
 /*
  * Copyright 1999 Guido van Rooij.  All rights reserved.

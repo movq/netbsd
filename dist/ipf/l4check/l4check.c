@@ -1,4 +1,4 @@
-/*	$NetBSD: l4check.c,v 1.1 2000/05/03 10:57:06 veego Exp $	*/
+/*	$NetBSD: l4check.c,v 1.1.1.1 2000/05/03 10:57:06 veego Exp $	*/
 
 /*
  * (C)Copyright March, 2000 - Darren Reed.
