@@ -1,5 +1,5 @@
 /*-
- * Copyright (c) 1992, 1993, 1994
+ * Copyright (c) 1992, 1993
  *	The Regents of the University of California.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -32,27 +32,16 @@
  */
 
 #ifndef lint
-static char sccsid[] = "@(#)log.c	8.14 (Berkeley) 3/14/94";
+static char sccsid[] = "@(#)log.c	8.9 (Berkeley) 12/28/93";
 #endif /* not lint */
 
 #include <sys/types.h>
-#include <sys/queue.h>
 #include <sys/stat.h>
-#include <sys/time.h>
 
-#include <bitstring.h>
 #include <errno.h>
 #include <fcntl.h>
-#include <limits.h>
-#include <signal.h>
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <termios.h>
-
-#include "compat.h"
-#include <db.h>
-#include <regex.h>
 
 #include "vi.h"
 
@@ -67,7 +56,7 @@ static char sccsid[] = "@(#)log.c	8.14 (Berkeley) 3/14/94";
  *	LOG_LINE_INSERT		recno_t		char *
  *	LOG_LINE_RESET_F	recno_t		char *
  *	LOG_LINE_RESET_B	recno_t		char *
- *	LOG_MARK		LMARK
+ *	LOG_MARK		MARK
  *
  * We do before image physical logging.  This means that the editor layer
  * MAY NOT modify records in place, even if simply deleting or overwriting
@@ -160,7 +149,7 @@ log_end(sp, ep)
 	ep->l_high = ep->l_cur = 1;
 	return (0);
 }
-
+		
 /*
  * log_cursor --
  *	Log the current cursor position, starting an event.
@@ -250,7 +239,7 @@ log_line(sp, ep, lno, action)
 			return (1);
 		ep->l_cursor.lno = OOBLNO;
 	}
-
+		
 	/*
 	 * Put out the changes.  If it's a LOG_LINE_RESET_B call, it's a
 	 * special case, avoid the caches.  Also, if it fails and it's
@@ -322,10 +311,10 @@ log_line(sp, ep, lno, action)
  *	cause any other change.
  */
 int
-log_mark(sp, ep, lmp)
+log_mark(sp, ep, mp)
 	SCR *sp;
 	EXF *ep;
-	LMARK *lmp;
+	MARK *mp;
 {
 	DBT data, key;
 
@@ -340,21 +329,17 @@ log_mark(sp, ep, lmp)
 	}
 
 	BINC_RET(sp, ep->l_lp,
-	    ep->l_len, sizeof(u_char) + sizeof(LMARK));
+	    ep->l_len, sizeof(u_char) + sizeof(MARK));
 	ep->l_lp[0] = LOG_MARK;
-	memmove(ep->l_lp + sizeof(u_char), lmp, sizeof(LMARK));
+	memmove(ep->l_lp + sizeof(u_char), mp, sizeof(MARK));
 
 	key.data = &ep->l_cur;
 	key.size = sizeof(recno_t);
 	data.data = ep->l_lp;
-	data.size = sizeof(u_char) + sizeof(LMARK);
+	data.size = sizeof(u_char) + sizeof(MARK);
 	if (ep->log->put(ep->log, &key, &data, 0) == -1)
 		LOG_ERR;
 
-#if defined(DEBUG) && 0
-	TRACE(sp, "%lu: mark %c: %lu/%u\n",
-	    ep->l_cur, lmp->name, lmp->lno, lmp->cno);
-#endif
 	/* Reset high water mark. */
 	ep->l_high = ++ep->l_cur;
 	return (0);
@@ -371,7 +356,6 @@ log_backward(sp, ep, rp)
 	MARK *rp;
 {
 	DBT key, data;
-	LMARK lm;
 	MARK m;
 	recno_t lno;
 	int didop;
@@ -439,10 +423,8 @@ log_backward(sp, ep, rp)
 			break;
 		case LOG_MARK:
 			didop = 1;
-			memmove(&lm, p + sizeof(u_char), sizeof(LMARK));
-			m.lno = lm.lno;
-			m.cno = lm.cno;
-			if (mark_set(sp, ep, lm.name, &m, 0))
+			memmove(&m, p + sizeof(u_char), sizeof(MARK));
+			if (mark_set(sp, ep, m.name, &m, 0))
 				goto err;
 			break;
 		default:
@@ -470,7 +452,6 @@ log_setline(sp, ep)
 	EXF *ep;
 {
 	DBT key, data;
-	LMARK lm;
 	MARK m;
 	recno_t lno;
 	u_char *p;
@@ -526,10 +507,8 @@ log_setline(sp, ep)
 				goto err;
 			++sp->rptlines[L_CHANGED];
 		case LOG_MARK:
-			memmove(&lm, p + sizeof(u_char), sizeof(LMARK));
-			m.lno = lm.lno;
-			m.cno = lm.cno;
-			if (mark_set(sp, ep, lm.name, &m, 0))
+			memmove(&m, p + sizeof(u_char), sizeof(MARK));
+			if (mark_set(sp, ep, m.name, &m, 0))
 				goto err;
 			break;
 		default:
@@ -552,7 +531,6 @@ log_forward(sp, ep, rp)
 	MARK *rp;
 {
 	DBT key, data;
-	LMARK lm;
 	MARK m;
 	recno_t lno;
 	int didop;
@@ -621,10 +599,8 @@ log_forward(sp, ep, rp)
 			break;
 		case LOG_MARK:
 			didop = 1;
-			memmove(&lm, p + sizeof(u_char), sizeof(LMARK));
-			m.lno = lm.lno;
-			m.cno = lm.cno;
-			if (mark_set(sp, ep, lm.name, &m, 0))
+			memmove(&m, p + sizeof(u_char), sizeof(MARK));
+			if (mark_set(sp, ep, m.name, &m, 0))
 				goto err;
 			break;
 		default:
@@ -644,7 +620,6 @@ log_trace(sp, msg, rno, p)
 	recno_t rno;
 	u_char *p;
 {
-	LMARK lm;
 	MARK m;
 	recno_t lno;
 
@@ -678,9 +653,8 @@ log_trace(sp, msg, rno, p)
 		TRACE(sp, "%lu: %s: RESET_B: %lu\n", rno, msg, lno);
 		break;
 	case LOG_MARK:
-		memmove(&lm, p + sizeof(u_char), sizeof(LMARK));
-		TRACE(sp,
-		    "%lu: %s:    MARK: %u/%u\n", rno, msg, lm.lno, lm.cno);
+		memmove(&m, p + sizeof(u_char), sizeof(MARK));
+		TRACE(sp, "%lu: %s:    MARK: %u/%u\n", rno, msg, m.lno, m.cno);
 		break;
 	default:
 		abort();

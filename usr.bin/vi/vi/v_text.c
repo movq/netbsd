@@ -1,5 +1,5 @@
 /*-
- * Copyright (c) 1992, 1993, 1994
+ * Copyright (c) 1992, 1993
  *	The Regents of the University of California.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -32,26 +32,15 @@
  */
 
 #ifndef lint
-static const char sccsid[] = "@(#)v_text.c	8.42 (Berkeley) 8/17/94";
+static char sccsid[] = "@(#)v_text.c	8.23 (Berkeley) 1/9/94";
 #endif /* not lint */
 
 #include <sys/types.h>
-#include <sys/queue.h>
-#include <sys/time.h>
 
-#include <bitstring.h>
 #include <ctype.h>
 #include <errno.h>
-#include <limits.h>
-#include <signal.h>
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <termios.h>
-
-#include "compat.h"
-#include <db.h>
-#include <regex.h>
 
 #include "vi.h"
 #include "vcmd.h"
@@ -65,7 +54,26 @@ static const char sccsid[] = "@(#)v_text.c	8.42 (Berkeley) 8/17/94";
  * right now, where "3o" would open 3 lines and then let the user fill them
  * in, to make screen movements on 300 baud modems more tolerable.  I don't
  * think it's going to be missed.
- *
+ */
+
+#define	SET_TXT_STD(sp, f) {						\
+	LF_INIT((f) | TXT_BEAUTIFY | TXT_CNTRLT | TXT_ESCAPE |		\
+	    TXT_MAPINPUT | TXT_RECORD | TXT_RESOLVE);			\
+	if (O_ISSET(sp, O_ALTWERASE))					\
+		LF_SET(TXT_ALTWERASE);					\
+	if (O_ISSET(sp, O_AUTOINDENT))					\
+		LF_SET(TXT_AUTOINDENT);					\
+	if (O_ISSET(sp, O_SHOWMATCH))					\
+		LF_SET(TXT_SHOWMATCH);					\
+	if (O_ISSET(sp, O_WRAPMARGIN))					\
+		LF_SET(TXT_WRAPMARGIN);					\
+	if (F_ISSET(sp, S_SCRIPT))					\
+		LF_SET(TXT_CR);						\
+	if (O_ISSET(sp, O_TTYWERASE))					\
+		LF_SET(TXT_TTYWERASE);					\
+}
+
+/* 
  * !!!
  * There's a problem with the way that we do logging for change commands with
  * implied motions (e.g. A, I, O, cc, etc.).  Since the main vi loop logs the
@@ -77,32 +85,21 @@ static const char sccsid[] = "@(#)v_text.c	8.42 (Berkeley) 8/17/94";
  * it fails is if the user entered 'o' from anywhere but the last character of
  * the line, the undo returned the cursor to the start of the line.  If the
  * user was on the last character of the line, the cursor returned to that
- * position.)  We also check for mapped keys waiting, i.e. if we're in the
- * middle of a map, don't bother logging the cursor.
+ * position.)
  */
-#define	LOG_CORRECT {							\
-	if (!MAPPED_KEYS_WAITING(sp))					\
-		(void)log_cursor(sp, ep);				\
-}
-#define	LOG_CORRECT_FIRST {						\
-	if (first == 1) {						\
-		LOG_CORRECT;						\
-		first = 0;						\
-	}								\
-}
 
-static u_int	set_txt_std __P((SCR *, VICMDARG *, u_int));
-static int	v_CS __P((SCR *, EXF *, VICMDARG *, u_int));
+static int v_CS __P((SCR *, EXF *, VICMDARG *, MARK *, MARK *, MARK *, u_int));
 
 /*
  * v_iA -- [count]A
  *	Append text to the end of the line.
  */
 int
-v_iA(sp, ep, vp)
+v_iA(sp, ep, vp, fm, tm, rp)
 	SCR *sp;
 	EXF *ep;
 	VICMDARG *vp;
+	MARK *fm, *tm, *rp;
 {
 	recno_t lno;
 	u_long cnt;
@@ -111,9 +108,10 @@ v_iA(sp, ep, vp)
 	int first;
 	char *p;
 
-	sp->showmode = "Append";
-	flags = set_txt_std(sp, vp, TXT_APPENDEOL);
-	for (first = 1, lno = vp->m_start.lno,
+	SET_TXT_STD(sp, TXT_APPENDEOL);
+	if (F_ISSET(vp,  VC_ISDOT))
+		LF_SET(TXT_REPLAY);
+	for (first = 1, lno = fm->lno,
 	    cnt = F_ISSET(vp, VC_C1SET) ? vp->count : 1; cnt--;) {
 		/* Move the cursor to the end of the line + 1. */
 		if ((p = file_gline(sp, ep, lno, &len)) == NULL) {
@@ -127,23 +125,22 @@ v_iA(sp, ep, vp)
 			len = 0;
 		} else {
 			/* Correct logging for implied cursor motion. */
+			sp->cno = len == 0 ? 0 : len - 1;
 			if (first == 1) {
-				sp->cno = len == 0 ? 0 : len - 1;
-				LOG_CORRECT;
+				log_cursor(sp, ep);
 				first = 0;
 			}
-
 			/* Start the change after the line. */
 			sp->cno = len;
 		}
 
 		if (v_ntext(sp, ep,
-		    sp->tiqp, NULL, p, len, &vp->m_final, 0, OOBLNO, flags))
+		    &sp->tiq, NULL, p, len, rp, 0, OOBLNO, flags))
 			return (1);
 
-		flags = set_txt_std(sp, vp, TXT_APPENDEOL | TXT_REPLAY);
-		sp->lno = lno = vp->m_final.lno;
-		sp->cno = vp->m_final.cno;
+		SET_TXT_STD(sp, TXT_APPENDEOL | TXT_REPLAY);
+		sp->lno = lno = rp->lno;
+		sp->cno = rp->cno;
 	}
 	return (0);
 }
@@ -153,10 +150,11 @@ v_iA(sp, ep, vp)
  *	Append text to the cursor position.
  */
 int
-v_ia(sp, ep, vp)
+v_ia(sp, ep, vp, fm, tm, rp)
 	SCR *sp;
 	EXF *ep;
 	VICMDARG *vp;
+	MARK *fm, *tm, *rp;
 {
 	recno_t lno;
 	u_long cnt;
@@ -164,9 +162,10 @@ v_ia(sp, ep, vp)
 	size_t len;
 	char *p;
 
-	sp->showmode = "Append";
-	flags = set_txt_std(sp, vp, 0);
-	for (lno = vp->m_start.lno,
+	SET_TXT_STD(sp, 0);
+	if (F_ISSET(vp,  VC_ISDOT))
+		LF_SET(TXT_REPLAY);
+	for (lno = fm->lno,
 	    cnt = F_ISSET(vp, VC_C1SET) ? vp->count : 1; cnt--;) {
 		/*
 		 * Move the cursor one column to the right and
@@ -192,12 +191,12 @@ v_ia(sp, ep, vp)
 			LF_SET(TXT_APPENDEOL);
 
 		if (v_ntext(sp, ep,
-		    sp->tiqp, NULL, p, len, &vp->m_final, 0, OOBLNO, flags))
+		    &sp->tiq, NULL, p, len, rp, 0, OOBLNO, flags))
 			return (1);
 
-		flags = set_txt_std(sp, vp, TXT_REPLAY);
-		sp->lno = lno = vp->m_final.lno;
-		sp->cno = vp->m_final.cno;
+		SET_TXT_STD(sp, TXT_REPLAY);
+		sp->lno = lno = rp->lno;
+		sp->cno = rp->cno;
 	}
 	return (0);
 }
@@ -207,10 +206,11 @@ v_ia(sp, ep, vp)
  *	Insert text at the first non-blank character in the line.
  */
 int
-v_iI(sp, ep, vp)
+v_iI(sp, ep, vp, fm, tm, rp)
 	SCR *sp;
 	EXF *ep;
 	VICMDARG *vp;
+	MARK *fm, *tm, *rp;
 {
 	recno_t lno;
 	u_long cnt;
@@ -219,9 +219,10 @@ v_iI(sp, ep, vp)
 	int first;
 	char *p;
 
-	sp->showmode = "Insert";
-	flags = set_txt_std(sp, vp, 0);
-	for (first = 1, lno = vp->m_start.lno,
+	SET_TXT_STD(sp, 0);
+	if (F_ISSET(vp,  VC_ISDOT))
+		LF_SET(TXT_REPLAY);
+	for (first = 1, lno = fm->lno,
 	    cnt = F_ISSET(vp, VC_C1SET) ? vp->count : 1; cnt--;) {
 		/*
 		 * Move the cursor to the start of the line and repaint
@@ -240,20 +241,22 @@ v_iI(sp, ep, vp)
 			sp->cno = 0;
 			if (nonblank(sp, ep, lno, &sp->cno))
 				return (1);
-
 			/* Correct logging for implied cursor motion. */
-			LOG_CORRECT_FIRST;
+			if (first == 1) {
+				log_cursor(sp, ep);
+				first = 0;
+			}
 		}
 		if (len == 0)
 			LF_SET(TXT_APPENDEOL);
 
 		if (v_ntext(sp, ep,
-		    sp->tiqp, NULL, p, len, &vp->m_final, 0, OOBLNO, flags))
+		    &sp->tiq, NULL, p, len, rp, 0, OOBLNO, flags))
 			return (1);
 
-		flags = set_txt_std(sp, vp, TXT_REPLAY);
-		sp->lno = lno = vp->m_final.lno;
-		sp->cno = vp->m_final.cno;
+		SET_TXT_STD(sp, TXT_REPLAY);
+		sp->lno = lno = rp->lno;
+		sp->cno = rp->cno;
 	}
 	return (0);
 }
@@ -263,10 +266,11 @@ v_iI(sp, ep, vp)
  *	Insert text at the cursor position.
  */
 int
-v_ii(sp, ep, vp)
+v_ii(sp, ep, vp, fm, tm, rp)
 	SCR *sp;
 	EXF *ep;
 	VICMDARG *vp;
+	MARK *fm, *tm, *rp;
 {
 	recno_t lno;
 	u_long cnt;
@@ -274,15 +278,16 @@ v_ii(sp, ep, vp)
 	u_int flags;
 	char *p;
 
-	sp->showmode = "Insert";
-	flags = set_txt_std(sp, vp, 0);
-	for (lno = vp->m_start.lno,
+	SET_TXT_STD(sp, 0);
+	if (F_ISSET(vp,  VC_ISDOT))
+		LF_SET(TXT_REPLAY);
+	for (lno = fm->lno,
 	    cnt = F_ISSET(vp, VC_C1SET) ? vp->count : 1; cnt--;) {
 		if ((p = file_gline(sp, ep, lno, &len)) == NULL) {
 			if (file_lline(sp, ep, &lno))
 				return (1);
 			if (lno != 0) {
-				GETLINE_ERR(sp, vp->m_start.lno);
+				GETLINE_ERR(sp, fm->lno);
 				return (1);
 			}
 			lno = 1;
@@ -293,16 +298,16 @@ v_ii(sp, ep, vp)
 			LF_SET(TXT_APPENDEOL);
 
 		if (v_ntext(sp, ep,
-		    sp->tiqp, NULL, p, len, &vp->m_final, 0, OOBLNO, flags))
+		    &sp->tiq, NULL, p, len, rp, 0, OOBLNO, flags))
 			return (1);
 
 		/*
 		 * On replay, if the line isn't empty, advance the insert
 		 * by one (make it an append).
 		 */
-		flags = set_txt_std(sp, vp, TXT_REPLAY);
-		sp->lno = lno = vp->m_final.lno;
-		if ((sp->cno = vp->m_final.cno) != 0)
+		SET_TXT_STD(sp, TXT_REPLAY);
+		sp->lno = lno = rp->lno;
+		if ((sp->cno = rp->cno) != 0)
 			++sp->cno;
 	}
 	return (0);
@@ -313,10 +318,11 @@ v_ii(sp, ep, vp)
  *	Insert text above this line.
  */
 int
-v_iO(sp, ep, vp)
+v_iO(sp, ep, vp, fm, tm, rp)
 	SCR *sp;
 	EXF *ep;
 	VICMDARG *vp;
+	MARK *fm, *tm, *rp;
 {
 	recno_t ai_line, lno;
 	size_t len;
@@ -325,8 +331,9 @@ v_iO(sp, ep, vp)
 	int first;
 	char *p;
 
-	sp->showmode = "Insert";
-	flags = set_txt_std(sp, vp, TXT_APPENDEOL);
+	SET_TXT_STD(sp, TXT_APPENDEOL);
+	if (F_ISSET(vp, VC_ISDOT))
+		LF_SET(TXT_REPLAY);
 	for (first = 1, cnt = F_ISSET(vp, VC_C1SET) ? vp->count : 1; cnt--;) {
 		if (sp->lno == 1) {
 			if (file_lline(sp, ep, &lno))
@@ -339,10 +346,11 @@ v_iO(sp, ep, vp)
 		} else {
 insert:			p = "";
 			sp->cno = 0;
-
 			/* Correct logging for implied cursor motion. */
-			LOG_CORRECT_FIRST;
-
+			if (first == 1) {
+				log_cursor(sp, ep);
+				first = 0;
+			}
 			if (file_iline(sp, ep, sp->lno, p, 0))
 				return (1);
 			if ((p = file_gline(sp, ep, sp->lno, &len)) == NULL) {
@@ -353,12 +361,12 @@ insert:			p = "";
 		}
 
 		if (v_ntext(sp, ep,
-		    sp->tiqp, NULL, p, len, &vp->m_final, 0, ai_line, flags))
+		    &sp->tiq, NULL, p, len, rp, 0, ai_line, flags))
 			return (1);
 
-		flags = set_txt_std(sp, vp, TXT_APPENDEOL | TXT_REPLAY);
-		sp->lno = lno = vp->m_final.lno;
-		sp->cno = vp->m_final.cno;
+		SET_TXT_STD(sp, TXT_APPENDEOL | TXT_REPLAY);
+		sp->lno = lno = rp->lno;
+		sp->cno = rp->cno;
 	}
 	return (0);
 }
@@ -368,10 +376,11 @@ insert:			p = "";
  *	Insert text after this line.
  */
 int
-v_io(sp, ep, vp)
+v_io(sp, ep, vp, fm, tm, rp)
 	SCR *sp;
 	EXF *ep;
 	VICMDARG *vp;
+	MARK *fm, *tm, *rp;
 {
 	recno_t ai_line, lno;
 	size_t len;
@@ -380,8 +389,9 @@ v_io(sp, ep, vp)
 	int first;
 	char *p;
 
-	sp->showmode = "Insert";
-	flags = set_txt_std(sp, vp, TXT_APPENDEOL);
+	SET_TXT_STD(sp, TXT_APPENDEOL);
+	if (F_ISSET(vp,  VC_ISDOT))
+		LF_SET(TXT_REPLAY);
 	for (first = 1,
 	    cnt = F_ISSET(vp, VC_C1SET) ? vp->count : 1; cnt--;) {
 		if (sp->lno == 1) {
@@ -395,10 +405,11 @@ v_io(sp, ep, vp)
 		} else {
 insert:			p = "";
 			sp->cno = 0;
-
 			/* Correct logging for implied cursor motion. */
-			LOG_CORRECT_FIRST;
-
+			if (first == 1) {
+				log_cursor(sp, ep);
+				first = 0;
+			}
 			len = 0;
 			if (file_aline(sp, ep, 1, sp->lno, p, len))
 				return (1);
@@ -410,12 +421,12 @@ insert:			p = "";
 		}
 
 		if (v_ntext(sp, ep,
-		    sp->tiqp, NULL, p, len, &vp->m_final, 0, ai_line, flags))
+		    &sp->tiq, NULL, p, len, rp, 0, ai_line, flags))
 			return (1);
 
-		flags = set_txt_std(sp, vp, TXT_APPENDEOL | TXT_REPLAY);
-		sp->lno = lno = vp->m_final.lno;
-		sp->cno = vp->m_final.cno;
+		SET_TXT_STD(sp, TXT_APPENDEOL | TXT_REPLAY);
+		sp->lno = lno = rp->lno;
+		sp->cno = rp->cno;
 	}
 	return (0);
 }
@@ -425,12 +436,13 @@ insert:			p = "";
  *	Change line command.
  */
 int
-v_Change(sp, ep, vp)
+v_Change(sp, ep, vp, fm, tm, rp)
 	SCR *sp;
 	EXF *ep;
 	VICMDARG *vp;
+	MARK *fm, *tm, *rp;
 {
-	return (v_CS(sp, ep, vp, 0));
+	return (v_CS(sp, ep, vp, fm, tm, rp, 0));
 }
 
 /*
@@ -438,10 +450,11 @@ v_Change(sp, ep, vp)
  *	Line substitute command.
  */
 int
-v_Subst(sp, ep, vp)
+v_Subst(sp, ep, vp, fm, tm, rp)
 	SCR *sp;
 	EXF *ep;
 	VICMDARG *vp;
+	MARK *fm, *tm, *rp;
 {
 	u_int flags;
 
@@ -456,14 +469,14 @@ v_Subst(sp, ep, vp)
 	 */
 	LF_INIT(0);
 	if (O_ISSET(sp, O_AUTOINDENT)) {
-		vp->m_start.cno = 0;
-		if (nonblank(sp, ep, vp->m_start.lno, &vp->m_start.cno))
+		fm->cno = 0;
+		if (nonblank(sp, ep, fm->lno, &fm->cno))
 			return (1);
 		LF_SET(TXT_AICHARS);
 	} else
-		vp->m_start.cno = 0;
-	sp->cno = vp->m_start.cno;
-	return (v_CS(sp, ep, vp, flags));
+		fm->cno = 0;
+	sp->cno = fm->cno;
+	return (v_CS(sp, ep, vp, fm, tm, rp, flags));
 }
 
 /*
@@ -471,105 +484,86 @@ v_Subst(sp, ep, vp)
  *	C and S commands.
  */
 static int
-v_CS(sp, ep, vp, iflags)
+v_CS(sp, ep, vp, fm, tm, rp, iflags)
 	SCR *sp;
 	EXF *ep;
 	VICMDARG *vp;
+	MARK *fm, *tm, *rp;
 	u_int iflags;
 {
-	MARK *tm;
 	recno_t lno;
 	size_t len;
 	char *p;
 	u_int flags;
 
-	sp->showmode = "Change";
-	flags = set_txt_std(sp, vp, iflags);
+	SET_TXT_STD(sp, iflags);
+	if (F_ISSET(vp,  VC_ISDOT))
+		LF_SET(TXT_REPLAY);
 
 	/*
 	 * There are two cases -- if a count is supplied, we do a line
 	 * mode change where we delete the lines and then insert text
 	 * into a new line.  Otherwise, we replace the current line.
 	 */
-	vp->m_stop.lno =
-	    vp->m_start.lno + (F_ISSET(vp, VC_C1SET) ? vp->count - 1 : 0);
-	if (vp->m_start.lno != vp->m_stop.lno) {
+	tm->lno = fm->lno + (F_ISSET(vp, VC_C1SET) ? vp->count - 1 : 0);
+	if (fm->lno != tm->lno) {
 		/* Make sure that the to line is real. */
-		if (file_gline(sp, ep,
-		    vp->m_stop.lno, &vp->m_stop.cno) == NULL) {
-			v_eof(sp, ep, &vp->m_start);
+		if (file_gline(sp, ep, tm->lno, NULL) == NULL) {
+			v_eof(sp, ep, fm);
 			return (1);
 		}
-		if (vp->m_stop.cno != 0)
-			--vp->m_stop.cno;
 
-		/*
-		 * Cut the lines.
-		 *
-		 * !!!
-		 * Historic practice, C and S did not cut into the numeric
-		 * buffers, only the unnamed one.
-		 */
+		/* Cut the lines. */
 		if (cut(sp, ep,
-		    F_ISSET(vp, VC_BUFFER) ? &vp->buffer : NULL,
-		    &vp->m_start, &vp->m_stop, CUT_LINEMODE))
+		    NULL, F_ISSET(vp, VC_BUFFER) ? &vp->buffer : NULL,
+		    fm, tm, CUT_LINEMODE))
 			return (1);
 
 		/* Insert a line while we still can... */
-		if (file_iline(sp, ep, vp->m_start.lno, "", 0))
+		if (file_iline(sp, ep, fm->lno, "", 0))
 			return (1);
-		++vp->m_start.lno;
-		++vp->m_stop.lno;
+		++fm->lno;
+		++tm->lno;
 
 		/* Delete the lines. */
-		if (delete(sp, ep, &vp->m_start, &vp->m_stop, 1))
+		if (delete(sp, ep, fm, tm, 1))
 			return (1);
 
 		/* Get the inserted line. */
-		if ((p = file_gline(sp, ep, --vp->m_start.lno, &len)) == NULL) {
-			GETLINE_ERR(sp, vp->m_start.lno);
+		if ((p = file_gline(sp, ep, --fm->lno, &len)) == NULL) {
+			GETLINE_ERR(sp, fm->lno);
 			return (1);
 		}
 		tm = NULL;
-		sp->lno = vp->m_start.lno;
+		sp->lno = fm->lno;
 		sp->cno = 0;
 		LF_SET(TXT_APPENDEOL);
-	} else {
+	} else { 
 		/* The line may be empty, but that's okay. */
-		if ((p = file_gline(sp, ep, vp->m_start.lno, &len)) == NULL) {
+		if ((p = file_gline(sp, ep, fm->lno, &len)) == NULL) {
 			if (file_lline(sp, ep, &lno))
 				return (1);
 			if (lno != 0) {
-				GETLINE_ERR(sp, vp->m_start.lno);
+				GETLINE_ERR(sp, tm->lno);
 				return (1);
 			}
-			vp->m_stop.cno = len = 0;
+			len = 0;
 			LF_SET(TXT_APPENDEOL);
 		} else {
-			if (len == 0) {
-				vp->m_stop.cno = 0;
-				LF_SET(TXT_APPENDEOL);
-			} else
-				vp->m_stop.cno = len - 1;
-			/*
-			 * !!!
-			 * Historic practice, C and S did not cut into the
-			 * numeric buffers, only the unnamed one.
-			 */
 			if (cut(sp, ep,
-			    F_ISSET(vp, VC_BUFFER) ? &vp->buffer : NULL,
-			    &vp->m_start, &vp->m_stop, CUT_LINEMODE))
+			    NULL, F_ISSET(vp, VC_BUFFER) ? &vp->buffer : NULL,
+			    fm, tm, CUT_LINEMODE))
 				return (1);
+			tm->cno = len;
+			if (len == 0)
+				LF_SET(TXT_APPENDEOL);
 			LF_SET(TXT_EMARK | TXT_OVERWRITE);
 		}
-		tm = &vp->m_stop;
 	}
-
 	/* Correct logging for implied cursor motion. */
-	LOG_CORRECT;
-
+	log_cursor(sp, ep);
 	return (v_ntext(sp, ep,
-	    sp->tiqp, tm, p, len, &vp->m_final, 0, OOBLNO, flags));
+	    &sp->tiq, tm, p, len, rp, 0, OOBLNO, flags));
 }
 
 /*
@@ -577,10 +571,11 @@ v_CS(sp, ep, vp, iflags)
  *	Change command.
  */
 int
-v_change(sp, ep, vp)
+v_change(sp, ep, vp, fm, tm, rp)
 	SCR *sp;
 	EXF *ep;
 	VICMDARG *vp;
+	MARK *fm, *tm, *rp;
 {
 	recno_t lno;
 	size_t blen, len;
@@ -588,8 +583,9 @@ v_change(sp, ep, vp)
 	int lmode, rval;
 	char *bp, *p;
 
-	sp->showmode = "Change";
-	flags = set_txt_std(sp, vp, 0);
+	SET_TXT_STD(sp, 0);
+	if (F_ISSET(vp,  VC_ISDOT))
+		LF_SET(TXT_REPLAY);
 
 	/*
 	 * Move the cursor to the start of the change.  Note, if autoindent
@@ -598,63 +594,49 @@ v_change(sp, ep, vp)
 	 * to make it just a bit more exciting, the initial space is handled
 	 * as auto-indent characters.
 	 */
-	lmode = F_ISSET(vp, VM_LMODE) ? CUT_LINEMODE : 0;
+	lmode = F_ISSET(vp, VC_LMODE) ? CUT_LINEMODE : 0;
 	if (lmode) {
-		vp->m_start.cno = 0;
+		fm->cno = 0;
 		if (O_ISSET(sp, O_AUTOINDENT)) {
-			if (nonblank(sp, ep, vp->m_start.lno, &vp->m_start.cno))
+			if (nonblank(sp, ep, fm->lno, &fm->cno))
 				return (1);
 			LF_SET(TXT_AICHARS);
 		}
 	}
-	sp->lno = vp->m_start.lno;
-	sp->cno = vp->m_start.cno;
+	sp->lno = fm->lno;
+	sp->cno = fm->cno;
 
 	/* Correct logging for implied cursor motion. */
-	LOG_CORRECT;
+	log_cursor(sp, ep);
 
 	/*
-	 * 'c' can be combined with motion commands that set the resulting
-	 * cursor position, i.e. "cG".  Clear the VM_RCM flags and make the
-	 * resulting cursor position stick, inserting text has its own rules
-	 * for cursor positioning.
+	 * If changing within a single line, the line either currently has
+	 * text or it doesn't.  If it doesn't, just insert text.  Otherwise,
+	 * copy it and overwrite it.
 	 */
-	F_CLR(vp, VM_RCM_MASK);
-	F_SET(vp, VM_RCM_SET);
-
-	/*
-	 * If not in line mode and changing within a single line, the line
-	 * either currently has text or it doesn't.  If it doesn't, insert
-	 * some.  Otherwise, copy it and overwrite it.
-	 */
-	if (!lmode && vp->m_start.lno == vp->m_stop.lno) {
-		if ((p = file_gline(sp, ep, vp->m_start.lno, &len)) == NULL) {
+	if (fm->lno == tm->lno) {
+		if ((p = file_gline(sp, ep, fm->lno, &len)) == NULL) {
 			if (p == NULL) {
 				if (file_lline(sp, ep, &lno))
 					return (1);
 				if (lno != 0) {
-					GETLINE_ERR(sp, vp->m_start.lno);
+					GETLINE_ERR(sp, fm->lno);
 					return (1);
 				}
 			}
-			vp->m_stop.cno = len = 0;
+			len = 0;
 			LF_SET(TXT_APPENDEOL);
 		} else {
-			/*
-			 * !!!
-			 * Historic practice, c cut into the numeric buffers,
-			 * as well as the unnamed one.
-			 */
 			if (cut(sp, ep,
-			    F_ISSET(vp, VC_BUFFER) ? &vp->buffer : NULL,
-			    &vp->m_start, &vp->m_stop, lmode | CUT_NUMOPT))
+			    NULL, F_ISSET(vp, VC_BUFFER) ? &vp->buffer : NULL,
+			    fm, tm, lmode))
 				return (1);
 			if (len == 0)
 				LF_SET(TXT_APPENDEOL);
 			LF_SET(TXT_EMARK | TXT_OVERWRITE);
 		}
-		return (v_ntext(sp, ep, sp->tiqp,
-		    &vp->m_stop, p, len, &vp->m_final, 0, OOBLNO, flags));
+		return (v_ntext(sp, ep,
+		    &sp->tiq, tm, p, len, rp, 0, OOBLNO, flags));
 	}
 
 	/*
@@ -665,59 +647,56 @@ v_change(sp, ep, vp)
 	 * replacement.  If we're not in line mode, we just delete the
 	 * text and start inserting.
 	 *
-	 * !!!
-	 * Historic practice, c cut into the numeric buffers, as well as the
-	 * unnamed one.
-	 *
 	 * Copy the text.
 	 */
 	if (cut(sp, ep,
-	    F_ISSET(vp, VC_BUFFER) ? &vp->buffer : NULL,
-	    &vp->m_start, &vp->m_stop, lmode | CUT_NUMOPT))
+	    NULL, F_ISSET(vp, VC_BUFFER) ? &vp->buffer : NULL, fm, tm, lmode))
 		return (1);
 
 	/* If replacing entire lines and there's leading text. */
-	if (lmode && vp->m_start.cno) {
+	if (lmode && fm->cno) {
 		/* Get a copy of the first line changed. */
-		if ((p = file_gline(sp, ep, vp->m_start.lno, &len)) == NULL) {
-			GETLINE_ERR(sp, vp->m_start.lno);
+		if ((p = file_gline(sp, ep, fm->lno, &len)) == NULL) {
+			GETLINE_ERR(sp, fm->lno);
 			return (1);
 		}
 		/* Copy the leading text elsewhere. */
-		GET_SPACE_RET(sp, bp, blen, vp->m_start.cno);
-		memmove(bp, p, vp->m_start.cno);
+		GET_SPACE_RET(sp, bp, blen, fm->cno);
+		memmove(bp, p, fm->cno);
 	} else
 		bp = NULL;
 
 	/* Delete the text. */
-	if (delete(sp, ep, &vp->m_start, &vp->m_stop, lmode))
+	if (delete(sp, ep, fm, tm, lmode))
 		return (1);
 
 	/* If replacing entire lines, insert a replacement line. */
 	if (lmode) {
-		if (file_iline(sp, ep, vp->m_start.lno, bp, vp->m_start.cno))
+		if (file_iline(sp, ep, fm->lno, bp, fm->cno))
 			return (1);
-		sp->lno = vp->m_start.lno;
-		len = sp->cno = vp->m_start.cno;
+		sp->lno = fm->lno;
+		len = sp->cno = fm->cno;
 	}
 
 	/* Get the line we're editing. */
-	if ((p = file_gline(sp, ep, vp->m_start.lno, &len)) == NULL) {
+	if ((p = file_gline(sp, ep, fm->lno, &len)) == NULL) {
 		if (file_lline(sp, ep, &lno))
 			return (1);
 		if (lno != 0) {
-			GETLINE_ERR(sp, vp->m_start.lno);
+			GETLINE_ERR(sp, fm->lno);
 			return (1);
 		}
 		len = 0;
 	}
 
 	/* Check to see if we're appending to the line. */
-	if (vp->m_start.cno >= len)
+	if (fm->cno >= len)
 		LF_SET(TXT_APPENDEOL);
 
-	rval = v_ntext(sp, ep,
-	    sp->tiqp, NULL, p, len, &vp->m_final, 0, OOBLNO, flags);
+	/* No to mark. */
+	tm = NULL;
+
+	rval = v_ntext(sp, ep, &sp->tiq, tm, p, len, rp, 0, OOBLNO, flags);
 
 	if (bp != NULL)
 		FREE_SPACE(sp, bp, blen);
@@ -729,10 +708,11 @@ v_change(sp, ep, vp)
  *	Overwrite multiple characters.
  */
 int
-v_Replace(sp, ep, vp)
+v_Replace(sp, ep, vp, fm, tm, rp)
 	SCR *sp;
 	EXF *ep;
 	VICMDARG *vp;
+	MARK *fm, *tm, *rp;
 {
 	recno_t lno;
 	u_long cnt;
@@ -740,15 +720,16 @@ v_Replace(sp, ep, vp)
 	u_int flags;
 	char *p;
 
-	sp->showmode = "Replace";
-	flags = set_txt_std(sp, vp, 0);
+	SET_TXT_STD(sp, 0);
+	if (F_ISSET(vp,  VC_ISDOT))
+		LF_SET(TXT_REPLAY);
 
 	cnt = F_ISSET(vp, VC_C1SET) ? vp->count : 1;
-	if ((p = file_gline(sp, ep, vp->m_start.lno, &len)) == NULL) {
+	if ((p = file_gline(sp, ep, rp->lno, &len)) == NULL) {
 		if (file_lline(sp, ep, &lno))
 			return (1);
 		if (lno != 0) {
-			GETLINE_ERR(sp, vp->m_start.lno);
+			GETLINE_ERR(sp, rp->lno);
 			return (1);
 		}
 		len = 0;
@@ -758,10 +739,9 @@ v_Replace(sp, ep, vp)
 			LF_SET(TXT_APPENDEOL);
 		LF_SET(TXT_OVERWRITE | TXT_REPLACE);
 	}
-	vp->m_stop.lno = vp->m_start.lno;
-	vp->m_stop.cno = len ? len - 1 : 0;
-	if (v_ntext(sp, ep, sp->tiqp,
-	    &vp->m_stop, p, len, &vp->m_final, 0, OOBLNO, flags))
+	tm->lno = rp->lno;
+	tm->cno = len ? len : 0;
+	if (v_ntext(sp, ep, &sp->tiq, tm, p, len, rp, 0, OOBLNO, flags))
 		return (1);
 
 	/*
@@ -771,31 +751,29 @@ v_Replace(sp, ep, vp)
 	 * This seems wrong, so this version counts R commands.  There is some
 	 * trickiness in moving back to where the user stopped replacing after
 	 * each R command.  Basically, if the user ended with a newline, we
-	 * want to use vp->m_final.cno (which will be 0).  Otherwise, use the
-	 * column after the returned cursor, unless it would be past the end of
-	 * the line, in which case we append to the line.
+	 * want to use rp->cno (which will be 0).  Otherwise, use the column
+	 * after the returned cursor, unless it would be past the end of the
+	 * line, in which case we append to the line.
 	 */
 	while (--cnt) {
-		if ((p = file_gline(sp, ep, vp->m_final.lno, &len)) == NULL)
-			GETLINE_ERR(sp, vp->m_final.lno);
-		flags = set_txt_std(sp, vp, TXT_REPLAY);
+		if ((p = file_gline(sp, ep, rp->lno, &len)) == NULL)
+			GETLINE_ERR(sp, rp->lno);
+		SET_TXT_STD(sp, TXT_REPLAY);
 
-		sp->lno = vp->m_final.lno;
+		sp->lno = rp->lno;
 
-		if (len == 0 || vp->m_final.cno == len - 1) {
+		if (len == 0 || rp->cno == len - 1) {
 			sp->cno = len;
 			LF_SET(TXT_APPENDEOL);
 		} else {
-			sp->cno = vp->m_final.cno;
-			if (vp->m_final.cno != 0)
+			sp->cno = rp->cno;
+			if (rp->cno != 0)
 				++sp->cno;
 			LF_SET(TXT_OVERWRITE | TXT_REPLACE);
 		}
 
-		vp->m_stop.lno = sp->lno;
-		vp->m_stop.cno = sp->cno;
-		if (v_ntext(sp, ep, sp->tiqp,
-		    &vp->m_stop, p, len, &vp->m_final, 0, OOBLNO, flags))
+		if (v_ntext(sp, ep,
+		    &sp->tiq, tm, p, len, rp, 0, OOBLNO, flags))
 			return (1);
 	}
 	return (0);
@@ -806,23 +784,25 @@ v_Replace(sp, ep, vp)
  *	Substitute characters.
  */
 int
-v_subst(sp, ep, vp)
+v_subst(sp, ep, vp, fm, tm, rp)
 	SCR *sp;
 	EXF *ep;
 	VICMDARG *vp;
+	MARK *fm, *tm, *rp;
 {
 	recno_t lno;
 	size_t len;
 	u_int flags;
 	char *p;
 
-	sp->showmode = "Change";
-	flags = set_txt_std(sp, vp, 0);
-	if ((p = file_gline(sp, ep, vp->m_start.lno, &len)) == NULL) {
+	SET_TXT_STD(sp, 0);
+	if (F_ISSET(vp,  VC_ISDOT))
+		LF_SET(TXT_REPLAY);
+	if ((p = file_gline(sp, ep, fm->lno, &len)) == NULL) {
 		if (file_lline(sp, ep, &lno))
 			return (1);
 		if (lno != 0) {
-			GETLINE_ERR(sp, vp->m_start.lno);
+			GETLINE_ERR(sp, fm->lno);
 			return (1);
 		}
 		len = 0;
@@ -833,54 +813,15 @@ v_subst(sp, ep, vp)
 		LF_SET(TXT_EMARK | TXT_OVERWRITE);
 	}
 
-	vp->m_stop.lno = vp->m_start.lno;
-	vp->m_stop.cno =
-	    vp->m_start.cno + (F_ISSET(vp, VC_C1SET) ? vp->count - 1 : 0);
-	if (vp->m_stop.cno > len - 1)
-		vp->m_stop.cno = len - 1;
+	tm->lno = fm->lno;
+	tm->cno = fm->cno + (F_ISSET(vp, VC_C1SET) ? vp->count : 1);
+	if (tm->cno > len)
+		tm->cno = len;
 
 	if (p != NULL && cut(sp, ep,
-	    F_ISSET(vp, VC_BUFFER) ? &vp->buffer : NULL,
-	    &vp->m_start, &vp->m_stop, 0))
+	    NULL, F_ISSET(vp, VC_BUFFER) ? &vp->buffer : NULL, fm, tm, 0))
 		return (1);
 
-	return (v_ntext(sp, ep, sp->tiqp,
-	    &vp->m_stop, p, len, &vp->m_final, 0, OOBLNO, flags));
-}
-
-/*
- * set_txt_std --
- *	Initialize text processing flags.
- */
-static u_int
-set_txt_std(sp, vp, init)
-	SCR *sp;
-	VICMDARG *vp;
-	u_int init;
-{
-	u_int flags;
-
-	/* Text operations are all interruptible. */
-	F_SET(sp, S_INTERRUPTIBLE);
-
-	LF_INIT(init);
-	LF_SET(TXT_CNTRLT |
-	    TXT_ESCAPE | TXT_MAPINPUT | TXT_RECORD | TXT_RESOLVE);
-	if (O_ISSET(sp, O_ALTWERASE))
-		LF_SET(TXT_ALTWERASE);
-	if (O_ISSET(sp, O_AUTOINDENT))
-		LF_SET(TXT_AUTOINDENT);
-	if (O_ISSET(sp, O_BEAUTIFY))
-		LF_SET(TXT_BEAUTIFY);
-	if (O_ISSET(sp, O_SHOWMATCH))
-		LF_SET(TXT_SHOWMATCH);
-	if (O_ISSET(sp, O_WRAPMARGIN))
-		LF_SET(TXT_WRAPMARGIN);
-	if (F_ISSET(sp, S_SCRIPT))
-		LF_SET(TXT_CR);
-	if (O_ISSET(sp, O_TTYWERASE))
-		LF_SET(TXT_TTYWERASE);
-	if (F_ISSET(vp,  VC_ISDOT))
-		LF_SET(TXT_REPLAY);
-	return (flags);
+	return (v_ntext(sp, ep,
+	    &sp->tiq, tm, p, len, rp, 0, OOBLNO, flags));
 }

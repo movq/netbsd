@@ -1,5 +1,5 @@
 /*-
- * Copyright (c) 1993, 1994
+ * Copyright (c) 1993
  *	The Regents of the University of California.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -32,36 +32,13 @@
  */
 
 #ifndef lint
-static const char sccsid[] = "@(#)sex_refresh.c	8.15 (Berkeley) 8/17/94";
+static char sccsid[] = "@(#)sex_refresh.c	8.5 (Berkeley) 11/18/93";
 #endif /* not lint */
 
 #include <sys/types.h>
-#include <sys/queue.h>
-#include <sys/time.h>
-
-#include <bitstring.h>
-#include <limits.h>
-#include <signal.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <termios.h>
-
-#include "compat.h"
-#include <curses.h>
-#include <db.h>
-#include <regex.h>
 
 #include "vi.h"
 #include "sex_screen.h"
-
-#ifndef SYSV_CURSES
-#define	A_NORMAL	1
-#define	A_STANDOUT	2
-#define	vidattr(attr)	Xvidattr(sp, attr)
-
-static int	Xvidattr __P((SCR *, int));
-#endif
 
 /*
  * sex_refresh --
@@ -74,7 +51,6 @@ sex_refresh(sp, ep)
 {
 	MSG *mp;
 
-	/* Check for screen resize. */
 	if (F_ISSET(sp, S_RESIZE)) {
 		sp->rows = O_VAL(sp, O_LINES);
 		sp->cols = O_VAL(sp, O_COLUMNS);
@@ -87,54 +63,10 @@ sex_refresh(sp, ep)
 		F_CLR(sp, S_BELLSCHED);
 	}
 
-	/* Display messages. */
 	for (mp = sp->msgq.lh_first;
 	    mp != NULL && !(F_ISSET(mp, M_EMPTY)); mp = mp->q.le_next) {
-		if (F_ISSET(mp, M_INV_VIDEO) &&
-		    vidattr(A_STANDOUT) == ERR && O_ISSET(sp, O_ERRORBELLS))
-			(void)printf("\07");
-		(void)printf("%.*s.\n", (int)mp->len, mp->mbuf);
+		(void)fprintf(stdout, "%.*s\n", (int)mp->len, mp->mbuf);
 		F_SET(mp, M_EMPTY);
-
-		if (F_ISSET(mp, M_INV_VIDEO))
-			vidattr(A_NORMAL);
-		(void)fflush(stdout);
 	}
 	return (0);
 }
-
-#ifndef SYSV_CURSES
-/*
- * Xvidattr --
- *	Set the video attributes to a value.
- *
- * XXX
- * Just enough to make the above code work when using non-System V
- * curses.
- */
-static int
-Xvidattr(sp, attr)
-	SCR *sp;
-	int attr;
-{
-	SEX_PRIVATE *sxp;
-
-	sxp = SXP(sp);
-
-	/* Check to see if standout isn't available. */
-	if (sxp->SO == NULL)
-		return (ERR);
-
-	switch (attr) {
-	case A_NORMAL:
-		(void)tputs(SXP(sp)->SE, 1, vi_putchar);
-		break;
-	case A_STANDOUT:
-		(void)tputs(SXP(sp)->SO, 1, vi_putchar);
-		break;
-	default:
-		abort();
-	}
-	return (0);
-}
-#endif

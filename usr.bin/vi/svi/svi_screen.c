@@ -1,5 +1,5 @@
 /*-
- * Copyright (c) 1993, 1994
+ * Copyright (c) 1993
  *	The Regents of the University of California.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -32,32 +32,28 @@
  */
 
 #ifndef lint
-static const char sccsid[] = "@(#)svi_screen.c	8.93 (Berkeley) 8/17/94";
+static char sccsid[] = "@(#)svi_screen.c	8.57 (Berkeley) 1/9/94";
 #endif /* not lint */
 
 #include <sys/types.h>
-#include <sys/queue.h>
-#include <sys/time.h>
 
-#include <bitstring.h>
+#include <curses.h>
 #include <errno.h>
-#include <limits.h>
-#include <signal.h>
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <termios.h>
 #include <unistd.h>
 
-#include "compat.h"
-#include <curses.h>
-#include <db.h>
-#include <regex.h>
-
 #include "vi.h"
-#include "../vi/vcmd.h"
+#include "vcmd.h"
+#include "excmd.h"
 #include "svi_screen.h"
-#include "../sex/sex_screen.h"
+#include "sex/sex_screen.h"
+
+static void	d_to_h __P((SCR *, char *));
+static int	svi_initscr_kluge __P((SCR *, struct termios *));
+static void	svi_keypad __P((SCR *, int));
+static void	svi_keypad_pc __P((int));
 
 /*
  * svi_screen_init --
@@ -72,11 +68,11 @@ svi_screen_init(sp)
 	sp->s_bg		= svi_bg;
 	sp->s_busy		= svi_busy;
 	sp->s_change		= svi_change;
+	sp->s_chposition	= svi_chposition;
 	sp->s_clear		= svi_clear;
-	sp->s_colpos		= svi_cm_public;
 	sp->s_column		= svi_column;
 	sp->s_confirm		= svi_confirm;
-	sp->s_crel		= svi_crel;
+	sp->s_down		= svi_sm_down;
 	sp->s_edit		= svi_screen_edit;
 	sp->s_end		= svi_screen_end;
 	sp->s_ex_cmd		= svi_ex_cmd;
@@ -87,15 +83,14 @@ svi_screen_init(sp)
 	sp->s_get		= svi_get;
 	sp->s_key_read		= sex_key_read;
 	sp->s_optchange		= svi_optchange;
-	sp->s_fmap		= svi_fmap;
 	sp->s_position		= svi_sm_position;
 	sp->s_rabs		= svi_rabs;
-	sp->s_rcm		= svi_rcm;
 	sp->s_refresh		= svi_refresh;
-	sp->s_scroll		= svi_sm_scroll;
+	sp->s_relative		= svi_relative;
+	sp->s_rrel		= svi_rrel;
 	sp->s_split		= svi_split;
 	sp->s_suspend		= svi_suspend;
-	sp->s_window		= sex_window;
+	sp->s_up		= svi_sm_up;
 
 	return (0);
 }
@@ -115,8 +110,8 @@ svi_screen_copy(orig, sp)
 	sp->svi_private = nsvi;
 
 /* INITIALIZED AT SCREEN CREATE. */
-	/* Invalidate the line size cache. */
-	SVI_SCR_CFLUSH(nsvi);
+	/* Lose svi_screens() cached information. */
+	nsvi->ss_lno = OOBLNO;
 
 /* PARTIALLY OR COMPLETELY COPIED FROM PREVIOUS SCREEN. */
 	if (orig == NULL) {
@@ -128,7 +123,7 @@ svi_screen_copy(orig, sp)
 			return (1);
 		}
 
-		F_SET(nsvi, F_ISSET(osvi, SVI_CURSES_INIT));
+		F_SET(nsvi, F_ISSET(osvi, SVI_NO_VBELL));
 	}
 	return (0);
 }
@@ -141,23 +136,34 @@ int
 svi_screen_end(sp)
 	SCR *sp;
 {
-	SVI_PRIVATE *svp;
+	int rval;
 
-	svp = SVP(sp);
+	rval = 0;
 
-	/* Free the screen map. */
+	/*
+	 * XXX
+	 * If this is the last screen, end curses
+	 * while we still have screen information.
+	 */
+	if (sp->q.cqe_prev == (void *)&sp->gp->dq &&
+	    sp->q.cqe_next == (void *)&sp->gp->dq &&
+	    sp->gp->hq.cqh_first == (void *)&sp->gp->hq &&
+	    svi_curses_end(sp))
+		rval = 1;
+
+	/* Free screen map. */
 	if (HMAP != NULL)
 		FREE(HMAP, SIZE_HMAP(sp) * sizeof(SMAP));
 
-	/* Free the visual bell string. */
-	if (svp->VB != NULL)
-		free(svp->VB);
+	/* Free visual bell string. */
+	if (SVP(sp)->VB != NULL)
+		FREE(SVP(sp)->VB, strlen(SVP(sp)->VB) + 1);
 
 	/* Free private memory. */
-	FREE(svp, sizeof(SVI_PRIVATE));
+	FREE(SVP(sp), sizeof(SVI_PRIVATE));
 	sp->svi_private = NULL;
 
-	return (0);
+	return (rval);
 }
 
 /*
@@ -183,36 +189,10 @@ svi_screen_edit(sp, ep)
 	EXF *ep;
 {
 	SCR *tsp;
-	int ecurses, escreen, force, rval;
+	int force;
 
-	escreen = ecurses = rval = 0;
-
-	/* Initialize curses. */
-	if (svi_curses_init(sp)) {
-		escreen = 1;
-		goto err;
-	}
-	ecurses = 1;
-
-	/*
-	 * The resize bit is probably set, as a result of the terminal being
-	 * set.  We clear it as we just finished initializing the screen.
-	 * However, we will want to fill in the map from scratch, so provide
-	 * a line number just in case, and set the reformat flag.
-	 */
-	HMAP->lno = 1;
-	F_CLR(sp, S_RESIZE);
-	F_SET(sp, S_REFORMAT);
-
-	/*
-	 * The historic 4BSD curses had an uneasy relationship with termcap.
-	 * Termcap used a static buffer to hold the terminal information,
-	 * which was was then used by the curses functions.  We want to use
-	 * it too, for lots of random things, but we've put it off until after
-	 * svi_curses_init:initscr() was called.  Do it now.
-	 */
-	if (svi_term_init(sp))
-		goto err;
+	/* Get refresh to init curses. */
+	F_SET(sp, S_RESIZE);
 
 	for (;;) {
 		/* Reset the cursor. */
@@ -223,10 +203,14 @@ svi_screen_edit(sp, ep)
 		 * corrupted, be extremely careful what you free up.
 		 */
 		if (vi(sp, sp->ep)) {
-			(void)rcv_sync(sp, sp->ep,
-			    RCV_EMAIL | RCV_ENDSESSION | RCV_PRESERVE);
-			escreen = 1;
-			goto err;
+			if (F_ISSET(ep, F_RCV_ON)) {
+				F_SET(ep, F_RCV_NORM);
+				(void)rcv_sync(sp, sp->ep);
+			}
+			(void)file_end(sp, sp->ep, 1);	/* End the file. */
+			(void)svi_curses_end(sp);	/* End curses. */
+			(void)screen_end(sp);		/* End the screen. */
+			return (1);
 		}
 
 		force = 0;
@@ -236,25 +220,19 @@ svi_screen_edit(sp, ep)
 			/* FALLTHROUGH */
 		case S_EXIT:
 			F_CLR(sp, S_EXIT_FORCE | S_EXIT);
-			if (file_end(sp, sp->ep, force))/* File end. */
+			if (file_end(sp, sp->ep, force))/* End the file. */
 				break;
-			/*
-			 * !!!
-			 * NB: sp->frp may now be NULL, if it was a tmp file.
-			 */
 			(void)svi_join(sp, &tsp);	/* Find a new screen. */
 			if (tsp == NULL)
 				(void)svi_swap(sp, &tsp, NULL);
-			if (tsp == NULL) {
-				escreen = 1;
-				goto ret;
-			}
-			(void)screen_end(sp);		/* Screen end. */
-			sp = tsp;
+			(void)screen_end(sp);		/* End the screen. */
+			if ((sp = tsp) == NULL)		/* Switch. */
+				return (0);
 			break;
 		case 0:					/* Exit vi mode. */
-			svi_dtoh(sp, "Exit from vi");
-			goto ret;
+			(void)svi_curses_end(sp);	/* End curses. */
+			d_to_h(sp, "Exit from vi");
+			return (0);
 		case S_FSWITCH:				/* File switch. */
 			F_CLR(sp, S_FSWITCH);
 			F_SET(sp, S_REFORMAT);
@@ -267,26 +245,154 @@ svi_screen_edit(sp, ep)
 			abort();
 		}
 	}
-
-	if (0) {
-err:		rval = 1;
-	}
-
-ret:	if (svi_term_end(sp))			/* Terminal end (uses sp). */
-		rval = 1;
-	if (ecurses && svi_curses_end(sp))	/* Curses end (uses sp). */
-		rval = 1;
-	if (escreen && screen_end(sp))		/* Screen end. */
-		rval = 1;
-	return (rval);
+	/* NOTREACHED */
 }
 
 /*
- * svi_crel --
+ * svi_curses_init --
+ *	Initialize curses.
+ */
+int
+svi_curses_init(sp)
+	SCR *sp;
+{
+	struct termios t;
+	int ixoff, ixon;
+	char *p, kbuf[2048];
+
+	/*
+	 * Vi wants raw mode, excepting flow control characters.  Both
+	 * cbreak and raw modes have problems for us.  In cbreak mode,
+	 * we have to turn all the signals off explicitly.  In raw mode,
+	 * we have to turn flow control back on.  Raw chosen for no strong
+	 * reason.  In both cases we have to periodically turn various
+	 * signals on.
+	 */
+	if (tcgetattr(STDIN_FILENO, &t)) {
+		msgq(sp, M_SYSERR, "tcgetattr");
+		return (1);
+	}
+	ixon = t.c_iflag & IXON;
+	ixoff = t.c_iflag & IXOFF;
+
+	/*
+	 * The initscr() in SunOS curses flushes the terminal driver queue.
+	 * I have no idea if this stark raving insanity appears elsewhere,
+	 * but since the SunOS curses is likely derived from the System III
+	 * or System V versions, here's the workaround.
+	 */
+	if (svi_initscr_kluge(sp, &t))
+		return (1);
+	
+	/*
+	 * Start the screen.  Initscr() doesn't provide useful error values
+	 * or messages.  Generally, either malloc failed or the terminal
+	 * was unknown or lacked some necesssary feature.  Try and guess so
+	 * the user isn't even more pissed off because of the error message.
+	 */
+	errno = 0;
+	if (initscr() == NULL) {
+		if (errno)
+			msgq(sp, M_SYSERR, "initscr failed");
+		else
+			msgq(sp, M_ERR, "Error: initscr failed.");
+		if ((p = getenv("TERM")) == NULL)
+			msgq(sp, M_ERR,
+			    "Error: no terminal environment variable set.");
+		else if (tgetent(kbuf, p) != 1)
+			msgq(sp, M_ERR,
+"Error: %s: unknown terminal type, or terminal lacking necessary features.", p);
+		else
+			msgq(sp, M_ERR,
+		    "Error: %s: terminal type lacking necessary features.", p);
+		return (1);
+	}
+
+	/*
+	 * !!!
+	 * If raw isn't turning off echo and newlines, something's wrong.
+	 * However, just in case...
+	 */
+	noecho();			/* No character echo. */
+	nonl();				/* No CR/NL translation. */
+	raw();				/* No special characters. */
+	idlok(stdscr, 1);		/* Use hardware insert/delete line. */
+
+	/*
+	 * Vi wants the cursor keys in application mode.  The historic version
+	 * of curses had no way to do this, and the newer versions (System V)
+	 * only enable it through the wgetch() interface.  Do it roughly, here.
+	 */
+	svi_keypad(sp, 1);
+
+	/*
+	 * XXX
+	 * Major compatibility kluge.  When we call the curses raw() routine,
+	 * XON/XOFF flow control is turned off.  Old terminals like to have
+	 * it, so if it's originally set for the tty, we turn it back on.  For
+	 * some unknown reason, this causes System V curses to NOT correctly
+	 * restore the terminal modes when SIGTSTP is received.
+	 */
+	if ((ixon || ixoff) &&
+	    !tcgetattr(STDIN_FILENO, &sp->gp->s5_curses_botch)) {
+		t = sp->gp->s5_curses_botch;
+		if (ixon)
+			t.c_iflag |= IXON;
+		if (ixoff)
+			t.c_iflag |= IXOFF;
+		F_SET(sp->gp, G_CURSES_S5CB);
+		(void)tcsetattr(STDIN_FILENO, TCSASOFT | TCSADRAIN, &t);
+	}
+
+	/*
+	 * The first screen in the list gets it all.  All other screens
+	 * are hidden and lose their maps.
+	 */
+	d_to_h(sp, "Window resize");
+
+	/* Initialize terminal values. */
+	SVP(sp)->srows = O_VAL(sp, O_LINES);
+
+	/*
+	 * Initialize screen values.
+	 *
+	 * Small windows: see svi/svi_refresh.c:svi_refresh, section 3b.
+	 *
+	 * Setup:
+	 *	t_minrows is the minimum rows to display
+	 *	t_maxrows is the maximum rows to display (rows - 1)
+	 *	t_rows is the rows currently being displayed
+	 */
+	sp->rows = SVP(sp)->srows;
+	sp->cols = O_VAL(sp, O_COLUMNS);
+	sp->woff = 0;
+	sp->t_rows = sp->t_minrows = O_VAL(sp, O_WINDOW);
+	if (sp->t_rows > sp->rows - 1) {
+		sp->t_minrows = sp->t_rows = sp->rows - 1;
+		msgq(sp, M_INFO,
+		    "Windows option value is too large, max is %u", sp->t_rows);
+	}
+	sp->t_maxrows = sp->rows - 1;
+
+	/* Create the screen map. */
+	if ((HMAP = malloc(SIZE_HMAP(sp) * sizeof(SMAP))) == NULL) {
+		msgq(sp, M_SYSERR, NULL);
+		return (1);
+	}
+	memset(HMAP, 0, SIZE_HMAP(sp) * sizeof(SMAP));
+	TMAP = HMAP + (sp->t_rows - 1);
+
+	F_SET(sp->gp, G_CURSES_INIT);		/* Curses initialized. */
+	F_SET(SVP(sp), SVI_CUR_INVALID);	/* Cursor is invalid. */
+	return (0);
+}
+
+/*
+ * svi_rrel --
  *	Change the relative size of the current screen.
  */
 int
-svi_crel(sp, count)
+svi_rrel(sp, count)
 	SCR *sp;
 	long count;
 {
@@ -303,11 +409,109 @@ svi_crel(sp, count)
 }
 
 /*
- * svi_dtoh --
+ * svi_curses_end --
+ *	Move to the bottom of the screen, end curses.
+ */
+int
+svi_curses_end(sp)
+	SCR *sp;
+{
+	/* We get called before anything has been initialized. */
+	if (!F_ISSET(sp->gp, G_CURSES_INIT))
+		return (0);
+	F_CLR(sp->gp, G_CURSES_INIT);
+
+	/* Move to the bottom of the screen. */
+	if (move(INFOLINE(sp), 0) == OK) {
+		clrtoeol();
+		refresh();
+	}
+
+	/*
+	 * XXX
+	 * See comment in svi_curses_init().
+	 */
+	if (F_ISSET(sp->gp, G_CURSES_S5CB))
+		(void)tcsetattr(STDIN_FILENO,
+		    TCSASOFT | TCSADRAIN, &sp->gp->s5_curses_botch);
+	F_CLR(sp->gp, G_CURSES_S5CB);
+
+	svi_keypad(sp, 0);
+	endwin();
+	return (0);
+}
+
+/*
+ * svi_keypad --
+ *	Put the keypad/cursor arrows into or out of application mode.
+ */
+static void
+svi_keypad(sp, on)
+	SCR *sp;
+	int on;
+{
+	char *sbp, *t, kbuf[2048], sbuf[128];
+
+	if (tgetent(kbuf, O_STR(sp, O_TERM)) != 1)
+		return;
+	sbp = sbuf;
+	if ((t = tgetstr(on ? "ks" : "ke", &sbp)) == NULL)
+		return;
+	(void)tputs(t, 0, svi_keypad_pc);
+}
+
+/*
+ * svi_keypad_pc --
+ *	putchar routine for tputs().
+ */
+static void
+svi_keypad_pc(argch)
+	int argch;
+{
+	char ch;
+
+	ch = argch;
+	(void)write(STDOUT_FILENO, &ch, sizeof(ch));
+}
+
+/*
+ * svi_initscr_kluge --
+ *	Read all of the waiting keys before calling initscr().
+ */
+static int
+svi_initscr_kluge(sp, tp)
+	SCR *sp;
+	struct termios *tp;
+{
+	struct termios rawt;
+	int rval;
+
+	/*
+	 * Turn off canonical input processing so that we get partial
+	 * lines as well as complete ones.  Also, set the MIN/TIME
+	 * values -- System V and SMI systems overload VMIN and VTIME,
+	 * such that VMIN is the same as the VEOF element, and VTIME is
+	 * the same as the VEOL element.  This means, that if VEOF was
+	 * ^D, the default VMIN is 4.  Majorly stupid.
+	 */
+	rawt = *tp;
+	rawt.c_cc[VMIN] = 1;
+	rawt.c_cc[VTIME] = 0;
+	rawt.c_lflag &= ~ICANON;
+	if (tcsetattr(STDIN_FILENO, TCSASOFT | TCSANOW, &rawt))
+		return (1);
+	rval = term_key_queue(sp);
+	if (tcsetattr(STDIN_FILENO, TCSASOFT | TCSANOW, tp) || rval)
+		return (1);
+	return (0);
+}
+
+/*
+ * d_to_h --
  *	Move all but the current screen to the hidden queue.
  */
-void
-svi_dtoh(sp, emsg)
+static void
+d_to_h(sp, emsg)
 	SCR *sp;
 	char *emsg;
 {
@@ -316,21 +520,15 @@ svi_dtoh(sp, emsg)
 
 	for (hidden = 0;
 	    (tsp = sp->gp->dq.cqh_first) != (void *)&sp->gp->dq; ++hidden) {
-		if (_HMAP(tsp) != NULL) {
+		if (_HMAP(tsp) != NULL)
 			FREE(_HMAP(tsp), SIZE_HMAP(tsp) * sizeof(SMAP));
-			_HMAP(tsp) = NULL;
-		}
-		SIGBLOCK(sp->gp);
 		CIRCLEQ_REMOVE(&sp->gp->dq, tsp, q);
 		CIRCLEQ_INSERT_TAIL(&sp->gp->hq, tsp, q);
-		SIGUNBLOCK(sp->gp);
 	}
-	SIGBLOCK(sp->gp);
 	CIRCLEQ_REMOVE(&sp->gp->hq, sp, q);
 	CIRCLEQ_INSERT_TAIL(&sp->gp->dq, sp, q);
-	SIGUNBLOCK(sp->gp);
 	if (hidden > 1)
 		msgq(sp, M_INFO,
-	    "%s backgrounded %d screens; use :display to list the screens",
+	    "%s backgrounded %d screens; use :display to list the screens.",
 		    emsg, hidden - 1);
 }

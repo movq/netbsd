@@ -1,5 +1,5 @@
 /*-
- * Copyright (c) 1992, 1993, 1994
+ * Copyright (c) 1992, 1993
  *	The Regents of the University of California.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -32,32 +32,22 @@
  */
 
 #ifndef lint
-static const char sccsid[] = "@(#)svi_refresh.c	8.61 (Berkeley) 8/17/94";
+static char sccsid[] = "@(#)svi_refresh.c	8.43 (Berkeley) 12/23/93";
 #endif /* not lint */
 
 #include <sys/types.h>
-#include <sys/queue.h>
-#include <sys/time.h>
 
-#include <bitstring.h>
 #include <ctype.h>
-#include <limits.h>
-#include <signal.h>
-#include <stdio.h>
+#include <curses.h>
 #include <stdlib.h>
 #include <string.h>
-#include <termios.h>
-
-#include "compat.h"
-#include <curses.h>
-#include <db.h>
-#include <regex.h>
 
 #include "vi.h"
 #include "svi_screen.h"
-#include "../sex/sex_screen.h"
+#include "sex/sex_screen.h"
 
 static int	svi_modeline __P((SCR *, EXF *));
+static int	svi_msgflush __P((SCR *));
 
 int
 svi_refresh(sp, ep)
@@ -82,14 +72,14 @@ svi_refresh(sp, ep)
 		if (svi_curses_end(sp) || svi_curses_init(sp))
 			return (1);
 
-		/* Invalidate the line size cache. */
-		SVI_SCR_CFLUSH(SVP(sp));
+		/* Lose any svi_screens() cached information. */
+		SVP(sp)->ss_lno = OOBLNO;
 
 		/*
 		 * Fill the map, incidentally losing any svi_line()
 		 * cached information.
 		 */
-		if (svi_sm_fill(sp, ep, sp->lno, P_FILL))
+		if (sp->s_fill(sp, ep, sp->lno, P_FILL))
 			return (1);
 		F_CLR(sp, S_RESIZE | S_REFORMAT);
 		F_SET(sp, S_REDRAW);
@@ -155,11 +145,12 @@ svi_paint(sp, ep)
 	SCR *sp;
 	EXF *ep;
 {
+	CHNAME const *cname;
 	SMAP *smp, tmp;
 	SVI_PRIVATE *svp;
 	recno_t lastline, lcnt;
 	size_t cwtotal, cnt, len, x, y;
-	int ch, didpaint, leftright_warp;
+	int ch, didpaint;
 	char *p;
 
 #define	 LNO	sp->lno
@@ -168,7 +159,7 @@ svi_paint(sp, ep)
 #define	OCNO	svp->ocno
 #define	SCNO	svp->sc_col
 
-	didpaint = leftright_warp = 0;
+	didpaint = 0;
 	svp = SVP(sp);
 
 	/*
@@ -179,14 +170,14 @@ svi_paint(sp, ep)
 	 * displayed if the leftright flag is set.
 	 */
 	if (F_ISSET(sp, S_REFORMAT)) {
-		/* Invalidate the line size cache. */
-		SVI_SCR_CFLUSH(SVP(sp));
+		/* Toss svi_screens() cached information. */
+		SVP(sp)->ss_lno = OOBLNO;
 
 		/* Toss svi_line() cached information. */
 		if (svi_sm_fill(sp, ep, HMAP->lno, P_TOP))
 			return (1);
 		if (O_ISSET(sp, O_LEFTRIGHT) &&
-		    (cnt = svi_opt_screens(sp, ep, LNO, &CNO)) != 1)
+		    (cnt = svi_screens(sp, ep, LNO, &CNO)) != 1)
 			for (smp = HMAP; smp <= TMAP; ++smp)
 				smp->off = cnt;
 		F_CLR(sp, S_REFORMAT);
@@ -218,7 +209,7 @@ svi_paint(sp, ep)
 			if (svi_sm_fill(sp, ep, LNO, P_BOTTOM))
 				return (1);
 		if (sp->t_rows == 1) {
-			HMAP->off = svi_opt_screens(sp, ep, LNO, &CNO);
+			HMAP->off = svi_screens(sp, ep, LNO, &CNO);
 			goto paint;
 		}
 		F_SET(sp, S_REDRAW);
@@ -297,16 +288,15 @@ small_fill:			MOVE(sp, INFOLINE(sp), 0);
 		}
 
 	/*
-	 * 3a: Line down, or current screen.
+	 * 3a: Line down.
 	 */
 	if (LNO >= HMAP->lno) {
-		/* Current screen. */
 		if (LNO <= TMAP->lno)
 			goto adjust;
 
 		/*
-		 * If less than half a screen above the line, scroll down
-		 * until the line is on the screen.
+		 * If less than half a screen away, scroll down until the
+		 * line is on the screen.
 		 */
 		lcnt = svi_sm_nlines(sp, ep, TMAP, LNO, HALFTEXT(sp));
 		if (lcnt < HALFTEXT(sp)) {
@@ -315,31 +305,14 @@ small_fill:			MOVE(sp, INFOLINE(sp), 0);
 					return (1);
 			goto adjust;
 		}
-		goto bottom;
-	}
-
-	/*
-	 * 3b: Line up.
-	 */
-	lcnt = svi_sm_nlines(sp, ep, HMAP, LNO, HALFTEXT(sp));
-	if (lcnt < HALFTEXT(sp)) {
-		/*
-		 * If less than half a screen below the line, scroll up until
-		 * the line is the first line on the screen.  Special check so
-		 * that if the screen has been emptied, we refill it.
-		 */
-		if (file_gline(sp, ep, HMAP->lno, &len) != NULL) {
-			while (lcnt--)
-				if (svi_sm_1down(sp, ep))
-					return (1);
-			goto adjust;
-		}
 
 		/*
-		 * If less than a full screen from the bottom of the file,
-		 * put the last line of the file on the bottom of the screen.
+		 * If less than a full screen from the bottom of the file, put
+		 * the last line of the file on the bottom of the screen.  The
+		 * calculation is safe because we know there's at least one
+		 * full screen of lines, otherwise couldn't have gotten here.
 		 */
-bottom:		if (file_lline(sp, ep, &lastline))
+		if (file_lline(sp, ep, &lastline))
 			return (1);
 		tmp.lno = LNO;
 		tmp.off = 1;
@@ -350,8 +323,26 @@ bottom:		if (file_lline(sp, ep, &lastline))
 			F_SET(sp, S_REDRAW);
 			goto adjust;
 		}
-		/* It's not close, just put the line in the middle. */
+
+		/*
+		 * If more than a full screen from the last line of the file,
+		 * put the new line in the middle of the screen.
+		 */
 		goto middle;
+	}
+
+	/*
+	 * 3b: Line up.
+	 *
+	 * If less than half a screen away, scroll up until the line is
+	 * the first line on the screen.
+	 */
+	lcnt = svi_sm_nlines(sp, ep, HMAP, LNO, HALFTEXT(sp));
+	if (lcnt < HALFTEXT(sp)) {
+		while (lcnt--)
+			if (svi_sm_1down(sp, ep))
+				return (1);
+		goto adjust;
 	}
 
 	/*
@@ -387,7 +378,7 @@ middle:		if (svi_sm_fill(sp, ep, LNO, P_MIDDLE))
 	 */
 adjust:	if (!O_ISSET(sp, O_LEFTRIGHT) &&
 	    (LNO == HMAP->lno || LNO == TMAP->lno)) {
-		cnt = svi_opt_screens(sp, ep, LNO, &CNO);
+		cnt = svi_screens(sp, ep, LNO, &CNO);
 		if (LNO == HMAP->lno && cnt < HMAP->off)
 			if ((HMAP->off - cnt) > HALFTEXT(sp)) {
 				HMAP->off = cnt;
@@ -408,31 +399,23 @@ adjust:	if (!O_ISSET(sp, O_LEFTRIGHT) &&
 						return (1);
 	}
 
-	/*
-	 * If the screen needs to be repainted, skip cursor optimization.
-	 * However, in the code above we skipped leftright scrolling on
-	 * the grounds that the cursor code would handle it.  Make sure
-	 * the right screen is up.
-	 */
-	if (F_ISSET(sp, S_REDRAW)) {
-		if (O_ISSET(sp, O_LEFTRIGHT)) {
-			cnt = svi_opt_screens(sp, ep, LNO, &CNO);
-			if (HMAP->off != cnt)
-				for (smp = HMAP; smp <= TMAP; ++smp)
-					smp->off = cnt;
-		}
+	/* If the screen needs to be repainted, skip cursor optimization. */
+	if (F_ISSET(sp, S_REDRAW))
 		goto paint;
-	}
 
 	/*
 	 * 4: Cursor movements.
 	 *
 	 * Decide cursor position.  If the line has changed, the cursor has
 	 * moved over a tab, or don't know where the cursor was, reparse the
-	 * line.  Otherwise, we've just moved over fixed-width characters,
-	 * and can calculate the left/right scrolling and cursor movement
-	 * without reparsing the line.  Note that we don't know which (if any)
-	 * of the characters between the old and new cursor positions changed.
+	 * line.  Note, if we think that the cursor "hasn't moved", reparse
+	 * the line.  This is 'cause if it hasn't moved, we've almost always
+	 * lost track of it.
+	 *
+	 * Otherwise, we've just moved over fixed-width characters, and can
+	 * calculate the left/right scrolling and cursor movement without
+	 * reparsing the line.  Note that we don't know which (if any) of
+	 * the characters between the old and new cursor positions changed.
 	 *
 	 * XXX
 	 * With some work, it should be possible to handle tabs quickly, at
@@ -478,6 +461,7 @@ adjust:	if (!O_ISSET(sp, O_LEFTRIGHT) &&
 	 * the old and new positions and decide how big they are on the
 	 * screen, and therefore, how many screen positions to move.
 	 */
+	cname = sp->gp->cname;
 	if (CNO < OCNO) {
 		/*
 		 * 4a: Cursor moved left.
@@ -493,7 +477,7 @@ adjust:	if (!O_ISSET(sp, O_LEFTRIGHT) &&
 			goto slow;
 
 		/*
-		 * Quick sanity check -- it's hard to figure out exactly when
+		 * Quit sanity check -- it's hard to figure out exactly when
 		 * we cross a screen boundary as we do in the cursor right
 		 * movement.  If cnt is so large that we're going to cross the
 		 * boundary no matter what, stop now.
@@ -505,7 +489,7 @@ adjust:	if (!O_ISSET(sp, O_LEFTRIGHT) &&
 		 * Count up the widths of the characters.  If it's a tab
 		 * character, go do it the the slow way.
 		 */
-		for (cwtotal = 0; cnt--; cwtotal += KEY_LEN(sp, ch))
+		for (cwtotal = 0; cnt--; cwtotal += cname[ch].len)
 			if ((ch = *(u_char *)p--) == '\t')
 				goto slow;
 
@@ -519,23 +503,17 @@ adjust:	if (!O_ISSET(sp, O_LEFTRIGHT) &&
 		 * If we're moving left, and there's a wide character in the
 		 * current position, go to the end of the character.
 		 */
-		if (KEY_LEN(sp, ch) > 1)
-			cwtotal -= KEY_LEN(sp, ch) - 1;
+		if (cname[ch].len > 1)
+			cwtotal -= cname[ch].len - 1;
 
 		/*
-		 * If the new column moved us off of the current logical line,
-		 * calculate a new one.  If doing leftright scrolling, we've
-		 * moved off of the current screen, as well.  Since most files
-		 * don't have more than two screens, we optimize moving from
-		 * screen 2 to screen 1.
+		 * If the new column moved us out of the current screen,
+		 * calculate a new screen.
 		 */
 		if (SCNO < cwtotal) {
 lscreen:		if (O_ISSET(sp, O_LEFTRIGHT)) {
-				cnt = HMAP->off == 2 ? 1 :
-				    svi_opt_screens(sp, ep, LNO, &CNO);
 				for (smp = HMAP; smp <= TMAP; ++smp)
-					smp->off = cnt;
-				leftright_warp = 1;
+					--smp->off;
 				goto paint;
 			}
 			goto slow;
@@ -558,7 +536,7 @@ lscreen:		if (O_ISSET(sp, O_LEFTRIGHT)) {
 		for (cwtotal = SCNO; cnt--;) {
 			if ((ch = *(u_char *)p++) == '\t')
 				goto slow;
-			if ((cwtotal += KEY_LEN(sp, ch)) >= SCREEN_COLS(sp))
+			if ((cwtotal += cname[ch].len) >= SCREEN_COLS(sp))
 				break;
 		}
 
@@ -568,13 +546,15 @@ lscreen:		if (O_ISSET(sp, O_LEFTRIGHT)) {
 		 */
 		SCNO = cwtotal;
 
-		/* See screen change comment in section 4a. */
+		/*
+		 * If the new column moved us out of the current screen,
+		 * calculate a new screen.
+		 */
 		if (SCNO >= SCREEN_COLS(sp)) {
 			if (O_ISSET(sp, O_LEFTRIGHT)) {
-				cnt = svi_opt_screens(sp, ep, LNO, &CNO);
+				SCNO -= SCREEN_COLS(sp);
 				for (smp = HMAP; smp <= TMAP; ++smp)
-					smp->off = cnt;
-				leftright_warp = 1;
+					++smp->off;
 				goto paint;
 			}
 			goto slow;
@@ -602,15 +582,13 @@ fast:	getyx(stdscr, y, x);
 	 */
 slow:	for (smp = HMAP; smp->lno != LNO; ++smp);
 	if (O_ISSET(sp, O_LEFTRIGHT)) {
-		cnt = svi_opt_screens(sp, ep, LNO, &CNO) % SCREEN_COLS(sp);
+		cnt = svi_screens(sp, ep, LNO, &CNO) % SCREEN_COLS(sp);
 		if (cnt != HMAP->off) {
 			if (ISINFOLINE(sp, smp))
 				smp->off = cnt;
-			else {
+			else
 				for (smp = HMAP; smp <= TMAP; ++smp)
 					smp->off = cnt;
-				leftright_warp = 1;
-			}
 			goto paint;
 		}
 	}
@@ -675,8 +653,7 @@ number:	if (O_ISSET(sp, O_NUMBER) && F_ISSET(sp, S_RENUMBER) && !didpaint) {
 	if (F_ISSET(sp, S_BELLSCHED))
 		svi_bell(sp);
 	/*
-	 * If the bottom line isn't in use by the colon command, and
-	 * we're not in the middle of a map:
+	 * If the bottom line isn't in use by the colon command:
 	 *
 	 *	Display any messages.  Don't test S_UPDATE_MODE.  The
 	 *	message printing routine set it to avoid anyone else
@@ -685,7 +662,7 @@ number:	if (O_ISSET(sp, O_NUMBER) && F_ISSET(sp, S_RENUMBER) && !didpaint) {
 	 *	If the bottom line isn't in use by anyone, put out the
 	 *	standard status line.
 	 */
-	if (!F_ISSET(SVP(sp), SVI_INFOLINE) && !KEYS_WAITING(sp))
+	if (!F_ISSET(SVP(sp), SVI_INFOLINE))
 		if (sp->msgq.lh_first != NULL &&
 		    !F_ISSET(sp->msgq.lh_first, M_EMPTY))
 			svi_msgflush(sp);
@@ -702,18 +679,98 @@ number:	if (O_ISSET(sp, O_NUMBER) && F_ISSET(sp, S_RENUMBER) && !didpaint) {
 	/* Flush it all out. */
 	refresh();
 
-	/*
-	 * XXX
-	 * Recalculate the "most favorite" cursor position.  Vi doesn't know
-	 * that we've warped the screen and it's going to have a completely
-	 * wrong idea about where the cursor should be.  This is vi's problem,
-	 * and fixing it here is a gross violation of layering.
-	 */
-	if (leftright_warp)
-		(void)svi_column(sp, ep, &sp->rcm);
-
 	return (0);
 }
+
+/*
+ * svi_msgflush --
+ *	Flush any accumulated messages.
+ */
+static int
+svi_msgflush(sp)
+	SCR *sp;
+{
+	CH ikey;
+	CHAR_T ch;
+	CHNAME const *cname;
+	MSG *mp;
+	size_t chlen, len;
+	char *p;
+
+#define	MCONTMSG	" [More ...]"
+
+	/* Display the messages. */
+	cname = sp->gp->cname;
+	for (mp = sp->msgq.lh_first, p = NULL;
+	    mp != NULL && !F_ISSET(mp, M_EMPTY); mp = mp->q.le_next) {
+		p = mp->mbuf;
+
+lcont:		/* Move to the message line and clear it. */
+		MOVE(sp, INFOLINE(sp), 0);
+		clrtoeol();
+
+		/*
+		 * Turn on standout mode if requested, or, if we've split
+		 * the screen and need a divider.
+		 */
+		if (F_ISSET(mp, M_INV_VIDEO) ||
+		    sp->q.cqe_next != (void *)&sp->gp->dq)
+			standout();
+
+		/*
+		 * Print up to the "more" message.  Avoid the last character
+		 * in the last line, some hardware doesn't like it.
+		 */
+		if (svi_ncols(sp, p, mp->len, NULL) < sp->cols - 1)
+			len = sp->cols - 1;
+		else
+			len = (sp->cols - sizeof(MCONTMSG)) - 1;
+		for (;; ++p) {
+			if (!mp->len)
+				break;
+			ch = *(u_char *)p;
+			chlen = cname[ch].len;
+			if (chlen >= len)
+				break;
+			len -= chlen;
+			--mp->len;
+			ADDNSTR(cname[ch].name, chlen);
+		}
+
+		/*
+		 * If more, print continue message.  If user key fails,
+		 * keep showing the messages anyway.
+		 */
+		if (mp->len || (mp->q.le_next != NULL &&
+		    !F_ISSET(mp->q.le_next, M_EMPTY))) {
+			ADDNSTR(MCONTMSG, sizeof(MCONTMSG) - 1);
+			refresh();
+			for (;;) {
+				if (term_user_key(sp, &ikey) != INP_OK)
+					break;
+				if (ikey.value == K_CR ||
+				    ikey.value == K_NL || ikey.ch == ' ')
+					break;
+				svi_bell(sp);
+			}
+		}
+
+		/* Turn off standout mode. */
+		if (F_ISSET(mp, M_INV_VIDEO) ||
+		    sp->q.cqe_next != (void *)&sp->gp->dq)
+			standend();
+
+		if (mp->len)
+			goto lcont;
+
+		refresh();
+		F_SET(mp, M_EMPTY);
+	}
+	return (0);
+}
+
+#define	RULERSIZE	15
+#define	MODESIZE	(RULERSIZE + 15)
 
 /*
  * svi_modeline --
@@ -724,95 +781,59 @@ svi_modeline(sp, ep)
 	SCR *sp;
 	EXF *ep;
 {
-	size_t cols, curlen, endpoint, len, midpoint;
-	char *p, buf[20];
+	char *s, buf[RULERSIZE];
 
-	/* Clear the mode line. */
 	MOVE(sp, INFOLINE(sp), 0);
 	clrtoeol();
 
-	/*
-	 * We put down the file name, the ruler, the mode and the dirty flag.
-	 * If there's not enough room, there's not enough room, we don't play
-	 * any special games.  We try to put the ruler in the middle and the
-	 * mode and dirty flag at the end.  
-	 *
-	 * !!!
-	 * Leave the last character blank, in case it's a really dumb terminal
-	 * with hardware scroll.  Second, don't paint the last character in the
-	 * screen, SunOS 4.1.1 and Ultrix 4.2 curses won't let you.
-	 */
-	cols = sp->cols - 1;
+	/* Display a dividing line if not the bottom screen. */
+	if (sp->q.cqe_next != (void *)&sp->gp->dq)
+		svi_divider(sp);
 
-	curlen = 0;
-	if (sp->q.cqe_next != (void *)&sp->gp->dq) {
-		for (p = sp->frp->name; *p != '\0'; ++p);
-		while (--p > sp->frp->name) {
-			if (*p == '/') {
-				++p;
-				break;
-			}
-			if ((curlen += KEY_LEN(sp, *p)) > cols) {
-				curlen -= KEY_LEN(sp, *p);
-				++p;
-				break;
-			}
-		}
-
-		MOVE(sp, INFOLINE(sp), 0);
-		standout();
-		for (; *p != '\0'; ++p)
-			ADDCH(*p);
-		standend();
-	}
-		
-	/*
-	 * Display the ruler.  If we're not at the midpoint yet, move there.
-	 * Otherwise, just add in two extra spaces.
-	 *
-	 * XXX
-	 * Assume that numbers, commas, and spaces only take up a single
-	 * column on the screen.
-	 */
-	if (O_ISSET(sp, O_RULER)) {
-		len = snprintf(buf,
+	/* Display the ruler. */
+	if (O_ISSET(sp, O_RULER) && sp->cols > RULERSIZE + 2) {
+		MOVE(sp, INFOLINE(sp), sp->cols / 2 - RULERSIZE / 2);
+		clrtoeol();
+		(void)snprintf(buf,
 		    sizeof(buf), "%lu,%lu", sp->lno, sp->cno + 1);
-		midpoint = (cols - ((len + 1) / 2)) / 2;
-		if (curlen < midpoint) {
-			MOVE(sp, INFOLINE(sp), midpoint);
-			ADDSTR(buf);
-			curlen += len;
-		} else if (curlen + 2 + len < cols) {
-			ADDSTR("  ");
-			ADDSTR(buf);
-			curlen += 2 + len;
-		}
+		ADDSTR(buf);
+	}
+
+	/* Show the modified bit. */
+	if (O_ISSET(sp, O_SHOWDIRTY) &&
+	    F_ISSET(ep, F_MODIFIED) && sp->cols > MODESIZE) {
+		MOVE(sp, INFOLINE(sp), sp->cols - 9);
+		ADDSTR("*");
 	}
 
 	/*
-	 * Display the mode and the modified flag, as close to the end of the
-	 * line as possible, but guaranteeing at least two spaces between the
-	 * ruler and the modified flag.
-	 *
-	 * XXX
-	 * Assume that mode name characters, asterisks, and spaces only take
-	 * up a single column on the screen.
+	 * Show the mode.  Leave the last character blank, in case it's a
+	 * really dumb terminal with hardware scroll.  Second, don't try
+	 * to *paint* the last character, SunOS 4.1.1 and Ultrix 4.2 curses
+	 * won't let you paint the last character in the screen.
 	 */
-	endpoint = cols;
-	if (O_ISSET(sp, O_SHOWDIRTY) && F_ISSET(ep, F_MODIFIED))
-		--endpoint;
+	if (O_ISSET(sp, O_SHOWMODE) && sp->cols > MODESIZE) {
+		MOVE(sp, INFOLINE(sp), sp->cols - 8);
+		s = F_ISSET(sp, S_INPUT) ? "  Input" : "Command";
+		ADDSTR(s);
+	}
 
-#define	MODESIZE	9
-	if (O_ISSET(sp, O_SHOWMODE))
-		endpoint -= MAX_MODE_NAME;
+	return (0);
+}
 
-	if (endpoint < curlen + 2)
-		return (0);
+/*
+ * svi_divider --
+ *	Draw a dividing line between the screens.
+ */
+int
+svi_divider(sp)
+	SCR *sp;
+{
+	size_t len;
 
-	MOVE(sp, INFOLINE(sp), endpoint);
-	if (O_ISSET(sp, O_SHOWDIRTY) && F_ISSET(ep, F_MODIFIED))
-		ADDSTR("*");
-	if (O_ISSET(sp, O_SHOWMODE))
-		ADDSTR(sp->showmode);
+#define	DIVIDESTR	"+=+=+=+=+=+=+=+"
+	len = sizeof(DIVIDESTR) - 1 > sp->cols ?
+	    sp->cols : sizeof(DIVIDESTR) - 1;
+	ADDNSTR(DIVIDESTR, len);
 	return (0);
 }

@@ -1,5 +1,5 @@
 /*-
- * Copyright (c) 1992, 1993, 1994
+ * Copyright (c) 1992, 1993
  *	The Regents of the University of California.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -32,26 +32,15 @@
  */
 
 #ifndef lint
-static const char sccsid[] = "@(#)ex_digraph.c	8.7 (Berkeley) 8/17/94";
+static char sccsid[] = "@(#)ex_digraph.c	8.4 (Berkeley) 12/9/93";
 #endif /* not lint */
 
 #ifndef NO_DIGRAPH
 #include <sys/types.h>
-#include <sys/queue.h>
-#include <sys/time.h>
 
-#include <bitstring.h>
-#include <limits.h>
-#include <signal.h>
-#include <stdio.h>
+#include <curses.h>
 #include <stdlib.h>
 #include <string.h>
-#include <termios.h>
-
-#include "compat.h"
-#include <curses.h>
-#include <db.h>
-#include <regex.h>
 
 #include "vi.h"
 #include "excmd.h"

@@ -1,5 +1,5 @@
 /*-
- * Copyright (c) 1993, 1994
+ * Copyright (c) 1993
  *	The Regents of the University of California.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -32,56 +32,66 @@
  */
 
 #ifndef lint
-static const char sccsid[] = "@(#)v_ntext.c	8.121 (Berkeley) 8/17/94";
+static char sccsid[] = "@(#)v_ntext.c	8.80 (Berkeley) 1/13/94";
 #endif /* not lint */
 
 #include <sys/types.h>
-#include <sys/queue.h>
 #include <sys/time.h>
 
-#include <bitstring.h>
 #include <ctype.h>
 #include <errno.h>
-#include <limits.h>
-#include <signal.h>
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <termios.h>
 #include <unistd.h>
 
-#include "compat.h"
-#include <db.h>
-#include <regex.h>
-
 #include "vi.h"
+#include "seq.h"
 #include "vcmd.h"
 #include "excmd.h"
 
-static int	 txt_abbrev __P((SCR *, TEXT *, CHAR_T *, int, int *, int *));
+static int	 txt_abbrev __P((SCR *, TEXT *, ARG_CHAR_T, int, int *, int *));
 static void	 txt_ai_resolve __P((SCR *, TEXT *));
-static TEXT	*txt_backup __P((SCR *, EXF *, TEXTH *, TEXT *, u_int *));
+static TEXT	*txt_backup __P((SCR *, EXF *, TEXTH *, TEXT *, u_int));
 static void	 txt_err __P((SCR *, EXF *, TEXTH *));
-static int	 txt_hex __P((SCR *, TEXT *));
+static int	 txt_hex __P((SCR *, TEXT *, int *, ARG_CHAR_T));
 static int	 txt_indent __P((SCR *, TEXT *));
-static int	 txt_margin __P((SCR *,
-		    TEXT *, CHAR_T *, TEXT *, u_int, int *));
+static int	 txt_margin __P((SCR *, TEXT *, int *, ARG_CHAR_T));
 static int	 txt_outdent __P((SCR *, TEXT *));
-static void	 txt_Rcleanup __P((SCR *,
-		    TEXTH *, TEXT *, const char *, const size_t));
-static int	 txt_resolve __P((SCR *, EXF *, TEXTH *, u_int));
 static void	 txt_showmatch __P((SCR *, EXF *));
-static void	 txt_unmap __P((SCR *, TEXT *, u_int *));
+static int	 txt_resolve __P((SCR *, EXF *, TEXTH *));
 
 /* Cursor character (space is hard to track on the screen). */
 #if defined(DEBUG) && 0
-#undef	CH_CURSOR
-#define	CH_CURSOR	'+'
+#undef	CURSOR_CH
+#define	CURSOR_CH	'+'
 #endif
 
+/* Local version of BINC. */
+#define	TBINC(sp, lp, llen, nlen) {					\
+	if ((nlen) > llen && binc(sp, &(lp), &(llen), nlen))		\
+		goto err;						\
+}
+
 /*
- * v_ntext --
+ * newtext --
  *	Read in text from the user.
+ *
+ * !!!
+ * Historic vi always used:
+ *
+ *	^D: autoindent deletion
+ *	^H: last character deletion
+ *	^W: last word deletion
+ *	^V: quote the next character
+ *
+ * regardless of the user's choices for these characters.  The user's erase
+ * and kill characters worked in addition to these characters.  Ex was not
+ * completely consistent with this, as it did map the scroll command to the
+ * user's EOF character.
+ *
+ * This implementation does not use fixed characters, but uses whatever the
+ * user specified as described by the termios structure.  I'm getting away
+ * with something here, but I think I'm unlikely to get caught.
  *
  * !!!
  * Historic vi did a special screen optimization for tab characters.  For
@@ -103,25 +113,22 @@ v_ntext(sp, ep, tiqh, tm, lp, len, rp, prompt, ai_line, flags)
 	const char *lp;		/* Input line. */
 	const size_t len;	/* Input line length. */
 	MARK *rp;		/* Return MARK. */
-	ARG_CHAR_T prompt;	/* Prompt to display. */
+	int prompt;		/* Prompt to display. */
 	recno_t ai_line;	/* Line number to use for autoindent count. */
 	u_int flags;		/* TXT_ flags. */
 {
 				/* State of abbreviation checks. */
-	enum { A_NOTSET, A_NOTWORD, A_INWORD } abb;
+	enum { A_NOTSET, A_SPACE, A_NOTSPACE } abb;
 				/* State of the "[^0]^D" sequences. */
 	enum { C_NOTSET, C_CARATSET, C_NOCHANGE, C_ZEROSET } carat_st;
 				/* State of the hex input character. */
 	enum { H_NOTSET, H_NEXTCHAR, H_INHEX } hex;
 				/* State of quotation. */
 	enum { Q_NOTSET, Q_NEXTCHAR, Q_THISCHAR } quoted;
-	enum input tval;
-	struct termios t;	/* Terminal characteristics. */
 	CH ikey;		/* Input character structure. */
 	CHAR_T ch;		/* Input character. */
+	GS *gp;			/* Global pointer. */
 	TEXT *tp, *ntp, ait;	/* Input and autoindent text structures. */
-	TEXT wmt;		/* Wrapmargin text structure. */
-	size_t owrite, insert;	/* Temporary copies of TEXT fields. */
 	size_t rcol;		/* 0-N: insert offset in the replay buffer. */
 	size_t col;		/* Current column. */
 	u_long margin;		/* Wrapmargin value. */
@@ -130,11 +137,8 @@ v_ntext(sp, ep, tiqh, tm, lp, len, rp, prompt, ai_line, flags)
 	int eval;		/* Routine return value. */
 	int replay;		/* If replaying a set of input. */
 	int showmatch;		/* Showmatch set on this character. */
-	int sig_ix, sig_reset;	/* Signal information. */
 	int testnr;		/* Test first character for nul replay. */
 	int max, tmp;
-	int unmap_tst;		/* Input map needs testing. */
-	int wmset, wmskip;	/* Wrapmargin happened, blank skip flags. */
 	char *p;
 
 	/*
@@ -145,6 +149,7 @@ v_ntext(sp, ep, tiqh, tm, lp, len, rp, prompt, ai_line, flags)
 
 	/* Local initialization. */
 	eval = 0;
+	gp = sp->gp;
 
 	/*
 	 * Get one TEXT structure with some initial buffer space, reusing
@@ -177,25 +182,25 @@ newtp:		if ((tp = text_init(sp, lp, len, len + 32)) == NULL)
 	 * Set the insert and overwrite counts.  If overwriting characters,
 	 * do insertion afterward.  If not overwriting characters, assume
 	 * doing insertion.  If change is to a mark, emphasize it with an
-	 * CH_ENDMARK
+	 * END_CH.
 	 */
 	if (len) {
 		if (LF_ISSET(TXT_OVERWRITE)) {
-			tp->owrite = (tm->cno - sp->cno) + 1;
-			tp->insert = (len - tm->cno) - 1;
+			tp->owrite = tm->cno - sp->cno;
+			tp->insert = len - tm->cno;
 		} else
 			tp->insert = len - sp->cno;
 
 		if (LF_ISSET(TXT_EMARK))
-			tp->lb[tm->cno] = CH_ENDMARK;
+			tp->lb[tm->cno - 1] = END_CH;
 	}
 
 	/*
 	 * Many of the special cases in this routine are to handle autoindent
 	 * support.  Somebody decided that it would be a good idea if "^^D"
 	 * and "0^D" deleted all of the autoindented characters.  In an editor
-	 * that takes single character input from the user, this beggars the
-	 * imagination.  Note also, "^^D" resets the next lines' autoindent,
+	 * that takes single character input from the user, this wasn't a very
+	 * good idea.  Note also that "^^D" resets the next lines' autoindent,
 	 * but "0^D" doesn't.
 	 *
 	 * We assume that autoindent only happens on empty lines, so insert
@@ -238,7 +243,7 @@ newtp:		if ((tp = text_init(sp, lp, len, len + 32)) == NULL)
 	 * strictly necessary.  Not a big deal.
 	 */
 	if (LF_ISSET(TXT_APPENDEOL)) {
-		tp->lb[sp->cno] = CH_CURSOR;
+		tp->lb[sp->cno] = CURSOR_CH;
 		++tp->len;
 		++tp->insert;
 	}
@@ -248,36 +253,27 @@ newtp:		if ((tp = text_init(sp, lp, len, len + 32)) == NULL)
 	 * from the RIGHT-HAND column, not the left.  It's more useful to
 	 * us as a distance from the left-hand column.
 	 *
-	 * !!!/XXX
-	 * Replay commands were not affected by the wrapmargin option in the
-	 * historic 4BSD vi.  What I found surprising was that people depend
-	 * on it, as in this gem of a macro which centers lines:
+	 * !!!
+	 * Replay commands are not affected by wrapmargin values.  What
+	 * I found surprising was that people actually depend on it, as
+	 * in this gem of a macro which centers lines:
 	 *
 	 *	map #c $mq81a ^V^[81^V|D`qld0:s/  / /g^V^M$p
-	 *
-	 * Other historic versions of vi, notably Sun's, applied wrapmargin
-	 * to replay lines as well.
 	 *
 	 * XXX
 	 * Setting margin causes a significant performance hit.  Normally
 	 * we don't update the screen if there are keys waiting, but we
 	 * have to if margin is set, otherwise the screen routines don't
 	 * know where the cursor is.
-	 *
-	 * !!!
-	 * One more special case.  If an inserted <blank> character causes
-	 * wrapmargin to split the line, the next user entered character is
-	 * discarded if it's a <space> character.
 	 */
 	if (LF_ISSET(TXT_REPLAY) || !LF_ISSET(TXT_WRAPMARGIN))
 		margin = 0;
 	else if ((margin = O_VAL(sp, O_WRAPMARGIN)) != 0)
 		margin = sp->cols - margin;
-	wmset = wmskip = 0;
 
 	/* Initialize abbreviations checks. */
-	if (F_ISSET(sp->gp, G_ABBREV) && LF_ISSET(TXT_MAPINPUT)) {
-		abb = A_INWORD;
+	if (F_ISSET(gp, G_ABBREV) && LF_ISSET(TXT_MAPINPUT)) {
+		abb = A_NOTSPACE;
 		ab_cnt = ab_turnoff = 0;
 	} else
 		abb = A_NOTSET;
@@ -311,7 +307,7 @@ nullreplay:
 		 */
 		if (VIP(sp)->rep == NULL)
 			return (0);
-		if (term_push(sp, VIP(sp)->rep, VIP(sp)->rep_cnt, CH_NOMAP))
+		if (term_push(sp, VIP(sp)->rep, VIP(sp)->rep_cnt, 0, CH_NOMAP))
 			return (1);
 		testnr = 0;
 		abb = A_NOTSET;
@@ -319,9 +315,8 @@ nullreplay:
 	} else
 		testnr = 1;
 
-	unmap_tst = LF_ISSET(TXT_MAPINPUT) && LF_ISSET(TXT_INFOLINE);
 	iflags = LF_ISSET(TXT_MAPCOMMAND | TXT_MAPINPUT);
-	for (showmatch = 0, sig_reset = 0,
+	for (gp, showmatch = 0,
 	    carat_st = C_NOTSET, hex = H_NOTSET, quoted = Q_NOTSET;;) {
 		/*
 		 * Reset the line and update the screen.  (The txt_showmatch()
@@ -340,50 +335,21 @@ nullreplay:
 		}
 
 		/* Get the next character. */
-next_ch:	tval = term_key(sp, &ikey, quoted == Q_THISCHAR ?
-		    iflags & ~(TXT_MAPCOMMAND | TXT_MAPINPUT) : iflags);
-		ch = ikey.ch;
-
-		/* Restore the terminal state if it was modified. */
-		if (sig_reset && !tcgetattr(STDIN_FILENO, &t)) {
-			t.c_lflag |= ISIG;
-			t.c_iflag |= sig_ix;
-			sig_reset = 0;
-			(void)tcsetattr(STDIN_FILENO, TCSASOFT | TCSADRAIN, &t);
-		}
-
-		/*
-		 * !!!
-		 * Historically, <interrupt> exited the user from text input
-		 * mode or cancelled a colon command, and returned to command
-		 * mode.  It also beeped the terminal, but that seems a bit
-		 * excessive.
-		 */
-		if (tval != INP_OK) {
-			if (tval == INP_INTR)
-				goto k_escape;
+next_ch:	if (term_key(sp, &ikey, iflags) != INP_OK)
 			goto err;
-		}
+		ch = ikey.ch;
 
 		/* Abbreviation check.  See comment in txt_abbrev(). */
 #define	MAX_ABBREVIATION_EXPANSION	256
 		if (ikey.flags & CH_ABBREVIATED) {
 			if (++ab_cnt > MAX_ABBREVIATION_EXPANSION) {
-				term_flush(sp,
-			"Abbreviation exceeded maximum number of characters",
-				    CH_ABBREVIATED);
+				term_ab_flush(sp,
+			"Abbreviation exceeded maximum number of characters");
 				ab_cnt = 0;
 				continue;
 			}
 		} else
 			ab_cnt = 0;
-
-		/* Wrapmargin check. */
-		if (wmskip) {
-			wmskip = 0;
-			if (ch == ' ')
-				goto next_ch;
-		}
 			
 		/*
 		 * !!!
@@ -404,64 +370,44 @@ next_ch:	tval = term_key(sp, &ikey, quoted == Q_THISCHAR ?
 		 * characters, but not worth fixing.
 		 */
 		if (LF_ISSET(TXT_RECORD)) {
-			BINC_GOTO(sp, VIP(sp)->rep, VIP(sp)->rep_len, rcol + 1);
+			TBINC(sp, VIP(sp)->rep, VIP(sp)->rep_len, rcol + 1);
 			VIP(sp)->rep[rcol++] = ch;
 		}
-		BINC_GOTO(sp, tp->lb, tp->lb_len, tp->len + 1);
+		TBINC(sp, tp->lb, tp->lb_len, tp->len + 1);
 
 		/*
 		 * If the character was quoted, replace the last character
 		 * (the literal mark) with the new character.  If quoted
 		 * by someone else, simply insert the character.
+		 *
+		 * !!!
+		 * Extension -- if the quoted character is HEX_CH, enter hex
+		 * mode.  If the user enters "<HEX_CH>[isxdigit()]*" we will
+		 * try to use the value as a character.  Anything else resets
+		 * hex mode.
 		 */
 		if (ikey.flags & CH_QUOTED)
-			goto insq_ch;
+			goto ins_ch;
 		if (quoted == Q_THISCHAR) {
 			--sp->cno;
 			++tp->owrite;
 			quoted = Q_NOTSET;
-			goto insq_ch;
-		}
-		/*
-		 * !!!
-		 * Extension.  If the user enters "<CH_HEX>[isxdigit()]*" we
-		 * will try to use the value as a character.  Anything else
-		 * inserts the <CH_HEX> character, and resets hex mode.
-		 */
-		if (hex == H_INHEX && !isxdigit(ch)) {
-			if (txt_hex(sp, tp))
-				goto err;
-			hex = H_NOTSET;
+
+			if (ch == HEX_CH)
+				hex = H_NEXTCHAR;
+			goto ins_ch;
 		}
 
 		switch (ikey.value) {
-		case K_CR:				/* Carriage return. */
+		case K_CR:
 		case K_NL:				/* New line. */
-			/* Return in script windows and the command line. */
-k_cr:			if (LF_ISSET(TXT_CR)) {
-				/*
-				 * If this was a map, we may have not displayed
-				 * the line.  Display it, just in case.
-				 *
-				 * If a script window and not the colon line,
-				 * push a <cr> so it gets executed.
-				 */
-				if (LF_ISSET(TXT_INFOLINE)) {
-					if (sp->s_change(sp,
-					    ep, tp->lno, LINE_RESET))
-						goto err;
-				} else if (F_ISSET(sp, S_SCRIPT))
-					(void)term_push(sp, "\r", 1, CH_NOMAP);
-				goto k_escape;
-			}
-
 #define	LINE_RESOLVE {							\
 			/*						\
 			 * Handle abbreviations.  If there was one,	\
 			 * discard the replay characters.		\
 			 */						\
-			if (abb == A_INWORD && !replay) {		\
-				if (txt_abbrev(sp, tp, &ch,		\
+			if (abb == A_NOTSPACE && !replay) {		\
+				if (txt_abbrev(sp, tp, ch,		\
 				    LF_ISSET(TXT_INFOLINE), &tmp,	\
 				    &ab_turnoff))			\
 					goto err;			\
@@ -472,9 +418,28 @@ k_cr:			if (LF_ISSET(TXT_CR)) {
 				}					\
 			}						\
 			if (abb != A_NOTSET)				\
-				abb = A_NOTWORD;			\
-			if (unmap_tst)					\
-				txt_unmap(sp, tp, &iflags);		\
+				abb = A_SPACE;				\
+			/* Handle hex numbers. */			\
+			if (hex == H_INHEX) {				\
+				if (txt_hex(sp, tp, &tmp, ch))		\
+					goto err;			\
+				if (tmp) {				\
+					hex = H_NOTSET;			\
+					goto next_ch;			\
+				}					\
+			}						\
+			/*						\
+			 * The 'R' command returns any overwriteable	\
+			 * characters in the first line to the original	\
+			 * characters.
+			 */						\
+			if (LF_ISSET(TXT_REPLACE) && tp->owrite &&	\
+			    tp == tiqh->cqh_first) {			\
+				memmove(tp->lb + sp->cno,		\
+				    lp + sp->cno, tp->owrite);		\
+				tp->insert += tp->owrite;		\
+				tp->owrite = 0;				\
+			}						\
 			/* Delete any appended cursor. */		\
 			if (LF_ISSET(TXT_APPENDEOL)) {			\
 				--tp->len;				\
@@ -483,54 +448,51 @@ k_cr:			if (LF_ISSET(TXT_CR)) {
 }
 			LINE_RESOLVE;
 
-			/*
-			 * Save the current line information for restoration
-			 * in txt_backup().  Set the new line length.
-			 */
-			tp->sv_len = tp->len;
-			tp->sv_cno = sp->cno;
-			tp->len = sp->cno;
-
-			/* Update the old line. */
-			if (sp->s_change(sp, ep, tp->lno, LINE_RESET))
-				goto err;
-
-			/* 
-			 * Historic practice was to delete <blank> characters
-			 * following the inserted newline.  This affected the
-			 * 'R', 'c', and 's' commands; 'c' and 's' retained
-			 * the insert characters only, 'R' moved overwrite and
-			 * insert characters into the next TEXT structure.
-			 * All other commands simply deleted the overwrite
-			 * characters.  We have to keep track of the number of
-			 * characters erased for the 'R' command so that we
-			 * can get the final resolution of the line correct.
-			 */
-			tp->R_erase = 0;
-			owrite = tp->owrite;
-			insert = tp->insert;
-			if (LF_ISSET(TXT_REPLACE) && owrite != 0) {
-				for (p = tp->lb + sp->cno;
-				    owrite > 0 && isblank(*p);
-				    ++p, --owrite, ++tp->R_erase);
-				if (owrite == 0)
-					for (; insert > 0 && isblank(*p);
-					    ++p, ++tp->R_erase, --insert);
-			} else {
-				for (p = tp->lb + sp->cno + owrite;
-				    insert > 0 && isblank(*p); ++p, --insert);
-				owrite = 0;
+			/* CR returns from the vi command line. */
+			if (LF_ISSET(TXT_CR)) {
+				/*
+				 * If a script window and not the colon
+				 * line, push a <cr> so it gets executed.
+				 */
+				if (F_ISSET(sp, S_SCRIPT) &&
+				    !LF_ISSET(TXT_INFOLINE))
+					(void)term_push(sp,
+					    "\r", 1, 0, CH_NOMAP);
+				goto k_escape;
 			}
 
-			/* Set up bookkeeping for the new line. */
-			if ((ntp = text_init(sp, p,
-			    insert + owrite, insert + owrite + 32)) == NULL)
-				goto err;
-			ntp->insert = insert;
-			ntp->owrite = owrite;
-			ntp->lno = tp->lno + 1;
+			/*
+			 * Historic practice was to delete any <blank>
+			 * characters following the inserted newline.
+			 * This affects the 'R', 'c', and 's' commands.
+			 */
+			for (p = tp->lb + sp->cno + tp->owrite;
+			    tp->insert && isblank(*p);
+			    ++p, ++tp->owrite, --tp->insert);
 
 			/*
+			 * Move any remaining insert characters into
+			 * a new TEXT structure.
+			 */
+			if ((ntp = text_init(sp,
+			    tp->lb + sp->cno + tp->owrite,
+			    tp->insert, tp->insert + 32)) == NULL)
+				goto err;
+
+			/* Set bookkeeping for the new line. */
+			ntp->lno = tp->lno + 1;
+			ntp->insert = tp->insert;
+
+			/*
+			 * Note if the user inserted any characters on this
+			 * line.  Done before calling txt_ai_resolve() because
+			 * it changes the value of sp->cno without making the
+			 * corresponding changes to tp->ai.
+			 */
+			tmp = sp->cno <= tp->ai;
+
+			/*
+			 * Resolve autoindented characters for the old line.
 			 * Reset the autoindent line value.  0^D keeps the ai
 			 * line from changing, ^D changes the level, even if
 			 * there are no characters in the old line.  Note,
@@ -539,6 +501,8 @@ k_cr:			if (LF_ISSET(TXT_CR)) {
 			 * characters.
 			 */
 			if (LF_ISSET(TXT_AUTOINDENT)) {
+				txt_ai_resolve(sp, tp);
+
 				if (carat_st == C_NOCHANGE) {
 					if (txt_auto(sp, ep,
 					    OOBLNO, &ait, ait.ai, ntp))
@@ -551,52 +515,49 @@ k_cr:			if (LF_ISSET(TXT_CR)) {
 				carat_st = C_NOTSET;
 			}
 
-			/* Reset the cursor. */
-			sp->lno = ntp->lno;
+			/*
+			 * If the user hasn't entered any characters, delete
+			 * any autoindent characters.
+			 *
+			 * !!!
+			 * Historic vi didn't get the insert test right, if
+			 * there were characters after the cursor, entering
+			 * a <cr> left the autoindent characters on the line.
+			 */
+			if (tmp)
+				sp->cno = 0;
+
+			/* Reset bookkeeping for the old line. */
+			tp->len = sp->cno;
+			tp->ai = tp->insert = tp->owrite = 0;
+
+			/* New cursor position. */
 			sp->cno = ntp->ai;
 
-			/*
-			 * If we're here because wrapmargin was set and we've
-			 * broken a line, there may be additional information
-			 * (i.e. the start of a line) in the wmt structure.
-			 */
-			if (wmset) {
-				if (wmt.len != 0 ||
-				     wmt.insert != 0 || wmt.owrite != 0) {
-					BINC_GOTO(sp, ntp->lb, ntp->lb_len,
-					    ntp->len + wmt.len + 32);
-					memmove(ntp->lb + sp->cno, wmt.lb,
-					    wmt.len + wmt.insert + wmt.owrite);
-					ntp->len +=
-					    wmt.len + wmt.insert + wmt.owrite;
-					ntp->insert = wmt.insert;
-					ntp->owrite = wmt.owrite;
-					sp->cno += wmt.len;
-				}
-				wmset = 0;
-			}
-
-			/* New lines are TXT_APPENDEOL. */
-			if (ntp->owrite == 0 && ntp->insert == 0) {
-				BINC_GOTO(sp,
-				    ntp->lb, ntp->lb_len, ntp->len + 1);
+			/* New lines are TXT_APPENDEOL if nothing to insert. */
+			if (ntp->insert == 0) {
+				TBINC(sp, tp->lb, tp->lb_len, tp->len + 1);
 				LF_SET(TXT_APPENDEOL);
-				ntp->lb[sp->cno] = CH_CURSOR;
+				ntp->lb[sp->cno] = CURSOR_CH;
 				++ntp->insert;
 				++ntp->len;
 			}
 
+			/* Update the old line. */
+			if (sp->s_change(sp, ep, tp->lno, LINE_RESET))
+				goto err;
+
 			/*
 			 * Swap old and new TEXT's, and insert the new TEXT
-			 * into the queue.
-			 *
-			 * !!!
-			 * DON'T insert until the old line has been updated,
-			 * or the inserted line count in line.c:file_gline()
-			 * will be wrong.
+			 * into the queue.  (DON'T insert until the old line
+			 * has been updated, or the inserted line count in
+			 * line.c:file_gline() will be wrong.)
 			 */
 			tp = ntp;
 			CIRCLEQ_INSERT_TAIL(tiqh, tp, q);
+
+			/* Reset the cursor. */
+			sp->lno = tp->lno;
 
 			/* Update the new line. */
 			if (sp->s_change(sp, ep, tp->lno, LINE_INSERT))
@@ -606,49 +567,60 @@ k_cr:			if (LF_ISSET(TXT_CR)) {
 			F_SET(sp, S_RENUMBER);
 
 			/* Refresh if nothing waiting. */
-			if (margin || !KEYS_WAITING(sp))
-				if (sp->s_refresh(sp, ep))
-					goto err;
+			if ((margin || !KEYS_WAITING(sp)) &&
+			    sp->s_refresh(sp, ep))
+				goto err;
 			goto next_ch;
 		case K_ESCAPE:				/* Escape. */
 			if (!LF_ISSET(TXT_ESCAPE))
 				goto ins_ch;
-k_escape:		LINE_RESOLVE;
+
+			LINE_RESOLVE;
 
 			/*
-			 * Clean up for the 'R' command, restoring overwrite
-			 * characters, and making them into insert characters.
+			 * If there aren't any trailing characters in the line
+			 * and the user hasn't entered any characters, delete
+			 * the autoindent characters.
 			 */
-			if (LF_ISSET(TXT_REPLACE))
-				txt_Rcleanup(sp, tiqh, tp, lp, len);
+			if (!tp->insert && sp->cno <= tp->ai) {
+				tp->len = tp->owrite = 0;
+				sp->cno = 0;
+			} else if (LF_ISSET(TXT_AUTOINDENT))
+				txt_ai_resolve(sp, tp);
+
+			/* If there are insert characters, copy them down. */
+k_escape:		if (tp->insert && tp->owrite)
+				memmove(tp->lb + sp->cno,
+				    tp->lb + sp->cno + tp->owrite, tp->insert);
+			tp->len -= tp->owrite;
 
 			/*
-			 * If there are any overwrite characters, copy down
-			 * any insert characters, and decrement the length.
+			 * Delete any lines that were inserted into the text
+			 * structure and then erased.
 			 */
-			if (tp->owrite) {
-				if (tp->insert)
-					memmove(tp->lb + sp->cno,
-					    tp->lb + sp->cno + tp->owrite,
-					    tp->insert);
-				tp->len -= tp->owrite;
+			while (tp->q.cqe_next != (void *)tiqh) {
+				ntp = tp->q.cqe_next;
+				CIRCLEQ_REMOVE(tiqh, ntp, q);
+				text_free(ntp);
 			}
 
 			/*
-			 * Optionally resolve the lines into the file.  Clear
-			 * the input flag, the look-aside buffer is no longer
-			 * valid.  If not resolving the lines into the file,
-			 * end it with a nul.
+			 * If not resolving the lines into the file, end
+			 * it with a nul.
 			 *
 			 * XXX
 			 * This is wrong, should pass back a length.
 			 */
 			if (LF_ISSET(TXT_RESOLVE)) {
-				if (txt_resolve(sp, ep, tiqh, flags))
+				if (txt_resolve(sp, ep, tiqh))
 					goto err;
+				/*
+				 * Clear input flag -- input buffer no longer
+				 * valid.
+				 */
 				F_CLR(sp, S_INPUT);
 			} else {
-				BINC_GOTO(sp, tp->lb, tp->lb_len, tp->len + 1);
+				TBINC(sp, tp->lb, tp->lb_len, tp->len + 1);
 				tp->lb[tp->len] = '\0';
 			}
 
@@ -671,7 +643,7 @@ k_escape:		LINE_RESOLVE;
 			if (LF_ISSET(TXT_AUTOINDENT) && sp->cno <= tp->ai)
 				carat_st = C_ZEROSET;
 			goto ins_ch;
-		case K_CNTRLD:			/* Delete autoindent char. */
+		case K_VEOF:			/* Delete autoindent char. */
 			/*
 			 * If in the first column or no characters to erase,
 			 * ignore the ^D (this matches historic practice).  If
@@ -681,16 +653,17 @@ k_escape:		LINE_RESOLVE;
 			 */
 			if (!LF_ISSET(TXT_AUTOINDENT))
 				goto ins_ch;
-			if (sp->cno == 0)
+			if (sp->cno == 0 || tp->ai == 0)
 				break;
 			switch (carat_st) {
 			case C_CARATSET:	/* ^^D */
 				if (sp->cno > tp->ai + tp->offset + 1)
 					goto ins_ch;
+
 				/* Save the ai string for later. */
 				ait.lb = NULL;
 				ait.lb_len = 0;
-				BINC_GOTO(sp, ait.lb, ait.lb_len, tp->ai);
+				TBINC(sp, ait.lb, ait.lb_len, tp->ai);
 				memmove(ait.lb, tp->lb, tp->ai);
 				ait.ai = ait.len = tp->ai;
 
@@ -730,7 +703,7 @@ leftmargin:			tp->lb[sp->cno - 1] = ' ';
 			 */
 			if (sp->cno == 0) {
 				if ((ntp = txt_backup(sp,
-				    ep, tiqh, tp, &flags)) == NULL)
+				    ep, tiqh, tp, flags)) == NULL)
 					goto err;
 				tp = ntp;
 				break;
@@ -739,7 +712,7 @@ leftmargin:			tp->lb[sp->cno - 1] = ' ';
 			/* If nothing to erase, bell the user. */
 			if (sp->cno <= tp->offset) {
 				msgq(sp, M_BERR,
-				    "No more characters to erase");
+				    "No more characters to erase.");
 				break;
 			}
 
@@ -757,6 +730,19 @@ leftmargin:			tp->lb[sp->cno - 1] = ' ';
 			if (sp->cno < tp->ai)
 				--tp->ai;
 			break;
+		case K_VINTR:
+			/*
+			 * !!!
+			 * Historically, <interrupt> exited the user from
+			 * editing the infoline, and returned to the main
+			 * screen.  It also beeped the terminal, but that
+			 * seems excessive.
+			 */
+			if (LF_ISSET(TXT_INFOLINE)) {
+				tp->lb[tp->len = 0] = '\0';
+				goto ret;
+			}
+			goto ins_ch;
 		case K_VWERASE:			/* Skip back one word. */
 			/*
 			 * If at the beginning of the line, try and drop back
@@ -764,7 +750,7 @@ leftmargin:			tp->lb[sp->cno - 1] = ' ';
 			 */
 			if (sp->cno == 0) {
 				if ((ntp = txt_backup(sp,
-				    ep, tiqh, tp, &flags)) == NULL)
+				    ep, tiqh, tp, flags)) == NULL)
 					goto err;
 				tp = ntp;
 			}
@@ -774,7 +760,7 @@ leftmargin:			tp->lb[sp->cno - 1] = ' ';
 			 */
 			if (sp->cno <= tp->offset) {
 				msgq(sp, M_BERR,
-				    "No more characters to erase");
+				    "No more characters to erase.");
 				break;
 			}
 
@@ -818,7 +804,7 @@ leftmargin:			tp->lb[sp->cno - 1] = ' ';
 			 * tty interface and the historic tty driver behavior,
 			 * respectively, and the default is the same as the
 			 * historic vi behavior.
-			 */
+			 */ 
 			if (LF_ISSET(TXT_TTYWERASE))
 				while (sp->cno > max) {
 					--sp->cno;
@@ -851,7 +837,7 @@ leftmargin:			tp->lb[sp->cno - 1] = ' ';
 			 */
 			if (sp->cno == 0) {
 				if ((ntp = txt_backup(sp,
-				    ep, tiqh, tp, &flags)) == NULL)
+				    ep, tiqh, tp, flags)) == NULL)
 					goto err;
 				tp = ntp;
 			}
@@ -859,7 +845,7 @@ leftmargin:			tp->lb[sp->cno - 1] = ' ';
 			/* If at offset, nothing to erase so bell the user. */
 			if (sp->cno <= tp->offset) {
 				msgq(sp, M_BERR,
-				    "No more characters to erase");
+				    "No more characters to erase.");
 				break;
 			}
 
@@ -886,16 +872,9 @@ leftmargin:			tp->lb[sp->cno - 1] = ' ';
 			if (txt_indent(sp, tp))
 				goto err;
 			goto ebuf_chk;
-#ifdef	HISTORIC_PRACTICE_IS_TO_INSERT_NOT_SUSPEND
 		case K_CNTRLZ:
-			/*
-			 * XXX
-			 * Note, historically suspend triggered an autowrite.
-			 * That needs to be done to make this work correctly.
-			 */
 			(void)sp->s_suspend(sp);
 			break;
-#endif
 #ifdef	HISTORIC_PRACTICE_IS_TO_INSERT_NOT_REPAINT
 		case K_FORMFEED:
 			F_SET(sp, S_REFRESH);
@@ -906,80 +885,58 @@ leftmargin:			tp->lb[sp->cno - 1] = ' ';
 			showmatch = LF_ISSET(TXT_SHOWMATCH);
 			goto ins_ch;
 		case K_VLNEXT:			/* Quote the next character. */
+			/* If in hex mode, see if we've entered a hex value. */
+			if (hex == H_INHEX) {
+				if (txt_hex(sp, tp, &tmp, ch))
+					goto err;
+				if (tmp) {
+					hex = H_NOTSET;
+					goto next_ch;
+				}
+			}
 			ch = '^';
 			quoted = Q_NEXTCHAR;
-			/*
-			 * If there are no keys in the queue, reset the tty
-			 * so that the user can enter a ^C, ^Q, ^S.  There's
-			 * an obvious race here, if the user entered the ^C
-			 * already.  There's nothing that we can do to fix
-			 * that problem.
-			 */
-			if (!KEYS_WAITING(sp) && !tcgetattr(STDIN_FILENO, &t)) {
-				t.c_lflag &= ~ISIG;
-				sig_ix = t.c_iflag & (IXON | IXOFF);
-				t.c_iflag &= ~(IXON | IXOFF);
-				sig_reset = 1;
-				(void)tcsetattr(STDIN_FILENO,
-				    TCSASOFT | TCSADRAIN, &t);
-			}
-			/*
-			 * XXX
-			 * Pass the tests for abbreviations, so ":ab xa XA",
-			 * "ixa^V<space>" works.  Historic vi did something
-			 * weird here: ":ab x y", "ix\<space>" resulted in
-			 * "<space>x\", for some unknown reason.  Had to be
-			 * a bug.
-			 */
-			goto insl_ch;
-		case K_HEXCHAR:
-			hex = H_NEXTCHAR;
-			goto insq_ch;
+			/* FALLTHROUGH */
 		default:			/* Insert the character. */
 ins_ch:			/*
-	 		 * Historically, vi eliminated nul's out of hand.  If
-			 * the beautify option was set, it also deleted any
-			 * unknown ASCII value less than space (040) and the
-			 * del character (0177), except for tabs.  Unknown is
-			 * a key word here.  Most vi documentation claims that
-			 * it deleted everything but <tab>, <nl> and <ff>, as
-			 * that's what the original 4BSD documentation said.
-			 * This is obviously wrong, however, as <esc> would be
-			 * included in that list.  What we do is eliminate any
-			 * unquoted, iscntrl() character that wasn't a replay
-			 * and wasn't handled specially, except <tab> or <ff>.
-			 */
-			if (LF_ISSET(TXT_BEAUTIFY) && iscntrl(ch) &&
-			    ikey.value != K_FORMFEED && ikey.value != K_TAB) {
-				msgq(sp, M_BERR,
-				    "Illegal character; quote to enter");
-				break;
-			}
-insq_ch:		/*
-			 * If entering a non-word character after a word, check
+			 * If entering a space character after a word, check
 			 * for abbreviations.  If there was one, discard the
-			 * replay characters.  If entering a blank character,
-			 * check for unmap commands, as well.
+			 * replay characters.
 			 */
-			if (!inword(ch)) {
-				if (abb == A_INWORD && !replay) {
-					if (txt_abbrev(sp, tp, &ch,
-					    LF_ISSET(TXT_INFOLINE),
-					    &tmp, &ab_turnoff))
-						goto err;
-					if (tmp) {
-						if (LF_ISSET(TXT_RECORD))
-							rcol -= tmp;
-						goto next_ch;
-					}
+			if (isblank(ch) && abb == A_NOTSPACE && !replay) {
+				if (txt_abbrev(sp, tp, ch,
+				    LF_ISSET(TXT_INFOLINE), &tmp, &ab_turnoff))
+					goto err;
+				if (tmp) {
+					if (LF_ISSET(TXT_RECORD))
+						rcol -= tmp;
+					goto next_ch;
 				}
-				if (isblank(ch) && unmap_tst)
-					txt_unmap(sp, tp, &iflags);
+			}
+			/* If in hex mode, see if we've entered a hex value. */
+			if (hex == H_INHEX && !isxdigit(ch)) {
+				if (txt_hex(sp, tp, &tmp, ch))
+					goto err;
+				if (tmp) {
+					hex = H_NOTSET;
+					goto next_ch;
+				}
+			}
+			/* Check to see if we've crossed the margin. */
+			if (margin) {
+				if (sp->s_column(sp, ep, &col))
+					goto err;
+				if (col >= margin) {
+					if (txt_margin(sp, tp, &tmp, ch))
+						goto err;
+					if (tmp)
+						goto next_ch;
+				}
 			}
 			if (abb != A_NOTSET)
-				abb = inword(ch) ? A_INWORD : A_NOTWORD;
+				abb = isblank(ch) ? A_SPACE : A_NOTSPACE;
 
-insl_ch:		if (tp->owrite)		/* Overwrite a character. */
+			if (tp->owrite)		/* Overwrite a character. */
 				--tp->owrite;
 			else if (tp->insert) {	/* Insert a character. */
 				++tp->len;
@@ -992,23 +949,6 @@ insl_ch:		if (tp->owrite)		/* Overwrite a character. */
 
 			tp->lb[sp->cno++] = ch;
 
-			/* Check to see if we've crossed the margin. */
-			if (margin) {
-				if (sp->s_column(sp, ep, &col))
-					goto err;
-				if (col >= margin) {
-					if (txt_margin(sp,
-					    tp, &ch, &wmt, flags, &tmp))
-						goto err;
-					if (tmp) {
-						if (isblank(ch))
-							wmskip = 1;
-						wmset = 1;
-						goto k_cr;
-					}
-				}
-			}
-
 			/*
 			 * If we've reached the end of the buffer, then we
 			 * need to switch into insert mode.  This happens
@@ -1016,9 +956,9 @@ insl_ch:		if (tp->owrite)		/* Overwrite a character. */
 			 * in more characters than the length of the motion.
 			 */
 ebuf_chk:		if (sp->cno >= tp->len) {
-				BINC_GOTO(sp, tp->lb, tp->lb_len, tp->len + 1);
+				TBINC(sp, tp->lb, tp->lb_len, tp->len + 1);
 				LF_SET(TXT_APPENDEOL);
-				tp->lb[sp->cno] = CH_CURSOR;
+				tp->lb[sp->cno] = CURSOR_CH;
 				++tp->insert;
 				++tp->len;
 			}
@@ -1045,9 +985,8 @@ ret:	F_CLR(sp, S_INPUT);
 		VIP(sp)->rep_cnt = rcol;
 	return (eval);
 
-err:	/* Error jumps. */
-binc_err:
-	eval = 1;
+	/* Error jump. */
+err:	eval = 1;
 	txt_err(sp, ep, tiqh);
 	goto ret;
 }
@@ -1057,10 +996,10 @@ binc_err:
  *	Handle abbreviations.
  */
 static int
-txt_abbrev(sp, tp, pushcp, isinfoline, didsubp, turnoffp)
+txt_abbrev(sp, tp, pushc, isinfoline, didsubp, turnoffp)
 	SCR *sp;
 	TEXT *tp;
-	CHAR_T *pushcp;
+	ARG_CHAR_T pushc;
 	int isinfoline, *didsubp, *turnoffp;
 {
 	CHAR_T ch;
@@ -1068,14 +1007,9 @@ txt_abbrev(sp, tp, pushcp, isinfoline, didsubp, turnoffp)
 	size_t len, off;
 	char *p;
 
-	/*
-	 * Find the start of the "word".  Historically, abbreviations
-	 * could be preceded by any non-word character or the beginning
-	 * of the entry, .e.g inserting an abbreviated string in the
-	 * middle of another string triggered the replacement.
-	 */
+	/* Find the beginning of this "word". */
 	for (off = sp->cno - 1, p = tp->lb + off, len = 0;; --p, --off) {
-		if (!inword(*p)) {
+		if (isblank(*p)) {
 			++p;
 			break;
 		}
@@ -1105,10 +1039,10 @@ txt_abbrev(sp, tp, pushcp, isinfoline, didsubp, turnoffp)
 	 *	:ab foo1 bar
 	 *	:ab foo2 bar
 	 *	:unab foo2
-	 * unabbreviate "foo1", and the commands:
+	 * unabbreviates "foo1", and the commands:
 	 *	:ab foo bar
 	 *	:ab bar baz
-	 * unabbreviate "foo"!
+	 * unabbreviates "foo"!
 	 *
 	 * Anyway, people neglected to first ask my opinion before they wrote
 	 * macros that depend on this stuff, so, we make this work as follows.
@@ -1116,8 +1050,8 @@ txt_abbrev(sp, tp, pushcp, isinfoline, didsubp, turnoffp)
 	 * string which is <blank> terminated and which starts at the beginning
 	 * of the line, we check to see it is the abbreviate or unabbreviate
 	 * commands.  If it is, turn abbreviations off and return as if no
-	 * abbreviation was found.  Note also, minor trickiness, so that if
-	 * the user erases the line and starts another command, we turn the
+	 * abbreviation was found.  Not also, minor trickiness, so that if the
+	 * user erases the line and starts another command, we go ahead an turn
 	 * abbreviations back on.
 	 *
 	 * This makes the layering look like a Nachos Supreme.
@@ -1156,13 +1090,16 @@ txt_abbrev(sp, tp, pushcp, isinfoline, didsubp, turnoffp)
 	 * queue would have to be adjusted, and the line state when an initial
 	 * abbreviated character was received would have to be saved.
 	 */
-	ch = *pushcp;
-	if (term_push(sp, &ch, 1, CH_ABBREVIATED))
+	ch = pushc;
+	if (term_push(sp, &ch, 1, 0, CH_ABBREVIATED))
 		return (1);
-	if (term_push(sp, qp->output, qp->olen, CH_ABBREVIATED))
+	if (term_push(sp, qp->output, qp->olen, 0, CH_ABBREVIATED))
 		return (1);
 
-	/* Move to the start of the abbreviation, adjust the length. */
+	/*
+	 * Move the cursor to the start of the abbreviation,
+	 * adjust the length.
+	 */
 	sp->cno -= len;
 	tp->len -= len;
 
@@ -1182,48 +1119,8 @@ txt_abbrev(sp, tp, pushcp, isinfoline, didsubp, turnoffp)
 	return (0);
 }
 
-/*
- * txt_unmap --
- *	Handle the unmap command.
- */
-static void
-txt_unmap(sp, tp, iflagsp)
-	SCR *sp;
-	TEXT *tp;
-	u_int *iflagsp;
-{
-	size_t len, off;
-	char *p;
-
-	/* Find the beginning of this "word". */
-	for (off = sp->cno - 1, p = tp->lb + off, len = 0;; --p, --off) {
-		if (isblank(*p)) {
-			++p;
-			break;
-		}
-		++len;
-		if (off == tp->ai || off == tp->offset)
-			break;
-	}
-
-	/*
-	 * !!!
-	 * Historic vi exploded input mappings on the command line.  See the
-	 * txt_abbrev() routine for an explanation of the problems inherent
-	 * in this.
-	 *
-	 * We make this work as follows.  If we get a string which is <blank>
-	 * terminated and which starts at the beginning of the line, we check
-	 * to see it is the unmap command.  If it is, we return that the input
-	 * mapping should be turned off.  Note also, minor trickiness, so that
-	 * if the user erases the line and starts another command, we go ahead
-	 * an turn mapping back on.
-	 */
-	if ((off == tp->ai || off == tp->offset) && ex_is_unmap(p, len))
-		*iflagsp &= ~TXT_MAPINPUT;
-	else
-		*iflagsp |= TXT_MAPINPUT;
-}
+/* Offset to next column of stop size. */
+#define	STOP_OFF(c, stop)	(stop - (c) % stop)
 
 /*
  * txt_ai_resolve --
@@ -1246,17 +1143,6 @@ txt_ai_resolve(sp, tp)
 	 */
 	if (!tp->len || tp->offset || !tp->ai)
 		return;
-
-	/*
-	 * If the length is less than or equal to the autoindent
-	 * characters, delete them.
-	 */
-	if (tp->len <= tp->ai) {
-		tp->len = tp->ai = 0;
-		if (tp->lno == sp->lno)
-			sp->cno = 0;
-		return;
-	}
 
 	/*
 	 * The autoindent characters plus any leading <blank> characters
@@ -1301,11 +1187,8 @@ txt_ai_resolve(sp, tp)
 	/* Shift the rest of the characters down, adjust the counts. */
 	del = old - new;
 	memmove(p - del, p, tp->len - old);
+	sp->cno -= del;
 	tp->len -= del;
-
-	/* If the cursor was on this line, adjust it as well. */
-	if (sp->lno == tp->lno)
-		sp->cno -= del;
 
 	/* Fill in space/tab characters. */
 	for (p = tp->lb; tabs--;)
@@ -1329,43 +1212,38 @@ txt_auto(sp, ep, lno, aitp, len, tp)
 {
 	size_t nlen;
 	char *p, *t;
-
+	
 	if (aitp == NULL) {
-		/*
-		 * If the ex append command is executed with an address of 0,
-		 * it's possible to get here with a line number of 0.  Return
-		 * an indent of 0.
-		 */
-		if (lno == 0) {
-			tp->ai = 0;
+		if ((p = t = file_gline(sp, ep, lno, &len)) == NULL)
 			return (0);
-		}
-		if ((t = file_gline(sp, ep, lno, &len)) == NULL)
-			return (1);
 	} else
-		t = aitp->lb;
-
-	/* Count whitespace characters. */
-	for (p = t; len > 0; ++p, --len)
+		p = t = aitp->lb;
+	for (nlen = 0; len; ++p) {
 		if (!isblank(*p))
 			break;
+		/* If last character is a space, it counts. */
+		if (--len == 0) {
+			++p;
+			break;
+		}
+	}
 
-	/* Set count, check for no indentation. */
-	if ((nlen = (p - t)) == 0)
+	/* No indentation. */
+	if (p == t)
 		return (0);
+
+	/* Set count. */
+	nlen = p - t;
 
 	/* Make sure the buffer's big enough. */
 	BINC_RET(sp, tp->lb, tp->lb_len, tp->len + nlen);
 
-	/* Copy the buffer's current contents up. */
-	if (tp->len != 0)
-		memmove(tp->lb + nlen, tp->lb, tp->len);
+	/* Copy the indentation into the new buffer. */
+	memmove(tp->lb + nlen, tp->lb, tp->len);
+	memmove(tp->lb, t, nlen);
 	tp->len += nlen;
 
-	/* Copy the indentation into the new buffer. */
-	memmove(tp->lb, t, nlen);
-
-	/* Set the autoindent count. */
+	/* Return the additional length. */
 	tp->ai = nlen;
 	return (0);
 }
@@ -1375,15 +1253,16 @@ txt_auto(sp, ep, lno, aitp, len, tp)
  *	Back up to the previously edited line.
  */
 static TEXT *
-txt_backup(sp, ep, tiqh, tp, flagsp)
+txt_backup(sp, ep, tiqh, tp, flags)
 	SCR *sp;
 	EXF *ep;
 	TEXTH *tiqh;
 	TEXT *tp;
-	u_int *flagsp;
+	u_int flags;
 {
 	TEXT *ntp;
-	u_int flags;
+	recno_t lno;
+	size_t total;
 
 	/* Get a handle on the previous TEXT structure. */
 	if ((ntp = tp->q.cqe_prev) == (void *)tiqh) {
@@ -1391,31 +1270,44 @@ txt_backup(sp, ep, tiqh, tp, flagsp)
 		return (tp);
 	}
 
-	/* Reset the cursor, bookkeeping. */
-	sp->lno = ntp->lno;
-	sp->cno = ntp->sv_cno;
-	ntp->len = ntp->sv_len;
+	/* Make sure that we have enough space. */
+	total = ntp->len + tp->insert;
+	if (LF_ISSET(TXT_APPENDEOL))
+		++total;
+	if (total > ntp->lb_len &&
+	    binc(sp, &ntp->lb, &ntp->lb_len, total))
+		return (NULL);
 
-	/* Handle appending to the line. */
-	flags = *flagsp;
-	if (ntp->owrite == 0 && ntp->insert == 0) {
-		ntp->lb[ntp->len] = CH_CURSOR;
-		++ntp->insert;
-		++ntp->len;
-		LF_SET(TXT_APPENDEOL);
+	/*
+	 * Append a cursor or copy inserted bytes to the end of the old line.
+	 * Test for appending a cursor first, because the TEXT insert field
+	 * will be 1 if we're appending a cursor.  I don't think there's a
+	 * third case, so abort() if there is.
+	 */
+	if (LF_ISSET(TXT_APPENDEOL)) {
+		ntp->lb[ntp->len] = CURSOR_CH;
+		ntp->insert = 1;
+	} else if (tp->insert) {
+		memmove(ntp->lb + ntp->len, tp->lb + tp->owrite, tp->insert);
+		ntp->insert = tp->insert;
 	} else
-		LF_CLR(TXT_APPENDEOL);
-	*flagsp = flags;
+		abort();
+
+	/* Set bookkeeping information. */
+	sp->lno = ntp->lno;
+	sp->cno = ntp->len;
+	ntp->len += ntp->insert;
 
 	/* Release the current TEXT. */
+	lno = tp->lno;
 	CIRCLEQ_REMOVE(tiqh, tp, q);
 	text_free(tp);
 
 	/* Update the old line on the screen. */
-	if (sp->s_change(sp, ep, ntp->lno + 1, LINE_DELETE))
+	if (sp->s_change(sp, ep, lno, LINE_DELETE))
 		return (NULL);
 
-	/* Return the new/current TEXT. */
+	/* Return the old line. */
 	return (ntp);
 }
 
@@ -1456,16 +1348,18 @@ txt_err(sp, ep, tiqh)
  *	Let the user insert any character value they want.
  *
  * !!!
- * This is an extension.  The pattern "^X[0-9a-fA-F]*" is a way
+ * This is an extension.  The pattern "^Vx[0-9a-fA-F]*" is a way
  * for the user to specify a character value which their keyboard
  * may not be able to enter.
  */
 static int
-txt_hex(sp, tp)
+txt_hex(sp, tp, was_hex, pushc)
 	SCR *sp;
 	TEXT *tp;
+	int *was_hex;
+	ARG_CHAR_T pushc;
 {
-	CHAR_T savec;
+	CHAR_T ch, savec;
 	size_t len, off;
 	u_long value;
 	char *p, *wp;
@@ -1478,47 +1372,49 @@ txt_hex(sp, tp)
 	savec = tp->lb[sp->cno];
 	tp->lb[sp->cno] = 0;
 
-	/* Find the previous CH_HEX character. */
-	for (off = sp->cno - 1, p = tp->lb + off, len = 0;; --p, --off, ++len) {
-		if (*p == CH_HEX) {
+	/* Find the previous HEX_CH. */
+	for (off = sp->cno - 1, p = tp->lb + off, len = 0;; --p, --off) {
+		if (*p == HEX_CH) {
 			wp = p + 1;
 			break;
 		}
-		/* Not on this line?  Shouldn't happen. */
+		++len;
+		/* If not on this line, there's nothing to do. */
 		if (off == tp->ai || off == tp->offset)
 			goto nothex;
 	}
 
-	/* If length of 0, then it wasn't a hex value. */
+	/* If no length, then it wasn't a hex value. */
 	if (len == 0)
 		goto nothex;
 
 	/* Get the value. */
-	errno = 0;
 	value = strtol(wp, NULL, 16);
-	if (errno || value > MAX_CHAR_T) {
+	if (value == LONG_MIN || value == LONG_MAX || value > MAX_CHAR_T) {
 nothex:		tp->lb[sp->cno] = savec;
+		*was_hex = 0;
 		return (0);
 	}
+		
+	ch = pushc;
+	if (term_push(sp, &ch, 1, 0, CH_NOMAP | CH_QUOTED))
+		return (1);
+	ch = value;
+	if (term_push(sp, &ch, 1, 0, CH_NOMAP | CH_QUOTED))
+		return (1);
 
-	/* Restore the original character. */
 	tp->lb[sp->cno] = savec;
 
-	/* Adjust the bookkeeping. */
-	sp->cno -= len;
-	tp->len -= len;
-	tp->lb[sp->cno - 1] = value;
+	/* Move the cursor to the start of the hex value, adjust the length. */
+	sp->cno -= len + 1;
+	tp->len -= len + 1;
 
-	/* Copy down any overwrite characters. */
-	if (tp->owrite)
-		memmove(tp->lb + sp->cno,
-		    tp->lb + sp->cno + len, tp->owrite);
-
-	/* Copy down any insert characters. */
+	/* Copy any insert characters back. */
 	if (tp->insert)
 		memmove(tp->lb + sp->cno + tp->owrite,
-		    tp->lb + sp->cno + tp->owrite + len, tp->insert);
+		    tp->lb + sp->cno + tp->owrite + len + 1, tp->insert);
 
+	*was_hex = 1;
 	return (0);
 }
 
@@ -1668,32 +1564,23 @@ txt_outdent(sp, tp)
  *	Resolve the input text chain into the file.
  */
 static int
-txt_resolve(sp, ep, tiqh, flags)
+txt_resolve(sp, ep, tiqh)
 	SCR *sp;
 	EXF *ep;
 	TEXTH *tiqh;
-	u_int flags;
 {
 	TEXT *tp;
 	recno_t lno;
 
-	/*
-	 * The first line replaces a current line, and all subsequent lines
-	 * are appended into the file.  Resolve autoindented characters for
-	 * each line before committing it.
-	 */
+	/* The first line replaces a current line. */
 	tp = tiqh->cqh_first;
-	if (LF_ISSET(TXT_AUTOINDENT))
-		txt_ai_resolve(sp, tp);
 	if (file_sline(sp, ep, tp->lno, tp->lb, tp->len))
 		return (1);
 
-	for (lno = tp->lno; (tp = tp->q.cqe_next) != (void *)sp->tiqp; ++lno) {
-		if (LF_ISSET(TXT_AUTOINDENT))
-			txt_ai_resolve(sp, tp);
+	/* All subsequent lines are appended into the file. */
+	for (lno = tp->lno; (tp = tp->q.cqe_next) != (void *)&sp->tiq; ++lno)
 		if (file_aline(sp, ep, 0, lno, tp->lb, tp->len))
 			return (1);
-	}
 	return (0);
 }
 
@@ -1782,34 +1669,31 @@ txt_showmatch(sp, ep)
 /*
  * txt_margin --
  *	Handle margin wrap.
+ *
+ * !!!
+ * Historic vi belled the user each time a character was entered after
+ * crossing the margin until a space was entered which could be used to
+ * break the line.  I don't, it tends to wake the cats.
  */
 static int
-txt_margin(sp, tp, chp, wmtp, flags, didbreak)
+txt_margin(sp, tp, didbreak, pushc)
 	SCR *sp;
-	TEXT *tp, *wmtp;
-	CHAR_T *chp;
+	TEXT *tp;
 	int *didbreak;
-	u_int flags;
+	ARG_CHAR_T pushc;
 {
-	size_t len, off;
+	CHAR_T ch;
+	size_t len, off, tlen;
 	char *p, *wp;
 
-	/* Find the nearest previous blank. */
-	for (off = sp->cno - 1, p = tp->lb + off, len = 0;; --off, --p, ++len) {
+	/* Find the closest previous blank. */
+	for (off = sp->cno - 1, p = tp->lb + off, len = 0;; --p, --off) {
 		if (isblank(*p)) {
 			wp = p + 1;
 			break;
 		}
-
-		/*
-		 * If reach the start of the line, there's nowhere to break.
-		 *
-		 * !!!
-		 * Historic vi belled each time a character was entered after
-		 * crossing the margin until a space was entered which could
-		 * be used to break the line.  I don't as it tends to wake the
-		 * cats.
-		 */
+		++len;
+		/* If it's the beginning of the line, there's nothing to do. */
 		if (off == tp->ai || off == tp->offset) {
 			*didbreak = 0;
 			return (0);
@@ -1817,83 +1701,28 @@ txt_margin(sp, tp, chp, wmtp, flags, didbreak)
 	}
 
 	/*
-	 * Store saved information about the rest of the line in the
-	 * wrapmargin TEXT structure.
+	 * Historic practice is to delete any trailing whitespace
+	 * from the previous line.
 	 */
-	wmtp->lb = p + 1;
-	wmtp->len = len;
-	wmtp->insert = LF_ISSET(TXT_APPENDEOL) ? tp->insert - 1 : tp->insert;
-	wmtp->owrite = tp->owrite;
-
-	/* Correct current bookkeeping information. */
-	sp->cno -= len;
-	if (LF_ISSET(TXT_APPENDEOL)) {
-		tp->len -= len + tp->owrite + (tp->insert - 1);
-		tp->insert = 1;
-	} else {
-		tp->len -= len + tp->owrite + tp->insert;
-		tp->insert = 0;
-	}
-	tp->owrite = 0;
-
-	/*
-	 * !!!
-	 * Delete any trailing whitespace from the current line.
-	 */
-	for (;; --p, --off) {
+	for (tlen = len;; --p, --off) {
 		if (!isblank(*p))
 			break;
-		--sp->cno;
-		--tp->len;
+		++tlen;
 		if (off == tp->ai || off == tp->offset)
 			break;
 	}
+
+	ch = pushc;
+	if (term_push(sp, &ch, 1, 0, CH_NOMAP))
+		return (1);
+	if (len && term_push(sp, wp, len, 0, CH_NOMAP | CH_QUOTED))
+		return (1);
+	ch = '\n';
+	if (term_push(sp, &ch, 1, 0, CH_NOMAP))
+		return (1);
+
+	sp->cno -= tlen;
+	tp->owrite += tlen;
 	*didbreak = 1;
 	return (0);
-}
-
-/*
- * txt_Rcleanup --
- *	Resolve the input line for the 'R' command.
- */
-static void
-txt_Rcleanup(sp, tiqh, tp, lp, olen)
-	SCR *sp;
-	TEXTH *tiqh;
-	TEXT *tp;
-	const char *lp;
-	const size_t olen;
-{
-	TEXT *ttp;
-	size_t ilen, tmp;
-
-	/*
-	 * Check to make sure that the cursor hasn't moved beyond
-	 * the end of the line.
-	 */
-	if (tp->owrite == 0)
-		return;
-
-	/*
-	 * Calculate how many characters the user has entered,
-	 * plus the blanks erased by <carriage-return>/<newline>s.
-	 */
-	for (ttp = tiqh->cqh_first, ilen = 0;;) {
-		ilen += ttp == tp ? sp->cno : ttp->len + ttp->R_erase;
-		if ((ttp = ttp->q.cqe_next) == (void *)sp->tiqp)
-			break;
-	}
-
-	/*
-	 * If the user has entered less characters than the original line
-	 * was long, restore any overwriteable characters to the original
-	 * characters, and make them insert characters.  We don't copy them
-	 * anywhere, because the 'R' command doesn't have insert characters.
-	 */
-	if (ilen < olen) {
-		tmp = MIN(tp->owrite, olen - ilen);
-		memmove(tp->lb + sp->cno, lp + ilen, tmp);
-		tp->owrite -= tmp;
-		tp->insert += tmp;
-	}
 }
