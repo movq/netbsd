@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 2003/09/12 02:50:30 lukem Exp $
+#	$NetBSD: Makefile,v 1.1.1.1 2003/09/12 02:50:30 lukem Exp $
 
 #XTODO	xft.pc
 #XTODO	xft-config

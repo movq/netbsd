@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.xdm,v 1.1 2003/09/12 02:52:11 lukem Exp $
+#	$NetBSD: Makefile.xdm,v 1.1.1.1 2003/09/12 02:52:11 lukem Exp $
 
 CPPFLAGS+=	-DBINDIR=\"${X11BINDIR}\" -DXDMDIR=\"${X11LIBDIR}/xdm\" \
 		-DHASXDMAUTH ${X11FLAGS.CONNECTION} -DGREET_USER_STATIC \

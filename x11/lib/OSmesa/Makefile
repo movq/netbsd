@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 2003/09/12 02:50:11 lukem Exp $
+#	$NetBSD: Makefile,v 1.1.1.1 2003/09/12 02:50:11 lukem Exp $
 
 NOLINT=		1	# XTODO: 3dnow.ln barfs on src/math/m_vertices.h
 

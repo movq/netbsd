@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 2003/09/12 02:56:13 lukem Exp $
+#	$NetBSD: Makefile,v 1.1.1.1 2003/09/12 02:56:13 lukem Exp $
 
 NOPIC=	1
 
