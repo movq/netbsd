@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 1996/06/20 03:11:06 gwr Exp $
+#	$NetBSD: Makefile,v 1.1.1.1 1996/06/20 03:11:06 gwr Exp $
 
 LIB=	kern
 
