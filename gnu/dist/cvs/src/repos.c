@@ -21,11 +21,11 @@
 
 char *
 Name_Repository (dir, update_dir)
-    const char *dir;
-    const char *update_dir;
+    char *dir;
+    char *update_dir;
 {
     FILE *fpin;
-    const char *xupdate_dir;
+    char *xupdate_dir;
     char *repos = NULL;
     size_t repos_allocated = 0;
     char *tmp;
@@ -37,7 +37,10 @@ Name_Repository (dir, update_dir)
 	xupdate_dir = ".";
 
     if (dir != NULL)
-	(void) xasprintf (&tmp, "%s/%s", dir, CVSADM_REP);
+    {
+	tmp = xmalloc (strlen (dir) + sizeof (CVSADM_REP) + 10);
+	(void) sprintf (tmp, "%s/%s", dir, CVSADM_REP);
+    }
     else
 	tmp = xstrdup (CVSADM_REP);
 
@@ -53,7 +56,10 @@ Name_Repository (dir, update_dir)
 	char *cvsadm;
 
 	if (dir != NULL)
-	    (void) xasprintf (&cvsadm, "%s/%s", dir, CVSADM);
+	{
+	    cvsadm = xmalloc (strlen (dir) + sizeof (CVSADM) + 10);
+	    (void) sprintf (cvsadm, "%s/%s", dir, CVSADM);
+	}
 	else
 	    cvsadm = xstrdup (CVSADM);
 
@@ -100,26 +106,25 @@ Name_Repository (dir, update_dir)
      * one by tacking on the CVSROOT environment variable. If the CVSROOT
      * environment variable is not set, die now.
      */
+    if (strcmp (repos, "..") == 0 || strncmp (repos, "../", 3) == 0)
+    {
+	error (0, 0, "in directory %s:", xupdate_dir);
+	error (0, 0, "`..'-relative repositories are not supported.");
+	error (1, 0, "illegal source repository");
+    }
     if (! isabsolute(repos))
     {
 	char *newrepos;
 
-	if (current_parsed_root == NULL)
+	if (CVSroot_original == NULL)
 	{
 	    error (0, 0, "in directory %s:", xupdate_dir);
 	    error (0, 0, "must set the CVSROOT environment variable\n");
 	    error (0, 0, "or specify the '-d' option to %s.", program_name);
 	    error (1, 0, "illegal repository setting");
 	}
-	if (pathname_levels (repos) > 0)
-	{
-	    error (0, 0, "in directory %s:", xupdate_dir);
-	    error (0, 0, "`..'-relative repositories are not supported.");
-	    error (1, 0, "illegal source repository");
-	}
-	newrepos = xmalloc (strlen (current_parsed_root->directory)
-	                    + strlen (repos) + 2);
-	sprintf (newrepos, "%s/%s", current_parsed_root->directory, repos);
+	newrepos = xmalloc (strlen (CVSroot_directory) + strlen (repos) + 10);
+	(void) sprintf (newrepos, "%s/%s", CVSroot_directory, repos);
 	free (repos);
 	repos = newrepos;
     }
@@ -129,32 +134,28 @@ Name_Repository (dir, update_dir)
     return repos;
 }
 
-
-
 /*
  * Return a pointer to the repository name relative to CVSROOT from a
  * possibly fully qualified repository
  */
-const char *
+char *
 Short_Repository (repository)
-    const char *repository;
+    char *repository;
 {
     if (repository == NULL)
-	return NULL;
+	return (NULL);
 
     /* If repository matches CVSroot at the beginning, strip off CVSroot */
     /* And skip leading '/' in rep, in case CVSroot ended with '/'. */
-    if (strncmp (current_parsed_root->directory, repository,
-		 strlen (current_parsed_root->directory)) == 0)
+    if (strncmp (CVSroot_directory, repository,
+		 strlen (CVSroot_directory)) == 0)
     {
-	const char *rep = repository + strlen (current_parsed_root->directory);
+	char *rep = repository + strlen (CVSroot_directory);
 	return (*rep == '/') ? rep+1 : rep;
     }
     else
-	return repository;
+	return (repository);
 }
-
-
 
 /* Sanitize the repository name (in place) by removing trailing
  * slashes and a trailing "." if present.  It should be safe for
@@ -178,7 +179,12 @@ Short_Repository (repository)
  *    back further someday, so that the trailing "/." doesn't get into
  *    repository in the first place, but we haven't taken things that
  *    far yet.''        --Jim Kingdon (recurse.c, 07-Sep-97)
- */
+ *
+ * Ahh, all too true.  The major consideration is RELATIVE_REPOS.  If
+ * the "/." doesn't end up in the repository while RELATIVE_REPOS is
+ * defined, there will be nothing in the CVS/Repository file.  I
+ * haven't verified that the remote protocol will handle that
+ * correctly yet, so I've not made that change. */
 
 void
 Sanitize_Repository_Name (repository)

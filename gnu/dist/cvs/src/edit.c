@@ -36,17 +36,14 @@ onoff_fileproc (callerdat, finfo)
     return 0;
 }
 
-
-
-static int onoff_filesdoneproc PROTO ((void *, int, const char *, const char *,
-                                       List *));
+static int onoff_filesdoneproc PROTO ((void *, int, char *, char *, List *));
 
 static int
 onoff_filesdoneproc (callerdat, err, repository, update_dir, entries)
     void *callerdat;
     int err;
-    const char *repository;
-    const char *update_dir;
+    char *repository;
+    char *update_dir;
     List *entries;
 {
     if (setting_default)
@@ -84,7 +81,7 @@ watch_onoff (argc, argv)
     argv += optind;
 
 #ifdef CLIENT_SUPPORT
-    if (current_parsed_root->isremote)
+    if (client_active)
     {
 	start_server ();
 
@@ -92,7 +89,6 @@ watch_onoff (argc, argv)
 
 	if (local)
 	    send_arg ("-l");
-	send_arg ("--");
 	send_files (argc, argv, local, 0, SEND_NO_CONTENTS);
 	send_file_names (argc, argv, SEND_EXPAND_WILD);
 	send_to_server (turning_on ? "watch-on\012" : "watch-off\012", 0);
@@ -102,12 +98,12 @@ watch_onoff (argc, argv)
 
     setting_default = (argc <= 0);
 
-    lock_tree_for_write (argc, argv, local, W_LOCAL, 0);
+    lock_tree_for_write (argc, argv, local, 0);
 
     err = start_recursion (onoff_fileproc, onoff_filesdoneproc,
 			   (DIRENTPROC) NULL, (DIRLEAVEPROC) NULL, NULL,
-			   argc, argv, local, W_LOCAL, 0, CVS_LOCK_NONE,
-			   (char *) NULL, 0, (char *) NULL);
+			   argc, argv, local, W_LOCAL, 0, 0, (char *)NULL,
+			   0);
 
     Lock_Cleanup ();
     return err;
@@ -239,9 +235,9 @@ send_notifications (argc, argv, local)
     /* OK, we've done everything which needs to happen on the client side.
        Now we can try to contact the server; if we fail, then the
        notifications stay in CVSADM_NOTIFY to be sent next time.  */
-    if (current_parsed_root->isremote)
+    if (client_active)
     {
-	if (strcmp (cvs_cmd_name, "release") != 0)
+	if (strcmp (command_name, "release") != 0)
 	{
 	    start_server ();
 	    ign_setup ();
@@ -250,10 +246,10 @@ send_notifications (argc, argv, local)
 	err += start_recursion (dummy_fileproc, (FILESDONEPROC) NULL,
 				(DIRENTPROC) NULL, (DIRLEAVEPROC) NULL, NULL,
 				argc, argv, local, W_LOCAL, 0, 0, (char *)NULL,
-				0, (char *) NULL);
+				0);
 
 	send_to_server ("noop\012", 0);
-	if (strcmp (cvs_cmd_name, "release") == 0)
+	if (strcmp (command_name, "release") == 0)
 	    err += get_server_responses ();
 	else
 	    err += get_responses_and_close ();
@@ -263,11 +259,11 @@ send_notifications (argc, argv, local)
     {
 	/* Local.  */
 
-	lock_tree_for_write (argc, argv, local, W_LOCAL, 0);
+	lock_tree_for_write (argc, argv, local, 0);
 	err += start_recursion (ncheck_fileproc, (FILESDONEPROC) NULL,
 				(DIRENTPROC) NULL, (DIRLEAVEPROC) NULL, NULL,
 				argc, argv, local, W_LOCAL, 0, 0, (char *)NULL,
-				0, (char *) NULL);
+				0);
 	Lock_Cleanup ();
     }
     return err;
@@ -305,8 +301,6 @@ edit_fileproc (callerdat, finfo)
     (void) time (&now);
     ascnow = asctime (gmtime (&now));
     ascnow[24] = '\0';
-    /* Fix non-standard format.  */
-    if (ascnow[8] == '0') ascnow[8] = ' ';
     fprintf (fp, "E%s\t%s GMT\t%s\t%s\t", finfo->file,
 	     ascnow, hostname, CurDir);
     if (setting_tedit)
@@ -337,7 +331,10 @@ edit_fileproc (callerdat, finfo)
        trying to create the output file fails.  But copy_file isn't
        set up to facilitate that.  */
     mkdir_if_needed (CVSADM_BASE);
-    xasprintf(&basefilename, "%s/%s", CVSADM_BASE, finfo->file);
+    basefilename = xmalloc (10 + sizeof CVSADM_BASE + strlen (finfo->file));
+    strcpy (basefilename, CVSADM_BASE);
+    strcat (basefilename, "/");
+    strcat (basefilename, finfo->file);
     copy_file (finfo->file, basefilename);
     free (basefilename);
 
@@ -430,21 +427,12 @@ edit (argc, argv)
 	setting_tcommit = 1;
     }
 
-    if (strpbrk (hostname, "+,>;=\t\n") != NULL)
-	error (1, 0,
-	       "host name (%s) contains an invalid character (+,>;=\\t\\n)",
-	       hostname);
-    if (strpbrk (CurDir, "+,>;=\t\n") != NULL)
-	error (1, 0,
-"current directory (%s) contains an invalid character (+,>;=\\t\\n)",
-	       CurDir);
-
     /* No need to readlock since we aren't doing anything to the
        repository.  */
     err = start_recursion (edit_fileproc, (FILESDONEPROC) NULL,
 			   (DIRENTPROC) NULL, (DIRLEAVEPROC) NULL, NULL,
-			   argc, argv, local, W_LOCAL, 0, 0, (char *) NULL,
-			   0, (char *) NULL);
+			   argc, argv, local, W_LOCAL, 0, 0, (char *)NULL,
+			   0);
 
     err += send_notifications (argc, argv, local);
 
@@ -466,7 +454,10 @@ unedit_fileproc (callerdat, finfo)
     if (noexec)
 	return 0;
 
-    xasprintf(&basefilename, "%s/%s", CVSADM_BASE, finfo->file);
+    basefilename = xmalloc (10 + sizeof CVSADM_BASE + strlen (finfo->file));
+    strcpy (basefilename, CVSADM_BASE);
+    strcat (basefilename, "/");
+    strcat (basefilename, finfo->file);
     if (!isfile (basefilename))
     {
 	/* This file apparently was never cvs edit'd (e.g. we are uneditting
@@ -493,8 +484,6 @@ unedit_fileproc (callerdat, finfo)
     (void) time (&now);
     ascnow = asctime (gmtime (&now));
     ascnow[24] = '\0';
-    /* Fix non-standard format.  */
-    if (ascnow[8] == '0') ascnow[8] = ' ';
     fprintf (fp, "U%s\t%s GMT\t%s\t%s\t\n", finfo->file,
 	     ascnow, hostname, CurDir);
 
@@ -531,7 +520,7 @@ unedit_fileproc (callerdat, finfo)
 	   now.  */
 	if (node != NULL)
 	{
-	    entdata = node->data;
+	    entdata = (Entnode *) node->data;
 	    if (baserev == NULL)
 	    {
 		/* This can only happen if the CVS/Baserev file got
@@ -610,7 +599,7 @@ unedit (argc, argv)
     err = start_recursion (unedit_fileproc, (FILESDONEPROC) NULL,
 			   (DIRENTPROC) NULL, (DIRLEAVEPROC) NULL, NULL,
 			   argc, argv, local, W_LOCAL, 0, 0, (char *)NULL,
-			   0,  (char *) NULL);
+			   0);
 
     err += send_notifications (argc, argv, local);
 
@@ -619,7 +608,7 @@ unedit (argc, argv)
 
 void
 mark_up_to_date (file)
-    const char *file;
+    char *file;
 {
     char *base;
 
@@ -634,13 +623,12 @@ mark_up_to_date (file)
     free (base);
 }
 
-
-
+
 void
 editor_set (filename, editor, val)
-    const char *filename;
-    const char *editor;
-    const char *val;
+    char *filename;
+    char *editor;
+    char *val;
 {
     char *edlist;
     char *newlist;
@@ -661,36 +649,32 @@ editor_set (filename, editor, val)
 
 struct notify_proc_args {
     /* What kind of notification, "edit", "tedit", etc.  */
-    const char *type;
+    char *type;
     /* User who is running the command which causes notification.  */
-    const char *who;
+    char *who;
     /* User to be notified.  */
-    const char *notifyee;
+    char *notifyee;
     /* File.  */
-    const char *file;
+    char *file;
 };
-
-
 
 /* Pass as a static until we get around to fixing Parse_Info to pass along
    a void * where we can stash it.  */
 static struct notify_proc_args *notify_args;
 
-
-
-static int notify_proc PROTO ((const char *repository, const char *filter));
+static int notify_proc PROTO ((char *repository, char *filter));
 
 static int
 notify_proc (repository, filter)
-    const char *repository;
-    const char *filter;
+    char *repository;
+    char *filter;
 {
     FILE *pipefp;
     char *prog;
     char *expanded_prog;
-    const char *p;
+    char *p;
     char *q;
-    const char *srepos;
+    char *srepos;
     struct notify_proc_args *args = notify_args;
 
     srepos = Short_Repository (repository);
@@ -753,11 +737,11 @@ notify_proc (repository, filter)
 void
 notify_do (type, filename, who, val, watches, repository)
     int type;
-    const char *filename;
-    const char *who;
-    const char *val;
-    const char *watches;
-    const char *repository;
+    char *filename;
+    char *who;
+    char *val;
+    char *watches;
+    char *repository;
 {
     static struct addremove_args blank;
     struct addremove_args args;
@@ -876,11 +860,11 @@ notify_do (type, filename, who, val, watches, repository)
 	    size_t line_len = 0;
 
 	    args.notifyee = NULL;
-	    usersname = xmalloc (strlen (current_parsed_root->directory)
+	    usersname = xmalloc (strlen (CVSroot_directory)
 				 + sizeof CVSROOTADM
 				 + sizeof CVSROOTADM_USERS
 				 + 20);
-	    strcpy (usersname, current_parsed_root->directory);
+	    strcpy (usersname, CVSroot_directory);
 	    strcat (usersname, "/");
 	    strcat (usersname, CVSROOTADM);
 	    strcat (usersname, "/");
@@ -921,11 +905,9 @@ notify_do (type, filename, who, val, watches, repository)
 
 	    if (args.notifyee == NULL)
 	    {
-		char *tmp;
-		tmp = xmalloc (endp - p + 1);
-		strncpy (tmp, p, endp - p);
-		tmp[endp - p] = '\0';
-		args.notifyee = tmp;
+		args.notifyee = xmalloc (endp - p + 1);
+		strncpy (args.notifyee, p, endp - p);
+		args.notifyee[endp - p] = '\0';
 	    }
 
 	    notify_args = &args;
@@ -934,12 +916,7 @@ notify_do (type, filename, who, val, watches, repository)
 	    args.file = filename;
 
 	    (void) Parse_Info (CVSROOTADM_NOTIFY, repository, notify_proc, 1);
-
-            /* It's okay to cast out the const for the free() below since we
-             * just allocated this a few lines above.  The const was for
-             * everybody else.
-             */
-            free ((char *)args.notifyee);
+	    free (args.notifyee);
 	}
 
 	p = nextp;
@@ -978,8 +955,8 @@ notify_do (type, filename, who, val, watches, repository)
 /* Check and send notifications.  This is only for the client.  */
 void
 notify_check (repository, update_dir)
-    const char *repository;
-    const char *update_dir;
+    char *repository;
+    char *update_dir;
 {
     FILE *fp;
     char *line = NULL;
@@ -1092,7 +1069,6 @@ editors_fileproc (callerdat, finfo)
 	cvs_output ("\n", 1);
     }
   out:;
-    free (them);
     return 0;
 }
 
@@ -1128,14 +1104,13 @@ editors (argc, argv)
     argv += optind;
 
 #ifdef CLIENT_SUPPORT
-    if (current_parsed_root->isremote)
+    if (client_active)
     {
 	start_server ();
 	ign_setup ();
 
 	if (local)
 	    send_arg ("-l");
-	send_arg ("--");
 	send_files (argc, argv, local, 0, SEND_NO_CONTENTS);
 	send_file_names (argc, argv, SEND_EXPAND_WILD);
 	send_to_server ("editors\012", 0);
@@ -1145,6 +1120,6 @@ editors (argc, argv)
 
     return start_recursion (editors_fileproc, (FILESDONEPROC) NULL,
 			    (DIRENTPROC) NULL, (DIRLEAVEPROC) NULL, NULL,
-			    argc, argv, local, W_LOCAL, 0, 1, (char *) NULL,
-			    0,  (char *) NULL);
+			    argc, argv, local, W_LOCAL, 0, 1, (char *)NULL,
+			    0);
 }

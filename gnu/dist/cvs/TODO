@@ -6,10 +6,9 @@ The "TODO" file!                              -*-Indented-Text-*-
     (If done, this should be configurable via commitinfo or some new
     config file -kingdon, Jun 1995).
 
-30. Add "rdiff" & "rtag" program options to the modules database.  These
-    commands seem hard to use since these commands deal directly with the
-    RCS ,v files.  (perhaps should think a little harder about what this is
-    trying to accomplish and what the best way is -kingdon, Jul 1997).
+30. Add "rdiff" program option to the modules database (and "diff"
+too?).  (perhaps should think a little harder about what this is
+trying to accomplish and what the best way is -kingdon, Jul 1997).
 
 31. Think hard about ^C recovery.
     One particular issue: RCS removes the ,foo.c, file on ^C and CVS
@@ -26,6 +25,10 @@ The "TODO" file!                              -*-Indented-Text-*-
     track of what has been merged is a pain.  Take a look at PRCS 1.2.
     PRCS 1.0 was particularly bad the way it handled the "invisible
     state", but 1.2 is significantly better.
+
+45. Consider enhancing the "rdiff" and "tag" (rtag??) command support in
+    the module database -- they seem hard to use since these commands
+    deal directly with the RCS ,v files.
 
 49. cvs xxx commands should be able to deal with files in other
     directories.  I want to do a cvs add foo/bar.c.
@@ -53,8 +56,8 @@ The "TODO" file!                              -*-Indented-Text-*-
 66. Length of the CVS temporary files must be limited to 14 characters for
     System-V stupid support.  As well as the length on the CVS.adm files.
 
-72. Consider re-design of the module -t options to use the file system more
-    intuitively.
+72. Consider re-design of the module -o, -i, -t options to use the file
+    system more intuitively.
 
 73. Consider an option (in .cvsrc?) to automatically add files that are new
     and specified to commit.
@@ -258,6 +261,10 @@ The "TODO" file!                              -*-Indented-Text-*-
      This behavior was not particularly popular and has been since
      reverted.
 
+     Note also RELATIVE_REPOS in options.h; it needs to be set for
+     changing CVS/Root (not CVS/Repository) to be sufficient in the
+     case where the directory has changed.
+
      This whole area is a rather bad pile of individual decisions which
      accumulated over time, some of them probably bad decisions with
      hindsight.  But we didn't get into this mess overnight, and we're
@@ -388,11 +395,11 @@ The "TODO" file!                              -*-Indented-Text-*-
      the checkout and update commands that could turn this invocation of the
      script off, for mature users.
 
-173. Need generic date-on-branch handling.  Currently, many commands
-     allow both -r and -D, but that's problematic for commands like diff
-     that interpret that as two revisions rather than a single revision.
-     Checkout and update -j takes tag:date which is probably a better
-     solution overall.
+173. We have a tagged branch in CVS.  How do we get the version of that branch
+     (for an entire directory) that corresponds to the files on that branch on a
+     certain day?  I'd like to specify BOTH -r and -D to 'cvs checkout', but I
+     can't.  It looks like I can only specify the date for the main line (as
+     opposed to any branches).  True?  Any workarounds to get what I need?
 
 174. I would like to see "cvs release" modified so that it only removes files
      which are known to CVS - all the files in the repository, plus those which
@@ -507,6 +514,11 @@ or whether there is a feature whereby there are circumstances in which
 merges from one branch to the other happen automatically (for example,
 the case in which the branches have not diverged).  This might be a
 legitimate question to ask even quite aside from multisite features.
+
+One additional random tidbit is to note that Eric Raymond has some
+interest in this sort of thing.  The item "Cooperative distributed
+freeware development" on http://www.ccil.org/~esr/ has a very brief
+introduction to what he is thinking about.
 
 187.  Might want to separate out usage error messages and help
 messages.  The problem now is that if you specify an invalid option,
@@ -780,111 +792,6 @@ send differences instead of entire files.  In the degenerate case
 (e.g. "cvs diff" without arguments) the required network traffic is
 reduced to zero, and the client need not even contact the server.
 
-197.  Analyze the difference between CVS_UNLINK & unlink_file.  As far as I
-can tell, unlink_file aborts in noexec mode and CVS_UNLINK does not.  I'm not
-sure it would be possible to remove even the use of temp files in noexec mode,
-but most unlinks should probably be using unlink_file and not CVS_UNLINK.
-
-198.  Remove references to deprecated cvs_temp_name function.
-
-199.  Add test for login & logout functionality, including support for
-backwards compatibility with old CVSROOTs.
-
-200.  Make a 'cvs add' without write access a non-fatal error so that
-the user's Entries file is updated and future 'cvs diffs' will work
-properly.  This should ease patch submission.
-
-201.  cvs_temp_file should be creating temporary files in a privately owned
-subdirectory of of temp due to security issues on some systems.
-
-202.  Enable rdiff to accept most diff options.  Make rdiff output look
-like diff's.  Make CVS diff garbage go to stderr and only standard diff
-output go to stdout.
-
-203.  Add val-tags additions to the tagging code.  Don't remove the
-update additions since val-tags could still be used as a cache when the
-repository was imported from elsewhere (the tags weren't applied with a
-version which wrote val-tags).
-
-204.  Add test case for compression.  A buf_shutdown error using compression
-wasn't caught by the test suite.
-
-205.  There are lots of cases where trailing slashes on directory names
-and other non-canonical paths confuse CVS.  Most of the cases that do
-work are handled on an ad-hoc basis.  We need to come up with a coherent
-strategy to address path canonicalization and apply it consistently.
-
-208.  Merge enhancements to the diff package back into the original GNU source.
-
-209.  Go through this file and try to:
-
-  a.  Verify that items are still valid.
-
-  b.  Create test cases for valid items when they don't exist.
-
-  c.  Remove fixed and no longer applicable items.
-
-210.  Explain to sanity.sh how to deal with paths with spaces and other odd
-characters in them.
-
-211.  Make sanity.sh run under the Win32 bash (cygwin) and maybe other Windex
-environments (e.g. DGSS or whatever the MSVC portability environemnt is called).
-
-212.  Autotestify (see autoconf source) sanity.sh.
-
-213.  Examine desirability of updating the regex library (regex.{c,h}) to the
-more recent versions that come with glibc and emacs.  It might be worth waiting
-for the emacs folks to get their act together and merge their changes into the
-glibc version.
-
-214.  Make options.h options configure script options instead.
-
-215.  Add reditors and rwatchers commands.
-
-	- Is an r* command abstraction layer possible here for the commands
-	  where this makes sense?  Would it be simpler?  It seems to me the
-	  major operational differences lie in the file list construction.
-
-216.  Avoid command-line keyword expansion modes overriding binary mode
-(or make binary mode completely separate from keyword expansion mode).
-
-218.  Fix "checkout -d ." in client/server mode.
-
-221.  Handle spaces in file/directory names.  (Most, if not all, of the
-internal infrastructure already handles them correctly, but most of the
-administrative file interfaces do not.)
-
-223.  Internationalization support.  This probably means using some kind
-of universal character set (ISO 10646?) internally and converting on
-input and output, which opens the locale can of worms.
-
-224.  Better timezone handling.  Many people would like to see times
-output in local time rather than UTC, but that's tricky since the
-conversion from internal form is currently done by the server who has no
-idea what the user's timezone even is, let alone the rules for
-converting to it.
-
-   -  On the contrary, I think the MT server response should be easily adaptable
-for this purpose.  It is defined in cvsclient.texi as processed by the client
-if it knows how and printed to stdout otherwise.  A "time" tag or the like
-could be the usual CVS server UTC time string.  An old client could just print
-the time in UTC and a new client would know that it could convert the time to a
-local time string according to the localization settings before printing it.
-
-225.  Add support for --allow-root to server command.
-
-227.  'cvs release' should use the CVS/Root in the directory being released
-when such is specified rather than $CVSROOT.  In my work directory with no CVS
-dir, a release of subdirectories causes the released projects to be tested
-against my $CVSROOT environment variable, which often isn't correct but which
-can complete without generating error messages if the project also exists in
-the other CVSROOT.  This happens a lot with my copies of the ccvs project.
-
-228.  Consider adding -d to commit ala ci.
-
-229.  Improve the locking code to use a random delay with exponential
-backoff ala Ethernet and separate the notification interval from the
-wait interval.
-
-230.  Support for options like compression as part of the CVSROOT might be
-nice.  This should be fairly easy to implement now using the method options.
+196.  Using a CVSROOT with a trailing slash will confuse CVS.  I think
+we need to add a call to strip_trailing_slashes in root.c
+(parse_cvsroot), but I haven't considered all of the ramifications.

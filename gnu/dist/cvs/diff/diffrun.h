@@ -56,7 +56,7 @@ struct diff_callbacks
 
 /* Run a diff.  */
 
-extern int diff_run DIFFPARAMS((int, char **, const char *,
+extern int diff_run DIFFPARAMS((int, char **, char *,
 				const struct diff_callbacks *));
 
 /* Run a diff3.  */

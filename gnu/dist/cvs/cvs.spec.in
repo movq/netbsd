@@ -8,7 +8,7 @@ Source: ftp://ftp.cvshome.com/pub/cvs-%{version}/cvs-%{version}.tar.gz
 URL: http://cvshome.org
 Prereq: /sbin/install-info
 Prefix: %{_prefix}
-BuildRoot:  %{_tmppath}/%{name}-%{version}-%{release}-root-%(%{__id_u} -n)
+Buildroot: %{_tmppath}/%{name}-root
 
 %description
 CVS (Concurrent Version System) is a version control system which can
@@ -90,7 +90,6 @@ make LDFLAGS=-s
 # forcefully compress the info pages so that install-info will work properly
 # in the %%post
 gzip $RPM_BUILD_ROOT/%{_infodir}/cvs* || true
-rm -f $RPM_BUILD_ROOT/%{_infodir}/dir
 
 %clean
 [ "$RPM_BUILD_ROOT" != "/" ] && rm -rf $RPM_BUILD_ROOT
@@ -108,6 +107,7 @@ fi
 
 %files
 %defattr(-,root,root)
+%defattr(-,root,root)
 %doc AUTHORS BUGS FAQ MINOR-BUGS NEWS PROJECTS TODO README
 %doc doc/RCSFILES doc/*.ps
 %{_bindir}/*
@@ -122,16 +122,6 @@ fi
 %endif
 
 %changelog
-* Wed Mar 31 2004 Mark D. Baushke <mdb@cvshome.org>
-- Do not fail if info DIR file is not present to be deleted.
-
-* Tue Feb 17 2004 Derek Price <derek@ximbiot.com>
-- Remove info DIR file to avoid RPM warning us about installing files we don't
-- package.
-
-* Tue May 27 2003 Derek Price <derek@ximbiot.com>
-- Install a few more files as part of doc.
-
 * Thu Mar 29 2002 Derek Price <oberon@umich.edu>
 - Misc changes imported from RedHat's spec files.
 - Let RPM pick up the krb5-libs dependency.

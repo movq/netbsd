@@ -21,7 +21,6 @@
  *		F	"Release" cmd.
  *		W	"Update" cmd - No User file, Remove from Entries file.
  *		U	"Update" cmd - File was checked out over User file.
- *		P	"Update" cmd - User file was patched.
  *		G	"Update" cmd - File was merged successfully.
  *		C	"Update" cmd - File was merged and shows overlaps.
  *		M	"Commit" cmd - "Modified" file.
@@ -35,9 +34,9 @@
  *
  *  CurDir	The directory where the action occurred.  This should be the
  *		absolute path of the directory which is at the same level as
- *		the "Repository" field (for W,U,P,G,C & M,A,R).
+ *		the "Repository" field (for W,U,G,C & M,A,R).
  *
- *  Repository	For record types [W,U,P,G,C,M,A,R] this field holds the
+ *  Repository	For record types [W,U,G,C,M,A,R] this field holds the
  *		repository read from the administrative data where the
  *		command was typed.
  *		T	"A" --> New Tag, "D" --> Delete Tag
@@ -49,11 +48,11 @@
  *		O,E	The Tag or Date, if specified, else "" (null field).
  *		F	"" (null field)
  *		W	The Tag or Date, if specified, else "" (null field).
- *		U,P	The Revision checked out over the User file.
+ *		U	The Revision checked out over the User file.
  *		G,C	The Revision(s) involved in merge.
  *		M,A,R	RCS Revision affected.
  *
- *  argument	The module (for [TOEF]) or file (for [WUPGCMAR]) affected.
+ *  argument	The module (for [TOEUF]) or file (for [WUGCMAR]) affected.
  *
  *
  *** Report categories: "User" and "Since" modifiers apply to all reports.
@@ -61,7 +60,7 @@
  *
  *   Extract list of record types
  *
- *	-e, -x [TOEFWUPGCMAR]
+ *	-e, -x [TOEFWUGCMAR]
  *
  *		Extracted records are simply printed, No analysis is performed.
  *		All "field" modifiers apply.  -e chooses all types.
@@ -94,7 +93,7 @@
  *		modules are remembered.  Only records matching exactly those
  *		files and repositories are shown.  Sorting by "module", then
  *		filename, is implied.  If -l ("last modified") is specified,
- *		then "update" records (types WUPCG), tag and release records
+ *		then "update" records (types WUCG), tag and release records
  *		are ignored and the last (by date) "modified" record.
  *
  *   TAG history
@@ -132,7 +131,7 @@
  *	-p repository	- Only records in which the "repository" string is a
  *			  prefix of the "repos" field are considered.
  *
- *	-n modulename	- Only records which contain "modulename" in the
+ *	-m modulename	- Only records which contain "modulename" in the
  *			  "module" field are considered.
  *
  *
@@ -171,7 +170,7 @@
  *	cvs hi -e -u user
  *
  *** Dump (eXtract) specified record types
- *	cvs hi -x [TOEFWUPGCMAR]
+ *	cvs hi -x [TOFWUGCMAR]
  *
  *
  * FUTURE:		J[Join], I[Import]  (Not currently implemented.)
@@ -179,7 +178,6 @@
  */
 
 #include "cvs.h"
-#include "history.h"
 #include "savecwd.h"
 
 static struct hrec
@@ -193,9 +191,8 @@ static struct hrec
     char *end;		/* Ptr into repository to copy at end of workdir */
     char *mod;		/* The module within which the file is contained */
     time_t date;	/* Calculated from date stored in record */
-    long idx;		/* Index of record, for "stable" sort. */
+    int idx;		/* Index of record, for "stable" sort. */
 } *hrec_head;
-static long hrec_idx;
 
 
 static void fill_hrec PROTO((char *line, struct hrec * hr));
@@ -210,6 +207,7 @@ static void save_file PROTO((char *dir, char *name, char *module));
 static void save_module PROTO((char *module));
 static void save_user PROTO((char *name));
 
+#define ALL_REC_TYPES "TOEFWUCGMAR"
 #define USER_INCREMENT	2
 #define FILE_INCREMENT	128
 #define MODULE_INCREMENT 5
@@ -218,7 +216,6 @@ static void save_user PROTO((char *name));
 static short report_count;
 
 static short extract;
-static short extract_all;
 static short v_checkout;
 static short modified;
 static short tag_report;
@@ -235,8 +232,6 @@ static short module_sort;
 static short tz_local;
 static time_t tz_seconds_east_of_GMT;
 static char *tz_name = "+0000";
-
-char *logHistory = ALL_HISTORY_REC_TYPES;
 
 /* -r, -t, or -b options, malloc'd.  These are "" if the option in
    question is not specified or is overridden by another option.  The
@@ -292,7 +287,7 @@ static const char *const history_usg[] =
     "        -c              Committed (Modified) files\n",
     "        -o              Checked out modules\n",
     "        -m <module>     Look for specified module (repeatable)\n",
-    "        -x [" ALL_HISTORY_REC_TYPES "] Extract by record type\n",
+    "        -x [TOEFWUCGMAR] Extract by record type\n",
     "        -e              Everything (same as -x, but all record types)\n",
     "   Flags:\n",
     "        -a              All users (Default is self)\n",
@@ -401,9 +396,9 @@ history (argc, argv)
 		break;
 	    case 'e':
 		report_count++;
-		extract_all++;
+		extract++;
 		free (rec_types);
-		rec_types = xstrdup (ALL_HISTORY_REC_TYPES);
+		rec_types = xstrdup (ALL_REC_TYPES);
 		break;
 	    case 'l':			/* Find Last file record */
 		last_entry = 1;
@@ -442,8 +437,8 @@ history (argc, argv)
 		save_file ("", optarg, (char *) NULL);
 		break;
 	    case 'm':			/* Full module report */
-		if (!module_report++) report_count++;
-		/* fall through */
+		report_count++;
+		module_report++;
 	    case 'n':			/* Look for specified module */
 		save_module (optarg);
 		break;
@@ -484,7 +479,7 @@ history (argc, argv)
 		    char *cp;
 
 		    for (cp = optarg; *cp; cp++)
-			if (!strchr (ALL_HISTORY_REC_TYPES, *cp))
+			if (!strchr (ALL_REC_TYPES, *cp))
 			    error (1, 0, "%c is not a valid report type", *cp);
 		}
 		free (rec_types);
@@ -541,7 +536,7 @@ history (argc, argv)
 	error (1, 0, "Only one report type allowed from: \"-Tcomxe\".");
 
 #ifdef CLIENT_SUPPORT
-    if (current_parsed_root->isremote)
+    if (client_active)
     {
 	struct file_list_str *f1;
 	char **mod;
@@ -586,8 +581,6 @@ history (argc, argv)
 	    option_with_arg ("-t", since_tag);
 	for (mod = user_list; mod < &user_list[user_count]; ++mod)
 	    option_with_arg ("-u", *mod);
-	if (extract_all)
-	    send_arg("-e");
 	if (extract)
 	    option_with_arg ("-x", rec_types);
 	option_with_arg ("-z", tz_name);
@@ -611,7 +604,7 @@ history (argc, argv)
 	    (void) strcat (rec_types, "T");
 	}
     }
-    else if (extract || extract_all)
+    else if (extract)
     {
 	if (user_list)
 	    user_sort++;
@@ -640,7 +633,7 @@ history (argc, argv)
     else if (module_report)
     {
 	free (rec_types);
-	rec_types = xstrdup (last_entry ? "OMAR" : ALL_HISTORY_REC_TYPES);
+	rec_types = xstrdup (last_entry ? "OMAR" : ALL_REC_TYPES);
 	module_sort++;
 	repos_sort++;
 	file_sort++;
@@ -674,9 +667,9 @@ history (argc, argv)
 	fname = xstrdup (histfile);
     else
     {
-	fname = xmalloc (strlen (current_parsed_root->directory) + sizeof (CVSROOTADM)
+	fname = xmalloc (strlen (CVSroot_directory) + sizeof (CVSROOTADM)
 			 + sizeof (CVSROOTADM_HISTORY) + 10);
-	(void) sprintf (fname, "%s/%s/%s", current_parsed_root->directory,
+	(void) sprintf (fname, "%s/%s/%s", CVSroot_directory,
 			CVSROOTADM, CVSROOTADM_HISTORY);
     }
 
@@ -701,43 +694,29 @@ history (argc, argv)
 void
 history_write (type, update_dir, revs, name, repository)
     int type;
-    const char *update_dir;
-    const char *revs;
-    const char *name;
-    const char *repository;
+    char *update_dir;
+    char *revs;
+    char *name;
+    char *repository;
 {
     char *fname;
     char *workdir;
     char *username = getcaller ();
     int fd;
     char *line;
-    char *slash = "", *cp;
-    const char *cp2, *repos;
+    char *slash = "", *cp, *cp2, *repos;
     int i;
     static char *tilde = "";
     static char *PrCurDir = NULL;
 
-    if (logoff)			/* History is turned off by noexec or
-				 * readonlyfs.
-				 */
+    if (logoff)			/* History is turned off by cmd line switch */
 	return;
-    if ( strchr(logHistory, type) == NULL )	
-	return;
-    fname = xmalloc (strlen (current_parsed_root->directory) + sizeof (CVSROOTADM)
-		     + sizeof (CVSROOTADM_HISTORY) + 3);
-    (void) sprintf (fname, "%s/%s/%s", current_parsed_root->directory,
+    fname = xmalloc (strlen (CVSroot_directory) + sizeof (CVSROOTADM)
+		     + sizeof (CVSROOTADM_HISTORY) + 10);
+    (void) sprintf (fname, "%s/%s/%s", CVSroot_directory,
 		    CVSROOTADM, CVSROOTADM_HISTORY);
 
     /* turn off history logging if the history file does not exist */
-    /* FIXME:  This should check for write permissions instead.  This way,
-     * O_CREATE could be added back into the call to open() below and
-     * there would be no race condition involved in log rotation.
-     *
-     * Note that the new method of turning off logging would be either via
-     * the CVSROOT/config file (probably the quicker method, but would need
-     * to be added, or at least checked for, too) or by creating a dummy
-     * history file with 0444 permissions.
-     */
     if (!isfile (fname))
     {
 	logoff = 1;
@@ -747,18 +726,11 @@ history_write (type, update_dir, revs, name, repository)
     if (trace)
 	fprintf (stderr, "%s-> fopen(%s,a)\n",
 		 CLIENT_SERVER_STR, fname);
-    if (nolock)
+    if (noexec)
 	goto out;
-    fd = CVS_OPEN (fname, O_WRONLY | O_APPEND | OPEN_BINARY, 0666);
+    fd = CVS_OPEN (fname, O_WRONLY | O_APPEND | O_CREAT | OPEN_BINARY, 0666);
     if (fd < 0)
-    {
-	if (! really_quiet)
-        {
-            error (0, errno, "warning: cannot write to history file %s",
-                   fname);
-        }
-        goto out;
-    }
+	error (1, errno, "cannot open history file: %s", fname);
 
     repos = Short_Repository (repository);
 
@@ -786,8 +758,11 @@ history_write (type, update_dir, revs, name, repository)
 		if (save_cwd (&cwd))
 		    error_exit ();
 
-		if ( CVS_CHDIR (pwdir) < 0 || (homedir = xgetwd ()) == NULL)
-		    homedir = pwdir;
+		if ( CVS_CHDIR (pwdir) < 0)
+		    error (1, errno, "can't chdir(%s)", pwdir);
+		homedir = xgetwd ();
+		if (homedir == NULL)
+		    error (1, errno, "can't getwd in %s", pwdir);
 
 		if (restore_cwd (&cwd, NULL))
 		    error_exit ();
@@ -799,9 +774,7 @@ history_write (type, update_dir, revs, name, repository)
 		    PrCurDir += i;	/* Point to '/' separator */
 		    tilde = "~";
 		}
-
-		if (homedir != pwdir)
-		    free (homedir);
+		free (homedir);
 	    }
 	}
     }
@@ -1000,12 +973,7 @@ expand_modules ()
  * 
  */
 
-#define NEXT_BAR(here) do { \
-	while (isspace(*line)) line++; \
-	hr->here = line; \
-	while ((c = *line++) && c != '|') ; \
-	if (!c) return; line[-1] = '\0'; \
-	} while (0)
+#define NEXT_BAR(here) do { while (isspace(*line)) line++; hr->here = line; while ((c = *line++) && c != '|') ; if (!c) return; *(line - 1) = '\0'; } while (0)
 
 static void
 fill_hrec (line, hr)
@@ -1014,31 +982,37 @@ fill_hrec (line, hr)
 {
     char *cp;
     int c;
+    int off;
+    static int idx = 0;
+    unsigned long date;
 
-    hr->type = hr->user = hr->dir = hr->repos = hr->rev = hr->file =
-	hr->end = hr->mod = NULL;
-    hr->date = -1;
-    hr->idx = ++hrec_idx;
+    memset ((char *) hr, 0, sizeof (*hr));
 
     while (isspace ((unsigned char) *line))
 	line++;
 
     hr->type = line++;
-    hr->date = strtoul (line, &cp, 16);
-    if (cp == line || *cp != '|')
+    (void) sscanf (line, "%lx", &date);
+    hr->date = date;
+    while (*line && strchr ("0123456789abcdefABCDEF", *line))
+	line++;
+    if (*line == '\0')
 	return;
-    line = cp + 1;
+
+    line++;
     NEXT_BAR (user);
     NEXT_BAR (dir);
     if ((cp = strrchr (hr->dir, '*')) != NULL)
     {
 	*cp++ = '\0';
-	hr->end = line + strtoul (cp, NULL, 16);
+	(void) sscanf (cp, "%x", &off);
+	hr->end = line + off;
     }
     else
 	hr->end = line - 1;		/* A handy pointer to '\0' */
     NEXT_BAR (repos);
     NEXT_BAR (rev);
+    hr->idx = idx++;
     if (strchr ("FOET", *(hr->type)))
 	hr->mod = line;
 
@@ -1047,7 +1021,7 @@ fill_hrec (line, hr)
 
 
 #ifndef STAT_BLOCKSIZE
-#if HAVE_STRUCT_STAT_ST_BLKSIZE
+#if HAVE_ST_BLKSIZE
 #define STAT_BLOCKSIZE(s) (s).st_blksize
 #else
 #define STAT_BLOCKSIZE(s) (4 * 1024)
@@ -1070,7 +1044,7 @@ static void
 read_hrecs (fname)
     char *fname;
 {
-    unsigned char *cpstart, *cpend, *cp, *nl;
+    unsigned char *cpstart, *cp, *nl;
     char *hrline;
     int i;
     int fd;
@@ -1087,22 +1061,21 @@ read_hrecs (fname)
 
     cpstart = xmalloc (2 * STAT_BLOCKSIZE(st_buf));
     cpstart[0] = '\0';
-    cp = cpend = cpstart;
+    cp = cpstart;
 
     hrec_max = HREC_INCREMENT;
     hrec_head = xmalloc (hrec_max * sizeof (struct hrec));
-    hrec_idx = 0;
 
     for (;;)
     {
-	for (nl = cp; nl < cpend && *nl != '\n'; nl++)
+	for (nl = cp; *nl && *nl != '\n'; nl++)
 	    if (!isprint(*nl)) *nl = ' ';
 
-	if (nl >= cpend)
+	if (!*nl)
 	{
 	    if (nl - cp >= STAT_BLOCKSIZE(st_buf))
 	    {
-		error(1, 0, "history line %ld too long (> %lu)", hrec_idx + 1,
+		error(1, 0, "history line too long (> %lu)",
 		      (unsigned long) STAT_BLOCKSIZE(st_buf));
 	    }
 	    if (nl > cp)
@@ -1112,14 +1085,13 @@ read_hrecs (fname)
 	    i = read (fd, nl, STAT_BLOCKSIZE(st_buf));
 	    if (i > 0)
 	    {
-		cpend = nl + i;
-		*cpend = '\0';
+		nl[i] = '\0';
 		continue;
 	    }
 	    if (i < 0)
 		error (1, errno, "error reading history file");
 	    if (nl == cp) break;
-	    error (0, 0, "warning: no newline at end of history file");
+	    nl[1] = '\0';
 	}
 	*nl = '\0';
 
@@ -1208,14 +1180,6 @@ select_hrec (hr)
     char **cpp, *cp, *cp2;
     struct file_list_str *fl;
     int count;
-
-    /* basic validity checking */
-    if (!hr->type || !hr->user || !hr->dir || !hr->repos || !hr->rev ||
-	!hr->file || !hr->end)
-    {
-	error (0, 0, "warning: history line %ld invalid", hr->idx);
-	return (0);
-    }
 
     /* "Since" checking:  The argument parser guarantees that only one of the
      *			  following four choices is set:
@@ -1497,9 +1461,9 @@ report_hrecs ()
 	else
 	    tm = localtime (&(lr->date));
 
-	(void) printf ("%c %04d-%02d-%02d %02d:%02d %s %-*s", ty,
-		  tm->tm_year+1900, tm->tm_mon + 1, tm->tm_mday, tm->tm_hour,
-		  tm->tm_min, tz_name, user_len, lr->user);
+	(void) printf ("%c %02d/%02d %02d:%02d %s %-*s", ty, tm->tm_mon + 1,
+		  tm->tm_mday, tm->tm_hour, tm->tm_min, tz_name,
+		  user_len, lr->user);
 
 	workdir = xmalloc (strlen (lr->dir) + strlen (lr->end) + 10);
 	(void) sprintf (workdir, "%s%s", lr->dir, lr->end);
@@ -1540,7 +1504,6 @@ report_hrecs ()
 		break;
 	    case 'W':
 	    case 'U':
-	    case 'P':
 	    case 'C':
 	    case 'G':
 	    case 'M':

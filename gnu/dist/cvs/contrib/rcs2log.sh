@@ -18,7 +18,6 @@ Options:
   -h HOSTNAME  Use HOSTNAME in change log entries (default current host).
   -i INDENT  Indent change log lines by INDENT spaces (default 8).
   -l LENGTH  Try to limit log lines to LENGTH characters (default 79).
-  -L FILE  Use rlog-format FILE for source of logs.
   -R  If no FILEs are given and RCS is used, recurse through working directory.
   -r OPTION  Pass OPTION to subsidiary log command.
   -t TABWIDTH  Tab stops are every TABWIDTH characters (default 8).
@@ -29,10 +28,9 @@ Options:
 
 Report bugs to <bug-gnu-emacs@gnu.org>.'
 
-Id='Id: rcs2log,v 1.48 2001/09/05 23:07:46 eggert Exp'
+Id='$Id: rcs2log.sh,v 1.1 2000/09/04 21:51:07 christos Exp $'
 
-# Copyright 1992, 1993, 1994, 1995, 1996, 1997, 1998, 2001, 2003
-#  Free Software Foundation, Inc.
+# Copyright 1992, 93, 94, 95, 96, 97, 1998 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -49,32 +47,13 @@ Id='Id: rcs2log,v 1.48 2001/09/05 23:07:46 eggert Exp'
 # Free Software Foundation, Inc., 59 Temple Place - Suite 330,
 # Boston, MA 02111-1307, USA.
 
-Copyright='Copyright 1992-2003 Free Software Foundation, Inc.
+Copyright='Copyright 1998 Free Software Foundation, Inc.
 This program comes with NO WARRANTY, to the extent permitted by law.
 You may redistribute copies of this program
 under the terms of the GNU General Public License.
 For more information about these matters, see the files named COPYING.
 Author: Paul Eggert <eggert@twinsun.com>'
 
-# functions
-@MKTEMP_SH_FUNCTION@
-
-# Use the traditional C locale.
-LANG=C
-LANGUAGE=C
-LC_ALL=C
-LC_COLLATE=C
-LC_CTYPE=C
-LC_MESSAGES=C
-LC_NUMERIC=C
-LC_TIME=C
-export LANG LANGUAGE LC_ALL LC_COLLATE LC_CTYPE LC_MESSAGES LC_NUMERIC LC_TIME
-
-# These variables each contain a single ASCII character.
-# Unfortunately, there's no portable way of writing these characters
-# in older Unix implementations, other than putting them directly into
-# this text file.
-SOH='' # SOH, octal code 001
 tab='	'
 nl='
 '
@@ -82,10 +61,8 @@ nl='
 # Parse options.
 
 # defaults
-: ${MKTEMP="@MKTEMP@"}
 : ${AWK=awk}
 : ${TMPDIR=/tmp}
-
 changelog=ChangeLog # change log file name
 datearg= # rlog date option
 hostname= # name of local host (if empty, will deduce it later)
@@ -97,7 +74,6 @@ logTZ= # time zone for log dates (if empty, use local time)
 recursive= # t if we want recursive rlog
 revision= # t if we want revision numbers
 rlog_options= # options to pass to rlog
-rlogfile= # log file to read from
 tabwidth=8 # width of horizontal tab
 
 while :
@@ -107,16 +83,17 @@ do
 	-i)	indent=${2?}; shift;;
 	-h)	hostname=${2?}; shift;;
 	-l)	length=${2?}; shift;;
-	-L)	rlogfile=${2?}; shift;;
 	-[nu])	# -n is obsolescent; it is replaced by -u.
 		case $1 in
 		-n)	case ${2?}${3?}${4?} in
 			*"$tab"* | *"$nl"*)
 				echo >&2 "$0: -n '$2' '$3' '$4': tabs, newlines not allowed"
-				exit 1;;
+				exit 1
 			esac
-			login=$2
-			lfm=$2$tab$3$tab$4
+			case $loginFullnameMailaddrs in
+			'') loginFullnameMailaddrs=$2$tab$3$tab$4;;
+			?*) loginFullnameMailaddrs=$loginFullnameMailaddrs$nl$2$tab$3$tab$4
+			esac
 			shift; shift; shift;;
 		-u)
 			# If $2 is not tab-separated, use colon for separator.
@@ -127,39 +104,33 @@ do
 			*"$tab"*)
 				t=$tab;;
 			*)
-				t=':';;
+				t=:
 			esac
 			case $2 in
 			*"$t"*"$t"*"$t"*)
 				echo >&2 "$0: -u '$2': too many fields"
 				exit 1;;
 			*"$t"*"$t"*)
-				uf="[^$t]*$t" # An unselected field, followed by a separator.
-				sf="\\([^$t]*\\)" # The selected field.
-				login=`expr "X$2" : "X$sf"`
-				lfm="$login$tab"`
-					expr "X$2" : "$uf$sf"
-				  `"$tab"`
-					expr "X$2" : "$uf$uf$sf"
-				`;;
+				;;
 			*)
 				echo >&2 "$0: -u '$2': not enough fields"
-				exit 1;;
+				exit 1
 			esac
-			shift;;
+			case $loginFullnameMailaddrs in
+			'') loginFullnameMailaddrs=$2;;
+			?*) loginFullnameMailaddrs=$loginFullnameMailaddrs$nl$2
+			esac
+			shift
 		esac
 		case $logins in
 		'') logins=$login;;
-		?*) logins=$logins$nl$login;;
+		?*) logins=$logins$nl$login
 		esac
-		case $loginFullnameMailaddrs in
-		'') loginFullnameMailaddrs=$lfm;;
-		?*) loginFullnameMailaddrs=$loginFullnameMailaddrs$nl$lfm;;
-		esac;;
+		;;
 	-r)
 		case $rlog_options in
 		'') rlog_options=${2?};;
-		?*) rlog_options=$rlog_options$nl${2?};;
+		?*) rlog_options=$rlog_options$nl${2?}
 		esac
 		shift;;
 	-R)	recursive=t;;
@@ -173,9 +144,9 @@ do
 	-*)	echo >&2 "Usage: $0 [OPTION]... [FILE ...]$nl$Help"
 		case $1 in
 		--help) exit 0;;
-		*) exit 1;;
+		*) exit 1
 		esac;;
-	*)	break;;
+	*)	break
 	esac
 	shift
 done
@@ -187,176 +158,157 @@ month_data='
 	m[9]="Oct"; m[10]="Nov"; m[11]="Dec"
 '
 
-logdir=`$MKTEMP -d $TMPDIR/rcs2log.XXXXXX`
-test -n "$logdir" || exit
-llogout=$logdir/l
-trap exit 1 2 13 15
-trap "rm -fr $logdir 2>/dev/null" 0
 
-# If no rlog-format log file is given, generate one into $rlogfile.
-case $rlogfile in
+# Put rlog output into $rlogout.
+
+# If no rlog options are given,
+# log the revisions checked in since the first ChangeLog entry.
+# Since ChangeLog is only by date, some of these revisions may be duplicates of
+# what's already in ChangeLog; it's the user's responsibility to remove them.
+case $rlog_options in
 '')
-	rlogfile=$logdir/r
-
-	# If no rlog options are given,
-	# log the revisions checked in since the first ChangeLog entry.
-	# Since ChangeLog is only by date, some of these revisions may be duplicates of
-	# what's already in ChangeLog; it's the user's responsibility to remove them.
-	case $rlog_options in
-	'')
-		if test -s "$changelog"
-		then
-			e='
-				/^[0-9]+-[0-9][0-9]-[0-9][0-9]/{
-					# ISO 8601 date
-					print $1
-					exit
-				}
-				/^... ... [ 0-9][0-9] [ 0-9][0-9]:[0-9][0-9]:[0-9][0-9] [0-9]+ /{
-					# old-fashioned date and time (Emacs 19.31 and earlier)
-					'"$month_data"'
-					year = $5
-					for (i=0; i<=11; i++) if (m[i] == $2) break
-					dd = $3
-					printf "%d-%02d-%02d\n", year, i+1, dd
-					exit
-				}
-			'
-			d=`$AWK "$e" <"$changelog"` || exit
-			case $d in
-			?*) datearg="-d>$d";;
-			esac
-		fi;;
-	esac
-
-	# Use TZ specified by ChangeLog local variable, if any.
 	if test -s "$changelog"
 	then
-		extractTZ='
-			/^.*change-log-time-zone-rule['"$tab"' ]*:['"$tab"' ]*"\([^"]*\)".*/{
-				s//\1/; p; q
+		e='
+			/^[0-9]+-[0-9][0-9]-[0-9][0-9]/{
+				# ISO 8601 date
+				print $1
+				exit
 			}
-			/^.*change-log-time-zone-rule['"$tab"' ]*:['"$tab"' ]*t.*/{
-				s//UTC0/; p; q
+			/^... ... [ 0-9][0-9] [ 0-9][0-9]:[0-9][0-9]:[0-9][0-9] [0-9]+ /{
+				# old-fashioned date and time (Emacs 19.31 and earlier)
+				'"$month_data"'
+				year = $5
+				for (i=0; i<=11; i++) if (m[i] == $2) break
+				dd = $3
+				printf "%d-%02d-%02d\n", year, i+1, dd
+				exit
 			}
 		'
-		logTZ=`tail "$changelog" | sed -n "$extractTZ"`
-		case $logTZ in
-		?*) TZ=$logTZ; export TZ;;
+		d=`$AWK "$e" <"$changelog"` || exit
+		case $d in
+		?*) datearg="-d>$d"
 		esac
 	fi
-
-	# If CVS is in use, examine its repository, not the normal RCS files.
-	if test ! -f CVS/Repository
-	then
-		rlog=rlog
-		repository=
-	else
-		rlog='cvs -q log'
-		repository=`sed 1q <CVS/Repository` || exit
-		test ! -f CVS/Root || CVSROOT=`cat <CVS/Root` || exit
-		case $CVSROOT in
-		*:/*:/*)
-			echo >&2 "$0: $CVSROOT: CVSROOT has multiple ':/'s"
-			exit 1;;
-		*:/*)
-			# remote repository
-			pository=`expr "X$repository" : '.*:\(/.*\)'`;;
-		*)
-			# local repository
-			case $repository in
-			/*) ;;
-			*) repository=${CVSROOT?}/$repository;;
-			esac
-			if test ! -d "$repository"
-			then
-				echo >&2 "$0: $repository: bad repository (see CVS/Repository)"
-				exit 1
-			fi
-			pository=$repository;;
-		esac
-
-		# Ensure that $pository ends in exactly one slash.
-		while :
-		do
-			case $pository in
-			*//) pository=`expr "X$pository" : 'X\(.*\)/'`;;
-			*/) break;;
-			*) pository=$pository/; break;;
-			esac
-		done
-
-	fi
-
-	# Use $rlog's -zLT option, if $rlog supports it.
-	case `$rlog -zLT 2>&1` in
-	*' option'*) ;;
-	*)
-		case $rlog_options in
-		'') rlog_options=-zLT;;
-		?*) rlog_options=-zLT$nl$rlog_options;;
-		esac;;
-	esac
-
-	# With no arguments, examine all files under the RCS directory.
-	case $# in
-	0)
-		case $repository in
-		'')
-			oldIFS=$IFS
-			IFS=$nl
-			case $recursive in
-			t)
-				RCSdirs=`find . -name RCS -type d -print`
-				filesFromRCSfiles='s|,v$||; s|/RCS/|/|; s|^\./||'
-				files=`
-					{
-						case $RCSdirs in
-						?*) find $RCSdirs \
-								-type f \
-								! -name '*_' \
-								! -name ',*,' \
-								! -name '.*_' \
-								! -name .rcsfreeze.log \
-								! -name .rcsfreeze.ver \
-								-print;;
-						esac
-						find . -name '*,v' -print
-					} |
-					sort -u |
-					sed "$filesFromRCSfiles"
-				`;;
-			*)
-				files=
-				for file in RCS/.* RCS/* .*,v *,v
-				do
-					case $file in
-					RCS/. | RCS/.. | RCS/,*, | RCS/*_) continue;;
-					RCS/.rcsfreeze.log | RCS/.rcsfreeze.ver) continue;;
-					RCS/.\* | RCS/\* | .\*,v | \*,v) test -f "$file" || continue;;
-					RCS/*,v | RCS/.*,v) ;;
-					RCS/* | RCS/.*) test -f "$file" || continue;;
-					esac
-					case $files in
-					'') files=$file;;
-					?*) files=$files$nl$file;;
-					esac
-				done
-				case $files in
-				'') exit 0;;
-				esac;;
-			esac
-			set x $files
-			shift
-			IFS=$oldIFS;;
-		esac;;
-	esac
-
-	case $datearg in
-	?*) $rlog $rlog_options "$datearg" ${1+"$@"} >$rlogfile;;
-	'') $rlog $rlog_options ${1+"$@"} >$rlogfile;;
-	esac || exit;;
 esac
+
+# Use TZ specified by ChangeLog local variable, if any.
+if test -s "$changelog"
+then
+	extractTZ='
+		/^.*change-log-time-zone-rule['"$tab"' ]*:['"$tab"' ]*"\([^"]*\)".*/{
+			s//\1/; p; q
+		}
+		/^.*change-log-time-zone-rule['"$tab"' ]*:['"$tab"' ]*t.*/{
+			s//UTC0/; p; q
+		}
+	'
+	logTZ=`tail "$changelog" | sed -n "$extractTZ"`
+	case $logTZ in
+	?*) TZ=$logTZ; export TZ
+	esac
+fi
+
+# If CVS is in use, examine its repository, not the normal RCS files.
+if test ! -f CVS/Repository
+then
+	rlog=rlog
+	repository=
+else
+	rlog='cvs -q log'
+	repository=`sed 1q <CVS/Repository` || exit
+	test ! -f CVS/Root || CVSROOT=`cat <CVS/Root` || exit
+	case $CVSROOT in
+	*:/*)
+		# remote repository
+		;;
+	*)
+		# local repository
+		case $repository in
+		/*) ;;
+		*) repository=${CVSROOT?}/$repository
+		esac
+		if test ! -d "$repository"
+		then
+			echo >&2 "$0: $repository: bad repository (see CVS/Repository)"
+			exit 1
+		fi
+	esac
+fi
+
+# Use $rlog's -zLT option, if $rlog supports it.
+case `$rlog -zLT 2>&1` in
+*' option'*) ;;
+*)
+	case $rlog_options in
+	'') rlog_options=-zLT;;
+	?*) rlog_options=-zLT$nl$rlog_options
+	esac
+esac
+
+# With no arguments, examine all files under the RCS directory.
+case $# in
+0)
+	case $repository in
+	'')
+		oldIFS=$IFS
+		IFS=$nl
+		case $recursive in
+		t)
+			RCSdirs=`find . -name RCS -type d -print`
+			filesFromRCSfiles='s|,v$||; s|/RCS/|/|; s|^\./||'
+			files=`
+				{
+					case $RCSdirs in
+					?*) find $RCSdirs \
+							-type f \
+							! -name '*_' \
+							! -name ',*,' \
+							! -name '.*_' \
+							! -name .rcsfreeze.log \
+							! -name .rcsfreeze.ver \
+							-print
+					esac
+					find . -name '*,v' -print
+				} |
+				sort -u |
+				sed "$filesFromRCSfiles"
+			`;;
+		*)
+			files=
+			for file in RCS/.* RCS/* .*,v *,v
+			do
+				case $file in
+				RCS/. | RCS/.. | RCS/,*, | RCS/*_) continue;;
+				RCS/.rcsfreeze.log | RCS/.rcsfreeze.ver) continue;;
+				RCS/.\* | RCS/\* | .\*,v | \*,v) test -f "$file" || continue;;
+				RCS/*,v | RCS/.*,v) ;;
+				RCS/* | RCS/.*) test -f "$file" || continue
+				esac
+				case $files in
+				'') files=$file;;
+				?*) files=$files$nl$file
+				esac
+			done
+			case $files in
+			'') exit 0
+			esac
+		esac
+		set x $files
+		shift
+		IFS=$oldIFS
+	esac
+esac
+
+llogout=$TMPDIR/rcs2log$$l
+rlogout=$TMPDIR/rcs2log$$r
+trap exit 1 2 13 15
+trap "rm -f $llogout $rlogout; exit 1" 0
+
+case $datearg in
+?*) $rlog $rlog_options "$datearg" ${1+"$@"} >$rlogout;;
+'') $rlog $rlog_options ${1+"$@"} >$rlogout
+esac || exit
 
 
 # Get the full name of each author the logs mention, and set initialize_fullname
@@ -374,14 +326,17 @@ case $loginFullnameMailaddrs in
 		sed 's/["\\]/\\&/g' >$llogout <<EOF || exit
 $loginFullnameMailaddrs
 EOF
-		loginFullnameMailaddrs=`cat $llogout`;;
+		loginFullnameMailaddrs=`cat $llogout`
 	esac
 
 	oldIFS=$IFS
 	IFS=$nl
 	for loginFullnameMailaddr in $loginFullnameMailaddrs
 	do
-		IFS=$tab
+		case $loginFullnameMailaddr in
+		*"$tab"*) IFS=$tab;;
+		*) IFS=:
+		esac
 		set x $loginFullnameMailaddr
 		login=$2
 		fullname=$3
@@ -391,26 +346,25 @@ EOF
 		initialize_mailaddr="$initialize_mailaddr
 			mailaddr[\"$login\"] = \"$mailaddr\""
 	done
-	IFS=$oldIFS;;
+	IFS=$oldIFS
 esac
 
-case $logins in
-?*)
-	sort -u -o $llogout <<EOF
+case $llogout in
+?*) sort -u -o $llogout <<EOF || exit
 $logins
 EOF
-	;;
-'')
-	: ;;
-esac >$llogout || exit
-
+esac
 output_authors='/^date: / {
 	if ($2 ~ /^[0-9]*[-\/][0-9][0-9][-\/][0-9][0-9]$/ && $3 ~ /^[0-9][0-9]:[0-9][0-9]:[0-9][0-9][-+0-9:]*;$/ && $4 == "author:" && $5 ~ /^[^;]*;$/) {
 		print substr($5, 1, length($5)-1)
 	}
 }'
 authors=`
-	$AWK "$output_authors" <"$rlogfile" | sort -u | comm -23 - $llogout
+	$AWK "$output_authors" <$rlogout |
+	case $llogout in
+	'') sort -u;;
+	?*) sort -u | comm -23 - $llogout
+	esac
 `
 case $authors in
 ?*)
@@ -482,13 +436,13 @@ EOF
 			)
 		} 2>/dev/null |
 		$AWK -F: "$awkscript"
-	`$initialize_fullname;;
+	`$initialize_fullname
 esac
 
 
 # Function to print a single log line.
 # We don't use awk functions, to stay compatible with old awk versions.
-# `Log' is the log message.
+# `Log' is the log message (with \n replaced by \001).
 # `files' contains the affected files.
 printlogline='{
 
@@ -498,25 +452,19 @@ printlogline='{
 	#	* file (function): comment
 	if (Log ~ /^\([^)]*\): /) {
 		i = index(Log, ")")
-		filefunc = substr(Log, 1, i)
-		while ((j = index(filefunc, "\n"))) {
-			files = files " " substr(filefunc, 1, j-1)
-			filefunc = substr(filefunc, j+1)
-		}
-		files = files " " filefunc
+		files = files " " substr(Log, 1, i)
 		Log = substr(Log, i+3)
 	}
 
 	# If "label: comment" is too long, break the line after the ":".
 	sep = " "
-	i = index(Log, "\n")
-	if ('"$length"' <= '"$indent"' + 1 + length(files) + i) sep = "\n" indent_string
+	if ('"$length"' <= '"$indent"' + 1 + length(files) + index(Log, SOH)) sep = "\n" indent_string
 
 	# Print the label.
 	printf "%s*%s:", indent_string, files
 
-	# Print each line of the log.
-	while (i) {
+	# Print each line of the log, transliterating \001 to \n.
+	while ((i = index(Log, SOH)) != 0) {
 		logline = substr(Log, 1, i-1)
 		if (logline ~ /[^'"$tab"' ]/) {
 			printf "%s%s\n", sep, logline
@@ -525,7 +473,6 @@ printlogline='{
 		}
 		sep = indent_string
 		Log = substr(Log, i+1)
-		i = index(Log, "\n")
 	}
 }'
 
@@ -546,27 +493,24 @@ case $hostname in
 	*)
 		domainname=`(domainname) 2>/dev/null` &&
 		case $domainname in
-		*.*) hostname=$hostname.$domainname;;
-		esac;;
-	esac;;
+		*.*) hostname=$hostname.$domainname
+		esac
+	esac
 esac
 
 
 # Process the rlog output, generating ChangeLog style entries.
 
 # First, reformat the rlog output so that each line contains one log entry.
-# Transliterate \n to SOH so that multiline entries fit on a single line.
+# Transliterate \n to \001 so that multiline entries fit on a single line.
 # Discard irrelevant rlog output.
-$AWK '
-	BEGIN {
-		pository = "'"$pository"'"
-		SOH="'"$SOH"'"
-	}
-	/^RCS file: / {
-		if (pository != "") {
-			filename = substr($0, 11)
-			if (substr(filename, 1, length(pository)) == pository) {
-				filename = substr(filename, length(pository) + 1)
+$AWK <$rlogout '
+	BEGIN { repository = "'"$repository"'" }
+	/^RCS file:/ {
+		if (repository != "") {
+			filename = $3
+			if (substr(filename, 1, length(repository) + 1) == repository "/") {
+				filename = substr(filename, length(repository) + 2)
 			}
 			if (filename ~ /,v$/) {
 				filename = substr(filename, 1, length(filename) - 2)
@@ -579,7 +523,7 @@ $AWK '
 		}
 		rev = "?"
 	}
-	/^Working file: / { if (repository == "") filename = substr($0, 15) }
+	/^Working file:/ { if (repository == "") filename = $3 }
 	/'"$rlog_revision_pattern"'/, /^(-----------*|===========*)$/ {
 		line = $0
 		if (line ~ /'"$rlog_revision_pattern"'/) {
@@ -600,7 +544,7 @@ $AWK '
 			}
 			time = substr($3, 1, length($3) - 1)
 			author = substr($5, 1, length($5)-1)
-			printf "%s%s%s%s%s%s%s%s%s%s", filename, SOH, rev, SOH, date, SOH, time, SOH, author, SOH
+			printf "%s %s %s %s %s %c", filename, rev, date, time, author, 1
 			rev = "?"
 			next
 		}
@@ -609,24 +553,28 @@ $AWK '
 		if (line == "Initial revision" || line ~ /^file .+ was initially added on branch .+\.$/) {
 			line = "New file."
 		}
-		printf "%s%s", line, SOH
+		printf "%s%c", line, 1
 	}
-' <"$rlogfile" |
+' |
 
 # Now each line is of the form
-# FILENAME@REVISION@YYYY-MM-DD@HH:MM:SS[+-TIMEZONE]@AUTHOR@LOG
-#	where @ stands for an SOH (octal code 001),
-#	and each line of LOG is terminated by SOH instead of \n.
+# FILENAME REVISION YYYY-MM-DD HH:MM:SS[+-TIMEZONE] AUTHOR \001LOG
+#	where \001 stands for a carriage return,
+#	and each line of the log is terminated by \001 instead of \n.
 # Sort the log entries, first by date+time (in reverse order),
 # then by author, then by log entry, and finally by file name and revision
 # (just in case).
-sort -t"$SOH" +2 -4r +4 +0 |
+sort +2 -4r +4 +0 |
 
 # Finally, reformat the sorted log entries.
-$AWK -F"$SOH" '
+$AWK '
 	BEGIN {
 		logTZ = "'"$logTZ"'"
 		revision = "'"$revision"'"
+
+		# Some awk variants do not understand "\001", so we have to
+		# put the char directly in the file.
+		SOH="" # <-- There is a single SOH (octal code 001) here.
 
 		# Initialize the fullname and mailaddr associative arrays.
 		'"$initialize_fullname"'
@@ -643,8 +591,7 @@ $AWK -F"$SOH" '
 	}
 
 	{
-		newlog = ""
-		for (i = 6; i < NF; i++) newlog = newlog $i "\n"
+		newlog = substr($0, 1 + index($0, SOH))
 
 		# Ignore log entries prefixed by "#".
 		if (newlog ~ /^#/) { next }
@@ -723,7 +670,7 @@ $AWK -F"$SOH" '
 
 # Exit successfully.
 
-exec rm -fr $logdir
+exec rm -f $llogout $rlogout
 
 # Local Variables:
 # tab-width:4

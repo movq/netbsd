@@ -1,8 +1,6 @@
 ## Process this file with automake to produce Makefile.in
 # Makefile for GNU CVS documentation (excluding man pages - see ../man).
-# Copyright (C) 1986, 1987, 1988, 1989, 1990, 1991, 1992, 1993, 1994,
-#               1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003
-#               Free Software Foundation, Inc.
+# Copyright (C) 1986, 1988-1990, 2000 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -15,16 +13,15 @@
 # GNU General Public License for more details.
 
 info_TEXINFOS = cvs.texinfo cvsclient.texi
-man_MANS = cvs.1
 
-PSS = \
+POSTSCRIPTS = \
 	cvs.ps \
 	cvs-paper.ps \
 	cvsclient.ps
 
 PDFS = \
-	cvs.pdf \
 	cvs-paper.pdf \
+	cvs.pdf \
 	cvsclient.pdf
 
 TXTS = \
@@ -32,26 +29,25 @@ TXTS = \
 	cvsclient.txt
 
 EXTRA_DIST = \
-	$(PSS) \
+	$(POSTSCRIPTS) \
 	.cvsignore \
 	ChangeLog.fsf \
 	RCSFILES \
 	mdate-sh \
-	cvs.1 \
-	cvs-paper.ms \
-	cvs.man.header \
-	cvs.man.footer
+	cvs-paper.ms
 
-MOSTLYCLEANFILES = \
+CLEANFILES = \
+	$(PDFS) \
 	$(TXTS)
 
-# These Automake generates MOSTLYCLEAN targets for PostScripts genersted from
-# TEXINFOS, but it shouldn't when those files are in EXTRA_DIST
 MAINTAINERCLEANFILES = \
-	$(PSS)
+	cvs-paper.ps
 
-doc: info ps
-.PHONY: doc
+doc ps: $(POSTSCRIPTS)
+.PHONY: doc ps
+
+pdf: $(PDFS)
+.PHONY: pdf
 
 txt: $(TXTS)
 .PHONY: txt
@@ -62,8 +58,8 @@ dvi: cvs.dvi cvsclient.dvi
 # FIXME-AUTOMAKE:
 # For some reason if I remove version.texi, it doesn't get built automatically.
 # This needs to be fixed in automake.
-cvs.txt: cvs.texinfo $(srcdir)/version.texi
-cvsclient.txt: cvsclient.texi $(srcdir)/version-client.texi
+cvs.aux cvs.pdf cvs.txt: cvs.texinfo $(srcdir)/version.texi
+cvsclient.aux cvsclient.pdf cvsclient.txt: cvsclient.texi
 
 # These targets need to be very specific so that the other PDFs get generated
 # correctly.  If they are more generic and cvs.ps is made before cvs.pdf, then
@@ -74,29 +70,36 @@ cvs-paper.ps: cvs-paper.ms
 	mv $@-t $@
 
 cvs-paper.pdf: cvs-paper.ps
-	ps2pdf $< $@
+	$(PS2PDF) $< $@
 
-# Targets to build a man page from cvs.texinfo.
-cvs.1: @MAINTAINER_MODE_TRUE@ mkman cvs.man.header cvs.texinfo cvs.man.footer
-	./mkman $(srcdir)/cvs.man.header $(srcdir)/cvs.texinfo \
-		$(srcdir)/cvs.man.footer >$@
+SUFFIXES = .aux .txt .pdf
 
 # texinfo based targets automake neglects to include
-SUFFIXES = .txt
+.texinfo.pdf:
+	TEXINPUTS=$(srcdir):$$TEXINPUTS \
+	  MAKEINFO='$(MAKEINFO) -I $(srcdir)' $(TEXI2DVI) --pdf --batch $<
+.txi.pdf:
+	TEXINPUTS=$(srcdir):$$TEXINPUTS \
+	  MAKEINFO='$(MAKEINFO) -I $(srcdir)' $(TEXI2DVI) --pdf --batch $<
+.texi.pdf:
+	TEXINPUTS=$(srcdir):$$TEXINPUTS \
+	  MAKEINFO='$(MAKEINFO) -I $(srcdir)' $(TEXI2DVI) --pdf --batch $<
+
 .texinfo.txt:
-	$(MAKEINFO) $(AM_MAKEINFOFLAGS) $(MAKEINFOFLAGS) -I $(srcdir) \
-	 --no-headers -o $@ `test -f '$<' || echo '$(srcdir)/'`$<
+	TEXINPUTS=$(srcdir):$$TEXINPUTS \
+	  MAKEINFO='$(MAKEINFO) -I $(srcdir)' $(MAKEINFO) $< --no-headers -o $@
 .txi.txt:
-	$(MAKEINFO) $(AM_MAKEINFOFLAGS) $(MAKEINFOFLAGS) -I $(srcdir) \
-	 --no-headers -o $@ `test -f '$<' || echo '$(srcdir)/'`$<
+	TEXINPUTS=$(srcdir):$$TEXINPUTS \
+	  MAKEINFO='$(MAKEINFO) -I $(srcdir)' $(MAKEINFO) $< --no-headers -o $@
 .texi.txt:
-	$(MAKEINFO) $(AM_MAKEINFOFLAGS) $(MAKEINFOFLAGS) -I $(srcdir) \
-	 --no-headers -o $@ `test -f '$<' || echo '$(srcdir)/'`$<
+	TEXINPUTS=$(srcdir):$$TEXINPUTS \
+	  MAKEINFO='$(MAKEINFO) -I $(srcdir)' $(MAKEINFO) $< --no-headers -o $@
 
 ##
 ## MAINTAINER Targets
 ##
 
+## realclean ##
 # for backwards compatibility with the old makefiles
 realclean: maintainer-clean
 .PHONY: realclean

@@ -15,36 +15,32 @@ extern int cvsencrypt;
 /* Whether the connection should use per-packet authentication.  */
 extern int cvsauthenticate;
 
-#ifdef __STDC__
-struct buffer;
-#endif
+#ifdef ENCRYPTION
 
-# ifdef ENCRYPTION
-
-#   ifdef HAVE_KERBEROS
+#ifdef HAVE_KERBEROS
 
 /* We can't declare the arguments without including krb.h, and I don't
    want to do that in every file.  */
 extern struct buffer *krb_encrypt_buffer_initialize ();
 
-#   endif /* HAVE_KERBEROS */
+#endif /* HAVE_KERBEROS */
 
-#   ifdef HAVE_GSSAPI
+#ifdef HAVE_GSSAPI
 
 /* Set this to turn on GSSAPI encryption.  */
 extern int cvs_gssapi_encrypt;
 
-#   endif /* HAVE_GSSAPI */
+#endif /* HAVE_GSSAPI */
 
-# endif /* ENCRYPTION */
+#endif /* ENCRYPTION */
 
-# ifdef HAVE_GSSAPI
+#ifdef HAVE_GSSAPI
 
 /* We can't declare the arguments without including gssapi.h, and I
    don't want to do that in every file.  */
 extern struct buffer *cvs_gssapi_wrap_buffer_initialize ();
 
-# endif /* HAVE_GSSAPI */
+#endif /* HAVE_GSSAPI */
 
 #endif /* defined (CLIENT_SUPPORT) || defined (SERVER_SUPPORT) */
 
@@ -58,27 +54,25 @@ extern int server_started;
 /* Is the -P option to checkout or update specified?  */
 extern int client_prune_dirs;
 
-# ifdef AUTH_CLIENT_SUPPORT
+#ifdef AUTH_CLIENT_SUPPORT
 extern int use_authenticating_server;
-# endif /* AUTH_CLIENT_SUPPORT */
-# if defined (AUTH_CLIENT_SUPPORT) || defined (HAVE_GSSAPI)
-void connect_to_pserver PROTO ((cvsroot_t *,
-				struct buffer **,
-				struct buffer **,
-				int, int ));
-#   ifndef CVS_AUTH_PORT
-#     define CVS_AUTH_PORT 2401
-#   endif /* CVS_AUTH_PORT */
-# endif /* (AUTH_CLIENT_SUPPORT) || defined (HAVE_GSSAPI) */
+void connect_to_pserver PROTO ((int *tofdp, int* fromfdp, int verify_only,
+				int do_gssapi));
+# ifndef CVS_AUTH_PORT
+# define CVS_AUTH_PORT 2401
+# endif /* CVS_AUTH_PORT */
+#endif /* AUTH_CLIENT_SUPPORT */
 
-# if HAVE_KERBEROS
-#   ifndef CVS_PORT
-#     define CVS_PORT 1999
-#   endif
-# endif /* HAVE_KERBEROS */
+#if defined (AUTH_SERVER_SUPPORT) || (defined (SERVER_SUPPORT) && defined (HAVE_GSSAPI))
+extern void pserver_authenticate_connection PROTO ((void));
+#endif
+
+#if defined (SERVER_SUPPORT) && defined (HAVE_KERBEROS)
+extern void kserver_authenticate_connection PROTO ((void));
+#endif
 
 /* Talking to the server. */
-void send_to_server PROTO((const char *str, size_t len));
+void send_to_server PROTO((char *str, size_t len));
 void read_from_server PROTO((char *buf, size_t len));
 
 /* Internal functions that handle client communication to server, etc.  */
@@ -100,7 +94,7 @@ send_file_names PROTO((int argc, char **argv, unsigned int flags));
 
 /* Flags for send_file_names.  */
 /* Expand wild cards?  */
-# define SEND_EXPAND_WILD 1
+#define SEND_EXPAND_WILD 1
 
 /*
  * Send Repository, Modified and Entry.  argc and argv contain only
@@ -112,10 +106,10 @@ send_files PROTO((int argc, char **argv, int local, int aflag,
 		  unsigned int flags));
 
 /* Flags for send_files.  */
-# define SEND_BUILD_DIRS 1
-# define SEND_FORCE 2
-# define SEND_NO_CONTENTS 4
-# define BACKUP_MODIFIED_FILES 8
+#define SEND_BUILD_DIRS 1
+#define SEND_FORCE 2
+#define SEND_NO_CONTENTS 4
+#define BACKUP_MODIFIED_FILES 8
 
 /* Send an argument to the remote server.  */
 void
@@ -125,8 +119,7 @@ send_arg PROTO((char *string));
 void
 send_option_string PROTO((char *string));
 
-extern void send_a_repository PROTO ((const char *, const char *,
-                                      const char *));
+extern void send_a_repository PROTO ((char *, char *, char *));
 
 #endif /* CLIENT_SUPPORT */
 
@@ -204,6 +197,5 @@ extern int client_process_import_file
 	   int targc, char *targv[], char *repository, int all_files_binary,
 	   int modtime));
 extern void client_import_done PROTO((void));
-extern void client_notify PROTO((const char *, const char *, const char *, int,
-                                 const char *));
+extern void client_notify PROTO((char *, char *, char *, int, char *));
 #endif /* CLIENT_SUPPORT */

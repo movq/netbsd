@@ -80,7 +80,7 @@ AC_MSG_RESULT([$acx_gssapi_cv_gssapi])
 # Set up GSSAPI includes for later use.  We don't bother to check for
 # $acx_gssapi_cv_gssapi=no here since that will be caught later.
 #
-if test x$acx_gssapi_cv_gssapi = xyes; then
+if test x$acx_gssapi_cv_gssapi = yes; then
   # no special includes necessary
   GSSAPI_INCLUDES=""
 else
@@ -181,13 +181,7 @@ when using GSSAPI.])
   AC_SEARCH_LIBS([__dn_expand], [resolv])
 
   #
-  # crypt              Needed by roken under FreeBSD 4.6.
-  #
-  AC_SEARCH_LIBS([crypt], [crypt])
-
-  #
   # roken		Heimdal K 0.3d		-lresolv
-  # roken               FreeBSD 4.6             -lcrypt
   #
   AC_SEARCH_LIBS([roken_gethostbyaddr], [roken])
 

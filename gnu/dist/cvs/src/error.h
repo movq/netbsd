@@ -11,8 +11,8 @@
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
    GNU General Public License for more details.  */
 
-#ifndef ERROR_H
-#define ERROR_H
+#ifndef _error_h_
+#define _error_h_
 
 /* Add prototype support.  Normally this is done in cvs.h, but that
    doesn't get included from lib/savecwd.c.  */
@@ -32,9 +32,8 @@
 /* The __-protected variants of `format' and `printf' attributes
    are accepted by gcc versions 2.6.4 (effectively 2.7) and later.  */
 # if __GNUC__ < 2 || (__GNUC__ == 2 && __GNUC_MINOR__ < 7)
-#  define __format__	format
-#  define __printf__	printf
-#  define __noreturn__	noreturn
+#  define __format__ format
+#  define __printf__ printf
 # endif
 #endif
 
@@ -47,11 +46,7 @@ void error ();
 
 /* Exit due to an error.  Similar to error (1, 0, "message"), but call
    it in the case where the message has already been printed.  */
-#ifdef __STDC__
-void error_exit (void) __attribute__ ((__noreturn__));
-#else
-void error_exit ();
-#endif
+extern void error_exit PROTO ((void));
 
 /* If non-zero, error will use the CVS protocol to report error
    messages.  This will only be set in the CVS server parent process;
@@ -59,4 +54,4 @@ void error_exit ();
    process and packages up its stderr in the protocol.  */
 extern int error_use_protocol;
 
-#endif /* ERROR_H */
+#endif /* _error_h_ */

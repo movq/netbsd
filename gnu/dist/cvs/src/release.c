@@ -94,7 +94,7 @@ release (argc, argv)
 	    case 'q':
 		error (1, 0,
 		       "-q or -Q must be specified before \"%s\"",
-		       cvs_cmd_name);
+		       command_name);
 		break;
 	    case 'd':
 		delete_flag++;
@@ -116,21 +116,16 @@ release (argc, argv)
      * up to the user to take note of them, at least currently
      * (ignore-193 in testsuite)).
      */
-    /* Construct the update command.  Be sure to add authentication and
-       encryption if we are using them currently, else our child process may
-       not be able to communicate with the server.  */
+    /* Construct the update command. */
     update_cmd = xmalloc (strlen (program_path)
-                        + strlen (current_parsed_root->original)
-                        + 1 + 3 + 3 + 16 + 1);
-    sprintf (update_cmd, "%s %s%s-n -q -d %s update",
-             program_path,
-             cvsauthenticate ? "-a " : "",
-             cvsencrypt ? "-x " : "",
-             current_parsed_root->original);
+			  + strlen (CVSroot_original)
+			  + 20);
+    sprintf (update_cmd, "%s -n -q -d %s update",
+             program_path, CVSroot_original);
 
 #ifdef CLIENT_SUPPORT
     /* Start the server; we'll close it after looping. */
-    if (current_parsed_root->isremote)
+    if (client_active)
     {
 	start_server ();
 	ign_setup ();
@@ -221,7 +216,7 @@ release (argc, argv)
 	    if (c)			/* "No" */
 	    {
 		(void) fprintf (stderr, "** `%s' aborted by user choice.\n",
-				cvs_cmd_name);
+				command_name);
 		free (repository);
 		if (restore_cwd (&cwd, NULL))
 		    error_exit ();
@@ -229,37 +224,25 @@ release (argc, argv)
 	    }
 	}
 
-        /* Note:  client.c doesn't like to have other code
-           changing the current directory on it.  So a fair amount
-           of effort is needed to make sure it doesn't get confused
-           about the directory and (for example) overwrite
-           CVS/Entries file in the wrong directory.  See release-17
-           through release-23. */
-
-        free (repository);
-	if (restore_cwd (&cwd, NULL))
-	    exit (EXIT_FAILURE);
-
 	if (1
 #ifdef CLIENT_SUPPORT
-	    && !(current_parsed_root->isremote
+	    && !(client_active
 		 && (!supported_request ("noop")
 		     || !supported_request ("Notify")))
 #endif
 	    )
 	{
-	    int argc = 2;
+	    /* We are chdir'ed into the directory in question.  
+	       So don't pass args to unedit.  */
+	    int argc = 1;
 	    char *argv[3];
 	    argv[0] = "dummy";
-	    argv[1] = thisarg;
-	    argv[2] = NULL;
+	    argv[1] = NULL;
 	    err += unedit (argc, argv);
-            if (restore_cwd (&cwd, NULL))
-                exit (EXIT_FAILURE);
 	}
 
 #ifdef CLIENT_SUPPORT
-        if (current_parsed_root->isremote)
+        if (client_active)
         {
 	    send_to_server ("Argument ", 0);
 	    send_to_server (thisarg, 0);
@@ -272,6 +255,11 @@ release (argc, argv)
 	    history_write ('F', thisarg, "", thisarg, ""); /* F == Free */
         }
 
+        free (repository);
+
+	if (restore_cwd (&cwd, NULL))
+	    error_exit ();
+
 	if (delete_flag)
 	{
 	    /* FIXME?  Shouldn't this just delete the CVS-controlled
@@ -283,18 +271,8 @@ release (argc, argv)
 	}
 
 #ifdef CLIENT_SUPPORT
-        if (current_parsed_root->isremote)
-        {
-	    /* FIXME:
-	     * Is there a good reason why get_server_responses() isn't
-	     * responsible for restoring its initial directory itself when
-	     * finished?
-	     */
-            err += get_server_responses ();
-
-            if (restore_cwd (&cwd, NULL))
-                exit (EXIT_FAILURE);
-        }
+        if (client_active)
+	    err += get_server_responses ();
 #endif /* CLIENT_SUPPORT */
     }
 
@@ -303,7 +281,7 @@ release (argc, argv)
     free_cwd (&cwd);
 
 #ifdef CLIENT_SUPPORT
-    if (current_parsed_root->isremote)
+    if (client_active)
     {
 	/* Unfortunately, client.c doesn't offer a way to close
 	   the connection without waiting for responses.  The extra
