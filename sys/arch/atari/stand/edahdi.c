@@ -1,4 +1,4 @@
-/*	$NetBSD: edahdi.c,v 1.1 1996/05/16 19:51:25 leo Exp $	*/
+/*	$NetBSD: edahdi.c,v 1.1.1.1 1996/05/16 19:51:25 leo Exp $	*/
 
 /*
  * Copyright (c) 1996 Leo Weppelman, Waldi Ravens.

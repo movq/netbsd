@@ -1,5 +1,11 @@
-#	$NetBSD: Makefile,v 1.1 1996/02/29 11:41:31 leo Exp $
+#	$NetBSD: Makefile,v 1.1.1.1 1996/05/16 19:51:26 leo Exp $
 
-SUBDIR=	installboot libsa bootxx xxboot
+PROG=	edahdi
+DPADD=	${LIBTERMCAP}
+LDADD=	-ltermcap
+MLINKS=	edahdi.1
+BINDIR=	/sbin
 
-.include <bsd.subdir.mk>
+CFLAGS+=-Wall
+
+.include <bsd.prog.mk>
