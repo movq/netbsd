@@ -1,6 +1,6 @@
 /*-
- * Copyright (c) 1991 The Regents of the University of California.
- * All rights reserved.
+ * Copyright (c) 1991, 1993
+ *	The Regents of the University of California.  All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Edward Sze-Tyan Wang.
@@ -35,7 +35,7 @@
  */
 
 #ifndef lint
-static char sccsid[] = "@(#)misc.c	5.1 (Berkeley) 7/21/91";
+static char sccsid[] = "@(#)misc.c	8.1 (Berkeley) 6/6/93";
 #endif /* not lint */
 
 #include <sys/types.h>
@@ -50,13 +50,13 @@ static char sccsid[] = "@(#)misc.c	5.1 (Berkeley) 7/21/91";
 void
 ierr()
 {
-	err("%s: %s", fname, strerror(errno));
+	err(0, "%s: %s", fname, strerror(errno));
 }
 
 void
 oerr()
 {
-	err("stdout: %s", strerror(errno));
+	err(1, "stdout: %s", strerror(errno));
 }
 
 #if __STDC__
@@ -67,9 +67,10 @@ oerr()
 
 void
 #if __STDC__
-err(const char *fmt, ...)
+err(int fatal, const char *fmt, ...)
 #else
-err(fmt, va_alist)
+err(fatal, fmt, va_alist)
+	int fatal;
 	char *fmt;
 	va_dcl
 #endif
@@ -84,6 +85,7 @@ err(fmt, va_alist)
 	(void)vfprintf(stderr, fmt, ap);
 	va_end(ap);
 	(void)fprintf(stderr, "\n");
-	exit(1);
-	/* NOTREACHED */
+	if (fatal)
+		exit(1);
+	rval = 1;
 }

@@ -1,6 +1,6 @@
 /*-
- * Copyright (c) 1991 The Regents of the University of California.
- * All rights reserved.
+ * Copyright (c) 1991, 1993
+ *	The Regents of the University of California.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -30,7 +30,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)extern.h	5.1 (Berkeley) 7/21/91
+ *	@(#)extern.h	8.1 (Berkeley) 6/6/93
  */
 
 #define	WR(p, size) \
@@ -39,15 +39,15 @@
 
 enum STYLE { NOTSET = 0, FBYTES, FLINES, RBYTES, RLINES, REVERSE };
 
-void	forward __P((FILE *, enum STYLE, long, struct stat *));
-void	reverse __P((FILE *, enum STYLE, long, struct stat *));
+void forward __P((FILE *, enum STYLE, long, struct stat *));
+void reverse __P((FILE *, enum STYLE, long, struct stat *));
 
-void	bytes __P((FILE *, off_t));
-void	lines __P((FILE *, off_t));
+void bytes __P((FILE *, off_t));
+void lines __P((FILE *, off_t));
 
-void	err __P((const char *fmt, ...));
-void	ierr __P((void));
-void	oerr __P((void));
+void err __P((int fatal, const char *fmt, ...));
+void ierr __P((void));
+void oerr __P((void));
 
 extern int fflag, rflag, rval;
 extern char *fname;
