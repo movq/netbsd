@@ -35,7 +35,7 @@
  *
  *	@(#)DEFS.h	5.1 (Berkeley) 4/23/90
  *
- *	$Id: DEFS.h,v 1.1 1993/09/17 18:43:46 phil Exp $
+ *	$Id: DEFS.h,v 1.1.1.1 1993/09/17 18:43:47 phil Exp $
  *
  *  Modified for the ns532 by Phil Nelson, 12/1/92
  *

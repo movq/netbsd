@@ -24,7 +24,7 @@
  * the rights to redistribute these changes.
  */
 /*
- *	$Id: bzero.c,v 1.1 1993/09/17 18:43:47 phil Exp $ 
+ *	$Id: bzero.c,v 1.1.1.1 1993/09/17 18:43:48 phil Exp $ 
  */
 /*
  *	Object:

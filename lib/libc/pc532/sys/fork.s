@@ -18,7 +18,7 @@
  * 29-Apr-92  Johannes Helander (jvh) at Helsinki University of Technology
  *	Created.
  *
- *	$Id: fork.s,v 1.1 1993/09/17 18:43:50 phil Exp $
+ *	$Id: fork.s,v 1.1.1.1 1993/09/17 18:43:51 phil Exp $
  */
 
 #include <sys/syscall.h>

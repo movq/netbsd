@@ -18,7 +18,7 @@
  * 29-Apr-92  Tero Kivinen (kivinen) at Helsinki University of Technology
  *	Created.
  *
- *	$Id: ldexp.s,v 1.1 1993/09/17 18:43:46 phil Exp $
+ *	$Id: ldexp.s,v 1.1.1.1 1993/09/17 18:43:47 phil Exp $
  */
 
 /*
