@@ -1,4 +1,4 @@
-/*	$NetBSD: ip_fil_solaris.c,v 1.1 2004/03/28 08:55:35 martti Exp $	*/
+/*	$NetBSD: ip_fil_solaris.c,v 1.1.1.1 2004/03/28 08:55:35 martti Exp $	*/
 
 /*
  * Copyright (C) 1993-2001, 2003 by Darren Reed.

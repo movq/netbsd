@@ -1,4 +1,4 @@
-/*	$NetBSD: md5.c,v 1.1 2004/03/28 08:55:47 martti Exp $	*/
+/*	$NetBSD: md5.c,v 1.1.1.1 2004/03/28 08:55:47 martti Exp $	*/
 
 
 

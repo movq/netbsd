@@ -1,4 +1,4 @@
-/*	$NetBSD: printfraginfo.c,v 1.1 2004/03/28 08:56:20 martti Exp $	*/
+/*	$NetBSD: printfraginfo.c,v 1.1.1.1 2004/03/28 08:56:20 martti Exp $	*/
 
 /*
  * Copyright (C) 2004 by Darren Reed.

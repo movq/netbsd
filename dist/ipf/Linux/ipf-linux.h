@@ -1,4 +1,4 @@
-/*	$NetBSD: ipf-linux.h,v 1.1 2004/03/28 08:56:03 martti Exp $	*/
+/*	$NetBSD: ipf-linux.h,v 1.1.1.1 2004/03/28 08:56:03 martti Exp $	*/
 
 #ifndef __IPF_LINUX_H__
 #define __IPF_LINUX_H__

@@ -1,4 +1,4 @@
-/*	$NetBSD: load_hash.c,v 1.1 2004/03/28 08:56:19 martti Exp $	*/
+/*	$NetBSD: load_hash.c,v 1.1.1.1 2004/03/28 08:56:19 martti Exp $	*/
 
 /*
  * Copyright (C) 2002 by Darren Reed.

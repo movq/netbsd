@@ -1,4 +1,4 @@
-/*	$NetBSD: kvatoname.c,v 1.1 2004/03/28 08:56:19 martti Exp $	*/
+/*	$NetBSD: kvatoname.c,v 1.1.1.1 2004/03/28 08:56:19 martti Exp $	*/
 
 #include "ipf.h"
 

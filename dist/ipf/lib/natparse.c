@@ -1,4 +1,4 @@
-/*	$NetBSD: natparse.c,v 1.1 2004/03/28 08:56:19 martti Exp $	*/
+/*	$NetBSD: natparse.c,v 1.1.1.1 2004/03/28 08:56:19 martti Exp $	*/
 
 /*
  * Copyright (C) 1993-2001 by Darren Reed.

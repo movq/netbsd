@@ -1,4 +1,4 @@
-/*	$NetBSD: lex_var.h,v 1.1 2004/03/28 08:56:35 martti Exp $	*/
+/*	$NetBSD: lex_var.h,v 1.1.1.1 2004/03/28 08:56:35 martti Exp $	*/
 
 
 extern	long		string_start;

@@ -1,4 +1,4 @@
-/*	$NetBSD: var.c,v 1.1 2004/03/28 08:56:21 martti Exp $	*/
+/*	$NetBSD: var.c,v 1.1.1.1 2004/03/28 08:56:21 martti Exp $	*/
 
 #include <ctype.h>
 

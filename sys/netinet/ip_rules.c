@@ -1,4 +1,4 @@
-/*	$NetBSD: ip_rules.c,v 1.1 2004/03/28 08:56:49 martti Exp $	*/
+/*	$NetBSD: ip_rules.c,v 1.1.1.1 2004/03/28 08:56:49 martti Exp $	*/
 
 /*
 * Copyright (C) 1993-2000 by Darren Reed.

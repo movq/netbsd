@@ -1,4 +1,4 @@
-/*	$NetBSD: ip_fil_linux.c,v 1.1 2004/03/28 08:55:34 martti Exp $	*/
+/*	$NetBSD: ip_fil_linux.c,v 1.1.1.1 2004/03/28 08:55:34 martti Exp $	*/
 
 #define _LINUX_TCP_H
 #include <net/checksum.h>
