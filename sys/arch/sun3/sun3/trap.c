@@ -1,4 +1,4 @@
-/*	$NetBSD: trap.c,v 1.31 1994/11/21 21:39:14 gwr Exp $	*/
+/*	$NetBSD: trap.c,v 1.31.2.1 1994/11/30 22:35:07 gwr Exp $	*/
 
 /*
  * Copyright (c) 1994 Gordon W. Ross
@@ -499,10 +499,9 @@ syscall(code, frame)
 	struct frame frame;
 {
 	register caddr_t params;
-	register int i;
 	register struct sysent *callp;
 	register struct proc *p;
-	int error, opc, numsys, s;
+	int error, opc, numsys;
 	u_int argsize;
 	u_quad_t sticks;
 	int args[8];
@@ -515,9 +514,10 @@ syscall(code, frame)
 
 	cnt.v_syscall++;
 	p = curproc;
+	sticks = p->p_sticks;
+
 	p->p_md.md_regs = frame.f_regs;
 	p->p_md.md_flags &= ~MDP_STACKADJ;
-	sticks = p->p_sticks;
 	opc = frame.f_pc - 2;
 	error = 0;
 
@@ -605,42 +605,47 @@ syscall(code, frame)
 	if (KTRPOINT(p, KTR_SYSCALL))
 		ktrsyscall(p->p_tracep, code, callp->sy_narg, args);
 #endif
-#ifdef SYSCALL_DEBUG
-	if (p->p_emul == EMUL_NETBSD) /* XXX */
-		scdebug_call(p, code, callp->sy_narg, args);
-#endif
-	if (error == 0) {
-		rval[0] = 0;
-		rval[1] = frame.f_regs[D1];
-		error = (*callp->sy_call)(p, &args, rval);
-	}
+
+	if (error)
+		goto bad;
+
+	rval[0] = 0;
+	rval[1] = frame.f_regs[D1];
+
+	/* OK, actualy do the system call... */
+	error = (*callp->sy_call)(p, &args, rval);
 
 	switch (error) {
+
 	case 0:
+		/*
+		 * Reinitialize proc pointer `p' as it may be different
+		 * if this is a child returning from fork syscall.
+		 */
+		p = curproc;
 		frame.f_regs[D0] = rval[0];
 		frame.f_regs[D1] = rval[1];
 		frame.f_sr &= ~PSL_C;
 		break;
+
 	case ERESTART:
+		/* The opc already points at the trap instruction. */
 		frame.f_pc = opc;
 		break;
+
 	case EJUSTRETURN:
 		break;
+
 	default:
+	bad:
+#ifdef COMPAT_HPUX
+		if (p->p_emul == EMUL_HPUX)
+			error = bsdtohpuxerrno(error);
+#endif
 		frame.f_regs[D0] = error;
 		frame.f_sr |= PSL_C;	/* carry bit */
 		break;
 	}
-
-	/*
-	 * Reinitialize proc pointer `p' as it may be different
-	 * if this is a child returning from fork syscall.
-	 */
-	p = curproc;
-#ifdef SYSCALL_DEBUG
-	if (p->p_emul == EMUL_NETBSD)			 /* XXX */
-		scdebug_ret(p, code, error, rval[0]);
-#endif
 
 #ifdef COMPAT_SUNOS
 	/* need new p-value for this */
