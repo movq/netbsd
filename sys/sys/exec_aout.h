@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1993 Christopher G. Demetriou
+ * Copyright (c) 1993, 1994 Christopher G. Demetriou
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -27,7 +27,7 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
- *	$Id: exec_aout.h,v 1.1 1994/01/08 07:15:25 cgd Exp $
+ *	$Id: exec_aout.h,v 1.2 1994/01/16 03:05:02 cgd Exp $
  */
 
 #ifndef	_SYS_EXEC_AOUT_H_
