@@ -1,4 +1,4 @@
-/* $NetBSD: ioeb.c,v 1.1 2000/05/09 21:56:02 bjh21 Exp $ */
+/* $NetBSD: ioeb.c,v 1.2 2000/08/18 12:50:01 bjh21 Exp $ */
 
 /*-
  * Copyright (c) 2000 Ben Harris
@@ -30,7 +30,7 @@
 
 #include <sys/param.h>
 
-__KERNEL_RCSID(0, "$NetBSD: ioeb.c,v 1.1 2000/05/09 21:56:02 bjh21 Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ioeb.c,v 1.2 2000/08/18 12:50:01 bjh21 Exp $");
 
 #include <sys/device.h>
 #include <sys/systm.h>
@@ -39,9 +39,12 @@ __KERNEL_RCSID(0, "$NetBSD: ioeb.c,v 1.1 2000/05/09 21:56:02 bjh21 Exp $");
 
 #include <arch/arm26/iobus/iocvar.h>
 #include <arch/arm26/ioc/ioebreg.h>
+#include <arch/arm26/ioc/ioebvar.h>
 
 struct ioeb_softc {
 	struct device sc_dev;
+	bus_space_tag_t sc_iot;
+	bus_space_handle_t sc_ioh;
 };
 
 static int ioeb_match(struct device *, struct cfdata *, void *);
@@ -68,6 +71,20 @@ ioeb_match(struct device *parent, struct cfdata *cf, void *aux)
 static void
 ioeb_attach(struct device *parent, struct device *self, void *aux)
 {
+	struct ioeb_softc *sc = (void *)self;
+	struct ioc_attach_args *ioc = aux;
 
+	sc->sc_iot = ioc->ioc_fast_t;
+	sc->sc_ioh = ioc->ioc_fast_h;
 	printf("\n");
+}
+
+void
+ioeb_irq_clear(struct device *self, int mask)
+{
+	struct ioeb_softc *sc = (void *)self;
+
+	/* The IOEB only controls interrupt 0 */
+	if (mask & IOEB_IRQ_CLEARABLE_MASK)
+		bus_space_write_1(sc->sc_iot, sc->sc_ioh, IOEB_REG_INTRCLR, 0);
 }
