@@ -1,10 +1,9 @@
-#	$NetBSD: MACALLAN,v 1.4 1995/06/27 01:00:38 cgd Exp $
+#	$NetBSD: MACALLAN,v 1.5 1995/08/03 00:09:22 cgd Exp $
 #
 # Kernel for macallan.dssc.cs.cmu.edu.
 
 machine		alpha
 
-makeoptions	CC="gcc -Werror"
 makeoptions	DEBUG="-g"
 
 maxusers 8
@@ -33,9 +32,6 @@ options		INET		# Internet protocol suite
 # 4.3BSD compatibility.  Should be optional, but necessary for now.
 options		COMPAT_43
 
-# OSF/1 binary compatibility
-options		COMPAT_OSF1
-
 # Loadable Kernel Modules
 options		LKM
 
@@ -56,6 +52,7 @@ esp0	at	tcds? slot ?
 esp1	at	tcds? slot ?
 #sfb*	at	tc? slot ? offset ?
 
+scsibus0 at	esp0
 scsibus* at	esp?
 
 sd0	at	scsibus0 target 0 lun 0
