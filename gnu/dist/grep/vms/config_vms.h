@@ -1,4 +1,4 @@
-/*	$NetBSD: config_vms.h,v 1.1 2003/01/26 23:27:31 wiz Exp $	*/
+/*	$NetBSD: config_vms.h,v 1.1.1.1 2003/01/26 23:27:31 wiz Exp $	*/
 
 /* Configuration file for OpenVMS */
 

@@ -1,4 +1,4 @@
-.\"	$NetBSD: output.0,v 1.1 2003/01/26 23:27:32 wiz Exp $
+.\"	$NetBSD: output.0,v 1.1.1.1 2003/01/26 23:27:32 wiz Exp $
 .\"
 @%:@! /bin/sh
 @%:@ Guess values for system-dependent variables and create Makefiles.

@@ -1,4 +1,4 @@
-.\"	$NetBSD: traces.0,v 1.1 2003/01/26 23:27:32 wiz Exp $
+.\"	$NetBSD: traces.0,v 1.1.1.1 2003/01/26 23:27:32 wiz Exp $
 .\"
 m4trace:configure.in:7: -1- m4_pattern_forbid([^_?A[CHUM]_])
 m4trace:configure.in:7: -1- m4_pattern_forbid([_AC_])
