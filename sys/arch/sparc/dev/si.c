@@ -1,4 +1,4 @@
-/*	$NetBSD: si.c,v 1.62 2000/06/26 09:50:00 pk Exp $	*/
+/*	$NetBSD: si.c,v 1.63 2000/06/26 19:54:08 pk Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -101,19 +101,9 @@
 #include <sys/errno.h>
 #include <sys/device.h>
 #include <sys/buf.h>
-#include <sys/proc.h>
-#include <sys/user.h>
-
-#include <vm/vm.h>
 
 #include <machine/bus.h>
 #include <machine/intr.h>
-#include <machine/autoconf.h>
-#include <machine/cpu.h>
-#include <machine/pmap.h>
-
-#include <sparc/sparc/vaddrs.h>
-#include <sparc/sparc/cpuvar.h>
 
 #include <dev/vme/vmereg.h>
 #include <dev/vme/vmevar.h>
@@ -130,8 +120,6 @@
 #ifndef DEBUG
 #define DEBUG XXX
 #endif
-
-#define COUNT_SW_LEFTOVERS	XXX	/* See sw DMA completion code */
 
 #include <dev/ic/ncr5380reg.h>
 #include <dev/ic/ncr5380var.h>
@@ -164,9 +152,7 @@ struct si_dma_handle {
 	int 		dh_flags;
 #define	SIDH_BUSY	0x01		/* This DH is in use */
 #define	SIDH_OUT	0x02		/* DMA does data out (write) */
-	u_char *	dh_addr;	/* KVA of start of buffer */
 	int 		dh_maplen;	/* Original data length */
-	long		dh_startingpa;	/* PA of buffer; for "sw" */
 	bus_dmamap_t	dh_dmamap;
 #define dh_dvma	dh_dmamap->dm_segs[0].ds_addr /* VA of buffer in DVMA space */
 };
@@ -180,10 +166,6 @@ struct si_softc {
 	bus_space_tag_t		sc_bustag;	/* bus tags */
 	bus_dma_tag_t		sc_dmatag;
 	vme_chipset_tag_t	sc_vctag;
-
-	int		sc_adapter_type;
-#define BOARD_ID_SI	0
-#define BOARD_ID_SW	1
 
 	int		sc_adapter_iv_am; /* int. vec + address modifier */
 	struct si_dma_handle *sc_dma;
@@ -200,9 +182,6 @@ struct si_softc {
  * mechanism.  The sc_options member of the softc is OR'd with
  * the value in si_options.
  *
- * On the "sw", interrupts (and thus) reselection don't work, so they're
- * disabled by default.  DMA is still a little dangerous, too.
- *
  * Note, there's a separate sw_options to make life easier.
  */
 #define	SI_ENABLE_DMA	0x01	/* Use DMA (maybe polled) */
@@ -211,87 +190,36 @@ struct si_softc {
 #define	SI_OPTIONS_MASK	(SI_ENABLE_DMA|SI_DMA_INTR|SI_DO_RESELECT)
 #define SI_OPTIONS_BITS	"\10\3RESELECT\2DMA_INTR\1DMA"
 int si_options = SI_ENABLE_DMA|SI_DMA_INTR;
-int sw_options = SI_ENABLE_DMA;
-
-/* How long to wait for DMA before declaring an error. */
-int si_dma_intr_timo = 500;	/* ticks (sec. X 100) */
 
 static int	si_match __P((struct device *, struct cfdata *, void *));
-static int	sw_match __P((struct device *, struct cfdata *, void *));
 static void	si_attach __P((struct device *, struct device *, void *));
-static void	sw_attach __P((struct device *, struct device *, void *));
-static void	si_attach_common __P((struct device *, struct si_softc *));
 static int	si_intr __P((void *));
 static void	si_reset_adapter __P((struct ncr5380_softc *));
-static void	sw_reset_adapter __P((struct ncr5380_softc *));
-static void	(*reset_adapter) __P((struct ncr5380_softc *));
 static void	si_minphys __P((struct buf *));
 
-void si_dma_alloc __P((struct ncr5380_softc *));
-void si_dma_free __P((struct ncr5380_softc *));
-void si_dma_poll __P((struct ncr5380_softc *));
+void	si_dma_alloc __P((struct ncr5380_softc *));
+void	si_dma_free __P((struct ncr5380_softc *));
+void	si_dma_poll __P((struct ncr5380_softc *));
 
-void si_vme_dma_setup __P((struct ncr5380_softc *));
-void si_vme_dma_start __P((struct ncr5380_softc *));
-void si_vme_dma_eop __P((struct ncr5380_softc *));
-void si_vme_dma_stop __P((struct ncr5380_softc *));
+void	si_dma_setup __P((struct ncr5380_softc *));
+void	si_dma_start __P((struct ncr5380_softc *));
+void	si_dma_eop __P((struct ncr5380_softc *));
+void	si_dma_stop __P((struct ncr5380_softc *));
 
-void si_vme_intr_on  __P((struct ncr5380_softc *));
-void si_vme_intr_off __P((struct ncr5380_softc *));
-
-void si_obio_dma_setup __P((struct ncr5380_softc *));
-void si_obio_dma_start __P((struct ncr5380_softc *));
-void si_obio_dma_eop __P((struct ncr5380_softc *));
-void si_obio_dma_stop __P((struct ncr5380_softc *));
-
-void si_obio_intr_on __P((struct ncr5380_softc *));
-void si_obio_intr_off __P((struct ncr5380_softc *));
+void	si_intr_on  __P((struct ncr5380_softc *));
+void	si_intr_off __P((struct ncr5380_softc *));
 
 /* Shorthand bus space access */
 #define SIREG_READ(sc, index) \
 	bus_space_read_2((sc)->sc_regt, (sc)->sc_regh, index)
 #define SIREG_WRITE(sc, index, v) \
 	bus_space_write_2((sc)->sc_regt, (sc)->sc_regh, index, v)
-#define SWREG_READ(sc, index) \
-	bus_space_read_4((sc)->sc_regt, (sc)->sc_regh, index)
-#define SWREG_WRITE(sc, index, v) \
-	bus_space_write_4((sc)->sc_regt, (sc)->sc_regh, index, v)
 
 
 /* The Sun SCSI-3 VME controller. */
 struct cfattach si_ca = {
 	sizeof(struct si_softc), si_match, si_attach
 };
-
-/* The Sun "SCSI Weird" 4/100 obio controller. */
-struct cfattach sw_ca = {
-	sizeof(struct si_softc), sw_match, sw_attach
-};
-
-static int
-sw_match(parent, cf, aux)
-	struct device	*parent;
-	struct cfdata *cf;
-	void *aux;
-{
-	union obio_attach_args *uoba = aux;
-	struct obio4_attach_args *oba;
-
-	/* Nothing but a Sun 4/100 is going to have these devices. */
-	if (cpuinfo.cpu_type != CPUTYP_4_100)
-		return (0);
-
-	if (uoba->uoba_isobio4 == 0)
-		return (0);
-
-	/* Make sure there is something there... */
-	oba = &uoba->uoba_oba4;
-	return (bus_space_probe(oba->oba_bustag, 0, oba->oba_paddr,
-				1,	/* probe size */
-				1,	/* offset */
-				0,	/* flags */
-				NULL, NULL));
-}
 
 static int
 si_match(parent, cf, aux)
@@ -334,6 +262,8 @@ si_attach(parent, self, aux)
 	vme_mapresc_t resc;
 	vme_intr_handle_t	ih;
 	vme_am_t		mod;
+	char bits[64];
+	int i;
 
 	sc->sc_dmatag = va->va_bdt;
 	sc->sc_vctag = ct;
@@ -348,13 +278,11 @@ si_attach(parent, self, aux)
 	ncr_sc->sc_regh = bh;
 
 	sc->sc_options = si_options;
-	sc->sc_adapter_type = BOARD_ID_SI;
-	reset_adapter = si_reset_adapter;
 
-	ncr_sc->sc_dma_setup = si_vme_dma_setup;
-	ncr_sc->sc_dma_start = si_vme_dma_start;
-	ncr_sc->sc_dma_eop   = si_vme_dma_stop;
-	ncr_sc->sc_dma_stop  = si_vme_dma_stop;
+	ncr_sc->sc_dma_setup = si_dma_setup;
+	ncr_sc->sc_dma_start = si_dma_start;
+	ncr_sc->sc_dma_eop   = si_dma_stop;
+	ncr_sc->sc_dma_stop  = si_dma_stop;
 
 	vme_intr_map(ct, va->ilevel, va->ivector, &ih);
 	vme_intr_establish(ct, ih, IPL_BIO, si_intr, sc);
@@ -362,81 +290,6 @@ si_attach(parent, self, aux)
 	printf("\n");
 
 	sc->sc_adapter_iv_am = (mod << 8) | (va->ivector & 0xFF);
-
-	si_attach_common(parent, sc);
-
-	if (sc->sc_options & SI_DO_RESELECT) {
-		/*
-		 * Need to enable interrupts (and DMA!)
-		 * on this H/W for reselect to work.
-		 */
-		ncr_sc->sc_intr_on   = si_vme_intr_on;
-		ncr_sc->sc_intr_off  = si_vme_intr_off;
-	}
-}
-
-static void
-sw_attach(parent, self, aux)
-	struct device	*parent, *self;
-	void		*aux;
-{
-	struct si_softc *sc = (struct si_softc *) self;
-	struct ncr5380_softc *ncr_sc = &sc->ncr_sc;
-	union obio_attach_args *uoba = aux;
-	struct obio4_attach_args *oba = &uoba->uoba_oba4;
-	bus_space_handle_t bh;
-
-	sc->sc_dmatag = oba->oba_dmatag;
-
-	/* Map the controller registers. */
-	if (obio_bus_map(oba->oba_bustag, oba->oba_paddr,
-			 0,
-			 SWREG_BANK_SZ,
-			 BUS_SPACE_MAP_LINEAR,
-			 0, &bh) != 0) {
-		printf("%s: cannot map registers\n", self->dv_xname);
-		return;
-	}
-
-	ncr_sc->sc_regt = oba->oba_bustag;
-	ncr_sc->sc_regh = bh;
-
-	sc->sc_options = sw_options;
-	sc->sc_adapter_type = BOARD_ID_SW;
-	reset_adapter = sw_reset_adapter;
-
-	ncr_sc->sc_dma_setup = si_obio_dma_setup;
-	ncr_sc->sc_dma_start = si_obio_dma_start;
-	ncr_sc->sc_dma_eop   = si_obio_dma_stop;
-	ncr_sc->sc_dma_stop  = si_obio_dma_stop;
-	ncr_sc->sc_intr_on   = si_obio_intr_on;
-	ncr_sc->sc_intr_off  = si_obio_intr_off;
-
-	/*
-	 * Establish interrupt channel.
-	 * Default interrupt priority always is 3.  At least, that's
-	 * what my board seems to be at.  --thorpej
-	 */
-	if (oba->oba_pri == -1)
-		oba->oba_pri = 3;
-
-	(void)bus_intr_establish(oba->oba_bustag,
-				 oba->oba_pri, 0,
-				 si_intr, sc);
-
-	printf(" pri %d\n", oba->oba_pri);
-
-	si_attach_common(parent, sc);
-}
-
-static void
-si_attach_common(parent, sc)
-	struct device	*parent;
-	struct si_softc *sc;
-{
-	struct ncr5380_softc *ncr_sc = &sc->ncr_sc;
-	char bits[64];
-	int error, i;
 
 	/*
 	 * Pull in the options flags.  Allow the user to completely
@@ -478,7 +331,6 @@ si_attach_common(parent, sc)
 		ncr_sc->sc_flags |= NCR5380_FORCE_POLLING;
 	ncr_sc->sc_min_dma_len = MIN_DMA_LEN;
 
-
 	/*
 	 * Allocate DMA handles.
 	 */
@@ -486,20 +338,12 @@ si_attach_common(parent, sc)
 	sc->sc_dma = (struct si_dma_handle *)malloc(i, M_DEVBUF, M_NOWAIT);
 	if (sc->sc_dma == NULL)
 		panic("si: dma handle malloc failed\n");
+
 	for (i = 0; i < SCI_OPENINGS; i++) {
 		sc->sc_dma[i].dh_flags = 0;
 
 		/* Allocate a DMA handle */
-		error = (sc->sc_adapter_type == BOARD_ID_SW)
-			? bus_dmamap_create(
-				sc->sc_dmatag,	/* tag */
-				MAXPHYS,	/* size */
-				1,		/* nsegments */
-				MAXPHYS,	/* maxsegsz */
-				0,		/* boundary */
-				BUS_DMA_NOWAIT,
-				&sc->sc_dma[i].dh_dmamap)
-			: vme_dmamap_create(
+		if (vme_dmamap_create(
 				sc->sc_vctag,	/* VME chip tag */
 				MAXPHYS,	/* size */
 				VME_AM_A24,	/* address modifier */
@@ -509,9 +353,8 @@ si_attach_common(parent, sc)
 				MAXPHYS,	/* maxsegsz */
 				0,		/* boundary */
 				BUS_DMA_NOWAIT,
-				&sc->sc_dma[i].dh_dmamap);
+				&sc->sc_dma[i].dh_dmamap) != 0) {
 
-		if (error != 0) {
 			printf("%s: DMA buffer map create error\n",
 				ncr_sc->sc_dev.dv_xname);
 			return;
@@ -533,8 +376,17 @@ si_attach_common(parent, sc)
 	/*
 	 *  Initialize si board itself.
 	 */
-	reset_adapter(ncr_sc);
+	si_reset_adapter(ncr_sc);
 	ncr5380_attach(ncr_sc);
+
+	if (sc->sc_options & SI_DO_RESELECT) {
+		/*
+		 * Need to enable interrupts (and DMA!)
+		 * on this H/W for reselect to work.
+		 */
+		ncr_sc->sc_intr_on   = si_intr_on;
+		ncr_sc->sc_intr_off  = si_intr_off;
+	}
 }
 
 static void
@@ -567,10 +419,7 @@ si_intr(void *arg)
 	dma_error = 0;
 
 	/* SBC interrupt? DMA interrupt? */
-	if (sc->sc_adapter_type == BOARD_ID_SW)
-		csr = SWREG_READ(ncr_sc, SWREG_CSR);
-	else
-		csr = SIREG_READ(ncr_sc, SIREG_CSR);
+	csr = SIREG_READ(ncr_sc, SIREG_CSR);
 
 	NCR_TRACE("si_intr: csr=0x%x\n", csr);
 
@@ -639,32 +488,6 @@ si_reset_adapter(struct ncr5380_softc *ncr_sc)
 	SCI_CLR_INTR(ncr_sc);
 }
 
-static void
-sw_reset_adapter(struct ncr5380_softc *ncr_sc)
-{
-
-#ifdef	DEBUG
-	if (si_debug) {
-		printf("sw_reset_adapter\n");
-	}
-#endif
-
-	/*
-	 * The reset bits in the CSR are active low.
-	 */
-	SWREG_WRITE(ncr_sc, SWREG_CSR, 0);
-	delay(10);
-	SWREG_WRITE(ncr_sc, SWREG_CSR, SI_CSR_SCSI_RES);
-
-	SWREG_WRITE(ncr_sc, SWREG_DMA_ADDR, 0);
-	SWREG_WRITE(ncr_sc, SWREG_DMA_CNT, 0);
-	delay(10);
-	SWREG_WRITE(ncr_sc, SWREG_CSR, SI_CSR_SCSI_RES | SI_CSR_INTR_EN);
-
-	SCI_CLR_INTR(ncr_sc);
-}
-
-
 /*****************************************************************
  * Common functions for DMA
  ****************************************************************/
@@ -716,11 +539,10 @@ si_dma_alloc(ncr_sc)
 			goto found;
 	}
 	panic("si: no free DMA handles.");
-found:
 
+found:
 	dh = &sc->sc_dma[i];
 	dh->dh_flags = SIDH_BUSY;
-	dh->dh_addr = (u_char*) addr;
 	dh->dh_maplen  = xlen;
 
 	/* Copy the "write" flag for convenience. */
@@ -736,8 +558,8 @@ found:
 	if (bus_dmamap_load(sc->sc_dmatag, dh->dh_dmamap,
 			    (caddr_t)addr, xlen, NULL, BUS_DMA_NOWAIT) != 0) {
 		/* Can't remap segment */
-		printf("si_dma_alloc: can't remap %p/0x%x, doing PIO\n",
-			dh->dh_addr, dh->dh_maplen);
+		printf("si_dma_alloc: can't remap 0x%lx/0x%x, doing PIO\n",
+			addr, dh->dh_maplen);
 		dh->dh_flags = 0;
 		return;
 	}
@@ -793,7 +615,6 @@ void
 si_dma_poll(ncr_sc)
 	struct ncr5380_softc *ncr_sc;
 {
-	struct si_softc *sc = (struct si_softc *)ncr_sc;
 	struct sci_req *sr = ncr_sc->sc_current;
 	int tmo, csr_mask, csr;
 
@@ -806,10 +627,7 @@ si_dma_poll(ncr_sc)
 
 	tmo = 50000;	/* X100 = 5 sec. */
 	for (;;) {
-		if (sc->sc_adapter_type == BOARD_ID_SW)
-			csr = SWREG_READ(ncr_sc, SWREG_CSR);
-		else
-			csr = SIREG_READ(ncr_sc, SIREG_CSR);
+		csr = SIREG_READ(ncr_sc, SIREG_CSR);
 		if (csr & csr_mask)
 			break;
 		if (--tmo <= 0) {
@@ -843,12 +661,12 @@ si_dma_poll(ncr_sc)
  * What a NASTY trick!
  */
 void
-si_vme_intr_on(ncr_sc)
+si_intr_on(ncr_sc)
 	struct ncr5380_softc *ncr_sc;
 {
 	u_int16_t csr;
 
-	si_vme_dma_setup(ncr_sc);
+	si_dma_setup(ncr_sc);
 	csr = SIREG_READ(ncr_sc, SIREG_CSR);
 	csr |= SI_CSR_DMA_EN;
 	SIREG_WRITE(ncr_sc, SIREG_CSR, csr);
@@ -859,7 +677,7 @@ si_vme_intr_on(ncr_sc)
  * about to start playing with the SBC chip.
  */
 void
-si_vme_intr_off(ncr_sc)
+si_intr_off(ncr_sc)
 	struct ncr5380_softc *ncr_sc;
 {
 	u_int16_t csr;
@@ -882,7 +700,7 @@ si_vme_intr_off(ncr_sc)
  * later, in dma_start.
  */
 void
-si_vme_dma_setup(ncr_sc)
+si_dma_setup(ncr_sc)
 	struct ncr5380_softc *ncr_sc;
 {
 	u_int16_t csr;
@@ -915,7 +733,7 @@ si_vme_dma_setup(ncr_sc)
 
 
 void
-si_vme_dma_start(ncr_sc)
+si_dma_start(ncr_sc)
 	struct ncr5380_softc *ncr_sc;
 {
 	struct si_softc *sc = (struct si_softc *)ncr_sc;
@@ -1022,7 +840,7 @@ si_vme_dma_start(ncr_sc)
 
 
 void
-si_vme_dma_eop(ncr_sc)
+si_dma_eop(ncr_sc)
 	struct ncr5380_softc *ncr_sc;
 {
 
@@ -1031,7 +849,7 @@ si_vme_dma_eop(ncr_sc)
 
 
 void
-si_vme_dma_stop(ncr_sc)
+si_dma_stop(ncr_sc)
 	struct ncr5380_softc *ncr_sc;
 {
 	struct si_softc *sc = (struct si_softc *)ncr_sc;
@@ -1079,7 +897,8 @@ si_vme_dma_stop(ncr_sc)
 	 * (Thanks to Matt Jacob)
 	 */
 
-	resid = SIREG_READ(ncr_sc, SIREG_FIFO_CNT) & 0xFFFF;
+	resid = SIREG_READ(ncr_sc, SIREG_FIFO_CNTH) << 16;
+	resid |= SIREG_READ(ncr_sc, SIREG_FIFO_CNT) & 0xFFFF;
 	if (dh->dh_flags & SIDH_OUT)
 		if ((resid > 0) && (resid < sc->sc_xlen))
 			resid++;
@@ -1160,354 +979,4 @@ out:
 	mode &= ~(SCI_MODE_DMA | SCI_MODE_DMA_IE);
 	NCR5380_WRITE(ncr_sc, sci_mode, mode);
 	NCR5380_WRITE(ncr_sc, sci_icmd, 0);
-}
-
-
-/*****************************************************************
- * OBIO functions for DMA
- ****************************************************************/
-
-
-/*
- * This is called when the bus is going idle,
- * so we want to enable the SBC interrupts.
- * That is controlled by the DMA enable!
- * Who would have guessed!
- * What a NASTY trick!
- *
- * XXX THIS MIGHT NOT WORK RIGHT!
- */
-void
-si_obio_intr_on(ncr_sc)
-	struct ncr5380_softc *ncr_sc;
-{
-	u_int32_t csr;
-
-	si_obio_dma_setup(ncr_sc);
-	csr = SWREG_READ(ncr_sc, SWREG_CSR);
-	csr |= SI_CSR_DMA_EN;
-	SWREG_WRITE(ncr_sc, SWREG_CSR, csr);
-}
-
-/*
- * This is called when the bus is idle and we are
- * about to start playing with the SBC chip.
- *
- * XXX THIS MIGHT NOT WORK RIGHT!
- */
-void
-si_obio_intr_off(ncr_sc)
-	struct ncr5380_softc *ncr_sc;
-{
-	u_int32_t csr;
-
-	csr = SWREG_READ(ncr_sc, SWREG_CSR);
-	csr &= ~SI_CSR_DMA_EN;
-	SWREG_WRITE(ncr_sc, SWREG_CSR, csr);
-}
-
-
-/*
- * This function is called during the COMMAND or MSG_IN phase
- * that preceeds a DATA_IN or DATA_OUT phase, in case we need
- * to setup the DMA engine before the bus enters a DATA phase.
- *
- * On the OBIO version we just clear the DMA count and address
- * here (to make sure it stays idle) and do the real setup
- * later, in dma_start.
- */
-void
-si_obio_dma_setup(ncr_sc)
-	struct ncr5380_softc *ncr_sc;
-{
-	u_int32_t csr;
-
-	/* No FIFO to reset on "sw". */
-
-	/* Set direction (assume recv here) */
-	csr = SWREG_READ(ncr_sc, SWREG_CSR);
-	csr &= ~SI_CSR_SEND;
-	SWREG_WRITE(ncr_sc, SWREG_CSR, csr);
-
-	SWREG_WRITE(ncr_sc, SWREG_DMA_ADDR, 0);
-	SWREG_WRITE(ncr_sc, SWREG_DMA_CNT, 0);
-}
-
-
-void
-si_obio_dma_start(ncr_sc)
-	struct ncr5380_softc *ncr_sc;
-{
-	struct si_softc *sc = (struct si_softc *)ncr_sc;
-	struct sci_req *sr = ncr_sc->sc_current;
-	struct si_dma_handle *dh = sr->sr_dma_hand;
-	u_long data_pa;
-	int xlen, adj, adjlen;
-	u_int mode;
-	u_int32_t csr;
-
-	/*
-	 * Get the DVMA mapping for this segment.
-	 */
-	data_pa = (u_long)(dh->dh_dvma);
-	if (data_pa & 1)
-		panic("si_dma_start: bad pa=0x%lx", data_pa);
-	xlen = ncr_sc->sc_datalen;
-	xlen &= ~1;
-	sc->sc_xlen = xlen;	/* XXX: or less... */
-
-#ifdef	DEBUG
-	if (si_debug & 2) {
-		printf("si_dma_start: dh=%p, pa=0x%lx, xlen=%d\n",
-		    dh, data_pa, xlen);
-	}
-#endif
-
-	/*
-	 * Set up the DMA controller.
-	 * Note that (dh->dh_len < sc_datalen)
-	 */
-
-	/* Set direction (send/recv) */
-	csr = SWREG_READ(ncr_sc, SWREG_CSR);
-	if (dh->dh_flags & SIDH_OUT) {
-		csr |= SI_CSR_SEND;
-	} else {
-		csr &= ~SI_CSR_SEND;
-	}
-	SWREG_WRITE(ncr_sc, SWREG_CSR, csr);
-
-	/*
-	 * The "sw" needs longword aligned transfers.  We
-	 * detect a shortword aligned transfer here, and adjust the
-	 * DMA transfer by 2 bytes.  These two bytes are read/written
-	 * in PIO mode just before the DMA is started.
-	 */
-	adj = 0;
-	if (data_pa & 2) {
-		adj = 2;
-#ifdef DEBUG
-		if (si_debug & 2)
-			printf("si_dma_start: adjusted up %d bytes\n", adj);
-#endif
-	}
-
-	/* We have to frob the address on the "sw". */
-	dh->dh_startingpa = (data_pa | 0xF00000);
-	SWREG_WRITE(ncr_sc, SWREG_DMA_ADDR, (u_int)(dh->dh_startingpa + adj));
-	SWREG_WRITE(ncr_sc, SWREG_DMA_CNT, xlen - adj);
-
-	/*
-	 * Acknowledge the phase change.  (After DMA setup!)
-	 * Put the SBIC into DMA mode, and start the transfer.
-	 */
-	if (dh->dh_flags & SIDH_OUT) {
-		NCR5380_WRITE(ncr_sc, sci_tcmd, PHASE_DATA_OUT);
-		if (adj) {
-			adjlen = ncr5380_pio_out(ncr_sc, PHASE_DATA_OUT,
-			    adj, dh->dh_addr);
-			if (adjlen != adj)
-				printf("%s: bad outgoing adj, %d != %d\n",
-				    ncr_sc->sc_dev.dv_xname, adjlen, adj);
-		}
-		SCI_CLR_INTR(ncr_sc);
-		NCR5380_WRITE(ncr_sc, sci_icmd, SCI_ICMD_DATA);
-		mode = NCR5380_READ(ncr_sc, sci_mode);
-		mode |= (SCI_MODE_DMA | SCI_MODE_DMA_IE);
-		NCR5380_WRITE(ncr_sc, sci_mode, mode);
-		NCR5380_WRITE(ncr_sc, sci_dma_send, 0); 	/* start it */
-	} else {
-		NCR5380_WRITE(ncr_sc, sci_tcmd, PHASE_DATA_IN);
-		if (adj) {
-			adjlen = ncr5380_pio_in(ncr_sc, PHASE_DATA_IN,
-			    adj, dh->dh_addr);
-			if (adjlen != adj)
-				printf("%s: bad incoming adj, %d != %d\n",
-				    ncr_sc->sc_dev.dv_xname, adjlen, adj);
-		}
-		SCI_CLR_INTR(ncr_sc);
-		NCR5380_WRITE(ncr_sc, sci_icmd, 0);
-		mode = NCR5380_READ(ncr_sc, sci_mode);
-		mode |= (SCI_MODE_DMA | SCI_MODE_DMA_IE);
-		NCR5380_WRITE(ncr_sc, sci_mode, mode);
-		NCR5380_WRITE(ncr_sc, sci_irecv, 0); 	/* start it */
-	}
-
-	/* Let'er rip! */
-	csr |= SI_CSR_DMA_EN;
-	SWREG_WRITE(ncr_sc, SWREG_CSR, csr);
-
-	ncr_sc->sc_state |= NCR_DOINGDMA;
-
-#ifdef	DEBUG
-	if (si_debug & 2) {
-		printf("si_dma_start: started, flags=0x%x\n",
-		    ncr_sc->sc_state);
-	}
-#endif
-}
-
-
-void
-si_obio_dma_eop(ncr_sc)
-	struct ncr5380_softc *ncr_sc;
-{
-
-	/* Not needed - DMA was stopped prior to examining sci_csr */
-}
-
-#if (defined(DEBUG) || defined(DIAGNOSTIC)) && !defined(COUNT_SW_LEFTOVERS)
-#define COUNT_SW_LEFTOVERS
-#endif
-#ifdef COUNT_SW_LEFTOVERS
-/*
- * Let's find out how often these occur.  Read these with DDB from time
- * to time.
- */
-int	sw_3_leftover = 0;
-int	sw_2_leftover = 0;
-int	sw_1_leftover = 0;
-int	sw_0_leftover = 0;
-#endif
-
-void
-si_obio_dma_stop(ncr_sc)
-	struct ncr5380_softc *ncr_sc;
-{
-	struct sci_req *sr = ncr_sc->sc_current;
-	struct si_dma_handle *dh = sr->sr_dma_hand;
-	int ntrans = 0, dma_addr;
-	u_int mode;
-	u_int32_t csr;
-
-	if ((ncr_sc->sc_state & NCR_DOINGDMA) == 0) {
-#ifdef	DEBUG
-		printf("si_dma_stop: dma not running\n");
-#endif
-		return;
-	}
-	ncr_sc->sc_state &= ~NCR_DOINGDMA;
-
-	/* First, halt the DMA engine. */
-	csr = SWREG_READ(ncr_sc, SWREG_CSR);
-	csr &= ~SI_CSR_DMA_EN;
-	SWREG_WRITE(ncr_sc, SWREG_CSR, csr);
-
-	/*
-	 * XXX HARDWARE BUG!
-	 * Apparently, some early 4/100 SCSI controllers had a hardware
-	 * bug that caused the controller to do illegal memory access.
-	 * We see this as SI_CSR_DMA_BUS_ERR (makes sense).  To work around
-	 * this, we simply need to clean up after ourselves ... there will
-	 * be as many as 3 bytes left over.  Since we clean up "left-over"
-	 * bytes on every read anyway, we just continue to chug along
-	 * if SI_CSR_DMA_BUS_ERR is asserted.  (This was probably worked
-	 * around in hardware later with the "left-over byte" indicator
-	 * in the VME controller.)
-	 */
-#if 0
-	if (csr & (SI_CSR_DMA_CONFLICT | SI_CSR_DMA_BUS_ERR)) {
-#else
-	if (csr & (SI_CSR_DMA_CONFLICT)) {
-#endif
-		printf("sw: DMA error, csr=0x%x, reset\n", csr);
-		sr->sr_xs->error = XS_DRIVER_STUFFUP;
-		ncr_sc->sc_state |= NCR_ABORTING;
-		si_reset_adapter(ncr_sc);
-	}
-
-	/* Note that timeout may have set the error flag. */
-	if (ncr_sc->sc_state & NCR_ABORTING)
-		goto out;
-
-	/*
-	 * Now try to figure out how much actually transferred
-	 *
-	 * The "sw" doesn't have a FIFO or a bcr, so we've stored
-	 * the starting PA of the transfer in the DMA handle,
-	 * and subtract it from the ending PA left in the dma_addr
-	 * register.
-	 */
-	dma_addr = SWREG_READ(ncr_sc, SWREG_DMA_ADDR);
-	ntrans = (dma_addr - dh->dh_startingpa);
-
-#ifdef	DEBUG
-	if (si_debug & 2) {
-		printf("si_dma_stop: ntrans=0x%x\n", ntrans);
-	}
-#endif
-
-	if (ntrans < MIN_DMA_LEN) {
-		printf("sw: short transfer\n");
-		ncr_sc->sc_state |= NCR_ABORTING;
-		goto out;
-	}
-
-	if (ntrans > ncr_sc->sc_datalen)
-		panic("si_dma_stop: excess transfer");
-
-	/* Adjust data pointer */
-	ncr_sc->sc_dataptr += ntrans;
-	ncr_sc->sc_datalen -= ntrans;
-
-	/*
-	 * After a read, we may need to clean-up
-	 * "Left-over bytes"  (yuck!)  The "sw" doesn't
-	 * have a "left-over" indicator, so we have to so
-	 * this no matter what.  Ick.
-	 */
-	if ((dh->dh_flags & SIDH_OUT) == 0) {
-		char *cp = ncr_sc->sc_dataptr;
-		u_int32_t bpr;
-
-		bpr = SWREG_READ(ncr_sc, SWREG_BPR);
-
-		switch (dma_addr & 3) {
-		case 3:
-			cp[0] = (bpr & 0xff000000) >> 24;
-			cp[1] = (bpr & 0x00ff0000) >> 16;
-			cp[2] = (bpr & 0x0000ff00) >> 8;
-#ifdef COUNT_SW_LEFTOVERS
-			++sw_3_leftover;
-#endif
-			break;
-
-		case 2:
-			cp[0] = (bpr & 0xff000000) >> 24;
-			cp[1] = (bpr & 0x00ff0000) >> 16;
-#ifdef COUNT_SW_LEFTOVERS
-			++sw_2_leftover;
-#endif
-			break;
-
-		case 1:
-			cp[0] = (bpr & 0xff000000) >> 24;
-#ifdef COUNT_SW_LEFTOVERS
-			++sw_1_leftover;
-#endif
-			break;
-
-#ifdef COUNT_SW_LEFTOVERS
-		default:
-			++sw_0_leftover;
-			break;
-#endif
-		}
-	}
-
- out:
-	SWREG_WRITE(ncr_sc, SWREG_DMA_ADDR, 0);
-	SWREG_WRITE(ncr_sc, SWREG_DMA_CNT, 0);
-
-	/* Put SBIC back in PIO mode. */
-	mode = NCR5380_READ(ncr_sc, sci_mode);
-	mode &= ~(SCI_MODE_DMA | SCI_MODE_DMA_IE);
-	NCR5380_WRITE(ncr_sc, sci_mode, mode);
-	NCR5380_WRITE(ncr_sc, sci_icmd, 0);
-
-#ifdef DEBUG
-	if (si_debug & 2) {
-		printf("si_dma_stop: ntrans=0x%x\n", ntrans);
-	}
-#endif
 }
