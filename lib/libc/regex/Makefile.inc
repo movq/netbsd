@@ -1,4 +1,4 @@
-# actually this is a Makefile.inc
+#	@(#)Makefile.inc	8.1 (Berkeley) 6/4/93
 
 # regex sources
 .PATH: ${.CURDIR}/regex
