@@ -1,4 +1,4 @@
-.\" $NetBSD: llc.h,v 1.1 2004/09/19 21:31:45 dyoung Exp $
+.\" $NetBSD: llc.h,v 1.1.1.1 2004/09/19 21:31:45 dyoung Exp $
 .\
 /*
  * Copyright (c) 1993, 1994, 1997
