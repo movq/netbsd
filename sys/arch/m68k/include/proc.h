@@ -1,13 +1,8 @@
-/*	$NetBSD: sigcode.s,v 1.10.16.1 2002/07/16 08:36:52 gehenna Exp $	*/
+/*	$NetBSD: proc.h,v 1.2.2.2 2002/07/16 08:36:47 gehenna Exp $	*/
 
 /*
- * Copyright (c) 1988 University of Utah.
- * Copyright (c) 1980, 1990, 1993
+ * Copyright (c) 1991, 1993
  *	The Regents of the University of California.  All rights reserved.
- *
- * This code is derived from software contributed to Berkeley by
- * the Systems Programming Group of the University of Utah Computer
- * Science Department.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -37,40 +32,37 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * from: Utah $Hdr: locore.s 1.66 92/12/22$
- *
- *	@(#)locore.s	8.6 (Berkeley) 5/27/94
+ *	@(#)proc.h	8.1 (Berkeley) 6/10/93
  */
+
+#ifndef _M68K_PROC_H
+#define _M68K_PROC_H
+
+#include <machine/frame.h>
+struct proc;
 
 /*
- * NOTICE: This is not a standalone file.  To use it, #include it in
- * your port's locore.s, like so:
- *
- *	#include <m68k/m68k/sigcode.s>
+ * Machine-dependent part of the proc structure for m68k-based ports.
  */
+struct mdproc {
+	int	*md_regs;		/* registers on current frame */
+	int	md_flags;		/* machine-dependent flags */
+	void	(*md_syscall)(register_t, struct proc *, struct frame *);
+};
 
 /*
- * Signal trampoline; copied to top of user stack.
- *
- * The handler has returned here as if we had called it.  On
- * entry, the stack looks like:
- *
- *		sigcontext structure			[12]
- *		pointer to sigcontext structure		[8]
- *		signal specific code			[4]
- *	sp->	signal number				[0]
+ * Note: The following are the aggregate of all the MDP_* #defines from the
+ * various m68k-based ports at the time this file was created.
+ * Some of them are probably obsolete and/or not applicable to all ports.
  */
+/* md_flags */
+#define	MDP_FPUSED	0x0001  /* floating point coprocessor used */
+#define	MDP_HPUXTRACE	0x0004  /* being traced by HP-UX process */
+#define	MDP_HPUXMMAP	0x0008	/* VA space is multiply mapped */
+#define MDP_CCBDATA	0x0010	/* copyback caching of data (68040) */
+#define MDP_CCBSTACK	0x0020	/* copyback caching of stack (68040) */
+#define MDP_STACKADJ	0x0040	/* Frame SP adjusted, might have to
+				 * undo when system call returns
+				 * ERESTART. */
 
-	.data
-	.align	2
-GLOBAL(sigcode)
-	leal	%sp@(12),%a0	/* get pointer to sigcontext */
-	movl	%a0,%sp@(4)	/* put it in the argument slot */
-				/* fake return address already there */
-	trap	#3		/* special sigreturn trap */
-	movl	%d0,%sp@(4)	/* exit with errno */
-	moveq	#SYS_exit,%d0	/* if sigreturn fails */
-	trap	#0
-
-	.align	2
-GLOBAL(esigcode)
+#endif /* _M68K_PROC_H */
