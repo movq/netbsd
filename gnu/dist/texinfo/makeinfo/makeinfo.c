@@ -1,5 +1,5 @@
 /* Makeinfo -- convert Texinfo source files into Info files.
-   $Id: makeinfo.c,v 1.1 1999/02/11 03:57:23 tv Exp $
+   $Id: makeinfo.c,v 1.1.1.1 1999/02/11 03:57:23 tv Exp $
 
    Copyright (C) 1987, 92, 93, 94, 95, 96, 97, 98
    Free Software Foundation, Inc.

@@ -1,5 +1,5 @@
 /* indices.c -- Commands for dealing with an Info file Index.
-   $Id: indices.c,v 1.1 1999/02/11 03:57:20 tv Exp $
+   $Id: indices.c,v 1.1.1.1 1999/02/11 03:57:20 tv Exp $
 
    Copyright (C) 1993, 97 Free Software Foundation, Inc.
 

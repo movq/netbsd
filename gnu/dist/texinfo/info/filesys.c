@@ -1,5 +1,5 @@
 /* filesys.c -- File system specific functions for hacking this system.
-   $Id: filesys.c,v 1.1 1999/02/11 03:57:20 tv Exp $
+   $Id: filesys.c,v 1.1.1.1 1999/02/11 03:57:20 tv Exp $
 
    Copyright (C) 1993, 97, 98 Free Software Foundation, Inc.
 
