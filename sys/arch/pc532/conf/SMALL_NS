@@ -1,26 +1,28 @@
 #
 # SMALL 532 Distribution - 
 #
-#	$Id: SMALL_NS,v 1.4 1994/03/09 21:23:02 ws Exp $
+#	$Id: SMALL_NS,v 1.5 1994/03/22 00:12:40 phil Exp $
 #
 machine		"pc532"
 cpu		"ns532"
 ident		SMALL_NS
-timezone	8 dst
+timezone	0 dst
 maxusers	10
 options		SWAPPAGER,VNODEPAGER,DEVPAGER
 options		FFS
 options		INET
 options		"COMPAT_43"
 options		"TCP_COMPAT_42"
+options		"COMDEF_SPEED=B19200"
+
 options		SCSI
 
 config		"netbsd"	root on sd0 swap on sd0
 
-controller	dp0
-disk		sd0	at dp0 flags 0 drive ? bio
-disk		sd1	at dp0 flags 0 drive ? bio
-tape		st0	at dp0 flags 1 drive ? bio
+controller	ncr0
+disk		sd0	at ncr0 flags 0 drive ? bio
+disk		sd1	at ncr0 flags 0 drive ? bio
+tape		st0	at ncr0 flags 1 drive ? bio
 
 controller	scn0
 device		com0 	at scn0 port 0 tty
@@ -35,4 +37,4 @@ device		com7 	at scn0 port 7 tty
 pseudo-device	loop
 pseudo-device	ether
 pseudo-device	sl	1
-pseudo-device	pty	4
+pseudo-device	pty	10
