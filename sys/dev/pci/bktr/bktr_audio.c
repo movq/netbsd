@@ -1,4 +1,4 @@
-/*	$NetBSD: bktr_audio.c,v 1.1 2000/05/07 00:16:17 wiz Exp $	*/
+/*	$NetBSD: bktr_audio.c,v 1.1.1.1 2000/05/07 00:16:17 wiz Exp $	*/
 
 /* FreeBSD: src/sys/dev/bktr/bktr_audio.c,v 1.2 1999/10/28 13:58:14 roger Exp */
 /*

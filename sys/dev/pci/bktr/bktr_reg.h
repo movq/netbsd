@@ -1,4 +1,4 @@
-/*	$NetBSD: bktr_reg.h,v 1.1 2000/05/07 00:16:18 wiz Exp $	*/
+/*	$NetBSD: bktr_reg.h,v 1.1.1.1 2000/05/07 00:16:18 wiz Exp $	*/
 
 /*
  * FreeBSD: src/sys/dev/bktr/bktr_reg.h,v 1.36 1999/10/28 13:58:17 roger Exp

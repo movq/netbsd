@@ -1,4 +1,4 @@
-/*	$NetBSD: bktr_core.c,v 1.1 2000/05/07 00:16:18 wiz Exp $	*/
+/*	$NetBSD: bktr_core.c,v 1.1.1.1 2000/05/07 00:16:18 wiz Exp $	*/
 
 /* FreeBSD: src/sys/dev/bktr/bktr_core.c,v 1.106 2000/04/16 07:50:08 roger Exp */
 
