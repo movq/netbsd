@@ -1,4 +1,4 @@
-/*	$NetBSD: file_subs.c,v 1.13 1999/11/01 01:35:58 mrg Exp $	*/
+/*	$NetBSD: file_subs.c,v 1.15 1999/11/07 15:48:24 mycroft Exp $	*/
 
 /*-
  * Copyright (c) 1992 Keith Muller.
@@ -42,7 +42,7 @@
 #if 0
 static char sccsid[] = "@(#)file_subs.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: file_subs.c,v 1.13 1999/11/01 01:35:58 mrg Exp $");
+__RCSID("$NetBSD: file_subs.c,v 1.15 1999/11/07 15:48:24 mycroft Exp $");
 #endif
 #endif /* not lint */
 
@@ -181,7 +181,7 @@ file_close(arcn, fd)
 		set_pmode(arcn->name, arcn->sb.st_mode);
 	if (patime || pmtime)
 		set_ftime(arcn->name, arcn->sb.st_mtime, arcn->sb.st_atime, 0);
-	if (pfflags)
+	if (pfflags && arcn->type != PAX_SLK)
 		set_chflags(arcn->name, arcn->sb.st_flags);
 }
 
@@ -535,7 +535,7 @@ node_creat(arcn)
 
 	if (patime || pmtime)
 		set_ftime(arcn->name, arcn->sb.st_mtime, arcn->sb.st_atime, 0);
-	if (pfflags)
+	if (pfflags && arcn->type != PAX_SLK)
 		set_chflags(arcn->name, arcn->sb.st_flags);
 	return(0);
 }
@@ -799,14 +799,15 @@ void
 set_chflags(char *fnm, u_int32_t flags)
 #else
 void
-set_pmode(fnm, flags)
+set_chflags(fnm, flags)
 	char *fnm;
 	u_int32_t flags;
 #endif
 {
-	
+#if 0
 	if (chflags(fnm, flags) < 0)
 		syswarn(1, errno, "Could not set file flags on %s", fnm);
+#endif
 	return;
 }
 
