@@ -1,4 +1,4 @@
-/*	$NetBSD: getnetgr.c,v 1.1 1995/10/08 23:08:48 gwr Exp $	*/
+/*	$NetBSD: getnetgr.c,v 1.1.1.1 1995/10/08 23:08:48 gwr Exp $	*/
 
 void
 endnetgrent()

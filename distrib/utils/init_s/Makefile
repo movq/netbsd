@@ -1,4 +1,4 @@
-# $NetBSD: Makefile,v 1.1 1995/10/08 23:08:47 gwr Exp $
+# $NetBSD: Makefile,v 1.1.1.1 1995/10/08 23:08:47 gwr Exp $
 # Build a "small init" (i.e. for boot media)
 
 PROG=	init

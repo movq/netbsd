@@ -1,4 +1,4 @@
-/*	$NetBSD: getpwent.c,v 1.1 1995/10/08 23:08:48 gwr Exp $	*/
+/*	$NetBSD: getpwent.c,v 1.1.1.1 1995/10/08 23:08:48 gwr Exp $	*/
 
 /*
  * Copyright (c) 1995 Gordon W. Ross

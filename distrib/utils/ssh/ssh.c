@@ -1,4 +1,4 @@
-/*	$NetBSD: ssh.c,v 1.1 1995/10/08 23:08:46 gwr Exp $	*/
+/*	$NetBSD: ssh.c,v 1.1.1.1 1995/10/08 23:08:46 gwr Exp $	*/
 
 /*
  * Copyright (c) 1995 Gordon W. Ross
