@@ -1,4 +1,4 @@
-/*	$NetBSD: vmevar.h,v 1.1 1997/03/03 12:20:57 leo Exp $	*/
+/*	$NetBSD: vmevar.h,v 1.1.1.1 1997/03/03 12:20:57 leo Exp $	*/
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
