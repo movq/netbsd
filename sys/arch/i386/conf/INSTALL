@@ -1,4 +1,4 @@
-#	$NetBSD: INSTALL,v 1.148.2.1 2000/07/27 02:10:50 mycroft Exp $
+#	$NetBSD: INSTALL,v 1.148.2.2 2000/10/09 13:16:24 fvdl Exp $
 #
 #	INSTALL - Installation kernel.
 #
@@ -11,14 +11,14 @@
 
 include "arch/i386/conf/std.i386"
 
+makeoptions 	COPTS="-Os"		# Optimise for space. Implies -O2
+
 # Enable the hooks used for initializing the root memory-disk.
 options 	MEMORY_DISK_HOOKS
 options 	MEMORY_DISK_IS_ROOT	# force root on memory disk
 options 	MEMORY_DISK_SERVER=0	# no userspace memory disk support
 options 	MINIROOTSIZE=4096	# size of memory disk, in blocks
 #options 	MINIROOTSIZE=2880	# 1.44M, same as a floppy
-
-makeoptions	COPTS="-Os"		# generates smaller code than -O2, -O1
 
 maxusers	32		# estimated number of users
 
@@ -51,7 +51,7 @@ options 	MATH_EMULATE	# floating point emulation
 #options 	REALEXTMEM=...	# size of extended memory
 
 # Avoid irq 5 and 7, the most likely cause of problems on modern laptops.
-options		PCIC_ISA_INTR_ALLOC_MASK=0xff5f
+options 		PCIC_ISA_INTR_ALLOC_MASK=0xff5f
 
 # Standard system options
 
@@ -79,7 +79,7 @@ options 	DDB		# in-kernel debugger
 options 	DDB_HISTORY_SIZE=512	# enable history editing in DDB
 #options 	KGDB		# remote debugger
 #options 	"KGDB_DEVNAME=\"com\"",KGDBADDR=0x3f8,KGDBRATE=9600
-#makeoptions	DEBUG="-g"	# compile full symbol table
+#makeoptions 	DEBUG="-g"	# compile full symbol table
 
 # Compatibility options
 #options 	COMPAT_NOMID	# compatibility with 386BSD, BSDI, NetBSD 0.8,
@@ -114,7 +114,7 @@ file-system 	KERNFS		# /kern
 #file-system 	UMAPFS		# NULLFS + uid and gid remapping
 #file-system 	UNION		# union file system
 
-# File system options
+# Filesystem options
 #options 	QUOTA		# UFS quotas
 #options 	NFSSERVER	# Network File System server
 #options 	EXT2FS_SYSTEM_FLAGS # makes ext2fs file flags (append and
@@ -320,7 +320,7 @@ bha0	at isa? port 0x330 irq ? drq ?	# BusLogic [457]4X SCSI
 bha1	at isa? port 0x334 irq ? drq ?
 # The "nca" and "dpt" probes might give false hits or hang your machine.
 #dpt0	at isa? port 0x170 irq ? drq ?	# DPT SmartCache/SmartRAID
-#nca0	at isa? port 0x360 irq 15	# Port-mapped NCR 53C80 contoller
+#nca0	at isa? port 0x360 irq 15	# Port-mapped NCR 53C80 controller
 #nca1	at isa? iomem 0xd8000 irq 5	# Memory-mapped controller (T128, etc.)
 sea0	at isa? iomem 0xc8000 irq 5	# Seagate/Future Domain SCSI
 uha0	at isa? port 0x330 irq ? drq ?	# UltraStor [13]4f SCSI
@@ -354,9 +354,11 @@ cd*	at scsibus? target ? lun ?	# SCSI CD-ROM drives
 #ss*	at scsibus? target ? lun ?	# SCSI scanners
 #uk*	at scsibus? target ? lun ?	# SCSI unknown
 
+
 # RAID controllers and devices
-cac*	at pci? dev ? function ?	# Compaq array controller
-ca*	at cac? unit ?			# Compaq array disk device
+cac*	at pci? dev ? function ?	# Compaq PCI array controllers
+ca*	at cac? unit ?			# Compaq array disk devices
+
 
 # IDE and related devices
 # PCI IDE controllers - see pciide(4) for supported hardware.
@@ -373,7 +375,7 @@ wdc*    at pcmcia? function ?
 
 # ISA ST506, ESDI, and IDE controllers
 # Use flags 0x01 if you want to try to use 32bits data I/O (the driver will
-# fall back to 16bits I/O if 32bits I/O are not functionnal).
+# fall back to 16bits I/O if 32bits I/O are not functional).
 # Some controllers pass the initial 32bit test, but will fail later.
 wdc0	at isa? port 0x1f0 irq 14 flags 0x00
 wdc1	at isa? port 0x170 irq 15 flags 0x00
@@ -516,38 +518,43 @@ ukphy*	at mii? phy ?			# generic unknown PHYs
 # USB Controller and Devices
 
 # PCI USB controllers
-#uhci*	at pci?				# Universal Host Controller (Intel)
-#ohci*	at pci?				# Open Host Controller
+uhci*	at pci?				# Universal Host Controller (Intel)
+ohci*	at pci?				# Open Host Controller
 
 # USB bus support
-#usb*	at uhci?
-#usb*	at ohci?
+usb*	at uhci?
+usb*	at ohci?
 
 # USB Hubs
-#uhub*	at usb?
-#uhub*	at uhub? port ? configuration ? interface ?
+uhub*	at usb?
+uhub*	at uhub? port ? configuration ? interface ?
 
 # USB Mice
 #ums*	at uhub? port ? configuration ? interface ?
 #wsmouse*	at ums?
 
 # USB Keyboards
-#ukbd*	at uhub? port ? configuration ? interface ?
-#wskbd*	at ukbd? console ?
+ukbd*	at uhub? port ? configuration ? interface ?
+wskbd*	at ukbd? console ?
 
 # USB Generic HID devices
-#uhid*	at uhub? port ? configuration ? interface ?
+uhid*	at uhub? port ? configuration ? interface ?
 
 # USB Printer
 #ulpt*	at uhub? port ? configuration ? interface ?
 
 # USB Mass Storage
-#umass*	at uhub? port ? configuration ? interface ?
-#atapibus* at umass? channel ?
-#scsibus* at umass? channel ?
+umass*	at uhub? port ? configuration ? interface ?
+atapibus* at umass? channel ?
+scsibus* at umass? channel ?
 
 # USB Generic driver
 #ugen*	at uhub? port ? configuration ? interface ?
+
+# USB Ethernet adapters
+aue* 	at uhub? port ?		# ADMtek AN986 Pegasus based adapters
+cue* 	at uhub? port ?		# CATC USB-EL1201A based adapters
+kue* 	at uhub? port ?		# Kawasaki LSI KL5KUSB101B based adapters
 
 # Audio Devices
 
@@ -570,7 +577,7 @@ ukphy*	at mii? phy ?			# generic unknown PHYs
 #sb0	at isa? port 0x220 irq 7 drq 1 drq2 5	# SoundBlaster
 #wss0	at isa? port 0x530 irq 10 drq 0	drq2 1	# Windows Sound System
 
-# OPL[23] FM syntheziers
+# OPL[23] FM synthesizers
 #opl0	at isa? port 0x388	# use only if not attached to sound card
 #opl*	at eso?
 #opl*	at ess?
@@ -653,7 +660,7 @@ pseudo-device	sl		2	# Serial Line IP
 #pseudo-device	ipip		2	# IP Encapsulation within IP (RFC 2003)
 
 # miscellaneous pseudo-devices
-pseudo-device	pty		64	# pseudo-terminals
+pseudo-device	pty		2	# pseudo-terminals
 #pseudo-device	tb		1	# tablet line discipline
 #pseudo-device	sequencer	1	# MIDI sequencer
 # rnd works; RND_COM does not on port i386 yet.
