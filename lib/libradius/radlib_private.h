@@ -1,4 +1,4 @@
-/* $NetBSD: radlib_private.h,v 1.1 2005/02/19 23:56:32 manu Exp $ */
+/* $NetBSD: radlib_private.h,v 1.1.1.1 2005/02/19 23:56:32 manu Exp $ */
 
 /*-
  * Copyright 1998 Juniper Networks, Inc.
