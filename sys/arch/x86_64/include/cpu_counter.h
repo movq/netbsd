@@ -1,4 +1,4 @@
-/*	$NetBSD: cpu_counter.h,v 1.1 2003/02/05 13:58:02 nakayama Exp $	*/
+/*	$NetBSD: cpu_counter.h,v 1.2 2003/03/05 23:56:01 fvdl Exp $	*/
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -63,12 +63,11 @@ cpu_counter32(void)
 	return (rdtsc() & 0xffffffffUL);
 }
 
-#if 0	/* XXX MI microtime() needs frequency of CPU counter. */
 static __inline uint64_t
 cpu_frequency(struct cpu_info *ci)
 {
+	return (ci->ci_tsc_freq);
 }
-#endif
 
 #endif /* _KERNEL */
 
