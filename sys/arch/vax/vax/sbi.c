@@ -1,4 +1,4 @@
-/*	$NetBSD: sbi.c,v 1.19 1999/02/02 18:37:21 ragge Exp $ */
+/*	$NetBSD: sbi.c,v 1.20 1999/08/07 10:36:50 ragge Exp $ */
 /*
  * Copyright (c) 1994 Ludd, University of Lule}, Sweden.
  * All rights reserved.
@@ -27,6 +27,10 @@
  * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
+
+/*
+ * Still to do: Write all SBI error handling.
  */
 
 #include <sys/types.h>
@@ -70,11 +74,9 @@ sbi_match(parent, cf, aux)
 	struct cfdata *cf;
 	void *aux;
 {
-	struct bp_conf *bp = aux;
-
-	if (strcmp(bp->type, "sbi"))
-		return 0;
-	return 1;
+	if (vax_bustype == VAX_SBIBUS)
+		return 1;
+	return 0;
 }
 
 void
@@ -87,15 +89,10 @@ sbi_attach(parent, self, aux)
 
 	printf("\n");
 
-	/*
-	 * Now a problem: on different machines with SBI units identifies
-	 * in different ways (if they identifies themselves at all).
-	 * We have to fake identifying depending on different CPUs.
-	 */
 #define NEXPAGES (sizeof(struct nexus) / VAX_NBPG)
 	minnex = self->dv_unit * NNEXSBI;
 	for (nexnum = minnex; nexnum < minnex + NNEXSBI; nexnum++) {
-		struct  nexus *nexusP;
+		struct	nexus *nexusP = 0;
 		volatile int tmp;
 
 		nexusP = (struct nexus *)vax_map_physmem((paddr_t)NEXA8600 +
@@ -113,6 +110,10 @@ sbi_attach(parent, self, aux)
 	}
 }
 
-struct	cfattach sbi_ca = {
+struct	cfattach sbi_mainbus_ca = {
+	sizeof(struct device), sbi_match, sbi_attach
+};
+
+struct	cfattach sbi_abus_ca = {
 	sizeof(struct device), sbi_match, sbi_attach
 };
