@@ -1,4 +1,4 @@
-/*	$NetBSD: machines.c,v 1.5 2002/04/11 07:56:13 lukem Exp $	*/
+/*	$NetBSD: machines.c,v 1.6 2002/04/19 07:08:53 lukem Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -38,18 +38,6 @@
 
 #include <sys/types.h>
 #include "installboot.h"
-
-int alpha_parseopt(ib_params *, const char *);
-int alpha_setboot(ib_params *);
-int alpha_clearboot(ib_params *);
-int pmax_parseopt(ib_params *, const char *);
-int pmax_setboot(ib_params *);
-int pmax_clearboot(ib_params *);
-int sparc64_setboot(ib_params *);
-int sparc64_clearboot(ib_params *);
-int vax_parseopt(ib_params *, const char *);
-int vax_setboot(ib_params *);
-int vax_clearboot(ib_params *);
 
 struct ib_mach machines[] = {
 	{ "alpha",	alpha_parseopt,	alpha_setboot,	alpha_clearboot },
