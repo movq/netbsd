@@ -1,4 +1,4 @@
-/*	$NetBSD: gatea20.c,v 1.2 1997/10/29 00:32:49 fvdl Exp $	*/
+/*	$NetBSD: gatea20.c,v 1.5 2002/08/12 14:27:34 thorpej Exp $	*/
 
 /* extracted from freebsd:sys/i386/boot/biosboot/io.c */
 
@@ -8,6 +8,7 @@
 #include <lib/libsa/stand.h>
 
 #include "libi386.h"
+#include "biosmca.h"
 
 #define K_RDWR 		0x60		/* keyboard data & cmds (read/write) */
 #define K_STATUS 	0x64		/* keyboard status */
@@ -31,19 +32,29 @@ static unsigned char	x_20 = KB_A20;
 void gateA20()
 {
 	__asm("pushfl ; cli");
-#ifdef	IBM_L40
-	outb(0x92, 0x2);
-#else	IBM_L40
-	while (inb(K_STATUS) & K_IBUF_FUL);
-	while (inb(K_STATUS) & K_OBUF_FUL)
-		(void)inb(K_RDWR);
+	/*
+	 * Not all systems enable A20 via the keyboard controller.
+	 *	* IBM PS/2 L40
+	 *	* AMD Elan SC520-based systems
+	 */
+	if (
+#ifdef SUPPORT_PS2
+	    biosmca_ps2model == 0xf82 ||
+#endif
+	    /* XXX How to check for AMD Elan SC520? */
+	    0) {
+		outb(0x92, 0x2);
+	} else {
+		while (inb(K_STATUS) & K_IBUF_FUL);
+		while (inb(K_STATUS) & K_OBUF_FUL)
+			(void)inb(K_RDWR);
 
-	outb(K_CMD, KC_CMD_WOUT);
-	delay(100);
-	while (inb(K_STATUS) & K_IBUF_FUL);
-	outb(K_RDWR, x_20);
-	delay(100);
-	while (inb(K_STATUS) & K_IBUF_FUL);
-#endif	IBM_L40
+		outb(K_CMD, KC_CMD_WOUT);
+		delay(100);
+		while (inb(K_STATUS) & K_IBUF_FUL);
+		outb(K_RDWR, x_20);
+		delay(100);
+		while (inb(K_STATUS) & K_IBUF_FUL);
+	}
 	__asm("popfl");
 }

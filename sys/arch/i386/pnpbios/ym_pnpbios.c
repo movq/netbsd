@@ -1,4 +1,4 @@
-/* $NetBSD: ym_pnpbios.c,v 1.2 1999/11/14 02:15:51 thorpej Exp $ */
+/* $NetBSD: ym_pnpbios.c,v 1.6 2002/03/10 13:57:12 itohy Exp $ */
 /*
  * Copyright (c) 1999
  *	Matthias Drochner.  All rights reserved.
@@ -25,6 +25,9 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
+
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: ym_pnpbios.c,v 1.6 2002/03/10 13:57:12 itohy Exp $");
 
 #include "mpu_ym.h"
 
@@ -118,7 +121,7 @@ ym_pnpbios_attach(parent, self, aux)
 
 	sc->sc_ic = aa->ic;
 
-	if (pnpbios_getirqnum(aa->pbt, aa->resc, 0, &sc->ym_irq)) {
+	if (pnpbios_getirqnum(aa->pbt, aa->resc, 0, &sc->ym_irq, NULL)) {
 		printf(": can't get IRQ\n");
 		return;
 	}
@@ -128,7 +131,7 @@ ym_pnpbios_attach(parent, self, aux)
 		return;
 	}
 	if (pnpbios_getdmachan(aa->pbt, aa->resc, 1, &sc->ym_recdrq))
-		sc->ym_recdrq = -1;
+		sc->ym_recdrq = sc->ym_playdrq;	/* half-duplex mode */
 
 	printf("\n");
 	pnpbios_print_devres(self, aa);
@@ -143,7 +146,6 @@ ym_pnpbios_attach(parent, self, aux)
 	}
 	ac->mode = 2;
 	ac->MCE_bit = MODE_CHANGE_ENABLE;
-	ac->chip_name = "OPL3-SA3";
 
 	sc->sc_ad1848.sc_ic  = sc->sc_ic;
 

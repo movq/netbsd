@@ -1,4 +1,4 @@
-/*	$NetBSD: opti82c558.c,v 1.1 1999/11/17 01:21:20 thorpej Exp $	*/
+/*	$NetBSD: opti82c558.c,v 1.3 2001/11/15 07:03:33 lukem Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -65,6 +65,9 @@
 /*
  * Support for the Opti 82c558 PCI-ISA bridge interrupt controller.
  */
+
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: opti82c558.c,v 1.3 2001/11/15 07:03:33 lukem Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -173,7 +176,8 @@ opti82c558_get_intr(v, clink, irqp)
 
 	reg = pci_conf_read(ph->ph_pc, ph->ph_tag, VIPER_CFG_PIRQ);
 	val = VIPER_PIRQ(reg, clink);
-	*irqp = (val == VIPER_PIRQ_NONE) ? 0xff : viper_pirq_decode[val];
+	*irqp = (val == VIPER_PIRQ_NONE) ?
+	    I386_PCI_INTERRUPT_LINE_NO_CONNECTION : viper_pirq_decode[val];
 
 	return (0);
 }

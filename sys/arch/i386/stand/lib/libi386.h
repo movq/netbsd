@@ -1,4 +1,4 @@
-/*	$NetBSD: libi386.h,v 1.10 1999/12/21 14:22:54 drochner Exp $	*/
+/*	$NetBSD: libi386.h,v 1.14 2001/06/01 23:26:31 jdolecek Exp $	*/
 
 /*
  * Copyright (c) 1996
@@ -44,12 +44,12 @@ ssize_t pread __P((int, void *, size_t));
 void startprog __P((physaddr_t, int, unsigned long*, physaddr_t));
 
 int exec_netbsd __P((const char*, physaddr_t, int));
-int netbsd_opt __P((char));
 
 void delay __P((int));
 int getbasemem __P((void));
 int getextmemx __P((void));
 int getextmem1 __P((void));
+int biosvideomode __P((void));
 #ifdef CONSERVATIVE_MEMDETECT
 #define getextmem() getextmem1()
 #else
@@ -73,12 +73,9 @@ void initio __P((int));
 int iskey __P((void));
 char awaitkey __P((int, int));
 
-#ifdef COMPAT_OLDBOOT
-int biosdisk_gettype __P((struct open_file*));
 /* this is in "user code"! */
 int parsebootfile __P((const char *, char**, char**, unsigned int*,
 		       unsigned int*, const char**));
-#endif
 
 #ifdef XMS
 physaddr_t ppbcopy __P((physaddr_t, physaddr_t, int));
@@ -88,7 +85,7 @@ physaddr_t xmsalloc __P((int));
 
 /* parseutils.c */
 char *gettrailer __P((char*));
-int parseopts __P((char*, int*));
+int parseopts __P((const char*, int*));
 int parseboot __P((char*, char**, int*));
 
 /* menuutils.c */
@@ -104,4 +101,4 @@ time_t getsecs __P((void));
 
 /* in "user code": */
 void command_help __P((char *));
-extern struct bootblk_command commands[];
+extern const struct bootblk_command commands[];

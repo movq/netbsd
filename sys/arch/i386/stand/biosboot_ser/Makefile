@@ -1,18 +1,18 @@
-#	$NetBSD: Makefile,v 1.4 1999/06/13 17:21:18 kim Exp $
+#	$NetBSD: Makefile,v 1.9 2002/02/17 20:03:08 thorpej Exp $
 
 S=	${.CURDIR}/../../../../
 
 BASE= biosboot_ser
 PROG= ${BASE}.sym
-MKMAN=	no
+NOMAN=	# defined
 NEWVERSWHAT=	"BIOS Boot"
+STARTFILE=	${BSSTART}
+RELOC=		0x0
 
 .PATH: ${.CURDIR}/../biosboot/
 SRCS= main.c devopen.c conf.c exec.c
 
-CLEANFILES+= ${BSSTART}
-
-CPPFLAGS+= -DCOMPAT_OLDBOOT -DCOMPAT_386BSD_MBRPART -DDEBUG
+CPPFLAGS+= -DCOMPAT_386BSD_MBRPART -DDEBUG
 
 #Sample use of serial line debugger
 #CPPFLAGS+= -DSUPPORT_SERIAL=CONSDEV_COM0KBD
@@ -22,6 +22,7 @@ CPPFLAGS+= -DSUPPORT_SERIAL=CONSDEV_AUTO -DDIRECT_SERIAL
 #CPPFLAGS+= -DDIRECT_SERIAL -DCOMCONS_KEYPRESS -DCONSPEED=57600
 
 CPPFLAGS+= -DPASS_BIOSGEOM
+CPPFLAGS+= -DPASS_MEMMAP
 #uncomment if there are problems with memory detection
 #CPPFLAGS+= -DCONSERVATIVE_MEMDETECT
 #increase MAXFLENTRIES if "installboot" complains about
@@ -34,7 +35,8 @@ CPPFLAGS+= -DPASS_BIOSGEOM
 CFLAGS+= -Wall -Wmissing-prototypes -Wstrict-prototypes -Wno-main
 
 SAMISCCPPFLAGS+= -DHEAP_START=0x10000 -DHEAP_LIMIT=0x40000
-SAMISCMAKEFLAGS= SA_USE_CREAD=yes SA_INCLUDE_NET=no
+SAMISCMAKEFLAGS= SA_USE_CREAD=yes	# Read compressed kernels
+SAMISCMAKEFLAGS= SA_INCLUDE_NET=no	# Support netboot 
 
 VERSIONFILE= ${.CURDIR}/../biosboot/version
 

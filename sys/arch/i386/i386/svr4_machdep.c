@@ -1,7 +1,7 @@
-/*	$NetBSD: svr4_machdep.c,v 1.46 1999/11/12 20:45:44 kleink Exp $	 */
+/*	$NetBSD: svr4_machdep.c,v 1.63 2002/07/04 23:32:04 thorpej Exp $	 */
 
 /*-
- * Copyright (c) 1994 The NetBSD Foundation, Inc.
+ * Copyright (c) 1994, 2000 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -36,8 +36,13 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: svr4_machdep.c,v 1.63 2002/07/04 23:32:04 thorpej Exp $");
+
+#if defined(_KERNEL_OPT)
 #include "opt_vm86.h"
 #include "opt_user_ldt.h"
+#endif
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -121,7 +126,10 @@ svr4_setregs(p, epp, stack)
 	register struct pcb *pcb = &p->p_addr->u_pcb;
 
 	setregs(p, epp, stack);
-	pcb->pcb_savefpu.sv_env.en_cw = __SVR4_NPXCW__;
+	if (i386_use_fxsave)
+		pcb->pcb_savefpu.sv_xmm.sv_env.en_cw = __SVR4_NPXCW__;
+	else
+		pcb->pcb_savefpu.sv_87.sv_env.en_cw = __SVR4_NPXCW__;
 }
 
 void *
@@ -145,8 +153,8 @@ svr4_getmcontext(p, mc, flags)
 	} else
 #endif
 	{
-	        __asm("movl %%gs,%w0" : "=r" (r[SVR4_X86_GS]));
-		__asm("movl %%fs,%w0" : "=r" (r[SVR4_X86_FS]));
+		r[SVR4_X86_GS] = tf->tf_gs;
+		r[SVR4_X86_FS] = tf->tf_fs;
 		r[SVR4_X86_ES] = tf->tf_es;
 		r[SVR4_X86_DS] = tf->tf_ds;
 		r[SVR4_X86_EFL] = tf->tf_eflags;
@@ -206,11 +214,14 @@ svr4_setmcontext(p, mc, flags)
 	tf = p->p_md.md_regs;
 #ifdef VM86
 	if (r[SVR4_X86_EFL] & PSL_VM) {
+		void syscall_vm86 __P((struct trapframe));
+
 		tf->tf_vm86_gs = r[SVR4_X86_GS];
 		tf->tf_vm86_fs = r[SVR4_X86_FS];
 		tf->tf_vm86_es = r[SVR4_X86_ES];
 		tf->tf_vm86_ds = r[SVR4_X86_DS];
 		set_vflags(p, r[SVR4_X86_EFL]);
+		p->p_md.md_syscall = syscall_vm86;
 	} else
 #endif
 	{
@@ -224,9 +235,14 @@ svr4_setmcontext(p, mc, flags)
 		    !USERMODE(r[SVR4_X86_CS], r[SVR4_X86_EFL]))
 			return (EINVAL);
 
-		/* %fs and %gs were restored by the trampoline. */
+		tf->tf_fs = r[SVR4_X86_FS];
+		tf->tf_gs = r[SVR4_X86_GS];
 		tf->tf_es = r[SVR4_X86_ES];
 		tf->tf_ds = r[SVR4_X86_DS];
+#ifdef VM86
+		if (tf->tf_eflags & PSL_VM)
+			(*p->p_emul->e_syscall_intern)(p);
+#endif
 		tf->tf_eflags = r[SVR4_X86_EFL];
 	}
 	tf->tf_edi = r[SVR4_X86_EDI];
@@ -236,8 +252,6 @@ svr4_setmcontext(p, mc, flags)
 	tf->tf_edx = r[SVR4_X86_EDX];
 	tf->tf_ecx = r[SVR4_X86_ECX];
 	tf->tf_eax = r[SVR4_X86_EAX];
-	tf->tf_trapno = r[SVR4_X86_TRAPNO];
-	tf->tf_err = r[SVR4_X86_ERR];
 	tf->tf_eip = r[SVR4_X86_EIP];
 	tf->tf_cs = r[SVR4_X86_CS];
 	tf->tf_ss = r[SVR4_X86_SS];
@@ -254,7 +268,7 @@ svr4_getsiginfo(si, sig, code, addr)
 	u_long			 code;
 	caddr_t			 addr;
 {
-	si->si_signo = native_to_svr4_sig[sig];
+	si->si_signo = native_to_svr4_signo[sig];
 	si->si_errno = 0;
 	si->si_addr  = addr;
 
@@ -351,8 +365,7 @@ svr4_getsiginfo(si, sig, code, addr)
  * will return to the user pc, psl.
  */
 void
-svr4_sendsig(catcher, sig, mask, code)
-	sig_t catcher;
+svr4_sendsig(sig, mask, code)
 	int sig;
 	sigset_t *mask;
 	u_long code;
@@ -360,20 +373,20 @@ svr4_sendsig(catcher, sig, mask, code)
 	register struct proc *p = curproc;
 	register struct trapframe *tf;
 	struct svr4_sigframe *fp, frame;
-	struct sigacts *psp = p->p_sigacts;
 	int onstack;
+	sig_t catcher = SIGACTION(p, sig).sa_handler;
 
 	tf = p->p_md.md_regs;
 
 	/* Do we need to jump onto the signal stack? */
 	onstack =
-	    (psp->ps_sigstk.ss_flags & (SS_DISABLE | SS_ONSTACK)) == 0 &&
-	    (psp->ps_sigact[sig].sa_flags & SA_ONSTACK) != 0;
+	    (p->p_sigctx.ps_sigstk.ss_flags & (SS_DISABLE | SS_ONSTACK)) == 0 &&
+	    (SIGACTION(p, sig).sa_flags & SA_ONSTACK) != 0;
 
 	/* Allocate space for the signal handler context. */
 	if (onstack)
-		fp = (struct svr4_sigframe *)((caddr_t)psp->ps_sigstk.ss_sp +
-						       psp->ps_sigstk.ss_size);
+		fp = (struct svr4_sigframe *)((caddr_t)p->p_sigctx.ps_sigstk.ss_sp +
+					p->p_sigctx.ps_sigstk.ss_size);
 	else
 		fp = (struct svr4_sigframe *)tf->tf_esp;
 	fp--;
@@ -413,9 +426,11 @@ svr4_sendsig(catcher, sig, mask, code)
 	/*
 	 * Build context to run handler in.
 	 */
+	tf->tf_gs = GSEL(GUDATA_SEL, SEL_UPL);
+	tf->tf_fs = GSEL(GUDATA_SEL, SEL_UPL);
 	tf->tf_es = GSEL(GUDATA_SEL, SEL_UPL);
 	tf->tf_ds = GSEL(GUDATA_SEL, SEL_UPL);
-	tf->tf_eip = (int)psp->ps_sigcode;
+	tf->tf_eip = (int)p->p_sigctx.ps_sigcode;
 	tf->tf_cs = GSEL(GUCODE_SEL, SEL_UPL);
 	tf->tf_eflags &= ~(PSL_T|PSL_VM|PSL_AC);
 	tf->tf_esp = (int)fp;
@@ -423,7 +438,7 @@ svr4_sendsig(catcher, sig, mask, code)
 
 	/* Remember that we're now on the signal stack. */
 	if (onstack)
-		psp->ps_sigstk.ss_flags |= SS_ONSTACK;
+		p->p_sigctx.ps_sigstk.ss_flags |= SS_ONSTACK;
 }
 
 /*
@@ -437,7 +452,7 @@ svr4_sys_sysarch(p, v, retval)
 {
 	struct svr4_sys_sysarch_args *uap = v;
 #ifdef USER_LDT
-	caddr_t sg = stackgap_init(p->p_emul);
+	caddr_t sg = stackgap_init(p, 0);
 	int error;
 #endif
 	*retval = 0;	/* XXX: What to do */
@@ -461,13 +476,17 @@ svr4_sys_sysarch(p, v, retval)
 				return error;
 			}
 
+#ifdef DEBUG
 			printf("s=%x, b=%x, l=%x, a1=%x a2=%x\n",
 			       ssd.selector, ssd.base, ssd.limit,
 			       ssd.access1, ssd.access2);
+#endif
 
 			/* We can only set ldt's for now. */
 			if (!ISLDT(ssd.selector)) {
+#ifdef DEBUG
 				printf("Not an ldt\n");
+#endif
 				return EPERM;
 			}
 
@@ -490,23 +509,20 @@ svr4_sys_sysarch(p, v, retval)
 			bsd.sd.sd_gran = (ssd.access2 >> 3)& 0x1;
 
 			sa.start = IDXSEL(ssd.selector);
-			sa.desc = stackgap_alloc(&sg, sizeof(union descriptor));
+			sa.desc = stackgap_alloc(p, &sg,
+			    sizeof(union descriptor));
 			sa.num = 1;
-			sap = stackgap_alloc(&sg,
-					     sizeof(struct i386_set_ldt_args));
+			sap = stackgap_alloc(p, &sg,
+			     sizeof(struct i386_set_ldt_args));
 
-			if ((error = copyout(&sa, sap, sizeof(sa))) != 0) {
-				printf("Cannot copyout args\n");
+			if ((error = copyout(&sa, sap, sizeof(sa))) != 0)
 				return error;
-			}
 
 			SCARG(&ua, op) = I386_SET_LDT;
 			SCARG(&ua, parms) = (char *) sap;
 
-			if ((error = copyout(&bsd, sa.desc, sizeof(bsd))) != 0) {
-				printf("Cannot copyout desc\n");
+			if ((error = copyout(&bsd, sa.desc, sizeof(bsd))) != 0)
 				return error;
-			}
 
 			return sys_sysarch(p, &ua, retval);
 		}
@@ -526,7 +542,6 @@ void
 svr4_fasttrap(frame)
 	struct trapframe frame;
 {
-	extern struct emul emul_svr4;
 	struct proc *p = curproc;
 
 	p->p_md.md_regs = &frame;
@@ -569,6 +584,8 @@ svr4_fasttrap(frame)
 		 * current runtime is the best we can do.
 		 */
 		{
+			struct schedstate_percpu *spc =
+			    &curcpu()->ci_schedstate;
 			struct timeval tv;
 			quad_t tm;
 
@@ -576,16 +593,31 @@ svr4_fasttrap(frame)
 
 			tm =
 			    (u_quad_t) (p->p_rtime.tv_sec +
-			                tv.tv_sec - runtime.tv_sec) * 1000000 +
+			                tv.tv_sec -
+			                    spc->spc_runtime.tv_sec)
+			                * 1000000 +
 			    (u_quad_t) (p->p_rtime.tv_usec +
-			                tv.tv_usec - runtime.tv_usec) * 1000;
+			                tv.tv_usec -
+			                    spc->spc_runtime.tv_usec)
+			                * 1000;
 			frame.tf_edx = ((u_int32_t *) &tm)[0];
 			frame.tf_eax = ((u_int32_t *) &tm)[1];
 		}
 		break;
 
-	case SVR4_TRAP_CLOCK_SETTIME:
-		uprintf("unimplemented svr4 fast trap CLOCK_SETTIME\n");
+	case SVR4_TRAP_GETHRESTIME:
+		/*
+		 * This is like clock_gettime(CLOCK_REALTIME, tp), returning
+		 * proc's wall time. Seconds are returned in %eax, nanoseconds
+		 * in %edx.
+		 */
+		{
+			struct timeval tv;
+			microtime(&tv);
+
+			frame.tf_eax = (u_int32_t) tv.tv_sec;
+			frame.tf_edx = (u_int32_t) tv.tv_usec * 1000;
+		}
 		break;
 
 	default:

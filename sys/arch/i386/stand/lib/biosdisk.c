@@ -1,4 +1,4 @@
-/*	$NetBSD: biosdisk.c,v 1.12 1999/08/03 19:46:22 drochner Exp $	*/
+/*	$NetBSD: biosdisk.c,v 1.15 2001/07/07 22:57:57 perry Exp $	*/
 
 /*
  * Copyright (c) 1996, 1998
@@ -85,9 +85,6 @@
 
 struct biosdisk {
 	struct biosdisk_ll ll;
-#ifdef COMPAT_OLDBOOT
-	int             disktype;
-#endif
 	int             boff;
 	char            buf[BUFSIZE];
 };
@@ -95,6 +92,8 @@ struct biosdisk {
 #ifdef _STANDALONE
 static struct btinfo_bootdisk bi_disk;
 #endif
+
+#define	RF_PROTECTED_SECTORS	64	/* XXX refer to <.../rf_optnames.h> */
 
 int 
 biosdiskstrategy(devdata, flag, dblk, size, buf, rsize)
@@ -129,22 +128,12 @@ biosdiskstrategy(devdata, flag, dblk, size, buf, rsize)
 				*rsize = blks * BIOSDISK_SECSIZE;
 			return (EIO);
 		}
-		bcopy(d->buf, buf + blks * BIOSDISK_SECSIZE, frag);
+		memcpy(buf + blks * BIOSDISK_SECSIZE, d->buf, frag);
 	}
 	if (rsize)
 		*rsize = size;
 	return (0);
 }
-
-#ifdef COMPAT_OLDBOOT
-int 
-biosdisk_gettype(f)
-	struct open_file *f;
-{
-	struct biosdisk *d = f->f_devdata;
-	return (d->disktype);
-}
-#endif
 
 int 
 biosdiskopen(struct open_file *f, ...)
@@ -256,13 +245,12 @@ biosdiskopen(struct open_file *f, ...)
 		goto out;
 	} else {
 		d->boff = lp->d_partitions[partition].p_offset;
-#ifdef COMPAT_OLDBOOT
-		d->disktype = lp->d_type;
-#endif
+		if (lp->d_partitions[partition].p_fstype == FS_RAID)
+			d->boff += RF_PROTECTED_SECTORS;
 #ifdef _STANDALONE
 		bi_disk.labelsector = sector + LABELSECTOR;
 		bi_disk.label.type = lp->d_type;
-		bcopy(lp->d_packname, bi_disk.label.packname, 16);
+		memcpy(bi_disk.label.packname, lp->d_packname, 16);
 		bi_disk.label.checksum = lp->d_checksum;
 #endif
 	}

@@ -1,4 +1,4 @@
-/*	$NetBSD: ess_pnpbios.c,v 1.1 2000/02/15 17:12:54 nathanw Exp $	*/
+/*	$NetBSD: ess_pnpbios.c,v 1.6 2002/02/15 22:06:50 nathanw Exp $	*/
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -35,6 +35,9 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
+
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: ess_pnpbios.c,v 1.6 2002/02/15 22:06:50 nathanw Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -74,7 +77,14 @@ ess_pnpbios_match(parent, match, aux)
 {
 	struct pnpbiosdev_attach_args *aa = aux;
 
-	if (strcmp(aa->idstr, "ESS0104"))
+	if (strcmp(aa->idstr, "ESS0104") && /* 1788 */
+	    strcmp(aa->idstr, "ESS0114") && /* 1788 */
+	    strcmp(aa->idstr, "CPQAE27") && /* 1788 */
+	    strcmp(aa->idstr, "ESS1869") && /* 1869 */
+	    strcmp(aa->idstr, "CPQB0AB") && /* 1869 */
+	    strcmp(aa->idstr, "CPQB0AC") && /* 1869 */
+	    strcmp(aa->idstr, "CPQB0AD") && /* 1869 */
+	    strcmp(aa->idstr, "CPQB0F1"))   /* 1869 */
 		return (0);
 
 	return (1);
@@ -101,12 +111,14 @@ ess_pnpbios_attach(parent, self, aux)
 	sc->sc_audio1.ist = IST_EDGE;
 	sc->sc_audio2.ist = IST_EDGE;
 
-	if (pnpbios_getirqnum(aa->pbt, aa->resc, 0, &sc->sc_audio1.irq)) {
+	if (pnpbios_getirqnum(aa->pbt, aa->resc, 0, &sc->sc_audio1.irq,
+	    NULL)) {
 		printf(": can't get IRQ\n");
 		return;
 	}
 
-	if (pnpbios_getirqnum(aa->pbt, aa->resc, 1, &sc->sc_audio2.irq))
+	if (pnpbios_getirqnum(aa->pbt, aa->resc, 1, &sc->sc_audio2.irq,
+	    NULL))
 		sc->sc_audio2.irq = -1;
 
 	if (pnpbios_getdmachan(aa->pbt, aa->resc, 0, &sc->sc_audio1.drq)) {
@@ -124,8 +136,7 @@ ess_pnpbios_attach(parent, self, aux)
 
 	if (!essmatch(sc)) {
 		printf("%s: essmatch failed\n", sc->sc_dev.dv_xname);
-		/* XXX should probably use "pnpbios_io_unmap", but it doesn't exist. */
-		bus_space_unmap(sc->sc_iot, sc->sc_ioh, ESS_NPORT);
+		pnpbios_io_unmap(aa->pbt, aa->resc, 0, sc->sc_iot, sc->sc_ioh);
 		return;
 	}
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: asm.h,v 1.17 1999/11/09 02:25:33 marc Exp $	*/
+/*	$NetBSD: asm.h,v 1.21 2002/05/31 18:07:31 thorpej Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -92,6 +92,23 @@
 #define _ENTRY(x) \
 	.text; _ALIGN_TEXT; .globl x; .type x,@function; x:
 
+#ifdef _KERNEL
+/* XXX Can't use __CONCAT() here, as it would be evaluated incorrectly. */
+#ifdef __ELF__
+#ifdef __STDC__
+#define	IDTVEC(name)	ALIGN_TEXT; .globl X ## name; X ## name:
+#else 
+#define	IDTVEC(name)	ALIGN_TEXT; .globl X/**/name; X/**/name:
+#endif /* __STDC__ */ 
+#else 
+#ifdef __STDC__
+#define	IDTVEC(name)	ALIGN_TEXT; .globl _X ## name; _X ## name: 
+#else
+#define	IDTVEC(name)	ALIGN_TEXT; .globl _X/**/name; _X/**/name:
+#endif /* __STDC__ */
+#endif /* __ELF__ */
+#endif /* _KERNEL */
+
 #ifdef GPROF
 # ifdef __ELF__
 #  define _PROF_PROLOGUE	\
@@ -108,11 +125,25 @@
 #define	NENTRY(y)	_ENTRY(_C_LABEL(y))
 #define	ASENTRY(y)	_ENTRY(_ASM_LABEL(y)); _PROF_PROLOGUE
 
-#define	ALTENTRY(name)	.globl _C_LABEL(name); _C_LABEL(name):
-
 #define	ASMSTR		.asciz
 
+#ifdef __ELF__
+#define RCSID(x)	.section ".ident"; .asciz x
+#else
 #define RCSID(x)	.text; .asciz x
+#endif
+
+#ifdef NO_KERNEL_RCSIDS
+#define	__KERNEL_RCSID(_n, _s)	/* nothing */
+#else
+#define	__KERNEL_RCSID(_n, _s)	RCSID(_s)
+#endif
+
+#ifdef __ELF__
+#define	WEAK_ALIAS(alias,sym)						\
+	.weak alias;							\
+	alias = sym
+#endif
 
 #ifdef __STDC__
 #define	WARN_REFERENCES(sym,msg)					\

@@ -1,7 +1,7 @@
-/*	$NetBSD: pchb.c,v 1.17 1998/10/10 14:12:21 drochner Exp $	*/
+/*	$NetBSD: pchb.c,v 1.28 2001/09/17 12:07:32 drochner Exp $	*/
 
 /*-
- * Copyright (c) 1996, 1998 The NetBSD Foundation, Inc.
+ * Copyright (c) 1996, 1998, 2000 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -48,6 +48,13 @@
 
 #include <dev/pci/pcidevs.h>
 
+#include <dev/pci/agpreg.h>
+#include <dev/pci/agpvar.h>
+
+#include <arch/i386/pci/pchbvar.h>
+
+#include "rnd.h"
+
 #define PCISET_BRIDGETYPE_MASK	0x3
 #define PCISET_TYPE_COMPAT	0x1
 #define PCISET_TYPE_AUX		0x2
@@ -55,6 +62,9 @@
 #define PCISET_BUSCONFIG_REG	0x48
 #define PCISET_BRIDGE_NUMBER(reg)	(((reg) >> 8) & 0xff)
 #define PCISET_PCI_BUS_NUMBER(reg)	(((reg) >> 16) & 0xff)
+
+/* XXX should be in dev/ic/i82443reg.h */
+#define	I82443BX_SDRAMC_REG	0x76
 
 /* XXX should be in dev/ic/i82424{reg.var}.h */
 #define I82424_CPU_BCTL_REG		0x53
@@ -69,105 +79,16 @@ int	pchbmatch __P((struct device *, struct cfdata *, void *));
 void	pchbattach __P((struct device *, struct device *, void *));
 
 int	pchb_print __P((void *, const char *));
+int	agp_print __P((void *, const char *));
 
 struct cfattach pchb_ca = {
-	sizeof(struct device), pchbmatch, pchbattach
+	sizeof(struct pchb_softc), pchbmatch, pchbattach
 };
 
 int
-pchbmatch(parent, match, aux)
-	struct device *parent;
-	struct cfdata *match;
-	void *aux;
+pchbmatch(struct device *parent, struct cfdata *match, void *aux)
 {
 	struct pci_attach_args *pa = aux;
-
-#if 0
-	/*
-	 * PCI host bridges are matched on class/subclass.
-	 * This list contains only the bridges where correct
-	 * (or incorrect) behaviour is not yet confirmed.
-	 */
-	switch (PCI_VENDOR(pa->pa_id)) {
-	case PCI_VENDOR_INTEL:
-		switch (PCI_PRODUCT(pa->pa_id)) {
-		case PCI_PRODUCT_INTEL_CDC:
-		case PCI_PRODUCT_INTEL_PCMC:
-		case PCI_PRODUCT_INTEL_82437FX:
-		case PCI_PRODUCT_INTEL_82437MX:
-		case PCI_PRODUCT_INTEL_82437VX:
-		case PCI_PRODUCT_INTEL_82439HX:
-		case PCI_PRODUCT_INTEL_82441FX:
-		case PCI_PRODUCT_INTEL_82443BX:
-		case PCI_PRODUCT_INTEL_82443LX:
-		case PCI_PRODUCT_INTEL_PCI450_PB:
-		case PCI_PRODUCT_INTEL_PCI450_MC:
-			return (1);
-		}
-		break;
-	case PCI_VENDOR_UMC:
-		switch (PCI_PRODUCT(pa->pa_id)) {
-		case PCI_PRODUCT_UMC_UM8891N:
-		case PCI_PRODUCT_UMC_UM8881F:
-			return (1);
-		}
-		break;
-	case PCI_VENDOR_ACC:
-		switch (PCI_PRODUCT(pa->pa_id)) {
-		case PCI_PRODUCT_ACC_2188:
-			return (1);
-		}
-		break;
-	case PCI_VENDOR_ACER:
-		switch (PCI_PRODUCT(pa->pa_id)) {
-		case PCI_PRODUCT_ACER_M1435:
-			return (1);
-		}
-		break;
-	case PCI_VENDOR_ALI:
-		switch (PCI_PRODUCT(pa->pa_id)) {
-		case PCI_PRODUCT_ALI_M1445:
-		case PCI_PRODUCT_ALI_M1451:
-		case PCI_PRODUCT_ALI_M1461:
-		case PCI_PRODUCT_ALI_M1541:
-			return (1);
-		}
-		break;
-	case PCI_VENDOR_COMPAQ:
-		switch (PCI_PRODUCT(pa->pa_id)) {
-		case PCI_PRODUCT_COMPAQ_TRIFLEX1:
-		case PCI_PRODUCT_COMPAQ_TRIFLEX2:
-		case PCI_PRODUCT_COMPAQ_TRIFLEX4:
-			return (1);
-		}
-		break;
-	case PCI_VENDOR_NEXGEN:
-		switch (PCI_PRODUCT(pa->pa_id)) {
-		case PCI_PRODUCT_NEXGEN_NX82C501:
-			return (1);
-		}
-		break;
-	case PCI_VENDOR_NKK:
-		switch (PCI_PRODUCT(pa->pa_id)) {
-		case PCI_PRODUCT_NKK_NDR4600:
-			return (1);
-		}
-		break;
-	case PCI_VENDOR_TOSHIBA:
-		switch (PCI_PRODUCT(pa->pa_id)) {
-		case PCI_PRODUCT_TOSHIBA_R4X00:
-			return (1);
-		}
-		break;
-	case PCI_VENDOR_VIATECH:
-		switch (PCI_PRODUCT(pa->pa_id)) {
-		case PCI_PRODUCT_VIATECH_VT82C570M:
-		case PCI_PRODUCT_VIATECH_VT82C595:
-			return (1);
-		}
-		break;
-	}
-#endif
 
 	if (PCI_CLASS(pa->pa_class) == PCI_CLASS_BRIDGE &&
 	    PCI_SUBCLASS(pa->pa_class) == PCI_SUBCLASS_BRIDGE_HOST) {
@@ -178,17 +99,24 @@ pchbmatch(parent, match, aux)
 }
 
 void
-pchbattach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+pchbattach(struct device *parent, struct device *self, void *aux)
 {
+#if NRND > 0
+	struct pchb_softc *sc = (void *) self;
+#endif
 	struct pci_attach_args *pa = aux;
 	char devinfo[256];
 	struct pcibus_attach_args pba;
+	struct agpbus_attach_args apa;
 	pcireg_t bcreg;
 	u_char bdnum, pbnum;
+	pcitag_t tag;
+	int doattach, attachflags, has_agp;
 
 	printf("\n");
+	doattach = 0;
+	has_agp = 0;
+	attachflags = pa->pa_flags;
 
 	/*
 	 * Print out a description, and configure certain chipsets which
@@ -199,8 +127,53 @@ pchbattach(parent, self, aux)
 	printf("%s: %s (rev. 0x%02x)\n", self->dv_xname, devinfo,
 	    PCI_REVISION(pa->pa_class));
 	switch (PCI_VENDOR(pa->pa_id)) {
+	case PCI_VENDOR_SERVERWORKS:
+		pbnum = pci_conf_read(pa->pa_pc, pa->pa_tag, 0x44) & 0xff;
+
+		if (pbnum == 0)
+			break;
+
+		/*
+		 * This host bridge has a second PCI bus.
+		 * Configure it.
+		 */
+		doattach = 1;
+		switch (PCI_PRODUCT(pa->pa_id)) {
+		case PCI_PRODUCT_SERVERWORKS_XX5:
+		case PCI_PRODUCT_SERVERWORKS_CNB20HE:
+		case PCI_PRODUCT_SERVERWORKS_CIOB20:
+			if ((attachflags &
+			    (PCI_FLAGS_IO_ENABLED | PCI_FLAGS_MEM_ENABLED)) ==
+			    PCI_FLAGS_MEM_ENABLED)
+				attachflags |= PCI_FLAGS_IO_ENABLED;
+			break;
+		}
+		break;
+
 	case PCI_VENDOR_INTEL:
 		switch (PCI_PRODUCT(pa->pa_id)) {
+		case PCI_PRODUCT_INTEL_82443BX_AGP:
+		case PCI_PRODUCT_INTEL_82443BX_NOAGP:
+			/*
+			 * BIOS BUG WORKAROUND!  The 82443BX
+			 * datasheet indicates that the only
+			 * legal setting for the "Idle/Pipeline
+			 * DRAM Leadoff Timing (IPLDT)" parameter
+			 * (bits 9:8) is 01.  Unfortunately, some
+			 * BIOSs do not set these bits properly.
+			 */
+			bcreg = pci_conf_read(pa->pa_pc, pa->pa_tag,
+			    I82443BX_SDRAMC_REG);
+			if ((bcreg & 0x0300) != 0x0100) {
+				printf("%s: fixing Idle/Pipeline DRAM "
+				    "Leadoff Timing\n", self->dv_xname);
+				bcreg &= ~0x0300;
+				bcreg |=  0x0100;
+				pci_conf_write(pa->pa_pc, pa->pa_tag,
+				    I82443BX_SDRAMC_REG, bcreg);
+			}
+			break;
+
 		case PCI_PRODUCT_INTEL_PCI450_PB:
 			bcreg = pci_conf_read(pa->pa_pc, pa->pa_tag,
 					      PCISET_BUSCONFIG_REG);
@@ -222,14 +195,7 @@ pchbattach(parent, self, aux)
 				 * This host bridge has a second PCI bus.
 				 * Configure it.
 				 */
-				pba.pba_busname = "pci";
-				pba.pba_iot = pa->pa_iot;
-				pba.pba_memt = pa->pa_memt;
-				pba.pba_dmat = pa->pa_dmat;
-				pba.pba_bus = pbnum;
-				pba.pba_flags = pa->pa_flags;
-				pba.pba_pc = pa->pa_pc;
-				config_found(self, &pba, pchb_print);
+				doattach = 1;
 				break;
 			}
 			break;
@@ -244,24 +210,111 @@ pchbattach(parent, self, aux)
 					self->dv_xname);
 			}
 			break;
+		case PCI_PRODUCT_INTEL_82451NX_PXB:
+			/*
+			 * The NX chipset supports up to 2 "PXB" chips
+			 * which can drive 2 PCI buses each. Each bus
+			 * shows up as logical PCI device, with fixed
+			 * device numbers between 18 and 21.
+			 * See the datasheet at
+		ftp://download.intel.com/design/chipsets/datashts/24377102.pdf
+			 * for details.
+			 * (It would be easier to attach all the buses
+			 * at the MIOC, but less aesthetical imho.)
+			 */
+			pbnum = 0;
+			switch (pa->pa_device) {
+			case 18: /* PXB 0 bus A - primary bus */
+				break;
+			case 19: /* PXB 0 bus B */
+				/* read SUBA0 from MIOC */
+				tag = pci_make_tag(pa->pa_pc, 0, 16, 0);
+				bcreg = pci_conf_read(pa->pa_pc, tag, 0xd0);
+				pbnum = ((bcreg & 0x0000ff00) >> 8) + 1;
+				break;
+			case 20: /* PXB 1 bus A */
+				/* read BUSNO1 from MIOC */
+				tag = pci_make_tag(pa->pa_pc, 0, 16, 0);
+				bcreg = pci_conf_read(pa->pa_pc, tag, 0xd0);
+				pbnum = (bcreg & 0xff000000) >> 24;
+				break;
+			case 21: /* PXB 1 bus B */
+				/* read SUBA1 from MIOC */
+				tag = pci_make_tag(pa->pa_pc, 0, 16, 0);
+				bcreg = pci_conf_read(pa->pa_pc, tag, 0xd4);
+				pbnum = (bcreg & 0x000000ff) + 1;
+				break;
+			}
+			if (pbnum != 0)
+				doattach = 1;
+			break;
+
+		case PCI_PRODUCT_INTEL_82810_MCH:
+		case PCI_PRODUCT_INTEL_82810_DC100_MCH:
+		case PCI_PRODUCT_INTEL_82810E_MCH:
+		case PCI_PRODUCT_INTEL_82815_FULL_HUB:
+			/*
+			 * The host bridge is either in GFX mode (internal
+			 * graphics) or in AGP mode. In GFX mode, we pretend
+			 * to have AGP because the graphics memory access
+			 * is very similar and the AGP GATT code will
+			 * deal with this. In the latter case, the
+			 * pci_get_capability(PCI_CAP_AGP) test below will
+			 * fire, so we do no harm by already setting the flag.
+			 */
+			has_agp = 1;
+			break;
 		}
+		break;
+	}
+
+#if NRND > 0
 	/*
-	 * XXX: vendor=PEQUR, device=0x0005 - host bridge with
-	 * auxiliary PCI bus (used in Compaq Proliant) should
-	 * be here, but I don't have enough information.
+	 * Attach a random number generator, if there is one.
 	 */
+	pchb_attach_rnd(sc, pa);
+#endif
+
+	/*
+	 * If we haven't detected AGP yet (via a product ID),
+	 * then check for AGP capability on the device.
+	 */
+	if (has_agp ||
+	    pci_get_capability(pa->pa_pc, pa->pa_tag, PCI_CAP_AGP,
+			       NULL, NULL) != 0) {
+		apa.apa_busname = "agp";
+		apa.apa_pci_args = *pa;
+		config_found(self, &apa, agp_print);
+	}
+
+	if (doattach) {
+		pba.pba_busname = "pci";
+		pba.pba_iot = pa->pa_iot;
+		pba.pba_memt = pa->pa_memt;
+		pba.pba_dmat = pa->pa_dmat;
+		pba.pba_bus = pbnum;
+		pba.pba_flags = attachflags;
+		pba.pba_pc = pa->pa_pc;
+		config_found(self, &pba, pchb_print);
 	}
 }
 
 int
-pchb_print(aux, pnp)
-	void *aux;
-	const char *pnp;
+pchb_print(void *aux, const char *pnp)
 {
 	struct pcibus_attach_args *pba = aux;
 
 	if (pnp)
 		printf("%s at %s", pba->pba_busname, pnp);
 	printf(" bus %d", pba->pba_bus);
+	return (UNCONF);
+}
+
+int
+agp_print(void *aux, const char *pnp)
+{
+	struct agpbus_attach_args *apa = aux;
+	if (pnp)
+		printf("%s at %s", apa->apa_busname, pnp);
 	return (UNCONF);
 }
