@@ -38,7 +38,7 @@
  * from: Utah $Hdr: ite.c 1.1 90/07/09$
  *
  *	from: @(#)ite.c	7.6 (Berkeley) 5/16/91
- *	$Id: ite.c,v 1.1 1993/07/05 19:19:43 mw Exp $
+ *	$Id: ite.c,v 1.1.1.1 1993/07/05 19:19:44 mw Exp $
  */
 
 /*
