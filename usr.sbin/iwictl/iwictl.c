@@ -1,4 +1,4 @@
-/*	$Id: iwictl.c,v 1.1 2005/01/11 18:28:38 skrll Exp $	*/
+/*	$Id: iwictl.c,v 1.1.1.1 2005/01/11 18:28:38 skrll Exp $	*/
 
 /*-
  * Copyright (c) 2004, 2005
@@ -28,7 +28,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$Id: iwictl.c,v 1.1 2005/01/11 18:28:38 skrll Exp $");
+__RCSID("$Id: iwictl.c,v 1.1.1.1 2005/01/11 18:28:38 skrll Exp $");
 
 #include <sys/types.h>
 #include <sys/ioctl.h>
