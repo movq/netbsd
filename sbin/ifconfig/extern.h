@@ -1,4 +1,4 @@
-/*	$NetBSD: extern.h,v 1.6 2005/03/19 23:32:55 thorpej Exp $	*/
+/*	$NetBSD: extern.h,v 1.7 2005/03/20 01:09:16 thorpej Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -50,10 +50,14 @@ struct afswtch {
 extern const struct afswtch *afp;
 extern struct ifreq ifr;
 extern int s;
+extern int explicit_prefix;
 extern char name[30];
 
 extern u_short flags;
 extern int zflag;
+#ifdef INET6
+extern int Lflag;
+#endif /* INET6 */
 
 extern struct ifreq ifr, ridreq;
 extern struct ifaliasreq addreq;
