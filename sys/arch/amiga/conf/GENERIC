@@ -1,4 +1,4 @@
-#	$NetBSD: GENERIC,v 1.32 1995/02/12 19:18:56 chopps Exp $
+#	$NetBSD: GENERIC,v 1.33 1995/03/02 03:30:43 chopps Exp $
 
 #
 # GENERIC AMIGA
@@ -181,5 +181,7 @@ pseudo-device	ppp			# ppp
 pseudo-device	view 10			# views
 pseudo-device	pty 16			# pseudo terminals
 pseudo-device	loop			# network loopback
+#pseudo-device	bpfilter 2		# berkeley packet filters
+#pseudo-device	tun 2
 
 config	netbsd swap on generic
