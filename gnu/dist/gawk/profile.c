@@ -1,4 +1,4 @@
-/*	$NetBSD: profile.c,v 1.1 2003/10/06 15:46:56 wiz Exp $	*/
+/*	$NetBSD: profile.c,v 1.1.1.1 2003/10/06 15:46:56 wiz Exp $	*/
 
 /*
  * profile.c - gawk parse tree pretty-printer with counts

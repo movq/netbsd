@@ -1,4 +1,4 @@
-/*	$NetBSD: awkgram.c,v 1.1 2003/10/06 15:43:35 wiz Exp $	*/
+/*	$NetBSD: awkgram.c,v 1.1.1.1 2003/10/06 15:43:35 wiz Exp $	*/
 
 /* A Bison parser, made by GNU Bison 1.875.  */
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: readfile.c,v 1.1 2003/10/06 15:50:50 wiz Exp $	*/
+/*	$NetBSD: readfile.c,v 1.1.1.1 2003/10/06 15:50:50 wiz Exp $	*/
 
 /*
  * readfile.c - Read an entire file into a string.

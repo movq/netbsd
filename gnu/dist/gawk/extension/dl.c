@@ -1,4 +1,4 @@
-/*	$NetBSD: dl.c,v 1.1 2003/10/06 15:50:48 wiz Exp $	*/
+/*	$NetBSD: dl.c,v 1.1.1.1 2003/10/06 15:50:48 wiz Exp $	*/
 
 /*
  * dl.c - Example of adding a new builtin function to gawk.

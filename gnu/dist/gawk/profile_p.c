@@ -1,4 +1,4 @@
-/*	$NetBSD: profile_p.c,v 1.1 2003/10/06 15:46:56 wiz Exp $	*/
+/*	$NetBSD: profile_p.c,v 1.1.1.1 2003/10/06 15:46:56 wiz Exp $	*/
 
 /*
  * profile_p.c - compile profile.c with profiling turned on.
