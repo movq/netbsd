@@ -1,4 +1,4 @@
-/*	$NetBSD: sunos_misc.c,v 1.76 1997/01/31 02:18:54 thorpej Exp $	*/
+/*	$NetBSD: sunos_misc.c,v 1.78 1997/05/08 16:19:54 mycroft Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
