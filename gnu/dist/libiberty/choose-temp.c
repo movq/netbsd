@@ -35,8 +35,6 @@ Boston, MA 02111-1307, USA.  */
 
 #include <stdio.h>	/* May get P_tmpdir.  */
 
-#include <string.h>
-
 #ifdef IN_GCC
 #include "config.h"
 #include "gansidecl.h"
