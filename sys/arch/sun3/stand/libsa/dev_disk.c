@@ -1,4 +1,4 @@
-/*	$NetBSD: dev_disk.c,v 1.1 1995/06/01 20:38:07 gwr Exp $ */
+/*	$NetBSD: dev_disk.c,v 1.1.1.1 1995/06/01 20:38:07 gwr Exp $ */
 
 /*
  * Copyright (c) 1993 Paul Kranenburg
