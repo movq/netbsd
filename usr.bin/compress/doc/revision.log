@@ -1,8 +1,8 @@
 /*
- * $Header: /home/mike/src/cvs/netbsd/src/usr.bin/compress/doc/revision.log,v 1.1 1993/03/21 09:45:37 cgd Exp $
+ * $Header: /home/mike/src/cvs/netbsd/src/usr.bin/compress/doc/revision.log,v 1.1.1.1 1993/03/21 09:45:37 cgd Exp $
  * $Log: revision.log,v $
- * Revision 1.1  1993/03/21 09:45:37  cgd
- * Initial revision
+ * Revision 1.1.1.1  1993/03/21 09:45:37  cgd
+ * initial import of 386bsd-0.1 sources
  *
  * Revision 4.0  85/07/30  12:50:00  joe
  * Removed ferror() calls in output routine on every output except first.
@@ -116,4 +116,4 @@
  */
 
 static char rcs_ident[] =
-	"$Header: /home/mike/src/cvs/netbsd/src/usr.bin/compress/doc/revision.log,v 1.1 1993/03/21 09:45:37 cgd Exp $";
+	"$Header: /home/mike/src/cvs/netbsd/src/usr.bin/compress/doc/revision.log,v 1.1.1.1 1993/03/21 09:45:37 cgd Exp $";

@@ -37,7 +37,7 @@
  *	@(#)bpf_filter.c	7.2 (Berkeley) 5/14/91
  *
  * static char rcsid[] =
- * "@(#) $Header: /home/mike/src/cvs/netbsd/src/sys/net/bpf_filter.c,v 1.1 1993/03/21 09:45:37 cgd Exp $ (LBL)";
+ * "@(#) $Header: /home/mike/src/cvs/netbsd/src/sys/net/bpf_filter.c,v 1.1.1.1 1993/03/21 09:45:37 cgd Exp $ (LBL)";
  */
 
 #include <sys/param.h>

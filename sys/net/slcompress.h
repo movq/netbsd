@@ -2,7 +2,7 @@
 /*
  * Definitions for tcp compression routines.
  *
- * $Header: /home/mike/src/cvs/netbsd/src/sys/net/slcompress.h,v 1.1 1993/03/21 09:45:37 cgd Exp $
+ * $Header: /home/mike/src/cvs/netbsd/src/sys/net/slcompress.h,v 1.1.1.1 1993/03/21 09:45:37 cgd Exp $
  *
  * Copyright (c) 1989 Regents of the University of California.
  * All rights reserved.

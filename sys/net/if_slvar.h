@@ -32,7 +32,7 @@
  *
  *	@(#)if_slvar.h	7.7 (Berkeley) 5/7/91
  *
- * $Header: /home/mike/src/cvs/netbsd/src/sys/net/if_slvar.h,v 1.1 1993/03/21 09:45:37 cgd Exp $
+ * $Header: /home/mike/src/cvs/netbsd/src/sys/net/if_slvar.h,v 1.1.1.1 1993/03/21 09:45:37 cgd Exp $
  */
 
 /*

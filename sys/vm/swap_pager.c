@@ -39,7 +39,7 @@
  *
  *	@(#)swap_pager.c	7.4 (Berkeley) 5/7/91
  */
-static char rcsid[] = "$Header: /home/mike/src/cvs/netbsd/src/sys/vm/Attic/swap_pager.c,v 1.1 1993/03/21 09:45:37 cgd Exp $";
+static char rcsid[] = "$Header: /home/mike/src/cvs/netbsd/src/sys/vm/Attic/swap_pager.c,v 1.1.1.1 1993/03/21 09:45:37 cgd Exp $";
 
 /*
  * Quick hack to page to dedicated partition(s).

@@ -32,7 +32,7 @@
  *
  *	@(#)tty_pty.c	7.21 (Berkeley) 5/30/91
  */
-static char rcsid[] = "$Header: /home/mike/src/cvs/netbsd/src/sys/kern/tty_pty.c,v 1.1 1993/03/21 09:45:37 cgd Exp $";
+static char rcsid[] = "$Header: /home/mike/src/cvs/netbsd/src/sys/kern/tty_pty.c,v 1.1.1.1 1993/03/21 09:45:37 cgd Exp $";
 
 /*
  * Pseudo-teletype Driver

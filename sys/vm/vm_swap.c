@@ -32,7 +32,7 @@
  *
  *	@(#)vm_swap.c	7.18 (Berkeley) 5/6/91
  */
-static char rcsid[] = "$Header: /home/mike/src/cvs/netbsd/src/sys/vm/Attic/vm_swap.c,v 1.1 1993/03/21 09:45:37 cgd Exp $";
+static char rcsid[] = "$Header: /home/mike/src/cvs/netbsd/src/sys/vm/Attic/vm_swap.c,v 1.1.1.1 1993/03/21 09:45:37 cgd Exp $";
 
 #include "param.h"
 #include "systm.h"

@@ -1,6 +1,6 @@
 /* Copyright (c) Stichting Mathematisch Centrum, Amsterdam, 1985. */
 /* hack.version.c - version 1.0.3 */
-/* $Header: /home/mike/src/cvs/netbsd/src/games/hack/hack.version.c,v 1.1 1993/03/21 09:45:37 cgd Exp $ */
+/* $Header: /home/mike/src/cvs/netbsd/src/games/hack/hack.version.c,v 1.1.1.1 1993/03/21 09:45:37 cgd Exp $ */
 
 #include	"date.h"
 

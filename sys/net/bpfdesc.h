@@ -36,7 +36,7 @@
  *
  *	@(#)bpfdesc.h	7.1 (Berkeley) 5/7/91
  *
- * @(#) $Header: /home/mike/src/cvs/netbsd/src/sys/net/bpfdesc.h,v 1.1 1993/03/21 09:45:37 cgd Exp $ (LBL)
+ * @(#) $Header: /home/mike/src/cvs/netbsd/src/sys/net/bpfdesc.h,v 1.1.1.1 1993/03/21 09:45:37 cgd Exp $ (LBL)
  */
 
 /*

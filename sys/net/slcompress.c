@@ -41,7 +41,7 @@
  *	- Initial distribution.
  *
  * static char rcsid[] =
- * "$Header: /home/mike/src/cvs/netbsd/src/sys/net/slcompress.c,v 1.1 1993/03/21 09:45:37 cgd Exp $";
+ * "$Header: /home/mike/src/cvs/netbsd/src/sys/net/slcompress.c,v 1.1.1.1 1993/03/21 09:45:37 cgd Exp $";
  */
 
 #include <sys/param.h>
