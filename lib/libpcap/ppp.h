@@ -1,4 +1,4 @@
-/*	$NetBSD: ppp.h,v 1.1 1997/10/03 15:38:55 christos Exp $	*/
+/*	$NetBSD: ppp.h,v 1.1.1.1 1997/10/03 15:38:55 christos Exp $	*/
 
 /* @(#) Header: ppp.h,v 1.7 95/05/04 17:52:46 mccanne Exp  (LBL) */
 /*
