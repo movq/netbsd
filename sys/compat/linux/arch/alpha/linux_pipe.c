@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_pipe.c,v 1.5 2000/10/16 03:18:04 erh Exp $	*/
+/*	$NetBSD: linux_pipe.c,v 1.5.2.1 2001/08/30 23:43:44 nathanw Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -43,6 +43,7 @@
 #include <sys/mbuf.h>
 #include <sys/mman.h>
 #include <sys/mount.h>
+#include <sys/lwp.h>
 #include <sys/proc.h>
   
 #include <sys/syscallargs.h> 
@@ -62,16 +63,16 @@
 
 
 int
-linux_sys_pipe(p, v, retval)
-	struct proc *p;
+linux_sys_pipe(l, v, retval)
+	struct lwp *l;
 	void *v;
 	register_t *retval;
 {
 	int error;
 
-	if ((error = sys_pipe(p, 0, retval)))
+	if ((error = sys_pipe(l, 0, retval)))
 		return error;
 
-	(p->p_md.md_tf)->tf_regs[FRAME_A4] = retval[1];
+	(l->l_md.md_tf)->tf_regs[FRAME_A4] = retval[1];
 	return 0;
 }
