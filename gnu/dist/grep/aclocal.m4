@@ -10,166 +10,47 @@ dnl but WITHOUT ANY WARRANTY, to the extent permitted by law; without
 dnl even the implied warranty of MERCHANTABILITY or FITNESS FOR A
 dnl PARTICULAR PURPOSE.
 
-# Do all the work for Automake.  This macro actually does too much --
-# some checks are only needed if your package does certain things.
-# But this isn't really a big deal.
-
-# serial 1
-
-dnl Usage:
-dnl AM_INIT_AUTOMAKE(package,version, [no-define])
-
-AC_DEFUN(AM_INIT_AUTOMAKE,
-[AC_REQUIRE([AC_PROG_INSTALL])
-PACKAGE=[$1]
-AC_SUBST(PACKAGE)
-VERSION=[$2]
-AC_SUBST(VERSION)
-dnl test to see if srcdir already configured
-if test "`cd $srcdir && pwd`" != "`pwd`" && test -f $srcdir/config.status; then
-  AC_MSG_ERROR([source directory already configured; run "make distclean" there first])
-fi
-ifelse([$3],,
-AC_DEFINE_UNQUOTED(PACKAGE, "$PACKAGE")
-AC_DEFINE_UNQUOTED(VERSION, "$VERSION"))
-AC_REQUIRE([AM_SANITY_CHECK])
-AC_REQUIRE([AC_ARG_PROGRAM])
-dnl FIXME This is truly gross.
-missing_dir=`cd $ac_aux_dir && pwd`
-AM_MISSING_PROG(ACLOCAL, aclocal, $missing_dir)
-AM_MISSING_PROG(AUTOCONF, autoconf, $missing_dir)
-AM_MISSING_PROG(AUTOMAKE, automake, $missing_dir)
-AM_MISSING_PROG(AUTOHEADER, autoheader, $missing_dir)
-AM_MISSING_PROG(MAKEINFO, makeinfo, $missing_dir)
-AC_REQUIRE([AC_PROG_MAKE_SET])])
-
-#
-# Check to make sure that the build environment is sane.
-#
-
-AC_DEFUN(AM_SANITY_CHECK,
-[AC_MSG_CHECKING([whether build environment is sane])
-# Just in case
-sleep 1
-echo timestamp > conftestfile
-# Do `set' in a subshell so we don't clobber the current shell's
-# arguments.  Must try -L first in case configure is actually a
-# symlink; some systems play weird games with the mod time of symlinks
-# (eg FreeBSD returns the mod time of the symlink's containing
-# directory).
-if (
-   set X `ls -Lt $srcdir/configure conftestfile 2> /dev/null`
-   if test "[$]*" = "X"; then
-      # -L didn't work.
-      set X `ls -t $srcdir/configure conftestfile`
-   fi
-   if test "[$]*" != "X $srcdir/configure conftestfile" \
-      && test "[$]*" != "X conftestfile $srcdir/configure"; then
-
-      # If neither matched, then we have a broken ls.  This can happen
-      # if, for instance, CONFIG_SHELL is bash and it inherits a
-      # broken ls alias from the environment.  This has actually
-      # happened.  Such a system could not be considered "sane".
-      AC_MSG_ERROR([ls -t appears to fail.  Make sure there is not a broken
-alias in your environment])
-   fi
-
-   test "[$]2" = conftestfile
-   )
-then
-   # Ok.
-   :
+dnl Check for DJGPP. we use DJ_GPP as the variable
+dnl EXEEXXT
+AC_DEFUN(AC_DJGPP,
+[AC_CACHE_CHECK(for DJGPP environment, ac_cv_djgpp,
+[AC_TRY_COMPILE(,[ return __DJGPP__;],
+ac_cv_djgpp=yes, ac_cv_djgpp=no)
+rm -f conftest*])
+DJ_GPP=
+test "$ac_cv_djgpp" = yes && DJ_GPP=yes])
+# Check to see if we use dir\file name conventtion
+# If so, set macro HAVE_DOS_FILE_NAMES 
+dnl AC_DOSFILE()
+AC_DEFUN(AC_DOSFILE,
+[AC_CACHE_CHECK([for dos file convention], ac_cv_dosfile,
+[if test -d ".\."; then
+   ac_cv_dosfile=yes
+   AC_DEFINE(HAVE_DOS_FILE_NAMES)
 else
-   AC_MSG_ERROR([newly created file is older than distributed files!
-Check your system clock])
+   ac_cv_dosfile=no
 fi
-rm -f conftest*
-AC_MSG_RESULT(yes)])
+])])
+# Check to see the separator for the environment variables
+# and set SEP to ";" or default ":"
 
-dnl AM_MISSING_PROG(NAME, PROGRAM, DIRECTORY)
-dnl The program must properly implement --version.
-AC_DEFUN(AM_MISSING_PROG,
-[AC_MSG_CHECKING(for working $2)
-# Run test in a subshell; some versions of sh will print an error if
-# an executable is not found, even if stderr is redirected.
-# Redirect stdin to placate older versions of autoconf.  Sigh.
-if ($2 --version) < /dev/null > /dev/null 2>&1; then
-   $1=$2
-   AC_MSG_RESULT(found)
+dnl AM_SEP()
+dnl SEP
+AC_DEFUN(AM_SEP,
+[AC_REQUIRE([AC_CYGWIN])
+AC_REQUIRE([AC_MINGW32])
+AC_REQUIRE([AC_DJGPP])
+AC_MSG_CHECKING([for environ variable separator])
+AC_CACHE_VAL(ac_cv_sep,
+[if test "$CYGWIN" = yes || test "$MINGW32" = yes || test "$DJ_GPP" = yes ; then
+  ac_cv_sep=yes
 else
-   $1="$3/missing $2"
-   AC_MSG_RESULT(missing)
-fi
-AC_SUBST($1)])
-
-# Like AC_CONFIG_HEADER, but automatically create stamp file.
-
-AC_DEFUN(AM_CONFIG_HEADER,
-[AC_PREREQ([2.12])
-AC_CONFIG_HEADER([$1])
-dnl When config.status generates a header, we must update the stamp-h file.
-dnl This file resides in the same directory as the config header
-dnl that is generated.  We must strip everything past the first ":",
-dnl and everything past the last "/".
-AC_OUTPUT_COMMANDS(changequote(<<,>>)dnl
-ifelse(patsubst(<<$1>>, <<[^ ]>>, <<>>), <<>>,
-<<test -z "<<$>>CONFIG_HEADERS" || echo timestamp > patsubst(<<$1>>, <<^\([^:]*/\)?.*>>, <<\1>>)stamp-h<<>>dnl>>,
-<<am_indx=1
-for am_file in <<$1>>; do
-  case " <<$>>CONFIG_HEADERS " in
-  *" <<$>>am_file "*<<)>>
-    echo timestamp > `echo <<$>>am_file | sed -e 's%:.*%%' -e 's%[^/]*$%%'`stamp-h$am_indx
-    ;;
-  esac
-  am_indx=`expr "<<$>>am_indx" + 1`
-done<<>>dnl>>)
-changequote([,]))])
-
-#serial 1
-
-dnl The problem is that the default compilation flags in Solaris 2.6 won't
-dnl let programs access large files;  you need to tell the compiler that
-dnl you actually want your programs to work on large files.  For more
-dnl details about this brain damage please see:
-dnl http://www.sas.com/standards/large.file/x_open.20Mar96.html
-
-dnl Written by Paul Eggert <eggert@twinsun.com>.
-
-AC_DEFUN(AC_LFS,
-[dnl
-  # If available, prefer support for large files unless the user specified
-  # one of the CPPFLAGS, LDFLAGS, or LIBS variables.
-  AC_MSG_CHECKING(whether large file support needs explicit enabling)
-  ac_getconfs=''
-  ac_result=yes
-  ac_set=''
-  ac_shellvars='CPPFLAGS LDFLAGS LIBS'
-  for ac_shellvar in $ac_shellvars; do
-    case $ac_shellvar in
-      CPPFLAGS) ac_lfsvar=LFS_CFLAGS ;;
-      *) ac_lfsvar=LFS_$ac_shellvar ;;
-    esac
-    eval test '"${'$ac_shellvar'+set}"' = set && ac_set=$ac_shellvar
-    (getconf $ac_lfsvar) >/dev/null 2>&1 || { ac_result=no; break; }
-    ac_getconf=`getconf $ac_lfsvar`
-    ac_getconfs=$ac_getconfs$ac_getconf
-    eval ac_test_$ac_shellvar=\$ac_getconf
-  done
-  case "$ac_result$ac_getconfs" in
-    yes) ac_result=no ;;
-  esac
-  case "$ac_result$ac_set" in
-    yes?*) ac_result="yes, but $ac_set is already set, so use its settings"
-  esac
-  AC_MSG_RESULT($ac_result)
-  case $ac_result in
-    yes)
-      for ac_shellvar in $ac_shellvars; do
-	eval $ac_shellvar=\$ac_test_$ac_shellvar
-      done ;;
-  esac
-])
-
+  ac_cv_sep=no
+fi])
+SEP=":"
+test x"$ac_cv_sep" = xyes && SEP=";"
+AC_MSG_RESULT(${SEP})
+AC_SUBST(SEP)])
 # Macro to add for using GNU gettext.
 # Ulrich Drepper <drepper@cygnus.com>, 1995.
 #
@@ -496,7 +377,281 @@ strdup __argz_count __argz_stringify __argz_next])
    sed -e "/^#/d" -e "/^\$/d" -e "s,.*,	$posrcprefix& \\\\," -e "\$s/\(.*\) \\\\/\1/" \
 	< $srcdir/po/POTFILES.in > po/POTFILES
   ])
+dnl From Gordon Matzigkeit.
+dnl Test for the GNU C Library.
+dnl FIXME: this should migrate into libit.
 
+AC_DEFUN(AM_GLIBC,
+  [
+    AC_CACHE_CHECK(whether we are using the GNU C Library,
+      ac_cv_gnu_library,
+      [AC_EGREP_CPP([Thanks for using GNU],
+	[
+#include <features.h>
+#ifdef __GNU_LIBRARY__
+  Thanks for using GNU
+#endif
+	],
+	ac_cv_gnu_library=yes,
+	ac_cv_gnu_library=no)
+      ]
+    )
+    AC_CACHE_CHECK(for version 2 of the GNU C Library,
+      ac_cv_glibc,
+      [AC_EGREP_CPP([Thanks for using GNU too],
+	[
+#include <features.h>
+#ifdef __GLIBC__
+  Thanks for using GNU too
+#endif
+	],
+	ac_cv_glibc=yes, ac_cv_glibc=no)
+      ]
+    )
+  ]
+)
+# Like AC_CONFIG_HEADER, but automatically create stamp file.
+
+AC_DEFUN(AM_CONFIG_HEADER,
+[AC_PREREQ([2.12])
+AC_CONFIG_HEADER([$1])
+dnl When config.status generates a header, we must update the stamp-h file.
+dnl This file resides in the same directory as the config header
+dnl that is generated.  We must strip everything past the first ":",
+dnl and everything past the last "/".
+AC_OUTPUT_COMMANDS(changequote(<<,>>)dnl
+ifelse(patsubst(<<$1>>, <<[^ ]>>, <<>>), <<>>,
+<<test -z "<<$>>CONFIG_HEADERS" || echo timestamp > patsubst(<<$1>>, <<^\([^:]*/\)?.*>>, <<\1>>)stamp-h<<>>dnl>>,
+<<am_indx=1
+for am_file in <<$1>>; do
+  case " <<$>>CONFIG_HEADERS " in
+  *" <<$>>am_file "*<<)>>
+    echo timestamp > `echo <<$>>am_file | sed -e 's%:.*%%' -e 's%[^/]*$%%'`stamp-h$am_indx
+    ;;
+  esac
+  am_indx=`expr "<<$>>am_indx" + 1`
+done<<>>dnl>>)
+changequote([,]))])
+# Do all the work for Automake.  This macro actually does too much --
+# some checks are only needed if your package does certain things.
+# But this isn't really a big deal.
+
+# serial 1
+
+dnl Usage:
+dnl AM_INIT_AUTOMAKE(package,version, [no-define])
+
+AC_DEFUN(AM_INIT_AUTOMAKE,
+[AC_REQUIRE([AC_PROG_INSTALL])
+PACKAGE=[$1]
+AC_SUBST(PACKAGE)
+VERSION=[$2]
+AC_SUBST(VERSION)
+dnl test to see if srcdir already configured
+if test "`cd $srcdir && pwd`" != "`pwd`" && test -f $srcdir/config.status; then
+  AC_MSG_ERROR([source directory already configured; run "make distclean" there first])
+fi
+ifelse([$3],,
+AC_DEFINE_UNQUOTED(PACKAGE, "$PACKAGE")
+AC_DEFINE_UNQUOTED(VERSION, "$VERSION"))
+AC_REQUIRE([AM_SANITY_CHECK])
+AC_REQUIRE([AC_ARG_PROGRAM])
+dnl FIXME This is truly gross.
+missing_dir=`cd $ac_aux_dir && pwd`
+AM_MISSING_PROG(ACLOCAL, aclocal, $missing_dir)
+AM_MISSING_PROG(AUTOCONF, autoconf, $missing_dir)
+AM_MISSING_PROG(AUTOMAKE, automake, $missing_dir)
+AM_MISSING_PROG(AUTOHEADER, autoheader, $missing_dir)
+AM_MISSING_PROG(MAKEINFO, makeinfo, $missing_dir)
+AC_REQUIRE([AC_PROG_MAKE_SET])])
+
+# serial 1
+
+AC_DEFUN(AM_PROG_INSTALL,
+[AC_REQUIRE([AC_PROG_INSTALL])
+test -z "$INSTALL_SCRIPT" && INSTALL_SCRIPT='${INSTALL_PROGRAM}'
+AC_SUBST(INSTALL_SCRIPT)dnl
+])
+#serial 1
+dnl This test replaces the one in autoconf.
+dnl Currently this macro should have the same name as the autoconf macro
+dnl because gettext's gettext.m4 (distributed in the automake package)
+dnl still uses it.  Otherwise, the use in gettext.m4 makes autoheader
+dnl give these diagnostics:
+dnl   configure.in:556: AC_TRY_COMPILE was called before AC_ISC_POSIX
+dnl   configure.in:556: AC_TRY_RUN was called before AC_ISC_POSIX
+
+undefine([AC_ISC_POSIX])
+AC_DEFUN(AC_ISC_POSIX,
+  [
+    dnl This test replaces the obsolescent AC_ISC_POSIX kludge.
+    dnl AC_CHECK_LIB(cposix, strerror, [LIBS="$LIBS -lcposix"])
+    dnl grep has stub for the absence of strerror
+  ]
+)
+#serial 6
+
+dnl By default, many hosts won't let programs access large files;
+dnl one must use special compiler options to get large-file access to work.
+dnl For more details about this brain damage please see:
+dnl http://www.sas.com/standards/large.file/x_open.20Mar96.html
+
+dnl Written by Paul Eggert <eggert@twinsun.com>.
+
+dnl Internal subroutine of AC_SYS_LARGEFILE.
+dnl AC_SYS_LARGEFILE_FLAGS(FLAGSNAME)
+AC_DEFUN(AC_SYS_LARGEFILE_FLAGS,
+  [AC_CACHE_CHECK([for $1 value to request large file support],
+     ac_cv_sys_largefile_$1,
+     [if ($GETCONF LFS_$1) >conftest.1 2>conftest.2 && test ! -s conftest.2
+      then
+        ac_cv_sys_largefile_$1=`cat conftest.1`
+      else
+	ac_cv_sys_largefile_$1=no
+	ifelse($1, CFLAGS,
+	  [case "$host_os" in
+	   # HP-UX 10.20 requires -D__STDC_EXT__ with gcc 2.95.1.
+changequote(, )dnl
+	   hpux10.[2-9][0-9]* | hpux1[1-9]* | hpux[2-9][0-9]*)
+changequote([, ])dnl
+	     if test "$GCC" = yes; then
+	       ac_cv_sys_largefile_CFLAGS=-D__STDC_EXT__
+	     fi
+	     ;;
+	   # IRIX 6.2 and later require cc -n32.
+changequote(, )dnl
+	   irix6.[2-9]* | irix6.1[0-9]* | irix[7-9].* | irix[1-9][0-9]*)
+changequote([, ])dnl
+	     if test "$GCC" != yes; then
+	       ac_cv_sys_largefile_CFLAGS=-n32
+	     fi
+	   esac
+	   if test "$ac_cv_sys_largefile_CFLAGS" != no; then
+	     ac_save_CC="$CC"
+	     CC="$CC $ac_cv_sys_largefile_CFLAGS"
+	     AC_TRY_LINK(, , , ac_cv_sys_largefile_CFLAGS=no)
+	     CC="$ac_save_CC"
+	   fi])
+      fi
+      rm -f conftest*])])
+
+dnl Internal subroutine of AC_SYS_LARGEFILE.
+dnl AC_SYS_LARGEFILE_SPACE_APPEND(VAR, VAL)
+AC_DEFUN(AC_SYS_LARGEFILE_SPACE_APPEND,
+  [case $2 in
+   no) ;;
+   ?*)
+     case "[$]$1" in
+     '') $1=$2 ;;
+     *) $1=[$]$1' '$2 ;;
+     esac ;;
+   esac])
+
+dnl Internal subroutine of AC_SYS_LARGEFILE.
+dnl AC_SYS_LARGEFILE_MACRO_VALUE(C-MACRO, CACHE-VAR, COMMENT, CODE-TO-SET-DEFAULT)
+AC_DEFUN(AC_SYS_LARGEFILE_MACRO_VALUE,
+  [AC_CACHE_CHECK([for $1], $2,
+     [$2=no
+changequote(, )dnl
+      $4
+      for ac_flag in $ac_cv_sys_largefile_CFLAGS no; do
+	case "$ac_flag" in
+	-D$1)
+	  $2=1 ;;
+	-D$1=*)
+	  $2=`expr " $ac_flag" : '[^=]*=\(.*\)'` ;;
+	esac
+      done
+changequote([, ])dnl
+      ])
+   if test "[$]$2" != no; then
+     AC_DEFINE_UNQUOTED([$1], [$]$2, [$3])
+   fi])
+
+AC_DEFUN(AC_SYS_LARGEFILE,
+  [AC_REQUIRE([AC_CANONICAL_HOST])
+   AC_ARG_ENABLE(largefile,
+     [  --disable-largefile     omit support for large files])
+   if test "$enable_largefile" != no; then
+     AC_CHECK_TOOL(GETCONF, getconf)
+     AC_SYS_LARGEFILE_FLAGS(CFLAGS)
+     AC_SYS_LARGEFILE_FLAGS(LDFLAGS)
+     AC_SYS_LARGEFILE_FLAGS(LIBS)
+
+     for ac_flag in $ac_cv_sys_largefile_CFLAGS no; do
+       case "$ac_flag" in
+       no) ;;
+       -D_FILE_OFFSET_BITS=*) ;;
+       -D_LARGEFILE_SOURCE | -D_LARGEFILE_SOURCE=*) ;;
+       -D_LARGE_FILES | -D_LARGE_FILES=*) ;;
+       -D?* | -I?*)
+	 AC_SYS_LARGEFILE_SPACE_APPEND(CPPFLAGS, "$ac_flag") ;;
+       *)
+	 AC_SYS_LARGEFILE_SPACE_APPEND(CFLAGS, "$ac_flag") ;;
+       esac
+     done
+     AC_SYS_LARGEFILE_SPACE_APPEND(LDFLAGS, "$ac_cv_sys_largefile_LDFLAGS")
+     AC_SYS_LARGEFILE_SPACE_APPEND(LIBS, "$ac_cv_sys_largefile_LIBS")
+     AC_SYS_LARGEFILE_MACRO_VALUE(_FILE_OFFSET_BITS,
+       ac_cv_sys_file_offset_bits,
+       [Number of bits in a file offset, on hosts where this is settable.],
+       [case "$host_os" in
+	# HP-UX 10.20 and later
+	hpux10.[2-9][0-9]* | hpux1[1-9]* | hpux[2-9][0-9]*)
+	  ac_cv_sys_file_offset_bits=64 ;;
+	esac])
+     AC_SYS_LARGEFILE_MACRO_VALUE(_LARGEFILE_SOURCE,
+       ac_cv_sys_largefile_source,
+       [Define to make fseeko etc. visible, on some hosts.],
+       [case "$host_os" in
+	# HP-UX 10.20 and later
+	hpux10.[2-9][0-9]* | hpux1[1-9]* | hpux[2-9][0-9]*)
+	  ac_cv_sys_largefile_source=1 ;;
+	esac])
+     AC_SYS_LARGEFILE_MACRO_VALUE(_LARGE_FILES,
+       ac_cv_sys_large_files,
+       [Define for large files, on AIX-style hosts.],
+       [case "$host_os" in
+	# AIX 4.2 and later
+	aix4.[2-9]* | aix4.1[0-9]* | aix[5-9].* | aix[1-9][0-9]*)
+	  ac_cv_sys_large_files=1 ;;
+	esac])
+   fi
+  ])
+# Check whether LC_MESSAGES is available in <locale.h>.
+# Ulrich Drepper <drepper@cygnus.com>, 1995.
+#
+# This file can be copied and used freely without restrictions.  It can
+# be used in projects which are not available under the GNU Public License
+# but which still want to provide support for the GNU gettext functionality.
+# Please note that the actual code is *not* freely available.
+
+# serial 1
+
+AC_DEFUN(AM_LC_MESSAGES,
+  [if test $ac_cv_header_locale_h = yes; then
+    AC_CACHE_CHECK([for LC_MESSAGES], am_cv_val_LC_MESSAGES,
+      [AC_TRY_LINK([#include <locale.h>], [return LC_MESSAGES],
+       am_cv_val_LC_MESSAGES=yes, am_cv_val_LC_MESSAGES=no)])
+    if test $am_cv_val_LC_MESSAGES = yes; then
+      AC_DEFINE(HAVE_LC_MESSAGES)
+    fi
+  fi])
+dnl AM_MISSING_PROG(NAME, PROGRAM, DIRECTORY)
+dnl The program must properly implement --version.
+AC_DEFUN(AM_MISSING_PROG,
+[AC_MSG_CHECKING(for working $2)
+# Run test in a subshell; some versions of sh will print an error if
+# an executable is not found, even if stderr is redirected.
+# Redirect stdin to placate older versions of autoconf.  Sigh.
+if ($2 --version) < /dev/null > /dev/null 2>&1; then
+   $1=$2
+   AC_MSG_RESULT(found)
+else
+   $1="$3/missing $2"
+   AC_MSG_RESULT(missing)
+fi
+AC_SUBST($1)])
 # Search path for a program which passes the given test.
 # Ulrich Drepper <drepper@cygnus.com>, 1996.
 # update to support dos
@@ -547,89 +702,6 @@ else
 fi
 AC_SUBST($1)dnl
 ])
-
-#serial 1
-dnl This test replaces the one in autoconf.
-dnl Currently this macro should have the same name as the autoconf macro
-dnl because gettext's gettext.m4 (distributed in the automake package)
-dnl still uses it.  Otherwise, the use in gettext.m4 makes autoheader
-dnl give these diagnostics:
-dnl   configure.in:556: AC_TRY_COMPILE was called before AC_ISC_POSIX
-dnl   configure.in:556: AC_TRY_RUN was called before AC_ISC_POSIX
-
-undefine([AC_ISC_POSIX])
-AC_DEFUN(AC_ISC_POSIX,
-  [
-    dnl This test replaces the obsolescent AC_ISC_POSIX kludge.
-    dnl AC_CHECK_LIB(cposix, strerror, [LIBS="$LIBS -lcposix"])
-    dnl grep has stub for the absence of strerror
-  ]
-)
-
-# Check whether LC_MESSAGES is available in <locale.h>.
-# Ulrich Drepper <drepper@cygnus.com>, 1995.
-#
-# This file can be copied and used freely without restrictions.  It can
-# be used in projects which are not available under the GNU Public License
-# but which still want to provide support for the GNU gettext functionality.
-# Please note that the actual code is *not* freely available.
-
-# serial 1
-
-AC_DEFUN(AM_LC_MESSAGES,
-  [if test $ac_cv_header_locale_h = yes; then
-    AC_CACHE_CHECK([for LC_MESSAGES], am_cv_val_LC_MESSAGES,
-      [AC_TRY_LINK([#include <locale.h>], [return LC_MESSAGES],
-       am_cv_val_LC_MESSAGES=yes, am_cv_val_LC_MESSAGES=no)])
-    if test $am_cv_val_LC_MESSAGES = yes; then
-      AC_DEFINE(HAVE_LC_MESSAGES)
-    fi
-  fi])
-
-# Check to see if we use dir\file name conventtion
-# If so, set macro HAVE_DOS_FILE_NAMES 
-dnl AC_DOSFILE()
-AC_DEFUN(AC_DOSFILE,
-[AC_CACHE_CHECK([for dos file convention], ac_cv_dosfile,
-[if test -d ".\."; then
-   ac_cv_dosfile=yes
-   AC_DEFINE(HAVE_DOS_FILE_NAMES)
-else
-   ac_cv_dosfile=no
-fi
-])])
-
-# Check to see the separator for the environment variables
-# and set SEP to ";" or default ":"
-
-dnl AM_SEP()
-dnl SEP
-AC_DEFUN(AM_SEP,
-[AC_REQUIRE([AC_CYGWIN])
-AC_REQUIRE([AC_MINGW32])
-AC_REQUIRE([AC_DJGPP])
-AC_MSG_CHECKING([for environ variable separator])
-AC_CACHE_VAL(ac_cv_sep,
-[if test "$CYGWIN" = yes || test "$MINGW32" = yes || test "$DJ_GPP" = yes ; then
-  ac_cv_sep=yes
-else
-  ac_cv_sep=no
-fi])
-SEP=":"
-test x"$ac_cv_sep" = xyes && SEP=";"
-AC_MSG_RESULT(${SEP})
-AC_SUBST(SEP)])
-
-dnl Check for DJGPP. we use DJ_GPP as the variable
-dnl EXEEXXT
-AC_DEFUN(AC_DJGPP,
-[AC_CACHE_CHECK(for DJGPP environment, ac_cv_djgpp,
-[AC_TRY_COMPILE(,[ return __DJGPP__;],
-ac_cv_djgpp=yes, ac_cv_djgpp=no)
-rm -f conftest*])
-DJ_GPP=
-test "$ac_cv_djgpp" = yes && DJ_GPP=yes])
-
 #serial 5
 
 dnl Initially derived from code in GNU grep.
@@ -699,4 +771,156 @@ AC_DEFUN(jm_INCLUDED_REGEX,
     )
   ]
 )
+#
+# Check to make sure that the build environment is sane.
+#
+
+AC_DEFUN(AM_SANITY_CHECK,
+[AC_MSG_CHECKING([whether build environment is sane])
+# Just in case
+sleep 1
+echo timestamp > conftestfile
+# Do `set' in a subshell so we don't clobber the current shell's
+# arguments.  Must try -L first in case configure is actually a
+# symlink; some systems play weird games with the mod time of symlinks
+# (eg FreeBSD returns the mod time of the symlink's containing
+# directory).
+if (
+   set X `ls -Lt $srcdir/configure conftestfile 2> /dev/null`
+   if test "[$]*" = "X"; then
+      # -L didn't work.
+      set X `ls -t $srcdir/configure conftestfile`
+   fi
+   if test "[$]*" != "X $srcdir/configure conftestfile" \
+      && test "[$]*" != "X conftestfile $srcdir/configure"; then
+
+      # If neither matched, then we have a broken ls.  This can happen
+      # if, for instance, CONFIG_SHELL is bash and it inherits a
+      # broken ls alias from the environment.  This has actually
+      # happened.  Such a system could not be considered "sane".
+      AC_MSG_ERROR([ls -t appears to fail.  Make sure there is not a broken
+alias in your environment])
+   fi
+
+   test "[$]2" = conftestfile
+   )
+then
+   # Ok.
+   :
+else
+   AC_MSG_ERROR([newly created file is older than distributed files!
+Check your system clock])
+fi
+rm -f conftest*
+AC_MSG_RESULT(yes)])
+
+
+# serial 1
+
+AC_DEFUN(AM_C_PROTOTYPES,
+[AC_REQUIRE([AM_PROG_CC_STDC])
+AC_REQUIRE([AC_PROG_CPP])
+AC_MSG_CHECKING([for function prototypes])
+if test "$am_cv_prog_cc_stdc" != no; then
+  AC_MSG_RESULT(yes)
+  AC_DEFINE(PROTOTYPES,1,[Define if compiler has function prototypes])
+  U= ANSI2KNR=
+else
+  AC_MSG_RESULT(no)
+  U=_ ANSI2KNR=./ansi2knr
+  # Ensure some checks needed by ansi2knr itself.
+  AC_HEADER_STDC
+  AC_CHECK_HEADERS(string.h)
+fi
+AC_SUBST(U)dnl
+AC_SUBST(ANSI2KNR)dnl
+])
+
+
+# serial 1
+
+# @defmac AC_PROG_CC_STDC
+# @maindex PROG_CC_STDC
+# @ovindex CC
+# If the C compiler in not in ANSI C mode by default, try to add an option
+# to output variable @code{CC} to make it so.  This macro tries various
+# options that select ANSI C on some system or another.  It considers the
+# compiler to be in ANSI C mode if it handles function prototypes correctly.
+#
+# If you use this macro, you should check after calling it whether the C
+# compiler has been set to accept ANSI C; if not, the shell variable
+# @code{am_cv_prog_cc_stdc} is set to @samp{no}.  If you wrote your source
+# code in ANSI C, you can make an un-ANSIfied copy of it by using the
+# program @code{ansi2knr}, which comes with Ghostscript.
+# @end defmac
+
+AC_DEFUN(AM_PROG_CC_STDC,
+[AC_REQUIRE([AC_PROG_CC])
+AC_BEFORE([$0], [AC_C_INLINE])
+AC_BEFORE([$0], [AC_C_CONST])
+dnl Force this before AC_PROG_CPP.  Some cpp's, eg on HPUX, require
+dnl a magic option to avoid problems with ANSI preprocessor commands
+dnl like #elif.
+dnl FIXME: can't do this because then AC_AIX won't work due to a
+dnl circular dependency.
+dnl AC_BEFORE([$0], [AC_PROG_CPP])
+AC_MSG_CHECKING(for ${CC-cc} option to accept ANSI C)
+AC_CACHE_VAL(am_cv_prog_cc_stdc,
+[am_cv_prog_cc_stdc=no
+ac_save_CC="$CC"
+# Don't try gcc -ansi; that turns off useful extensions and
+# breaks some systems' header files.
+# AIX			-qlanglvl=ansi
+# Ultrix and OSF/1	-std1
+# HP-UX			-Aa -D_HPUX_SOURCE
+# SVR4			-Xc -D__EXTENSIONS__
+for ac_arg in "" -qlanglvl=ansi -std1 "-Aa -D_HPUX_SOURCE" "-Xc -D__EXTENSIONS__"
+do
+  CC="$ac_save_CC $ac_arg"
+  AC_TRY_COMPILE(
+[#include <stdarg.h>
+#include <stdio.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+/* Most of the following tests are stolen from RCS 5.7's src/conf.sh.  */
+struct buf { int x; };
+FILE * (*rcsopen) (struct buf *, struct stat *, int);
+static char *e (p, i)
+     char **p;
+     int i;
+{
+  return p[i];
+}
+static char *f (char * (*g) (char **, int), char **p, ...)
+{
+  char *s;
+  va_list v;
+  va_start (v,p);
+  s = g (p, va_arg (v,int));
+  va_end (v);
+  return s;
+}
+int test (int i, double x);
+struct s1 {int (*f) (int a);};
+struct s2 {int (*f) (double a);};
+int pairnames (int, char **, FILE *(*)(struct buf *, struct stat *, int), int, int);
+int argc;
+char **argv;
+], [
+return f (e, argv, 0) != argv[0]  ||  f (e, argv, 1) != argv[1];
+],
+[am_cv_prog_cc_stdc="$ac_arg"; break])
+done
+CC="$ac_save_CC"
+])
+if test -z "$am_cv_prog_cc_stdc"; then
+  AC_MSG_RESULT([none needed])
+else
+  AC_MSG_RESULT($am_cv_prog_cc_stdc)
+fi
+case "x$am_cv_prog_cc_stdc" in
+  x|xno) ;;
+  *) CC="$CC $am_cv_prog_cc_stdc" ;;
+esac
+])
 
