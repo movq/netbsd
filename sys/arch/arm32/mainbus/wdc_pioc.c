@@ -1,10 +1,8 @@
-/*	$NetBSD: wdc_pioc.c,v 1.3 1998/02/21 22:51:43 mark Exp $	*/
+/*	$NetBSD: wdc_pioc.c,v 1.6 1998/09/22 00:40:37 mark Exp $	*/
 
 /*
- * Copyright (c) 1994, 1995 Charles M. Hannum.  All rights reserved.
- *
- * DMA and multi-sector PIO handling are derived from code contributed by
- * Onno van der Linden.
+ * Copyright (c) 1997-1998 Mark Brinicombe.
+ * Copyright (c) 1997 Causality Limited.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -16,48 +14,55 @@
  *    documentation and/or other materials provided with the distribution.
  * 3. All advertising materials mentioning features or use of this software
  *    must display the following acknowledgement:
- *	This product includes software developed by Charles M. Hannum.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
+ *	This product includes software developed by Mark Brinicombe
+ *	for the NetBSD Project.
+ * 4. The name of the company nor the name of the author may be used to
+ *    endorse or promote products derived from this software without specific
+ *    prior written permission.
  *
- * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
- * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
- * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
- * IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
- * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
- * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
- * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
- * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
- * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- *
- *	from: wd.c,v 1.156 1997/01/17 20:45:29 perry Exp
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR IMPLIED
+ * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+ * IN NO EVENT SHALL THE AUTHOR OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT,
+ * INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+ * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
  */
 
 #include <sys/param.h>
 #include <sys/systm.h>
-#include <sys/kernel.h>
-#include <sys/buf.h>
 #include <sys/device.h>
-#include <sys/proc.h>
+
 #include <machine/bus.h>
-#include <machine/bootconfig.h>
 #include <machine/irqhandler.h>
+
 #include <arm32/mainbus/piocvar.h>
-#include <arm32/dev/wdreg.h>
-#include <arm32/dev/wdlink.h>
+
+#include <dev/ic/wdcvar.h>
 
 #include "locators.h"
 
-/* prototypes for functions */
+#define WDC_PIOC_REG_NPORTS	8
+#define WDC_PIOC_AUXREG_OFFSET	(0x206 * 4)
+#define WDC_PIOC_AUXREG_NPORTS	1
 
+struct wdc_pioc_softc {
+	struct wdc_softc sc_wdcdev;
+	struct wdc_attachment_data sc_ad;
+	void	*sc_ih;
+};
+
+/* prototypes for functions */
 static int  wdc_pioc_probe  __P((struct device *, struct cfdata *, void *));
 static void wdc_pioc_attach __P((struct device *, struct device *, void *));
 
 /* device attach structure */
-
 struct cfattach wdc_pioc_ca = {
-	sizeof(struct wdc_softc), wdc_pioc_probe, wdc_pioc_attach
+	sizeof(struct wdc_pioc_softc), wdc_pioc_probe, wdc_pioc_attach
 };
 
 /*
@@ -74,10 +79,8 @@ wdc_pioc_probe(parent, cf, aux)
 	void *aux;
 {
 	struct pioc_attach_args *pa = aux;
-	bus_space_tag_t iot;
-	bus_space_handle_t ioh;
-	bus_space_handle_t aux_ioh;
-	int rv = 0;
+	struct wdc_attachment_data ad;
+	int res;
 	u_int iobase;
 
 	if (pa->pa_name && strcmp(pa->pa_name, "wdc") != 0)
@@ -87,25 +90,27 @@ wdc_pioc_probe(parent, cf, aux)
 	if (pa->pa_offset == PIOCCF_OFFSET_DEFAULT)
 		return(0);
 
-	/* XXX - need xname */
-
-	iot = pa->pa_iot;
 	iobase = pa->pa_iobase + pa->pa_offset;
-	
-	if (bus_space_map(iot, iobase, 8, 0, &ioh))
+	memset(&ad, 0, sizeof(ad));
+	ad.iot = pa->pa_iot;
+	ad.auxiot = pa->pa_iot;
+
+	if (bus_space_map(ad.iot, iobase, WDC_PIOC_REG_NPORTS, 0, &ad.ioh))
 		return(0);
+	if (bus_space_map(ad.auxiot, iobase + WDC_PIOC_AUXREG_OFFSET,
+	    WDC_PIOC_AUXREG_NPORTS, 0, &ad.auxioh)) {
+		bus_space_unmap(ad.iot, ad.ioh, WDC_PIOC_REG_NPORTS);
+		return(0);
+	}
 
-	if (bus_space_map(iot, iobase + (WD_ALTSTATUS*4), 1, 0, &aux_ioh))
-		goto out;
+	res = wdcprobe(&ad);
 
-	rv = wdcprobe_internal(iot, ioh, aux_ioh, ioh, -1, "wdc");
+	bus_space_unmap(ad.auxiot, ad.auxioh, WDC_PIOC_AUXREG_NPORTS);
+	bus_space_unmap(ad.iot, ad.ioh, WDC_PIOC_REG_NPORTS);
 
-	pa->pa_iosize = 8*4;
-
-out:
-	bus_space_unmap(iot, ioh, 8);
-	bus_space_unmap(iot, aux_ioh, 1);
-	return(rv);
+	if (res)
+		 pa->pa_iosize = WDC_PIOC_REG_NPORTS;
+	return(res);
 }
 
 /*
@@ -119,37 +124,28 @@ wdc_pioc_attach(parent, self, aux)
 	struct device *parent, *self;
 	void *aux;
 {
-	struct wdc_softc *wdc = (void *)self;
+	struct wdc_pioc_softc *sc = (void *)self;
 	struct pioc_attach_args *pa = aux;
-	bus_space_tag_t iot;
-	bus_space_handle_t ioh;
-	bus_space_handle_t aux_ioh;
 	u_int iobase;
 
-/*	TAILQ_INIT(&wdc->sc_drives);*/
-	iot = pa->pa_iot;
+	printf("\n");
+
 	iobase = pa->pa_iobase + pa->pa_offset;
+	sc->sc_ad.iot = pa->pa_iot;
+	sc->sc_ad.auxiot = pa->pa_iot;
+	if (bus_space_map(sc->sc_ad.iot, iobase, WDC_PIOC_REG_NPORTS, 0,
+	    &sc->sc_ad.ioh))
+		panic("%s: couldn't map drive registers\n", self->dv_xname);
+	    
+	if (bus_space_map(sc->sc_ad.auxiot, iobase + WDC_PIOC_AUXREG_OFFSET,
+	    WDC_PIOC_AUXREG_NPORTS, 0, &sc->sc_ad.auxioh))
+		panic("%s: couldn't map aux registers\n", self->dv_xname);
 
-	if (bus_space_map(iot, iobase, 8, 0, &ioh))
-		panic("%s: Cannot map IO\n", wdc->sc_dev.dv_xname);
+	sc->sc_ih = intr_claim(pa->pa_irq, IPL_BIO, "wdc",  wdcintr, sc);
+	if (!sc->sc_ih)
+		panic("%s: Cannot claim IRQ %d\n", self->dv_xname, pa->pa_irq);
 
-	if (bus_space_map(iot, iobase + (WD_ALTSTATUS*4), 1, 0,
-	     &aux_ioh))
-		panic("%s: Cannot map IO\n", wdc->sc_dev.dv_xname);
-
-	wdc->sc_ih = intr_claim(pa->pa_irq, IPL_BIO, "wdc",
-	    wdcintr, wdc);
-
-	/* Hack needed for some drives */
-        if (boot_args) {
-        	char *ptr;
-       
-		ptr = strstr(boot_args, "nowdreset");
-		if (ptr)
-			wdc->sc_flags |= WDCF_NORESET;
-	}
-
-	wdcattach_internal(wdc, iot, ioh, aux_ioh, ioh, -1, pa->pa_drq);
+	wdcattach(&sc->sc_wdcdev, &sc->sc_ad);
 }
 
 /* End of wdc_pioc.c */
