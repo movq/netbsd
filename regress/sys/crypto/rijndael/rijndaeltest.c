@@ -1,4 +1,4 @@
-/*	$NetBSD: rijndaeltest.c,v 1.1 2000/11/01 15:33:26 itojun Exp $	*/
+/*	$NetBSD: rijndaeltest.c,v 1.1.1.1 2000/11/01 15:33:26 itojun Exp $	*/
 /*	$KAME: rijndaeltest.c,v 1.4 2000/11/01 14:38:24 itojun Exp $	*/
 
 /*
