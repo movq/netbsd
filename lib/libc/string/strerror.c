@@ -1,6 +1,6 @@
 /*
- * Copyright (c) 1988 Regents of the University of California.
- * All rights reserved.
+ * Copyright (c) 1988, 1993
+ *	The Regents of the University of California.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,26 +32,19 @@
  */
 
 #if defined(LIBC_SCCS) && !defined(lint)
-/*static char *sccsid = "from: @(#)strerror.c	5.6 (Berkeley) 5/4/91";*/
-static char *rcsid = "$Id: strerror.c,v 1.1 1993/10/07 19:27:53 jtc Exp $";
+static char sccsid[] = "@(#)strerror.c	8.1 (Berkeley) 6/4/93";
 #endif /* LIBC_SCCS and not lint */
 
 #include <string.h>
 
-/*
- * Since perror() is not allowed to change the contents of strerror()'s
- * static buffer, both functions supply their own buffers to the
- * internal function _strerror().
- */
-
 char *
-_strerror(num, buf)
+strerror(num)
 	int num;
-	char *buf;
 {
-#define	UPREFIX	"Unknown error: "
-	extern char *sys_errlist[];
 	extern int sys_nerr;
+	extern char *sys_errlist[];
+#define	UPREFIX	"Unknown error: "
+	static char ebuf[40] = UPREFIX;		/* 64-bit number + slop */
 	register unsigned int errnum;
 	register char *p, *t;
 	char tmp[40];
@@ -65,22 +58,10 @@ _strerror(num, buf)
 	do {
 		*t++ = "0123456789"[errnum % 10];
 	} while (errnum /= 10);
-
-	strcpy (buf, UPREFIX);
-	for (p = buf + sizeof(UPREFIX) -1;;) {
+	for (p = ebuf + sizeof(UPREFIX) - 1;;) {
 		*p++ = *--t;
 		if (t <= tmp)
 			break;
 	}
-
-	return buf;
-}
-
-
-char *
-strerror(num)
-	int num;
-{
-	static char buf[40];			/* 64-bit number + slop */
-	return _strerror(num, buf);
+	return(ebuf);
 }
