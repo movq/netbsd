@@ -1,4 +1,4 @@
-/*	$NetBSD: tcp_timer.c,v 1.43 1998/09/10 10:47:00 mouse Exp $	*/
+/*	$NetBSD: tcp_timer.c,v 1.43.10.1 1999/06/28 06:37:02 itojun Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.
@@ -72,6 +72,8 @@
  *	@(#)tcp_timer.c	8.2 (Berkeley) 5/24/95
  */
 
+#include "opt_inet.h"
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/malloc.h>
@@ -89,6 +91,15 @@
 #include <netinet/ip.h>
 #include <netinet/in_pcb.h>
 #include <netinet/ip_var.h>
+
+#ifdef INET6
+#ifndef INET
+#include <netinet/in.h>
+#endif
+#include <netinet/ip6.h>
+#include <netinet6/in6_pcb.h>
+#endif
+
 #include <netinet/tcp.h>
 #include <netinet/tcp_fsm.h>
 #include <netinet/tcp_seq.h>
@@ -137,19 +148,26 @@ tcp_slowtimo()
 {
 	register struct inpcb *inp, *ninp;
 	register struct tcpcb *tp;
+#if defined(INET6) && !defined(TCP6)
+	register struct in6pcb *in6p, *nin6p;
+#endif
 	int s;
 	register long i;
 	static int syn_cache_last = 0;
+	int skip, mask;
+
+	skip = mask = 0;
 
 	s = splsoftnet();
 	tcp_maxidle = tcp_keepcnt * tcp_keepintvl;
 	/*
 	 * Search through tcb's and update active timers.
 	 */
+	mask |= 1;
 	inp = tcbtable.inpt_queue.cqh_first;
 	if (inp == (struct inpcb *)0) {				/* XXX */
-		splx(s);
-		return;
+		skip |= 1;
+		goto dotcb6;
 	}
 	for (; inp != (struct inpcb *)&tcbtable.inpt_queue; inp = ninp) {
 		ninp = inp->inp_queue.cqe_next;
@@ -176,12 +194,51 @@ tcp_slowtimo()
 tpgone:
 		;
 	}
+dotcb6:
+#if defined(INET6) && !defined(TCP6)
+	mask |= 2;
+	in6p = tcb6.in6p_next;
+	if (in6p == (struct in6pcb *)0) {			/* XXX */
+		skip |= 2;
+		goto doiss;
+	}
+	for (; in6p != (struct in6pcb *)&tcb6; in6p = nin6p) {
+		nin6p = in6p->in6p_next;
+		tp = in6totcpcb(in6p);
+		if (tp == 0 || tp->t_state == TCPS_LISTEN)
+			continue;
+		for (i = 0; i < TCPT_NTIMERS; i++) {
+			if (TCP_TIMER_ISEXPIRED(tp, i)) {
+				TCP_TIMER_DISARM(tp, i);
+				(void) tcp_usrreq(tp->t_in6pcb->in6p_socket,
+				    PRU_SLOWTIMO, (struct mbuf *)0,
+				    (struct mbuf *)i, (struct mbuf *)0,
+				    (struct proc *)0);
+				/* XXX NOT MP SAFE */
+				if ((nin6p == (void *)&tcb6 &&
+				    tcb6.in6p_prev != in6p) ||
+				    nin6p->in6p_prev != in6p)
+					goto tp6gone;
+			}
+		}
+		tp->t_idle++;
+		if (tp->t_rtt)
+			tp->t_rtt++;
+tp6gone:
+		;
+	}
+
+doiss:
+#endif
+	if (mask == skip)
+		goto done;
 	tcp_iss_seq += TCP_ISSINCR;			/* increment iss */
 	tcp_now++;					/* for timestamps */
 	if (++syn_cache_last >= tcp_syn_cache_interval) {
 		syn_cache_timer();
 		syn_cache_last = 0;
 	}
+done:
 	splx(s);
 }
 
@@ -259,8 +316,14 @@ tcp_timers(tp, timer)
 		 * value here...
 		 */
 		if (ip_mtudisc && tp->t_rxtshift > TCP_MAXRXTSHIFT / 6) {
-			struct inpcb *inp = tp->t_inpcb;
-			struct rtentry *rt = in_pcbrtentry(inp);
+			struct rtentry *rt = NULL;
+
+			if (tp->t_inpcb)
+				rt = in_pcbrtentry(tp->t_inpcb);
+#ifdef INET6
+			else if (tp->t_in6pcb)
+				rt = in6_pcbrtentry(tp->t_in6pcb);
+#endif
 
 			/* XXX:  Black hole recovery code goes here */
 		}
@@ -274,7 +337,12 @@ tcp_timers(tp, timer)
 		 * retransmit times until then.
 		 */
 		if (tp->t_rxtshift > TCP_MAXRXTSHIFT / 4) {
-			in_losing(tp->t_inpcb);
+			if (tp->t_inpcb)
+				in_losing(tp->t_inpcb);
+#ifdef INET6
+			else if (tp->t_in6pcb)
+				in6_losing(tp->t_in6pcb);
+#endif
 			tp->t_rttvar += (tp->t_srtt >> TCP_RTT_SHIFT);
 			tp->t_srtt = 0;
 		}
@@ -360,10 +428,19 @@ tcp_timers(tp, timer)
 	 * or drop connection if idle for too long.
 	 */
 	case TCPT_KEEP:
+	    {
+		struct socket *so = NULL;
+
 		tcpstat.tcps_keeptimeo++;
 		if (TCPS_HAVEESTABLISHED(tp->t_state) == 0)
 			goto dropit;
-		if (tp->t_inpcb->inp_socket->so_options & SO_KEEPALIVE &&
+		if (tp->t_inpcb)
+			so = tp->t_inpcb->inp_socket;
+#ifdef INET6
+		else if (tp->t_in6pcb)
+			so = tp->t_in6pcb->in6p_socket;
+#endif
+		if (so->so_options & SO_KEEPALIVE &&
 		    tp->t_state <= TCPS_CLOSE_WAIT) {
 		    	if ((tcp_maxidle > 0) &&
 			    (tp->t_idle >= tcp_keepidle + tcp_maxidle))
@@ -398,6 +475,7 @@ tcp_timers(tp, timer)
 		} else
 			TCP_TIMER_ARM(tp, TCPT_KEEP, tcp_keepidle);
 		break;
+	    }
 	dropit:
 		tcpstat.tcps_keepdrops++;
 		tp = tcp_drop(tp, ETIMEDOUT);
