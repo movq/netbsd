@@ -1,4 +1,4 @@
-/*	$NetBSD: sigsuspend.S,v 1.7 1997/07/16 14:37:36 christos Exp $	*/
+/*	$NetBSD: sigsuspend.S,v 1.8 1998/09/26 23:49:34 christos Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -40,7 +40,7 @@
 
 #include <machine/asm.h>
 #if defined(SYSLIBC_SCCS) && !defined(lint)
-	RCSID("$NetBSD: sigsuspend.S,v 1.7 1997/07/16 14:37:36 christos Exp $")
+	RCSID("$NetBSD: sigsuspend.S,v 1.8 1998/09/26 23:49:34 christos Exp $")
 #endif /* SYSLIBC_SCCS and not lint */
 
 #include "SYS.h"
@@ -49,7 +49,7 @@ ENTRY(sigsuspend)
 	movl	4(%esp),%eax		# fetch mask arg
 	movl	(%eax),%eax		# indirect to mask arg
 	movl	%eax,4(%esp)
-	movl	$(SYS_sigsuspend),%eax
+	movl	$(SYS_compat_13_sigsuspend13),%eax
 	int	$0x80
 	jc	err
 	xorl	%eax,%eax		# shouldn t happen
