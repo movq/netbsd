@@ -1,4 +1,4 @@
-/*	$NetBSD: gdt.h,v 1.1 2001/06/19 00:20:11 fvdl Exp $	*/
+/*	$NetBSD: gdt.h,v 1.2 2003/01/26 00:05:37 fvdl Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997 The NetBSD Foundation, Inc.
@@ -40,7 +40,7 @@ struct proc;
 struct pmap;
 
 void gdt_init __P((void));
-void tss_alloc __P((struct proc *));
-void tss_free __P((struct proc *));
+int tss_alloc __P((struct pcb *));
+void tss_free __P((int));
 void ldt_alloc __P((struct pmap *, char *, size_t));
 void ldt_free __P((struct pmap *));
