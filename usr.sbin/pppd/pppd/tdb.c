@@ -1,4 +1,4 @@
-/*	$NetBSD: tdb.c,v 1.1 2000/09/23 22:14:54 christos Exp $	*/
+/*	$NetBSD: tdb.c,v 1.1.1.1 2000/09/23 22:14:54 christos Exp $	*/
 
 /* 
  * Database functions

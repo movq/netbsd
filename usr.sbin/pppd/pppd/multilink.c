@@ -1,4 +1,4 @@
-/*	$NetBSD: multilink.c,v 1.1 2000/09/23 22:14:52 christos Exp $	*/
+/*	$NetBSD: multilink.c,v 1.1.1.1 2000/09/23 22:14:52 christos Exp $	*/
 
 /*
  * multilink.c - support routines for multilink.
