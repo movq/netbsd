@@ -1,7 +1,7 @@
 /******************************************************************************
  *
- * Name: acnetbsd.h - OS specific defines, etc.
- *       $Revision: 1.1 $
+ * Name: acfreebsd.h - OS specific defines, etc.
+ *       xRevision: 11 $
  *
  *****************************************************************************/
 
@@ -9,7 +9,7 @@
  *
  * 1. Copyright Notice
  *
- * Some or all of this work - Copyright (c) 1999, 2000, 2001, Intel Corp.
+ * Some or all of this work - Copyright (c) 1999 - 2003, Intel Corp.
  * All rights reserved.
  *
  * 2. License
@@ -117,54 +117,46 @@
 #ifndef __ACNETBSD_H__
 #define __ACNETBSD_H__
 
-#if 0
 /*
  * XXX this is technically correct, but will cause problems with some ASL
  *     which only works if the string names a Microsoft operating system.
  */
 #define ACPI_OS_NAME                "NetBSD"
-#else
-#define	ACPI_OS_NAME                "Microsoft Windows NT"
-#endif
 
 /* NetBSD uses GCC */
 
 #include "acgcc.h"
+#include <machine/acpica_machdep.h>
 
 #ifdef _KERNEL
-#include "opt_acpi.h"		/* collect build-time options here */
-
+#include <sys/ctype.h>
 #include <sys/param.h>
 #include <sys/systm.h>
+#include <sys/libkern.h>
 #include <machine/stdarg.h>
 
 #define asm         __asm
-
-/* XXX This is not a perfect world. */
-#ifdef __i386__
-#include <machine/cpufunc.h>
 #define __cli()     disable_intr()
 #define __sti()     enable_intr()
-#endif /* __i386__ */
 
-#ifdef ACPI_DEBUG
+#ifdef ACPI_DEBUG_OUTPUT
 #ifdef DEBUGGER_THREADING
 #undef DEBUGGER_THREADING
 #endif /* DEBUGGER_THREADING */
-#define DEBUGGER_THREADING 0	/* integrated with DDB */
+#define DEBUGGER_THREADING 0    /* integrated with DDB */
 #include "opt_ddb.h"
 #ifdef DDB
-#define ENABLE_DEBUGGER
+#define ACPI_DEBUGGER
 #endif /* DDB */
-#endif /* ACPI_DEBUG */
+#endif /* ACPI_DEBUG_OUTPUT */
 
 #else /* _KERNEL */
 
 /* Not building kernel code, so use libc */
 #define ACPI_USE_STANDARD_HEADERS
 
-#define	__cli()
-#define	__sti()
+#define __cli()
+#define __sti()
 
 #endif /* _KERNEL */
 
@@ -177,8 +169,8 @@ strupr(char *str)
 {
     char *c = str;
     while(*c) {
-	*c = toupper(*c);
-	c++;
+    *c = toupper(*c);
+    c++;
     }
     return(str);
 }
@@ -192,14 +184,14 @@ strstr(char *s, char *find)
     size_t len;
 
     if ((c = *find++) != 0) {
-	len = strlen(find);
-	do {
-	    do {
-		if ((sc = *s++) == 0)
-		    return (NULL);
-	    } while (sc != c);
-	} while (strncmp(s, find, len) != 0);
-	s--;
+    len = strlen(find);
+    do {
+        do {
+        if ((sc = *s++) == 0)
+            return (NULL);
+        } while (sc != c);
+    } while (strncmp(s, find, len) != 0);
+    s--;
     }
     return ((char *)s);
 }
