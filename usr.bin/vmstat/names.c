@@ -1,6 +1,6 @@
 /*-
- * Copyright (c) 1991 The Regents of the University of California.
- * All rights reserved.
+ * Copyright (c) 1991, 1993
+ *	The Regents of the University of California.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -30,79 +30,24 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)names.c	5.2 (Berkeley) 6/4/91
+ *	@(#)names.c	8.1 (Berkeley) 6/6/93
  */
 
-#if !defined(hp300) && !defined(tahoe) && !defined(vax) && !defined(__386BSD__)
+#if !defined(hp300) && !defined(tahoe) && !defined(vax) && \
+	!defined(luna68k) && !defined(mips)
 char *defdrives[] = { 0 };
-
-void read_names()
-{
-}
 #endif
 
-#ifdef __386BSD__
-/*
- * 386BSD support added by Rodney W. Grimes, rgrimes@agora.rain.com 3/24/93
- */
-#include <i386/isa/isa_device.h>
-
-char *defdrives[] = { "fd0", "fd1", "wd0", "wd1",
-	              "as0", "as1", "sd0", "sd1", 0 };
-
-void
-read_names()
-{
-	register char *p;
-	register u_long isa_bio;
-	static char buf[BUFSIZ];
-	struct isa_device dev;
-	struct isa_driver drv;
-	char name[10];
-	int i = 0;
-	int dummydk = 0;
-	int fdunit = 0;
-	int wdunit = 0;
-	int ahaunit = 0;
-
-	isa_bio = nl[X_ISA_BIO].n_value;
-	if (isa_bio == 0) {
-		(void) fprintf(stderr,
-		    "vmstat: disk init info not in namelist\n");
-		exit(1);
-	}
-		
-	p = buf;
-	for (;; isa_bio += sizeof dev) {
-		(void)kvm_read((void *)isa_bio, &dev, sizeof dev);
-		if (dev.id_driver == 0)
-			break;
-		if (dev.id_alive == 0)
-			continue;
-		(void)kvm_read(dev.id_driver, &drv, sizeof drv);
-		(void)kvm_read(drv.name, name, sizeof name);
-
-		/*
-		 * 386bsd is kinda brain dead about dk_units, or at least
-		 * I can't figure out how to get the real unit mappings
-		 */
-		if (strcmp(name, "fd") == 0) dummydk = fdunit++;
-		if (strcmp(name, "wd") == 0) dummydk = wdunit++;
-		if (strcmp(name, "aha") == 0) dummydk = ahaunit++;
-
-		dr_name[i] = p;
-		p += sprintf(p, "%s%d", name, dummydk) + 1;
-		i++;
-	}
-}
-#endif /* __386BSD__ */
-
-#ifdef hp300
-#include <hp300/dev/device.h>
+#if defined(hp300) || defined(luna68k)
+#if defined(hp300)
+#include <hp/dev/device.h>
+#else
+#include <luna68k/dev/device.h>
+#endif
 
 char *defdrives[] = { "sd0", "sd1", "sd2", "rd0", "rd1", "rd2", 0 };
 
-void
+int
 read_names()
 {
 	register char *p;
@@ -112,34 +57,35 @@ read_names()
 	struct driver hdrv;
 	char name[10];
 
-	hp = nl[X_HPDINIT].n_value;
+	hp = namelist[X_HPDINIT].n_value;
 	if (hp == 0) {
-		(void) fprintf(stderr,
-		    "vmstat: disk init info not in namelist\n");
-		exit(1);
+		(void)fprintf(stderr,
+		    "disk init info not in namelist\n");
+		return (0);
 	}
 	p = buf;
 	for (;; hp += sizeof hdev) {
-		(void)kvm_read((void *)hp, &hdev, sizeof hdev);
+		(void)kvm_read(kd, hp, &hdev, sizeof hdev);
 		if (hdev.hp_driver == 0)
 			break;
 		if (hdev.hp_dk < 0 || hdev.hp_alive == 0 ||
 		    hdev.hp_cdriver == 0)
 			continue;
-		(void)kvm_read(hdev.hp_driver, &hdrv, sizeof hdrv);
-		(void)kvm_read(hdrv.d_name, name, sizeof name);
+		(void)kvm_read(kd, (u_long)hdev.hp_driver, &hdrv, sizeof hdrv);
+		(void)kvm_read(kd, (u_long)hdrv.d_name, name, sizeof name);
 		dr_name[hdev.hp_dk] = p;
 		p += sprintf(p, "%s%d", name, hdev.hp_unit) + 1;
 	}
+	return (1);
 }
-#endif /* hp300 */
+#endif /* hp300 || luna68k */
 
 #ifdef tahoe
 #include <tahoe/vba/vbavar.h>
 
 char *defdrives[] = { "dk0", "dk1", "dk2", 0 };
 
-void
+int
 read_names()
 {
 	register char *p;
@@ -148,24 +94,25 @@ read_names()
 	char name[10];
 	static char buf[BUFSIZ];
 
-	up = (struct vba_device *) nl[X_VBDINIT].n_value;
+	up = (struct vba_device *)namelist[X_VBDINIT].n_value;
 	if (up == 0) {
 		(void) fprintf(stderr,
-		    "vmstat: disk init info not in namelist\n");
-		exit(1);
+		    "disk init info not in namelist\n");
+		return (0);
 	}
 	p = buf;
 	for (;; up += sizeof udev) {
-		(void)kvm_read(up, &udev, sizeof udev);
+		(void)kvm_read(kd, up, &udev, sizeof udev);
 		if (udev.ui_driver == 0)
 			break;
 		if (udev.ui_dk < 0 || udev.ui_alive == 0)
 			continue;
-		(void)kvm_read(udev.ui_driver, &udrv, sizeof udrv);
-		(void)kvm_read(udrv.ud_dname, name, sizeof name);
+		(void)kvm_read(kd, udev.ui_driver, &udrv, sizeof udrv);
+		(void)kvm_read(kd, udrv.ud_dname, name, sizeof name);
 		dr_name[udev.ui_dk] = p;
 		p += sprintf(p, "%s%d", name, udev.ui_unit);
 	}
+	return (1);
 }
 #endif /* tahoe */
 
@@ -175,7 +122,7 @@ read_names()
 
 char *defdrives[] = { "hp0", "hp1", "hp2", 0 };
 
-void
+int
 read_names()
 {
 	register char *p;
@@ -187,35 +134,109 @@ read_names()
 	char name[10];
 	static char buf[BUFSIZ];
 
-	mp = nl[X_MBDINIT].n_value;
-	up = nl[X_UBDINIT].n_value;
+	mp = namelist[X_MBDINIT].n_value;
+	up = namelist[X_UBDINIT].n_value;
 	if (mp == 0 && up == 0) {
-		(void) fprintf(stderr,
-		    "vmstat: disk init info not in namelist\n");
-		exit(1);
+		(void)fprintf(stderr,
+		    "disk init info not in namelist\n");
+		return (0);
 	}
 	p = buf;
-	if (mp) for (;; mp += sizeof mdev) {
-		(void)kvm_read(mp, &mdev, sizeof mdev);
-		if (mdev.mi_driver == 0)
-			break;
-		if (mdev.mi_dk < 0 || mdev.mi_alive == 0)
-			continue;
-		(void)kvm_read(mdev.mi_driver, &mdrv, sizeof mdrv);
-		(void)kvm_read(mdrv.md_dname, name, sizeof name);
-		dr_name[mdev.mi_dk] = p;
-		p += sprintf(p, "%s%d", name, mdev.mi_unit);
-	}
-	if (up) for (;; up += sizeof udev) {
-		(void)kvm_read(up, &udev, sizeof udev);
-		if (udev.ui_driver == 0)
-			break;
-		if (udev.ui_dk < 0 || udev.ui_alive == 0)
-			continue;
-		(void)kvm_read(udev.ui_driver, &udrv, sizeof udrv);
-		(void)kvm_read(udrv.ud_dname, name, sizeof name);
-		dr_name[udev.ui_dk] = p;
-		p += sprintf(p, "%s%d", name, udev.ui_unit);
-	}
+	if (mp)
+		for (;; mp += sizeof mdev) {
+			(void)kvm_read(kd, mp, &mdev, sizeof mdev);
+			if (mdev.mi_driver == 0)
+				break;
+			if (mdev.mi_dk < 0 || mdev.mi_alive == 0)
+				continue;
+			(void)kvm_read(kd, mdev.mi_driver, &mdrv, sizeof mdrv);
+			(void)kvm_rea(kd, mdrv.md_dname, name, sizeof name);
+			dr_name[mdev.mi_dk] = p;
+			p += sprintf(p, "%s%d", name, mdev.mi_unit);
+		}
+	if (up)
+		for (;; up += sizeof udev) {
+			(void)kvm_read(kd, up, &udev, sizeof udev);
+			if (udev.ui_driver == 0)
+				break;
+			if (udev.ui_dk < 0 || udev.ui_alive == 0)
+				continue;
+			(void)kvm_read(kd, udev.ui_driver, &udrv, sizeof udrv);
+			(void)kvm_read(kd, udrv.ud_dname, name, sizeof name);
+			dr_name[udev.ui_dk] = p;
+			p += sprintf(p, "%s%d", name, udev.ui_unit);
+		}
+	return (1);
 }
 #endif /* vax */
+
+#ifdef sun
+#include <sundev/mbvar.h>
+
+int
+read_names()
+{
+	static int once = 0;
+	struct mb_device mdev;
+	struct mb_driver mdrv;
+	short two_char;
+	char *cp = (char *) &two_char;
+	register struct mb_device *mp;
+
+	mp = (struct mb_device *)namelist[X_MBDINIT].n_value;
+	if (mp == 0) {
+		(void)fprintf(stderr,
+		    "disk init info not in namelist\n");
+		return (0);
+	}
+	for (;; ++mp) {
+		(void)kvm_read(kd, mp++, &mdev, sizeof(mdev));
+		if (mdev.md_driver == 0)
+			break;
+		if (mdev.md_dk < 0 || mdev.md_alive == 0)
+			continue;
+		(void)kvm_read(kd, mdev.md_driver, &mdrv, sizeof(mdrv));
+		(void)kvm_read(kd, mdrv.mdr_dname, &two_char, sizeof(two_char));
+		(void)sprintf(dr_name[mdev.md_dk],
+		    "%c%c%d", cp[0], cp[1], mdev.md_unit);
+	}
+	return(1);
+}
+#endif /* sun */
+
+#if defined(mips)
+#include <pmax/dev/device.h>
+
+char *defdrives[] = { "rz0", "rz1", "rz2", "rz3", "rz4", "rz5", "rz6", 0 };
+
+int
+read_names()
+{
+	register char *p;
+	register u_long sp;
+	static char buf[BUFSIZ];
+	struct scsi_device sdev;
+	struct driver hdrv;
+	char name[10];
+
+	sp = namelist[X_SCSI_DINIT].n_value;
+	if (sp == 0) {
+		(void)fprintf(stderr, "disk init info not in namelist\n");
+		return (0);
+	}
+	p = buf;
+	for (;; sp += sizeof sdev) {
+		(void)kvm_read(kd, sp, &sdev, sizeof sdev);
+		if (sdev.sd_driver == 0)
+			break;
+		if (sdev.sd_dk < 0 || sdev.sd_alive == 0 ||
+		    sdev.sd_cdriver == 0)
+			continue;
+		(void)kvm_read(kd, (u_long)sdev.sd_driver, &hdrv, sizeof hdrv);
+		(void)kvm_read(kd, (u_long)hdrv.d_name, name, sizeof name);
+		dr_name[sdev.sd_dk] = p;
+		p += sprintf(p, "%s%d", name, sdev.sd_unit) + 1;
+	}
+	return (1);
+}
+#endif /* mips */
