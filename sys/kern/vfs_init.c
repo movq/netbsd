@@ -35,8 +35,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	from: @(#)vfs_init.c	8.3 (Berkeley) 1/4/94
- *	$Id: vfs_init.c,v 1.1 1994/06/08 11:28:54 mycroft Exp $
+ *	@(#)vfs_init.c	8.3 (Berkeley) 1/4/94
  */
 
 
@@ -239,7 +238,7 @@ vfsinit()
 	 * Initialize each file system type.
 	 */
 	vattr_null(&va_null);
-	for (vfsp = &vfssw[0]; vfsp < &vfssw[nvfssw]; vfsp++) {
+	for (vfsp = &vfssw[0]; vfsp <= &vfssw[MOUNT_MAXTYPE]; vfsp++) {
 		if (*vfsp == NULL)
 			continue;
 		(*(*vfsp)->vfs_init)();

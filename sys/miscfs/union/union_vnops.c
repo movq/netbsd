@@ -34,8 +34,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	from: @(#)union_vnops.c	8.6 (Berkeley) 2/17/94
- *	$Id: union_vnops.c,v 1.1 1994/06/08 11:34:03 mycroft Exp $
+ *	@(#)union_vnops.c	8.6 (Berkeley) 2/17/94
  */
 
 #include <sys/param.h>
@@ -1138,20 +1137,17 @@ union_readdir(ap)
 		struct vnode *a_vp;
 		struct uio *a_uio;
 		struct ucred *a_cred;
-		int *a_eofflag;
-		u_long *a_cookies;
-		int a_ncookies;
 	} */ *ap;
 {
-	register struct union_node *un = VTOUNION(ap->a_vp);
-	register struct vnode *uvp = un->un_uppervp;
+	int error = 0;
+	struct union_node *un = VTOUNION(ap->a_vp);
 
-	if (uvp == NULLVP)
-		return (0);
+	if (un->un_uppervp) {
+		FIXUP(un);
+		error = VOP_READDIR(un->un_uppervp, ap->a_uio, ap->a_cred);
+	}
 
-	FIXUP(un);
-	ap->a_vp = uvp;
-	return (VOCALL(uvp->v_op, VOFFSET(vop_readdir), ap));
+	return (error);
 }
 
 int

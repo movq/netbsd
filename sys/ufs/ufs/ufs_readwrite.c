@@ -30,8 +30,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	from: @(#)ufs_readwrite.c	8.7 (Berkeley) 1/21/94
- *	$Id: ufs_readwrite.c,v 1.1 1994/06/08 11:43:21 mycroft Exp $
+ *	@(#)ufs_readwrite.c	8.7 (Berkeley) 1/21/94
  */
 
 #ifdef LFS_READWRITE
@@ -87,8 +86,7 @@ READ(ap)
 		panic("%s: mode", READ_S);
 
 	if (vp->v_type == VLNK) {
-		if ((int)ip->i_size < vp->v_mount->mnt_maxsymlinklen ||
-		    OLDFASTLINK(&ip->i_din))
+		if ((int)ip->i_size < vp->v_mount->mnt_maxsymlinklen)
 			panic("%s: short symlink", READ_S);
 	} else if (vp->v_type != VREG && vp->v_type != VDIR)
 		panic("%s: type %d", READ_S, vp->v_type);

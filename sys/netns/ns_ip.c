@@ -1,6 +1,6 @@
 /*
- * Copyright (c) 1984, 1985, 1986, 1987 Regents of the University of California.
- * All rights reserved.
+ * Copyright (c) 1984, 1985, 1986, 1987, 1993
+ *	The Regents of the University of California.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -30,7 +30,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)ns_ip.c	7.6 (Berkeley) 6/28/90
+ *	@(#)ns_ip.c	8.1 (Berkeley) 6/10/93
  */
 
 /*
@@ -38,31 +38,31 @@
  */
 
 #ifdef NSIP
-#include "param.h"
-#include "systm.h"
-#include "malloc.h"
-#include "mbuf.h"
-#include "socket.h"
-#include "socketvar.h"
-#include "errno.h"
-#include "ioctl.h"
-#include "protosw.h"
+#include <sys/param.h>
+#include <sys/systm.h>
+#include <sys/malloc.h>
+#include <sys/mbuf.h>
+#include <sys/socket.h>
+#include <sys/socketvar.h>
+#include <sys/errno.h>
+#include <sys/ioctl.h>
+#include <sys/protosw.h>
 
-#include "../net/if.h"
-#include "../net/netisr.h"
-#include "../net/route.h"
+#include <net/if.h>
+#include <net/netisr.h>
+#include <net/route.h>
 
-#include "../netinet/in.h"
-#include "../netinet/in_systm.h"
-#include "../netinet/in_var.h"
-#include "../netinet/ip.h"
-#include "../netinet/ip_var.h"
+#include <netinet/in.h>
+#include <netinet/in_systm.h>
+#include <netinet/in_var.h>
+#include <netinet/ip.h>
+#include <netinet/ip_var.h>
 
-#include "machine/mtpr.h"
+#include <machine/mtpr.h>
 
-#include "../netns/ns.h"
-#include "../netns/ns_if.h"
-#include "../netns/idp.h"
+#include <netns/ns.h>
+#include <netns/ns_if.h>
+#include <netns/idp.h>
 
 struct ifnet_en {
 	struct ifnet ifen_ifnet;
@@ -181,7 +181,7 @@ idpip_input(m, ifp)
 	}
 	ip = mtod(m, struct ip *);
 	if (ip->ip_hl > (sizeof (struct ip) >> 2)) {
-		ip_stripoptions(ip, (struct mbuf *)0);
+		ip_stripoptions(m, (struct mbuf *)0);
 		if (m->m_len < s) {
 			if ((m = m_pullup(m, s)) == 0) {
 				nsipif.if_ierrors++;
@@ -289,7 +289,7 @@ nsipoutput(ifn, m, dst)
 	/*
 	 * Output final datagram.
 	 */
-	error =  (ip_output(m, (struct mbuf *)0, ro, SO_BROADCAST));
+	error =  (ip_output(m, (struct mbuf *)0, ro, SO_BROADCAST, NULL));
 	if (error) {
 		ifn->ifen_ifnet.if_oerrors++;
 		ifn->ifen_ifnet.if_ierrors = error;

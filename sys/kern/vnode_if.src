@@ -30,8 +30,7 @@
 # OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 # SUCH DAMAGE.
 #
-#	from: @(#)vnode_if.src	8.3 (Berkeley) 2/3/94
-#	$Id: vnode_if.src,v 1.1 1994/06/08 11:29:02 mycroft Exp $
+#	@(#)vnode_if.src	8.3 (Berkeley) 2/3/94
 #
 vop_lookup {
 	IN struct vnode *dvp;
@@ -188,9 +187,6 @@ vop_readdir {
 	IN struct vnode *vp;
 	INOUT struct uio *uio;
 	IN struct ucred *cred;
-	OUT int *eofflag;
-	OUT u_long *cookies;
-	IN int ncookies;
 };
 
 vop_readlink {

@@ -1,6 +1,9 @@
-/*
- * Copyright (c) 1982, 1986, 1991 The Regents of the University of California.
- * All rights reserved.
+/*-
+ * Copyright (c) 1994
+ *	The Regents of the University of California.  All rights reserved.
+ *
+ * This code is derived from software contributed to Berkeley by
+ * Chuck Karish of Mindcraft, Inc.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -30,31 +33,24 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)utsname.h	1.0 (Berkeley) 43/29/93
+ *	@(#)utsname.h	8.1 (Berkeley) 1/4/94
  */
 
-#ifndef _UTSNAME_H_
-#define	_UTSNAME_H_
-
-#define SYS_NMLN	32
+#ifndef	_SYS_UTSNAME_H
+#define	_SYS_UTSNAME_H
 
 struct utsname {
-        char    sysname[SYS_NMLN];
-        char    nodename[SYS_NMLN];
-        char    release[SYS_NMLN];
-        char    version[SYS_NMLN];
-        char    machine[SYS_NMLN];
+	char	sysname[256];	/* Name of this OS. */
+	char	nodename[256];	/* Name of this network node. */
+	char	release[256];	/* Release level. */
+	char	version[256];	/* Version level. */
+	char	machine[256];	/* Hardware type. */
 };
 
-#ifndef KERNEL
-#ifdef __STDC__
-extern int uname(struct utsname *);
-#else
-extern int uname();
-#endif
-#else
-extern struct utsname utsname;
-#endif	/* KERNEL */
+#include <sys/cdefs.h>
 
-#endif	/* _UTSNAME_H_ */
+__BEGIN_DECLS
+int	uname __P((struct utsname *));
+__END_DECLS
 
+#endif	/* !_SYS_UTSNAME_H */

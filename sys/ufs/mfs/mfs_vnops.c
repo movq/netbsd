@@ -30,8 +30,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	from: @(#)mfs_vnops.c	8.3 (Berkeley) 9/21/93
- *	$Id: mfs_vnops.c,v 1.1 1994/06/08 11:42:57 mycroft Exp $
+ *	@(#)mfs_vnops.c	8.3 (Berkeley) 9/21/93
  */
 
 #include <sys/param.h>
@@ -388,16 +387,9 @@ mfs_reclaim(ap)
 		struct vnode *a_vp;
 	} */ *ap;
 {
-	register struct vnode *vp = ap->a_vp;
-#if 0 /* XXX */
-	int error;
 
-	error = ufs_reclaim(vp);
-	if (error)
-		return (error);
-#endif
-	FREE(vp->v_data, M_MFSNODE);
-	vp->v_data = NULL;
+	FREE(ap->a_vp->v_data, M_MFSNODE);
+	ap->a_vp->v_data = NULL;
 	return (0);
 }
 

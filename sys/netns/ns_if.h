@@ -1,6 +1,6 @@
 /*
- * Copyright (c) 1984, 1985, 1986, 1987 Regents of the University of California.
- * All rights reserved.
+ * Copyright (c) 1984, 1985, 1986, 1987, 1993
+ *	The Regents of the University of California.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -30,7 +30,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)ns_if.h	7.6 (Berkeley) 6/28/90
+ *	@(#)ns_if.h	8.1 (Berkeley) 6/10/93
  */
 
 /*
@@ -44,8 +44,6 @@ struct ns_ifaddr {
 	struct	ifaddr ia_ifa;		/* protocol-independent info */
 #define	ia_ifp		ia_ifa.ifa_ifp
 #define	ia_flags	ia_ifa.ifa_flags
-/*	union	ns_net	ia_net;		/* network number of interface */
-#define ia_net		ia_addr.sns_addr.x_net
 	struct	ns_ifaddr *ia_next;	/* next in list of xerox addresses */
 	struct	sockaddr_ns ia_addr;	/* reserve space for my address */
 	struct	sockaddr_ns ia_dstaddr;	/* space for my broadcast address */

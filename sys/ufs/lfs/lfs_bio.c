@@ -30,8 +30,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	from: @(#)lfs_bio.c	8.4 (Berkeley) 12/30/93
- *	$Id: lfs_bio.c,v 1.1 1994/06/08 11:42:28 mycroft Exp $
+ *	@(#)lfs_bio.c	8.4 (Berkeley) 12/30/93
  */
 
 #include <sys/param.h>
@@ -142,7 +141,7 @@ lfs_flush()
 	lfs_writing = 1;
 	for (mp = mountlist.tqh_first; mp != NULL; mp = mp->mnt_list.tqe_next) {
 		/* The lock check below is to avoid races with unmount. */
-		if (!strcmp(&mp->mnt_stat.f_fstypename[0], MOUNT_LFS) &&
+		if (mp->mnt_stat.f_type == MOUNT_LFS &&
 		    (mp->mnt_flag & (MNT_MLOCK|MNT_RDONLY|MNT_UNMOUNT)) == 0 &&
 		    !((((struct ufsmount *)mp->mnt_data))->ufsmount_u.lfs)->lfs_dirops ) {
 			/*

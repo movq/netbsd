@@ -33,8 +33,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	from: @(#)umap_vnops.c	8.3 (Berkeley) 1/5/94
- *	$Id: umap_vnops.c,v 1.1 1994/06/08 11:33:54 mycroft Exp $
+ *	@(#)umap_vnops.c	8.3 (Berkeley) 1/5/94
  */
 
 /*
@@ -136,9 +135,8 @@ umap_bypass(ap)
 
 		/* Save old values */
 
-		savecredp = *credpp;
-		if (savecredp != NOCRED)
-			*credpp = crdup(savecredp);
+		savecredp = (*credpp);
+		(*credpp) = crdup(savecredp);
 		credp = *credpp;
 
 		if (umap_bug_bypass && credp->cr_uid != 0)
@@ -163,10 +161,9 @@ umap_bypass(ap)
 		compnamepp = VOPARG_OFFSETTO(struct componentname**, 
 		    descp->vdesc_componentname_offset, ap);
 
-		savecompcredp = (*compnamepp)->cn_cred;
-		if (savecompcredp != NOCRED)
-			(*compnamepp)->cn_cred = crdup(savecompcredp);
 		compcredp = (*compnamepp)->cn_cred;
+		savecompcredp = compcredp;
+		compcredp = (*compnamepp)->cn_cred = crdup(savecompcredp);
 
 		if (umap_bug_bypass && compcredp->cr_uid != 0)
 			printf("umap_bypass: component credit user was %d, group %d\n", 
@@ -227,27 +224,23 @@ umap_bypass(ap)
 			printf("umap_bypass: returning-user was %d\n",
 					credp->cr_uid);
 
-		if (savecredp != NOCRED) {
-			crfree(credp);
-			*credpp = savecredp;
-			if (umap_bug_bypass && credpp && (*credpp)->cr_uid != 0)
-			 	printf("umap_bypass: returning-user now %d\n\n", 
-				    savecredp->cr_uid);
-		}
+		crfree(credp);
+		(*credpp) = savecredp;
+		if (umap_bug_bypass && credpp && (*credpp)->cr_uid != 0)
+		 	printf("umap_bypass: returning-user now %d\n\n", 
+			    (*credpp)->cr_uid);
 	}
 
 	if (descp->vdesc_componentname_offset != VDESC_NO_OFFSET) {
 		if (umap_bug_bypass && compcredp && compcredp->cr_uid != 0)
-			printf("umap_bypass: returning-component-user was %d\n", 
+		printf("umap_bypass: returning-component-user was %d\n", 
 				compcredp->cr_uid);
 
-		if (savecompcredp != NOCRED) {
-			crfree(compcredp);
-			(*compnamepp)->cn_cred = savecompcredp;
-			if (umap_bug_bypass && credpp && (*credpp)->cr_uid != 0)
-			 	printf("umap_bypass: returning-component-user now %d\n", 
-				    savecompcredp->cr_uid);
-		}
+		crfree(compcredp);
+		(*compnamepp)->cn_cred = savecompcredp;
+		if (umap_bug_bypass && credpp && (*credpp)->cr_uid != 0)
+		 	printf("umap_bypass: returning-component-user now %d\n", 
+					compcredp->cr_uid);
 	}
 
 	return (error);
@@ -266,11 +259,9 @@ umap_getattr(ap)
 		struct proc *a_p;
 	} */ *ap;
 {
-	uid_t uid;
-	gid_t gid;
+	short uid, gid;
 	int error, tmpid, nentries, gnentries;
-	uid_t (*mapdata)[2];
-	gid_t (*gmapdata)[2];
+	u_long (*mapdata)[2], (*gmapdata)[2];
 	struct vnode **vp1p;
 	struct vnodeop_desc *descp = ap->a_desc;
 
@@ -310,6 +301,7 @@ umap_getattr(ap)
 	tmpid = umap_reverse_findid(uid, mapdata, nentries);
 
 	if (tmpid != -1) {
+
 		ap->a_vap->va_uid = (uid_t) tmpid;
 		if (umap_bug_bypass)
 			printf("umap_getattr: original uid = %d\n", uid);
@@ -321,6 +313,7 @@ umap_getattr(ap)
 	tmpid = umap_reverse_findid(gid, gmapdata, gnentries);
 
 	if (tmpid != -1) {
+
 		ap->a_vap->va_gid = (gid_t) tmpid;
 		if (umap_bug_bypass)
 			printf("umap_getattr: original gid = %d\n", gid);

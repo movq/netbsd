@@ -1,7 +1,7 @@
 /*
- * Copyright (c) 1993 The Regents of the University of California.
  * Copyright (c) 1993 Jan-Simon Pendry
- * All rights reserved.
+ * Copyright (c) 1993
+ *	The Regents of the University of California.  All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Jan-Simon Pendry.
@@ -34,10 +34,10 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * From:
- *	Id: procfs_status.c,v 4.1 1993/12/17 10:47:45 jsp Rel
+ *	@(#)procfs_status.c	8.3 (Berkeley) 2/17/94
  *
- *	$Id: procfs_status.c,v 1.1 1994/01/05 07:51:27 cgd Exp $
+ * From:
+ *	$Id: procfs_status.c,v 1.1.1.1 1998/03/01 02:10:01 fvdl Exp $
  */
 
 #include <sys/param.h>
@@ -52,7 +52,8 @@
 #include <sys/resourcevar.h>
 #include <miscfs/procfs/procfs.h>
 
-pfs_dostatus(curp, p, pfs, uio)
+int
+procfs_dostatus(curp, p, pfs, uio)
 	struct proc *curp;
 	struct proc *p;
 	struct pfsnode *pfs;
@@ -86,7 +87,7 @@ pfs_dostatus(curp, p, pfs, uio)
 	ps += strlen(ps);
 	ps += sprintf(ps, " %d %d %d %d ", pid, ppid, pgid, sid);
 
-	if ((p->p_flag&SCTTY) && (tp = sess->s_ttyp))
+	if ((p->p_flag&P_CONTROLT) && (tp = sess->s_ttyp))
 		ps += sprintf(ps, "%d,%d ", major(tp->t_dev), minor(tp->t_dev));
 	else
 		ps += sprintf(ps, "%d,%d ", -1, -1);
@@ -103,27 +104,32 @@ pfs_dostatus(curp, p, pfs, uio)
 	if (*sep != ',')
 		ps += sprintf(ps, "noflags");
 
-	if (p->p_stat & SLOAD)
-		ps += sprintf(ps, " %d %d",
+	if (p->p_flag & P_INMEM)
+		ps += sprintf(ps, " %d,%d",
 			p->p_stats->p_start.tv_sec,
 			p->p_stats->p_start.tv_usec);
 	else
-		ps += sprintf(ps, " -1 -1");
+		ps += sprintf(ps, " -1,-1");
 	
-	ps += sprintf(ps, " %d %d %d %d",
-		p->p_utime.tv_sec,
-		p->p_utime.tv_usec,
-		p->p_stime.tv_sec,
-		p->p_stime.tv_usec);
+	{
+		struct timeval ut, st;
+
+		calcru(p, &ut, &st, (void *) 0);
+		ps += sprintf(ps, " %d,%d %d,%d",
+			ut.tv_sec,
+			ut.tv_usec,
+			st.tv_sec,
+			st.tv_usec);
+	}
 
 	ps += sprintf(ps, " %s",
 		(p->p_wchan && p->p_wmesg) ? p->p_wmesg : "nochan");
 
 	cr = p->p_ucred;
 
-	ps += sprintf(ps, " %d %d", cr->cr_uid, cr->cr_gid);
+	ps += sprintf(ps, " %d", cr->cr_uid, cr->cr_gid);
 	for (i = 0; i < cr->cr_ngroups; i++)
-		ps += sprintf(ps, " %d", cr->cr_groups[i]);
+		ps += sprintf(ps, ",%d", cr->cr_groups[i]);
 	ps += sprintf(ps, "\n");
 
 	xlen = ps - psbuf;

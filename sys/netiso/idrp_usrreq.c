@@ -30,8 +30,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	from: @(#)idrp_usrreq.c	8.1 (Berkeley) 6/10/93
- *	$Id: idrp_usrreq.c,v 1.1 1994/05/13 06:08:42 mycroft Exp $
+ *	@(#)idrp_usrreq.c	8.1 (Berkeley) 6/10/93
  */
 
 #include <sys/param.h>
@@ -54,15 +53,13 @@
 #include <netiso/iso_pcb.h>
 #include <netiso/iso_var.h>
 
-void	idrp_input();
+int idrp_input();
 struct	isopcb	idrp_isop;
 static	struct	sockaddr_iso idrp_addrs[2] =
 {  { sizeof(idrp_addrs), AF_ISO, }, { sizeof(idrp_addrs[1]), AF_ISO, } };
-
 /*
  * IDRP initialization
  */
-void
 idrp_init()
 {
 	extern struct clnl_protosw clnl_protox[256];
@@ -83,14 +80,13 @@ idrp_init()
  * and mke suitable for the idrp socket.
  * No return value.  
  */
-void
 idrp_input(m, src, dst)
 	register struct mbuf *m;
 	struct sockaddr_iso *src, *dst;
 {
 	if (idrp_isop.isop_socket == 0) {
 	bad:	m_freem(m);
-		return;
+		return 0;
 	}
 	bzero(idrp_addrs[0].siso_data, sizeof(idrp_addrs[0].siso_data));
 	bcopy((caddr_t)&(src->siso_addr), (caddr_t)&idrp_addrs[0].siso_addr,
@@ -102,6 +98,7 @@ idrp_input(m, src, dst)
 		(struct sockaddr *)idrp_addrs, m, (struct mbuf *)0) == 0)
 		goto bad;
 	sorwakeup(idrp_isop.isop_socket);
+	return 0;
 }
 
 idrp_output(m, addr)

@@ -35,8 +35,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	from: @(#)cd9660_vfsops.c	8.3 (Berkeley) 1/31/94
- *	$Id: cd9660_vfsops.c,v 1.1 1994/06/08 11:22:57 mycroft Exp $
+ *	@(#)cd9660_vfsops.c	8.3 (Berkeley) 1/31/94
  */
 
 #include <sys/param.h>
@@ -61,7 +60,6 @@
 extern int enodev ();
 
 struct vfsops cd9660_vfsops = {
-	MOUNT_CD9660,
 	cd9660_mount,
 	cd9660_start,
 	cd9660_unmount,
@@ -105,7 +103,6 @@ cd9660_mountroot()
 	bzero((char *)mp, (u_long)sizeof(struct mount));
 	mp->mnt_op = &cd9660_vfsops;
 	mp->mnt_flag = MNT_RDONLY;
-	LIST_INIT(&mp->mnt_vnodelist);
 	args.flags = ISOFSMNT_ROOT;
 	if (error = iso_mountfs(rootvp, mp, p, &args)) {
 		free(mp, M_MOUNT);
@@ -131,6 +128,11 @@ cd9660_mountroot()
 	vfs_unlock(mp);
 	return (0);
 }
+
+/*
+ * Flag to allow forcible unmounting.
+ */
+int iso_doforce = 1;
 
 /*
  * VFS Operations.
@@ -315,7 +317,7 @@ static iso_mountfs(devvp, mp, p, argp)
 	
 	mp->mnt_data = (qaddr_t)isomp;
 	mp->mnt_stat.f_fsid.val[0] = (long)dev;
-	mp->mnt_stat.f_fsid.val[1] = makefstype(MOUNT_CD9660);
+	mp->mnt_stat.f_fsid.val[1] = MOUNT_CD9660;
 	mp->mnt_maxsymlinklen = 0;
 	mp->mnt_flag |= MNT_LOCAL;
 	isomp->im_mountp = mp;
@@ -400,9 +402,7 @@ cd9660_unmount(mp, mntflags, p)
 	int i, error, ronly, flags = 0;
 	
 	if (mntflags & MNT_FORCE) {
-		extern int doforce;
-
-		if (!doforce || (mp->mnt_flag & MNT_ROOTFS))
+		if (!iso_doforce || (mp->mnt_flag & MNT_ROOTFS))
 			return (EINVAL);
 		flags |= FORCECLOSE;
 	}
@@ -494,12 +494,8 @@ cd9660_statfs(mp, sbp, p)
 	register struct fs *fs;
 	
 	isomp = VFSTOISOFS(mp);
-
-#ifdef COMPAT_09
-	sbp->f_type = 5;
-#else
-	sbp->f_type = 0;
-#endif
+	
+	sbp->f_type = MOUNT_CD9660;
 	sbp->f_bsize = isomp->logical_block_size;
 	sbp->f_iosize = sbp->f_bsize;	/* XXX */
 	sbp->f_blocks = isomp->volume_space_size;
@@ -513,8 +509,6 @@ cd9660_statfs(mp, sbp, p)
 		bcopy((caddr_t)mp->mnt_stat.f_mntfromname,
 			(caddr_t)&sbp->f_mntfromname[0], MNAMELEN);
 	}
-	strncpy(&sbp->f_fstypename[0], mp->mnt_op->vfs_name, MFSNAMELEN);
-	sbp->f_fstypename[MFSNAMELEN] = '\0';
 	/* Use the first spare for flags: */
 	sbp->f_spare[0] = isomp->im_flags;
 	return 0;

@@ -1,9 +1,11 @@
-#	$Id: TODO.hibler,v 1.1 1994/06/08 11:22:47 mycroft Exp $
-
 1. Investiate making ISOFS another UFS shared filesystem (ala FFS/MFS/LFS).
    Since it was modelled after the inode code, we might be able to merge
    them back.  It looks like a seperate (but very similar) lookup routine
    will be needed due to the associated file stuff.
+
+2. Make filesystem exportable.  This comes for free if stacked with UFS.
+   Otherwise, the ufs_export routines need to be elevated to vfs_* routines.
+	[ DONE - hibler ]
 
 3. If it can't be merged with UFS, at least get them in sync.  For example,
    it could use the same style hashing routines as in ufs/ufs_ihash.c

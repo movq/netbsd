@@ -1,7 +1,7 @@
 /*
- * Copyright (c) 1993 The Regents of the University of California.
  * Copyright (c) 1993 Jan-Simon Pendry
- * All rights reserved.
+ * Copyright (c) 1993
+ *	The Regents of the University of California.  All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Jan-Simon Pendry.
@@ -34,10 +34,10 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * From:
- *	Id: procfs_ctl.c,v 4.1 1993/12/17 10:47:45 jsp Rel
+ *	@(#)procfs_ctl.c	8.3 (Berkeley) 1/21/94
  *
- *	$Id: procfs_ctl.c,v 1.1 1994/01/05 07:51:15 cgd Exp $
+ * From:
+ *	$Id: procfs_ctl.c,v 1.1.1.1 1998/03/01 02:10:00 fvdl Exp $
  */
 
 #include <sys/param.h>
@@ -59,14 +59,16 @@
 #define TRACE_WAIT_P(curp, p) \
 	((p)->p_stat == SSTOP && \
 	 (p)->p_pptr == (curp) && \
-	 ((p)->p_flag & STRC))
+	 ((p)->p_flag & P_TRACED))
 
+#ifdef notdef
 #define FIX_SSTEP(p) { \
-	if ((p)->p_stat & SSSTEP) { \
 		procfs_fix_sstep(p); \
-		(p)->p_stat &= ~SSSTEP; \
 	} \
 }
+#else
+#define FIX_SSTEP(p)
+#endif
 
 #define PROCFS_CTL_ATTACH	1
 #define PROCFS_CTL_DETACH	2
@@ -119,7 +121,7 @@ procfs_control(curp, p, op)
 	 */
 	if (op == PROCFS_CTL_ATTACH) {
 		/* check whether already being traced */
-		if (p->p_flag & STRC)
+		if (p->p_flag & P_TRACED)
 			return (EBUSY);
 
 		/* can't trace yourself! */
@@ -134,7 +136,7 @@ procfs_control(curp, p, op)
 		 *   proc gets to see all the action.
 		 * Stop the target.
 		 */
-		p->p_flag |= STRC;
+		p->p_flag |= P_TRACED;
 		p->p_xstat = 0;		/* XXX ? */
 		if (p->p_pptr != curp) {
 			p->p_oppid = p->p_pptr->p_pid;
@@ -146,7 +148,7 @@ procfs_control(curp, p, op)
 
 	/*
 	 * Target process must be stopped, owned by (curp) and
-	 * be set up for tracing (STRC flag set).
+	 * be set up for tracing (P_TRACED flag set).
 	 * Allow DETACH to take place at any time for sanity.
 	 * Allow WAIT any time, of course.
 	 */
@@ -179,11 +181,11 @@ procfs_control(curp, p, op)
 	 */
 	case PROCFS_CTL_DETACH:
 		/* if not being traced, then this is a painless no-op */
-		if ((p->p_flag & STRC) == 0)
+		if ((p->p_flag & P_TRACED) == 0)
 			return (0);
 
 		/* not being traced any more */
-		p->p_flag &= ~STRC;
+		p->p_flag &= ~P_TRACED;
 
 		/* give process back to original parent */
 		if (p->p_oppid != p->p_pptr->p_pid) {
@@ -195,7 +197,7 @@ procfs_control(curp, p, op)
 		}
 
 		p->p_oppid = 0;
-		p->p_flag &= ~SWTED;	/* XXX ? */
+		p->p_flag &= ~P_WAITED;	/* XXX ? */
 		wakeup((caddr_t) curp);	/* XXX for CTL_WAIT below ? */
 
 		break;
@@ -221,10 +223,10 @@ procfs_control(curp, p, op)
 	 */
 	case PROCFS_CTL_WAIT:
 		error = 0;
-		if (p->p_flag & STRC) {
+		if (p->p_flag & P_TRACED) {
 			while (error == 0 &&
 					(p->p_stat != SSTOP) &&
-					(p->p_flag & STRC) &&
+					(p->p_flag & P_TRACED) &&
 					(p->p_pptr == curp)) {
 				error = tsleep((caddr_t) p,
 						PWAIT|PCATCH, "procfsx", 0);
@@ -244,22 +246,20 @@ procfs_control(curp, p, op)
 	}
 
 	if (p->p_stat == SSTOP)
-		setrun(p);
+		setrunnable(p);
 	return (0);
 }
 
-pfs_doctl(curp, p, pfs, uio)
+int
+procfs_doctl(curp, p, pfs, uio)
 	struct proc *curp;
 	struct pfsnode *pfs;
 	struct uio *uio;
 	struct proc *p;
 {
-	int len = uio->uio_resid;
 	int xlen;
 	int error;
-	struct sigmap *sm;
 	char msg[PROCFS_CTLLEN+1];
-	char *cp = msg;
 	vfs_namemap_t *nm;
 
 	if (uio->uio_rw != UIO_WRITE)
@@ -290,7 +290,7 @@ pfs_doctl(curp, p, pfs, uio)
 			if (TRACE_WAIT_P(curp, p)) {
 				p->p_xstat = nm->nm_val;
 				FIX_SSTEP(p);
-				setrun(p);
+				setrunnable(p);
 			} else {
 				psignal(p, nm->nm_val);
 			}

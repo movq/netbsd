@@ -1,6 +1,6 @@
 /*
- * Copyright (c) 1984, 1985, 1986, 1987 Regents of the University of California.
- * All rights reserved.
+ * Copyright (c) 1984, 1985, 1986, 1987, 1993
+ *	The Regents of the University of California.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -30,24 +30,22 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)ns.c	7.8 (Berkeley) 6/27/91
+ *	@(#)ns.c	8.2 (Berkeley) 11/15/93
  */
 
-#include "param.h"
-#include "mbuf.h"
-#include "ioctl.h"
-#include "protosw.h"
-#include "errno.h"
-#include "socket.h"
-#include "socketvar.h"
+#include <sys/param.h>
+#include <sys/mbuf.h>
+#include <sys/ioctl.h>
+#include <sys/protosw.h>
+#include <sys/errno.h>
+#include <sys/socket.h>
+#include <sys/socketvar.h>
 
+#include <net/if.h>
+#include <net/route.h>
 
-#include "../net/if.h"
-#include "../net/route.h"
-#include "../net/af.h"
-
-#include "ns.h"
-#include "ns_if.h"
+#include <netns/ns.h>
+#include <netns/ns_if.h>
 
 #ifdef NS
 
@@ -70,7 +68,6 @@ ns_control(so, cmd, data, ifp)
 	register struct ns_ifaddr *ia;
 	struct ifaddr *ifa;
 	struct ns_ifaddr *oia;
-	struct mbuf *m;
 	int error, dstIsNew, hostIsNew;
 
 	/*
@@ -128,16 +125,18 @@ ns_control(so, cmd, data, ifp)
 	case SIOCSIFADDR:
 	case SIOCSIFDSTADDR:
 		if (ia == (struct ns_ifaddr *)0) {
-			m = m_getclr(M_WAIT, MT_IFADDR);
-			if (m == (struct mbuf *)NULL)
+			oia = (struct ns_ifaddr *)
+				malloc(sizeof *ia, M_IFADDR, M_WAITOK);
+			if (oia == (struct ns_ifaddr *)NULL)
 				return (ENOBUFS);
+			bzero((caddr_t)oia, sizeof(*oia));
 			if (ia = ns_ifaddr) {
 				for ( ; ia->ia_next; ia = ia->ia_next)
 					;
-				ia->ia_next = mtod(m, struct ns_ifaddr *);
+				ia->ia_next = oia;
 			} else
-				ns_ifaddr = mtod(m, struct ns_ifaddr *);
-			ia = mtod(m, struct ns_ifaddr *);
+				ns_ifaddr = oia;
+			ia = oia;
 			if (ifa = ifp->if_addrlist) {
 				for ( ; ifa->ifa_next; ifa = ifa->ifa_next)
 					;
@@ -208,7 +207,7 @@ ns_control(so, cmd, data, ifp)
 			else
 				printf("Didn't unlink nsifadr from list\n");
 		}
-		(void) m_free(dtom(oia));
+		IFAFREE((&oia->ia_ifa));
 		if (0 == --ns_interfaces) {
 			/*
 			 * We reset to virginity and start all over again
@@ -318,6 +317,7 @@ ns_ifinit(ifp, ia, sns, scrub)
 		splx(s);
 		return (EINVAL);
 	}
+	ia->ia_ifa.ifa_metric = ifp->if_metric;
 	/*
 	 * Add route for the network.
 	 */
@@ -329,7 +329,7 @@ ns_ifinit(ifp, ia, sns, scrub)
 	if (ifp->if_flags & IFF_POINTOPOINT)
 		rtinit(&(ia->ia_ifa), (int)RTM_ADD, RTF_HOST|RTF_UP);
 	else {
-		ia->ia_broadaddr.sns_addr.x_net = ia->ia_net;
+		ia->ia_broadaddr.sns_addr.x_net = ia->ia_addr.sns_addr.x_net;
 		rtinit(&(ia->ia_ifa), (int)RTM_ADD, RTF_UP);
 	}
 	ia->ia_flags |= IFA_ROUTE;
@@ -355,10 +355,10 @@ ns_iaonnetof(dst)
 				compare = &satons_addr(ia->ia_dstaddr);
 				if (ns_hosteq(*dst, *compare))
 					return (ia);
-				if (ns_neteqnn(net, ia->ia_net))
+				if (ns_neteqnn(net, ia->ia_addr.sns_addr.x_net))
 					ia_maybe = ia;
 			} else {
-				if (ns_neteqnn(net, ia->ia_net))
+				if (ns_neteqnn(net, ia->ia_addr.sns_addr.x_net))
 					return (ia);
 			}
 		}

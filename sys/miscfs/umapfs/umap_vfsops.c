@@ -33,9 +33,9 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	from: @(#)null_vfsops.c       1.5 (Berkeley) 7/10/92
- *	from: @(#)umap_vfsops.c	8.3 (Berkeley) 1/21/94
- *	$Id: umap_vfsops.c,v 1.1 1994/06/08 11:33:53 mycroft Exp $
+ *	@(#)umap_vfsops.c	8.3 (Berkeley) 1/21/94
+ *
+ * @(#)null_vfsops.c       1.5 (Berkeley) 7/10/92
  */
 
 /*
@@ -183,7 +183,7 @@ umapfs_mount(mp, path, data, ndp, p)
 	if (UMAPVPTOLOWERVP(umapm_rootvp)->v_mount->mnt_flag & MNT_LOCAL)
 		mp->mnt_flag |= MNT_LOCAL;
 	mp->mnt_data = (qaddr_t) amp;
-	getnewfsid(mp, makefstype(MOUNT_LOFS));
+	getnewfsid(mp, MOUNT_LOFS);
 
 	(void) copyinstr(path, mp->mnt_stat.f_mntonname, MNAMELEN - 1, &size);
 	bzero(mp->mnt_stat.f_mntonname + size, MNAMELEN - size);
@@ -208,7 +208,6 @@ umapfs_start(mp, flags, p)
 	int flags;
 	struct proc *p;
 {
-
 	return (0);
 	/* return (VFS_START(MOUNTTOUMAPMOUNT(mp)->umapm_vfs, flags, p)); */
 }
@@ -304,7 +303,6 @@ umapfs_quotactl(mp, cmd, uid, arg, p)
 	caddr_t arg;
 	struct proc *p;
 {
-
 	return (VFS_QUOTACTL(MOUNTTOUMAPMOUNT(mp)->umapm_vfs, cmd, uid, arg, p));
 }
 
@@ -345,8 +343,6 @@ umapfs_statfs(mp, sbp, p)
 		bcopy(mp->mnt_stat.f_mntonname, sbp->f_mntonname, MNAMELEN);
 		bcopy(mp->mnt_stat.f_mntfromname, sbp->f_mntfromname, MNAMELEN);
 	}
-	strncpy(&sbp->f_fstypename[0], &mstat.f_fstypename[0], MFSNAMELEN);
-	sbp->f_fstypename[MFSNAMELEN] = '\0';
 	return (0);
 }
 
@@ -357,7 +353,6 @@ umapfs_sync(mp, waitfor, cred, p)
 	struct ucred *cred;
 	struct proc *p;
 {
-
 	/*
 	 * XXX - Assumes no data cached at umap layer.
 	 */
@@ -392,14 +387,12 @@ umapfs_vptofh(vp, fhp)
 	struct vnode *vp;
 	struct fid *fhp;
 {
-
 	return (VFS_VPTOFH(UMAPVPTOLOWERVP(vp), fhp));
 }
 
 int umapfs_init __P((void));
 
 struct vfsops umap_vfsops = {
-	MOUNT_UMAP,
 	umapfs_mount,
 	umapfs_start,
 	umapfs_unmount,

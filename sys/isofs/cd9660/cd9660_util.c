@@ -35,8 +35,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	from: @(#)cd9660_util.c	8.1 (Berkeley) 1/21/94
- *	$Id: cd9660_util.c,v 1.1 1994/06/08 11:22:55 mycroft Exp $
+ *	@(#)cd9660_util.c	8.1 (Berkeley) 1/21/94
  */
 
 #include <sys/param.h>

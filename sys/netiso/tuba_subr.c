@@ -30,8 +30,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	from: @(#)tuba_subr.c	8.1 (Berkeley) 6/10/93
- *	$Id: tuba_subr.c,v 1.1 1994/05/13 06:10:01 mycroft Exp $
+ *	@(#)tuba_subr.c	8.1 (Berkeley) 6/10/93
  */
 
 #include <sys/param.h>
@@ -78,7 +77,6 @@ struct	isopcb	tuba_isopcb;
 /*
  * Tuba initialization
  */
-void
 tuba_init()
 {
 #define TUBAHDRSIZE (3 /*LLC*/ + 9 /*CLNP Fixed*/ + 42 /*Addresses*/ \

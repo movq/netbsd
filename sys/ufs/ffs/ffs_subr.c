@@ -30,8 +30,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	from: @(#)ffs_subr.c	8.2 (Berkeley) 9/21/93
- *	$Id: ffs_subr.c,v 1.1 1994/06/08 11:42:06 mycroft Exp $
+ *	@(#)ffs_subr.c	8.2 (Berkeley) 9/21/93
  */
 
 #include <sys/param.h>

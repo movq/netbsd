@@ -36,8 +36,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	from: @(#)llc_var.h	8.1 (Berkeley) 6/10/93
- *	$Id: llc_var.h,v 1.1 1994/05/13 06:04:37 mycroft Exp $
+ *	@(#)llc_var.h	8.1 (Berkeley) 6/10/93
  */
 
 #ifdef __STDC__

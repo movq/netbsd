@@ -30,8 +30,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	from: @(#)ufs_extern.h	8.3 (Berkeley) 4/16/94
- *	$Id: ufs_extern.h,v 1.1 1994/06/08 11:43:15 mycroft Exp $
+ *	@(#)ufs_extern.h	8.3 (Berkeley) 4/16/94
  */
 
 struct buf;
@@ -51,6 +50,14 @@ struct vnode;
 struct ufs_args;
 
 __BEGIN_DECLS
+void	 diskerr
+	    __P((struct buf *, char *, char *, int, int, struct disklabel *));
+void	 disksort __P((struct buf *, struct buf *));
+u_int	 dkcksum __P((struct disklabel *));
+char	*readdisklabel __P((dev_t, int (*)(), struct disklabel *));
+int	 setdisklabel __P((struct disklabel *, struct disklabel *, u_long));
+int	 writedisklabel __P((dev_t, int (*)(), struct disklabel *));
+
 int	 ufs_abortop __P((struct vop_abortop_args *));
 int	 ufs_access __P((struct vop_access_args *));
 int	 ufs_advlock __P((struct vop_advlock_args *));
@@ -92,7 +99,7 @@ int	 ufs_pathconf __P((struct vop_pathconf_args *));
 int	 ufs_print __P((struct vop_print_args *));
 int	 ufs_readdir __P((struct vop_readdir_args *));
 int	 ufs_readlink __P((struct vop_readlink_args *));
-int	 ufs_reclaim __P((struct vnode *));
+int	 ufs_reclaim __P((struct vop_reclaim_args *));
 int	 ufs_remove __P((struct vop_remove_args *));
 int	 ufs_rename __P((struct vop_rename_args *));
 int	 ufs_rmdir __P((struct vop_rmdir_args *));

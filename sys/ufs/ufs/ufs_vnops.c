@@ -35,8 +35,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	from: @(#)ufs_vnops.c	8.10 (Berkeley) 4/1/94
- *	$Id: ufs_vnops.c,v 1.1 1994/06/08 11:43:24 mycroft Exp $
+ *	@(#)ufs_vnops.c	8.10 (Berkeley) 4/1/94
  */
 
 #include <sys/param.h>
@@ -53,12 +52,12 @@
 #include <sys/vnode.h>
 #include <sys/malloc.h>
 #include <sys/dirent.h>
-#include <sys/lockf.h>
 
 #include <vm/vm.h>
 
 #include <miscfs/specfs/specdev.h>
 
+#include <ufs/ufs/lockf.h>
 #include <ufs/ufs/quota.h>
 #include <ufs/ufs/inode.h>
 #include <ufs/ufs/dir.h>
@@ -708,6 +707,161 @@ out2:
 	return (error);
 }
 
+
+
+/*
+ * relookup - lookup a path name component
+ *    Used by lookup to re-aquire things.
+ */
+int
+relookup(dvp, vpp, cnp)
+	struct vnode *dvp, **vpp;
+	struct componentname *cnp;
+{
+	register struct vnode *dp = 0;	/* the directory we are searching */
+	int docache;			/* == 0 do not cache last component */
+	int wantparent;			/* 1 => wantparent or lockparent flag */
+	int rdonly;			/* lookup read-only flag bit */
+	int error = 0;
+#ifdef NAMEI_DIAGNOSTIC
+	int newhash;			/* DEBUG: check name hash */
+	char *cp;			/* DEBUG: check name ptr/len */
+#endif
+
+	/*
+	 * Setup: break out flag bits into variables.
+	 */
+	wantparent = cnp->cn_flags & (LOCKPARENT|WANTPARENT);
+	docache = (cnp->cn_flags & NOCACHE) ^ NOCACHE;
+	if (cnp->cn_nameiop == DELETE ||
+	    (wantparent && cnp->cn_nameiop != CREATE))
+		docache = 0;
+	rdonly = cnp->cn_flags & RDONLY;
+	cnp->cn_flags &= ~ISSYMLINK;
+	dp = dvp;
+	VOP_LOCK(dp);
+
+/* dirloop: */
+	/*
+	 * Search a new directory.
+	 *
+	 * The cn_hash value is for use by vfs_cache.
+	 * The last component of the filename is left accessible via
+	 * cnp->cn_nameptr for callers that need the name. Callers needing
+	 * the name set the SAVENAME flag. When done, they assume
+	 * responsibility for freeing the pathname buffer.
+	 */
+#ifdef NAMEI_DIAGNOSTIC
+	for (newhash = 0, cp = cnp->cn_nameptr; *cp != 0 && *cp != '/'; cp++)
+		newhash += (unsigned char)*cp;
+	if (newhash != cnp->cn_hash)
+		panic("relookup: bad hash");
+	if (cnp->cn_namelen != cp - cnp->cn_nameptr)
+		panic ("relookup: bad len");
+	if (*cp != 0)
+		panic("relookup: not last component");
+	printf("{%s}: ", cnp->cn_nameptr);
+#endif
+
+	/*
+	 * Check for degenerate name (e.g. / or "")
+	 * which is a way of talking about a directory,
+	 * e.g. like "/." or ".".
+	 */
+	if (cnp->cn_nameptr[0] == '\0') {
+		if (cnp->cn_nameiop != LOOKUP || wantparent) {
+			error = EISDIR;
+			goto bad;
+		}
+		if (dp->v_type != VDIR) {
+			error = ENOTDIR;
+			goto bad;
+		}
+		if (!(cnp->cn_flags & LOCKLEAF))
+			VOP_UNLOCK(dp);
+		*vpp = dp;
+		if (cnp->cn_flags & SAVESTART)
+			panic("lookup: SAVESTART");
+		return (0);
+	}
+
+	if (cnp->cn_flags & ISDOTDOT)
+		panic ("relookup: lookup on dot-dot");
+
+	/*
+	 * We now have a segment name to search for, and a directory to search.
+	 */
+	if (error = VOP_LOOKUP(dp, vpp, cnp)) {
+#ifdef DIAGNOSTIC
+		if (*vpp != NULL)
+			panic("leaf should be empty");
+#endif
+		if (error != EJUSTRETURN)
+			goto bad;
+		/*
+		 * If creating and at end of pathname, then can consider
+		 * allowing file to be created.
+		 */
+		if (rdonly || (dvp->v_mount->mnt_flag & MNT_RDONLY)) {
+			error = EROFS;
+			goto bad;
+		}
+		/* ASSERT(dvp == ndp->ni_startdir) */
+		if (cnp->cn_flags & SAVESTART)
+			VREF(dvp);
+		/*
+		 * We return with ni_vp NULL to indicate that the entry
+		 * doesn't currently exist, leaving a pointer to the
+		 * (possibly locked) directory inode in ndp->ni_dvp.
+		 */
+		return (0);
+	}
+	dp = *vpp;
+
+#ifdef DIAGNOSTIC
+	/*
+	 * Check for symbolic link
+	 */
+	if (dp->v_type == VLNK && (cnp->cn_flags & FOLLOW))
+		panic ("relookup: symlink found.\n");
+#endif
+
+	/*
+	 * Check for read-only file systems.
+	 */
+	if (cnp->cn_nameiop == DELETE || cnp->cn_nameiop == RENAME) {
+		/*
+		 * Disallow directory write attempts on read-only
+		 * file systems.
+		 */
+		if (rdonly || (dp->v_mount->mnt_flag & MNT_RDONLY) ||
+		    (wantparent &&
+		     (dvp->v_mount->mnt_flag & MNT_RDONLY))) {
+			error = EROFS;
+			goto bad2;
+		}
+	}
+	/* ASSERT(dvp == ndp->ni_startdir) */
+	if (cnp->cn_flags & SAVESTART)
+		VREF(dvp);
+	
+	if (!wantparent)
+		vrele(dvp);
+	if ((cnp->cn_flags & LOCKLEAF) == 0)
+		VOP_UNLOCK(dp);
+	return (0);
+
+bad2:
+	if ((cnp->cn_flags & LOCKPARENT) && (cnp->cn_flags & ISLASTCN))
+		VOP_UNLOCK(dvp);
+	vrele(dvp);
+bad:
+	vput(dp);
+	*vpp = NULL;
+	return (error);
+}
+
+
 /*
  * Rename system call.
  * 	rename("foo", "bar");
@@ -1352,22 +1506,16 @@ ufs_readdir(ap)
 		struct vnode *a_vp;
 		struct uio *a_uio;
 		struct ucred *a_cred;
-		int *a_eofflag;
-		u_long *a_cookies;
-		int ncookies;
 	} */ *ap;
 {
 	register struct uio *uio = ap->a_uio;
-	int error;
-	size_t count, lost;
-	off_t off = uio->uio_offset;
+	int count, lost, error;
 
 	count = uio->uio_resid;
-	/* Make sure we don't return partial entries. */
-	count -= (uio->uio_offset + count) & (DIRBLKSIZ -1);
-	if (count <= 0)
-		return (EINVAL);
+	count &= ~(DIRBLKSIZ - 1);
 	lost = uio->uio_resid - count;
+	if (count < DIRBLKSIZ || (uio->uio_offset & (DIRBLKSIZ -1)))
+		return (EINVAL);
 	uio->uio_resid = count;
 	uio->uio_iov->iov_len = count;
 #	if (BYTE_ORDER == LITTLE_ENDIAN)
@@ -1412,32 +1560,7 @@ ufs_readdir(ap)
 #	else
 		error = VOP_READ(ap->a_vp, uio, 0, ap->a_cred);
 #	endif
-	if (!error && ap->a_ncookies) {
-		register struct dirent *dp;
-		register u_long *cookies = ap->a_cookies;
-		register int ncookies = ap->a_ncookies;
-
-		/*
-		 * Only the NFS server uses cookies, and it loads the
-		 * directory block into system space, so we can just look at
-		 * it directly.
-		 */
-		if (uio->uio_segflg != UIO_SYSSPACE || uio->uio_iovcnt != 1)
-			panic("ufs_readdir: lost in space");
-		dp = (struct dirent *)
-		     (uio->uio_iov->iov_base - (uio->uio_offset - off));
-		while (ncookies-- && off < uio->uio_offset) {
-			if (dp->d_reclen == 0)
-				break;
-			off += dp->d_reclen;
-			*(cookies++) = off;
-			dp = (struct dirent *)((caddr_t)dp + dp->d_reclen);
-		}
-		lost += uio->uio_offset - off;
-		uio->uio_offset = off;
-	}
 	uio->uio_resid += lost;
-	*ap->a_eofflag = VTOI(ap->a_vp)->i_size <= uio->uio_offset;
 	return (error);
 }
 
@@ -1457,8 +1580,7 @@ ufs_readlink(ap)
 	int isize;
 
 	isize = ip->i_size;
-	if (isize < vp->v_mount->mnt_maxsymlinklen ||
-	    (vp->v_mount->mnt_maxsymlinklen == 0 && OLDFASTLINK(&ip->i_din))) {
+	if (isize < vp->v_mount->mnt_maxsymlinklen) {
 		uiomove((char *)ip->i_shortlink, isize, ap->a_uio);
 		return (0);
 	}
@@ -1821,9 +1943,81 @@ ufs_advlock(ap)
 	} */ *ap;
 {
 	register struct inode *ip = VTOI(ap->a_vp);
+	register struct flock *fl = ap->a_fl;
+	register struct lockf *lock;
+	off_t start, end;
+	int error;
 
-	return (lf_advlock(&ip->i_lockf, ip->i_size, ap->a_id, ap->a_op,
-	    ap->a_fl, ap->a_flags));
+	/*
+	 * Avoid the common case of unlocking when inode has no locks.
+	 */
+	if (ip->i_lockf == (struct lockf *)0) {
+		if (ap->a_op != F_SETLK) {
+			fl->l_type = F_UNLCK;
+			return (0);
+		}
+	}
+	/*
+	 * Convert the flock structure into a start and end.
+	 */
+	switch (fl->l_whence) {
+
+	case SEEK_SET:
+	case SEEK_CUR:
+		/*
+		 * Caller is responsible for adding any necessary offset
+		 * when SEEK_CUR is used.
+		 */
+		start = fl->l_start;
+		break;
+
+	case SEEK_END:
+		start = ip->i_size + fl->l_start;
+		break;
+
+	default:
+		return (EINVAL);
+	}
+	if (start < 0)
+		return (EINVAL);
+	if (fl->l_len == 0)
+		end = -1;
+	else
+		end = start + fl->l_len - 1;
+	/*
+	 * Create the lockf structure
+	 */
+	MALLOC(lock, struct lockf *, sizeof *lock, M_LOCKF, M_WAITOK);
+	lock->lf_start = start;
+	lock->lf_end = end;
+	lock->lf_id = ap->a_id;
+	lock->lf_inode = ip;
+	lock->lf_type = fl->l_type;
+	lock->lf_next = (struct lockf *)0;
+	lock->lf_block = (struct lockf *)0;
+	lock->lf_flags = ap->a_flags;
+	/*
+	 * Do the requested operation.
+	 */
+	switch(ap->a_op) {
+	case F_SETLK:
+		return (lf_setlock(lock));
+
+	case F_UNLCK:
+		error = lf_clearlock(lock);
+		FREE(lock, M_LOCKF);
+		return (error);
+
+	case F_GETLK:
+		error = lf_getlock(lock, fl);
+		FREE(lock, M_LOCKF);
+		return (error);
+	
+	default:
+		free(lock, M_LOCKF);
+		return (EINVAL);
+	}
+	/* NOTREACHED */
 }
 
 /*

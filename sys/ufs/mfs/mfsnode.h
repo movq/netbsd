@@ -30,8 +30,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	from: @(#)mfsnode.h	8.2 (Berkeley) 8/11/93
- *	$Id: mfsnode.h,v 1.1 1994/06/08 11:42:59 mycroft Exp $
+ *	@(#)mfsnode.h	8.2 (Berkeley) 8/11/93
  */
 
 /*

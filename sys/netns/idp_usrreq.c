@@ -1,6 +1,6 @@
 /*
- * Copyright (c) 1984, 1985, 1986, 1987 Regents of the University of California.
- * All rights reserved.
+ * Copyright (c) 1984, 1985, 1986, 1987, 1993
+ *	The Regents of the University of California.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -30,27 +30,27 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)idp_usrreq.c	7.11 (Berkeley) 6/27/91
+ *	@(#)idp_usrreq.c	8.1 (Berkeley) 6/10/93
  */
 
-#include "param.h"
-#include "malloc.h"
-#include "mbuf.h"
-#include "protosw.h"
-#include "socket.h"
-#include "socketvar.h"
-#include "errno.h"
-#include "stat.h"
+#include <sys/param.h>
+#include <sys/malloc.h>
+#include <sys/mbuf.h>
+#include <sys/protosw.h>
+#include <sys/socket.h>
+#include <sys/socketvar.h>
+#include <sys/errno.h>
+#include <sys/stat.h>
 
-#include "../net/if.h"
-#include "../net/route.h"
+#include <net/if.h>
+#include <net/route.h>
 
-#include "ns.h"
-#include "ns_pcb.h"
-#include "ns_if.h"
-#include "idp.h"
-#include "idp_var.h"
-#include "ns_error.h"
+#include <netns/ns.h>
+#include <netns/ns_pcb.h>
+#include <netns/ns_if.h>
+#include <netns/idp.h>
+#include <netns/idp_var.h>
+#include <netns/ns_error.h>
 
 /*
  * IDP protocol implementation.
@@ -253,7 +253,7 @@ idp_output(nsp, m0)
 		}
 	}
 	nsp->nsp_lastdst = idp->idp_dna;
-#endif ancient_history
+#endif /* ancient_history */
 	if (noIdpRoute) ro = 0;
 	return (ns_output(m, ro, so->so_options & SO_BROADCAST));
 }
@@ -357,7 +357,7 @@ idp_ctloutput(req, so, level, name, value)
 		case SO_NSIP_ROUTE:
 			error = nsip_route(*value);
 			break;
-#endif NSIP
+#endif /* NSIP */
 		default:
 			error = EINVAL;
 		}

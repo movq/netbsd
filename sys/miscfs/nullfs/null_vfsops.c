@@ -33,10 +33,10 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	from: Id: lofs_vfsops.c,v 1.9 1992/05/30 10:26:24 jsp Exp
- *	from: @(#)lofs_vfsops.c	1.2 (Berkeley) 6/18/92
- *	from: @(#)null_vfsops.c	8.2 (Berkeley) 1/21/94
- *	$Id: null_vfsops.c,v 1.1 1994/06/08 11:33:25 mycroft Exp $
+ *	@(#)null_vfsops.c	8.2 (Berkeley) 1/21/94
+ *
+ * @(#)lofs_vfsops.c	1.2 (Berkeley) 6/18/92
+ * $Id: null_vfsops.c,v 1.1.1.1 1998/03/01 02:09:59 fvdl Exp $
  */
 
 /*
@@ -142,7 +142,7 @@ nullfs_mount(mp, path, data, ndp, p)
 	if (NULLVPTOLOWERVP(nullm_rootvp)->v_mount->mnt_flag & MNT_LOCAL)
 		mp->mnt_flag |= MNT_LOCAL;
 	mp->mnt_data = (qaddr_t) xmp;
-	getnewfsid(mp, makefstype(MOUNT_LOFS));
+	getnewfsid(mp, MOUNT_LOFS);
 
 	(void) copyinstr(path, mp->mnt_stat.f_mntonname, MNAMELEN - 1, &size);
 	bzero(mp->mnt_stat.f_mntonname + size, MNAMELEN - size);
@@ -167,7 +167,6 @@ nullfs_start(mp, flags, p)
 	int flags;
 	struct proc *p;
 {
-
 	return (0);
 	/* return VFS_START(MOUNTTONULLMOUNT(mp)->nullm_vfs, flags, p); */
 }
@@ -263,7 +262,6 @@ nullfs_quotactl(mp, cmd, uid, arg, p)
 	caddr_t arg;
 	struct proc *p;
 {
-
 	return VFS_QUOTACTL(MOUNTTONULLMOUNT(mp)->nullm_vfs, cmd, uid, arg, p);
 }
 
@@ -304,8 +302,6 @@ nullfs_statfs(mp, sbp, p)
 		bcopy(mp->mnt_stat.f_mntonname, sbp->f_mntonname, MNAMELEN);
 		bcopy(mp->mnt_stat.f_mntfromname, sbp->f_mntfromname, MNAMELEN);
 	}
-	strncpy(&sbp->f_fstypename[0], &mstat.f_fstypename[0], MFSNAMELEN);
-	sbp->f_fstypename[MFSNAMELEN] = '\0';
 	return (0);
 }
 
@@ -316,7 +312,6 @@ nullfs_sync(mp, waitfor, cred, p)
 	struct ucred *cred;
 	struct proc *p;
 {
-
 	/*
 	 * XXX - Assumes no data cached at null layer.
 	 */
@@ -351,14 +346,12 @@ nullfs_vptofh(vp, fhp)
 	struct vnode *vp;
 	struct fid *fhp;
 {
-
 	return VFS_VPTOFH(NULLVPTOLOWERVP(vp), fhp);
 }
 
 int nullfs_init __P((void));
 
 struct vfsops null_vfsops = {
-	MOUNT_NULL,
 	nullfs_mount,
 	nullfs_start,
 	nullfs_unmount,

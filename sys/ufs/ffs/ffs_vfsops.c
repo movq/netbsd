@@ -30,8 +30,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	from: @(#)ffs_vfsops.c	8.8 (Berkeley) 4/18/94
- *	$Id: ffs_vfsops.c,v 1.1 1994/06/08 11:42:09 mycroft Exp $
+ *	@(#)ffs_vfsops.c	8.8 (Berkeley) 4/18/94
  */
 
 #include <sys/param.h>
@@ -63,7 +62,6 @@
 int ffs_sbupdate __P((struct ufsmount *, int));
 
 struct vfsops ufs_vfsops = {
-	MOUNT_UFS,
 	ffs_mount,
 	ufs_start,
 	ffs_unmount,
@@ -250,7 +248,6 @@ ffs_reload(mountp, cred, p)
 	struct csum *space;
 	struct buf *bp;
 	struct fs *fs;
-	struct partinfo dpart;
 	int i, blks, size, error;
 
 	if ((mountp->mnt_flag & MNT_RDONLY) == 0)
@@ -264,11 +261,7 @@ ffs_reload(mountp, cred, p)
 	/*
 	 * Step 2: re-read superblock from disk.
 	 */
-	if (VOP_IOCTL(devvp, DIOCGPART, (caddr_t)&dpart, FREAD, NOCRED, p) != 0)
-		size = DEV_BSIZE;
-	else
-		size = dpart.disklab->d_secsize;
-	if (error = bread(devvp, SBOFF / size, SBSIZE, NOCRED, &bp))
+	if (error = bread(devvp, SBLOCK, SBSIZE, NOCRED, &bp))
 		return (error);
 	fs = (struct fs *)bp->b_data;
 	if (fs->fs_magic != FS_MAGIC || fs->fs_bsize > MAXBSIZE ||
@@ -351,7 +344,7 @@ ffs_mountfs(devvp, mp, p)
 	dev_t dev = devvp->v_rdev;
 	struct partinfo dpart;
 	caddr_t base, space;
-	int blks;
+	int havepart = 0, blks;
 	int error, i, size;
 	int ronly;
 	extern struct vnode *rootvp;
@@ -374,22 +367,19 @@ ffs_mountfs(devvp, mp, p)
 		return (error);
 	if (VOP_IOCTL(devvp, DIOCGPART, (caddr_t)&dpart, FREAD, NOCRED, p) != 0)
 		size = DEV_BSIZE;
-	else
+	else {
+		havepart = 1;
 		size = dpart.disklab->d_secsize;
+	}
 
 	bp = NULL;
 	ump = NULL;
-	if (error = bread(devvp, SBOFF / size, SBSIZE, NOCRED, &bp))
+	if (error = bread(devvp, SBLOCK, SBSIZE, NOCRED, &bp))
 		goto out;
 	fs = (struct fs *)bp->b_data;
 	if (fs->fs_magic != FS_MAGIC || fs->fs_bsize > MAXBSIZE ||
 	    fs->fs_bsize < sizeof(struct fs)) {
 		error = EINVAL;		/* XXX needs translation */
-		goto out;
-	}
-	/* XXX updating 4.2 FFS superblocks trashes rotational layout tables */
-	if (fs->fs_postblformat == FS_42POSTBLFMT && !ronly) {
-		error = EROFS;		/* XXX what should be returned? */
 		goto out;
 	}
 	ump = malloc(sizeof *ump, M_UFSMNT, M_WAITOK);
@@ -426,7 +416,7 @@ ffs_mountfs(devvp, mp, p)
 	}
 	mp->mnt_data = (qaddr_t)ump;
 	mp->mnt_stat.f_fsid.val[0] = (long)dev;
-	mp->mnt_stat.f_fsid.val[1] = makefstype(MOUNT_UFS);
+	mp->mnt_stat.f_fsid.val[1] = MOUNT_UFS;
 	mp->mnt_maxsymlinklen = fs->fs_maxsymlinklen;
 	mp->mnt_flag |= MNT_LOCAL;
 	ump->um_mountp = mp;
@@ -566,11 +556,7 @@ ffs_statfs(mp, sbp, p)
 	fs = ump->um_fs;
 	if (fs->fs_magic != FS_MAGIC)
 		panic("ffs_statfs");
-#ifdef COMPAT_09
-	sbp->f_type = 1;
-#else
-	sbp->f_type = 0;
-#endif
+	sbp->f_type = MOUNT_UFS;
 	sbp->f_bsize = fs->fs_fsize;
 	sbp->f_iosize = fs->fs_bsize;
 	sbp->f_blocks = fs->fs_dsize;
@@ -586,8 +572,6 @@ ffs_statfs(mp, sbp, p)
 		bcopy((caddr_t)mp->mnt_stat.f_mntfromname,
 			(caddr_t)&sbp->f_mntfromname[0], MNAMELEN);
 	}
-	strncpy(&sbp->f_fstypename[0], mp->mnt_op->vfs_name, MFSNAMELEN);
-	sbp->f_fstypename[MFSNAMELEN] = '\0';
 	return (0);
 }
 
@@ -831,21 +815,11 @@ ffs_sbupdate(mp, waitfor)
 	caddr_t space;
 	int i, size, error = 0;
 
-	bp = getblk(mp->um_devvp, SBOFF >> (fs->fs_fshift - fs->fs_fsbtodb),
-	    (int)fs->fs_sbsize, 0, 0);
+	bp = getblk(mp->um_devvp, SBLOCK, (int)fs->fs_sbsize, 0, 0);
 	bcopy((caddr_t)fs, bp->b_data, (u_int)fs->fs_sbsize);
 	/* Restore compatibility to old file systems.		   XXX */
 	if (fs->fs_postblformat == FS_42POSTBLFMT)		/* XXX */
 		((struct fs *)bp->b_data)->fs_nrpos = -1;	/* XXX */
-	if (fs->fs_inodefmt < FS_44INODEFMT) {			/* XXX */
-		long *lp, tmp;					/* XXX */
-								/* XXX */
-		lp = (long *)&((struct fs *)bp->b_data)->fs_qbmask; /* XXX */
-		tmp = lp[4];					/* XXX */
-		for (i = 4; i > 0; i--)				/* XXX */
-			lp[i] = lp[i-1];			/* XXX */
-		lp[0] = tmp;					/* XXX */
-	}							/* XXX */
 	if (waitfor == MNT_WAIT)
 		error = bwrite(bp);
 	else

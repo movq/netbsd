@@ -1,6 +1,6 @@
 /*
- * Copyright (c) 1984, 1985, 1986, 1987 Regents of the University of California.
- * All rights reserved.
+ * Copyright (c) 1984, 1985, 1986, 1987, 1993
+ *	The Regents of the University of California.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -30,16 +30,18 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)ns_proto.c	7.4 (Berkeley) 6/28/90
+ *	@(#)ns_proto.c	8.1 (Berkeley) 6/10/93
  */
 
-#include "param.h"
-#include "socket.h"
-#include "protosw.h"
-#include "domain.h"
-#include "mbuf.h"
+#include <sys/param.h>
+#include <sys/socket.h>
+#include <sys/protosw.h>
+#include <sys/domain.h>
+#include <sys/mbuf.h>
 
-#include "ns.h"
+#include <net/radix.h>
+
+#include <netns/ns.h>
 
 /*
  * NS protocol family: IDP, ERR, PE, SPP, ROUTE.
@@ -89,5 +91,6 @@ struct protosw nssw[] = {
 
 struct domain nsdomain =
     { AF_NS, "network systems", 0, 0, 0, 
-      nssw, &nssw[sizeof(nssw)/sizeof(nssw[0])] };
+      nssw, &nssw[sizeof(nssw)/sizeof(nssw[0])], 0,
+      rn_inithead, 16, sizeof(struct sockaddr_ns)};
 

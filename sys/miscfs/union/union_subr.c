@@ -34,15 +34,13 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	from: @(#)union_subr.c	8.4 (Berkeley) 2/17/94
- *	$Id: union_subr.c,v 1.1 1994/06/08 11:34:00 mycroft Exp $
+ *	@(#)union_subr.c	8.4 (Berkeley) 2/17/94
  */
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/time.h>
 #include <sys/kernel.h>
-#include <sys/proc.h>
 #include <sys/vnode.h>
 #include <sys/namei.h>
 #include <sys/malloc.h>
@@ -50,6 +48,10 @@
 #include <sys/filedesc.h>
 #include <sys/queue.h>
 #include <miscfs/union/union.h>
+
+#ifdef DIAGNOSTIC
+#include <sys/proc.h>
+#endif
 
 /* must be power of two, otherwise change UNION_HASH() */
 #define NHASH 32

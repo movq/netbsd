@@ -1,10 +1,11 @@
 /*
- * Copyright (c) 1993 The Regents of the University of California.
  * Copyright (c) 1993 Jan-Simon Pendry
- * All rights reserved.
+ * Copyright (c) 1993 Sean Eric Fagan
+ * Copyright (c) 1993
+ *	The Regents of the University of California.  All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
- * Jan-Simon Pendry.
+ * Jan-Simon Pendry and Sean Eric Fagan.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -34,10 +35,10 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * From:
- *	Id: procfs_mem.c,v 4.1 1993/12/17 10:47:45 jsp Rel
+ *	@(#)procfs_mem.c	8.4 (Berkeley) 1/21/94
  *
- *	$Id: procfs_mem.c,v 1.1 1994/01/05 07:51:18 cgd Exp $
+ * From:
+ *	$Id: procfs_mem.c,v 1.1.1.1 1998/03/01 02:10:01 fvdl Exp $
  */
 
 /*
@@ -57,7 +58,7 @@
 #include <vm/vm_page.h>
 
 static int
-pfs_rwmem(p, uio)
+procfs_rwmem(p, uio)
 	struct proc *p;
 	struct uio *uio;
 {
@@ -152,7 +153,7 @@ pfs_rwmem(p, uio)
 		 */
 		if (!error && writing && object->shadow) {
 			m = vm_page_lookup(object, off);
-			if (m == 0 || m->copy_on_write)
+			if (m == 0 || (m->flags & PG_COPYONWRITE))
 				error = vm_fault(map, pageno,
 							VM_PROT_WRITE, FALSE);
 		}
@@ -198,7 +199,8 @@ pfs_rwmem(p, uio)
  * the kernel and then doing a uiomove direct
  * from the kernel address space.
  */
-pfs_domem(curp, p, pfs, uio)
+int
+procfs_domem(curp, p, pfs, uio)
 	struct proc *curp;
 	struct proc *p;
 	struct pfsnode *pfs;
@@ -209,7 +211,7 @@ pfs_domem(curp, p, pfs, uio)
 	if (uio->uio_resid == 0)
 		return (0);
 
-	error = pfs_rwmem(p, uio);
+	error = procfs_rwmem(p, uio);
 
 	return (error);
 }
@@ -269,9 +271,9 @@ procfs_findtextvp(p)
 		if (!error) {
 			vm_pager_t pager;
 
-			printf("procfs: found object\n");
+			printf("procfs: found vm object\n");
 			vm_map_lookup_done(map, out_entry);
-			printf("procfs: object = %x\n", object);
+			printf("procfs: vm object = %x\n", object);
 
 			/*
 			 * At this point, assuming no errors, object
@@ -294,7 +296,7 @@ procfs_findtextvp(p)
 		}
 	}
 
-	printf("procfs: not found\n");
+	printf("procfs: text object not found\n");
 	return (0);
 }
-#endif /* notyet */
+#endif /* probably_never */

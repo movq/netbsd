@@ -33,8 +33,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	from: @(#)nfs_nqlease.c	8.3 (Berkeley) 1/4/94
- *	$Id: nfs_nqlease.c,v 1.1 1994/06/08 11:36:54 mycroft Exp $
+ *	@(#)nfs_nqlease.c	8.3 (Berkeley) 1/4/94
  */
 
 /*
@@ -586,7 +585,6 @@ tryagain:
 	}
 }
 
-#ifdef NFSSERVER
 /*
  * Nqnfs server timer that maintains the server lease queue.
  * Scan the lease queue for expired entries:
@@ -800,9 +798,7 @@ nfsmout:
 	}
 	return (EPERM);
 }
-#endif /* NFSSERVER */
 
-#ifdef NFSCLIENT
 /*
  * Client get lease rpc function.
  */
@@ -1023,13 +1019,13 @@ nqnfs_clientd(nmp, cred, ncd, flag, argp, p)
 		while (np != (struct nfsnode *)nmp &&
 		       (nmp->nm_flag & NFSMNT_DISMINPROG) == 0) {
 			vp = NFSTOV(np);
-if (strcmp(&vp->v_mount->mnt_stat.f_fstypename[0], MOUNT_NFS)) panic("trash2");
+if (vp->v_mount->mnt_stat.f_fsid.val[1] != MOUNT_NFS) panic("trash2");
 			vpid = vp->v_id;
 			if (np->n_expiry < time.tv_sec) {
 			   if (vget(vp, 1) == 0) {
 			     nmp->nm_inprog = vp;
 			     if (vpid == vp->v_id) {
-if (strcmp(&vp->v_mount->mnt_stat.f_fstypename[0], MOUNT_NFS)) panic("trash3");
+if (vp->v_mount->mnt_stat.f_fsid.val[1] != MOUNT_NFS) panic("trash3");
 				if (np->n_tnext == (struct nfsnode *)nmp)
 					nmp->nm_tprev = np->n_tprev;
 				else
@@ -1065,7 +1061,7 @@ if (strcmp(&vp->v_mount->mnt_stat.f_fstypename[0], MOUNT_NFS)) panic("trash3");
 				 == NQNFSWRITE && vp->v_dirtyblkhd.lh_first &&
 				 vget(vp, 1) == 0) {
 				 nmp->nm_inprog = vp;
-if (strcmp(&vp->v_mount->mnt_stat.f_fstypename[0], MOUNT_NFS)) panic("trash4");
+if (vp->v_mount->mnt_stat.f_fsid.val[1] != MOUNT_NFS) panic("trash4");
 				 if (vpid == vp->v_id &&
 				     nqnfs_getlease(vp, NQL_WRITE, cred, p)==0)
 					np->n_brev = np->n_lrev;
@@ -1107,6 +1103,77 @@ if (strcmp(&vp->v_mount->mnt_stat.f_fstypename[0], MOUNT_NFS)) panic("trash4");
 	if (error == EWOULDBLOCK)
 		error = 0;
 	return (error);
+}
+
+/*
+ * Adjust all timer queue expiry times when the time of day clock is changed.
+ * Called from the settimeofday() syscall.
+ */
+void
+lease_updatetime(deltat)
+	register int deltat;
+{
+	register struct nqlease *lp;
+	register struct nfsnode *np;
+	struct mount *mp;
+	struct nfsmount *nmp;
+	int s;
+
+	if (nqnfsstarttime != 0)
+		nqnfsstarttime += deltat;
+	s = splsoftclock();
+	lp = nqthead.th_chain[0];
+	while (lp != (struct nqlease *)&nqthead) {
+		lp->lc_expiry += deltat;
+		lp = lp->lc_chain1[0];
+	}
+	splx(s);
+
+	/*
+	 * Search the mount list for all nqnfs mounts and do their timer
+	 * queues.
+	 */
+	for (mp = mountlist.tqh_first; mp != NULL; mp = mp->mnt_list.tqe_next) {
+		if (mp->mnt_stat.f_fsid.val[1] == MOUNT_NFS) {
+			nmp = VFSTONFS(mp);
+			if (nmp->nm_flag & NFSMNT_NQNFS) {
+				np = nmp->nm_tnext;
+				while (np != (struct nfsnode *)nmp) {
+					np->n_expiry += deltat;
+					np = np->n_tnext;
+				}
+			}
+		}
+	}
+}
+
+/*
+ * Lock a server lease.
+ */
+void
+nqsrv_locklease(lp)
+	struct nqlease *lp;
+{
+
+	while (lp->lc_flag & LC_LOCKED) {
+		lp->lc_flag |= LC_WANTED;
+		(void) tsleep((caddr_t)lp, PSOCK, "nqlc", 0);
+	}
+	lp->lc_flag |= LC_LOCKED;
+	lp->lc_flag &= ~LC_WANTED;
+}
+
+/*
+ * Unlock a server lease.
+ */
+void
+nqsrv_unlocklease(lp)
+	struct nqlease *lp;
+{
+
+	lp->lc_flag &= ~LC_LOCKED;
+	if (lp->lc_flag & LC_WANTED)
+		wakeup((caddr_t)lp);
 }
 
 /*
@@ -1158,76 +1225,4 @@ nqnfs_clientlease(nmp, np, rwflag, cachable, expiry, frev)
 		nmp->nm_tprev = np;
 	else
 		np->n_tnext->n_tprev = np;
-}
-#endif /* NFSCLIENT */
-
-/*
- * Adjust all timer queue expiry times when the time of day clock is changed.
- * Called from the settimeofday() syscall.
- */
-void
-lease_updatetime(deltat)
-	register int deltat;
-{
-	register struct nqlease *lp;
-	register struct nfsnode *np;
-	struct mount *mp;
-	struct nfsmount *nmp;
-	int s;
-
-	if (nqnfsstarttime != 0)
-		nqnfsstarttime += deltat;
-	s = splsoftclock();
-	lp = nqthead.th_chain[0];
-	while (lp != (struct nqlease *)&nqthead) {
-		lp->lc_expiry += deltat;
-		lp = lp->lc_chain1[0];
-	}
-	splx(s);
-
-	/*
-	 * Search the mount list for all nqnfs mounts and do their timer
-	 * queues.
-	 */
-	for (mp = mountlist.tqh_first; mp != NULL; mp = mp->mnt_list.tqe_next) {
-		if (!strcmp(&mp->mnt_stat.f_fstypename[0], MOUNT_NFS)) {
-			nmp = VFSTONFS(mp);
-			if (nmp->nm_flag & NFSMNT_NQNFS) {
-				np = nmp->nm_tnext;
-				while (np != (struct nfsnode *)nmp) {
-					np->n_expiry += deltat;
-					np = np->n_tnext;
-				}
-			}
-		}
-	}
-}
-
-/*
- * Lock a server lease.
- */
-void
-nqsrv_locklease(lp)
-	struct nqlease *lp;
-{
-
-	while (lp->lc_flag & LC_LOCKED) {
-		lp->lc_flag |= LC_WANTED;
-		(void) tsleep((caddr_t)lp, PSOCK, "nqlc", 0);
-	}
-	lp->lc_flag |= LC_LOCKED;
-	lp->lc_flag &= ~LC_WANTED;
-}
-
-/*
- * Unlock a server lease.
- */
-void
-nqsrv_unlocklease(lp)
-	struct nqlease *lp;
-{
-
-	lp->lc_flag &= ~LC_LOCKED;
-	if (lp->lc_flag & LC_WANTED)
-		wakeup((caddr_t)lp);
 }

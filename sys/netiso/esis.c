@@ -1,6 +1,6 @@
 /*-
- * Copyright (c) 1991 The Regents of the University of California.
- * All rights reserved.
+ * Copyright (c) 1991, 1993
+ *	The Regents of the University of California.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -30,7 +30,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)esis.c	7.19 (Berkeley) 6/27/91
+ *	@(#)esis.c	8.1 (Berkeley) 6/10/93
  */
 
 /***********************************************************
@@ -62,31 +62,30 @@ SOFTWARE.
 
 #ifdef ISO
 
-#include "types.h"
-#include "param.h"
-#include "systm.h"
-#include "mbuf.h"
-#include "domain.h"
-#include "protosw.h"
-#include "socket.h"
-#include "socketvar.h"
-#include "errno.h"
+#include <sys/param.h>
+#include <sys/systm.h>
+#include <sys/mbuf.h>
+#include <sys/domain.h>
+#include <sys/protosw.h>
+#include <sys/socket.h>
+#include <sys/socketvar.h>
+#include <sys/errno.h>
+#include <sys/kernel.h>
 
-#include "../net/if.h"
-#include "../net/if_dl.h"
-#include "../net/route.h"
-#include "../net/raw_cb.h"
+#include <net/if.h>
+#include <net/if_dl.h>
+#include <net/route.h>
+#include <net/raw_cb.h>
 
-#include "iso.h"
-#include "iso_pcb.h"
-#include "iso_var.h"
-#include "iso_snpac.h"
-#include "clnl.h"
-#include "clnp.h"
-#include "clnp_stat.h"
-#include "esis.h"
-#include "argo_debug.h"
-#include "kernel.h"
+#include <netiso/iso.h>
+#include <netiso/iso_pcb.h>
+#include <netiso/iso_var.h>
+#include <netiso/iso_snpac.h>
+#include <netiso/clnl.h>
+#include <netiso/clnp.h>
+#include <netiso/clnp_stat.h>
+#include <netiso/esis.h>
+#include <netiso/argo_debug.h>
 
 /*
  *	Global variables to esis implementation
@@ -98,7 +97,7 @@ SOFTWARE.
  *
  */
 struct rawcb	esis_pcb;
-int				esis_config(), snpac_age();
+void				esis_config(), snpac_age();
 int				esis_sendspace = 2048;
 int				esis_recvspace = 2048;
 short			esis_holding_time = ESIS_HT;
@@ -134,7 +133,7 @@ esis_init()
 	int	esis_input(), isis_input();
 #ifdef	ISO_X25ESIS
 	int	x25esis_input();
-#endif	ISO_X25ESIS
+#endif	/* ISO_X25ESIS */
 
 	esis_pcb.rcb_next = esis_pcb.rcb_prev = &esis_pcb;
 	llinfo_llc.lc_next = llinfo_llc.lc_prev = &llinfo_llc;
@@ -146,7 +145,7 @@ esis_init()
 	clnl_protox[ISO10589_ISIS].clnl_input = isis_input;
 #ifdef	ISO_X25ESIS
 	clnl_protox[ISO9542X25_ESIS].clnl_input = x25esis_input;
-#endif	ISO_X25ESIS
+#endif	/* ISO_X25ESIS */
 }
 
 /*
@@ -443,7 +442,7 @@ struct rtentry		*rt;			/* snpa cache info regarding next hop of
 	siso.siso_nlen = 6 + 1;	/* should be taken from snpa_hdr */
 										/* +1 is for AFI */
 	bcopy(inbound_shp->snh_shost, siso.siso_data + 1, 6);
-	(ifp->if_output)(ifp, m0, &siso, 0);
+	(ifp->if_output)(ifp, m0, (struct sockaddr *)&siso, 0);
 }
 
 /*
@@ -743,6 +742,7 @@ bad: ;    /* Needed by ESIS_NEXT_OPTION */
  *
  * NOTES:			Called every esis_config_time seconds
  */
+void
 esis_config()
 {
 	register struct ifnet	*ifp;
@@ -920,7 +920,7 @@ struct	iso_addr *isoa;
 	siso.siso_data[0] = AFI_SNA;
 	siso.siso_nlen = sn_len + 1;
 	bcopy(sn_addr, siso.siso_data + 1, (unsigned)sn_len);
-	(ifp->if_output)(ifp, m0, &siso, 0);
+	(ifp->if_output)(ifp, m0, (struct sockaddr *)&siso, 0);
 }
 
 /*
@@ -966,9 +966,9 @@ struct snpa_hdr	*shp;	/* subnetwork header */
 		}
 		if (mm = m_copy(m0, 0, M_COPYALL)) { /*can't block at interrupt level */
 			if (sbappendaddr(&rp->rcb_socket->so_rcv,
-							  &esis_dl, mm, (struct mbuf *)0) != 0)
+							  &esis_dl, mm, (struct mbuf *)0) != 0) {
 				sorwakeup(rp->rcb_socket);
-			else {
+			 } else {
 				IFDEBUG(D_ISISINPUT)
 					printf("Error in sbappenaddr, mm = 0x%x\n", mm);
 				ENDDEBUG
@@ -994,7 +994,7 @@ struct mbuf *m;
 	int error = 0;
 	unsigned sn_len;
 
-	ifa = ifa_ifwithnet(sdl);	/* extract ifp from sockaddr_dl */
+	ifa = ifa_ifwithnet((struct sockaddr *)sdl);	/* get ifp from sdl */
 	if (ifa == 0) {
 		IFDEBUG(D_ISISOUTPUT)
 			printf("isis_output: interface not found\n");
@@ -1060,4 +1060,4 @@ struct sockaddr_iso		*siso;		/* address of ifp */
 		}
 }
 
-#endif	ISO
+#endif	/* ISO */

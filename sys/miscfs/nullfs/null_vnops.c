@@ -33,12 +33,11 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	from: @(#)null_vnops.c	8.1 (Berkeley) 6/10/93
- *	$Id: null_vnops.c,v 1.1 1994/06/08 11:33:26 mycroft Exp $
+ *	@(#)null_vnops.c	8.1 (Berkeley) 6/10/93
  *
  * Ancestors:
  *	@(#)lofs_vnops.c	1.2 (Berkeley) 6/18/92
- *	Id: lofs_vnops.c,v 1.11 1992/05/30 10:05:43 jsp Exp
+ *	$Id: null_vnops.c,v 1.1.1.1 1998/03/01 02:09:59 fvdl Exp $
  *	...and...
  *	@(#)null_vnodeops.c 1.20 92/07/07 UCLA Ficus project
  */

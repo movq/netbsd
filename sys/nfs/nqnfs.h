@@ -33,8 +33,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	from: @(#)nqnfs.h	8.1 (Berkeley) 6/10/93
- *	$Id: nqnfs.h,v 1.1 1994/06/08 11:37:18 mycroft Exp $
+ *	@(#)nqnfs.h	8.1 (Berkeley) 6/10/93
  */
 
 /*

@@ -33,9 +33,9 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	from: Id: lofs_subr.c,v 1.11 1992/05/30 10:05:43 jsp Exp
- *	from: @(#)null_subr.c	8.4 (Berkeley) 1/21/94
- *	$Id: null_subr.c,v 1.1 1994/06/08 11:33:24 mycroft Exp $
+ *	@(#)null_subr.c	8.4 (Berkeley) 1/21/94
+ *
+ * $Id: null_subr.c,v 1.1.1.1 1998/03/01 02:09:58 fvdl Exp $
  */
 
 #include <sys/param.h>
@@ -227,9 +227,10 @@ null_node_create(mp, lowervp, newvpp)
 #ifdef DIAGNOSTIC
 	if (lowervp->v_usecount < 1) {
 		/* Should never happen... */
-		vprint("null_node_create: alias", aliasvp);
-		vprint("null_node_create: lower", lowervp);
-		panic("null_node_create: lower has 0 usecount.");
+		vprint ("null_node_create: alias ");
+		vprint ("null_node_create: lower ");
+		printf ("null_node_create: lower has 0 usecount.\n");
+		panic ("null_node_create: lower has 0 usecount.");
 	};
 #endif
 

@@ -36,8 +36,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	from: @(#)pk_llcsubr.c	8.1 (Berkeley) 6/10/93
- *	$Id: pk_llcsubr.c,v 1.1 1994/05/13 06:04:52 mycroft Exp $
+ *	@(#)pk_llcsubr.c	8.1 (Berkeley) 6/10/93
  */
 
 #include <sys/param.h>

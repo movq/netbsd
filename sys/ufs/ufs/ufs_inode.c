@@ -35,8 +35,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	from: @(#)ufs_inode.c	8.4 (Berkeley) 1/21/94
- *	$Id: ufs_inode.c,v 1.1 1994/06/08 11:43:17 mycroft Exp $
+ *	@(#)ufs_inode.c	8.4 (Berkeley) 1/21/94
  */
 
 #include <sys/param.h>
@@ -69,9 +68,7 @@ ufs_init()
 		printf("ufs_init: bad size %d\n", sizeof(struct inode));
 #endif
 	ufs_ihashinit();
-#ifdef QUOTA
 	dqinit();
-#endif
 	return (0);
 }
 
@@ -140,11 +137,14 @@ ufs_inactive(ap)
  * Reclaim an inode so that it can be used for other purposes.
  */
 int
-ufs_reclaim(vp)
-	register struct vnode *vp;
+ufs_reclaim(ap)
+	struct vop_reclaim_args /* {
+		struct vnode *a_vp;
+	} */ *ap;
 {
+	register struct vnode *vp = ap->a_vp;
 	register struct inode *ip;
-	int i;
+	int i, type;
 
 	if (prtactive && vp->v_usecount != 0)
 		vprint("ufs_reclaim: pushing active", vp);
@@ -169,5 +169,20 @@ ufs_reclaim(vp)
 		}
 	}
 #endif
+	switch (vp->v_mount->mnt_stat.f_type) {
+	case MOUNT_UFS:
+		type = M_FFSNODE;
+		break;
+	case MOUNT_MFS:
+		type = M_MFSNODE;
+		break;
+	case MOUNT_LFS:
+		type = M_LFSNODE;
+		break;
+	default:
+		panic("ufs_reclaim: not ufs file");
+	}
+	FREE(vp->v_data, type);
+	vp->v_data = NULL;
 	return (0);
 }

@@ -32,8 +32,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	from: @(#)dll.h	8.1 (Berkeley) 6/10/93
- *	$Id: dll.h,v 1.1 1994/05/13 06:04:14 mycroft Exp $
+ *	@(#)dll.h	8.1 (Berkeley) 6/10/93
  */
 
 /* 

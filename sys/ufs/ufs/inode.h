@@ -35,8 +35,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	from: @(#)inode.h	8.4 (Berkeley) 1/21/94
- *	$Id: inode.h,v 1.1 1994/06/08 11:43:07 mycroft Exp $
+ *	@(#)inode.h	8.4 (Berkeley) 1/21/94
  */
 
 #include <ufs/ufs/dinode.h>
@@ -66,8 +65,7 @@ struct inode {
 	struct	vnode *i_vnode;	/* Vnode associated with this inode. */
 	struct	vnode *i_devvp;	/* Vnode for block I/O. */
 	u_long	i_flag;		/* I* flags. */
-	/* XXX Should be a dev_t. */
-	u_long	i_dev;		/* Device associated with the inode. */
+	dev_t	i_dev;		/* Device associated with the inode. */
 	ino_t	i_number;	/* The identity of the inode. */
 	union {			/* Associated filesystem. */
 		struct	fs *fs;		/* FFS */

@@ -35,8 +35,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	from: @(#)dinode.h	8.3 (Berkeley) 1/21/94
- *	$Id: dinode.h,v 1.1 1994/06/08 11:43:02 mycroft Exp $
+ *	@(#)dinode.h	8.3 (Berkeley) 1/21/94
  */
 
 /*
@@ -75,8 +74,6 @@ struct dinode {
 	u_long		di_gid;		/* 116: File group. */
 	long		di_spare[2];	/* 120: Reserved; currently unused */
 };
-#define	OLDFASTLINK(dp)	\
-	((dp)->di_size < MAXSYMLINKLEN && (dp)->di_size == (dp)->di_uid)
 
 /*
  * The di_db fields may be overlaid with other information for

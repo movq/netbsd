@@ -35,8 +35,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	from: @(#)ttycom.h	8.1 (Berkeley) 3/28/94
- *	$Id: ttycom.h,v 1.1 1994/05/21 05:20:03 cgd Exp $
+ *	@(#)ttycom.h	8.1 (Berkeley) 3/28/94
  */
 
 #ifndef	_SYS_TTYCOM_H_
@@ -115,23 +114,15 @@ struct winsize {
 #define	TIOCGWINSZ	_IOR('t', 104, struct winsize)	/* get window size */
 #define	TIOCSWINSZ	_IOW('t', 103, struct winsize)	/* set window size */
 #define	TIOCUCNTL	_IOW('t', 102, int)	/* pty: set/clr usr cntl mode */
-#define	TIOCSTAT	_IOW('t', 101, int)	/* generate status message */
 #define		UIOCCMD(n)	_IO('u', n)	/* usr cntl op "n" */
 #define	TIOCCONS	_IOW('t', 98, int)	/* become virtual console */
 #define	TIOCSCTTY	 _IO('t', 97)		/* become controlling tty */
 #define	TIOCEXT		_IOW('t', 96, int)	/* pty: external processing */
 #define	TIOCSIG		 _IO('t', 95)		/* pty: generate signal */
 #define	TIOCDRAIN	 _IO('t', 94)		/* wait till output drained */
-#define	TIOCGFLAGS	_IOR('t', 93, int)	/* get device flags */
-#define	TIOCSFLAGS	_IOW('t', 92, int)	/* set device flags */
-#define		TIOCFLAG_SOFTCAR	0x01	/* ignore hardware carrier */
-#define		TIOCFLAG_CLOCAL		0x02	/* set clocal on open */
-#define		TIOCFLAG_CRTSCTS	0x04	/* set crtscts on open */
-#define		TIOCFLAG_MDMBUF		0x08	/* set mdmbuf on open */
 
 #define	TTYDISC		0		/* termios tty line discipline */
 #define	TABLDISC	3		/* tablet discipline */
 #define	SLIPDISC	4		/* serial IP discipline */
-#define	PPPDISC		5		/* ppp discipline */
 
 #endif /* !_SYS_TTYCOM_H_ */

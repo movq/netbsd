@@ -33,8 +33,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	from: @(#)kern_sysctl.c	8.4 (Berkeley) 4/14/94
- *	$Id: kern_sysctl.c,v 1.1 1994/05/06 22:43:23 cgd Exp $
+ *	@(#)kern_sysctl.c	8.4 (Berkeley) 4/14/94
  */
 
 /*
@@ -176,8 +175,6 @@ __sysctl(p, uap, retval)
  */
 char hostname[MAXHOSTNAMELEN];
 int hostnamelen;
-char domainname[MAXHOSTNAMELEN];
-int domainnamelen;
 long hostid;
 int securelevel;
 
@@ -231,12 +228,6 @@ kern_sysctl(name, namelen, oldp, oldlenp, newp, newlen, p)
 		    hostname, sizeof(hostname));
 		if (newp && !error)
 			hostnamelen = newlen;
-		return (error);
-	case KERN_DOMAINNAME:
-		error = sysctl_string(oldp, oldlenp, newp, newlen,
-		    domainname, sizeof(domainname));
-		if (newp && !error)
-			domainnamelen = newlen;
 		return (error);
 	case KERN_HOSTID:
 		inthostid = hostid;  /* XXX assumes sizeof long <= sizeof int */

@@ -1,7 +1,7 @@
 /*
  * Copyright (c) University of British Columbia, 1984
- * Copyright (c) 1990 The Regents of the University of California.
- * All rights reserved.
+ * Copyright (c) 1990, 1993
+ *	The Regents of the University of California.  All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * the Laboratory for Computation Vision and the Computer Science Department
@@ -35,25 +35,25 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)pk_acct.c	7.6 (Berkeley) 6/26/91
+ *	@(#)pk_acct.c	8.1 (Berkeley) 6/10/93
  */
 
-#include "param.h"
-#include "systm.h"
-#include "namei.h"
-#include "proc.h"
-#include "vnode.h"
-#include "kernel.h"
-#include "file.h"
-#include "socket.h"
-#include "socketvar.h"
+#include <sys/param.h>
+#include <sys/systm.h>
+#include <sys/namei.h>
+#include <sys/proc.h>
+#include <sys/vnode.h>
+#include <sys/kernel.h>
+#include <sys/file.h>
+#include <sys/socket.h>
+#include <sys/socketvar.h>
 
-#include "../net/if.h"
+#include <net/if.h>
 
-#include "x25.h"
-#include "pk.h"
-#include "pk_var.h"
-#include "x25acct.h"
+#include <netccitt/x25.h>
+#include <netccitt/pk.h>
+#include <netccitt/pk_var.h>
+#include <netccitt/x25acct.h>
 
 
 struct	vnode *pkacctp;
@@ -72,9 +72,8 @@ pk_accton (path)
 
 	if (path == 0)
 		goto close;
-	nd.ni_segflg = UIO_USERSPACE;
-	nd.ni_dirp = path;
-	if (error = vn_open (&nd, p, FWRITE, 0644))
+	NDINIT(&nd, LOOKUP, FOLLOW, UIO_USERSPACE, path, p);
+	if (error = vn_open (&nd, FWRITE, 0644))
 		return (error);
 	vp = nd.ni_vp;
 	VOP_UNLOCK(vp);

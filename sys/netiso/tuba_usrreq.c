@@ -30,8 +30,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	from: @(#)tuba_usrreq.c	8.1 (Berkeley) 6/10/93
- *	$Id: tuba_usrreq.c,v 1.1 1994/05/13 06:10:10 mycroft Exp $
+ *	@(#)tuba_usrreq.c	8.1 (Berkeley) 6/10/93
  */
 
 #include <sys/param.h>

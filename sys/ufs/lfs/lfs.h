@@ -30,8 +30,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	from: @(#)lfs.h	8.3 (Berkeley) 9/23/93
- *	$Id: lfs.h,v 1.1 1994/06/08 11:42:23 mycroft Exp $
+ *	@(#)lfs.h	8.3 (Berkeley) 9/23/93
  */
 
 #define	LFS_LABELPAD	8192		/* LFS label size */
@@ -157,8 +156,6 @@ struct lfs {
 
 /* Checksum; valid on disk. */
 	u_long	lfs_cksum;		/* checksum for superblock checking */
-
-	long	lfs_maxsymlinklen;	/* max length of an internal symlink */
 };
 
 /*

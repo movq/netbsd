@@ -1,4 +1,4 @@
-/* $Header: /cvsroot/src/sys/netiso/Attic/tp_events.h,v 1.1 1993/04/09 12:01:32 cgd Exp $ */
+/* $Header: /cvsroot/src/sys/netiso/Attic/tp_events.h,v 1.1.1.1 1998/03/01 02:10:23 fvdl Exp $ */
 /* $Source: /cvsroot/src/sys/netiso/Attic/tp_events.h,v $ */
 struct tp_event {
 	int ev_number;

@@ -35,8 +35,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	from: @(#)dir.h	8.2 (Berkeley) 1/21/94
- *	$Id: dir.h,v 1.1 1994/06/08 11:43:04 mycroft Exp $
+ *	@(#)dir.h	8.2 (Berkeley) 1/21/94
  */
 
 #ifndef _DIR_H_

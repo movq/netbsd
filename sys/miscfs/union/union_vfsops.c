@@ -34,8 +34,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	from: @(#)union_vfsops.c	8.7 (Berkeley) 3/5/94
- *	$Id: union_vfsops.c,v 1.1 1994/06/08 11:34:02 mycroft Exp $
+ *	@(#)union_vfsops.c	8.7 (Berkeley) 3/5/94
  */
 
 /*
@@ -229,7 +228,7 @@ union_mount(mp, path, data, ndp, p)
 	mp->mnt_flag |= MNT_USER;
 
 	mp->mnt_data = (qaddr_t) um;
-	getnewfsid(mp, makefstype(MOUNT_UNION));
+	getnewfsid(mp, MOUNT_UNION);
 
 	(void) copyinstr(path, mp->mnt_stat.f_mntonname, MNAMELEN - 1, &size);
 	bzero(mp->mnt_stat.f_mntonname + size, MNAMELEN - size);
@@ -458,7 +457,7 @@ union_statfs(mp, sbp, p)
 	if (error)
 		return (error);
 
-	sbp->f_type = 0;
+	sbp->f_type = MOUNT_UNION;
 	sbp->f_flags = mstat.f_flags;
 	sbp->f_bsize = mstat.f_bsize;
 	sbp->f_iosize = mstat.f_iosize;
@@ -485,8 +484,6 @@ union_statfs(mp, sbp, p)
 		bcopy(mp->mnt_stat.f_mntonname, sbp->f_mntonname, MNAMELEN);
 		bcopy(mp->mnt_stat.f_mntfromname, sbp->f_mntfromname, MNAMELEN);
 	}
-	strncpy(&sbp->f_fstypename[0], mp->mnt_op->vfs_name, MFSNAMELEN);
-	sbp->f_fstypename[MFSNAMELEN] = '\0';
 	return (0);
 }
 
@@ -539,7 +536,6 @@ union_vptofh(vp, fhp)
 int union_init __P((void));
 
 struct vfsops union_vfsops = {
-	MOUNT_UNION,
 	union_mount,
 	union_start,
 	union_unmount,

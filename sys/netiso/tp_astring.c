@@ -30,8 +30,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	from: @(#)tp_astring.c	8.1 (Berkeley) 6/10/93
- *	$Id: tp_astring.c,v 1.1 1994/05/13 06:09:09 mycroft Exp $
+ *	@(#)tp_astring.c	8.1 (Berkeley) 6/10/93
  */
 
 char *tp_sstring[] = {
