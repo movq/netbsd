@@ -1,4 +1,4 @@
-/*	$NetBSD: atari_init.c,v 1.1 1995/03/26 07:12:21 leo Exp $	*/
+/*	$NetBSD: atari_init.c,v 1.1.1.1 1995/03/26 07:12:21 leo Exp $	*/
 
 /*
  * Copyright (c) 1995 Leo Weppelman

@@ -1,4 +1,4 @@
-/*	$NetBSD: ite_cc.c,v 1.1 1995/03/26 07:12:14 leo Exp $	*/
+/*	$NetBSD: ite_cc.c,v 1.1.1.1 1995/03/26 07:12:14 leo Exp $	*/
 
 /*
  * Copyright (c) 1994 Christian E. Hopps

@@ -1,4 +1,4 @@
-/*	$NetBSD: kdassert.h,v 1.1 1995/03/26 07:12:18 leo Exp $	*/
+/*	$NetBSD: kdassert.h,v 1.1.1.1 1995/03/26 07:12:18 leo Exp $	*/
 
 /*
  * Copyright (c) 1994 Christian E. Hopps
