@@ -1,4 +1,4 @@
-/*	$NetBSD: opmbellvar.h,v 1.1 1996/05/05 12:17:10 oki Exp $	*/
+/*	$NetBSD: opmbellvar.h,v 1.1.1.1 1996/05/05 12:17:03 oki Exp $	*/
 
 /*
  * Copyright (c) 1995 Takuya Harakawa.
