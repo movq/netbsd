@@ -1,4 +1,4 @@
-/*	$NetBSD: yplog.c,v 1.1 1996/08/09 10:14:51 thorpej Exp $	*/
+/*	$NetBSD: yplog.c,v 1.1.1.1 1996/08/09 10:14:51 thorpej Exp $	*/
 
 /*
  * Copyright (c) 1996 Charles D. Cranor

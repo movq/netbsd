@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 1996/08/09 10:15:01 thorpej Exp $
+#	$NetBSD: Makefile,v 1.1.1.1 1996/08/09 10:15:01 thorpej Exp $
 
 PROG=	yppush
 SRCS=	localhostname.c yppush.c yplib_host.c yppush_svc.c yppush_proc.c \

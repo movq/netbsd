@@ -1,4 +1,4 @@
-/*	$NetBSD: ypserv_proc.c,v 1.1 1996/08/09 10:15:04 thorpej Exp $	*/
+/*	$NetBSD: ypserv_proc.c,v 1.1.1.1 1996/08/09 10:15:04 thorpej Exp $	*/
 
 /*
  * Copyright (c) 1994 Mats O Jansson <moj@stacken.kth.se>

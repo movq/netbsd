@@ -1,4 +1,4 @@
-/*	$NetBSD: stdethers.c,v 1.1 1996/08/09 10:14:57 thorpej Exp $	*/
+/*	$NetBSD: stdethers.c,v 1.1.1.1 1996/08/09 10:14:57 thorpej Exp $	*/
 
 /*
  * Copyright (c) 1995 Mats O Jansson <moj@stacken.kth.se>

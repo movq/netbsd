@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 1996/08/09 10:14:54 thorpej Exp $
+#	$NetBSD: Makefile,v 1.1.1.1 1996/08/09 10:14:54 thorpej Exp $
 
 PROG=	makedbm
 SRCS=	localhostname.c makedbm.c read_line.c ypdb.c

@@ -1,4 +1,4 @@
-/*	$NetBSD: localhostname.c,v 1.1 1996/08/09 10:14:53 thorpej Exp $	*/
+/*	$NetBSD: localhostname.c,v 1.1.1.1 1996/08/09 10:14:53 thorpej Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.

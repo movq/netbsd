@@ -1,4 +1,4 @@
-/*	$NetBSD: acl.c,v 1.1 1996/08/09 10:15:03 thorpej Exp $	*/
+/*	$NetBSD: acl.c,v 1.1.1.1 1996/08/09 10:15:03 thorpej Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.

@@ -1,4 +1,4 @@
-/*	$NetBSD: protos.h,v 1.1 1996/08/09 10:14:52 thorpej Exp $	*/
+/*	$NetBSD: protos.h,v 1.1.1.1 1996/08/09 10:14:52 thorpej Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.

@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-#	$NetBSD: ypinit.sh,v 1.1 1996/08/09 10:14:59 thorpej Exp $
+#	$NetBSD: ypinit.sh,v 1.1.1.1 1996/08/09 10:14:59 thorpej Exp $
 #
 # ypinit.sh - setup a master or slave YP server
 #

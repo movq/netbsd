@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.yp,v 1.1 1996/08/09 10:14:59 thorpej Exp $
+#	$NetBSD: Makefile.yp,v 1.1.1.1 1996/08/09 10:14:59 thorpej Exp $
 #
 # This is the YP Makefile, used to create and push YP maps.
 #

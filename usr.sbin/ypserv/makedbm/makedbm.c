@@ -1,4 +1,4 @@
-/*	$NetBSD: makedbm.c,v 1.1 1996/08/09 10:14:54 thorpej Exp $	*/
+/*	$NetBSD: makedbm.c,v 1.1.1.1 1996/08/09 10:14:54 thorpej Exp $	*/
 
 /*
  * Copyright (c) 1994 Mats O Jansson <moj@stacken.kth.se>

@@ -1,4 +1,4 @@
-/*	$NetBSD: ypdb.c,v 1.1 1996/08/09 10:14:50 thorpej Exp $	*/
+/*	$NetBSD: ypdb.c,v 1.1.1.1 1996/08/09 10:14:50 thorpej Exp $	*/
 
 /*
  * Copyright (c) 1990, 1993

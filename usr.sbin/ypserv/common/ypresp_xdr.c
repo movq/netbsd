@@ -1,4 +1,4 @@
-/*	$NetBSD: ypresp_xdr.c,v 1.1 1996/08/09 10:14:52 thorpej Exp $	*/
+/*	$NetBSD: ypresp_xdr.c,v 1.1.1.1 1996/08/09 10:14:52 thorpej Exp $	*/
 
 /*
  * This file was originally generated with rpcgen, then modified

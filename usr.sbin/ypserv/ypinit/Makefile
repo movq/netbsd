@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 1996/08/09 10:14:59 thorpej Exp $
+#	$NetBSD: Makefile,v 1.1.1.1 1996/08/09 10:14:59 thorpej Exp $
 
 NOOBJ=	noobj
 

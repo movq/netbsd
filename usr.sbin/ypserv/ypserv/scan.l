@@ -1,5 +1,5 @@
 %{
-/*	$NetBSD: scan.l,v 1.1 1996/08/09 10:15:02 thorpej Exp $	*/
+/*	$NetBSD: scan.l,v 1.1.1.1 1996/08/09 10:15:02 thorpej Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.

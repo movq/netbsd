@@ -1,4 +1,4 @@
-/*	$NetBSD: yplib_host.c,v 1.1 1996/08/09 10:14:51 thorpej Exp $	*/
+/*	$NetBSD: yplib_host.c,v 1.1.1.1 1996/08/09 10:14:51 thorpej Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993 Theo de Raadt <deraadt@theos.com>

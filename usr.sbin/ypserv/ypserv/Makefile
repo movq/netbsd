@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 1996/08/09 10:15:05 thorpej Exp $
+#	$NetBSD: Makefile,v 1.1.1.1 1996/08/09 10:15:05 thorpej Exp $
 
 PROG=	ypserv
 SRCS=	acl.c gram.c scan.c ypserv.c ypserv_proc.c ypserv_db.c yplog.c \
