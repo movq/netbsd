@@ -1,22 +1,27 @@
-#	$Id: Makefile,v 1.1 1997/03/25 21:01:50 christos Exp $
+#	$NetBSD: Makefile,v 1.1.1.1 2001/04/19 14:33:14 wiz Exp $
+
+.include "../../Makefile.path"
+
+DIST=		${IIDIST}/contrib/mm/mm
+.PATH:		${DIST}
+
+.include <bsd.own.mk>
 
 # XXX -- this depends on ../include/defs.h
 TMACDIR?=	/usr/share/tmac
 
-TMACOWN?=	bin
-TMACGRP?=	bin
-TMACMODE?=	444
+TMACOWN?=	${FILESOWN}
+TMACGRP?=	${FILESGRP}
+TMACMODE?=	${FILESMODE}
 
-
+.if ${MKSHARE} != "no"
 FILES=		0.MT 5.MT 4.MT ms.cov se_ms.cov locale se_locale
 FILESDIR=	${TMACDIR}/mm
-FILESOWN=	${TMACOWN}
-FILESGRP=	${TMACGRP}
-FILESMODE=	${TMACMODE}
+.endif
 
 CLEANFILES+=locale se_locale
 
-all: locale se_locale
+realall: locale se_locale
 locale:	Makefile
 	touch ${.TARGET}
 

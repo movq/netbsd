@@ -1,11 +1,13 @@
-# Makefile for tfmtodit
+#	$NetBSD: Makefile,v 1.1.1.1 2001/04/19 14:33:14 wiz Exp $
+
+.include "../Makefile.lib"
+
+DIST=		${IDIST}/src/utils/tfmtodit
+.PATH:		${DIST}
 
 PROG=		tfmtodit
 SRCS=		tfmtodit.cc
-CFLAGS+=	-I$(.CURDIR)/../include
 LDADD+=		$(LIBGROFF) -lm
-DPADD+=		$(LIBGROFF) $(LIBMATH)
+DPADD+=		$(LIBGROFF) $(LIBM)
 
 .include <bsd.prog.mk>
-.include "../../Makefile.inc"
-.include "../Makefile.cfg"

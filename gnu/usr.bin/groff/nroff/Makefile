@@ -1,11 +1,12 @@
-MAN1=		nroff.0
+#	$NetBSD: Makefile,v 1.1.1.1 2001/04/19 14:33:14 wiz Exp $
 
-afterinstall:
-	install -c -o ${BINOWN} -g ${BINGRP} -m ${BINMODE} \
-		$(.CURDIR)/nroff.sh $(DESTDIR)$(BINDIR)/nroff
-	install -c -o ${BINOWN} -g ${BINGRP} -m ${BINMODE} \
-		$(.CURDIR)/psroff.sh $(DESTDIR)$(BINDIR)/psroff
+.include "../Makefile.path"
 
+DIST=		${IDIST}/src/roff/nroff
+.PATH:		${DIST}
+
+MAN=		nroff.1
+SCRIPTS=	nroff.sh
+
+.include "../../Makefile.inc"
 .include <bsd.prog.mk>
-.include <../../Makefile.inc>
-.include <../Makefile.cfg>

@@ -1,3 +1,4 @@
+/*	$Id: defs.h,v 1.1.1.1 2001/04/19 14:33:07 wiz Exp $ */
 #define PROG_PREFIX ""
 #define DEVICE "ps"
 #define FONTPATH "/usr/share/groff_font"

@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 2001/04/19 14:33:14 wiz Exp $
+#	$NetBSD: Makefile,v 1.1.1.1 2001/04/19 14:33:14 wiz Exp $
 
 .include "../Makefile.lib"
 

@@ -1,13 +1,17 @@
-# Makefile for libbib
+#	$NetBSD: Makefile,v 1.1.1.1 2001/04/19 14:33:07 wiz Exp $
+
+.include "../Makefile.comp"
+
+DIST=		${IDIST}/src/libs/libbib
+.PATH:		${DIST}
 
 LIB=		bib
 SRCS=		common.cc index.cc linear.cc search.cc map.c
-CFLAGS+=	-I$(.CURDIR)/../include
+MKMAN=		no
+MKPROFILE=	no
+MKPIC=		no
 
-NOMAN=		noman
-NOPROFILE=	noprofile
-
-install:
+# only needed during build
+libinstall::
 
 .include <bsd.lib.mk>
-.include "../Makefile.cfg"
