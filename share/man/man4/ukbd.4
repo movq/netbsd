@@ -1,6 +1,6 @@
-.\" $NetBSD: ukbd.4,v 1.8 2001/10/24 22:37:07 augustss Exp $
+.\" $NetBSD: ukbd.4,v 1.9 2001/12/28 17:38:00 augustss Exp $
 .\"
-.\" Copyright (c) 1999 The NetBSD Foundation, Inc.
+.\" Copyright (c) 1999, 2001 The NetBSD Foundation, Inc.
 .\" All rights reserved.
 .\"
 .\" This code is derived from software contributed to The NetBSD Foundation
@@ -41,7 +41,7 @@
 .Nm ukbd
 .Nd USB keyboard support
 .Sh SYNOPSIS
-.Cd "ukbd*     at uhub?"
+.Cd "ukbd*     at uhidev? reportid ?"
 .Cd "wskbd*    at ukbd? console ?"
 .Sh DESCRIPTION
 The
@@ -52,6 +52,7 @@ Access to the keyboard is through the
 .Xr wscons 4
 driver.
 .Sh SEE ALSO
+.Xr uhidev 4 ,
 .Xr usb 4 ,
 .Xr wskbd 4
 .Sh HISTORY
