@@ -1,4 +1,4 @@
-/*	$NetBSD: testutil.h,v 1.1 2004/05/17 23:43:47 christos Exp $	*/
+/*	$NetBSD: testutil.h,v 1.1.1.1 2004/05/17 23:43:47 christos Exp $	*/
 
 /* Id: testutil.h,v 1.1.1.1 2003/06/04 00:27:03 marka Exp */
 /*

@@ -1,4 +1,4 @@
-/*	$NetBSD: resource.h,v 1.1 2004/05/17 23:43:39 christos Exp $	*/
+/*	$NetBSD: resource.h,v 1.1.1.1 2004/05/17 23:43:39 christos Exp $	*/
 
 //{{NO_DEPENDENCIES}}
 // Microsoft Developer Studio generated include file.

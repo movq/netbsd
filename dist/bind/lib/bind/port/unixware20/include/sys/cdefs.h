@@ -1,4 +1,4 @@
-/*	$NetBSD: cdefs.h,v 1.1 2004/05/17 23:44:47 christos Exp $	*/
+/*	$NetBSD: cdefs.h,v 1.1.1.1 2004/05/17 23:44:47 christos Exp $	*/
 
 /*
  * ++Copyright++ 1991, 1993

@@ -1,4 +1,4 @@
-/*	$NetBSD: res_debug.c,v 1.1 2004/05/17 23:44:47 christos Exp $	*/
+/*	$NetBSD: res_debug.c,v 1.1.1.1 2004/05/17 23:44:47 christos Exp $	*/
 
 /*
  * Copyright (c) 1985

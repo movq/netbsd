@@ -1,4 +1,4 @@
-/*	$NetBSD: openssldh_link.c,v 1.1 2004/05/17 23:45:01 christos Exp $	*/
+/*	$NetBSD: openssldh_link.c,v 1.1.1.1 2004/05/17 23:45:01 christos Exp $	*/
 
 /*
  * Portions Copyright (C) 2004  Internet Systems Consortium, Inc. ("ISC")

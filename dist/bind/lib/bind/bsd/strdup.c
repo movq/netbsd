@@ -1,4 +1,4 @@
-/*	$NetBSD: strdup.c,v 1.1 2004/05/17 23:44:40 christos Exp $	*/
+/*	$NetBSD: strdup.c,v 1.1.1.1 2004/05/17 23:44:40 christos Exp $	*/
 
 #include "port_before.h"
 

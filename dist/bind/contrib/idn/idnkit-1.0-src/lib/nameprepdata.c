@@ -1,4 +1,4 @@
-/*	$NetBSD: nameprepdata.c,v 1.1 2004/05/17 23:43:45 christos Exp $	*/
+/*	$NetBSD: nameprepdata.c,v 1.1.1.1 2004/05/17 23:43:45 christos Exp $	*/
 
 /* Id: nameprepdata.c,v 1.1.1.1 2003/06/04 00:26:05 marka Exp */
 /* $-Id: generate_nameprep_data.pl,v 1.9 2002/11/29 09:08:13 ishisone Exp -$ */

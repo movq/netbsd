@@ -1,4 +1,4 @@
-/*	$NetBSD: dllfunc.c,v 1.1 2004/05/17 23:43:50 christos Exp $	*/
+/*	$NetBSD: dllfunc.c,v 1.1.1.1 2004/05/17 23:43:50 christos Exp $	*/
 
 /*
  * dllfunc.c - wrapper functions
