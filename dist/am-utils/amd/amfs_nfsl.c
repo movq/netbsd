@@ -1,5 +1,4 @@
-/*	$NetBSD: amfs_nfsl.c,v 1.1.1.2 2000/11/19 23:43:35 wiz Exp $	*/
-
+/*	$NetBSD: amfs_nfsl.c,v 1.1 2000/06/07 00:52:22 dogcow Exp $ */
 /*
  * Copyright (c) 1997-2000 Erez Zadok
  * Copyright (c) 1990 Jan-Simon Pendry
@@ -40,7 +39,7 @@
  *
  *      %W% (Berkeley) %G%
  *
- * Id: amfs_nfsl.c,v 1.4 2000/01/12 16:44:15 ezk Exp
+ * Id: amfs_nfsl.c,v 1.4 2000/01/12 16:44:15 ezk Exp 
  *
  */
 

@@ -23,16 +23,7 @@ libamu_la_SOURCES =	\
 
 ## no need to list other optional sources because automake will add them
 ## automatically.
-## XXX: must add the files after memcmp.c until automake 1.4+ is out
-EXTRA_DIST = memcmp.c	\
-	alloca.c	\
-	clnt_sperrno.c	\
-	hasmntopt.c	\
-	strdup.c	\
-	strcasecmp.c	\
-	strstr.c	\
-	ualarm.c
-
+EXTRA_DIST = memcmp.c
 DISTCLEANFILES = mountutil.c mtabutil.c transputil.c umount_fs.c
 
 # these may be added automatically by automake if needed:
@@ -58,12 +49,7 @@ BUILT_SOURCES =		\
 	mtabutil.c	\
 	transputil.c
 
-## XXX: Use the next line when automake newer than 1.4
-## XXX: Instead of the two lines that follow.
-## libamu_la_LIBADD = @LTLIBOBJS@ @LTALLOCA@
-libamu_la_LIBADD = @AMU_LIB_OBJS@
-libamu_la_DEPENDENCIES = @AMU_LIB_OBJS@
-
+libamu_la_LIBADD = @LTLIBOBJS@ @LTALLOCA@
 
 # LDFLAGS should include standard ones plus LIBTOOL ones
 LDFLAGS = @LDFLAGS@ @LIBTOOL_LDFLAGS@

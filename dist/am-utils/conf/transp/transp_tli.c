@@ -1,5 +1,4 @@
-/*	$NetBSD: transp_tli.c,v 1.1.1.2 2000/11/19 23:43:14 wiz Exp $	*/
-
+/*	$NetBSD: transp_tli.c,v 1.1 2000/06/07 00:52:21 dogcow Exp $ */
 /*
  * Copyright (c) 1997-2000 Erez Zadok
  * Copyright (c) 1990 Jan-Simon Pendry
@@ -40,7 +39,7 @@
  *
  *      %W% (Berkeley) %G%
  *
- * Id: transp_tli.c,v 1.5 2000/01/12 16:44:55 ezk Exp
+ * Id: transp_tli.c,v 1.5 2000/01/12 16:44:55 ezk Exp 
  *
  * TLI specific utilities.
  *      -Erez Zadok <ezk@cs.columbia.edu>

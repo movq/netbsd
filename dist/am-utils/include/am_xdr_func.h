@@ -1,5 +1,4 @@
-/*	$NetBSD: am_xdr_func.h,v 1.1.1.2 2000/11/19 23:43:00 wiz Exp $	*/
-
+/*	$NetBSD: am_xdr_func.h,v 1.1 2000/06/07 00:52:21 dogcow Exp $ */
 /*
  * Copyright (c) 1997-2000 Erez Zadok
  * Copyright (c) 1990 Jan-Simon Pendry
@@ -40,7 +39,7 @@
  *
  *      %W% (Berkeley) %G%
  *
- * Id: am_xdr_func.h,v 1.3 2000/01/12 16:45:04 ezk Exp
+ * Id: am_xdr_func.h,v 1.3 2000/01/12 16:45:04 ezk Exp 
  *
  */
 

@@ -25,13 +25,31 @@ SUBDIRS =		\
 #	aux/aclocal
 EXTRA_DIST_AUX =			\
 	aux/GNUmakefile			\
+	aux/acconfig.h			\
+	aux/acinclude.m4		\
+	aux/aclocal.m4			\
 	aux/amindent			\
 	aux/autopat			\
+	aux/aux_conf.h.in		\
 	aux/chop-aclocal.pl		\
+	aux/config.guess		\
+	aux/config.guess.long		\
+	aux/config.h.in			\
+	aux/config.sub			\
+	aux/configure.in		\
 	aux/copy-if-newbig		\
+	aux/depcomp			\
+	aux/install-sh			\
+	aux/ltconfig			\
+	aux/ltmain.sh			\
+	aux/mdate-sh			\
+	aux/missing			\
 	aux/mk-aclocal			\
 	aux/mkconf			\
+	aux/mkinstalldirs		\
 	aux/rmtspc			\
+	aux/texinfo.tex			\
+	aux/stamp-h.in			\
 	aux/update_build_version	\
 	\
 	aux/macros/HEADER				\
@@ -105,6 +123,7 @@ EXTRA_DIST_AUX =			\
 	aux/macros/struct_nfs_fh.m4			\
 	aux/macros/struct_nfs_fh3.m4			\
 	aux/macros/struct_nfs_gfs_mount.m4		\
+	aux/macros/struct_nfs_mount_data.m4		\
 	aux/macros/try_compile_anyfs.m4			\
 	aux/macros/try_compile_nfs.m4			\
 	aux/macros/try_compile_rpc.m4			\
@@ -259,8 +278,6 @@ EXTRA_DIST =			\
 	README.autofs		\
 	README.y2k		\
 	buildall		\
-	config.guess.long	\
-	depcomp			\
 	tasks
 
 DISTCLEANFILES = amu_nfs_prot.h config.cache.old dbgcf.h
@@ -270,8 +287,8 @@ DISTCLEANFILES = amu_nfs_prot.h config.cache.old dbgcf.h
 
 # update possibly new versions of autoconf/automake/libtool files
 update:
-	${MAKE} ${MFLAGS} -f $(top_srcdir)/aux/GNUmakefile update
-	${MAKE} ${MFLAGS} libtool
+	(cd $(top_srcdir)/$(altdir) && make update)
+	make libtool
 # remake libtool
 libtool: $(LIBTOOL_DEPS)
 	$(SHELL) ./config.status --recheck

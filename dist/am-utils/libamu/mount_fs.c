@@ -1,5 +1,4 @@
-/*	$NetBSD: mount_fs.c,v 1.1.1.2 2000/11/19 23:43:21 wiz Exp $	*/
-
+/*	$NetBSD: mount_fs.c,v 1.1 2000/06/07 00:52:22 dogcow Exp $ */
 /*
  * Copyright (c) 1997-2000 Erez Zadok
  * Copyright (c) 1990 Jan-Simon Pendry
@@ -40,7 +39,7 @@
  *
  *      %W% (Berkeley) %G%
  *
- * Id: mount_fs.c,v 1.11 2000/02/15 00:12:31 ezk Exp
+ * Id: mount_fs.c,v 1.9 2000/01/12 16:45:06 ezk Exp 
  *
  */
 
@@ -386,9 +385,6 @@ compute_nfs_args(nfs_args_t *nap, mntent_t *mntp, int genflags, struct sockaddr_
 # ifdef MNT2_NFS_OPT_NFSV3
     nap->flags |= MNT2_NFS_OPT_NFSV3;
 # endif /* MNT2_NFS_OPT_NFSV3 */
-# ifdef MNT2_NFS_OPT_VER3
-    nap->flags |= MNT2_NFS_OPT_VER3;
-# endif /* MNT2_NFS_OPT_VER3 */
   } else
 #endif /* HAVE_FS_NFS3 */
     NFS_FH_DREF(nap->NFS_FH_FIELD, &(fhp->v2.fhs_fh));
@@ -650,12 +646,6 @@ compute_nfs_args(nfs_args_t *nap, mntent_t *mntp, int genflags, struct sockaddr_
      * Either turn on the "allow interrupts" option, or
      * turn off the "disallow interrupts" option"
      */
-# ifdef MNT2_NFS_OPT_INTR
-    nap->flags |= MNT2_NFS_OPT_INTR;
-# endif /* MNT2_NFS_OPT_INTR */
-# ifdef MNT2_NFS_OPT_NOINTR
-    nap->flags &= ~MNT2_NFS_OPT_NOINTR;
-# endif /* MNT2_NFS_OPT_NOINTR */
 # ifdef MNT2_NFS_OPT_INT
     nap->flags |= MNT2_NFS_OPT_INT;
 # endif /* MNT2_NFS_OPT_INT */
