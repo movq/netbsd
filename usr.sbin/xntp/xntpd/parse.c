@@ -1,7 +1,7 @@
 /*
- * /src/NTP/REPOSITORY/v4/libparse/parse.c,v 3.42 1997/01/19 14:37:19 kardel Exp
+ * /src/NTP/REPOSITORY/v4/libparse/parse.c,v 3.43 1997/01/26 18:12:21 kardel Exp
  *  
- * parse.c,v 3.42 1997/01/19 14:37:19 kardel Exp
+ * parse.c,v 3.43 1997/01/26 18:12:21 kardel Exp
  *
  * Parser module for reference clock
  *
@@ -37,7 +37,7 @@ void token_libparse_symbol()
 #if defined(REFCLOCK) && (defined(PARSE) || defined(PARSEPPS))
 
 #if	!(defined(lint) || defined(__GNUC__))
-static char rcsid[] = "parse.c,v 3.42 1997/01/19 14:37:19 kardel Exp";
+static char rcsid[] = "parse.c,v 3.43 1997/01/26 18:12:21 kardel Exp";
 #endif
 
 #include <sys/types.h>
@@ -54,7 +54,9 @@ static char rcsid[] = "parse.c,v 3.42 1997/01/19 14:37:19 kardel Exp";
 
 #include "ntp_stdlib.h"
 
+#ifdef STREAM
 #include <sys/parsestreams.h>
+#endif
 
 #if defined(PARSESTREAM) && (defined(SYS_SUNOS4) || defined(SYS_SOLARIS)) && defined(STREAM)
 /*
@@ -382,7 +384,7 @@ parse_ioread(parseio, ch, ctime)
       break;
     }
 
-  parseprintf(DD_PARSE, ("parse_ioread(0x%x, char=0x%x, ..., ...)\n", (unsigned int)parseio, ch & 0xFF));
+  parseprintf(DD_PARSE, ("parse_ioread(0x%lx, char=0x%x, ..., ...)\n", (unsigned long)parseio, ch & 0xFF));
 
   if (parseio->parse_flags & PARSE_FIXED_FMT)
     {
@@ -1094,6 +1096,9 @@ int parse_bs;
  * History:
  *
  * parse.c,v
+ * Revision 3.43  1997/01/26 18:12:21  kardel
+ * 3-5.88.2 reconciliation
+ *
  * Revision 3.42  1997/01/19 14:37:19  kardel
  * fixed comments
  *
