@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 2003/09/11 18:37:29 lukem Exp $
+#	$NetBSD: Makefile,v 1.1.1.1 2003/09/11 18:37:29 lukem Exp $
 
 SUBDIR=	X11 ICE Xau .WAIT \
 	SM Xext .WAIT \

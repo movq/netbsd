@@ -1,4 +1,4 @@
-/*	$NetBSD: xkbcomp-KeyBind.c,v 1.1 2003/09/11 18:39:58 lukem Exp $	*/
+/*	$NetBSD: xkbcomp-KeyBind.c,v 1.1.1.1 2003/09/11 18:39:58 lukem Exp $	*/
 
 /* $Xorg: KeyBind.c,v 1.4 2001/02/09 02:03:34 xorgcvs Exp $ */
 /* 

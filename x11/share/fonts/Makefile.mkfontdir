@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.mkfontdir,v 1.1 2003/09/11 18:37:09 lukem Exp $
+#	$NetBSD: Makefile.mkfontdir,v 1.1.1.1 2003/09/11 18:37:09 lukem Exp $
 
 # Note: needs "install" run in ./encodings  first
 #

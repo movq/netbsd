@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 2003/09/11 18:37:05 lukem Exp $
+#	$NetBSD: Makefile,v 1.1.1.1 2003/09/11 18:37:05 lukem Exp $
 
 LIB=		ext
 SRCS=		EVI.c appgroup.c bigreq.c cup.c dpms.c fontcache.c mitmisc.c \

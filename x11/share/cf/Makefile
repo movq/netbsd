@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 2003/09/11 18:42:22 lukem Exp $
+#	$NetBSD: Makefile,v 1.1.1.1 2003/09/11 18:42:22 lukem Exp $
 
 XTODO=	acts as #define InstallEmptyHostDef
 

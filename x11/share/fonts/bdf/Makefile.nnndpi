@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.nnndpi,v 1.1 2003/09/11 18:37:09 lukem Exp $
+#	$NetBSD: Makefile.nnndpi,v 1.1.1.1 2003/09/11 18:37:09 lukem Exp $
 
 BDFFILES+=	courB08.bdf courB10.bdf courB12.bdf courB14.bdf \
 		courB18.bdf courB24.bdf \

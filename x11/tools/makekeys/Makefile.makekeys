@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.makekeys,v 1.1 2003/09/11 18:38:50 lukem Exp $
+#	$NetBSD: Makefile.makekeys,v 1.1.1.1 2003/09/11 18:38:50 lukem Exp $
 
 MAKEKEYSDIR!=	cd ${NETBSDSRCDIR}/x11/tools/makekeys && ${PRINTOBJDIR}
 MAKEKEYS=	${MAKEKEYSDIR}/makekeys
