@@ -1,8 +1,8 @@
 i pkginfo
-i copyright
+i copyright=../copyright
 !default 0755 root root
-i postinstall
-i postremove
+i postinstall=../postinstall
+i postremove=../postremove
 d none /opt ? root sys
 d none /opt/ipf
 d none /opt/ipf/man
