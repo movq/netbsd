@@ -1,5 +1,5 @@
-/*	$NetBSD: uvm_swap.c,v 1.1 1998/02/05 06:25:08 mrg Exp $	*/
-/*	$Id: uvm_swap.c,v 1.1 1998/02/05 06:25:08 mrg Exp $	*/
+/*	$NetBSD: uvm_swap.c,v 1.1.1.1 1998/02/05 06:25:08 mrg Exp $	*/
+/*	$Id: uvm_swap.c,v 1.1.1.1 1998/02/05 06:25:08 mrg Exp $	*/
 
 /*
  * Copyright (c) 1995, 1996, 1997 Matthew R. Green
