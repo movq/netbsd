@@ -1,5 +1,4 @@
-/*	$NetBSD: wr_exportfs.c,v 1.1.1.2 2000/11/19 23:44:31 wiz Exp $	*/
-
+/*	$NetBSD: wr_exportfs.c,v 1.1 2000/06/07 00:52:23 dogcow Exp $ */
 /*
  * Copyright (c) 1997-2000 Erez Zadok
  * Copyright (c) 1989 Jan-Simon Pendry
@@ -40,7 +39,7 @@
  *
  *      %W% (Berkeley) %G%
  *
- * Id: wr_exportfs.c,v 1.3 2000/01/12 16:45:00 ezk Exp
+ * Id: wr_exportfs.c,v 1.3 2000/01/12 16:45:00 ezk Exp 
  *
  */
 

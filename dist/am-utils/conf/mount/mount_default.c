@@ -1,5 +1,4 @@
-/*	$NetBSD: mount_default.c,v 1.1.1.2 2000/11/19 23:43:05 wiz Exp $	*/
-
+/*	$NetBSD: mount_default.c,v 1.1 2000/06/07 00:52:20 dogcow Exp $ */
 /*
  * Copyright (c) 1997-2000 Erez Zadok
  * Copyright (c) 1990 Jan-Simon Pendry
@@ -40,7 +39,7 @@
  *
  *      %W% (Berkeley) %G%
  *
- * Id: mount_default.c,v 1.1 2000/02/07 08:35:12 ezk Exp
+ * Id: mount_default.c,v 1.1 2000/02/07 08:35:12 ezk Exp 
  */
 
 /*

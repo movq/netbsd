@@ -1,5 +1,4 @@
-/*	$NetBSD: mapc.c,v 1.1.1.2 2000/11/19 23:43:39 wiz Exp $	*/
-
+/*	$NetBSD: mapc.c,v 1.1 2000/06/07 00:52:22 dogcow Exp $ */
 /*
  * Copyright (c) 1997-2000 Erez Zadok
  * Copyright (c) 1989 Jan-Simon Pendry
@@ -40,7 +39,7 @@
  *
  *      %W% (Berkeley) %G%
  *
- * Id: mapc.c,v 1.7.2.1 2000/06/09 18:18:32 ro Exp
+ * Id: mapc.c,v 1.7 2000/02/07 08:34:50 ezk Exp 
  *
  */
 
@@ -232,7 +231,7 @@ static map_type maptypes[] =
     NULL,			/* isup function */
     passwd_search,
     error_mtime,
-    MAPC_INC
+    MAPC_ALL
   },
 #endif /* HAVE_MAP_PASSWD */
 #ifdef HAVE_MAP_HESIOD
@@ -243,7 +242,7 @@ static map_type maptypes[] =
     hesiod_isup,		/* is Hesiod up or not? */
     hesiod_search,
     error_mtime,
-    MAPC_INC
+    MAPC_ALL
   },
 #endif /* HAVE_MAP_HESIOD */
 #ifdef HAVE_MAP_LDAP
@@ -254,7 +253,7 @@ static map_type maptypes[] =
     NULL,			/* isup function */
     amu_ldap_search,
     amu_ldap_mtime,
-    MAPC_INC
+    MAPC_ALL
   },
 #endif /* HAVE_MAP_LDAP */
 #ifdef HAVE_MAP_UNION
@@ -298,7 +297,7 @@ static map_type maptypes[] =
     NULL,			/* isup function */
     ndbm_search,
     ndbm_mtime,
-    MAPC_INC
+    MAPC_ALL
   },
 #endif /* HAVE_MAP_NDBM */
 #ifdef HAVE_MAP_FILE

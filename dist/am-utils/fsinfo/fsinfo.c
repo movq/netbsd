@@ -1,5 +1,4 @@
-/*	$NetBSD: fsinfo.c,v 1.3 2000/11/20 00:03:15 wiz Exp $	*/
-
+/*	$NetBSD: fsinfo.c,v 1.1 2000/06/07 00:52:23 dogcow Exp $ */
 /*
  * Copyright (c) 1997-2000 Erez Zadok
  * Copyright (c) 1989 Jan-Simon Pendry
@@ -40,7 +39,7 @@
  *
  *      %W% (Berkeley) %G%
  *
- * Id: fsinfo.c,v 1.5 2000/01/12 16:44:59 ezk Exp
+ * Id: fsinfo.c,v 1.5 2000/01/12 16:44:59 ezk Exp 
  *
  */
 
@@ -198,7 +197,7 @@ Usage: %s [-v] [-a autodir] [-h hostname] [-b bootparams] [-d dumpsets]\n\
 static char *
 find_username(void)
 {
-  const char *u = getlogin();
+  char *u = getlogin();
 
   if (!u) {
     struct passwd *pw = getpwuid(getuid());
@@ -235,7 +234,7 @@ main(int argc, char *argv[])
     perror("gethostname");
     exit(1);
   }
-  hostname[sizeof(hostname) - 1] = '\0';
+
   /*
    * Get the username
    */

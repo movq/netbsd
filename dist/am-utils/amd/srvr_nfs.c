@@ -1,5 +1,4 @@
-/*	$NetBSD: srvr_nfs.c,v 1.3 2000/11/20 00:02:56 wiz Exp $	*/
-
+/*	$NetBSD: srvr_nfs.c,v 1.1 2000/06/07 00:52:22 dogcow Exp $ */
 /*
  * Copyright (c) 1997-2000 Erez Zadok
  * Copyright (c) 1990 Jan-Simon Pendry
@@ -40,7 +39,7 @@
  *
  *      %W% (Berkeley) %G%
  *
- * Id: srvr_nfs.c,v 1.7 2000/02/16 13:52:57 ezk Exp
+ * Id: srvr_nfs.c,v 1.6 2000/01/12 16:44:26 ezk Exp 
  *
  */
 
@@ -96,7 +95,7 @@ static char ping_buf[sizeof(struct rpc_msg) + 32];
 
 #if defined(MNTTAB_OPT_PROTO) || defined(HAVE_FS_NFS3)
 /* protocols we know about, in order of preference */
-static char *protocols[] = { "udp", "tcp", NULL };
+static char *protocols[] = { "tcp", "udp", NULL };
 #endif /* defined(MNTTAB_OPT_PROTO) || defined(HAVE_FS_NFS3) */
 
 /* forward definitions */
@@ -674,17 +673,6 @@ find_nfs_srvr(mntfs *mf)
   }
 #endif /* HAVE_NFS_NFSV2_H */
 
-  /* check if we globally overridden the NFS version/protocol */
-  if (gopt.nfs_vers) {
-    nfs_version = gopt.nfs_vers;
-    plog(XLOG_INFO, "find_nfs_srvr: force NFS version to %d",
-	 (int) nfs_version);
-  }
-  if (gopt.nfs_proto) {
-    nfs_proto = gopt.nfs_proto;
-    plog(XLOG_INFO, "find_nfs_srvr: force NFS protocol to %s", nfs_proto);
-  }
-
   /*
    * lookup host address and canonical name
    */
@@ -767,14 +755,6 @@ find_nfs_srvr(mntfs *mf)
 
   if (!nfs_proto)
     nfs_proto = "udp";
-
-  if (ip) {
-    /*    
-     * XXX RPC or SunOS 4.1.4 bug ? the last call to nfs_get_version() must  
-     * be done with the used version and proto  
-     */  
-    (void)get_nfs_version(host, ip, nfs_version, nfs_proto);  
-  }
 
   plog(XLOG_INFO, "Using NFS version %d, protocol %s on host %s",
        (int) nfs_version, nfs_proto, host);

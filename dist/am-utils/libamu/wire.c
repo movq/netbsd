@@ -1,5 +1,4 @@
-/*	$NetBSD: wire.c,v 1.3 2000/11/20 00:03:16 wiz Exp $	*/
-
+/*	$NetBSD: wire.c,v 1.1 2000/06/07 00:52:22 dogcow Exp $ */
 /*
  * Copyright (c) 1997-2000 Erez Zadok
  * Copyright (c) 1990 Jan-Simon Pendry
@@ -40,7 +39,7 @@
  *
  *      %W% (Berkeley) %G%
  *
- * Id: wire.c,v 1.8.2.2 2000/06/09 20:16:26 ezk Exp
+ * Id: wire.c,v 1.8 2000/02/07 08:35:29 ezk Exp 
  *
  */
 
@@ -61,6 +60,7 @@
 #endif /* HAVE_CONFIG_H */
 #include <am_defs.h>
 #include <amu.h>
+
 
 #ifdef HAVE_IFADDRS_H
 #include <ifaddrs.h>
@@ -170,17 +170,7 @@ getwire_lookup(u_long address, u_long netmask, int ishost)
     u_char addr[4];
 
     if (irs_gen == NULL)
-#ifdef irs_irp_acc
-      /*
-       * bsdi4 added another argument to this function, without changing
-       * its name.  The irs_irp_acc is the one (hacky) distinguishing
-       * feature found in <irs.h> that can differentiate between bsdi3 and
-       * bsdi4.
-       */
       irs_gen = irs_gen_acc("", NULL);
-#else /* not irs_irp_acc */
-      irs_gen = irs_gen_acc("");
-#endif /* not irs_irp_acc */
     if (irs_gen && irs_nw == NULL)
       irs_nw = (*irs_gen->nw_map)(irs_gen);
     net = ntohl(address) & (mask = ntohl(netmask));
@@ -387,7 +377,7 @@ void
 getwire(char **name1, char **number1)
 {
   struct ifconf ifc;
-  struct ifreq *ifr, ifrpool;
+  struct ifreq *ifr;
   caddr_t cp, cplim;
   int fd = -1;
   u_long address;
@@ -442,8 +432,7 @@ getwire(char **name1, char **number1)
    * Scan the list looking for a suitable interface
    */
   for (cp = buf; cp < cplim; /* increment in the loop body */) {
-    memcpy(&ifrpool, cp, sizeof(ifrpool));
-    ifr = &ifrpool;
+    ifr = (struct ifreq *) cp;
     cp += SIZE(ifr);
 
     if (ifr->ifr_addr.sa_family != AF_INET)
