@@ -1,11 +1,11 @@
-/*	$NetBSD: vmevar.h,v 1.3 1998/01/12 19:51:12 thorpej Exp $	*/
+/*	$NetBSD: mainbus.h,v 1.1.2.1 2000/03/11 20:51:50 scw Exp $	*/
 
 /*-
- * Copyright (c) 1996 The NetBSD Foundation, Inc.
+ * Copyright (c) 2000 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
- * by Jason R. Thorpe.
+ * by Steve C. Woodford.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -36,53 +36,25 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-/*
- * Autoconfiguration and glue definitions for VME support on the
- * Motorola MVME series of computers.
- */
+#ifndef _MVME68K_MAINBUS_H
+#define _MVME68K_MAINBUS_H
 
-struct vmechip_softc {
-	struct	device sc_dev;		/* generic device info */
-	caddr_t	sc_reg;			/* chip registers */
-	struct	vme_chip *sc_chip;	/* controller vector */
-	u_long	sc_irqref[8];		/* ipl reference count */
+struct mainbus_attach_args {
+	const char	*ma_name;
+	bus_dma_tag_t	 ma_dmat;
+	bus_space_tag_t	 ma_bust;
+	bus_addr_t	 ma_offset;
 };
 
 /*
- * Structure used to describe VME controller chips.
+ * Mainbus offsets for devices on MVME147
  */
-struct vme_chip {
-	int	(*vme_translate_addr) __P((u_long, size_t, int, int, u_long *));
-	void	(*vme_intrline_enable) __P((int));
-	void	(*vme_intrline_disable) __P((int));
-};
+#define	MAINBUS_PCC_OFFSET		0x0000u
 
 /*
- * Structure used to attach childres to the VME busses and controller.
+ * Mainbus offsets for devices on MVME167 and MVME177
  */
-struct vme_attach_args {
-	int	va_bustype;		/* VME_D16 or VME_D32 */
-	int	va_atype;		/* VME_A16, VME_A24, or VME_A32 */
-	u_long	va_addr;		/* address of card in bus space */
-	int	va_ipl;			/* card interrupt level */
-	int	va_vec;			/* card interrupt vector */
-};
+#define MAINBUS_VMETWO_OFFSET	0x0000u
+#define	MAINBUS_PCCTWO_OFFSET	0x0000u
 
-#define VME_D16		0		/* D16 */
-#define VME_D32		1		/* D32 */
-
-#define VME_A16		16		/* A16 */
-#define VME_A24		24		/* A24 */
-#define VME_A32		32		/* A32 */
-
-/* Shorthand for locators. */
-#define vmecf_atype	cf_loc[0]
-#define vmecf_addr	cf_loc[1]
-#define vmecf_ipl	cf_loc[2]
-#define vmecf_vec	cf_loc[3]
-
-void	vme_config __P((struct vmechip_softc *));
-void	*vmemap __P((u_long, size_t, int, int));
-void	vmeunmap __P((void *, size_t));
-void	vmeintr_establish __P((int (*)(void *), void *, int, int));
-void	vmeintr_disestablish __P((int, int));
+#endif /* _MVME68K_MAINBUS_H */
