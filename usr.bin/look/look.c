@@ -1,6 +1,6 @@
 /*-
- * Copyright (c) 1991 The Regents of the University of California.
- * All rights reserved.
+ * Copyright (c) 1991, 1993
+ *	The Regents of the University of California.  All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * David Hitz of Auspex Systems, Inc.
@@ -35,13 +35,13 @@
  */
 
 #ifndef lint
-char copyright[] =
-"@(#) Copyright (c) 1991 The Regents of the University of California.\n\
- All rights reserved.\n";
+static char copyright[] =
+"@(#) Copyright (c) 1991, 1993\n\
+	The Regents of the University of California.  All rights reserved.\n";
 #endif /* not lint */
 
 #ifndef lint
-static char sccsid[] = "@(#)look.c	5.1 (Berkeley) 7/21/91";
+static char sccsid[] = "@(#)look.c	8.1 (Berkeley) 6/14/93";
 #endif /* not lint */
 
 /*
@@ -55,6 +55,8 @@ static char sccsid[] = "@(#)look.c	5.1 (Berkeley) 7/21/91";
 #include <sys/types.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
+
+#include <limits.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <stdio.h>
@@ -86,24 +88,29 @@ void	 err __P((const char *fmt, ...));
 char	*linear_search __P((char *, char *, char *));
 int	 look __P((char *, char *, char *));
 void	 print_from __P((char *, char *, char *));
-void	 usage __P((void));
+
+static void usage __P((void));
 
 main(argc, argv)
 	int argc;
 	char *argv[];
 {
 	struct stat sb;
-	int ch, fd;
-	char *back, *file, *front, *string;
+	int ch, fd, termchar;
+	char *back, *file, *front, *string, *p;
 
 	file = _PATH_WORDS;
-	while ((ch = getopt(argc, argv, "df")) != EOF)
+	termchar = '\0';
+	while ((ch = getopt(argc, argv, "dft:")) != EOF)
 		switch(ch) {
 		case 'd':
 			dflag = 1;
 			break;
 		case 'f':
 			fflag = 1;
+			break;
+		case 't':
+			termchar = *optarg;
 			break;
 		case '?':
 		default:
@@ -125,9 +132,15 @@ main(argc, argv)
 		usage();
 	}
 
-	if ((fd = open(file, O_RDONLY, 0)) < 0 || fstat(fd, &sb) ||
-	    (front = mmap(NULL, sb.st_size, PROT_READ, MAP_FILE, fd,
-	    (off_t)0)) == NULL)
+	if (termchar != '\0' && (p = strchr(string, termchar)) != NULL)
+		*++p = '\0';
+
+	if ((fd = open(file, O_RDONLY, 0)) < 0 || fstat(fd, &sb))
+		err("%s: %s", file, strerror(errno));
+	if (sb.st_size > SIZE_T_MAX)
+		err("%s: %s", file, strerror(EFBIG));
+	if ((front = mmap(NULL,
+	    (size_t)sb.st_size, PROT_READ, 0, fd, (off_t)0)) == NULL)
 		err("%s: %s", file, strerror(errno));
 	back = front + sb.st_size;
 	exit(look(string, front, back));
@@ -209,7 +222,11 @@ binary_search(string, front, back)
 	p = front + (back - front) / 2;
 	SKIP_PAST_NEWLINE(p, back);
 
-	while (p != back) {
+	/*
+	 * If the file changes underneath us, make sure we don't
+	 * infinitely loop.
+	 */
+	while (p < back && back > front) {
 		if (compare(string, p, back) == GREATER)
 			front = p;
 		else
@@ -306,7 +323,7 @@ compare(s1, s2, back)
 static void
 usage()
 {
-	(void)fprintf(stderr, "usage: look [-df] string [file]\n");
+	(void)fprintf(stderr, "usage: look [-df] [-t char] string [file]\n");
 	exit(2);
 }
 
