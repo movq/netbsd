@@ -18,6 +18,10 @@ You should have received a copy of the GNU General Public License
 along with GNU CC; see the file COPYING.  If not, write to
 the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.  */
 
+#ifndef lint
+static char input_rcsid[] = "$Id: cp-input.c,v 1.3 1993/08/23 09:22:50 cgd Exp $";
+#endif /* not lint */
+
 /* G++ needs to do enough saving and re-parsing of text that it is
    necessary to abandon the simple FILE* model and use a mechanism where
    we can pre-empt one input stream with another derived from saved text;

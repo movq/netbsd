@@ -1,14 +1,10 @@
-PROG=           cc1obj
-BINDIR=         /usr/libexec
-SRCS=		objc-parse.c objc-act.c  \
-		c-lex.c c-pragma.c c-decl.c c-typeck.c c-convert.c\
-		c-aux-info.c c-iterate.c \
-		$(COMMON_SRC)
-CFLAGS+=        -I. -I$(.CURDIR) -I$(.CURDIR)/../common \
-                -I$(.CURDIR)/.. -I$(.CURDIR)/../$(MACHINE)
-YFLAGS=
-NOMAN=          noman
-.PATH:          $(.CURDIR)/../common $(.CURDIR)/../cc1 \
-                $(.CURDIR)/../$(MACHINE)
+#	$Id: Makefile,v 1.5 1993/08/23 09:22:37 cgd Exp $
 
-.include <bsd.prog.mk>
+PROG=           cc1obj
+
+SRCS=		objc-parse.c objc-act.c c-lex.c c-pragma.c c-decl.c \
+		c-typeck.c c-convert.c c-aux-info.c c-iterate.c
+
+.PATH:          $(.CURDIR)/../cc1
+
+.include <../Makefile.cc1>

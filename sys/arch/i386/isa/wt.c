@@ -31,7 +31,7 @@
  * SUCH DAMAGE.
  *
  *	from: @(#)wt.c	7.1 (Berkeley) 5/9/91
- *	$Id: wt.c,v 1.2 1993/05/22 08:01:48 cgd Exp $
+ *	$Id: wt.c,v 1.4 1993/07/19 16:58:20 cgd Exp $
  */
 
 /*
@@ -65,14 +65,7 @@
 #include "wt.h"
 #if NWT > 0
 /* 
- * HISTORY
- * $Log: wt.c,v $
- * Revision 1.2  1993/05/22 08:01:48  cgd
- * add rcsids to everything and clean up headers
- *
- * Revision 1.1.1.1  1993/03/21  09:46:00  cgd
- * initial import of 386bsd-0.1 sources
- *
+ * (Mach) HISTORY
  * Revision 2.2.1.3  90/01/08  13:29:38  rvb
  * 	Add Intel copyright.
  * 	[90/01/08            rvb]
@@ -452,7 +445,9 @@ errxit:				bp->b_flags |= B_ERROR;
 			}
 		/* Reading file marks or writing end of tape return 0 bytes */
 		} else	{
-			bp->b_flags |= B_ERROR;
+			/* XXX (cgd) - for broken 386bsd physio only:
+			 * bp->b_flags |= B_ERROR;
+			 */
 			wtflags &= ~(TPWO|TPRO);
 		}
 	}
