@@ -1,5 +1,5 @@
 #
-#	$NetBSD: fstab.tmp,v 1.1 1995/03/30 05:44:08 leo Exp $
+#	$NetBSD: fstab.tmp,v 1.1.1.1 1995/03/30 05:44:08 leo Exp $
 #
 /dev/sd0a	/	ufs	rw		1	1
 /dev/sd0d	/usr	ufs	rw		1	2	
