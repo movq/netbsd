@@ -1,4 +1,4 @@
-/*      $NetBSD: strcmp.S,v 1.1 2002/11/16 18:27:40 rearnsha Exp $ */
+/*      $NetBSD: strcmp.S,v 1.2 2002/11/23 14:29:30 chris Exp $ */
 
 /*
  * Copyright (c) 2002 ARM Ltd
@@ -30,13 +30,15 @@
 
 #include <machine/asm.h>
 
+RCSID("$NetBSD: strcmp.S,v 1.2 2002/11/23 14:29:30 chris Exp $")
+
 ENTRY(strcmp)
-.Loop:
+1:
 	ldrb	r2, [r0], #1
 	ldrb	r3, [r1], #1
 	cmp	r2, #1
 	cmpcs	r2, r3
-	beq	.Loop
+	beq	1b
 	sub	r0, r2, r3
 #ifdef __APCS_26__
         movs	pc, lr
