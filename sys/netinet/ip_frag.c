@@ -7,7 +7,7 @@
  */
 #if !defined(lint) && defined(LIBC_SCCS)
 static	char	sccsid[] = "@(#)ip_frag.c	1.11 3/24/96 (C) 1993-1995 Darren Reed";
-static	char	rcsid[] = "$Id: ip_frag.c,v 1.1 1997/01/05 13:48:06 mrg Exp $";
+static	char	rcsid[] = "$Id: ip_frag.c,v 1.1.1.1 1997/03/27 14:51:26 darrenr Exp $";
 #endif
 
 #if !defined(_KERNEL) && !defined(KERNEL)
@@ -47,11 +47,11 @@ static	char	rcsid[] = "$Id: ip_frag.c,v 1.1 1997/01/05 13:48:06 mrg Exp $";
 #include <netinet/udp.h>
 #include <netinet/tcpip.h>
 #include <netinet/ip_icmp.h>
-#include <netinet/ip_fil.h>
-#include <netinet/ip_compat.h>
-#include <netinet/ip_frag.h>
-#include <netinet/ip_nat.h>
-#include <netinet/ip_state.h>
+#include "ip_compat.h"
+#include "ip_fil.h"
+#include "ip_frag.h"
+#include "ip_nat.h"
+#include "ip_state.h"
 
 ipfr_t	*ipfr_heads[IPFT_SIZE];
 ipfrstat_t ipfr_stats;
@@ -114,7 +114,8 @@ int pass;
 			return -1;
 		}
 
-	if (!(fr = (ipfr_t *)KMALLOC(sizeof(*fr)))) {
+	KMALLOC(fr, ipfr_t *, sizeof(*fr));
+	if (fr == NULL) {
 		ipfr_stats.ifs_nomem++;
 		MUTEX_EXIT(&ipf_frag);
 		return -1;
@@ -127,7 +128,6 @@ int pass;
 	fr->ipfr_ttl = fr_ipfrttl;
 	fr->ipfr_pass = pass & ~(FR_LOGFIRST|FR_LOG);
 	fr->ipfr_off = (ip->ip_off & 0x1fff) + (fin->fin_dlen >> 3);
-	*fp = fr;
 	ipfr_stats.ifs_new++;
 	ipfr_inuse++;
 	MUTEX_EXIT(&ipf_frag);
@@ -231,10 +231,10 @@ void ipfr_unload()
  * Slowly expire held state for fragments.  Timeouts are set * in expectation
  * of this being called twice per second.
  */
-# if BSD < 199306
-int ipfr_slowtimer()
-# else
+# if (BSD >= 199306) || SOLARIS
 void ipfr_slowtimer()
+# else
+int ipfr_slowtimer()
 # endif
 {
 	ipfr_t	**fp, *fr;

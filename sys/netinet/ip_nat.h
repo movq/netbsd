@@ -6,7 +6,7 @@
  * to the original author and the contributors.
  *
  * @(#)ip_nat.h	1.5 2/4/96
- * $Id: ip_nat.h,v 1.1 1997/01/05 13:48:10 mrg Exp $
+ * $Id: ip_nat.h,v 1.1.1.1 1997/03/27 14:51:17 darrenr Exp $
  */
 
 #ifndef	__IP_NAT_H_
@@ -23,6 +23,9 @@
 #define	SIOCGNATL	_IOWR('r', 83, struct natlookup)
 #define SIOCGFRST	_IOR('r', 84, struct ipfrstat)
 #define SIOCGIPST	_IOR('r', 85, struct ips_stat)
+#define	SIOCFLNAT	_IOWR('r', 86, int)
+#define	SIOCCNATL	_IOWR('r', 87, int)
+
 #else
 #define	SIOCADNAT	_IOW(r, 80, struct ipnat)
 #define	SIOCRMNAT	_IOW(r, 81, struct ipnat)
@@ -30,14 +33,17 @@
 #define	SIOCGNATL	_IOWR(r, 83, struct natlookup)
 #define SIOCGFRST	_IOR(r, 84, struct ipfrstat)
 #define SIOCGIPST	_IOR(r, 85, struct ips_stat)
+#define	SIOCFLNAT	_IOWR(r, 86, int)
+#define	SIOCCNATL	_IOWR(r, 87, int)
 #endif
 
 #define	NAT_SIZE	367
 
 typedef	struct	nat	{
-	struct	nat	*nat_next;
-	int	nat_age;
+	u_long	nat_age;
+	int	nat_flags;
 	u_long	nat_sumd;
+	u_long	nat_ipsumd;
 	struct	in_addr	nat_inip;
 	struct	in_addr	nat_outip;
 	struct	in_addr	nat_oip;	/* other ip */
@@ -46,12 +52,17 @@ typedef	struct	nat	{
 	u_short	nat_outport;
 	u_short	nat_use;
 	u_char	nat_state[2];
+	struct	ipnat	*nat_ptr;
+	struct	nat	*nat_next;
+	struct	nat	*nat_hnext[2];
+	struct	nat	**nat_hstart[2];
 } nat_t;
 
 typedef	struct	ipnat	{
 	struct	ipnat	*in_next;
 	void	*in_ifp;
-	int	in_space;
+	u_int	in_space;
+	u_int	in_use;
 	struct	in_addr	in_nextip;
 	u_short	in_pnext;
 	u_short	in_flags;
@@ -91,7 +102,7 @@ typedef	struct	natstat	{
 	u_long	ns_added;
 	u_long	ns_expire;
 	u_long	ns_inuse;
-	nat_t	***ns_table;
+	nat_t	**ns_table[2];
 	ipnat_t	*ns_list;
 } natstat_t;
 
@@ -100,12 +111,17 @@ typedef	struct	natstat	{
 #define	IPN_UDP		2
 #define	IPN_TCPUDP	3
 
-extern	int	nat_ioctl __P((caddr_t data, int cmd, int mode));
-extern	nat_t	*nat_lookupoutip __P((register ipnat_t *np, ip_t *ip, tcphdr_t *tcp));
-extern	nat_t	*nat_lookupinip __P((struct in_addr ipaddr, u_short sport));
-extern	nat_t	*nat_lookupredir __P((natlookup_t *np));
-extern	int	ip_natout __P((ip_t *ip, int hlen, fr_info_t *fin));
-extern	int	ip_natin __P((ip_t *ip, int hlen, fr_info_t *fin));
-extern	void	ip_natunload __P((void));
-extern	void	ip_natexpire __P((void));
+extern nat_t *nat_table[2][NAT_SIZE];
+extern int nat_ioctl __P((caddr_t, int, int));
+extern nat_t *nat_outlookup __P((int, struct in_addr, u_short,
+				 struct in_addr, u_short));
+extern nat_t *nat_inlookup __P((int, struct in_addr, u_short,
+				struct in_addr, u_short));
+extern nat_t *nat_lookupredir __P((natlookup_t *));
+extern nat_t *nat_lookupmapip __P((int, struct in_addr, u_short,
+				   struct in_addr, u_short));
+
+extern int ip_natout __P((ip_t *, int, fr_info_t *));
+extern int ip_natin __P((ip_t *, int, fr_info_t *));
+extern void ip_natunload __P((void)), ip_natexpire __P((void));
 #endif /* __IP_NAT_H__ */
