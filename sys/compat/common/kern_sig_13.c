@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_sig_13.c,v 1.1 1997/11/25 19:32:17 kleink Exp $	*/
+/*	$NetBSD: kern_sig_13.c,v 1.2 1997/11/29 18:39:46 kleink Exp $	*/
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -36,7 +36,6 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <sys/types.h>
 #include <sys/param.h>
 #include <sys/proc.h>
 #include <sys/signal.h>
@@ -44,6 +43,8 @@
 
 #include <sys/mount.h>
 #include <sys/syscallargs.h>
+
+#include <machine/limits.h>
 
 #include <compat/common/compat_util.h>
 
@@ -54,7 +55,7 @@ compat_13_sys_sigaltstack(p, v, retval)
 	void *v;
 	register_t *retval;
 {
-	struct sys_sigaltstack_args ua;
+	struct sys___sigaltstack14_args ua;
 	struct compat_13_sys_sigaltstack_args /* {
 		syscallarg(const struct sigaltstack13 *) nss;
 		syscallarg(struct sigaltstack13 *) oss;
@@ -92,7 +93,7 @@ compat_13_sys_sigaltstack(p, v, retval)
 	SCARG(&ua, nss) = nssp;
 	SCARG(&ua, oss) = ossp;
 
-	error = sys_sigaltstack(p, &ua, retval);
+	error = sys___sigaltstack14(p, &ua, retval);
 	if (error != 0)
 		return (error);
 
@@ -103,7 +104,10 @@ compat_13_sys_sigaltstack(p, v, retval)
 			return (error);
 		
 		tmp13.ss_sp = tmp.ss_sp;
-		tmp13.ss_size = (int)tmp.ss_size;
+		if (tmp.ss_size > INT_MAX)
+			tmp13.ss_size = INT_MAX;
+		else
+			tmp13.ss_size = tmp.ss_size;
 		tmp13.ss_flags = tmp.ss_flags;
 
 		error = copyout(&tmp13, SCARG(uap, oss),
