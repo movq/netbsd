@@ -31,7 +31,7 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  */
-#ident "$Id: device.h,v 1.1 1993/09/29 06:09:27 briggs Exp $"
+#ident "$Id: device.h,v 1.1.1.1 1993/09/29 06:09:28 briggs Exp $"
 
 #include "nubus.h"
 

@@ -31,7 +31,7 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  */
-#ident "$Id: serreg.h,v 1.1 1993/09/29 06:09:26 briggs Exp $"
+#ident "$Id: serreg.h,v 1.1.1.1 1993/09/29 06:09:27 briggs Exp $"
 /*
  *	Mac II serial device interface
  *

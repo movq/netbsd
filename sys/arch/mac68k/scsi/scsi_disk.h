@@ -1,8 +1,10 @@
 /*
  * HISTORY
  * $Log: scsi_disk.h,v $
- * Revision 1.1  1993/09/29 06:08:38  briggs
- * Initial revision
+ * Revision 1.1.1.1  1993/09/29 06:08:39  briggs
+ * The current MacBSD architecture sub-directory for NetBSD-0.9--more or
+ * less.  It needs some help to get to be -current.  Support for minimal
+ * hardware on the SE/30, II, IIx, and IIcx exists.
  *
  * Revision 1.3  93/08/05  21:38:11  julian
  * fix the definitionof the last byte of each scsi command.

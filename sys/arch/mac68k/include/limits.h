@@ -32,7 +32,7 @@
  *
  *	@(#)limits.h	7.2 (Berkeley) 6/28/90
  */
-#ident "$Id: limits.h,v 1.1 1993/09/29 06:09:22 briggs Exp $"
+#ident "$Id: limits.h,v 1.1.1.1 1993/09/29 06:09:23 briggs Exp $"
 
 #define	CHAR_BIT	8		/* number of bits in a char */
 #define	CLK_TCK		60		/* ticks per second */

@@ -21,13 +21,13 @@
  * 16 Feb 93	Julian Elischer		ADDED for SCSI system
  * 1.15 is the last verion to support MACH and OSF/1
  */
-/* $Revision: 1.1 $ */
+/* $Revision: 1.1.1.1 $ */
 
 /*
  * Ported to run under 386BSD by Julian Elischer (julian@tfs.com) Sept 1992
  * major changes by Julian Elischer (julian@jules.dialix.oz.au) May 1993
  *
- *	$Id: st.c,v 1.1 1993/09/29 06:08:39 briggs Exp $
+ *	$Id: st.c,v 1.1.1.1 1993/09/29 06:08:40 briggs Exp $
  */
 
 

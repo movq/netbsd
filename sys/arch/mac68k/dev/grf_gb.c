@@ -39,7 +39,7 @@
  *
  *	@(#)grf_gb.c	7.4 (Berkeley) 5/7/91
  */
-#ident "$Id: grf_gb.c,v 1.1 1993/09/29 06:09:29 briggs Exp $"
+#ident "$Id: grf_gb.c,v 1.1.1.1 1993/09/29 06:09:30 briggs Exp $"
 
 #include "grf.h"
 #if NGRF > 0

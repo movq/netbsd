@@ -74,7 +74,7 @@
  */
 #ifndef	_PMAP_MACHINE_
 #define	_PMAP_MACHINE_
-#ident "$Id: pmap.h,v 1.1 1993/09/29 06:09:21 briggs Exp $"
+#ident "$Id: pmap.h,v 1.1.1.1 1993/09/29 06:09:22 briggs Exp $"
 
 #define MAC_PAGE_SIZE	NBPG
 #define MAC_SEG_SIZE	NBSEG

@@ -32,7 +32,7 @@
  *
  *	@(#)proc.h	7.1 (Berkeley) 5/15/91
  */
-#ident "$Id: proc.h,v 1.1 1993/09/29 06:09:21 briggs Exp $"
+#ident "$Id: proc.h,v 1.1.1.1 1993/09/29 06:09:22 briggs Exp $"
 
 /*
  * Machine-dependent part of the proc structure for hp300.

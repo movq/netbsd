@@ -2660,7 +2660,7 @@ _intrnames:
 	.asciz  "pclock"
 #endif
 	.asciz	"nmi"
-	.asciz	"$Id: locore.s,v 1.1 1993/09/29 06:09:16 briggs Exp $"
+	.asciz	"$Id: locore.s,v 1.1.1.1 1993/09/29 06:09:17 briggs Exp $"
 _eintrnames:
 	.even
 _intrcnt:

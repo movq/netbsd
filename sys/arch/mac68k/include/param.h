@@ -68,7 +68,7 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  */
-#ident "$Id: param.h,v 1.1 1993/09/29 06:09:21 briggs Exp $"
+#ident "$Id: param.h,v 1.1.1.1 1993/09/29 06:09:22 briggs Exp $"
 
 /*
  * from: Utah $Hdr: machparam.h 1.11 89/08/14$

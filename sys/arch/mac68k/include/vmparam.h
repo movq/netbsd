@@ -68,7 +68,7 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  */
-#ident "$Id: vmparam.h,v 1.1 1993/09/29 06:09:19 briggs Exp $"
+#ident "$Id: vmparam.h,v 1.1.1.1 1993/09/29 06:09:20 briggs Exp $"
 /*
  * from: Utah $Hdr: vmparam.h 1.16 91/01/18$
  *

@@ -40,7 +40,7 @@
  *	from: @(#)grfioctl.h	7.2 (Berkeley) 11/4/90
  *	grfioctl.h,v 1.2 1993/05/22 07:56:14 cgd Exp
  */
-#ident "$Id: grfioctl.h,v 1.1 1993/09/29 06:09:30 briggs Exp $"
+#ident "$Id: grfioctl.h,v 1.1.1.1 1993/09/29 06:09:31 briggs Exp $"
 
 struct	grfinfo {
 	int	gd_id;			/* HPUX identifier */

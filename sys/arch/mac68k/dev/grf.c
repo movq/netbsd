@@ -39,7 +39,7 @@
  *
  *	@(#)grf.c	7.8 (Berkeley) 5/7/91
  */
-#ident "$Id: grf.c,v 1.1 1993/09/29 06:09:29 briggs Exp $"
+#ident "$Id: grf.c,v 1.1.1.1 1993/09/29 06:09:30 briggs Exp $"
 
 /*
  * Graphics display driver for the HP300.

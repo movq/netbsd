@@ -31,7 +31,7 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  */
-#ident "$Id: clockreg.h,v 1.1 1993/09/29 06:09:18 briggs Exp $"
+#ident "$Id: clockreg.h,v 1.1.1.1 1993/09/29 06:09:19 briggs Exp $"
 /*
    Clock defines and things.
    MacII clock characteristics used.

@@ -30,7 +30,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
 */
-#ident "$Id: genassym.c,v 1.1 1993/09/29 06:09:17 briggs Exp $"
+#ident "$Id: genassym.c,v 1.1.1.1 1993/09/29 06:09:18 briggs Exp $"
 
 /*
  *	@(#)genassym.c	7.8 (Berkeley) 5/7/91

@@ -26,8 +26,10 @@
 /*
  * HISTORY
  * $Log: scc_8530_hdw.c,v $
- * Revision 1.1  1993/09/29 06:09:27  briggs
- * Initial revision
+ * Revision 1.1.1.1  1993/09/29 06:09:28  briggs
+ * The current MacBSD architecture sub-directory for NetBSD-0.9--more or
+ * less.  It needs some help to get to be -current.  Support for minimal
+ * hardware on the SE/30, II, IIx, and IIcx exists.
  *
  * Revision 2.9  93/03/26  17:58:01  mrt
  * 	No minor()s, no dev_t.
@@ -84,7 +86,7 @@
  * 	[91/06/28            af]
  * 
  */
-#ident "$Id: scc_8530_hdw.c,v 1.1 1993/09/29 06:09:27 briggs Exp $"
+#ident "$Id: scc_8530_hdw.c,v 1.1.1.1 1993/09/29 06:09:28 briggs Exp $"
 /*
  *	File: scc_8530_hdw.c
  * 	Author: Alessandro Forin, Carnegie Mellon University

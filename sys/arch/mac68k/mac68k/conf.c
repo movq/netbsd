@@ -63,7 +63,7 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  */
-#ident "$Id: conf.c,v 1.1 1993/09/29 06:09:17 briggs Exp $"
+#ident "$Id: conf.c,v 1.1.1.1 1993/09/29 06:09:18 briggs Exp $"
 /*-
  *      @(#)conf.c	7.9 (Berkeley) 5/28/91
  */

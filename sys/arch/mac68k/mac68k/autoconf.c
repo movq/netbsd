@@ -68,7 +68,7 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  */
-#ident "$Id: autoconf.c,v 1.1 1993/09/29 06:09:18 briggs Exp $"
+#ident "$Id: autoconf.c,v 1.1.1.1 1993/09/29 06:09:19 briggs Exp $"
 /*
  * from: Utah $Hdr: autoconf.c 1.31 91/01/21$
  *

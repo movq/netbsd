@@ -31,7 +31,7 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  */
-#ident "$Id: nubus.c,v 1.1 1993/09/29 06:09:28 briggs Exp $"
+#ident "$Id: nubus.c,v 1.1.1.1 1993/09/29 06:09:29 briggs Exp $"
 
 /* 
 	MF 8-24-93 first hack at a real nubus driver

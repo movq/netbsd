@@ -32,7 +32,7 @@
  *
  *	@(#)types.h	7.5 (Berkeley) 3/9/91
  */
-#ident "$Id: types.h,v 1.1 1993/09/29 06:09:19 briggs Exp $"
+#ident "$Id: types.h,v 1.1.1.1 1993/09/29 06:09:20 briggs Exp $"
 
 #ifndef	_MACHTYPES_H_
 #define	_MACHTYPES_H_

@@ -26,8 +26,10 @@
 /*
  * HISTORY
  * $Log: scc_8530.h,v $
- * Revision 1.1  1993/09/29 06:09:27  briggs
- * Initial revision
+ * Revision 1.1.1.1  1993/09/29 06:09:28  briggs
+ * The current MacBSD architecture sub-directory for NetBSD-0.9--more or
+ * less.  It needs some help to get to be -current.  Support for minimal
+ * hardware on the SE/30, II, IIx, and IIcx exists.
  *
  * Revision 2.4  93/02/05  08:06:56  danner
  * 	Generalized register access, to accomodate Alpha.
@@ -53,7 +55,7 @@
  *
  *	Definitions for the Zilog Z8530 SCC serial line chip
  */
-#ident "$Id: scc_8530.h,v 1.1 1993/09/29 06:09:27 briggs Exp $"
+#ident "$Id: scc_8530.h,v 1.1.1.1 1993/09/29 06:09:28 briggs Exp $"
 
 #ifndef	_SCC_8530_H_
 #define	_SCC_8530_H_

@@ -31,7 +31,7 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  */
-#ident "$Id: scsi_defs.h,v 1.1 1993/09/29 06:09:25 briggs Exp $"
+#ident "$Id: scsi_defs.h,v 1.1.1.1 1993/09/29 06:09:26 briggs Exp $"
 
 #ifndef _SCSI_DEFS_H
 #define _SCSI_DEFS_H

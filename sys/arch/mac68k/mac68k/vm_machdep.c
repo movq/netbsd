@@ -35,7 +35,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#ident "$Id: vm_machdep.c,v 1.1 1993/09/29 06:09:13 briggs Exp $"
+#ident "$Id: vm_machdep.c,v 1.1.1.1 1993/09/29 06:09:14 briggs Exp $"
 /*
  * from: Utah $Hdr: vm_machdep.c 1.21 91/04/06$
  *

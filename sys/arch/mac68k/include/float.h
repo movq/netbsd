@@ -39,7 +39,7 @@
  *
  * 27 Feb 93    Handel/da Silva/Poirot  Adjust value for MAX_DOUBLE
  */
-#ident "$Id: float.h,v 1.1 1993/09/29 06:09:22 briggs Exp $"
+#ident "$Id: float.h,v 1.1.1.1 1993/09/29 06:09:23 briggs Exp $"
 
 #define FLT_RADIX	2		/* b */
 #define FLT_ROUNDS	1		/* FP addition rounds to nearest */
