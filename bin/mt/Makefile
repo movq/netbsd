@@ -1,7 +1,6 @@
-#	@(#)Makefile	5.4 (Berkeley) 1/14/91
-#
-#	$Header: /home/mike/src/cvs/netbsd/src/bin/mt/Makefile,v 1.1 1993/03/25 08:01:33 cgd Exp $
+#	@(#)Makefile	8.1 (Berkeley) 6/6/93
 
 PROG=	mt
+CFLAGS+=-I/sys
 
 .include <bsd.prog.mk>
