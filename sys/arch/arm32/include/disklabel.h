@@ -1,4 +1,4 @@
-/*	$NetBSD: disklabel.h,v 1.3 1997/10/14 09:20:09 mark Exp $	*/
+/*	$NetBSD: disklabel.h,v 1.4 1998/06/08 20:21:18 mark Exp $	*/
 
 /*
  * Copyright (c) 1994 Mark Brinicombe.
@@ -51,77 +51,18 @@
 #define MAXPARTITIONS	8		/* number of partitions */
 #define RAW_PART	2		/* raw partition: XX?c */
 
-#define NRISCBSD_PARTITIONS MAXPARTITIONS
-
-#define PARTITION_TYPE_UNUSED  0
-#define PARTITION_TYPE_ADFS    1
-#define PARTITION_TYPE_RISCIX  2
-
-#define PARTITION_FORMAT_RISCIX  2
-#define PARTITION_FORMAT_RISCBSD 0x42
-
-#define FILECORE_BOOT_SECTOR 6
-
-/* Stuff to deal with RISCiX partitions */
-
-#define NRISCIX_PARTITIONS 8
-#define RISCIX_PARTITION_OFFSET 8
-
-struct riscix_partition {
-	u_int rp_start;
-	u_int rp_length;
-	u_int rp_type;
-	char rp_name[16];
-};
-
-struct riscix_partition_table {
-	u_int pad0;
-	u_int pad1;
-	struct riscix_partition partitions[NRISCIX_PARTITIONS];
-};
-
-  
 #include <sys/dkbad.h>
-
-struct riscbsd_partition {
-	u_int rp_start;
-	u_int rp_length;
-	u_int rp_type;
-	char rp_name[16];
-};
+#include <machine/disklabel_acorn.h>
+#include <machine/disklabel_mbr.h>
 
 struct cpu_disklabel {
+#if 0 /* XXX not actually used by anything */
 	u_int pad0;
 	u_int pad1;
 	struct riscbsd_partition partitions[NRISCBSD_PARTITIONS];
+#endif
+	struct mbr_partition mbrparts[NMBRPART];
 	struct dkbad bad;
-};
-
-struct filecore_bootblock {
-	u_char  padding0[0x1c0];
-	u_char  log2secsize;
-	u_char  secspertrack;
-	u_char  heads;
-	u_char  density;
-	u_char  idlen;
-	u_char  log2bpmb;
-	u_char  skew;
-	u_char  bootoption;
-	u_char  lowsector;
-	u_char  nzones;
-	u_short zone_spare;
-	u_int   root;
-	u_int   disc_size;
-	u_short disc_id;
-	u_char  disc_name[10];
-	u_int   disc_type;
-
-	u_char  padding1[24];
-
-	u_char partition_type;
-	u_char partition_cyl_low;
-	u_char partition_cyl_high;
-	u_char checksum;
 };
 
 #ifdef _KERNEL
