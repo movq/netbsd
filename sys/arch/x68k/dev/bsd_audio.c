@@ -1,4 +1,4 @@
-/*	$NetBSD: bsd_audio.c,v 1.1 1996/05/05 12:17:04 oki Exp $	*/
+/*	$NetBSD: bsd_audio.c,v 1.1.1.1 1996/05/05 12:17:03 oki Exp $	*/
 
 /*
  * Copyright (c) 1991-1993 Regents of the University of California.

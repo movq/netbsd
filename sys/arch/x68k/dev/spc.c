@@ -1,4 +1,4 @@
-/*	$NetBSD: spc.c,v 1.1 1996/05/05 12:17:06 oki Exp $	*/
+/*	$NetBSD: spc.c,v 1.1.1.1 1996/05/05 12:17:03 oki Exp $	*/
 
 #define	integrate	static inline
 

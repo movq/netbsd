@@ -1,4 +1,4 @@
-/*	$NetBSD: aout_machdep.h,v 1.1 1996/05/05 12:17:11 oki Exp $	*/
+/*	$NetBSD: aout_machdep.h,v 1.1.1.1 1996/05/05 12:17:03 oki Exp $	*/
 
 /*
  * Copyright (c) 1993 Christopher G. Demetriou

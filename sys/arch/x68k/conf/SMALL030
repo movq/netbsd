@@ -1,7 +1,7 @@
 #
 #	ALL -- everything that's currently supported
 #
-# $Id: SMALL030,v 1.1 1996/05/05 12:17:03 oki Exp $
+# $Id: SMALL030,v 1.1.1.1 1996/05/05 12:17:03 oki Exp $
 #
 
 # architecture type and name of kernel; REQUIRED
