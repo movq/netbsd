@@ -1,4 +1,4 @@
-/*	$NetBSD: swaplist.c,v 1.1 1997/06/12 13:14:11 mrg Exp $	*/
+/*	$NetBSD: swaplist.c,v 1.1.1.1 1997/06/12 13:14:11 mrg Exp $	*/
 
 /*
  * Copyright (c) 1997 Matthew R. Green
