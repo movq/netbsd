@@ -1,16 +1,13 @@
-#	@(#)Makefile	6.2 (Berkeley) 4/30/91
-
-.include "../Makefile.g++"
+# Makefile for libdriver
 
 LIB=		driver
 SRCS=		input.cc printer.cc
-CXXFLAGS+=	-I$(.CURDIR) -I$(.CURDIR)/../libgroff \
-		-I$(.CURDIR)/../../../lib/libg++/g++-include
+CFLAGS+=	-I$(.CURDIR)/../include
+
 NOMAN=		noman
 NOPROFILE=	noprofile
 
 install:
 
 .include <bsd.lib.mk>
-
-.SUFFIXES: .cc
+.include "../Makefile.cfg"
