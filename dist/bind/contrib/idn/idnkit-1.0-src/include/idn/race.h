@@ -1,4 +1,4 @@
-/*	$NetBSD: race.h,v 1.1 2004/05/17 23:43:42 christos Exp $	*/
+/*	$NetBSD: race.h,v 1.1.1.1 2004/05/17 23:43:42 christos Exp $	*/
 
 /* Id: race.h,v 1.1.1.1 2003/06/04 00:25:40 marka Exp */
 /*

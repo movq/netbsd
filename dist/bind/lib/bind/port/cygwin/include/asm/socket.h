@@ -1,4 +1,4 @@
-/*	$NetBSD: socket.h,v 1.1 2004/05/17 23:44:46 christos Exp $	*/
+/*	$NetBSD: socket.h,v 1.1.1.1 2004/05/17 23:44:46 christos Exp $	*/
 
 #ifndef _cygwin_asm_socket_h
 #define _cygwin_asm_socket_h

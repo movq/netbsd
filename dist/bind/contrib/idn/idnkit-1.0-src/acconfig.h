@@ -1,4 +1,4 @@
-/*	$NetBSD: acconfig.h,v 1.1 2004/05/17 23:43:39 christos Exp $	*/
+/*	$NetBSD: acconfig.h,v 1.1.1.1 2004/05/17 23:43:39 christos Exp $	*/
 
 /* Id: acconfig.h,v 1.1.1.1 2003/06/04 00:25:03 marka Exp */
 /*

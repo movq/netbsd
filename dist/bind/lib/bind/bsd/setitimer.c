@@ -1,4 +1,4 @@
-/*	$NetBSD: setitimer.c,v 1.1 2004/05/17 23:44:40 christos Exp $	*/
+/*	$NetBSD: setitimer.c,v 1.1.1.1 2004/05/17 23:44:40 christos Exp $	*/
 
 #ifndef LINT
 static const char rcsid[] = "Id: setitimer.c,v 1.1 2001/03/29 06:30:35 marka Exp";

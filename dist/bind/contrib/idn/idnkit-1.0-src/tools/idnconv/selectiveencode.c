@@ -1,4 +1,4 @@
-/*	$NetBSD: selectiveencode.c,v 1.1 2004/05/17 23:43:48 christos Exp $	*/
+/*	$NetBSD: selectiveencode.c,v 1.1.1.1 2004/05/17 23:43:48 christos Exp $	*/
 
 #ifndef lint
 static char *rcsid = "Id: selectiveencode.c,v 1.1.1.1 2003/06/04 00:27:07 marka Exp";

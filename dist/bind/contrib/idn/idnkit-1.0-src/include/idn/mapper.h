@@ -1,4 +1,4 @@
-/*	$NetBSD: mapper.h,v 1.1 2004/05/17 23:43:42 christos Exp $	*/
+/*	$NetBSD: mapper.h,v 1.1.1.1 2004/05/17 23:43:42 christos Exp $	*/
 
 /* Id: mapper.h,v 1.1.1.1 2003/06/04 00:25:38 marka Exp */
 /*

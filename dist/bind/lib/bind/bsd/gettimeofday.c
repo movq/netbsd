@@ -1,4 +1,4 @@
-/*	$NetBSD: gettimeofday.c,v 1.1 2004/05/17 23:44:40 christos Exp $	*/
+/*	$NetBSD: gettimeofday.c,v 1.1.1.1 2004/05/17 23:44:40 christos Exp $	*/
 
 #ifndef LINT
 static const char rcsid[] = "Id: gettimeofday.c,v 1.1.2.2 2002/07/12 00:49:51 marka Exp";

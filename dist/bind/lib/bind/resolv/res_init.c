@@ -1,4 +1,4 @@
-/*	$NetBSD: res_init.c,v 1.1 2004/05/17 23:44:47 christos Exp $	*/
+/*	$NetBSD: res_init.c,v 1.1.1.1 2004/05/17 23:44:47 christos Exp $	*/
 
 /*
  * Copyright (c) 1985, 1989, 1993

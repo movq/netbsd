@@ -1,4 +1,4 @@
-/*	$NetBSD: hook.c,v 1.1 2004/05/17 23:43:50 christos Exp $	*/
+/*	$NetBSD: hook.c,v 1.1.1.1 2004/05/17 23:43:50 christos Exp $	*/
 
 /*
  * hook.c - Hooking Asynchronous Completion

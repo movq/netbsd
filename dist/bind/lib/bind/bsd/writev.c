@@ -1,4 +1,4 @@
-/*	$NetBSD: writev.c,v 1.1 2004/05/17 23:44:40 christos Exp $	*/
+/*	$NetBSD: writev.c,v 1.1.1.1 2004/05/17 23:44:40 christos Exp $	*/
 
 #ifndef LINT
 static const char rcsid[] = "Id: writev.c,v 1.1.2.1 2003/06/27 03:51:35 marka Exp";

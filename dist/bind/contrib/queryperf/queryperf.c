@@ -1,4 +1,4 @@
-/*	$NetBSD: queryperf.c,v 1.1 2004/05/17 23:43:53 christos Exp $	*/
+/*	$NetBSD: queryperf.c,v 1.1.1.1 2004/05/17 23:43:53 christos Exp $	*/
 
 /*
  * Copyright (C) 2000, 2001  Nominum, Inc.

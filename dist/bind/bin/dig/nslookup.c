@@ -1,4 +1,4 @@
-/*	$NetBSD: nslookup.c,v 1.1 2004/05/17 23:43:20 christos Exp $	*/
+/*	$NetBSD: nslookup.c,v 1.1.1.1 2004/05/17 23:43:20 christos Exp $	*/
 
 /*
  * Copyright (C) 2004  Internet Systems Consortium, Inc. ("ISC")
