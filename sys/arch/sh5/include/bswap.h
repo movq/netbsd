@@ -1,9 +1,4 @@
-/*      $NetBSD: bswap.h,v 1.2 2002/07/10 15:52:49 scw Exp $	*/
-
-/*
- * Based on Manuel Bouyer's public domain code.
- * The following copyright applies to the SH-5 changes:
- */
+/*      $NetBSD: bswap.h,v 1.3 2002/08/30 10:50:06 scw Exp $	*/
 
 /*
  * Copyright 2002 Wasabi Systems, Inc.
@@ -43,54 +38,16 @@
 #ifndef _SH5_BSWAP_H_
 #define	_SH5_BSWAP_H_
 
-#include <sys/cdefs.h>
-#include <sys/types.h>
+#define __BSWAP_RENAME
+#include <sys/bswap.h>
 
-#ifndef _KERNEL
+#ifdef __GNUC__
 
-__BEGIN_DECLS
-u_int16_t bswap16(u_int16_t);
-u_int32_t bswap32(u_int32_t);
-u_int64_t bswap64(u_int64_t);
-__END_DECLS
+#include <sh5/byte_swap.h>
+#define	bswap16(x)	_sh5_bswap16(x)
+#define	bswap32(x)	_sh5_bswap32(x)
+#define	bswap64(x)	_sh5_bswap64(x)
 
-#else /* _KERNEL */
-
-__BEGIN_DECLS
-static __inline u_int16_t bswap16(u_int16_t);
-static __inline u_int32_t bswap32(u_int32_t);
-static __inline u_int64_t bswap64(u_int64_t);
-__END_DECLS
-
-static __inline u_int16_t
-bswap16(u_int16_t x)
-{
-	u_int64_t rval;
-
-	__asm __volatile ("byterev %1,%0" : "=r"(rval) : "r"(x));
-
-	return ((u_int16_t)(rval >> 48));
-}
-
-static __inline u_int32_t
-bswap32(u_int32_t x)
-{
-	u_int64_t rval;
-
-	__asm __volatile ("byterev %1,%0" : "=r"(rval) : "r"(x));
-
-	return ((u_int32_t)(rval >> 32));
-}
-
-static __inline u_int64_t
-bswap64(u_int64_t x)
-{
-	u_int64_t rval;
-
-	__asm __volatile ("byterev %1,%0" : "=r"(rval) : "r"(x));
-
-	return (rval);
-}
-#endif /* _KERNEL */
+#endif /* __GNUC__ */
 
 #endif /* _SH5_BSWAP_H_ */
