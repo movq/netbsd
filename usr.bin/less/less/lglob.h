@@ -1,4 +1,4 @@
-/*	$NetBSD: lglob.h,v 1.1 1997/09/21 12:34:31 mrg Exp $	*/
+/*	$NetBSD: lglob.h,v 1.1.1.1 1997/09/21 12:34:31 mrg Exp $	*/
 
 /*
  * Copyright (c) 1984,1985,1989,1994,1995,1996  Mark Nudelman
