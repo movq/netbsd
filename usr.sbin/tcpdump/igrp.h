@@ -1,4 +1,4 @@
-/*	$NetBSD: igrp.h,v 1.1 1997/10/03 17:25:06 christos Exp $	*/
+/*	$NetBSD: igrp.h,v 1.1.1.1 1997/10/03 17:25:06 christos Exp $	*/
 
 /* Cisco IGRP definitions */
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: netbios.h,v 1.1 1997/10/03 17:25:12 christos Exp $	*/
+/*	$NetBSD: netbios.h,v 1.1.1.1 1997/10/03 17:25:12 christos Exp $	*/
 
 /*
  * NETBIOS protocol formats

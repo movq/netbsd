@@ -1,4 +1,4 @@
-/*	$NetBSD: gmt2local.c,v 1.1 1997/10/03 17:24:11 christos Exp $	*/
+/*	$NetBSD: gmt2local.c,v 1.1.1.1 1997/10/03 17:24:11 christos Exp $	*/
 
 /*
  * Copyright (c) 1997
@@ -27,7 +27,7 @@
 static const char rcsid[] =
     "@(#) Header: gmt2local.c,v 1.2 97/01/23 22:31:25 leres Exp  (LBL)";
 #else
-__RCSID("$NetBSD: gmt2local.c,v 1.1 1997/10/03 17:24:11 christos Exp $");
+__RCSID("$NetBSD: gmt2local.c,v 1.1.1.1 1997/10/03 17:24:11 christos Exp $");
 #endif
 #endif
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: print-gre.c,v 1.1 1997/10/03 17:24:21 christos Exp $	*/
+/*	$NetBSD: print-gre.c,v 1.1.1.1 1997/10/03 17:24:21 christos Exp $	*/
 
 /*
  * Copyright (c) 1996
@@ -30,7 +30,7 @@
 static const char rcsid[] =
     "@(#) Header: print-gre.c,v 1.4 96/12/10 23:28:23 leres Exp ";
 #else
-__RCSID("$NetBSD: print-gre.c,v 1.1 1997/10/03 17:24:21 christos Exp $");
+__RCSID("$NetBSD: print-gre.c,v 1.1.1.1 1997/10/03 17:24:21 christos Exp $");
 #endif
 #endif
 

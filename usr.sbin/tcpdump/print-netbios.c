@@ -1,4 +1,4 @@
-/*	$NetBSD: print-netbios.c,v 1.1 1997/10/03 17:24:26 christos Exp $	*/
+/*	$NetBSD: print-netbios.c,v 1.1.1.1 1997/10/03 17:24:26 christos Exp $	*/
 
 /*
  * Copyright (c) 1994, 1995, 1996
@@ -30,7 +30,7 @@
 static const char rcsid[] =
     "@(#) Header: print-netbios.c,v 1.10 96/12/10 23:25:12 leres Exp ";
 #else
-__RCSID("$NetBSD: print-netbios.c,v 1.1 1997/10/03 17:24:26 christos Exp $");
+__RCSID("$NetBSD: print-netbios.c,v 1.1.1.1 1997/10/03 17:24:26 christos Exp $");
 #endif
 #endif
 

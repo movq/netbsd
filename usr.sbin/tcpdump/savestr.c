@@ -1,4 +1,4 @@
-/*	$NetBSD: savestr.c,v 1.1 1997/10/03 17:24:49 christos Exp $	*/
+/*	$NetBSD: savestr.c,v 1.1.1.1 1997/10/03 17:24:49 christos Exp $	*/
 
 /*
  * Copyright (c) 1997
@@ -27,7 +27,7 @@
 static const char rcsid[] =
     "@(#) Header: savestr.c,v 1.2 97/05/09 14:52:31 leres Exp  (LBL)";
 #else
-__RCSID("$NetBSD: savestr.c,v 1.1 1997/10/03 17:24:49 christos Exp $");
+__RCSID("$NetBSD: savestr.c,v 1.1.1.1 1997/10/03 17:24:49 christos Exp $");
 #endif
 #endif
 
