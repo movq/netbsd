@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# $NetBSD: greptests.sh,v 1.1 2003/09/14 13:47:48 cjep Exp $
+# $NetBSD: greptests.sh,v 1.1.1.1 2003/09/14 13:47:48 cjep Exp $
 #
 #
 # Regression tests for grep. Some of these tests are based on those
