@@ -1,7 +1,7 @@
 /******************************************************************************
  *
- * Name: acenv.h - Generation environment specific items
- *       xRevision: 76 $
+ * Name: acwin.h - OS specific defines, etc.
+ *       $Revision: 1.1 $
  *
  *****************************************************************************/
 
@@ -9,7 +9,7 @@
  *
  * 1. Copyright Notice
  *
- * Some or all of this work - Copyright (c) 1999, 2000, 2001, Intel Corp.
+ * Some or all of this work - Copyright (c) 1999 - 2002, Intel Corp.
  * All rights reserved.
  *
  * 2. License
@@ -114,266 +114,52 @@
  *
  *****************************************************************************/
 
-#ifndef __ACENV_H__
-#define __ACENV_H__
+#ifndef __ACWIN64_H__
+#define __ACWIN64_H__
 
+/*! [Begin] no source code translation (Keep the include) */
 
-/*
- * Configuration for ACPI tools and utilities
- */
-
-#ifdef _ACPI_DUMP_APP
-#define ACPI_DEBUG
-#define ACPI_APPLICATION
-#define ENABLE_DEBUGGER
-#define ACPI_USE_SYSTEM_CLIBRARY
-#define PARSER_ONLY
-#endif
-
-#ifdef _ACPI_EXEC_APP
-#undef DEBUGGER_THREADING
-#define DEBUGGER_THREADING      DEBUGGER_SINGLE_THREADED
-#define ACPI_DEBUG
-#define ACPI_APPLICATION
-#define ENABLE_DEBUGGER
-#define ACPI_USE_SYSTEM_CLIBRARY
-#endif
-
-#ifdef _ACPI_ASL_COMPILER
-#define ACPI_DEBUG
-#define ACPI_APPLICATION
-#define ENABLE_DEBUGGER
-#define ACPI_USE_SYSTEM_CLIBRARY
-#endif
-
-/*
- * Memory allocation tracking.  Used only if
- * 1) This is the debug version
- * 2) This is NOT a 16-bit version of the code (not enough real-mode memory)
- */
-#ifdef ACPI_DEBUG
-#ifndef _IA16
-#define ACPI_DBG_TRACK_ALLOCATIONS
-#endif
-#endif
-
-/*
- * Environment configuration.  The purpose of this file is to interface to the
- * local generation environment.
- *
- * 1) ACPI_USE_SYSTEM_CLIBRARY - Define this if linking to an actual C library.
- *      Otherwise, local versions of string/memory functions will be used.
- * 2) ACPI_USE_STANDARD_HEADERS - Define this if linking to a C library and
- *      the standard header files may be used.
- *
- * The ACPI subsystem only uses low level C library functions that do not call
- * operating system services and may therefore be inlined in the code.
- *
- * It may be necessary to tailor these include files to the target
- * generation environment.
- *
- *
- * Functions and constants used from each header:
- *
- * string.h:    memcpy
- *              memset
- *              strcat
- *              strcmp
- *              strcpy
- *              strlen
- *              strncmp
- *              strncat
- *              strncpy
- *
- * stdlib.h:    strtoul
- *
- * stdarg.h:    va_list
- *              va_arg
- *              va_start
- *              va_end
- *
- */
-
-/*! [Begin] no source code translation */
-
-#ifdef _LINUX
-#include "aclinux.h"
-
-#elif _AED_EFI
-#include "acefi.h"
-
-#elif WIN32
-#include "acwin.h"
-
-#elif __FreeBSD__
-#include "acfreebsd.h"
-
-#else
-
-/* All other environments */
-
-#define ACPI_USE_STANDARD_HEADERS
-
-/* Name of host operating system (returned by the _OS_ namespace object) */
-
-#define ACPI_OS_NAME         "Intel ACPI/CA Core Subsystem"
-
-#endif
-
-
+#include "acintel.h"
 /*! [End] no source code translation !*/
 
-/******************************************************************************
- *
- * C library configuration
- *
- *****************************************************************************/
+#define ACPI_OS_NAME                "Windows"
 
-#ifdef ACPI_USE_SYSTEM_CLIBRARY
-/*
- * Use the standard C library headers.
- * We want to keep these to a minimum.
- *
- */
+#define ACPI_MACHINE_WIDTH          64
 
-#ifdef ACPI_USE_STANDARD_HEADERS
-/*
- * Use the standard headers from the standard locations
- */
-#include <stdarg.h>
-#include <stdlib.h>
-#include <string.h>
-#include <ctype.h>
-
-#endif /* ACPI_USE_STANDARD_HEADERS */
-
-/*
- * We will be linking to the standard Clib functions
- */
-
-#define STRSTR(s1,s2)   strstr((s1), (s2))
-#define STRUPR(s)       AcpiUtStrupr  ((s))
-#define STRLEN(s)       (UINT32) strlen((s))
-#define STRCPY(d,s)     strcpy((d), (s))
-#define STRNCPY(d,s,n)  strncpy((d), (s), (NATIVE_INT)(n))
-#define STRNCMP(d,s,n)  strncmp((d), (s), (NATIVE_INT)(n))
-#define STRCMP(d,s)     strcmp((d), (s))
-#define STRCAT(d,s)     strcat((d), (s))
-#define STRNCAT(d,s,n)  strncat((d), (s), (NATIVE_INT)(n))
-#define STRTOUL(d,s,n)  strtoul((d), (s), (NATIVE_INT)(n))
-#define MEMCPY(d,s,n)   memcpy((d), (s), (NATIVE_INT)(n))
-#define MEMSET(d,s,n)   memset((d), (s), (NATIVE_INT)(n))
-#define TOUPPER         toupper
-#define TOLOWER         tolower
-#define IS_XDIGIT       isxdigit
-
-/******************************************************************************
- *
- * Not using native C library, use local implementations
- *
- *****************************************************************************/
-#else
-
-/*
- * Use local definitions of C library macros and functions
- * NOTE: The function implementations may not be as efficient
- * as an inline or assembly code implementation provided by a
- * native C library.
- */
-
-#ifndef va_arg
-
-#ifndef _VALIST
-#define _VALIST
-typedef char *va_list;
-#endif /* _VALIST */
-
-/*
- * Storage alignment properties
- */
-
-#define  _AUPBND         (sizeof (NATIVE_INT) - 1)
-#define  _ADNBND         (sizeof (NATIVE_INT) - 1)
-
-/*
- * Variable argument list macro definitions
- */
-
-#define _Bnd(X, bnd)    (((sizeof (X)) + (bnd)) & (~(bnd)))
-#define va_arg(ap, T)   (*(T *)(((ap) += (_Bnd (T, _AUPBND))) - (_Bnd (T,_ADNBND))))
-#define va_end(ap)      (void) 0
-#define va_start(ap, A) (void) ((ap) = (((char *) &(A)) + (_Bnd (A,_AUPBND))))
-
-#endif /* va_arg */
-
-
-#define STRSTR(s1,s2)    AcpiUtStrstr  ((s1), (s2))
-#define STRUPR(s)        AcpiUtStrupr  ((s))
-#define STRLEN(s)        AcpiUtStrlen  ((s))
-#define STRCPY(d,s)      AcpiUtStrcpy  ((d), (s))
-#define STRNCPY(d,s,n)   AcpiUtStrncpy ((d), (s), (n))
-#define STRNCMP(d,s,n)   AcpiUtStrncmp ((d), (s), (n))
-#define STRCMP(d,s)      AcpiUtStrcmp  ((d), (s))
-#define STRCAT(d,s)      AcpiUtStrcat  ((d), (s))
-#define STRNCAT(d,s,n)   AcpiUtStrncat ((d), (s), (n))
-#define STRTOUL(d,s,n)   AcpiUtStrtoul ((d), (s),(n))
-#define MEMCPY(d,s,n)    AcpiUtMemcpy  ((d), (s), (n))
-#define MEMSET(d,v,n)    AcpiUtMemset  ((d), (v), (n))
-#define TOUPPER          AcpiUtToUpper
-#define TOLOWER          AcpiUtToLower
-
-#endif /* ACPI_USE_SYSTEM_CLIBRARY */
-
-
-/******************************************************************************
- *
- * Assembly code macros
- *
- *****************************************************************************/
+#define strupr              _strupr
+#define ACPI_USE_STANDARD_HEADERS
 
 /*
  * Handle platform- and compiler-specific assembly language differences.
- * These should already have been defined by the platform includes above.
  *
  * Notes:
  * 1) Interrupt 3 is used to break into a debugger
  * 2) Interrupts are turned off during ACPI register setup
  */
 
-/* Unrecognized compiler, use defaults */
-#ifndef ACPI_ASM_MACROS
+/*! [Begin] no source code translation  */
 
 #define ACPI_ASM_MACROS
 #define causeinterrupt(level)
 #define BREAKPOINT3
-#define disable()
-#define enable()
-#define halt()
-#define ACPI_ACQUIRE_GLOBAL_LOCK(GLptr, Acq)
-#define ACPI_RELEASE_GLOBAL_LOCK(GLptr, Acq)
-
-#endif /* ACPI_ASM_MACROS */
+#define ACPI_DISABLE_IRQS()
+#define ACPI_ENABLE_IRQS()
+#define ACPI_FLUSH_CPU_CACHE()
 
 
+/*
+ * For Acpi applications, we don't want to try to access the global lock
+ */
 #ifdef ACPI_APPLICATION
+#define ACPI_ACQUIRE_GLOBAL_LOCK(GLptr, Acq)       if (AcpiGbl_GlobalLockPresent) {Acq = 0xFF;} else {Acq = 0;}
+#define ACPI_RELEASE_GLOBAL_LOCK(GLptr, Pnd)       if (AcpiGbl_GlobalLockPresent) {Pnd = 0xFF;} else {Pnd = 0;}
+#else
 
-/* Don't want software interrupts within a ring3 application */
+#define ACPI_ACQUIRE_GLOBAL_LOCK(GLptr, Acq)
 
-#undef causeinterrupt
-#undef BREAKPOINT3
-#define causeinterrupt(level)
-#define BREAKPOINT3
+#define ACPI_RELEASE_GLOBAL_LOCK(GLptr, Pnd)
+
 #endif
 
 
-/******************************************************************************
- *
- * Compiler-specific
- *
- *****************************************************************************/
-
-/* this has been moved to compiler-specific headers, which are included from the
-   platform header. */
-
-
-#endif /* __ACENV_H__ */
+#endif /* __ACWIN_H__ */
