@@ -1,4 +1,4 @@
-/*	$NetBSD: hex.c,v 1.1 2002/06/20 10:30:37 itojun Exp $	*/
+/*	$NetBSD: hex.c,v 1.1.1.1 2002/06/20 10:30:37 itojun Exp $	*/
 
 /*
  * Copyright (c) 2001 by Internet Software Consortium.

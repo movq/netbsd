@@ -1,4 +1,4 @@
-/*	$NetBSD: res_private.h,v 1.1 2002/06/20 10:30:43 itojun Exp $	*/
+/*	$NetBSD: res_private.h,v 1.1.1.1 2002/06/20 10:30:43 itojun Exp $	*/
 
 #ifndef res_private_h
 #define res_private_h
