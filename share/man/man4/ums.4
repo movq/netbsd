@@ -1,4 +1,4 @@
-.\" $NetBSD: ums.4,v 1.2 1998/07/13 14:56:08 augustss Exp $
+.\" $NetBSD: ums.4,v 1.3 1998/07/26 17:50:13 augustss Exp $
 .\" Copyright (c) 1998 The NetBSD Foundation, Inc.
 .\" All rights reserved.
 .\"
@@ -39,17 +39,18 @@
 .Nd USB mouse support
 .Sh SYNOPSIS
 .Cd "ums*     at uhub? port ?"
+.Cd "wsmouse* at ums?"
 .Pp
 .Sh DESCRIPTION
 The
 .Nm
 driver provides support for USB mice.
-The driver converts the USB mouse protocol into the
-.Xr busmouse 4
-protocol. 
+Access to the mouse is through the
+.Xr wscons 4
+driver.
 .Sh SEE ALSO
-.Xr busmouse 4 ,
-.Xr usb 4
+.Xr usb 4 ,
+.Xr wsmouse 4
 .Sh HISTORY
 The
 .Nm
