@@ -1,6 +1,6 @@
 /*-
- * Copyright (c) 1991 The Regents of the University of California.
- * All rights reserved.
+ * Copyright (c) 1991, 1993
+ *	The Regents of the University of California.  All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Edward Sze-Tyan Wang.
@@ -35,13 +35,13 @@
  */
 
 #ifndef lint
-char copyright[] =
-"@(#) Copyright (c) 1991 The Regents of the University of California.\n\
- All rights reserved.\n";
+static char copyright[] =
+"@(#) Copyright (c) 1991, 1993\n\
+	The Regents of the University of California.  All rights reserved.\n";
 #endif /* not lint */
 
 #ifndef lint
-static char sccsid[] = "@(#)tail.c	5.7 (Berkeley) 2/12/92";
+static char sccsid[] = "@(#)tail.c	8.1 (Berkeley) 6/6/93";
 #endif /* not lint */
 
 #include <sys/types.h>
@@ -59,15 +59,16 @@ char *fname;
 static void obsolete __P((char **));
 static void usage __P((void));
 
+int
 main(argc, argv)
 	int argc;
-	char **argv;
+	char *argv[];
 {
 	struct stat sb;
 	FILE *fp;
 	long off;
 	enum STYLE style;
-	int ch;
+	int ch, first;
 	char *p;
 
 	/*
@@ -82,25 +83,25 @@ main(argc, argv)
 	 * number of characters in reverse order.  Finally, the default for
 	 * -r is the entire file, not 10 lines.
 	 */
-#define	ARG(units, forward, backward) { \
-	if (style) \
-		usage(); \
-	off = strtol(optarg, &p, 10) * (units); \
-	if (*p) \
-		err("illegal offset -- %s", optarg); \
-	switch(optarg[0]) { \
-	case '+': \
-		if (off) \
-			off -= (units); \
-			style = (forward); \
-		break; \
-	case '-': \
-		off = -off; \
-		/* FALLTHROUGH */ \
-	default: \
-		style = (backward); \
-		break; \
-	} \
+#define	ARG(units, forward, backward) {					\
+	if (style)							\
+		usage();						\
+	off = strtol(optarg, &p, 10) * (units);				\
+	if (*p)								\
+		err(1, "illegal offset -- %s", optarg);			\
+	switch(optarg[0]) {						\
+	case '+':							\
+		if (off)						\
+			off -= (units);					\
+			style = (forward);				\
+		break;							\
+	case '-':							\
+		off = -off;						\
+		/* FALLTHROUGH */					\
+	default:							\
+		style = (backward);					\
+		break;							\
+	}								\
 }
 
 	obsolete(argv);
@@ -129,6 +130,9 @@ main(argc, argv)
 	argc -= optind;
 	argv += optind;
 
+	if (fflag && argc > 1)
+		err(1, "-f option only appropriate for a single file");
+
 	/*
 	 * If displaying in reverse, don't permit follow option, and convert
 	 * style values.
@@ -138,7 +142,7 @@ main(argc, argv)
 			usage();
 		if (style == FBYTES)
 			style = RBYTES;
-		if (style == FLINES)
+		else if (style == FLINES)
 			style = RLINES;
 	}
 
@@ -155,30 +159,49 @@ main(argc, argv)
 			style = RLINES;
 		}
 
-	if (fname = *argv) {
-		if ((fp = fopen(fname, "r")) == NULL)
-			ierr();
-	} else {
-		fp = stdin;
+	if (*argv)
+		for (first = 1; fname = *argv++;) {
+			if ((fp = fopen(fname, "r")) == NULL ||
+			    fstat(fileno(fp), &sb)) {
+				ierr();
+				continue;
+			}
+			if (argc > 1) {
+				(void)printf("%s==> %s <==\n",
+				    first ? "" : "\n", fname);
+				first = 0;
+				(void)fflush(stdout);
+			}
+
+			if (rflag)
+				reverse(fp, style, off, &sb);
+			else
+				forward(fp, style, off, &sb);
+			(void)fclose(fp);
+		}
+	else {
 		fname = "stdin";
+
+		if (fstat(fileno(stdin), &sb)) {
+			ierr();
+			exit(1);
+		}
+
+		/*
+		 * Determine if input is a pipe.  4.4BSD will set the SOCKET
+		 * bit in the st_mode field for pipes.  Fix this then.
+		 */
+		if (lseek(fileno(stdin), (off_t)0, SEEK_CUR) == -1 &&
+		    errno == ESPIPE) {
+			errno = 0;
+			fflag = 0;		/* POSIX.2 requires this. */
+		}
+
+		if (rflag)
+			reverse(stdin, style, off, &sb);
+		else
+			forward(stdin, style, off, &sb);
 	}
-
-	if (fstat(fileno(fp), &sb))
-		ierr();
-
-	/*
-	 * Determine if input is a pipe.  4.4BSD will set the SOCKET
-	 * bit in the st_mode field for pipes.  Fix this then.
-	 */
-	if (lseek(fileno(fp), 0L, SEEK_CUR) == -1 && errno == ESPIPE) {
-		errno = 0;
-		fflag = 0;		/* POSIX.2 requires this. */
-	}
-
-	if (rflag)
-		reverse(fp, style, off, &sb);
-	else
-		forward(fp, style, off, &sb);
 	exit(rval);
 }
 
@@ -189,7 +212,7 @@ main(argc, argv)
  */
 static void
 obsolete(argv)
-	char **argv;
+	char *argv[];
 {
 	register char *ap, *p, *t;
 	int len;
@@ -211,7 +234,7 @@ obsolete(argv)
 			/* Malloc space for dash, new option and argument. */
 			len = strlen(*argv);
 			if ((start = p = malloc(len + 3)) == NULL)
-				err("%s", strerror(errno));
+				err(1, "%s", strerror(errno));
 			*p++ = '-';
 
 			/*
@@ -241,7 +264,7 @@ obsolete(argv)
 				*p++ = 'n';
 				break;
 			default:
-				err("illegal option -- %s", *argv);
+				err(1, "illegal option -- %s", *argv);
 			}
 			*p++ = *argv[0];
 			(void)strcpy(p, ap);
@@ -274,6 +297,6 @@ static void
 usage()
 {
 	(void)fprintf(stderr,
-	    "usage: tail [-f | -r] [-b # | -c # | -n #] [file]\n");
+	    "usage: tail [-f | -r] [-b # | -c # | -n #] [file ...]\n");
 	exit(1);
 }

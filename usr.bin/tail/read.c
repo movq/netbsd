@@ -1,6 +1,6 @@
 /*-
- * Copyright (c) 1991 The Regents of the University of California.
- * All rights reserved.
+ * Copyright (c) 1991, 1993
+ *	The Regents of the University of California.  All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Edward Sze-Tyan Wang.
@@ -35,7 +35,7 @@
  */
 
 #ifndef lint
-static char sccsid[] = "@(#)read.c	5.1 (Berkeley) 7/21/91";
+static char sccsid[] = "@(#)read.c	8.1 (Berkeley) 6/6/93";
 #endif /* not lint */
 
 #include <sys/types.h>
@@ -61,7 +61,7 @@ static char sccsid[] = "@(#)read.c	5.1 (Berkeley) 7/21/91";
 void
 bytes(fp, off)
 	register FILE *fp;
-	long off;
+	off_t off;
 {
 	register int ch, len, tlen;
 	register char *ep, *p, *t;
@@ -69,7 +69,7 @@ bytes(fp, off)
 	char *sp;
 
 	if ((sp = p = malloc(off)) == NULL)
-		err("%s", strerror(errno));
+		err(1, "%s", strerror(errno));
 
 	for (wrap = 0, ep = p + off; (ch = getc(fp)) != EOF;) {
 		*p = ch;
@@ -78,8 +78,10 @@ bytes(fp, off)
 			p = sp;
 		}
 	}
-	if (ferror(fp))
+	if (ferror(fp)) {
 		ierr();
+		return;
+	}
 
 	if (rflag) {
 		for (t = p - 1, len = 0; t >= sp; --t, ++len)
@@ -126,7 +128,7 @@ bytes(fp, off)
 void
 lines(fp, off)
 	register FILE *fp;
-	long off;
+	off_t off;
 {
 	struct {
 		u_int blen;
@@ -135,12 +137,11 @@ lines(fp, off)
 	} *lines;
 	register int ch;
 	register char *p;
-	u_int blen, cnt, recno;
-	int wrap;
+	int blen, cnt, recno, wrap;
 	char *sp;
 
 	if ((lines = malloc(off * sizeof(*lines))) == NULL)
-		err("%s", strerror(errno));
+		err(1, "%s", strerror(errno));
 
 	sp = NULL;
 	blen = cnt = recno = wrap = 0;
@@ -148,7 +149,7 @@ lines(fp, off)
 	while ((ch = getc(fp)) != EOF) {
 		if (++cnt > blen) {
 			if ((sp = realloc(sp, blen += 1024)) == NULL)
-				err("%s", strerror(errno));
+				err(1, "%s", strerror(errno));
 			p = sp + cnt - 1;
 		}
 		*p++ = ch;
@@ -157,7 +158,7 @@ lines(fp, off)
 				lines[recno].blen = cnt + 256;
 				if ((lines[recno].l = realloc(lines[recno].l,
 				    lines[recno].blen)) == NULL)
-					err("%s", strerror(errno));
+					err(1, "%s", strerror(errno));
 			}
 			bcopy(sp, lines[recno].l, lines[recno].len = cnt);
 			cnt = 0;
@@ -168,8 +169,10 @@ lines(fp, off)
 			}
 		}
 	}
-	if (ferror(fp))
+	if (ferror(fp)) {
 		ierr();
+		return;
+	}
 	if (cnt) {
 		lines[recno].l = sp;
 		lines[recno].len = cnt;
