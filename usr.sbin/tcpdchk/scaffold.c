@@ -1,18 +1,11 @@
-/*	$NetBSD: scaffold.c,v 1.8 2002/06/06 21:28:50 itojun Exp $	*/
-
  /*
   * Routines for testing only. Not really industrial strength.
   * 
   * Author: Wietse Venema, Eindhoven University of Technology, The Netherlands.
   */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccs_id[] = "@(#) scaffold.c 1.6 97/03/21 19:27:24";
-#else
-__RCSID("$NetBSD: scaffold.c,v 1.8 2002/06/06 21:28:50 itojun Exp $");
-#endif
+static char sccs_id[] = "@(#) scaffold.c 1.5 95/01/03 09:13:48";
 #endif
 
 /* System libraries. */
@@ -27,11 +20,12 @@ __RCSID("$NetBSD: scaffold.c,v 1.8 2002/06/06 21:28:50 itojun Exp $");
 #include <syslog.h>
 #include <setjmp.h>
 #include <string.h>
-#include <stdlib.h>
 
 #ifndef INADDR_NONE
 #define	INADDR_NONE	(-1)		/* XXX should be 0xffffffff */
 #endif
+
+extern char *malloc();
 
 /* Application-specific. */
 
@@ -43,31 +37,86 @@ __RCSID("$NetBSD: scaffold.c,v 1.8 2002/06/06 21:28:50 itojun Exp $");
   */
 int     allow_severity = SEVERITY;
 int     deny_severity = LOG_WARNING;
-extern int rfc931_timeout; /* = RFC931_TIMEOUT; */
+int     rfc931_timeout = RFC931_TIMEOUT;
+
+/* dup_hostent - create hostent in one memory block */
+
+static struct hostent *dup_hostent(hp)
+struct hostent *hp;
+{
+    struct hostent_block {
+	struct hostent host;
+	char   *addr_list[1];
+    };
+    struct hostent_block *hb;
+    int     count;
+    char   *data;
+    char   *addr;
+
+    for (count = 0; hp->h_addr_list[count] != 0; count++)
+	 /* void */ ;
+
+    if ((hb = (struct hostent_block *) malloc(sizeof(struct hostent_block)
+			 + (hp->h_length + sizeof(char *)) * count)) == 0) {
+	fprintf(stderr, "Sorry, out of memory\n");
+	exit(1);
+    }
+    memset((char *) &hb->host, 0, sizeof(hb->host));
+    hb->host.h_length = hp->h_length;
+    hb->host.h_addr_list = hb->addr_list;
+    hb->host.h_addr_list[count] = 0;
+    data = (char *) (hb->host.h_addr_list + count + 1);
+
+    for (count = 0; (addr = hp->h_addr_list[count]) != 0; count++) {
+	hb->host.h_addr_list[count] = data + hp->h_length * count;
+	memcpy(hb->host.h_addr_list[count], addr, hp->h_length);
+    }
+    return (&hb->host);
+}
 
 /* find_inet_addr - find all addresses for this host, result to free() */
 
-struct addrinfo *find_inet_addr(host, flags)
+struct hostent *find_inet_addr(host)
 char   *host;
-int	flags;
 {
-    struct addrinfo hints, *res;
-    int error;
+    struct in_addr addr;
+    struct hostent *hp;
+    static struct hostent h;
+    static char *addr_list[2];
 
-    memset(&hints, 0, sizeof(hints));
-    hints.ai_socktype = SOCK_DGRAM;
-    hints.ai_flags = AI_CANONNAME | flags;
-    error = getaddrinfo(host, "0", &hints, &res);
-    if (error) {
-	tcpd_warn("%s: %s", host, gai_strerror(error));
+    /*
+     * Host address: translate it to internal form.
+     */
+    if ((addr.s_addr = dot_quad_addr(host)) != INADDR_NONE) {
+	h.h_addr_list = addr_list;
+	h.h_addr_list[0] = (char *) &addr;
+	h.h_length = sizeof(addr);
+	return (dup_hostent(&h));
+    }
+
+    /*
+     * Map host name to a series of addresses. Watch out for non-internet
+     * forms or aliases. The NOT_INADDR() is here in case gethostbyname() has
+     * been "enhanced" to accept numeric addresses. Make a copy of the
+     * address list so that later gethostbyXXX() calls will not clobber it.
+     */
+    if (NOT_INADDR(host) == 0) {
+	tcpd_warn("%s: not an internet address", host);
 	return (0);
     }
-
-    if (res->ai_canonname && STR_NE(host, res->ai_canonname)) {
-	tcpd_warn("%s: hostname alias", host);
-	tcpd_warn("(official name: %.*s)", STRING_LENGTH, res->ai_canonname);
+    if ((hp = gethostbyname(host)) == 0) {
+	tcpd_warn("%s: host not found", host);
+	return (0);
     }
-    return (res);
+    if (hp->h_addrtype != AF_INET) {
+	tcpd_warn("%d: not an internet host", hp->h_addrtype);
+	return (0);
+    }
+    if (STR_NE(host, hp->h_name)) {
+	tcpd_warn("%s: hostname alias", host);
+	tcpd_warn("(official name: %s)", hp->h_name);
+    }
+    return (dup_hostent(hp));
 }
 
 /* check_dns - give each address thorough workout, return address count */
@@ -76,22 +125,20 @@ int     check_dns(host)
 char   *host;
 {
     struct request_info request;
-    struct sockaddr_storage ss;
-    struct addrinfo *res0, *res;
+    struct sockaddr_in sin;
+    struct hostent *hp;
     int     count;
+    char   *addr;
 
-    if ((res0 = find_inet_addr(host, 0)) == NULL)
+    if ((hp = find_inet_addr(host)) == 0)
 	return (0);
-    memset(&ss, 0, sizeof(ss));
-    request_init(&request, RQ_CLIENT_SIN, &ss, 0);
+    request_init(&request, RQ_CLIENT_SIN, &sin, 0);
     sock_methods(&request);
+    memset((char *) &sin, 0, sizeof(sin));
+    sin.sin_family = AF_INET;
 
-    count = 0;
-    for (res = res0; res; res = res->ai_next) {
-	count++;
-	if (res->ai_addrlen > sizeof(ss))
-	    continue;
-	memcpy(&ss, res->ai_addr, res->ai_addrlen);
+    for (count = 0; (addr = hp->h_addr_list[count]) != 0; count++) {
+	memcpy((char *) &sin.sin_addr, addr, sizeof(sin.sin_addr));
 
 	/*
 	 * Force host name and address conversions. Use the request structure
@@ -103,9 +150,8 @@ char   *host;
 	if (STR_EQ(eval_hostname(request.client), unknown))
 	    tcpd_warn("host address %s->name lookup failed",
 		      eval_hostaddr(request.client));
-	    tcpd_warn("%s %s", eval_hostname(request.client), unknown);
     }
-    freeaddrinfo(res0);
+    free((char *) hp);
     return (count);
 }
 
@@ -130,7 +176,6 @@ struct request_info *request;
     exit(0);
 }
 
-#if 0
 /* dummy function  to intercept the real rfc931() */
 
 /* ARGSUSED */
@@ -140,7 +185,6 @@ struct request_info *request;
 {
     strcpy(request->user, unknown);
 }
-#endif
 
 /* check_path - examine accessibility */
 

@@ -45,7 +45,8 @@ typedef struct TOK822 {
 #define	TOK822_DOMLIT	259		/* stuff between [] not nesting */
 #define	TOK822_ADDR	260		/* actually a token group */
 #define TOK822_STARTGRP	261		/* start of named group */
-#define TOK822_MAXTOK	261
+#define	TOK822_COMMENT_TEXT 262		/* comment text */
+#define TOK822_MAXTOK	262
 
  /*
   * tok822_node.c
@@ -74,14 +75,11 @@ extern TOK822 **tok822_grep(TOK822 *, int);
  /*
   * tok822_parse.c
   */
-extern TOK822 *tok822_scan_limit(const char *, TOK822 **, int);
+extern TOK822 *tok822_scan(const char *, TOK822 **);
 extern TOK822 *tok822_scan_addr(const char *);
-extern TOK822 *tok822_parse_limit(const char *, int);
+extern TOK822 *tok822_parse(const char *);
 extern VSTRING *tok822_externalize(VSTRING *, TOK822 *, int);
 extern VSTRING *tok822_internalize(VSTRING *, TOK822 *, int);
-
-#define tok822_scan(cp, ptr)	tok822_scan_limit((cp), (ptr), 0)
-#define tok822_parse(cp)	tok822_parse_limit((cp), 0)
 
 #define TOK822_STR_NONE	(0)
 #define TOK822_STR_WIPE	(1<<0)

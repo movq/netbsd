@@ -6,18 +6,9 @@
 /* SYNOPSIS
 /*	#include <tok822.h>
 /*
-/*	TOK822 *tok822_scan_limit(str, tailp, limit)
-/*	const char *str;
-/*	TOK822	**tailp;
-/*	int	limit;
-/*
 /*	TOK822 *tok822_scan(str, tailp)
 /*	const char *str;
 /*	TOK822	**tailp;
-/*
-/*	TOK822	*tok822_parse_limit(str, limit)
-/*	const char *str;
-/*	int	limit;
 /*
 /*	TOK822	*tok822_parse(str)
 /*	const char *str;
@@ -46,18 +37,10 @@
 /*	to a linear token list. The \fItailp\fR argument is a null pointer
 /*	or receives the pointer value of the last result list element.
 /*
-/*	tok822_scan_limit() implements tok822_scan(), which is a macro.
-/*	The \fIlimit\fR argument is either zero or an upper bound on the
-/*	number of tokens produced.
-/*
 /*	tok822_parse() converts the external-form address list in
 /*	\fIstr\fR to the corresponding token tree. The parser is permissive
 /*	and will not throw away information that it does not understand.
 /*	The parser adds missing commas between addresses.
-/*
-/*	tok822_parse_limit() implements tok822_parse(), which is a macro.
-/*	The \fIlimit\fR argument is either zero or an upper bound on the
-/*	number of tokens produced.
 /*
 /*	tok822_scan_addr() converts the external-form string in
 /*	\fIstr\fR to an address token tree. This is just string to
@@ -124,8 +107,6 @@
 
 /* Global library. */
 
-#include "lex_822.h"
-#include "quote_822_local.h"
 #include "tok822.h"
 
  /*
@@ -139,7 +120,7 @@
 	    } else if (!(cond)) { \
 		break; \
 	    } \
-	    VSTRING_ADDCH(t->vstr, IS_SPACE_TAB_CR_LF(c) ? ' ' : c); \
+	    VSTRING_ADDCH(t->vstr, ISSPACE(c) ? ' ' : c); \
 	    s++; \
 	} \
 	VSTRING_TERMINATE(t->vstr); \
@@ -173,9 +154,10 @@
  /*
   * Single-character operators. We include the % and ! operators because not
   * all the world is RFC822. XXX Make this operator list configurable when we
-  * have a real rewriting language. Include | for aliases file parsing.
+  * have a real rewriting language.
   */
-static char tok822_opchar[] = "|%!" LEX_822_SPECIALS;
+static char tok822_opchar[] = "|\"(),.:;<>@[]%!";
+
 static void tok822_quote_atom(TOK822 *);
 static const char *tok822_comment(TOK822 *, const char *);
 static TOK822 *tok822_group(int, TOK822 *, TOK822 *, int);
@@ -210,7 +192,12 @@ VSTRING *tok822_internalize(VSTRING *vp, TOK822 *tree, int flags)
 	    tok822_internalize(vp, tp->head, TOK822_STR_NONE);
 	    break;
 	case TOK822_COMMENT:
+	    VSTRING_ADDCH(vp, '(');
+	    tok822_internalize(vp, tp->head, TOK822_STR_NONE);
+	    VSTRING_ADDCH(vp, ')');
+	    break;
 	case TOK822_ATOM:
+	case TOK822_COMMENT_TEXT:
 	case TOK822_QSTRING:
 	    vstring_strcat(vp, vstring_str(tp->vstr));
 	    break;
@@ -239,7 +226,6 @@ VSTRING *tok822_internalize(VSTRING *vp, TOK822 *tree, int flags)
 
 VSTRING *tok822_externalize(VSTRING *vp, TOK822 *tree, int flags)
 {
-    VSTRING *tmp;
     TOK822 *tp;
 
     if (flags & TOK822_STR_WIPE)
@@ -254,24 +240,19 @@ VSTRING *tok822_externalize(VSTRING *vp, TOK822 *tree, int flags)
 		continue;
 	    }
 	    break;
-
-	    /*
-	     * XXX In order to correctly externalize an address, it is not
-	     * sufficient to quote individual atoms. There are higher-level
-	     * rules that say when an address localpart needs to be quoted.
-	     * We wing it with the quote_822_local() routine, which ignores
-	     * the issue of atoms in the domain part that would need quoting.
-	     */
 	case TOK822_ADDR:
-	    tmp = vstring_alloc(100);
-	    tok822_internalize(tmp, tp->head, TOK822_STR_TERM);
-	    quote_822_local_flags(vp, vstring_str(tmp),
-				  QUOTE_FLAG_8BITCLEAN | QUOTE_FLAG_APPEND);
-	    vstring_free(tmp);
+	    tok822_externalize(vp, tp->head, TOK822_STR_NONE);
 	    break;
 	case TOK822_ATOM:
-	case TOK822_COMMENT:
 	    vstring_strcat(vp, vstring_str(tp->vstr));
+	    break;
+	case TOK822_COMMENT:
+	    VSTRING_ADDCH(vp, '(');
+	    tok822_externalize(vp, tp->head, TOK822_STR_NONE);
+	    VSTRING_ADDCH(vp, ')');
+	    break;
+	case TOK822_COMMENT_TEXT:
+	    tok822_copy_quoted(vp, vstring_str(tp->vstr), "()\\\r\n");
 	    break;
 	case TOK822_QSTRING:
 	    VSTRING_ADDCH(vp, '"');
@@ -331,25 +312,17 @@ static int tok822_append_space(TOK822 *tp)
     return (NON_OPERATOR(tp) && NON_OPERATOR(next));
 }
 
-/* tok822_scan_limit - tokenize string */
+/* tok822_scan - tokenize string */
 
-TOK822 *tok822_scan_limit(const char *str, TOK822 **tailp, int tok_count_limit)
+TOK822 *tok822_scan(const char *str, TOK822 **tailp)
 {
     TOK822 *head = 0;
     TOK822 *tail = 0;
     TOK822 *tp;
     int     ch;
-    int     tok_count = 0;
 
-    /*
-     * XXX 2822 new feature: Section 4.1 allows "." to appear in a phrase (to
-     * allow for forms such as: Johnny B. Goode <johhny@domain.org>. I cannot
-     * handle that at the tokenizer level - it is not context sensitive. And
-     * to fix this at the parser level requires radical changes to preserve
-     * white space as part of the token stream. Thanks a lot, people.
-     */
     while ((ch = *(unsigned char *) str++) != 0) {
-	if (IS_SPACE_TAB_CR_LF(ch))
+	if (ISSPACE(ch))
 	    continue;
 	if (ch == '(') {
 	    tp = tok822_alloc(TOK822_COMMENT, (char *) 0);
@@ -365,7 +338,7 @@ TOK822 *tok822_scan_limit(const char *str, TOK822 **tailp, int tok_count_limit)
 	} else {
 	    tp = tok822_alloc(TOK822_ATOM, (char *) 0);
 	    str -= 1;				/* \ may be first */
-	    COLLECT(tp, str, ch, !IS_SPACE_TAB_CR_LF(ch) && !strchr(tok822_opchar, ch));
+	    COLLECT(tp, str, ch, !ISSPACE(ch) && !strchr(tok822_opchar, ch));
 	    tok822_quote_atom(tp);
 	}
 	if (head == 0) {
@@ -375,17 +348,15 @@ TOK822 *tok822_scan_limit(const char *str, TOK822 **tailp, int tok_count_limit)
 	} else {
 	    tail = tok822_append(tail, tp);
 	}
-	if (tok_count_limit > 0 && ++tok_count >= tok_count_limit)
-	    break;
     }
     if (tailp)
 	*tailp = tail;
     return (head);
 }
 
-/* tok822_parse_limit - translate external string to token tree */
+/* tok822_parse - translate external string to token tree */
 
-TOK822 *tok822_parse_limit(const char *str, int tok_count_limit)
+TOK822 *tok822_parse(const char *str)
 {
     TOK822 *head;
     TOK822 *tail;
@@ -401,7 +372,7 @@ TOK822 *tok822_parse_limit(const char *str, int tok_count_limit)
      * token list that contains all tokens, we can always convert back to
      * string form.
      */
-    if ((first_token = tok822_scan_limit(str, &last_token, tok_count_limit)) == 0)
+    if ((first_token = tok822_scan(str, &last_token)) == 0)
 	return (0);
 
     /*
@@ -483,7 +454,7 @@ static void tok822_quote_atom(TOK822 *tp)
      * (and still passing it on as 8-bit data) we leave 8-bit data alone.
      */
     for (cp = vstring_str(tp->vstr); (ch = *(unsigned char *) cp) != 0; cp++) {
-	if ( /* !ISASCII(ch) || */ ch == ' '
+	if ( /* !ISASCII(ch) || */ ISSPACE(ch)
 	    || ISCNTRL(ch) || strchr(tok822_opchar, ch)) {
 	    tp->type = TOK822_QSTRING;
 	    break;
@@ -495,33 +466,36 @@ static void tok822_quote_atom(TOK822 *tp)
 
 static const char *tok822_comment(TOK822 *tp, const char *str)
 {
-    int     level = 1;
+    TOK822 *tc = 0;
     int     ch;
 
-    /*
-     * XXX We cheat by storing comments in their external form. Otherwise it
-     * would be a royal pain to preserve \ before (. That would require a
-     * recursive parser; the easy to implement stack-based recursion would be
-     * too expensive.
-     */
-    VSTRING_ADDCH(tp->vstr, '(');
+#define COMMENT_TEXT_TOKEN(t) ((t) && (t)->type == TOK822_COMMENT_TEXT)
+
+#define APPEND_NEW_TOKEN(tp, type, strval) \
+	tok822_sub_append(tp, tok822_alloc(type, strval))
 
     while ((ch = *(unsigned char *) str) != 0) {
-	VSTRING_ADDCH(tp->vstr, ch);
 	str++;
 	if (ch == '(') {			/* comments can nest! */
-	    level++;
+	    if (COMMENT_TEXT_TOKEN(tc))
+		VSTRING_TERMINATE(tc->vstr);
+	    tc = APPEND_NEW_TOKEN(tp, TOK822_COMMENT, (char *) 0);
+	    str = tok822_comment(tc, str);
 	} else if (ch == ')') {
-	    if (--level == 0)
-		break;
-	} else if (ch == '\\') {
-	    if ((ch = *(unsigned char *) str) == 0)
-		break;
-	    VSTRING_ADDCH(tp->vstr, ch);
-	    str++;
+	    break;
+	} else {
+	    if (ch == '\\') {
+		if ((ch = *(unsigned char *) str) == 0)
+		    break;
+		str++;
+	    }
+	    if (!COMMENT_TEXT_TOKEN(tc))
+		tc = APPEND_NEW_TOKEN(tp, TOK822_COMMENT_TEXT, (char *) 0);
+	    VSTRING_ADDCH(tc->vstr, ch);
 	}
     }
-    VSTRING_TERMINATE(tp->vstr);
+    if (COMMENT_TEXT_TOKEN(tc))
+	VSTRING_TERMINATE(tc->vstr);
     return (str);
 }
 
@@ -566,7 +540,7 @@ TOK822 *tok822_scan_addr(const char *addr)
 
 #include <unistd.h>
 #include <vstream.h>
-#include <readlline.h>
+#include <vstring_vstream.h>
 
 /* tok822_print - display token */
 
@@ -580,11 +554,14 @@ static void tok822_print(TOK822 *list, int indent)
 	} else if (tp->type == TOK822_ADDR) {
 	    vstream_printf("%*s %s\n", indent, "", "address");
 	    tok822_print(tp->head, indent + 2);
+	} else if (tp->type == TOK822_COMMENT) {
+	    vstream_printf("%*s %s\n", indent, "", "comment");
+	    tok822_print(tp->head, indent + 2);
 	} else if (tp->type == TOK822_STARTGRP) {
 	    vstream_printf("%*s %s\n", indent, "", "group \":\"");
 	} else {
 	    vstream_printf("%*s %s \"%s\"\n", indent, "",
-			   tp->type == TOK822_COMMENT ? "comment" :
+			   tp->type == TOK822_COMMENT_TEXT ? "text" :
 			   tp->type == TOK822_ATOM ? "atom" :
 			   tp->type == TOK822_QSTRING ? "quoted string" :
 			   tp->type == TOK822_DOMLIT ? "domain literal" :
@@ -600,16 +577,10 @@ int     main(int unused_argc, char **unused_argv)
     TOK822 *list;
     VSTRING *buf = vstring_alloc(100);
 
-#define TEST_TOKEN_LIMIT 20
-
-    while (readlline(buf, VSTREAM_IN, (int *) 0)) {
-	while (VSTRING_LEN(buf) > 0 && vstring_end(buf)[-1] == '\n') {
-	    vstring_end(buf)[-1] = 0;
-	    vstring_truncate(buf, VSTRING_LEN(buf) - 1);
-	}
+    while (vstring_fgets_nonl(buf, VSTREAM_IN)) {
 	if (!isatty(vstream_fileno(VSTREAM_IN)))
 	    vstream_printf(">>>%s<<<\n\n", vstring_str(buf));
-	list = tok822_parse_limit(vstring_str(buf), TEST_TOKEN_LIMIT);
+	list = tok822_parse(vstring_str(buf));
 	vstream_printf("Parse tree:\n");
 	tok822_print(list, 0);
 	vstream_printf("\n");

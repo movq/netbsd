@@ -106,16 +106,10 @@ static void postcat(VSTREAM *fp, VSTRING *buffer)
 	    vstream_printf("defer_warn_time: %s", asctime(localtime(&time)));
 	    break;
 	case REC_TYPE_CONT:
-	    if (msg_verbose)
-		vstream_printf("non-final line fragment: %s\n", STR(buffer));
-	    else
-		vstream_printf("%s", STR(buffer));
+	    vstream_printf("%s", STR(buffer));
 	    break;
 	case REC_TYPE_NORM:
-	    if (msg_verbose)
-		vstream_printf("final line fragment: %s\n", STR(buffer));
-	    else
-		vstream_printf("%s\n", STR(buffer));
+	    vstream_printf("%s\n", STR(buffer));
 	    break;
 	case REC_TYPE_MESG:
 	    vstream_printf("*** MESSAGE CONTENTS %s ***\n", VSTREAM_PATH(fp));

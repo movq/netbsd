@@ -1,5 +1,3 @@
-/*	$NetBSD: shell_cmd.c,v 1.5 2000/10/04 16:24:49 sommerfeld Exp $	*/
-
  /*
   * shell_cmd() takes a shell command after %<character> substitutions. The
   * command is executed by a /bin/sh child process, with standard input,
@@ -10,27 +8,20 @@
   * Author: Wietse Venema, Eindhoven University of Technology, The Netherlands.
   */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
 static char sccsid[] = "@(#) shell_cmd.c 1.5 94/12/28 17:42:44";
-#else
-__RCSID("$NetBSD: shell_cmd.c,v 1.5 2000/10/04 16:24:49 sommerfeld Exp $");
-#endif
 #endif
 
 /* System libraries. */
 
 #include <sys/types.h>
 #include <sys/param.h>
-#include <sys/wait.h>
 #include <signal.h>
 #include <stdio.h>
-#include <stdlib.h>
-#include <unistd.h>
-#include <fcntl.h>
 #include <syslog.h>
 #include <string.h>
+
+extern void exit();
 
 /* Local stuff. */
 
@@ -38,7 +29,7 @@ __RCSID("$NetBSD: shell_cmd.c,v 1.5 2000/10/04 16:24:49 sommerfeld Exp $");
 
 /* Forward declarations. */
 
-static void do_child __P((char *));
+static void do_child();
 
 /* shell_cmd - execute shell command */
 
@@ -71,6 +62,7 @@ char   *command;
 static void do_child(command)
 char   *command;
 {
+    char   *error;
     int     tmp_fd;
 
     /*
@@ -85,14 +77,16 @@ char   *command;
     for (tmp_fd = 0; tmp_fd < 3; tmp_fd++)
 	(void) close(tmp_fd);
     if (open("/dev/null", 2) != 0) {
-	tcpd_warn("open /dev/null: %m");
+	error = "open /dev/null: %m";
     } else if (dup(0) != 1 || dup(0) != 2) {
-	tcpd_warn("dup: %m");
+	error = "dup: %m";
     } else {
 	(void) execl("/bin/sh", "sh", "-c", command, (char *) 0);
-	tcpd_warn("execl /bin/sh: %m");
+	error = "execl /bin/sh: %m";
     }
 
     /* Something went wrong. We MUST terminate the child process. */
+
+    tcpd_warn(error);
     _exit(0);
 }

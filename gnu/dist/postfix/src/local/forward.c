@@ -120,18 +120,12 @@ static FORWARD_INFO *forward_open(char *sender)
      * Contact the cleanup service and save the new mail queue id. Request
      * that the cleanup service bounces bad messages to the sender so that we
      * can avoid the trouble of bounce management.
-     * 
-     * In case you wonder what kind of bounces, examples are "too many hops",
-     * "message too large", perhaps some others. The reason not to bounce
-     * ourselves is that we don't really know who the recipients are.
      */
-    cleanup = mail_connect(MAIL_CLASS_PUBLIC, var_cleanup_service, BLOCKING);
+    cleanup = mail_connect(MAIL_CLASS_PRIVATE, MAIL_SERVICE_CLEANUP, BLOCKING);
     if (cleanup == 0)
 	return (0);
     close_on_exec(vstream_fileno(cleanup), CLOSE_ON_EXEC);
-    if (attr_scan(cleanup, ATTR_FLAG_STRICT,
-		  ATTR_TYPE_STR, MAIL_ATTR_QUEUEID, buffer,
-		  ATTR_TYPE_END) != 1) {
+    if (mail_scan(cleanup, "%s", buffer) != 1) {
 	vstream_fclose(cleanup);
 	return (0);
     }
@@ -139,9 +133,7 @@ static FORWARD_INFO *forward_open(char *sender)
     info->cleanup = cleanup;
     info->queue_id = mystrdup(vstring_str(buffer));
     info->posting_time = time((time_t *) 0);
-    attr_print(cleanup, ATTR_FLAG_NONE,
-	       ATTR_TYPE_NUM, MAIL_ATTR_FLAGS, CLEANUP_FLAG_BOUNCE,
-	       ATTR_TYPE_END);
+    mail_print(cleanup, "%d", CLEANUP_FLAG_BOUNCE);
 
     /*
      * Send initial message envelope information. For bounces, set the
@@ -187,7 +179,6 @@ int     forward_append(DELIVER_ATTR attr)
     /*
      * Append the recipient to the message envelope.
      */
-    rec_fputs(info->cleanup, REC_TYPE_ORCP, attr.orig_rcpt);
     rec_fputs(info->cleanup, REC_TYPE_RCPT, attr.recipient);
 
     return (vstream_ferror(info->cleanup));
@@ -242,9 +233,7 @@ static int forward_send(FORWARD_INFO *info, DELIVER_ATTR attr, char *delivered)
      */
     if (status == 0)
 	if (vstream_fflush(info->cleanup)
-	    || attr_scan(info->cleanup, ATTR_FLAG_MISSING,
-			 ATTR_TYPE_NUM, MAIL_ATTR_STATUS, &status,
-			 ATTR_TYPE_END) != 1)
+	    || mail_scan(info->cleanup, "%d", &status) != 1)
 	    status = 1;
 
     /*

@@ -35,8 +35,7 @@ typedef struct DICT {
     int     (*delete) (struct DICT *, const char *);
     int     (*sequence) (struct DICT *, int, const char **, const char **);
     void    (*close) (struct DICT *);
-    int     lock_fd;			/* for dict_update() lock */
-    int     stat_fd;			/* change detection */
+    int     fd;				/* for dict_update() lock */
     time_t  mtime;			/* mod time at open */
 } DICT;
 
@@ -46,7 +45,6 @@ extern void dict_free(DICT *);
 extern DICT *dict_debug(DICT *);
 #define DICT_DEBUG(d) ((d)->flags & DICT_FLAG_DEBUG ? dict_debug(d) : (d))
 
-#define DICT_FLAG_NONE		(0)
 #define DICT_FLAG_DUP_WARN	(1<<0)	/* if file, warn about dups */
 #define DICT_FLAG_DUP_IGNORE	(1<<1)	/* if file, ignore dups */
 #define DICT_FLAG_TRY0NULL	(1<<2)	/* do not append 0 to key/value */
@@ -57,8 +55,6 @@ extern DICT *dict_debug(DICT *);
 #define DICT_FLAG_DUP_REPLACE	(1<<7)	/* if file, replace dups */
 #define DICT_FLAG_SYNC_UPDATE	(1<<8)	/* if file, sync updates */
 #define DICT_FLAG_DEBUG		(1<<9)	/* log access */
-#define DICT_FLAG_FOLD_KEY	(1<<10)	/* lowercase the lookup key */
-#define DICT_FLAG_NO_REGSUB	(1<<11)	/* no lhs->rhs regexp substitution */
 
 extern int dict_unknown_allowed;
 extern int dict_errno;

@@ -7,10 +7,12 @@
 /*	#include <mail_conf.h>
 /*
 /*	int	get_mail_conf_bool(name, defval)
+/*	const char *path;
 /*	const char *name;
 /*	int	defval;
 /*
 /*	int	get_mail_conf_bool_fn(name, defval)
+/*	const char *path;
 /*	const char *name;
 /*	int	(*defval)();
 /*

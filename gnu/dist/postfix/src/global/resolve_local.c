@@ -2,20 +2,19 @@
 /* NAME
 /*	resolve_local 3
 /* SUMMARY
-/*	determine if domain resolves to local mail system
+/*	determine if address resolves to local mail system
 /* SYNOPSIS
 /*	#include <resolve_local.h>
 /*
 /*	void	resolve_local_init()
 /*
-/*	int	resolve_local(domain)
-/*	const char *domain;
+/*	int	resolve_local(host)
+/*	const char *host;
 /* DESCRIPTION
 /*	resolve_local() determines if the named domain resolves to the
 /*	local mail system, either by case-insensitive exact match
 /*	against the domains, files or tables listed in $mydestination,
-/*	or by any of the network addresses listed in $inet_interfaces
-/*	or in $proxy_interfaces.
+/*	or by any of the network addresses listed in $inet_interfaces.
 /*
 /*	resolve_local_init() performs initialization. If this routine is
 /*	not called explicitly ahead of time, it will be called on the fly.
@@ -59,7 +58,6 @@
 #include <mail_params.h>
 #include <own_inet_addr.h>
 #include <resolve_local.h>
-#include <match_parent_style.h>
 
 /* Application-specific */
 
@@ -71,10 +69,10 @@ void    resolve_local_init(void)
 {
     if (resolve_local_list)
 	msg_panic("resolve_local_init: duplicate initialization");
-    resolve_local_list = string_list_init(MATCH_FLAG_NONE, var_mydest);
+    resolve_local_list = string_list_init(var_mydest);
 }
 
-/* resolve_local - match domain against list of local destinations */
+/* resolve_local - match address against list of local destinations */
 
 int     resolve_local(const char *addr)
 {
@@ -89,19 +87,11 @@ int     resolve_local(const char *addr)
 	resolve_local_init();
 
     /*
-     * Strip one trailing dot but not dot-dot.
-     *
-     * XXX This should not be distributed all over the code. Problem is,
-     * addresses can enter the system via multiple paths: networks, local  
-     * forward/alias/include files, even as the result of address rewriting.
+     * Strip one trailing dot.
      */
     len = strlen(saved_addr);
-    if (len == 0)
-	RETURN(0);
     if (saved_addr[len - 1] == '.')
 	saved_addr[--len] = 0;
-    if (len == 0 || saved_addr[len - 1] == '.')
-	RETURN(0);
 
     /*
      * Compare the destination against the list of destinations that we
@@ -119,7 +109,7 @@ int     resolve_local(const char *addr)
 	dest++;
 	dest[len -= 2] = 0;
 	if ((ipaddr.s_addr = inet_addr(dest)) != INADDR_NONE
-	    && (own_inet_addr(&ipaddr) || proxy_inet_addr(&ipaddr)))
+	    && own_inet_addr(&ipaddr))
 	    RETURN(1);
     }
 

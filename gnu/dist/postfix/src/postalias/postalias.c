@@ -5,7 +5,7 @@
 /*	Postfix alias database maintenance
 /* SYNOPSIS
 /* .fi
-/*	\fBpostalias\fR [\fB-Nfinorvw\fR] [\fB-c \fIconfig_dir\fR]
+/*	\fBpostalias\fR [\fB-Ninrvw\fR] [\fB-c \fIconfig_dir\fR]
 /*		[\fB-d \fIkey\fR] [\fB-q \fIkey\fR]
 /*		[\fIfile_type\fR:]\fIfile_name\fR ...
 /* DESCRIPTION
@@ -13,9 +13,6 @@
 /*	alias databases, or updates an existing one. The input and output
 /*	file formats are expected to be compatible with Sendmail version 8,
 /*	and are expected to be suitable for the use as NIS alias maps.
-/*
-/*	If the result files do not exist they will be created with the
-/*	same group and other read permissions as the source file.
 /*
 /*	While a database update is in progress, signal delivery is
 /*	postponed, and an exclusive, advisory, lock is placed on the
@@ -32,35 +29,19 @@
 /*	instead of the default configuration directory.
 /* .IP "\fB-d \fIkey\fR"
 /*	Search the specified maps for \fIkey\fR and remove one entry per map.
-/*	The exit status is zero when the requested information was found.
-/*
-/*	If a key value of \fB-\fR is specified, the program reads key
-/*	values from the standard input stream. The exit status is zero
-/*	when at least one of the requested keys was found.
-/* .IP \fB-f\fR
-/*	Do not fold the lookup key to lower case while creating or querying
-/*	a map.
+/*	The exit status is non-zero if the requested information was not found.
 /* .IP \fB-i\fR
 /*	Incremental mode. Read entries from standard input and do not
 /*	truncate an existing database. By default, \fBpostalias\fR creates
-/*	a new database from the entries in \fIfile_name\fR.
+/*	a new database from the entries in \fBfile_name\fR.
 /* .IP \fB-n\fR
 /*	Don't include the terminating null character that terminates lookup
 /*	keys and values. By default, Postfix does whatever is the default for
 /*	the host operating system.
-/* .IP \fB-o\fR
-/*	Do not release root privileges when processing a non-root
-/*	input file. By default, \fBpostalias\fR drops root privileges
-/*	and runs as the source file owner instead.
 /* .IP "\fB-q \fIkey\fR"
 /*	Search the specified maps for \fIkey\fR and print the first value
-/*	found on the standard output stream. The exit status is zero
-/*	when the requested information was found.
-/*
-/*	If a key value of \fB-\fR is specified, the program reads key
-/*	values from the standard input stream and prints one line of
-/*	\fIkey: value\fR output for each key that was found. The exit
-/*	status is zero when at least one of the requested keys was found.
+/*	found on the standard output stream. The exit status is non-zero
+/*	if the requested information was not found.
 /* .IP \fB-r\fR
 /*	When updating a table, do not warn about duplicate entries; silently
 /*	replace them.
@@ -86,24 +67,23 @@
 /*	The output is a hashed file, named \fIfile_name\fB.db\fR.
 /*	This is available only on systems with support for \fBdb\fR databases.
 /* .PP
-/*	Use the command \fBpostconf -m\fR to find out what types of database
-/*	your Postfix installation can support.
-/*
 /*	When no \fIfile_type\fR is specified, the software uses the database
-/*	type specified via the \fBdefault_database_type\fR configuration
-/*	parameter.
+/*	type specified via the \fBdatabase_type\fR configuration parameter.
 /*	The default value for this parameter depends on the host environment.
 /* .RE
 /* .IP \fIfile_name\fR
-/*	The name of the alias database source file when creating a database.
+/*	The name of the alias database source file when rebuilding a database.
 /* DIAGNOSTICS
 /*	Problems are logged to the standard error stream. No output means
 /*	no problems were detected. Duplicate entries are skipped and are
 /*	flagged with a warning.
 /*
 /*	\fBpostalias\fR terminates with zero exit status in case of success
-/*	(including successful \fBpostalias -q\fR lookup) and terminates
+/*	(including successful \fBpostmap -q\fR lookup) and terminates
 /*	with non-zero exit status in case of failure.
+/* BUGS
+/*	The "delete key" support is limited to one delete operation
+/*	per command invocation.
 /* ENVIRONMENT
 /* .ad
 /* .fi
@@ -117,15 +97,9 @@
 /*	The following \fBmain.cf\fR parameters are especially relevant to
 /*	this program. See the Postfix \fBmain.cf\fR file for syntax details
 /*	and for default values.
-/* .IP \fBdefault_database_type\fR
-/*	Default database type. On many UNIX systems, the default type
+/* .IP \fBdatabase_type\fR
+/*	Default alias database type. On many UNIX systems, the default type
 /*	is either \fBdbm\fR or \fBhash\fR.
-/* .IP \fBberkeley_db_create_buffer_size\fR
-/*	Amount of buffer memory to be used when creating a Berkeley DB
-/*	\fBhash\fR or \fBbtree\fR lookup table.
-/* .IP \fBberkeley_db_read_buffer_size\fR
-/*	Amount of buffer memory to be used when reading a Berkeley DB
-/*	\fBhash\fR or \fBbtree\fR lookup table.
 /* STANDARDS
 /*	RFC 822 (ARPA Internet Text Messages)
 /* SEE ALSO
@@ -162,8 +136,7 @@
 #include <readlline.h>
 #include <stringops.h>
 #include <split_at.h>
-#include <vstring_vstream.h>
-#include <set_eugid.h>
+#include <get_hostname.h>
 
 /* Global library. */
 
@@ -176,11 +149,9 @@
 
 #define STR	vstring_str
 
-#define POSTALIAS_FLAG_AS_OWNER	(1<<0)	/* open dest as owner of source */
-
 /* postalias - create or update alias database */
 
-static void postalias(char *map_type, char *path_name, int postalias_flags,
+static void postalias(char *map_type, char *path_name,
 		              int open_flags, int dict_flags)
 {
     VSTREAM *source_fp;
@@ -193,8 +164,6 @@ static void postalias(char *map_type, char *path_name, int postalias_flags,
     TOK822 *key_list;
     TOK822 *colon;
     TOK822 *value_list;
-    struct stat st;
-    mode_t  saved_mask;
 
     /*
      * Initialize.
@@ -208,24 +177,6 @@ static void postalias(char *map_type, char *path_name, int postalias_flags,
     } else if ((source_fp = vstream_fopen(path_name, O_RDONLY, 0)) == 0) {
 	msg_fatal("open %s: %m", path_name);
     }
-    if (fstat(vstream_fileno(source_fp), &st) < 0)
-	msg_fatal("fstat %s: %m", path_name);
-
-    /*
-     * Turn off group/other read permissions as indicated in the source file.
-     */
-    if (S_ISREG(st.st_mode))
-	saved_mask = umask(022 | (~st.st_mode & 077));
-
-    /*
-     * If running as root, run as the owner of the source file, so that the
-     * result shows proper ownership, and so that a bug in postalias does not
-     * allow privilege escalation.
-     */
-    if ((postalias_flags & POSTALIAS_FLAG_AS_OWNER) && getuid() == 0
-	&& (st.st_uid != geteuid() || st.st_gid != getegid()))
-	set_eugid(st.st_uid, st.st_gid);
-
 
     /*
      * Open the database, create it when it does not exist, truncate it when
@@ -234,16 +185,26 @@ static void postalias(char *map_type, char *path_name, int postalias_flags,
     mkmap = mkmap_open(map_type, path_name, open_flags, dict_flags);
 
     /*
-     * And restore the umask, in case it matters.
-     */
-    if (S_ISREG(st.st_mode))
-	umask(saved_mask);
-
-    /*
      * Add records to the database.
      */
     lineno = 0;
-    while (readlline(line_buffer, source_fp, &lineno)) {
+    while (readlline(line_buffer, source_fp, &lineno, READLL_STRIPNL)) {
+
+	/*
+	 * Skip comments.
+	 */
+	if (*STR(line_buffer) == '#')
+	    continue;
+
+	/*
+	 * Weird stuff. Normally, a line that begins with whitespace is a
+	 * continuation of the previous line.
+	 */
+	if (ISSPACE(*STR(line_buffer))) {
+	    msg_warn("%s, line %d: malformed line",
+		     VSTREAM_PATH(source_fp), lineno);
+	    continue;
+	}
 
 	/*
 	 * Tokenize the input, so that we do the right thing when a quoted
@@ -302,8 +263,7 @@ static void postalias(char *map_type, char *path_name, int postalias_flags,
 	/*
 	 * Store the value under a case-insensitive key.
 	 */
-	if (dict_flags & DICT_FLAG_FOLD_KEY)
-	    lowercase(STR(key_buffer));
+	lowercase(STR(key_buffer));
 	mkmap_append(mkmap, STR(key_buffer), STR(value_buffer));
     }
 
@@ -328,10 +288,8 @@ static void postalias(char *map_type, char *path_name, int postalias_flags,
     mkmap->dict->flags &= ~DICT_FLAG_TRY1NULL;
     mkmap->dict->flags |= DICT_FLAG_TRY0NULL;
     vstring_sprintf(value_buffer, "%010ld", (long) time((time_t *) 0));
-#if (defined(HAS_NIS) || defined(HAS_NISPLUS))
     mkmap_append(mkmap, "YP_LAST_MODIFIED", STR(value_buffer));
-    mkmap_append(mkmap, "YP_MASTER_NAME", var_myhostname);
-#endif
+    mkmap_append(mkmap, "YP_MASTER_NAME", get_hostname());
 
     /*
      * Close the alias database, and release the lock.
@@ -346,65 +304,6 @@ static void postalias(char *map_type, char *path_name, int postalias_flags,
     vstring_free(line_buffer);
     if (source_fp != VSTREAM_IN)
 	vstream_fclose(source_fp);
-}
-
-/* postalias_queries - apply multiple requests from stdin */
-
-static int postalias_queries(VSTREAM *in, char **maps, const int map_count,
-			             const int dict_flags)
-{
-    int     found = 0;
-    VSTRING *keybuf = vstring_alloc(100);
-    DICT  **dicts;
-    const char *map_name;
-    const char *value;
-    int     n;
-
-    /*
-     * Sanity check.
-     */
-    if (map_count <= 0)
-	msg_panic("postalias_queries: bad map count");
-
-    /*
-     * Prepare to open maps lazily.
-     */
-    dicts = (DICT **) mymalloc(sizeof(*dicts) * map_count);
-    for (n = 0; n < map_count; n++)
-	dicts[n] = 0;
-
-    /*
-     * Perform all queries. Open maps on the fly, to avoid opening unecessary
-     * maps.
-     */
-    while (vstring_get_nonl(keybuf, in) != VSTREAM_EOF) {
-	if (dict_flags & DICT_FLAG_FOLD_KEY)
-	    lowercase(STR(keybuf));
-	for (n = 0; n < map_count; n++) {
-	    if (dicts[n] == 0)
-		dicts[n] = ((map_name = split_at(maps[n], ':')) != 0 ?
-		   dict_open3(maps[n], map_name, O_RDONLY, DICT_FLAG_LOCK) :
-		dict_open3(var_db_type, maps[n], O_RDONLY, DICT_FLAG_LOCK));
-	    if ((value = dict_get(dicts[n], STR(keybuf))) != 0) {
-		vstream_printf("%s:	%s\n", STR(keybuf), value);
-		found = 1;
-		break;
-	    }
-	}
-    }
-    if (found)
-	vstream_fflush(VSTREAM_OUT);
-
-    /*
-     * Cleanup.
-     */
-    for (n = 0; n < map_count; n++)
-	if (dicts[n])
-	    dict_close(dicts[n]);
-    myfree((char *) dicts);
-    vstring_free(keybuf);
-
-    return (found);
 }
 
 /* postalias_query - query a map and print the result to stdout */
@@ -424,50 +323,6 @@ static int postalias_query(const char *map_type, const char *map_name,
     return (value != 0);
 }
 
-/* postalias_deletes - apply multiple requests from stdin */
-
-static int postalias_deletes(VSTREAM *in, char **maps, const int map_count)
-{
-    int     found = 0;
-    VSTRING *keybuf = vstring_alloc(100);
-    DICT  **dicts;
-    const char *map_name;
-    int     n;
-
-    /*
-     * Sanity check.
-     */
-    if (map_count <= 0)
-	msg_panic("postalias_deletes: bad map count");
-
-    /*
-     * Open maps ahead of time.
-     */
-    dicts = (DICT **) mymalloc(sizeof(*dicts) * map_count);
-    for (n = 0; n < map_count; n++)
-	dicts[n] = ((map_name = split_at(maps[n], ':')) != 0 ?
-		    dict_open3(maps[n], map_name, O_RDWR, DICT_FLAG_LOCK) :
-		  dict_open3(var_db_type, maps[n], O_RDWR, DICT_FLAG_LOCK));
-
-    /*
-     * Perform all requests.
-     */
-    while (vstring_get_nonl(keybuf, in) != VSTREAM_EOF)
-	for (n = 0; n < map_count; n++)
-	    found |= (dict_del(dicts[n], STR(keybuf)) == 0);
-
-    /*
-     * Cleanup.
-     */
-    for (n = 0; n < map_count; n++)
-	if (dicts[n])
-	    dict_close(dicts[n]);
-    myfree((char *) dicts);
-    vstring_free(keybuf);
-
-    return (found);
-}
-
 /* postalias_delete - delete a key value pair from a map */
 
 static int postalias_delete(const char *map_type, const char *map_name,
@@ -476,6 +331,10 @@ static int postalias_delete(const char *map_type, const char *map_name,
     DICT   *dict;
     int     status;
 
+    /*
+     * XXX This must be generalized to multi-key (read from stdin) and
+     * multi-map (given on command line) updates.
+     */
     dict = dict_open3(map_type, map_name, O_RDWR, DICT_FLAG_LOCK);
     status = dict_del(dict, key);
     dict_close(dict);
@@ -486,7 +345,7 @@ static int postalias_delete(const char *map_type, const char *map_name,
 
 static NORETURN usage(char *myname)
 {
-    msg_fatal("usage: %s [-Nfinorvw] [-c config_dir] [-d key] [-q key] [map_type:]file...",
+    msg_fatal("usage: %s [-Ninrvw] [-c config_dir] [-d key] [-q key] [map_type:]file...",
 	      myname);
 }
 
@@ -497,9 +356,8 @@ int     main(int argc, char **argv)
     int     fd;
     char   *slash;
     struct stat st;
-    int     postalias_flags = POSTALIAS_FLAG_AS_OWNER;
     int     open_flags = O_RDWR | O_CREAT | O_TRUNC;
-    int     dict_flags = DICT_FLAG_DUP_WARN | DICT_FLAG_FOLD_KEY;
+    int     dict_flags = DICT_FLAG_DUP_WARN;
     char   *query = 0;
     char   *delkey = 0;
     int     found;
@@ -537,7 +395,7 @@ int     main(int argc, char **argv)
     /*
      * Parse JCL.
      */
-    while ((ch = GETOPT(argc, argv, "Nc:d:finoq:rvw")) > 0) {
+    while ((ch = GETOPT(argc, argv, "Nc:d:inq:rvw")) > 0) {
 	switch (ch) {
 	default:
 	    usage(argv[0]);
@@ -555,18 +413,12 @@ int     main(int argc, char **argv)
 		msg_fatal("specify only one of -q or -d");
 	    delkey = optarg;
 	    break;
-	case 'f':
-	    dict_flags &= ~DICT_FLAG_FOLD_KEY;
-	    break;
 	case 'i':
 	    open_flags &= ~O_TRUNC;
 	    break;
 	case 'n':
 	    dict_flags |= DICT_FLAG_TRY0NULL;
 	    dict_flags &= ~DICT_FLAG_TRY1NULL;
-	    break;
-	case 'o':
-	    postalias_flags &= ~POSTALIAS_FLAG_AS_OWNER;
 	    break;
 	case 'q':
 	    if (query || delkey)
@@ -595,8 +447,6 @@ int     main(int argc, char **argv)
     if (delkey) {				/* remove entry */
 	if (optind + 1 > argc)
 	    usage(argv[0]);
-	if (strcmp(delkey, "-") == 0)
-	    exit(postalias_deletes(VSTREAM_IN, argv + optind, argc - optind) == 0);
 	found = 0;
 	while (optind < argc) {
 	    if ((path_name = split_at(argv[optind], ':')) != 0) {
@@ -610,11 +460,6 @@ int     main(int argc, char **argv)
     } else if (query) {				/* query map(s) */
 	if (optind + 1 > argc)
 	    usage(argv[0]);
-	if (strcmp(query, "-") == 0)
-	    exit(postalias_queries(VSTREAM_IN, argv + optind, argc - optind,
-				   dict_flags) == 0);
-	if (dict_flags & DICT_FLAG_FOLD_KEY)
-	    lowercase(query);
 	while (optind < argc) {
 	    if ((path_name = split_at(argv[optind], ':')) != 0) {
 		found = postalias_query(argv[optind], path_name, query);
@@ -631,11 +476,9 @@ int     main(int argc, char **argv)
 	    usage(argv[0]);
 	while (optind < argc) {
 	    if ((path_name = split_at(argv[optind], ':')) != 0) {
-		postalias(argv[optind], path_name, postalias_flags,
-			  open_flags, dict_flags);
+		postalias(argv[optind], path_name, open_flags, dict_flags);
 	    } else {
-		postalias(var_db_type, argv[optind], postalias_flags,
-			  open_flags, dict_flags);
+		postalias(var_db_type, argv[optind], open_flags, dict_flags);
 	    }
 	    optind++;
 	}

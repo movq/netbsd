@@ -10,11 +10,6 @@
 /*	VSTRING	*dst;
 /*	const char *src;
 /*
-/*	VSTRING	*quote_822_local_flags(dst, src, flags)
-/*	VSTRING	*dst;
-/*	const char *src;
-/*	int	flags;
-/*
 /*	VSTRING	*unquote_822_local(dst, src)
 /*	VSTRING	*dst;
 /*	const char *src;
@@ -22,9 +17,7 @@
 /*	quote_822_local() quotes the local part of a mailbox and
 /*	returns a result that can be used in message headers as
 /*	specified by RFC 822 (actually, an 8-bit clean version of
-/*	RFC 822). It implements an 8-bit clean version of RFC 822.
-/*
-/*	quote_822_local_flags() provides finer control.
+/*	RFC 822).
 /*
 /*	unquote_822_local() transforms the local part of a mailbox
 /*	address to unquoted (internal) form.
@@ -34,16 +27,6 @@
 /*	The result.
 /* .IP src
 /*	The input address.
-/* .IP flags
-/*	Bit-wise OR of zero or more of the following.
-/* .RS
-/* .IP QUOTE_FLAG_8BITCLEAN
-/*	In violation with RFCs, treat 8-bit text as ordinary text.
-/* .IP QUOTE_FLAG_EXPOSE_AT
-/*	In violation with RFCs, treat `@' as an ordinary character.
-/* .IP QUOTE_FLAG_APPEND
-/*	Append to the result buffer, instead of overwriting it.
-/* .RE
 /* STANDARDS
 /*	RFC 822 (ARPA Internet Text Messages)
 /* BUGS
@@ -82,7 +65,7 @@
 
 /* is_822_dot_string - is this local-part an rfc 822 dot-string? */
 
-static int is_822_dot_string(const char *local_part, const char *end, int flags)
+static int is_822_dot_string(const char *local_part, const char *end)
 {
     const char *cp;
     int     ch;
@@ -95,20 +78,22 @@ static int is_822_dot_string(const char *local_part, const char *end, int flags)
      * RFC 822 expects 7-bit data. Rather than quoting every 8-bit character
      * (and still passing it on as 8-bit data) we leave 8-bit data alone.
      */
-    if (local_part == end || local_part[0] == 0 || local_part[0] == '.')
+    if (local_part[0] == 0 || local_part[0] == '.')
 	return (NO);
     for (cp = local_part; cp < end && (ch = *(unsigned char *) cp) != 0; cp++) {
 	if (ch == '.' && (cp + 1) < end && cp[1] == '.')
 	    return (NO);
-	if (ch > 127 && !(flags & QUOTE_FLAG_8BITCLEAN))
+#if 0
+	if (ch > 127)
 	    return (NO);
+#endif
 	if (ch == ' ')
 	    return (NO);
 	if (ISCNTRL(ch))
 	    return (NO);
 	if (ch == '(' || ch == ')'
 	    || ch == '<' || ch == '>'
-	    || (ch == '@' && !(flags & QUOTE_FLAG_EXPOSE_AT)) || ch == ','
+	    /* || ch == '@' */ || ch == ','
 	    || ch == ';' || ch == ':'
 	    || ch == '\\' || ch == '"'
 	    || ch == '[' || ch == ']')
@@ -122,7 +107,7 @@ static int is_822_dot_string(const char *local_part, const char *end, int flags)
 /* make_822_quoted_string - make quoted-string from local-part */
 
 static VSTRING *make_822_quoted_string(VSTRING *dst, const char *local_part,
-				               const char *end, int flags)
+				               const char *end)
 {
     const char *cp;
     int     ch;
@@ -133,8 +118,7 @@ static VSTRING *make_822_quoted_string(VSTRING *dst, const char *local_part,
      */
     VSTRING_ADDCH(dst, '"');
     for (cp = local_part; cp < end && (ch = *cp) != 0; cp++) {
-	if ((ch > 127 && !(flags & QUOTE_FLAG_8BITCLEAN))
-	    || ch == '"' || ch == '\\' || ch == '\r')
+	if ( /* ch > 127 || */ ch == '"' || ch == '\\' || ch == '\r')
 	    VSTRING_ADDCH(dst, '\\');
 	VSTRING_ADDCH(dst, ch);
     }
@@ -142,9 +126,9 @@ static VSTRING *make_822_quoted_string(VSTRING *dst, const char *local_part,
     return (dst);
 }
 
-/* quote_822_local_flags - quote local part of mailbox according to rfc 822 */
+/* quote_822_local - quote local part of mailbox according to rfc 822 */
 
-VSTRING *quote_822_local_flags(VSTRING *dst, const char *mbox, int flags)
+VSTRING *quote_822_local(VSTRING *dst, const char *mbox)
 {
     const char *start;			/* first byte of localpart */
     const char *end;			/* first byte after localpart */
@@ -162,13 +146,11 @@ VSTRING *quote_822_local_flags(VSTRING *dst, const char *mbox, int flags)
 	start = mbox;
     if ((end = strrchr(start, '@')) == 0)
 	end = start + strlen(start);
-    if ((flags & QUOTE_FLAG_APPEND) == 0)
-	VSTRING_RESET(dst);
-    if (is_822_dot_string(start, end, flags)) {
-	return (vstring_strcat(dst, mbox));
+    if (is_822_dot_string(start, end)) {
+	return (vstring_strcpy(dst, mbox));
     } else {
-	vstring_strncat(dst, mbox, start - mbox);
-	make_822_quoted_string(dst, start, end, flags & QUOTE_FLAG_8BITCLEAN);
+	vstring_strncpy(dst, mbox, start - mbox);
+	make_822_quoted_string(dst, start, end);
 	return (vstring_strcat(dst, end));
     }
 }

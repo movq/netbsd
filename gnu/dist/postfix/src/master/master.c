@@ -5,8 +5,7 @@
 /*	Postfix master process
 /* SYNOPSIS
 /* .fi
-/*	\fBmaster\fR [\fB-Dtv\fR] [\fB-c \fIconfig_dir\fR]
-/*		[\fB-e \fIexit_time\fR]
+/*	\fBmaster\fR [\fB-c \fIconfig_dir\fR] [\fB-D\fR] [\fB-t\fR] [\fB-v\fR]
 /* DESCRIPTION
 /*	The \fBmaster\fR daemon is the resident process that runs Postfix
 /*	daemons on demand: daemons to send or receive messages via the
@@ -29,9 +28,6 @@
 /* .IP "\fB-c \fIconfig_dir\fR"
 /*	Read the \fBmain.cf\fR and \fBmaster.cf\fR configuration files in
 /*	the named directory instead of the default configuration directory.
-/* .IP "\fB-e \fIexit_time\fR"
-/*	Terminate the master process after \fIexit_time\fR seconds. Child
-/*	processes terminate at their convenience.
 /* .IP \fB-D\fR
 /*	After initialization, run a debugger on the master process. The
 /*	debugging command is specified with the \fBdebugger_command\fR in
@@ -96,9 +92,6 @@
 /* .IP \fBqueue_directory\fR
 /*	Top-level directory of the Postfix queue. This is also the root
 /*	directory of Postfix daemons that run chrooted.
-/* .IP \fBinet_interfaces\fR
-/*	The network interface addresses that this system receives mail on.
-/*	You need to stop and start Postfix when this parameter changes.
 /* .SH "Resource controls"
 /* .ad
 /* .fi
@@ -157,12 +150,10 @@
 #include <watchdog.h>
 #include <clean_env.h>
 #include <argv.h>
-#include <safe.h>
 
 /* Global library. */
 
 #include <mail_params.h>
-#include <mail_version.h>
 #include <debug_process.h>
 #include <mail_task.h>
 #include <mail_conf.h>
@@ -171,16 +162,6 @@
 /* Application-specific. */
 
 #include "master.h"
-
-/* master_exit_event - exit for memory leak testing purposes */
-
-static void master_exit_event(int unused_event, char *unused_context)
-{
-    msg_info("master exit time has arrived");
-    exit(0);
-}
-
-/* main - main program */
 
 int     main(int argc, char **argv)
 {
@@ -246,16 +227,6 @@ int     main(int argc, char **argv)
     msg_syslog_init(mail_task(var_procname), LOG_PID, LOG_FACILITY);
 
     /*
-     * The mail system must be run by the superuser so it can revoke
-     * privileges for selected operations. That's right - it takes privileges
-     * to toss privileges.
-     */
-    if (getuid() != 0)
-	msg_fatal("the master command is reserved for the superuser");
-    if (unsafe() != 0)
-	msg_fatal("the master command must not run as a set-uid process");
-
-    /*
      * If started from a terminal, get rid of any tty association. This also
      * means that all errors and warnings must go to the syslog daemon.
      */
@@ -271,11 +242,8 @@ int     main(int argc, char **argv)
      * when a service listens on many ports. In order to do this right we
      * must change the master-child interface so that descriptors do not need
      * to have fixed numbers.
-     * 
-     * In a child we need two descriptors for the flow control pipe, one for
-     * child->master status updates and at least one for listening.
      */
-    for (n = 0; n < 5; n++) {
+    for (n = 0; n < 3; n++) {
 	if (close_on_exec(dup(0), CLOSE_ON_EXEC) < 0)
 	    msg_fatal("dup(0): %m");
     }
@@ -283,14 +251,11 @@ int     main(int argc, char **argv)
     /*
      * Process JCL.
      */
-    while ((ch = GETOPT(argc, argv, "c:e:Dtv")) > 0) {
+    while ((ch = GETOPT(argc, argv, "c:Dtv")) > 0) {
 	switch (ch) {
 	case 'c':
 	    if (setenv(CONF_ENV_PATH, optarg, 1) < 0)
 		msg_fatal("out of memory");
-	    break;
-	case 'e':
-	    event_request_timer(master_exit_event, (char *) 0, atoi(optarg));
 	    break;
 	case 'D':
 	    debug_me = 1;
@@ -302,7 +267,7 @@ int     main(int argc, char **argv)
 	    msg_verbose++;
 	    break;
 	default:
-	    msg_fatal("usage: %s [-c config_dir] [-e exit_time] [-D (debug)] [-t (test)] [-v]", argv[0]);
+	    msg_fatal("usage: %s [-D] [-t] [-v]", argv[0]);
 	    /* NOTREACHED */
 	}
     }
@@ -317,7 +282,8 @@ int     main(int argc, char **argv)
 
     /*
      * Environment import filter, to enforce consistent behavior whether
-     * Postfix is started by hand, or at system boot time.
+     * Postfix is started by hand, or at system boot time. The argument list
+     * specifies what environment parameters to preserve.
      */
     import_env = argv_split(var_import_environ, ", \t\r\n");
     clean_env(import_env->argv);
@@ -367,8 +333,7 @@ int     main(int argc, char **argv)
      */
     master_config();
     master_sigsetup();
-    master_flow_init();
-    msg_info("daemon started -- version %s", var_mail_version);
+    msg_info("daemon started");
 
     /*
      * Process events. The event handler will execute the read/write/timer

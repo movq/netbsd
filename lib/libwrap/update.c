@@ -1,5 +1,3 @@
-/*	$NetBSD: update.c,v 1.8 2002/06/06 21:45:20 itojun Exp $	*/
-
  /*
   * Routines for controlled update/initialization of request structures.
   * 
@@ -15,13 +13,8 @@
   * Author: Wietse Venema, Eindhoven University of Technology, The Netherlands.
   */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
 static char sccsid[] = "@(#) update.c 1.1 94/12/28 17:42:56";
-#else
-__RCSID("$NetBSD: update.c,v 1.8 2002/06/06 21:45:20 itojun Exp $");
-#endif
 #endif
 
 /* System libraries */
@@ -29,14 +22,11 @@ __RCSID("$NetBSD: update.c,v 1.8 2002/06/06 21:45:20 itojun Exp $");
 #include <stdio.h>
 #include <syslog.h>
 #include <string.h>
-#include <unistd.h>
 
 /* Local stuff. */
 
 #include "mystdarg.h"
 #include "tcpd.h"
-
-static struct request_info *request_fill __P((struct request_info *, va_list));
 
 /* request_fill - request update engine */
 
@@ -56,10 +46,10 @@ va_list ap;
 	    request->fd = va_arg(ap, int);
 	    continue;
 	case RQ_CLIENT_SIN:
-	    request->client->sin = va_arg(ap, struct sockaddr *);
+	    request->client->sin = va_arg(ap, struct sockaddr_in *);
 	    continue;
 	case RQ_SERVER_SIN:
-	    request->server->sin = va_arg(ap, struct sockaddr *);
+	    request->server->sin = va_arg(ap, struct sockaddr_in *);
 	    continue;
 
 	    /*
@@ -85,7 +75,7 @@ va_list ap;
 	    ptr = request->server->addr;
 	    break;
 	}
-	strlcpy(ptr, va_arg(ap, char *), STRING_LENGTH);
+	STRN_CPY(ptr, va_arg(ap, char *), STRING_LENGTH);
     }
     return (request);
 }
@@ -106,8 +96,8 @@ struct request_info *VARARGS(request_init, struct request_info *, request)
     VASTART(ap, struct request_info *, request);
     *request = default_info;
     request->fd = -1;
-    (void)strlcpy(request->daemon, unknown, sizeof(request->daemon));
-    (void)snprintf(request->pid, sizeof(request->pid), "%d", getpid());
+    strcpy(request->daemon, unknown);
+    sprintf(request->pid, "%d", getpid());
     request->client->request = request;
     request->server->request = request;
     r = request_fill(request, ap);

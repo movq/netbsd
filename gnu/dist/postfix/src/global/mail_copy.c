@@ -6,9 +6,8 @@
 /* SYNOPSIS
 /*	#include <mail_copy.h>
 /*
-/*	int	mail_copy(sender, orig_to, delivered, src, dst, flags, eol, why)
+/*	int	mail_copy(sender, delivered, src, dst, flags, eol, why)
 /*	const char *sender;
-/*	const char *orig_to;
 /*	const char *delivered;
 /*	VSTREAM	*src;
 /*	VSTREAM	*dst;
@@ -49,9 +48,6 @@
 /* .IP MAIL_COPY_DELIVERED
 /*	Prepend a Delivered-To: header with the name of the
 /*	\fIdelivered\fR attribute.
-/* .IP MAIL_COPY_ORIG_RCPT
-/*	Prepend an X-Original-To: header with the original
-/*	envelope recipient address.
 /* .IP MAIL_COPY_RETURN_PATH
 /*	Prepend a Return-Path: header with the value of the
 /*	\fIsender\fR attribute.
@@ -66,14 +62,6 @@
 /* DIAGNOSTICS
 /*	A non-zero result means the operation failed. Warnings: corrupt
 /*	message file. A corrupt message is marked as corrupt.
-/*
-/*	The result is the bit-wise OR of zero or more of the following:
-/* .IP MAIL_COPY_STAT_CORRUPT
-/*	The queue file is marked as corrupt.
-/* .IP MAIL_COPY_STAT_READ
-/*	A read error was detected; errno specifies the nature of the problem.
-/* .IP MAIL_COPY_STAT_WRITE
-/*	A write error was detected; errno specifies the nature of the problem.
 /* SEE ALSO
 /*	mark_corrupt(3), mark queue file as corrupted.
 /* LICENSE
@@ -93,7 +81,6 @@
 #include <string.h>
 #include <unistd.h>
 #include <time.h>
-#include <errno.h>
 
 /* Utility library. */
 
@@ -111,15 +98,12 @@
 #include "rec_type.h"
 #include "mail_queue.h"
 #include "mail_addr.h"
-#include "mark_corrupt.h"
-#include "mail_params.h"
 #include "mail_copy.h"
+#include "mark_corrupt.h"
 
 /* mail_copy - copy message with extreme prejudice */
 
-int     mail_copy(const char *sender,
-		          const char *orig_rcpt,
-		          const char *delivered,
+int     mail_copy(const char *sender, const char *delivered,
 		          VSTREAM *src, VSTREAM *dst,
 		          int flags, const char *eol, VSTRING *why)
 {
@@ -162,17 +146,12 @@ int     mail_copy(const char *sender,
 			    *sender ? vstring_str(buf) : "", eol);
 	}
     }
-    if (flags & MAIL_COPY_ORIG_RCPT) {
-	if (orig_rcpt == 0)
-	    msg_panic("%s: null orig_rcpt", myname);
-	quote_822_local(buf, orig_rcpt);
-	vstream_fprintf(dst, "X-Original-To: %s%s", vstring_str(buf), eol);
-    }
     if (flags & MAIL_COPY_DELIVERED) {
 	if (delivered == 0)
 	    msg_panic("%s: null delivered", myname);
 	quote_822_local(buf, delivered);
-	vstream_fprintf(dst, "Delivered-To: %s%s", vstring_str(buf), eol);
+	vstream_fprintf(dst, "Delivered-To: %s%s",
+			lowercase(vstring_str(buf)), eol);
     }
 
     /*
@@ -204,8 +183,6 @@ int     mail_copy(const char *sender,
 	prev_type = type;
     }
     if (vstream_ferror(dst) == 0) {
-	if (var_fault_inj_code == 1)
-	    type = 0;
 	if (type != REC_TYPE_XTRA)
 	    corrupt_error = mark_corrupt(src);
 	if (prev_type != REC_TYPE_NORM)
@@ -231,17 +208,9 @@ int     mail_copy(const char *sender,
     if ((flags & MAIL_COPY_TOFILE) != 0)
 	write_error |= fsync(vstream_fileno(dst));
 #endif
-    if (var_fault_inj_code == 2) {
-	read_error = 1;
-	errno = ENOENT;
-    }
-    if (var_fault_inj_code == 3) {
-	write_error = 1;
-	errno = ENOENT;
-    }
 #ifndef NO_TRUNCATE
     if ((flags & MAIL_COPY_TOFILE) != 0)
-	if (corrupt_error || read_error || write_error)
+	if (read_error || write_error)
 	    ftruncate(vstream_fileno(dst), (off_t) orig_length);
 #endif
     write_error |= vstream_fclose(dst);
@@ -249,7 +218,5 @@ int     mail_copy(const char *sender,
 	vstring_sprintf(why, "error reading message: %m");
     if (why && write_error)
 	vstring_sprintf(why, "error writing message: %m");
-    return ((corrupt_error ? MAIL_COPY_STAT_CORRUPT : 0)
-	    | (read_error ? MAIL_COPY_STAT_READ : 0)
-	    | (write_error ? MAIL_COPY_STAT_WRITE : 0));
+    return (corrupt_error || read_error || write_error);
 }

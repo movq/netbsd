@@ -3,10 +3,13 @@
 # Written by Gerben Wierda, Oct 2001. I waive every copyright on this and
 # I also do not give any warranty.
 
-SIDIR="/Library/StartupItems"
+SIDIR="/System/Library/StartupItems"
+SIDISABLEDDIR="/System/Library/DisabledStartupItems"
 
 PSI="${SIDIR}/Postfix"
-PSIDISABLED="${PSI}.disabled"
+SSI="${SIDIR}/Sendmail"
+PSIDISABLED="${SIDISABLEDDIR}/Postfix"
+SSIDISABLED="${SIDISABLEDDIR}/Sendmail"
 
 POSTFIXBACKUPDIR=/usr/sbin/.postfixbackup
 SENDMAILBACKUPDIR=/usr/sbin/.sendmailbackup

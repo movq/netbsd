@@ -38,7 +38,6 @@
 #define PIPE_CMD_SHELL		10	/* alternative shell */
 #define PIPE_CMD_EOL		11	/* record delimiter */
 #define PIPE_CMD_EXPORT		12	/* exportable environment */
-#define PIPE_CMD_ORIG_RCPT	13	/* mail_copy() original recipient */
 
  /*
   * Command completion status.
@@ -46,7 +45,6 @@
 #define PIPE_STAT_OK		0	/* success */
 #define PIPE_STAT_DEFER		1	/* try again */
 #define PIPE_STAT_BOUNCE	2	/* failed */
-#define PIPE_STAT_CORRUPT	3	/* corrupted file */
 
 extern int pipe_command(VSTREAM *, VSTRING *,...);
 

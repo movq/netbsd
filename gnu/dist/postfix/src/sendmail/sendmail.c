@@ -19,9 +19,11 @@
 /*
 /*	By default, \fBsendmail\fR reads a message from standard input
 /*	until EOF or until it reads a line with only a \fB.\fR character,
-/*	and arranges for delivery.  \fBsendmail\fR relies on the
-/*	\fBpostdrop\fR(1) command to create a queue file in the \fBmaildrop\fR
-/*	directory.
+/*	and arranges for delivery.  \fBsendmail\fR attempts to create
+/*	a queue file in the \fBmaildrop\fR directory. If that directory
+/*	is not world-writable, the message is piped through the
+/*	\fBpostdrop\fR(1) command, which is expected to execute with
+/*	suitable privileges.
 /*
 /*	Specific command aliases are provided for other common modes of
 /*	operation:
@@ -30,15 +32,14 @@
 /*	size, arrival time, sender, and the recipients that still need to
 /*	be delivered.  If mail could not be delivered upon the last attempt,
 /*	the reason for failure is shown. This mode of operation is implemented
-/*	by executing the \fBpostqueue\fR(1) command.
+/*	by connecting to the \fBshowq\fR(8) daemon.
 /* .IP \fBnewaliases\fR
-/*	Initialize the alias database.  If no input file is specified (with
-/*	the \fB-oA\fR option, see below), the program processes the file(s)
-/*	specified with the \fBalias_database\fR configuration parameter.
-/*	If no alias database type is specified, the program uses the type
-/*	specified with the \fBdefault_database_type\fR configuration parameter.
-/*	This mode of operation is implemented by running the \fBpostalias\fR(1)
-/*	command.
+/*	Initialize the alias database. If no alias database type is
+/*	specified, the program uses the type specified in the
+/*	\fBdatabase_type\fR configuration parameter; if no input file
+/*	is specified, the program processes the file(s) specified with the
+/*	\fBalias_database\fR configuration parameter. This mode of operation
+/*	is implemented by running the \fBpostalias\fR(1) command.
 /* .sp
 /*	Note: it may take a minute or so before an alias database update
 /*	becomes visible. Use the \fBpostfix reload\fR command to eliminate
@@ -49,12 +50,9 @@
 /*	controlled by parameters in the \fBmain.cf\fR configuration file.
 /*
 /*	The following options are recognized:
-/* .IP "\fB-Am\fR (ignored)"
-/* .IP "\fB-Ac\fR (ignored)"
-/*	Postfix sendmail uses the same configuration file regardless of
-/*	whether or not a message is an initial submission.
-/* .IP "\fB-B \fIbody_type\fR"
-/*	The message body MIME type: \fB7BIT\fR or \fB8BITMIME\fR.
+/* .IP "\fB-B \fIbody_type\fR (ignored)"
+/*	The message body MIME type. Currently, Postfix implements
+/*	\fBjust-send-eight\fR.
 /* .IP "\fB-C \fIconfig_file\fR (ignored :-)"
 /*	The path name of the \fBsendmail.cf\fR file. Postfix configuration
 /*	files are kept in \fB/etc/postfix\fR.
@@ -66,9 +64,6 @@
 /* .IP \fB-I\fR
 /*	Initialize alias database. See the \fBnewaliases\fR
 /*	command above.
-/* .IP "\fB-L \fIlabel\fR (ignored)"
-/*	The logging label. Use the \fBsyslog_name\fR configuration
-/*	parameter instead.
 /* .IP "\fB-N \fIdsn\fR (ignored)"
 /*	Delivery status notification control. Currently, Postfix does
 /*	not implement \fBDSN\fR.
@@ -80,20 +75,6 @@
 /*	\fBdebug_peer_level\fR configuration parameters instead.
 /* .IP "\fB-U\fR (ignored)"
 /*	Initial user submission.
-/* .IP \fB-V\fR
-/*	Variable Envelope Return Path. Given an envelope sender address
-/*	of the form \fIowner-listname\fR@\fIorigin\fR, each recipient
-/*	\fIuser\fR@\fIdomain\fR receives mail with a personalized envelope
-/*	sender address.
-/* .sp
-/*	By default, the personalized envelope sender address is
-/*	\fIowner-listname\fB+\fIuser\fB=\fIdomain\fR@\fIorigin\fR. The default
-/*	\fB+\fR and \fB=\fR characters are configurable with the
-/*	\fBdefault_verp_delimiters\fR configuration parameter.
-/* .IP \fB-V\fIxy\fR
-/*	As \fB-V\fR, but uses \fIx\fR and \fIy\fR as the VERP delimiter
-/*	characters, instead of the characters specified with the
-/*	\fBdefault_verp_delimiters\fR configuration parameter.
 /* .IP \fB-bd\fR
 /*	Go into daemon mode. This mode of operation is implemented by
 /*	executing the \fBpostfix start\fR command.
@@ -108,10 +89,6 @@
 /* .IP \fB-bs\fR
 /*	Stand-alone SMTP server mode. Read SMTP commands from
 /*	standard input, and write responses to standard output.
-/*	In stand-alone SMTP server mode, UCE restrictions and
-/*	access controls are disabled by default. To enable them,
-/*	run the process as the \fBmail_owner\fR user.
-/* .sp
 /*	This mode of operation is implemented by running the
 /*	\fBsmtpd\fR(8) daemon.
 /* .IP "\fB-f \fIsender\fR"
@@ -134,8 +111,8 @@
 /*	details.
 /* .IP "\fB-o7\fR (ignored)"
 /* .IP "\fB-o8\fR (ignored)"
-/*	To send 8-bit or binary content, use an appropriate MIME encapsulation
-/*	and specify the appropriate \fB-B\fR command-line option.
+/*	The message body type. Currently, Postfix implements
+/*	\fBjust-send-eight\fR.
 /* .IP "\fB-oi\fR"
 /*	When reading a message from standard input, don\'t treat a line
 /*	with only a \fB.\fR character as the end of input.
@@ -149,17 +126,17 @@
 /*	delivery problems are sent to, unless the message contains an
 /*	\fBErrors-To:\fR message header.
 /* .IP \fB-q\fR
-/*	Attempt to deliver all queued mail. This is implemented by
-/*	executing the \fBpostqueue\fR(1) command.
+/*	Attempt to deliver all queued mail. This is implemented by kicking the
+/*	\fBqmgr\fR(8) daemon.
 /* .IP "\fB-q\fIinterval\fR (ignored)"
 /*	The interval between queue runs. Use the \fBqueue_run_delay\fR
 /*	configuration parameter instead.
 /* .IP \fB-qR\fIsite\fR
 /*	Schedule immediate delivery of all mail that is queued for the named
-/*	\fIsite\fR. This option accepts only \fIsite\fR names that are
-/*	eligible for the "fast flush" service, and is implemented by
-/*	executing the \fBpostqueue\fR(1) command.
-/*	See \fBflush\fR(8) for more information about the "fast flush"
+/*	\fIsite\fR. Depending on the destination, this uses "fast flush"
+/*	service, or it has the same effect as \fBsendmail -q\fR.
+/*	This is implemented by connecting to the local SMTP server.
+/*	See \fBsmtpd\fR(8) for more information about the "fast flush"
 /*	service.
 /* .IP \fB-qS\fIsite\fR
 /*	This command is not implemented. Use the slower \fBsendmail -q\fR
@@ -169,9 +146,7 @@
 /*	recipients be specified on the command line.
 /* .IP \fB-v\fR
 /*	Enable verbose logging for debugging purposes. Multiple \fB-v\fR
-/*	options make the software increasingly verbose. For compatibility
-/*	with mailx and other mail submission software, a single \fB-v\fR
-/*	option produces no output.
+/*	options make the software increasingly verbose.
 /* SECURITY
 /* .ad
 /* .fi
@@ -207,7 +182,7 @@
 /* .IP \fBbounce_size_limit\fR
 /*	The amount of original message context that is sent along
 /*	with a non-delivery notification.
-/* .IP \fBdefault_database_type\fR
+/* .IP \fBdatabase_type\fR
 /*	Default alias etc. database type. On many UNIX systems the
 /*	default type is either \fBdbm\fR or \fBhash\fR.
 /* .IP \fBdebugger_command\fR
@@ -219,14 +194,12 @@
 /*	List of domain or network patterns. When a remote host matches
 /*	a pattern, increase the verbose logging level by the amount
 /*	specified in the \fBdebug_peer_level\fR parameter.
-/* .IP \fBdefault_verp_delimiters\fR
-/*	The VERP delimiter characters that are used when the \fB-V\fR
-/*	command line option is specified without delimiter characters.
 /* .IP \fBfast_flush_domains\fR
 /*	List of domains that will receive "fast flush" service (default: all
-/*	domains that this system is willing to relay mail to). This list
-/*	specifies the domains that Postfix accepts in the SMTP \fBETRN\fR
-/*	request and in the \fBsendmail -qR\fR command.
+/*	domains that this system is willing to relay mail to). This greatly
+/*	improves the performance of the SMTP \fBETRN\fR request, and of the
+/*	\fBsendmail -qR\fR command. For domains not in the list, Postfix simply
+/*	attempts to deliver all queued mail.
 /* .IP \fBfork_attempts\fR
 /*	Number of attempts to \fBfork\fR() a process before giving up.
 /* .IP \fBfork_delay\fR
@@ -236,26 +209,26 @@
 /* .IP \fBmail_owner\fR
 /*	The owner of the mail queue and of most Postfix processes.
 /* .IP \fBcommand_directory\fR
-/*	Directory with Postfix support commands.
+/*	Directory with Postfix support commands (default:
+/*	\fB$program_directory\fR).
 /* .IP \fBdaemon_directory\fR
-/*	Directory with Postfix daemon programs.
+/*	Directory with Postfix daemon programs (default:
+/*	\fB$program_directory\fR).
 /* .IP \fBqueue_directory\fR
 /*	Top-level directory of the Postfix queue. This is also the root
 /*	directory of Postfix daemons that run chrooted.
 /* .IP \fBqueue_run_delay\fR
 /*	The time between successive scans of the deferred queue.
-/* .IP \fBverp_delimiter_filter\fR
-/*	The characters that Postfix accepts as VERP delimiter characters.
 /* SEE ALSO
 /*	pickup(8) mail pickup daemon
-/*	postsuper(1) queue maintenance
 /*	postalias(1) maintain alias database
-/*	postdrop(1) mail posting utility
+/*	postdrop(1) privileged posting agent
 /*	postfix(1) mail system control
-/*	postqueue(1) mail queue control
+/*	postkick(1) kick a Postfix daemon
 /*	qmgr(8) queue manager
+/*	showq(8) list mail queue
 /*	smtpd(8) SMTP server
-/*	flush(8) fast flush service
+/*	flushd(8) fast flush service
 /*	syslogd(8) system logging
 /* LICENSE
 /* .ad
@@ -283,7 +256,6 @@
 #include <errno.h>
 #include <ctype.h>
 #include <stdarg.h>
-#include <sysexits.h>
 
 /* Utility library. */
 
@@ -318,7 +290,7 @@
 #include <tok822.h>
 #include <mail_flush.h>
 #include <mail_stream.h>
-#include <verp_sender.h>
+#include <smtp_stream.h>
 
 /* Application-specific. */
 
@@ -333,16 +305,18 @@
 #define SM_MODE_FLUSHQ		6	/* user (stand-alone) mode */
 
  /*
+  * Queue file name. Global, so that the cleanup routine can find it when
+  * called by the run-time error handler.
+  */
+static char *sendmail_path;
+static void sendmail_cleanup(void);
+
+ /*
   * Flag parade.
   */
 #define SM_FLAG_AEOF	(1<<0)		/* archaic EOF */
 
 #define SM_FLAG_DEFAULT	(SM_FLAG_AEOF)
-
- /*
-  * VERP support.
-  */
-char   *verp_delims;
 
  /*
   * Silly little macros (SLMs).
@@ -351,8 +325,8 @@ char   *verp_delims;
 
 /* enqueue - post one message */
 
-static void enqueue(const int flags, const char *encoding, const char *sender,
-		            const char *full_name, char **recipients)
+static void enqueue(const int flags, const char *sender, const char *full_name,
+		            char **recipients)
 {
     VSTRING *buf;
     VSTREAM *dst;
@@ -370,8 +344,8 @@ static void enqueue(const int flags, const char *encoding, const char *sender,
     char   *postdrop_command;
     uid_t   uid = getuid();
     int     status;
+    struct stat st;
     int     naddr;
-    int     prev_type;
 
     /*
      * Initialize.
@@ -385,34 +359,41 @@ static void enqueue(const int flags, const char *encoding, const char *sender,
      * to use login names at all.
      */
     if (sender != 0) {
-	VSTRING_RESET(buf);
-	VSTRING_TERMINATE(buf);
 	tree = tok822_parse(sender);
 	for (naddr = 0, tp = tree; tp != 0; tp = tp->next)
-	    if (tp->type == TOK822_ADDR && naddr++ == 0)
-		tok822_internalize(buf, tp->head, TOK822_STR_DEFL);
+	    if (tp->type == TOK822_ADDR)
+		naddr++, tok822_internalize(buf, tp->head, TOK822_STR_DEFL);
 	tok822_free_tree(tree);
 	saved_sender = mystrdup(STR(buf));
 	if (naddr > 1)
 	    msg_warn("-f option specified malformed sender: %s", sender);
     } else {
 	if ((sender = username()) == 0)
-	    msg_fatal_status(EX_OSERR, "no login name found for user ID %lu",
-			     (unsigned long) uid);
+	    msg_fatal("unable to find out your login name");
 	saved_sender = mystrdup(sender);
     }
 
     /*
-     * Let the postdrop command open the queue file for us, and sanity check
-     * the content. XXX Make postdrop a manifest constant.
+     * Open the queue file. Save the queue file name, so the run-time error
+     * handler can clean up in case of errors.
+     * 
+     * If the queue is not world-writable, let the postdrop command open the
+     * queue file.
      */
-    errno = 0;
-    postdrop_command = concatenate(var_command_dir, "/postdrop -r",
+    if (stat(MAIL_QUEUE_MAILDROP, &st) < 0)
+	msg_fatal("No maildrop directory %s: %m", MAIL_QUEUE_MAILDROP);
+    if (st.st_mode & S_IWOTH) {
+	handle = mail_stream_file(MAIL_QUEUE_MAILDROP,
+				  MAIL_CLASS_PUBLIC, MAIL_SERVICE_PICKUP);
+	sendmail_path = mystrdup(VSTREAM_PATH(handle->stream));
+    } else {
+	postdrop_command = concatenate(var_command_dir, "/postdrop",
 			      msg_verbose ? " -v" : (char *) 0, (char *) 0);
-    if ((handle = mail_stream_command(postdrop_command)) == 0)
-	msg_fatal_status(EX_UNAVAILABLE, "%s(%ld): unable to execute %s: %m",
-			 saved_sender, (long) uid, postdrop_command);
-    myfree(postdrop_command);
+	if ((handle = mail_stream_command(postdrop_command)) == 0)
+	    msg_fatal("%s(%ld): unable to execute %s",
+		      saved_sender, (long) uid, postdrop_command);
+	myfree(postdrop_command);
+    }
     dst = handle->stream;
 
     /*
@@ -432,13 +413,6 @@ static void enqueue(const int flags, const char *encoding, const char *sender,
     if (full_name || (full_name = fullname()) != 0)
 	rec_fputs(dst, REC_TYPE_FULL, full_name);
     rec_fputs(dst, REC_TYPE_FROM, saved_sender);
-    if (verp_delims && *saved_sender == 0)
-	msg_fatal_status(EX_USAGE,
-			 "-V option requires non-null sender address");
-    if (encoding)
-	rec_fprintf(dst, REC_TYPE_ATTR, "%s=%s", MAIL_ATTR_ENCODING, encoding);
-    if (verp_delims)
-	rec_fputs(dst, REC_TYPE_VERP, verp_delims);
     if (recipients) {
 	for (cpp = recipients; *cpp != 0; cpp++) {
 	    tree = tok822_parse(*cpp);
@@ -446,9 +420,8 @@ static void enqueue(const int flags, const char *encoding, const char *sender,
 		if (tp->type == TOK822_ADDR) {
 		    tok822_internalize(buf, tp->head, TOK822_STR_DEFL);
 		    if (REC_PUT_BUF(dst, REC_TYPE_RCPT, buf) < 0)
-			msg_fatal_status(EX_TEMPFAIL,
-				    "%s(%ld): error writing queue file: %m",
-					 saved_sender, (long) uid);
+			msg_fatal("%s(%ld): error writing queue file: %m",
+				  saved_sender, (long) uid);
 		}
 	    }
 	    tok822_free_tree(tree);
@@ -467,8 +440,8 @@ static void enqueue(const int flags, const char *encoding, const char *sender,
     rec_fprintf(dst, REC_TYPE_MESG, REC_TYPE_MESG_FORMAT, 0L);
     skip_from_ = 1;
     strip_cr = STRIP_CR_DUNNO;
-    for (prev_type = 0; (type = rec_streamlf_get(VSTREAM_IN, buf, var_line_limit))
-	 != REC_TYPE_EOF; prev_type = type) {
+    while ((type = rec_streamlf_get(VSTREAM_IN, buf, var_line_limit))
+	   != REC_TYPE_EOF) {
 	if (strip_cr == STRIP_CR_DUNNO && type == REC_TYPE_NORM) {
 	    if (VSTRING_LEN(buf) > 0 && vstring_end(buf)[-1] == '\r')
 		strip_cr = STRIP_CR_DO;
@@ -486,13 +459,11 @@ static void enqueue(const int flags, const char *encoding, const char *sender,
 	if (strip_cr == STRIP_CR_DO && type == REC_TYPE_NORM)
 	    if (VSTRING_LEN(buf) > 0 && vstring_end(buf)[-1] == '\r')
 		vstring_truncate(buf, VSTRING_LEN(buf) - 1);
-	if ((flags & SM_FLAG_AEOF) && prev_type != REC_TYPE_CONT
-	    && VSTRING_LEN(buf) == 1 && *STR(buf) == '.')
+	if ((flags & SM_FLAG_AEOF) && VSTRING_LEN(buf) == 1 && *STR(buf) == '.')
 	    break;
 	if (REC_PUT_BUF(dst, type, buf) < 0)
-	    msg_fatal_status(EX_TEMPFAIL,
-			     "%s(%ld): error writing queue file: %m",
-			     saved_sender, (long) uid);
+	    msg_fatal("%s(%ld): error writing queue file: %m",
+		      saved_sender, (long) uid);
     }
 
     /*
@@ -513,13 +484,15 @@ static void enqueue(const int flags, const char *encoding, const char *sender,
      * handler from removing the file.
      */
     if (vstream_ferror(VSTREAM_IN))
-	msg_fatal_status(EX_DATAERR, "%s(%ld): error reading input: %m",
-			 saved_sender, (long) uid);
-    if ((status = mail_stream_finish(handle, (VSTRING *) 0)) != 0)
-	msg_fatal_status((status & CLEANUP_STAT_BAD) ? EX_SOFTWARE :
-			 (status & CLEANUP_STAT_WRITE) ? EX_TEMPFAIL :
-			 EX_UNAVAILABLE, "%s(%ld): %s", saved_sender,
-			 (long) uid, cleanup_strerror(status));
+	msg_fatal("%s(%ld): error reading input: %m",
+		  saved_sender, (long) uid);
+    if ((status = mail_stream_finish(handle)) != 0)
+	msg_fatal("%s(%ld): %s", saved_sender,
+		  (long) uid, cleanup_strerror(status));
+    if (sendmail_path) {
+	myfree(sendmail_path);
+	sendmail_path = 0;
+    }
 
     /*
      * Cleanup. Not really necessary as we're about to exit, but good for
@@ -527,6 +500,170 @@ static void enqueue(const int flags, const char *encoding, const char *sender,
      */
     vstring_free(buf);
     myfree(saved_sender);
+}
+
+/* show_queue - show queue status */
+
+static void show_queue(void)
+{
+    char    buf[VSTREAM_BUFSIZE];
+    VSTREAM *showq;
+    int     n;
+
+    /*
+     * Connect to the show queue service. Terminate silently when piping into
+     * a program that terminates early.
+     */
+    signal(SIGPIPE, SIG_DFL);
+    if ((showq = mail_connect(MAIL_CLASS_PUBLIC, MAIL_SERVICE_SHOWQ, BLOCKING)) != 0) {
+	while ((n = vstream_fread(showq, buf, sizeof(buf))) > 0)
+	    if (vstream_fwrite(VSTREAM_OUT, buf, n) != n)
+		msg_fatal("write error: %m");
+
+	if (vstream_fflush(VSTREAM_OUT))
+	    msg_fatal("write error: %m");
+
+	if (vstream_fclose(showq))
+	    msg_warn("close: %m");
+    }
+
+    /*
+     * When the mail system is down, the superuser can still access the queue
+     * directly. Just run the showq program in stand-alone mode.
+     */
+    else if (geteuid() == 0) {
+	ARGV   *argv;
+	int     stat;
+
+	msg_warn("Mail system is down -- accessing queue directly");
+	argv = argv_alloc(6);
+	argv_add(argv, MAIL_SERVICE_SHOWQ, "-c", "-u", "-S", (char *) 0);
+	for (n = 0; n < msg_verbose; n++)
+	    argv_add(argv, "-v", (char *) 0);
+	argv_terminate(argv);
+	stat = mail_run_foreground(var_daemon_dir, argv->argv);
+	argv_free(argv);
+    }
+
+    /*
+     * When the mail system is down, unprivileged users are stuck, because by
+     * design the mail system contains no set_uid programs. The only way for
+     * an unprivileged user to cross protection boundaries is to talk to the
+     * showq daemon.
+     */
+    else {
+	msg_fatal("Queue report unavailable - mail system is down");
+    }
+}
+
+/* flush_queue - force delivery */
+
+static void flush_queue(void)
+{
+
+    /*
+     * Trigger the flush queue service.
+     */
+    if (mail_flush_deferred() < 0)
+	msg_warn("Cannot flush mail queue - mail system is down");
+}
+
+/* chat - send command and examine reply */
+
+static void chat(VSTREAM *fp, VSTRING *buf, const char *fmt,...)
+{
+    va_list ap;
+
+    smtp_get(buf, fp, var_line_limit);
+    if (STR(buf)[0] != '2')
+	msg_fatal("server rejected request: %s", STR(buf));
+
+    if (msg_verbose)
+	msg_info("<<< %s", STR(buf));
+
+    if (msg_verbose) {
+	va_start(ap, fmt);
+	vstring_vsprintf(buf, fmt, ap);
+	va_end(ap);
+	msg_info(">>> %s", STR(buf));
+    }
+    va_start(ap, fmt);
+    smtp_vprintf(fp, fmt, ap);
+    va_end(ap);
+}
+
+/* flush_site - flush mail for site */
+
+static void flush_site(const char *site)
+{
+    VSTRING *buf = vstring_alloc(10);
+    VSTREAM *fp;
+    int     sock;
+    int     status;
+
+    /*
+     * Make connection to the local SMTP server. Translate "connection
+     * refused" into something less misleading.
+     */
+    vstring_sprintf(buf, "%s:smtp", var_myhostname);
+    if ((sock = inet_connect(STR(buf), BLOCKING, 10)) < 0) {
+	if (errno == ECONNREFUSED)
+	    msg_fatal("mail service at %s is down", var_myhostname);
+	msg_fatal("connect to mail service at %s: %m", var_myhostname);
+    }
+    fp = vstream_fdopen(sock, O_RDWR);
+
+    /*
+     * Prepare for trouble.
+     */
+    vstream_control(fp, VSTREAM_CTL_EXCEPT, VSTREAM_CTL_END);
+    status = vstream_setjmp(fp);
+    if (status != 0) {
+	switch (status) {
+	case SMTP_ERR_EOF:
+	    msg_fatal("server at %s aborted connection", var_myhostname);
+	case SMTP_ERR_TIME:
+	    msg_fatal("timeout while talking to server at %s", var_myhostname);
+	}
+    }
+    smtp_timeout_setup(fp, 60);
+
+    /*
+     * Chat with the SMTP server.
+     */
+    chat(fp, buf, "helo %s", var_myhostname);
+    chat(fp, buf, "etrn %s", site);
+    chat(fp, buf, "quit");
+
+    vstream_fclose(fp);
+    vstring_free(buf);
+}
+
+/* sendmail_cleanup - callback for the runtime error handler */
+
+static void sendmail_cleanup(void)
+{
+
+    /*
+     * We're possibly running from a signal handler, so we should not be
+     * doing complicated things such as memory of buffer management, but if
+     * for some reason we can't cleanup it is even worse to just die quietly.
+     */
+    if (sendmail_path) {
+	if (remove(sendmail_path))
+	    msg_warn("sendmail_cleanup: remove %s: %m", sendmail_path);
+	else if (msg_verbose)
+	    msg_info("remove %s", sendmail_path);
+	sendmail_path = 0;
+    }
+}
+
+/* sendmail_sig - catch signal and clean up */
+
+static void sendmail_sig(int sig)
+{
+    sendmail_cleanup();
+    exit(sig);
 }
 
 /* main - the main program */
@@ -547,7 +684,6 @@ int     main(int argc, char **argv)
     int     n;
     int     flags = SM_FLAG_DEFAULT;
     char   *site_to_flush = 0;
-    char   *encoding = 0;
 
     /*
      * Be consistent with file permissions.
@@ -562,7 +698,7 @@ int     main(int argc, char **argv)
     for (fd = 0; fd < 3; fd++)
 	if (fstat(fd, &st) == -1
 	    && (close(fd), open("/dev/null", O_RDWR, 0)) != fd)
-	    msg_fatal_status(EX_UNAVAILABLE, "open /dev/null: %m");
+	    msg_fatal("open /dev/null: %m");
 
     /*
      * The CDE desktop calendar manager leaks a parent file descriptor into
@@ -610,16 +746,15 @@ int     main(int argc, char **argv)
      */
     mail_conf_read();
     if (chdir(var_queue_dir))
-	msg_fatal_status(EX_UNAVAILABLE, "chdir %s: %m", var_queue_dir);
-
-    /*
-     * Stop run-away process accidents by limiting the queue file size. This
-     * is not a defense against DOS attack.
-     */
-    if (var_message_limit > 0 && get_file_limit() > var_message_limit)
-	set_file_limit((off_t) var_message_limit);
+	msg_fatal("chdir %s: %m", var_queue_dir);
 
     signal(SIGPIPE, SIG_IGN);
+
+    signal(SIGHUP, sendmail_sig);
+    signal(SIGINT, sendmail_sig);
+    signal(SIGQUIT, sendmail_sig);
+    signal(SIGTERM, sendmail_sig);
+    msg_cleanup(sendmail_cleanup);
 
     /*
      * Optionally start the debugger on ourself. This must be done after
@@ -660,12 +795,7 @@ int     main(int argc, char **argv)
 	    optind++;
 	    continue;
 	}
-	if (strcmp(argv[OPTIND], "-V") == 0) {
-	    verp_delims = var_verp_delims;
-	    optind++;
-	    continue;
-	}
-	if ((c = GETOPT(argc, argv, "A:B:C:F:GIL:N:R:UV:X:b:ce:f:h:imno:p:r:q:tvx")) <= 0)
+	if ((c = GETOPT(argc, argv, "B:C:F:GIN:R:UX:b:ce:f:h:imno:p:r:q:tvx")) <= 0)
 	    break;
 	switch (c) {
 	default:
@@ -673,31 +803,25 @@ int     main(int argc, char **argv)
 		msg_info("-%c option ignored", c);
 	    break;
 	case 'n':
-	    msg_fatal_status(EX_USAGE, "-%c option not supported", c);
-	case 'B':
-	    if (strcmp(optarg, "8BITMIME") == 0)/* RFC 1652 */
-		encoding = MAIL_ATTR_ENC_8BIT;
-	    else if (strcmp(optarg, "7BIT") == 0)	/* RFC 1652 */
-		encoding = MAIL_ATTR_ENC_7BIT;
-	    else
-		msg_fatal_status(EX_USAGE, "-B option needs 8BITMIME or 7BIT");
+	    msg_fatal("-%c option not supported", c);
+	case 'B':				/* body type */
 	    break;
 	case 'F':				/* full name */
 	    full_name = optarg;
 	    break;
+	case 'G':				/* gateway submission */
+	    break;
 	case 'I':				/* newaliases */
 	    mode = SM_MODE_NEWALIAS;
 	    break;
-	case 'V':				/* VERP */
-	    if (verp_delims_verify(optarg) != 0)
-		msg_fatal_status(EX_USAGE, "-V requires two characters from %s",
-				 var_verp_filter);
-	    verp_delims = optarg;
+	case 'N':				/* DSN */
+	    break;
+	case 'R':				/* DSN */
 	    break;
 	case 'b':
 	    switch (*optarg) {
 	    default:
-		msg_fatal_status(EX_USAGE, "unsupported: -%c%c", c, *optarg);
+		msg_fatal("unsupported: -%c%c", c, *optarg);
 	    case 'd':				/* daemon mode */
 		if (mode == SM_MODE_FLUSHQ)
 		    msg_warn("ignoring -q option in daemon mode");
@@ -731,7 +855,7 @@ int     main(int argc, char **argv)
 		break;
 	    case 'A':
 		if (optarg[1] == 0)
-		    msg_fatal_status(EX_USAGE, "-oA requires pathname");
+		    msg_fatal("-oA requires pathname");
 		myfree(var_alias_db_map);
 		var_alias_db_map = mystrdup(optarg + 1);
 		set_mail_conf_str(VAR_ALIAS_DB_MAP, var_alias_db_map);
@@ -758,11 +882,8 @@ int     main(int argc, char **argv)
 		}
 	    } else if (optarg[0] == 'R') {
 		site_to_flush = optarg + 1;
-		if (*site_to_flush == 0)
-		    msg_fatal_status(EX_USAGE, "specify: -qRsitename");
 	    } else {
-		msg_fatal_status(EX_USAGE, "-q%c is not implemented",
-				 optarg[0]);
+		msg_fatal("-q%c is not implemented", optarg[0]);
 	    }
 	    break;
 	case 't':
@@ -772,77 +893,49 @@ int     main(int argc, char **argv)
 	    msg_verbose++;
 	    break;
 	case '?':
-	    msg_fatal_status(EX_USAGE, "usage: %s [options]", argv[0]);
+	    msg_fatal("usage: %s [options]", argv[0]);
 	}
     }
-
-    /*
-     * Workaround: produce no output when verbose delivery is requested in
-     * mail.rc.
-     */
-    if (msg_verbose > 0)
-	msg_verbose--;
 
     /*
      * Look for conflicting options and arguments.
      */
     if (extract_recipients && mode != SM_MODE_ENQUEUE)
-	msg_fatal_status(EX_USAGE, "-t can be used only in delivery mode");
+	msg_fatal("-t can be used only in delivery mode");
 
     if (site_to_flush && mode != SM_MODE_ENQUEUE)
-	msg_fatal_status(EX_USAGE, "-qR can be used only in delivery mode");
+	msg_fatal("-qR can be used only in delivery mode");
 
     if (extract_recipients && argv[OPTIND])
-	msg_fatal_status(EX_USAGE,
-			 "cannot handle command-line recipients with -t");
+	msg_fatal("cannot handle command-line recipients with -t");
 
     /*
-     * Start processing. Everything is delegated to external commands.
+     * Start processing. Some modes are implemented internally (enqueue
+     * message), or as network clients (show queue, flush queue); everything
+     * else is delegated to external commands.
      */
     switch (mode) {
     default:
 	msg_panic("unknown operation mode: %d", mode);
 	/* NOTREACHED */
     case SM_MODE_ENQUEUE:
-	if (site_to_flush == 0) {
-	    enqueue(flags, encoding, sender, full_name, argv + OPTIND);
-	    exit(0);
-	}
-	if (argv[OPTIND])
-	    msg_fatal_status(EX_USAGE, "flush site requires no recipient");
-	ext_argv = argv_alloc(2);
-	argv_add(ext_argv, "postqueue", "-s", site_to_flush, (char *) 0);
-	for (n = 0; n < msg_verbose; n++)
-	    argv_add(ext_argv, "-v", (char *) 0);
-	argv_terminate(ext_argv);
-	mail_run_replace(var_command_dir, ext_argv->argv);
-	/* NOTREACHED */
+	if (site_to_flush)
+	    flush_site(site_to_flush);
+	else
+	    enqueue(flags, sender, full_name, argv + OPTIND);
+	exit(0);
 	break;
     case SM_MODE_MAILQ:
-	if (argv[OPTIND])
-	    msg_fatal_status(EX_USAGE,
-			     "display queue mode requires no recipient");
-	ext_argv = argv_alloc(2);
-	argv_add(ext_argv, "postqueue", "-p", (char *) 0);
-	for (n = 0; n < msg_verbose; n++)
-	    argv_add(ext_argv, "-v", (char *) 0);
-	argv_terminate(ext_argv);
-	mail_run_replace(var_command_dir, ext_argv->argv);
-	/* NOTREACHED */
+	show_queue();
+	exit(0);
+	break;
     case SM_MODE_FLUSHQ:
-	if (argv[OPTIND])
-	    msg_fatal_status(EX_USAGE,
-			     "flush queue mode requires no recipient");
-	ext_argv = argv_alloc(2);
-	argv_add(ext_argv, "postqueue", "-f", (char *) 0);
-	for (n = 0; n < msg_verbose; n++)
-	    argv_add(ext_argv, "-v", (char *) 0);
-	argv_terminate(ext_argv);
-	mail_run_replace(var_command_dir, ext_argv->argv);
-	/* NOTREACHED */
+	flush_queue();
+	exit(0);
+	break;
     case SM_MODE_DAEMON:
 	if (argv[OPTIND])
-	    msg_fatal_status(EX_USAGE, "daemon mode requires no recipient");
+	    msg_fatal("daemon mode requires no recipient");
 	ext_argv = argv_alloc(2);
 	argv_add(ext_argv, "postfix", (char *) 0);
 	for (n = 0; n < msg_verbose; n++)
@@ -855,22 +948,17 @@ int     main(int argc, char **argv)
 	break;
     case SM_MODE_NEWALIAS:
 	if (argv[OPTIND])
-	    msg_fatal_status(EX_USAGE,
-			 "alias initialization mode requires no recipient");
-	if (*var_alias_db_map == 0)
-	    return (0);
+	    msg_fatal("alias initialization mode requires no recipient");
 	ext_argv = argv_alloc(2);
 	argv_add(ext_argv, "postalias", (char *) 0);
 	for (n = 0; n < msg_verbose; n++)
 	    argv_add(ext_argv, "-v", (char *) 0);
 	argv_split_append(ext_argv, var_alias_db_map, ", \t\r\n");
-	argv_terminate(ext_argv);
 	mail_run_replace(var_command_dir, ext_argv->argv);
 	/* NOTREACHED */
     case SM_MODE_USER:
 	if (argv[OPTIND])
-	    msg_fatal_status(EX_USAGE,
-			     "stand-alone mode requires no recipient");
+	    msg_fatal("stand-alone mode requires no recipient");
 	ext_argv = argv_alloc(2);
 	argv_add(ext_argv, "smtpd", "-S", (char *) 0);
 	for (n = 0; n < msg_verbose; n++)

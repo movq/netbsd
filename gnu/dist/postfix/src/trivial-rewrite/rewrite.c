@@ -91,12 +91,6 @@ void    rewrite_tree(char *unused_ruleset, TOK822 *tree)
     TOK822 *local;
 
     /*
-     * XXX If you change this module, quote_822_local.c, or tok822_parse.c,
-     * be sure to re-run the tests under "make rewrite_clnt_test" and "make
-     * resolve_clnt_test" in the global directory.
-     */
-
-    /*
      * Sanity check.
      */
     if (tree->head == 0)
@@ -124,8 +118,7 @@ void    rewrite_tree(char *unused_ruleset, TOK822 *tree)
      * Strip source route.
      */
     if (tree->head->type == '@'
-	&& (colon = tok822_find_type(tree->head, ':')) != 0
-	&& colon != tree->tail)
+	&& (colon = tok822_find_type(tree->head, ':')) != 0)
 	tok822_free_tree(tok822_sub_keep_after(tree, colon));
 
     /*
@@ -164,13 +157,10 @@ void    rewrite_tree(char *unused_ruleset, TOK822 *tree)
     }
 
     /*
-     * Append missing .domain, but leave broken forms ending in @ alone. This
-     * merely makes diagnostics more accurate by leaving bogus addresses
-     * alone.
+     * Append missing .domain
      */
     if (var_append_dot_mydomain != 0
 	&& (domain = tok822_rfind_type(tree->tail, '@')) != 0
-	&& domain != tree->tail
 	&& tok822_find_type(domain, TOK822_DOMLIT) == 0
 	&& tok822_find_type(domain, '.') == 0) {
 	tok822_sub_append(tree, tok822_alloc('.', (char *) 0));
@@ -178,17 +168,10 @@ void    rewrite_tree(char *unused_ruleset, TOK822 *tree)
     }
 
     /*
-     * Strip trailing dot at end of domain, but not dot-dot or @-dot. This
-     * merely makes diagnostics more accurate by leaving bogus addresses
-     * alone.
+     * Strip trailing dot.
      */
-#if 0
-    if (tree->tail->type == '.'
-	&& tree->tail->prev
-	&& tree->tail->prev->type != '.'
-	&& tree->tail->prev->type != '@')
+    if (tree->tail->type == '.')
 	tok822_free_tree(tok822_sub_keep_before(tree, tree->tail));
-#endif
 }
 
 /* rewrite_addr - rewrite address according to rule set */
@@ -220,10 +203,7 @@ void    rewrite_addr(char *ruleset, char *addr, VSTRING *result)
 
 int     rewrite_proto(VSTREAM *stream)
 {
-    if (attr_scan(stream, ATTR_FLAG_STRICT,
-		  ATTR_TYPE_STR, MAIL_ATTR_RULE, ruleset,
-		  ATTR_TYPE_STR, MAIL_ATTR_ADDR, address,
-		  ATTR_TYPE_END) != 2)
+    if (mail_scan(stream, "%s %s", ruleset, address) != 2)
 	return (-1);
 
     rewrite_addr(vstring_str(ruleset), vstring_str(address), result);
@@ -232,9 +212,7 @@ int     rewrite_proto(VSTREAM *stream)
 	msg_info("`%s' `%s' -> `%s'", vstring_str(ruleset),
 		 vstring_str(address), vstring_str(result));
 
-    attr_print(stream, ATTR_FLAG_NONE,
-	       ATTR_TYPE_STR, MAIL_ATTR_ADDR, vstring_str(result),
-	       ATTR_TYPE_END);
+    mail_print(stream, "%s", vstring_str(result));
 
     if (vstream_fflush(stream) != 0) {
 	msg_warn("write rewrite reply: %m");

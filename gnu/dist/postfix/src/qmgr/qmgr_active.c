@@ -131,8 +131,7 @@ static void qmgr_active_corrupt(const char *queue_id)
 	msg_warn("%s: save corrupt file queue %s id %s: %m",
 		 myname, MAIL_QUEUE_ACTIVE, queue_id);
     } else {
-	msg_warn("saving corrupt file \"%s\" from queue \"%s\" to queue \"%s\"", 
-		queue_id, MAIL_QUEUE_ACTIVE, MAIL_QUEUE_CORRUPT);
+	msg_warn("corrupt file queue %s id %s", MAIL_QUEUE_ACTIVE, queue_id);
     }
 }
 
@@ -150,7 +149,7 @@ static void qmgr_active_defer(const char *queue_name, const char *queue_id,
 
     tbuf.actime = tbuf.modtime = event_time() + delay;
     path = mail_queue_path((VSTRING *) 0, queue_name, queue_id);
-    if (utime(path, &tbuf) < 0 && errno != ENOENT)
+    if (utime(path, &tbuf) < 0)
 	msg_fatal("%s: update %s time stamps: %m", myname, path);
     if (mail_queue_rename(queue_id, queue_name, dest_queue)) {
 	if (errno != ENOENT)
@@ -165,7 +164,7 @@ static void qmgr_active_defer(const char *queue_name, const char *queue_id,
 
 /* qmgr_active_feed - feed one message into active queue */
 
-int     qmgr_active_feed(QMGR_SCAN *scan_info, const char *queue_id)
+void    qmgr_active_feed(QMGR_SCAN *scan_info, const char *queue_id)
 {
     char   *myname = "qmgr_active_feed";
     QMGR_MESSAGE *message;
@@ -181,7 +180,7 @@ int     qmgr_active_feed(QMGR_SCAN *scan_info, const char *queue_id)
      * Make sure this is something we are willing to open.
      */
     if (mail_open_ok(scan_info->queue, queue_id, &st, &path) == MAIL_OPEN_NO)
-	return (0);
+	return;
 
     if (msg_verbose)
 	msg_info("%s: %s", myname, path);
@@ -195,7 +194,7 @@ int     qmgr_active_feed(QMGR_SCAN *scan_info, const char *queue_id)
 	if (msg_verbose)
 	    msg_info("%s: skip %s (%ld seconds)", myname, queue_id,
 		     (long) (st.st_mtime - event_time()));
-	return (0);
+	return;
     }
 
     /*
@@ -207,7 +206,7 @@ int     qmgr_active_feed(QMGR_SCAN *scan_info, const char *queue_id)
 		      queue_id, scan_info->queue, MAIL_QUEUE_ACTIVE);
 	msg_warn("%s: %s: rename from %s to %s: %m", myname,
 		 queue_id, scan_info->queue, MAIL_QUEUE_ACTIVE);
-	return (0);
+	return;
     }
 
     /*
@@ -227,10 +226,8 @@ int     qmgr_active_feed(QMGR_SCAN *scan_info, const char *queue_id)
     if ((message = qmgr_message_alloc(MAIL_QUEUE_ACTIVE, queue_id,
 				      scan_info->flags)) == 0) {
 	qmgr_active_corrupt(queue_id);
-	return (0);
     } else if (message == QMGR_MESSAGE_LOCKED) {
 	qmgr_active_defer(MAIL_QUEUE_ACTIVE, queue_id, MAIL_QUEUE_INCOMING, 60);
-	return (0);
     } else {
 
 	/*
@@ -239,7 +236,6 @@ int     qmgr_active_feed(QMGR_SCAN *scan_info, const char *queue_id)
 	 */
 	if (message->refcount == 0)
 	    qmgr_active_done(message);
-	return (1);
     }
 }
 
@@ -279,23 +275,12 @@ void    qmgr_active_done(QMGR_MESSAGE *message)
 	} else {
 	    if (msg_verbose)
 		msg_info("%s: bounce %s", myname, message->queue_id);
-	    if (message->verp_delims == 0 || var_verp_bounce_off)
-		abounce_flush(BOUNCE_FLAG_KEEP,
-			      message->queue_name,
-			      message->queue_id,
-			      message->encoding,
-			      message->errors_to,
-			      qmgr_active_done_2_bounce_flush,
-			      (char *) message);
-	    else
-		abounce_flush_verp(BOUNCE_FLAG_KEEP,
-				   message->queue_name,
-				   message->queue_id,
-				   message->encoding,
-				   message->errors_to,
-				   message->verp_delims,
-				   qmgr_active_done_2_bounce_flush,
-				   (char *) message);
+	    abounce_flush(BOUNCE_FLAG_KEEP,
+			  message->queue_name,
+			  message->queue_id,
+			  message->errors_to,
+			  qmgr_active_done_2_bounce_flush,
+			  (char *) message);
 	    return;
 	}
     }
@@ -332,7 +317,7 @@ static void qmgr_active_done_2_generic(QMGR_MESSAGE *message)
      * attributes, and by pretending that delivery was deferred.
      */
     if (message->flags
-	&& mail_open_ok(MAIL_QUEUE_ACTIVE, message->queue_id, &st, &path) == MAIL_OPEN_NO) {
+	&& !mail_open_ok(MAIL_QUEUE_ACTIVE, message->queue_id, &st, &path)) {
 	qmgr_active_corrupt(message->queue_id);
 	qmgr_message_free(message);
 	return;
@@ -365,26 +350,15 @@ static void qmgr_active_done_2_generic(QMGR_MESSAGE *message)
      * daemon waits for the qmgr to accept the "new mail" trigger.
      */
     if (message->flags) {
-	if (event_time() >= message->arrival_time + var_max_queue_time) {
-	    msg_info("%s: from=<%s>, status=expired, returned to sender",
-		     message->queue_id, message->sender);
-	    if (message->verp_delims == 0 || var_verp_bounce_off)
-		adefer_flush(BOUNCE_FLAG_KEEP,
-			     message->queue_name,
-			     message->queue_id,
-			     message->encoding,
-			     message->errors_to,
-			     qmgr_active_done_3_defer_flush,
-			     (char *) message);
-	    else
-		adefer_flush_verp(BOUNCE_FLAG_KEEP,
-				  message->queue_name,
-				  message->queue_id,
-				  message->encoding,
-				  message->errors_to,
-				  message->verp_delims,
-				  qmgr_active_done_3_defer_flush,
-				  (char *) message);
+	if (event_time() > message->arrival_time + var_max_queue_time) {
+	    if (msg_verbose)
+		msg_info("%s: too old, bouncing %s", myname, message->queue_id);
+	    adefer_flush(BOUNCE_FLAG_KEEP,
+			 message->queue_name,
+			 message->queue_id,
+			 message->errors_to,
+			 qmgr_active_done_3_defer_flush,
+			 (char *) message);
 	    return;
 	} else if (message->warn_time > 0
 		   && event_time() > message->warn_time) {
@@ -393,7 +367,6 @@ static void qmgr_active_done_2_generic(QMGR_MESSAGE *message)
 	    adefer_warn(BOUNCE_FLAG_KEEP,
 			message->queue_name,
 			message->queue_id,
-			message->encoding,
 			message->errors_to,
 			qmgr_active_done_3_defer_warn,
 			(char *) message);

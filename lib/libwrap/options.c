@@ -1,5 +1,3 @@
-/*	$NetBSD: options.c,v 1.11 2002/05/24 05:38:20 itojun Exp $	*/
-
  /*
   * General skeleton for adding options to the access control language. The
   * features offered by this module are documented in the hosts_options(5)
@@ -30,13 +28,8 @@
   * course of action.
   */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
 static char sccsid[] = "@(#) options.c 1.17 96/02/11 17:01:31";
-#else
-__RCSID("$NetBSD: options.c,v 1.11 2002/05/24 05:38:20 itojun Exp $");
-#endif
 #endif
 
 /* System libraries. */
@@ -49,13 +42,15 @@ __RCSID("$NetBSD: options.c,v 1.11 2002/05/24 05:38:20 itojun Exp $");
 #include <netdb.h>
 #include <stdio.h>
 #include <syslog.h>
-#include <unistd.h>
-#include <stdlib.h>
 #include <pwd.h>
 #include <grp.h>
 #include <ctype.h>
 #include <setjmp.h>
 #include <string.h>
+
+#ifndef MAXPATHNAMELEN
+#define MAXPATHNAMELEN  BUFSIZ
+#endif
 
 /* Local stuff. */
 
@@ -71,51 +66,31 @@ extern jmp_buf tcpd_buf;		/* tcpd_jump() support */
 static char whitespace_eq[] = "= \t\r\n";
 #define whitespace (whitespace_eq + 1)
 
-static char *get_field			/* chew :-delimited field off string */
-		__P((char *));
-static char *chop_string		/* strip leading and trailing blanks */
-		__P((char *));
-struct syslog_names;
-static int severity_map 
-		__P((struct syslog_names *, char *));
+static char *get_field();		/* chew :-delimited field off string */
+static char *chop_string();		/* strip leading and trailing blanks */
 
 /* List of functions that implement the options. Add yours here. */
 
-static void user_option			/* execute "user name.group" option */
-		__P((char *, struct request_info *));
-static void group_option		/* execute "group name" option */
-		__P((char *, struct request_info *));
-static void umask_option		/* execute "umask mask" option */
-		__P((char *, struct request_info *));
-static void linger_option		/* execute "linger time" option */
-		__P((char *, struct request_info *));
-static void keepalive_option		/* execute "keepalive" option */
-		__P((char *, struct request_info *));
-static void spawn_option		/* execute "spawn command" option */
-		__P((char *, struct request_info *));
-static void twist_option		/* execute "twist command" option */
-		__P((char *, struct request_info *));
-static void rfc931_option		/* execute "rfc931" option */
-		__P((char *, struct request_info *));
-static void setenv_option		/* execute "setenv name value" */
-		__P((char *, struct request_info *));
-static void nice_option			/* execute "nice" option */
-		__P((char *, struct request_info *));
-static void severity_option		/* execute "severity value" */
-		__P((char *, struct request_info *));
-static void allow_option		/* execute "allow" option */
-		__P((char *, struct request_info *));
-static void deny_option			/* execute "deny" option */
-		__P((char *, struct request_info *));
-static void banners_option		/* execute "banners path" option */
-		__P((char *, struct request_info *));
+static void user_option();		/* execute "user name.group" option */
+static void group_option();		/* execute "group name" option */
+static void umask_option();		/* execute "umask mask" option */
+static void linger_option();		/* execute "linger time" option */
+static void keepalive_option();		/* execute "keepalive" option */
+static void spawn_option();		/* execute "spawn command" option */
+static void twist_option();		/* execute "twist command" option */
+static void rfc931_option();		/* execute "rfc931" option */
+static void setenv_option();		/* execute "setenv name value" */
+static void nice_option();		/* execute "nice" option */
+static void severity_option();		/* execute "severity value" */
+static void allow_option();		/* execute "allow" option */
+static void deny_option();		/* execute "deny" option */
+static void banners_option();		/* execute "banners path" option */
 
 /* Structure of the options table. */
 
 struct option {
     char   *name;			/* keyword name, case is ignored */
-    void  (*func)			/* function that does the real work */
-		__P((char *, struct request_info *));
+    void  (*func) ();			/* function that does the real work */
     int     flags;			/* see below... */
 };
 
@@ -133,21 +108,21 @@ struct option {
 /* List of known keywords. Add yours here. */
 
 static struct option option_table[] = {
-    { "user", user_option, NEED_ARG },
-    { "group", group_option, NEED_ARG },
-    { "umask", umask_option, NEED_ARG },
-    { "linger", linger_option, NEED_ARG },
-    { "keepalive", keepalive_option, 0 },
-    { "spawn", spawn_option, NEED_ARG | EXPAND_ARG },
-    { "twist", twist_option, NEED_ARG | EXPAND_ARG | USE_LAST },
-    { "rfc931", rfc931_option, OPT_ARG },
-    { "setenv", setenv_option, NEED_ARG | EXPAND_ARG },
-    { "nice", nice_option, OPT_ARG },
-    { "severity", severity_option, NEED_ARG },
-    { "allow", allow_option, USE_LAST },
-    { "deny", deny_option, USE_LAST },
-    { "banners", banners_option, NEED_ARG },
-    { NULL, NULL, 0 }
+    "user", user_option, NEED_ARG,
+    "group", group_option, NEED_ARG,
+    "umask", umask_option, NEED_ARG,
+    "linger", linger_option, NEED_ARG,
+    "keepalive", keepalive_option, 0,
+    "spawn", spawn_option, NEED_ARG | EXPAND_ARG,
+    "twist", twist_option, NEED_ARG | EXPAND_ARG | USE_LAST,
+    "rfc931", rfc931_option, OPT_ARG,
+    "setenv", setenv_option, NEED_ARG | EXPAND_ARG,
+    "nice", nice_option, OPT_ARG,
+    "severity", severity_option, NEED_ARG,
+    "allow", allow_option, USE_LAST,
+    "deny", deny_option, USE_LAST,
+    "banners", banners_option, NEED_ARG,
+    0,
 };
 
 /* process_options - process access control options */
@@ -242,21 +217,21 @@ static void banners_option(value, request)
 char   *value;
 struct request_info *request;
 {
-    char    path[MAXPATHLEN];
+    char    path[MAXPATHNAMELEN];
     char    ibuf[BUFSIZ];
     char    obuf[2 * BUFSIZ];
     struct stat st;
     int     ch;
     FILE   *fp;
 
-    (void)snprintf(path, sizeof path, "%s/%s", value, eval_daemon(request));
+    sprintf(path, "%s/%s", value, eval_daemon(request));
     if ((fp = fopen(path, "r")) != 0) {
 	while ((ch = fgetc(fp)) == 0)
 	    write(request->fd, "", 1);
 	ungetc(ch, fp);
-	while (fgets(ibuf, sizeof(ibuf) - 2, fp)) {
+	while (fgets(ibuf, sizeof(ibuf) - 1, fp)) {
 	    if (split_at(ibuf, '\n'))
-		strcat(ibuf, "\r\n");	/* XXX strcat is safe */
+		strcat(ibuf, "\r\n");
 	    percent_x(obuf, sizeof(obuf), ibuf, request);
 	    write(request->fd, obuf, strlen(obuf));
 	}
@@ -275,6 +250,7 @@ char   *value;
 struct request_info *request;
 {
     struct group *grp;
+    struct group *getgrnam();
 
     if ((grp = getgrnam(value)) == 0)
 	tcpd_jump("unknown group: \"%s\"", value);
@@ -293,6 +269,7 @@ char   *value;
 struct request_info *request;
 {
     struct passwd *pwd;
+    struct passwd *getpwnam();
     char   *group;
 
     if ((group = split_at(value, '.')) != 0)
@@ -393,6 +370,8 @@ static void twist_option(value, request)
 char   *value;
 struct request_info *request;
 {
+    char   *error;
+
     if (dry_run != 0) {
 	dry_run = 0;
     } else {
@@ -408,15 +387,17 @@ struct request_info *request;
 	if (maybe_dup2(request->fd, 0) != 0 ||
 	    maybe_dup2(request->fd, 1) != 1 ||
 	    maybe_dup2(request->fd, 2) != 2) {
-	    tcpd_warn("twist_option: dup: %m");
+	    error = "twist_option: dup: %m";
 	} else {
 	    if (request->fd > 2)
 		close(request->fd);
 	    (void) execl("/bin/sh", "sh", "-c", value, (char *) 0);
-	    tcpd_warn("twist_option: /bin/sh: %m");
+	    error = "twist_option: /bin/sh: %m";
 	}
 
 	/* Something went wrong: we MUST terminate the process. */
+
+	tcpd_warn(error);
 	clean_exit(request);
     }
 }
@@ -466,91 +447,85 @@ struct syslog_names {
 
 static struct syslog_names log_fac[] = {
 #ifdef LOG_KERN
-    { "kern", LOG_KERN },
+    "kern", LOG_KERN,
 #endif
 #ifdef LOG_USER
-    { "user", LOG_USER },
+    "user", LOG_USER,
 #endif
 #ifdef LOG_MAIL
-    { "mail", LOG_MAIL },
+    "mail", LOG_MAIL,
 #endif
 #ifdef LOG_DAEMON
-    { "daemon", LOG_DAEMON },
+    "daemon", LOG_DAEMON,
 #endif
 #ifdef LOG_AUTH
-    { "auth", LOG_AUTH },
+    "auth", LOG_AUTH,
 #endif
 #ifdef LOG_LPR
-    { "lpr", LOG_LPR },
+    "lpr", LOG_LPR,
 #endif
 #ifdef LOG_NEWS
-    { "news", LOG_NEWS },
+    "news", LOG_NEWS,
 #endif
 #ifdef LOG_UUCP
-    { "uucp", LOG_UUCP },
+    "uucp", LOG_UUCP,
 #endif
 #ifdef LOG_CRON
-    { "cron", LOG_CRON },
-#endif
-#ifdef LOG_AUTHPRIV
-    { "authpriv", LOG_AUTHPRIV },
-#endif
-#ifdef LOG_FTP
-    { "ftp", LOG_FTP },
+    "cron", LOG_CRON,
 #endif
 #ifdef LOG_LOCAL0
-    { "local0", LOG_LOCAL0 },
+    "local0", LOG_LOCAL0,
 #endif
 #ifdef LOG_LOCAL1
-    { "local1", LOG_LOCAL1 },
+    "local1", LOG_LOCAL1,
 #endif
 #ifdef LOG_LOCAL2
-    { "local2", LOG_LOCAL2 },
+    "local2", LOG_LOCAL2,
 #endif
 #ifdef LOG_LOCAL3
-    { "local3", LOG_LOCAL3 },
+    "local3", LOG_LOCAL3,
 #endif
 #ifdef LOG_LOCAL4
-    { "local4", LOG_LOCAL4 },
+    "local4", LOG_LOCAL4,
 #endif
 #ifdef LOG_LOCAL5
-    { "local5", LOG_LOCAL5 },
+    "local5", LOG_LOCAL5,
 #endif
 #ifdef LOG_LOCAL6
-    { "local6", LOG_LOCAL6 },
+    "local6", LOG_LOCAL6,
 #endif
 #ifdef LOG_LOCAL7
-    { "local7", LOG_LOCAL7 },
+    "local7", LOG_LOCAL7,
 #endif
-    { NULL, 0 }
+    0,
 };
 
 static struct syslog_names log_sev[] = {
 #ifdef LOG_EMERG
-    { "emerg", LOG_EMERG },
+    "emerg", LOG_EMERG,
 #endif
 #ifdef LOG_ALERT
-    { "alert", LOG_ALERT },
+    "alert", LOG_ALERT,
 #endif
 #ifdef LOG_CRIT
-    { "crit", LOG_CRIT },
+    "crit", LOG_CRIT,
 #endif
 #ifdef LOG_ERR
-    { "err", LOG_ERR },
+    "err", LOG_ERR,
 #endif
 #ifdef LOG_WARNING
-    { "warning", LOG_WARNING },
+    "warning", LOG_WARNING,
 #endif
 #ifdef LOG_NOTICE
-    { "notice", LOG_NOTICE },
+    "notice", LOG_NOTICE,
 #endif
 #ifdef LOG_INFO
-    { "info", LOG_INFO },
+    "info", LOG_INFO,
 #endif
 #ifdef LOG_DEBUG
-    { "debug", LOG_DEBUG },
+    "debug", LOG_DEBUG,
 #endif
-    { NULL, 0 }
+    0,
 };
 
 /* severity_map - lookup facility or severity value */
@@ -566,7 +541,6 @@ char   *name;
 	    return (t->value);
     tcpd_jump("bad syslog facility or severity: \"%s\"", name);
     /* NOTREACHED */
-    return -1;
 }
 
 /* severity_option - change logging severity for this event (Dave Mitchell) */
@@ -612,7 +586,7 @@ char   *string;
     if (src[0] == 0)
 	return (0);
 
-    while ((ch = *src) != '\0') {
+    while (ch = *src) {
 	if (ch == ':') {
 	    if (*++src == 0)
 		tcpd_warn("rule ends in \":\"");
@@ -632,12 +606,12 @@ char   *string;
 static char *chop_string(string)
 register char *string;
 {
-    char   *start = NULL;
-    char   *end = NULL;
+    char   *start = 0;
+    char   *end;
     char   *cp;
 
     for (cp = string; *cp; cp++) {
-	if (!isspace((unsigned char) *cp)) {
+	if (!isspace(*cp)) {
 	    if (start == 0)
 		start = cp;
 	    end = cp;

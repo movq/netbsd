@@ -154,7 +154,7 @@ void    dot_unlockfile(const char *path)
 #include <msg_vstream.h>
 #include <mail_conf.h>
 
-int     main(int argc, char **argv)
+main(int argc, char **argv)
 {
     VSTRING *why = vstring_alloc(100);
 

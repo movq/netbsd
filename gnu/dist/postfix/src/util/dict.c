@@ -182,7 +182,6 @@
 #include "vstring.h"
 #include "readlline.h"
 #include "mac_parse.h"
-#include "stringops.h"
 #include "dict.h"
 #include "dict_ht.h"
 
@@ -373,18 +372,43 @@ void    dict_load_file(const char *dict_name, const char *path)
 void    dict_load_fp(const char *dict_name, VSTREAM *fp)
 {
     VSTRING *buf;
+    char   *start;
     char   *member;
     char   *val;
+    char   *cp;
+    char   *ep;
     int     lineno;
-    const char *err;
+
+    /*
+     * Ugly macros to make complex expressions less unreadable.
+     */
+#define SKIP(start, var, cond) \
+	for (var = start; *var && (cond); var++);
+
+#define TRIM(s) { \
+	char *p; \
+	for (p = (s) + strlen(s); p > (s) && ISSPACE(p[-1]); p--); \
+	*p = 0; \
+    }
 
     buf = vstring_alloc(100);
     lineno = 0;
 
-    while (readlline(buf, fp, &lineno)) {
-	if ((err = split_nameval(STR(buf), &member, &val)) != 0)
-	    msg_fatal("%s, line %d: %s: \"%s\"",
-		      VSTREAM_PATH(fp), lineno, err, STR(buf));
+    while (readlline(buf, fp, &lineno, READLL_STRIPNL)) {
+	start = STR(buf);
+	SKIP(start, member, ISSPACE(*member));	/* find member begin */
+	if (*member == 0 || *member == '#')
+	    continue;				/* comment or blank line */
+	SKIP(member, ep, !ISSPACE(*ep) && *ep != '=');	/* find member end */
+	SKIP(ep, cp, ISSPACE(*cp));		/* skip blanks before '=' */
+	if (*cp && *cp != '=')			/* need '=' or end of string */
+	    msg_fatal("%s, line %d: whitespace in attribute name: \"%s\"",
+		      VSTREAM_PATH(fp), lineno, member);
+	if (*cp)
+	    cp++;				/* skip over '=' */
+	*ep = 0;				/* terminate member name */
+	SKIP(cp, val, ISSPACE(*val));		/* skip leading blanks */
+	TRIM(val);				/* trim trailing blanks */
 	dict_update(dict_name, member, val);
     }
     vstring_free(buf);
@@ -407,7 +431,7 @@ static int dict_eval_action(int type, VSTRING *buf, char *ptr)
     char   *myname = "dict_eval_action";
     const char *pp;
 
-    if (msg_verbose > 1)
+    if (msg_verbose)
 	msg_info("%s: type %s buf %s context %s \"%s\" %s",
 		 myname, type == MAC_PARSE_VARNAME ? "variable" : "literal",
 		 STR(buf), ctxt->dict_name, STR(ctxt->buf),
@@ -508,11 +532,11 @@ int     dict_changed(void)
     ht_info_list = htable_list(dict_table);
     for (status = 0, ht = ht_info_list; status == 0 && (h = *ht) != 0; ht++) {
 	dict = ((DICT_NODE *) h->value)->dict;
-	if (dict->stat_fd < 0)			/* not file-based */
+	if (dict->fd < 0)			/* not file-based */
 	    continue;
 	if (dict->mtime == 0)			/* not bloody likely */
 	    msg_warn("%s: table %s: null time stamp", myname, h->key);
-	if (fstat(dict->stat_fd, &st) < 0)
+	if (fstat(dict->fd, &st) < 0)
 	    msg_fatal("%s: fstat: %m", myname);
 	status = (st.st_mtime != dict->mtime || st.st_nlink == 0);
     }

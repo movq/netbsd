@@ -81,7 +81,7 @@
 /* .SH Tarpitting
 /* .ad
 /* .fi
-/* .IP \fBqmqpd_error_delay\fR
+/* .IP \fBqmqpd_error_sleep_time\fR
 /*	Time to wait in seconds before informing the client of
 /*	a problem. This slows down run-away errors.
 /* SEE ALSO
@@ -136,8 +136,6 @@
 #include <namadr_list.h>
 #include <quote_822_local.h>
 #include <match_parent_style.h>
-#include <lex_822.h>
-#include <verp_sender.h>
 
 /* Single-threaded server skeleton. */
 
@@ -182,13 +180,13 @@ static void qmqpd_open_file(QMQPD_STATE *state)
     /*
      * Connect to the cleanup server. Log client name/address with queue ID.
      */
-    state->dest = mail_stream_service(MAIL_CLASS_PUBLIC, var_cleanup_service);
+    state->dest = mail_stream_service(MAIL_CLASS_PUBLIC, MAIL_SERVICE_CLEANUP);
     if (state->dest == 0
 	|| attr_print(state->dest->stream, ATTR_FLAG_NONE,
 		      ATTR_TYPE_NUM, MAIL_ATTR_FLAGS, CLEANUP_FLAG_FILTER,
 		      ATTR_TYPE_END) != 0)
 	msg_fatal("unable to connect to the %s %s service",
-		  MAIL_CLASS_PUBLIC, var_cleanup_service);
+		  MAIL_CLASS_PUBLIC, MAIL_SERVICE_CLEANUP);
     state->cleanup = state->dest->stream;
     state->queue_id = mystrdup(state->dest->id);
     msg_info("%s: client=%s", state->queue_id, state->namaddr);
@@ -198,7 +196,7 @@ static void qmqpd_open_file(QMQPD_STATE *state)
      * bloody likely, but present for the sake of consistency with all other
      * Postfix points of entrance).
      */
-    rec_fprintf(state->cleanup, REC_TYPE_TIME, "%ld", (long) state->time);
+    rec_fprintf(state->cleanup, REC_TYPE_TIME, "%ld", state->time);
     if (*var_filter_xport)
 	rec_fprintf(state->cleanup, REC_TYPE_FILT, "%s", var_filter_xport);
 }
@@ -218,32 +216,23 @@ static void qmqpd_copy_sender(QMQPD_STATE *state)
     char   *end_prefix;
     char   *end_origin;
     int     verp_requested;
-    static char verp_delims[] = "-=";
 
     /*
-     * If the sender address looks like prefix@origin-@[], then request
+     * If the sender address looks like prefix-@origin-@[], then request
      * variable envelope return path delivery, with an envelope sender
-     * address of prefi@origin, and with VERP delimiters of x and =. This
+     * address of prefix@origin, and with VERP delimiters of - and =. This
      * way, the recipients will see envelope sender addresses that look like:
-     * prefixuser=domain@origin.
+     * prefix-user=domain@origin.
      */
     state->where = "receiving sender address";
     netstring_get(state->client, state->buf, var_line_limit);
     VSTRING_TERMINATE(state->buf);
-    verp_requested =
-	((end_origin = vstring_end(state->buf) - 4) > STR(state->buf)
-	 && strcmp(end_origin, "-@[]") == 0
-	 && (end_prefix = strchr(STR(state->buf), '@')) != 0	/* XXX */
-	 && --end_prefix < end_origin - 2	/* non-null origin */
-	 && end_prefix > STR(state->buf));	/* non-null prefix */
+    verp_requested = ((end_prefix = strstr(STR(state->buf), "-@")) != 0
+		      && (end_origin = strstr(end_prefix + 2, "-@")) != 0
+		      && strncmp(end_origin + 2, "[]", 2) == 0
+		      && vstring_end(state->buf) == end_origin + 4);
     if (verp_requested) {
-	verp_delims[0] = end_prefix[0];
-	if (verp_delims_verify(verp_delims) != 0) {
-	    state->err |= CLEANUP_STAT_CONT;	/* XXX */
-	    vstring_sprintf(state->why_rejected, "Invalid VERP delimiters: \"%s\". Need two characters from \"%s\"",
-			    verp_delims, var_verp_filter);
-	}
-	memmove(end_prefix, end_prefix + 1, end_origin - end_prefix - 1);
+	memcpy(end_prefix, end_prefix + 1, end_origin - end_prefix - 1);
 	vstring_truncate(state->buf, end_origin - STR(state->buf) - 1);
     }
     if (state->err == CLEANUP_STAT_OK
@@ -251,23 +240,9 @@ static void qmqpd_copy_sender(QMQPD_STATE *state)
 	state->err = CLEANUP_STAT_WRITE;
     if (verp_requested)
 	if (state->err == CLEANUP_STAT_OK
-	    && rec_put(state->cleanup, REC_TYPE_VERP, verp_delims, 2) < 0)
+	    && rec_put(state->cleanup, REC_TYPE_VERP, "-=", 2) < 0)
 	    state->err = CLEANUP_STAT_WRITE;
     state->sender = mystrndup(STR(state->buf), LEN(state->buf));
-}
-
-/* qmqpd_write_attributes - save session attributes */
-
-static void qmqpd_write_attributes(QMQPD_STATE *state)
-{
-    rec_fprintf(state->cleanup, REC_TYPE_ATTR, "%s=%s",
-		MAIL_ATTR_CLIENT_NAME, state->name);
-    rec_fprintf(state->cleanup, REC_TYPE_ATTR, "%s=%s",
-		MAIL_ATTR_CLIENT_ADDR, state->addr);
-    rec_fprintf(state->cleanup, REC_TYPE_ATTR, "%s=%s",
-		MAIL_ATTR_ORIGIN, state->namaddr);
-    rec_fprintf(state->cleanup, REC_TYPE_ATTR, "%s=%s",
-		MAIL_ATTR_PROTO_NAME, state->protocol);
 }
 
 /* qmqpd_copy_recipients - copy message recipients */
@@ -299,10 +274,8 @@ static void qmqpd_copy_recipients(QMQPD_STATE *state)
     /*
      * Append the optional recipient who is copied on all mail.
      */
-    if (state->err == CLEANUP_STAT_OK
-	&& *var_always_bcc
-	&& rec_fputs(state->cleanup, REC_TYPE_RCPT, var_always_bcc) < 0)
-	state->err = CLEANUP_STAT_WRITE;
+    if (*var_always_bcc)
+	rec_fputs(state->cleanup, REC_TYPE_RCPT, var_always_bcc);
 }
 
 /* qmqpd_next_line - get line from buffer, return last char, newline, or -1 */
@@ -391,11 +364,11 @@ static void qmqpd_write_content(QMQPD_STATE *state)
 	if (first) {
 	    if (strncmp(start + strspn(start, ">"), "From ", 5) == 0) {
 		rec_fprintf(state->cleanup, rec_type,
-			    "X-Mailbox-Line: %*s", len, start);
+			    "Mailbox-Line: %*s", len, start);
 		continue;
 	    }
 	    first = 0;
-	    if (len > 0 && IS_SPACE_TAB(start[0]))
+	    if (len > 0 && ISSPACE(start[0]))
 		rec_put(state->cleanup, REC_TYPE_NORM, "", 0);
 	}
 	if (rec_put(state->cleanup, rec_type, start, len) < 0) {
@@ -531,11 +504,6 @@ static void qmqpd_receive(QMQPD_STATE *state)
     qmqpd_copy_sender(state);
 
     /*
-     * Record some session attributes.
-     */
-    qmqpd_write_attributes(state);
-
-    /*
      * Read and write the envelope recipients, including the optional big
      * brother recipient.
      */
@@ -545,8 +513,7 @@ static void qmqpd_receive(QMQPD_STATE *state)
      * Start the message content segment, prepend our own Received: header,
      * and write the message content.
      */
-    if (state->err == 0)
-	qmqpd_write_content(state);
+    qmqpd_write_content(state);
 
     /*
      * Close the queue file.
@@ -597,16 +564,7 @@ static void qmqpd_proto(QMQPD_STATE *state)
 	break;
 
     case 0:
-
-	/*
-	 * See if we want to talk to this client at all.
-	 */
-	if (namadr_list_match(qmqpd_clients, state->name, state->addr) == 0) {
-	    qmqpd_reply(state, DONT_LOG, QMQPD_STAT_HARD,
-			"Error: %s is not authorized to use this service",
-			state->namaddr);
-	} else
-	    qmqpd_receive(state);
+	qmqpd_receive(state);
 	break;
     }
 
@@ -644,11 +602,24 @@ static void qmqpd_service(VSTREAM *stream, char *unused_service, char **argv)
     debug_peer_check(state->name, state->addr);
 
     /*
+     * See if we want to talk to this client at all. In all cases, log the
+     * connection event.
+     */
+    if (namadr_list_match(qmqpd_clients, state->name, state->addr) == 0) {
+	msg_info("refused connect from %s", state->namaddr);
+	qmqpd_reply(state, DONT_LOG, QMQPD_STAT_HARD,
+		    "Error: %s is not authorized to use this service",
+		    state->namaddr);
+    }
+
+    /*
      * Provide the QMQP service.
      */
-    msg_info("connect from %s", state->namaddr);
-    qmqpd_proto(state);
-    msg_info("disconnect from %s", state->namaddr);
+    else {
+	msg_info("connect from %s", state->namaddr);
+	qmqpd_proto(state);
+	msg_info("disconnect from %s", state->namaddr);
+    }
 
     /*
      * After the client has gone away, clean up whatever we have set up at

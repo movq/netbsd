@@ -92,7 +92,6 @@
 #include <iostuff.h>
 #include <timed_connect.h>
 #include <stringops.h>
-#include <host_port.h>
 
 /* Global library. */
 
@@ -117,8 +116,7 @@ static LMTP_SESSION *lmtp_connect_sock(int, struct sockaddr *, int,
 
 /* lmtp_connect_unix - connect to UNIX-domain address */
 
-static LMTP_SESSION *lmtp_connect_unix(const char *addr,
-			              const char *destination, VSTRING *why)
+static LMTP_SESSION *lmtp_connect_unix(const char *addr, VSTRING *why)
 {
 #undef sun
     char   *myname = "lmtp_connect_unix";
@@ -158,7 +156,7 @@ static LMTP_SESSION *lmtp_connect_unix(const char *addr,
 	msg_info("%s: trying: %s...", myname, addr);
 
     return (lmtp_connect_sock(sock, (struct sockaddr *) & sun, sizeof(sun),
-			      addr, addr, destination, why));
+			      addr, addr, addr, why));
 }
 
 /* lmtp_connect_addr - connect to explicit address */
@@ -247,7 +245,7 @@ static LMTP_SESSION *lmtp_connect_sock(int sock, struct sockaddr * sa, int len,
      */
     stream = vstream_fdopen(sock, O_RDWR);
     if ((ch = VSTREAM_GETC(stream)) == VSTREAM_EOF) {
-	vstring_sprintf(why, "connect to %s[%s]: server dropped connection without sending the initial greeting",
+	vstring_sprintf(why, "connect to %s[%s]: server dropped connection",
 			name, addr);
 	lmtp_errno = LMTP_RETRY;
 	vstream_fclose(stream);
@@ -299,21 +297,35 @@ static char *lmtp_parse_destination(const char *destination, char *def_service,
 {
     char   *myname = "lmtp_parse_destination";
     char   *buf = mystrdup(destination);
+    char   *host = buf;
     char   *service;
     struct servent *sp;
     char   *protocol = "tcp";		/* XXX configurable? */
     unsigned port;
-    const char *err;
 
     if (msg_verbose)
 	msg_info("%s: %s %s", myname, destination, def_service);
 
     /*
-     * Parse the host/port information. We're working with a copy of the
-     * destination argument so the parsing can be destructive.
+     * Strip quoting. We're working with a copy of the destination argument
+     * so the stripping can be destructive.
      */
-    if ((err = host_port(buf, hostp, &service, def_service)) != 0)
-	msg_fatal("%s in LMTP server description: %s", err, destination);
+    if (*host == '[') {
+	host++;
+	host[strcspn(host, "]")] = 0;
+    }
+
+    /*
+     * Separate host and service information, or use the default service
+     * specified by the caller. XXX the ":" character is used in the IPV6
+     * address notation, so using split_at_right() is not sufficient. We'd
+     * have to count the number of ":" instances.
+     */
+    if ((service = split_at_right(host, ':')) == 0 || *service == 0)
+	service = def_service;
+    if (*service == 0)
+	msg_fatal("%s: empty service name: %s", myname, destination);
+    *hostp = host;
 
     /*
      * Convert service to port number, network byte order. Since most folks
@@ -346,19 +358,13 @@ LMTP_SESSION *lmtp_connect(const char *destination, VSTRING *why)
      * XXX Ad-hoc transport parsing and connection management. Some or all
      * should be moved away to a reusable library routine so that every
      * program benefits from it.
-     * 
-     * XXX Should transform destination into canonical form (unix:/path or
-     * inet:host:port before entering it into the connection cache. See also
-     * the connection cache lookup code in lmtp.c.
      */
     if (strncmp(destination, "unix:", 5) == 0)
-	return (lmtp_connect_unix(destination + 5, destination, why));
+	return (lmtp_connect_unix(destination + 5, why));
     if (strncmp(destination, "inet:", 5) == 0)
-	dest_buf = lmtp_parse_destination(destination + 5, def_service,
-					  &host, &port);
-    else
-	dest_buf = lmtp_parse_destination(destination, def_service,
-					  &host, &port);
+	destination += 5;
+    dest_buf = lmtp_parse_destination(destination, def_service,
+				      &host, &port);
     if (msg_verbose)
 	msg_info("%s: connecting to %s port %d", myname, host, ntohs(port));
     session = lmtp_connect_host(host, port, destination, why);

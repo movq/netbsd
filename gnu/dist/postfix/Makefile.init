@@ -12,10 +12,7 @@ SHELL	= /bin/sh
 default: update
 
 update depend printfck clean tidy depend_update: Makefiles
-	$(MAKE) MAKELEVEL= $@
-
-install upgrade:
-	@echo Please review the INSTALL instructions first.
+	$(MAKE) $@
 
 makefiles Makefiles:
-	$(MAKE) -f Makefile.in MAKELEVEL= Makefiles
+	$(MAKE) -f Makefile.in Makefiles

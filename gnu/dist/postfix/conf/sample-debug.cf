@@ -16,8 +16,8 @@ debug_peer_level = 2
 # increase the verbose logging level by the amount specified in the
 # debug_peer_level parameter.
 #
-#debug_peer_list = 127.0.0.1
-#debug_peer_list = some.domain
+# debug_peer_list = 127.0.0.1
+# debug_peer_list = some.domain
 debug_peer_list = 
 
 # The debugger_command specifies the external command that is executed
@@ -29,4 +29,4 @@ debug_peer_list =
 #
 debugger_command =
          PATH=/usr/bin:/usr/X11R6/bin
-         xxgdb $daemon_directory/$process_name $process_id & sleep 5
+         xxgdb $program_directory/$process_name $process_id & sleep 5

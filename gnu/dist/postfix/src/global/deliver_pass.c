@@ -6,11 +6,10 @@
 /* SYNOPSIS
 /*	#include <deliver_request.h>
 /*
-/*	int	deliver_pass(class, service, request, orig_addr, address, offset)
+/*	int	deliver_pass(class, service, request, address, offset)
 /*	const char *class;
 /*	const char *service;
 /*	DELIVER_REQUEST *request;
-/*	const char *orig_addr;
 /*	const char *address;
 /*	long	offset;
 /*
@@ -78,9 +77,7 @@ static int deliver_pass_initial_reply(VSTREAM *stream)
 {
     int     stat;
 
-    if (attr_scan(stream, ATTR_FLAG_STRICT,
-		  ATTR_TYPE_NUM, MAIL_ATTR_STATUS, &stat,
-		  ATTR_TYPE_END) != 1) {
+    if (mail_scan(stream, "%d", &stat) != 1) {
 	msg_warn("%s: malformed response", VSTREAM_PATH(stream));
 	stat = -1;
     }
@@ -90,28 +87,18 @@ static int deliver_pass_initial_reply(VSTREAM *stream)
 /* deliver_pass_send_request - send delivery request to delivery process */
 
 static int deliver_pass_send_request(VSTREAM *stream, DELIVER_REQUEST *request,
-			             const char *nexthop, const char *orcpt,
-				             const char *addr, long offs)
+		           const char *nexthop, const char *addr, long offs)
 {
     int     stat;
 
-    attr_print(stream, ATTR_FLAG_NONE,
-	       ATTR_TYPE_NUM, MAIL_ATTR_FLAGS, request->flags,
-	       ATTR_TYPE_STR, MAIL_ATTR_QUEUE, request->queue_name,
-	       ATTR_TYPE_STR, MAIL_ATTR_QUEUEID, request->queue_id,
-	       ATTR_TYPE_LONG, MAIL_ATTR_OFFSET, request->data_offset,
-	       ATTR_TYPE_LONG, MAIL_ATTR_SIZE, request->data_size,
-	       ATTR_TYPE_STR, MAIL_ATTR_NEXTHOP, nexthop,
-	       ATTR_TYPE_STR, MAIL_ATTR_ENCODING, request->encoding,
-	       ATTR_TYPE_STR, MAIL_ATTR_SENDER, request->sender,
-	       ATTR_TYPE_STR, MAIL_ATTR_ERRTO, request->errors_to,
-	       ATTR_TYPE_STR, MAIL_ATTR_RRCPT, request->return_receipt,
-	       ATTR_TYPE_LONG, MAIL_ATTR_TIME, request->arrival_time,
-	       ATTR_TYPE_LONG, MAIL_ATTR_OFFSET, offs,
-	       ATTR_TYPE_STR, MAIL_ATTR_ORCPT, orcpt,
-	       ATTR_TYPE_STR, MAIL_ATTR_RECIP, addr,
-	       ATTR_TYPE_NUM, MAIL_ATTR_OFFSET, 0,
-	       ATTR_TYPE_END);
+    mail_print(stream, "%d %s %s %ld %ld %s %s %s %s %ld %ld %s %s",
+	       request->flags,
+	       request->queue_name, request->queue_id,
+	       request->data_offset, request->data_size,
+	       nexthop, request->sender,
+	       request->errors_to, request->return_receipt,
+	       request->arrival_time,
+	       offs, addr, "0");
 
     if (vstream_fflush(stream)) {
 	msg_warn("%s: bad write: %m", VSTREAM_PATH(stream));
@@ -128,10 +115,7 @@ static int deliver_pass_final_reply(VSTREAM *stream, VSTRING *reason)
 {
     int     stat;
 
-    if (attr_scan(stream, ATTR_FLAG_STRICT,
-		  ATTR_TYPE_STR, MAIL_ATTR_WHY, reason,
-		  ATTR_TYPE_NUM, MAIL_ATTR_STATUS, &stat,
-		  ATTR_TYPE_END) != 2) {
+    if (mail_scan(stream, "%s %d", reason, &stat) != 2) {
 	msg_warn("%s: malformed response", VSTREAM_PATH(stream));
 	stat = -1;
     }
@@ -141,8 +125,7 @@ static int deliver_pass_final_reply(VSTREAM *stream, VSTRING *reason)
 /* deliver_pass - deliver one per-site queue entry */
 
 int     deliver_pass(const char *class, const char *service,
-		             DELIVER_REQUEST *request, const char *orig_addr,
-		             const char *addr, long offs)
+	              DELIVER_REQUEST *request, const char *addr, long offs)
 {
     VSTREAM *stream;
     VSTRING *reason;
@@ -179,7 +162,7 @@ int     deliver_pass(const char *class, const char *service,
      */
     if ((status = deliver_pass_initial_reply(stream)) == 0
 	&& (status = deliver_pass_send_request(stream, request, nexthop,
-					       orig_addr, addr, offs)) == 0)
+					       addr, offs)) == 0)
 	status = deliver_pass_final_reply(stream, reason);
 
     /*
@@ -204,7 +187,6 @@ int     deliver_pass_all(const char *class, const char *service,
     list = &request->rcpt_list;
     for (rcpt = list->info; rcpt < list->info + list->len; rcpt++)
 	status |= deliver_pass(class, service, request,
-			       rcpt->orig_addr, rcpt->address,
-			       rcpt->offset);
+			       rcpt->address, rcpt->offset);
     return (status);
 }

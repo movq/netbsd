@@ -6,17 +6,15 @@
 /* SYNOPSIS
 /*	#include <sent.h>
 /*
-/*	int	sent(queue_id, orig_rcpt, recipient, relay, entry, format, ...)
+/*	int	sent(queue_id, recipient, relay, entry, format, ...)
 /*	const char *queue_id;
-/*	const char *orig_rcpt;
 /*	const char *recipient;
 /*	const char *relay;
 /*	time_t	entry;
 /*	const char *format;
 /*
-/*	int	vsent(queue_id, orig_rcpt, recipient, relay, entry, format, ap)
+/*	int	vsent(queue_id, recipient, relay, entry, format, ap)
 /*	const char *queue_id;
-/*	const char *orig_rcpt;
 /*	const char *recipient;
 /*	const char *relay;
 /*	time_t	entry;
@@ -30,9 +28,6 @@
 /*	Arguments:
 /* .IP queue_id
 /*	The message queue id.
-/* .IP orig_rcpt
-/*	The original envelope recipient address. If unavailable,
-/*	specify a null string or a null pointer.
 /* .IP recipient
 /*	The recipient address.
 /* .IP relay
@@ -65,11 +60,6 @@
 #include <stdio.h>
 #include <stdlib.h>			/* 44BSD stdarg.h uses abort() */
 #include <stdarg.h>
-#include <string.h>
-
-#ifdef STRCASECMP_IN_STRINGS_H
-#include <strings.h>
-#endif
 
 /* Utility library. */
 
@@ -82,22 +72,20 @@
 
 /* sent - log that a message was sent */
 
-int     sent(const char *queue_id, const char *orig_rcpt,
-	             const char *recipient, const char *relay,
+int     sent(const char *queue_id, const char *recipient, const char *relay,
 	             time_t entry, const char *fmt,...)
 {
     va_list ap;
 
     va_start(ap, fmt);
-    vsent(queue_id, orig_rcpt, recipient, relay, entry, fmt, ap);
+    vsent(queue_id, recipient, relay, entry, fmt, ap);
     va_end(ap);
     return (0);
 }
 
 /* vsent - log that a message was sent */
 
-int     vsent(const char *queue_id, const char *orig_rcpt,
-	              const char *recipient, const char *relay,
+int     vsent(const char *queue_id, const char *recipient, const char *relay,
 	              time_t entry, const char *fmt, va_list ap)
 {
 #define TEXT (vstring_str(text))
@@ -105,14 +93,9 @@ int     vsent(const char *queue_id, const char *orig_rcpt,
     int     delay = time((time_t *) 0) - entry;
 
     vstring_vsprintf(text, fmt, ap);
-    if (orig_rcpt && *orig_rcpt && strcasecmp(recipient, orig_rcpt) != 0)
-	msg_info("%s: to=<%s>, orig_to=<%s>, relay=%s, delay=%d, status=sent%s%s%s",
-		 queue_id, recipient, orig_rcpt, relay, delay,
-		 *TEXT ? " (" : "", TEXT, *TEXT ? ")" : "");
-    else
-	msg_info("%s: to=<%s>, relay=%s, delay=%d, status=sent%s%s%s",
-		 queue_id, recipient, relay, delay,
-		 *TEXT ? " (" : "", TEXT, *TEXT ? ")" : "");
+    msg_info("%s: to=<%s>, relay=%s, delay=%d, status=sent%s%s%s",
+	     queue_id, recipient, relay, delay,
+	     *TEXT ? " (" : "", TEXT, *TEXT ? ")" : "");
     vstring_free(text);
     return (0);
 }

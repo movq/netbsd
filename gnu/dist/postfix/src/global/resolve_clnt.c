@@ -48,32 +48,6 @@
 /*	After address resolution the recipient localpart contains further
 /*	routing information, so the resolved next-hop destination is not
 /*	the final destination.
-/* .IP RESOLVE_FLAG_ERROR
-/*	The address resolved to something that has invalid syntax.
-/* .IP RESOLVE_FLAG_FAIL
-/*	The request could not be completed.
-/* .PP
-/*	In addition, the address domain class is returned by setting
-/*	one of the following flags (this is preliminary code awaiting
-/*	more permanent implementation of address domain class handling):
-/* .IP RESOLVE_CLASS_LOCAL
-/*	The address domain matches $mydestination or $inet_interfaces.
-/* .IP RESOLVE_CLASS_ALIAS
-/*	The address domain matches $virtual_alias_domains (simulated
-/*	virtual domains, where each address is redirected to a real
-/*	local or remote address).
-/* .IP RESOLVE_CLASS_VIRTUAL
-/*	The address domain matches $virtual_mailbox_domains (true
-/*	virtual domains where each address can have its own mailbox).
-/* .IP RESOLVE_CLASS_RELAY
-/*	The address domain matches $relay_domains, i.e. this is an
-/*	authorized mail relay destination.
-/* .IP RESOLVE_CLASS_DEFAULT
-/*	The address matches none of the above. Access to this domain
-/*	should be limited to authorized senders only.
-/* .PP
-/*	For convenience, the constant RESOLVE_CLASS_FINAL includes all
-/*	cases where the local machine is the final destination.
 /* DIAGNOSTICS
 /*	Warnings: communication failure. Fatal error: mail system is down.
 /* SEE ALSO
@@ -159,7 +133,7 @@ void    resolve_clnt_query(const char *addr, RESOLVE_REPLY *reply)
     /*
      * Peek at the cache.
      */
-    if (*addr && strcmp(addr, STR(last_addr)) == 0) {
+    if (strcmp(addr, STR(last_addr)) == 0) {
 	vstring_strcpy(reply->transport, STR(last_reply.transport));
 	vstring_strcpy(reply->nexthop, STR(last_reply.nexthop));
 	vstring_strcpy(reply->recipient, STR(last_reply.recipient));
@@ -178,24 +152,17 @@ void    resolve_clnt_query(const char *addr, RESOLVE_REPLY *reply)
      */
     if (rewrite_clnt_stream == 0)
 	rewrite_clnt_stream = clnt_stream_create(MAIL_CLASS_PRIVATE,
-				   var_rewrite_service, var_ipc_idle_limit);
+				  MAIL_SERVICE_REWRITE, var_ipc_idle_limit);
 
     for (;;) {
 	stream = clnt_stream_access(rewrite_clnt_stream);
-	if (attr_print(stream, ATTR_FLAG_NONE,
-		       ATTR_TYPE_STR, MAIL_ATTR_REQ, RESOLVE_ADDR,
-		       ATTR_TYPE_STR, MAIL_ATTR_ADDR, addr,
-		       ATTR_TYPE_END)
+	if (mail_print(stream, "%s %s", RESOLVE_ADDR, addr)
 	    || vstream_fflush(stream)) {
 	    if (msg_verbose || (errno != EPIPE && errno != ENOENT))
 		msg_warn("%s: bad write: %m", myname);
-	} else if (attr_scan(stream, ATTR_FLAG_STRICT,
-		       ATTR_TYPE_STR, MAIL_ATTR_TRANSPORT, reply->transport,
-			   ATTR_TYPE_STR, MAIL_ATTR_NEXTHOP, reply->nexthop,
-
-			   ATTR_TYPE_STR, MAIL_ATTR_RECIP, reply->recipient,
-			     ATTR_TYPE_NUM, MAIL_ATTR_FLAGS, &reply->flags,
-			     ATTR_TYPE_END) != 4) {
+	} else if (mail_scan(stream, "%s %s %s %d",
+			     reply->transport, reply->nexthop,
+			     reply->recipient, &reply->flags) != 4) {
 	    if (msg_verbose || (errno != EPIPE && errno != ENOENT))
 		msg_warn("%s: bad read: %m", myname);
 	} else {
@@ -205,7 +172,7 @@ void    resolve_clnt_query(const char *addr, RESOLVE_REPLY *reply)
 			 STR(reply->nexthop), STR(reply->recipient));
 	    if (STR(reply->transport)[0] == 0)
 		msg_warn("%s: null transport result for: <%s>", myname, addr);
-	    else if (STR(reply->recipient)[0] == 0 && *addr != 0)
+	    else if (STR(reply->recipient)[0] == 0)
 		msg_warn("%s: null recipient result for: <%s>", myname, addr);
 	    else
 		break;
@@ -247,48 +214,16 @@ static NORETURN usage(char *myname)
 
 static void resolve(char *addr, RESOLVE_REPLY *reply)
 {
-    struct RESOLVE_FLAG_TABLE {
-	int     flag;
-	const char *name;
-    };
-    struct RESOLVE_FLAG_TABLE resolve_flag_table[] = {
-	RESOLVE_FLAG_FINAL, "FLAG_FINAL",
-	RESOLVE_FLAG_ROUTED, "FLAG_ROUTED",
-	RESOLVE_FLAG_ERROR, "FLAG_ERROR",
-	RESOLVE_FLAG_FAIL, "FLAG_FAIL",
-	RESOLVE_CLASS_LOCAL, "CLASS_LOCAL",
-	RESOLVE_CLASS_ALIAS, "CLASS_ALIAS",
-	RESOLVE_CLASS_VIRTUAL, "CLASS_VIRTUAL",
-	RESOLVE_CLASS_RELAY, "CLASS_RELAY",
-	RESOLVE_CLASS_DEFAULT, "CLASS_DEFAULT",
-	0,
-    };
-    struct RESOLVE_FLAG_TABLE *fp;
-
     resolve_clnt_query(addr, reply);
-    if (reply->flags & RESOLVE_FLAG_FAIL) {
-	vstream_printf("request failed\n");
-    } else {
-	vstream_printf("%-10s %s\n", "address", addr);
-	vstream_printf("%-10s %s\n", "transport", STR(reply->transport));
-	vstream_printf("%-10s %s\n", "nexthop", *STR(reply->nexthop) ?
-		       STR(reply->nexthop) : "[none]");
-	vstream_printf("%-10s %s\n", "recipient", STR(reply->recipient));
-	vstream_printf("%-10s ", "flags");
-	for (fp = resolve_flag_table; fp->name; fp++) {
-	    if (reply->flags & fp->flag) {
-		vstream_printf("%s ", fp->name);
-		reply->flags &= ~fp->flag;
-	    }
-	}
-	if (reply->flags != 0)
-	    vstream_printf("Unknown flag 0x%x", reply->flags);
-	vstream_printf("\n");
-	vstream_fflush(VSTREAM_OUT);
-    }
+    vstream_printf("%-10s %s\n", "address", addr);
+    vstream_printf("%-10s %s\n", "transport", STR(reply->transport));
+    vstream_printf("%-10s %s\n", "nexthop", *STR(reply->nexthop) ?
+		   STR(reply->nexthop) : "[none]");
+    vstream_printf("%-10s %s\n", "recipient", STR(reply->recipient));
+    vstream_fflush(VSTREAM_OUT);
 }
 
-int     main(int argc, char **argv)
+main(int argc, char **argv)
 {
     RESOLVE_REPLY reply;
     int     ch;
@@ -322,10 +257,7 @@ int     main(int argc, char **argv)
 	while (vstring_fgets_nonl(buffer, VSTREAM_IN)) {
 	    resolve(STR(buffer), &reply);
 	}
-	vstring_free(buffer);
     }
-    resolve_clnt_free(&reply);
-    exit(0);
 }
 
 #endif

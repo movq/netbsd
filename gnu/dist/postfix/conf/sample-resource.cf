@@ -33,13 +33,10 @@ default_process_limit = 50
 #
 deliver_lock_attempts = 5
 
-# The deliver_lock_delay parameter specifies the time between attempts
-# to acquire an exclusive lock.
+# The deliver_lock_delay parameter limits the time in seconds between
+# attempts to acquire an exclusive lock.
 #
-# Time units: s (seconds), m (minutes), h (hours), d (days), w (weeks).
-# The default time unit is s (seconds).
-#
-deliver_lock_delay = 1s
+deliver_lock_delay = 1
 
 # The duplicate_filter_limit parameter limits the number of addresses
 # remembered by the duplicate filter for alias, virtual, etc.
@@ -52,26 +49,16 @@ duplicate_filter_limit = 1000
 #
 fork_attempts = 5
 
-# The fork_delay parameter specifies the delay between attempts to
-# fork() an external process.
+# The fork_delay parameter specifies the delay in seconds between
+# fork() attempts.
 #
-# Time units: s (seconds), m (minutes), h (hours), d (days), w (weeks).
-# The default time unit is s (seconds).
-#
-fork_delay = 1s
+fork_delay = 1
 
 # The header_size_limit parameter limits the amount of memory in
-# bytes used for storing a message header. If a header is larger,
-# the remainder of the header is descarded.
+# bytes used for processing a message header. If a header is larger,
+# the remainder of the entire message is treated as message body.
 #
 header_size_limit = 102400
-
-# The header_address_token_limit limits the amount of memory that
-# Postfix will spend while rewriting addresses in message headers.
-# The limit is expressed as a token count. Tokens beyond the limit
-# are discarded.
-# 
-header_address_token_limit = 10240
 
 # The line_length_limit parameter limits the amount of memory in
 # bytes used for handling input lines. Longer lines are chopped up
@@ -104,16 +91,10 @@ queue_minfree = 0
 # The stale_lock_time parameter limits the time after which a stale
 # lock is removed. This is used for delivery to file or mailbox.
 #
-# Time units: s (seconds), m (minutes), h (hours), d (days), w (weeks).
-# The default time unit is s (seconds).
-#
-stale_lock_time = 500s
+stale_lock_time = 500
 
-# The transport_retry_time parameter specifies the time between
-# attempts by the queue manager to contact a broken message delivery
-# transport.
+# The transport_retry_time parameter specifies the time in seconds
+# between attempts by the queue manager to contact a broken message
+# delivery transport.
 #
-# Time units: s (seconds), m (minutes), h (hours), d (days), w (weeks).
-# The default time unit is s (seconds).
-#
-transport_retry_time = 60s
+transport_retry_time = 60

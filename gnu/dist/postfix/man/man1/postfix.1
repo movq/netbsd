@@ -9,19 +9,16 @@ Postfix control program
 .na
 .nf
 .fi
-\fBpostfix\fR [\fB-Dv\fR] [\fB-c \fIconfig_dir\fR] \fIcommand\fR
+\fBpostfix\fR [\fB-c \fIconfig_dir\fR] [\fB-D\fR] [\fB-v\fR]
+\fIcommand\fR
 .SH DESCRIPTION
 .ad
 .fi
-This command is reserved for the superuser. To submit mail,
-use the Postfix \fBsendmail\fR command.
-
 The \fBpostfix\fR command controls the operation of the Postfix
 mail system: start or stop the \fBmaster\fR daemon, do a health
-check, and other maintenance.
-
-The \fBpostfix\fR command sets up a standardized environment and
-runs the \fBpostfix-script\fR shell script to do the actual work.
+check, and other maintenance. The command sets up a standardized
+environment and runs the \fBpostfix-script\fR shell script to
+do the actual work.
 
 The following commands are implemented:
 .IP \fBcheck\fR
@@ -51,8 +48,7 @@ earliest convenience.
 .PP
 The following options are implemented:
 .IP "\fB-c \fIconfig_dir\fR"
-Read the \fBmain.cf\fR and \fBmaster.cf\fR configuration files in
-the named directory instead of the default configuration directory.
+The absolute path to a directory with Postfix configuration files.
 Use this to distinguish between multiple Postfix instances on the
 same host.
 .IP "\fB-D\fR (with \fBpostfix start\fR only)"
@@ -66,69 +62,39 @@ options make the software increasingly verbose.
 .nf
 .ad
 .fi
-The \fBpostfix\fR command exports the following environment
-variables before executing the \fBpostfix-script\fR file:
+The \fBpostfix\fR command sets the following environment
+variables:
 .IP \fBMAIL_CONFIG\fR
-This is set when the -c command-line option is present.
+Directory with Postfix configuration files.
 .IP \fBMAIL_VERBOSE\fR
 This is set when the -v command-line option is present.
 .IP \fBMAIL_DEBUG\fR
 This is set when the -D command-line option is present.
 .PP
-The following \fBmain.cf\fR configuration parameters are
-exported as environment variables with the same names:
+The following configuration parameters are made available
+as process environment variables with the same names:
 .IP \fBcommand_directory\fR
-Directory with Postfix administrative commands.
+Directory with Postfix support commands (default:
+\fB$program_directory\fR).
 .IP \fBdaemon_directory\fR
-Directory with Postfix daemon programs.
+Directory with Postfix daemon programs (default:
+\fB$program_directory\fR).
 .IP \fBconfig_directory\fR
 Directory with Postfix configuration files and with administrative
 shell scripts.
 .IP \fBqueue_directory\fR
-The directory with Postfix queue files, with local inter-process
-communication endpoints, and with files needed for daemon programs
-that run in the optional chrooted environment.
+The directory with the Postfix queue directory (and with some
+files needed for programs running in a chrooted environment).
 .IP \fBmail_owner\fR
-The owner of Postfix queue files and of most Postfix processes.
-.IP \fBsetgid_group\fR
-The group for mail submission and queue management commands.
-.IP \fBsendmail_path
-The full pathname for the Postfix \fBsendmail\fR command.
-.IP \fBnewaliases_path
-The full pathname for the Postfix \fBnewaliases\fR command.
-.IP \fBmailq_path
-The full pathname for the Postfix \fBmailq\fR command.
-.IP \fBmanpage_directory
-The directory for the Postfix on-line manual pages.
-.IP \fBsample_directory
-The directory for the Postfix sample configuration files.
-.IP \fBreadme_directory
-The directory for the Postfix README files.
-.SH Other configuration parameters
-.ad
-.fi
-.IP \fBimport_environment\fR
-List of names of environment parameters that can be imported
-from non-Postfix processes.
+The owner of the Postfix queue and of most Postfix processes.
 .SH FILES
 .na
 .nf
 $\fBconfig_directory/postfix-script\fR, administrative commands
-$\fBconfig_directory/main.cf\fR, configuration parameters
-$\fBconfig_directory/master.cf\fR, Postfix daemon processes
 .SH SEE ALSO
 .na
 .nf
-postconf(1) Postfix configuration management
-postsuper(1) Postfix housekeeping
-sendmail(1) Sendmail-compatible interface
-postmap(1) Postfix lookup table management
-master(8) Postfix master daemon
-.ad
-.fi
-The respective manual pages for the daemon processes
-specified in the \fBmaster.cf\fR file, and the manual
-pages referenced by those manual pages.
+master(8) Postfix master program
 .SH LICENSE
 .na
 .nf

@@ -95,13 +95,6 @@
 /*	Function to be executed prior to accepting a new connection.
 /* .sp
 /*	Only the last instance of this parameter type is remembered.
-/* .IP "MAIL_SERVER_IN_FLOW_DELAY (none)"
-/*	Pause $in_flow_delay seconds when no "mail flow control token"
-/*	is available. A token is consumed for each connection request.
-/* .IP MAIL_SERVER_SOLITARY
-/*	This service must be configured with process limit of 1.
-/* .IP MAIL_SERVER_UNLIMITED
-/*	This service must be configured with process limit of 0.
 /* .PP
 /*	multi_server_disconnect() should be called by the application
 /*	when a client disconnects.
@@ -175,7 +168,6 @@
 #include <mail_conf.h>
 #include <timed_ipc.h>
 #include <resolve_local.h>
-#include <mail_flow.h>
 
 /* Process manager. */
 
@@ -198,7 +190,6 @@ static void (*multi_server_accept) (int, char *);
 static void (*multi_server_onexit) (char *, char **);
 static void (*multi_server_pre_accept) (char *, char **);
 static VSTREAM *multi_server_lock;
-static int multi_server_in_flow_delay;
 
 /* multi_server_exit - normal termination */
 
@@ -254,11 +245,7 @@ static void multi_server_execute(int unused_event, char *context)
      * Do not bother the application when the client disconnected.
      */
     if (peekfd(vstream_fileno(stream)) > 0) {
-	if (master_notify(var_pid, MASTER_STAT_TAKEN) < 0)
-	    multi_server_abort(EVENT_NULL_TYPE, EVENT_NULL_CONTEXT);
 	multi_server_service(stream, multi_server_name, multi_server_argv);
-	if (master_notify(var_pid, MASTER_STAT_AVAIL) < 0)
-	    multi_server_abort(EVENT_NULL_TYPE, EVENT_NULL_CONTEXT);
     } else {
 	multi_server_disconnect(stream);
     }
@@ -266,21 +253,11 @@ static void multi_server_execute(int unused_event, char *context)
 	event_request_timer(multi_server_timeout, (char *) 0, var_idle_limit);
 }
 
-/* multi_server_enable_read - enable read events */
-
-static void multi_server_enable_read(int unused_event, char *context)
-{
-    VSTREAM *stream = (VSTREAM *) context;
-
-    event_enable_read(vstream_fileno(stream), multi_server_execute, (char *) stream);
-}
-
 /* multi_server_wakeup - wake up application */
 
 static void multi_server_wakeup(int fd)
 {
     VSTREAM *stream;
-    char   *tmp;
 
     if (msg_verbose)
 	msg_info("connection established fd %d", fd);
@@ -288,15 +265,8 @@ static void multi_server_wakeup(int fd)
     close_on_exec(fd, CLOSE_ON_EXEC);
     client_count++;
     stream = vstream_fdopen(fd, O_RDWR);
-    tmp = concatenate(multi_server_name, " socket", (char *) 0);
-    vstream_control(stream, VSTREAM_CTL_PATH, tmp, VSTREAM_CTL_END);
-    myfree(tmp);
     timed_ipc_setup(stream);
-    if (multi_server_in_flow_delay && mail_flow_get(1) < 0)
-	event_request_timer(multi_server_enable_read, (char *) stream,
-			    var_in_flow_delay);
-    else
-	multi_server_enable_read(0, (char *) stream);
+    event_enable_read(fd, multi_server_execute, (char *) stream);
 }
 
 /* multi_server_accept_local - accept client connection request */
@@ -392,7 +362,6 @@ NORETURN multi_server_main(int argc, char **argv, MULTI_SERVER_FN service,...)
     char   *lock_path;
     VSTRING *why;
     int     alone = 0;
-    int     zerolimit = 0;
     WATCHDOG *watchdog;
     char   *oval;
 
@@ -441,7 +410,7 @@ NORETURN multi_server_main(int argc, char **argv, MULTI_SERVER_FN service,...)
      * stderr, because no-one is going to see them.
      */
     opterr = 0;
-    while ((c = GETOPT(argc, argv, "cDi:lm:n:o:s:St:uvz")) > 0) {
+    while ((c = GETOPT(argc, argv, "cDi:lm:n:o:s:St:uv")) > 0) {
 	switch (c) {
 	case 'c':
 	    root_dir = "setme";
@@ -481,9 +450,6 @@ NORETURN multi_server_main(int argc, char **argv, MULTI_SERVER_FN service,...)
 	    break;
 	case 'v':
 	    msg_verbose++;
-	    break;
-	case 'z':
-	    zerolimit = 1;
 	    break;
 	default:
 	    msg_fatal("invalid option: %c", c);
@@ -532,19 +498,6 @@ NORETURN multi_server_main(int argc, char **argv, MULTI_SERVER_FN service,...)
 	case MAIL_SERVER_PRE_ACCEPT:
 	    multi_server_pre_accept = va_arg(ap, MAIL_SERVER_ACCEPT_FN);
 	    break;
-	case MAIL_SERVER_IN_FLOW_DELAY:
-	    multi_server_in_flow_delay = 1;
-	    break;
-	case MAIL_SERVER_SOLITARY:
-	    if (!alone)
-		msg_fatal("service %s requires a process limit of 1",
-			  service_name);
-	    break;
-	case MAIL_SERVER_UNLIMITED:
-	    if (!zerolimit)
-		msg_fatal("service %s requires a process limit of 0",
-			  service_name);
-	    break;
 	default:
 	    msg_panic("%s: unknown argument type: %d", myname, key);
 	}
@@ -590,12 +543,6 @@ NORETURN multi_server_main(int argc, char **argv, MULTI_SERVER_FN service,...)
      * Illustrated volume 2 page 532. We avoid select() collisions with an
      * external lock file.
      */
-
-    /*
-     * XXX Can't compete for exclusive access to the listen socket because we
-     * also have to monitor existing client connections for service requests.
-     */
-#if 0
     if (stream == 0 && !alone) {
 	lock_path = concatenate(DEF_PID_DIR, "/", transport,
 				".", service_name, (char *) 0);
@@ -607,7 +554,6 @@ NORETURN multi_server_main(int argc, char **argv, MULTI_SERVER_FN service,...)
 	myfree(lock_path);
 	vstring_free(why);
     }
-#endif
 
     /*
      * Set up call-back info.
@@ -665,8 +611,6 @@ NORETURN multi_server_main(int argc, char **argv, MULTI_SERVER_FN service,...)
     }
     event_enable_read(MASTER_STATUS_FD, multi_server_abort, (char *) 0);
     close_on_exec(MASTER_STATUS_FD, CLOSE_ON_EXEC);
-    close_on_exec(MASTER_FLOW_READ, CLOSE_ON_EXEC);
-    close_on_exec(MASTER_FLOW_WRITE, CLOSE_ON_EXEC);
     watchdog = watchdog_create(var_daemon_timeout, (WATCHDOG_FN) 0, (char *) 0);
 
     /*

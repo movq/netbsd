@@ -46,7 +46,6 @@
 #include <sys_defs.h>
 #include <unistd.h>
 #include <errno.h>
-#include <string.h>
 
 /* Utility library. */
 
@@ -119,21 +118,15 @@ VSTRING *rewrite_clnt(const char *rule, const char *addr, VSTRING *result)
      */
     if (rewrite_clnt_stream == 0)
 	rewrite_clnt_stream = clnt_stream_create(MAIL_CLASS_PRIVATE,
-				  var_rewrite_service, var_ipc_idle_limit);
+				  MAIL_SERVICE_REWRITE, var_ipc_idle_limit);
 
     for (;;) {
 	stream = clnt_stream_access(rewrite_clnt_stream);
-	if (attr_print(stream, ATTR_FLAG_NONE,
-		       ATTR_TYPE_STR, MAIL_ATTR_REQ, REWRITE_ADDR,
-		       ATTR_TYPE_STR, MAIL_ATTR_RULE, rule,
-		       ATTR_TYPE_STR, MAIL_ATTR_ADDR, addr,
-		       ATTR_TYPE_END),
+	if (mail_print(stream, "%s %s %s", REWRITE_ADDR, rule, addr),
 	    vstream_fflush(stream)) {
 	    if (msg_verbose || (errno != EPIPE && errno != ENOENT))
 		msg_warn("%s: bad write: %m", myname);
-	} else if (attr_scan(stream, ATTR_FLAG_STRICT,
-			     ATTR_TYPE_STR, MAIL_ATTR_ADDR, result,
-			     ATTR_TYPE_END) != 1) {
+	} else if (mail_scan(stream, "%s", result) != 1) {
 	    if (msg_verbose || (errno != EPIPE && errno != ENOENT))
 		msg_warn("%s: bad read: %m", myname);
 	} else {
@@ -197,7 +190,7 @@ static void rewrite(char *rule, char *addr, VSTRING *reply)
     vstream_fflush(VSTREAM_OUT);
 }
 
-int     main(int argc, char **argv)
+main(int argc, char **argv)
 {
     VSTRING *reply;
     int     ch;
@@ -242,7 +235,6 @@ int     main(int argc, char **argv)
 	vstring_free(buffer);
     }
     vstring_free(reply);
-    exit(0);
 }
 
 #endif

@@ -56,12 +56,10 @@ run chrooted at fixed low privilege.
 .nf
 RFC 821 (SMTP protocol)
 RFC 1651 (SMTP service extensions)
-RFC 1652 (8bit-MIME transport)
 RFC 1870 (Message Size Declaration)
 RFC 2033 (LMTP protocol)
+RFC 2197 (Pipelining)
 RFC 2554 (AUTH command)
-RFC 2821 (SMTP protocol)
-RFC 2920 (SMTP Pipelining)
 .SH DIAGNOSTICS
 .ad
 .fi
@@ -105,7 +103,7 @@ Do not wait for the server response after sending QUIT.
 The TCP port to be used when connecting to a LMTP server.  Used as
 backup if the \fBlmtp\fR service is not found in \fBservices\fR(4).
 .SH "Authentication controls"
-.IP \fBlmtp_sasl_auth_enable\fR
+.IP \fBlmtp_enable_sasl_auth\fR
 Enable per-session authentication as per RFC 2554 (SASL).
 By default, Postfix is built without SASL support.
 .IP \fBlmtp_sasl_password_maps\fR

@@ -29,7 +29,6 @@ extern void event_disable_readwrite(int);
 extern time_t event_request_timer(EVENT_NOTIFY_TIME, char *, int);
 extern int event_cancel_timer(EVENT_NOTIFY_TIME, char *);
 extern void event_loop(int);
-extern void event_drain(void);
 
  /*
   * Event codes.

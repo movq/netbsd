@@ -8,7 +8,7 @@ WARN	= -W -Wformat -Wimplicit -Wmissing-prototypes \
 	-Wunused
 DEFS	= -I. -I$(INC_DIR) -D$(SYSTYPE)
 CFLAGS	= $(DEBUG) $(OPT) $(DEFS)
-TESTPROG=
+TESTPROG= quote_821_local pipe_unalias
 PROG	= pipe
 INC_DIR	= ../../include
 LIBS	= ../../lib/libmaster.a ../../lib/libglobal.a ../../lib/libutil.a
@@ -22,8 +22,6 @@ Makefile: Makefile.in
 	(set -e; echo "# DO NOT EDIT"; $(OPTS) $(SHELL) ../../makedefs && cat $?) >$@
 
 test:	$(TESTPROG)
-
-tests:	test
 
 update: ../../libexec/$(PROG)
 
@@ -84,6 +82,4 @@ pipe.o: ../../include/mail_addr.h
 pipe.o: ../../include/canon_addr.h
 pipe.o: ../../include/split_addr.h
 pipe.o: ../../include/off_cvt.h
-pipe.o: ../../include/quote_822_local.h
-pipe.o: ../../include/quote_flags.h
 pipe.o: ../../include/mail_server.h

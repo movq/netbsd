@@ -149,20 +149,6 @@ void    smtp_chat_cmd(SMTP_STATE *state, char *fmt,...)
      * Send the command to the SMTP server.
      */
     smtp_fputs(STR(state->buffer), LEN(state->buffer), session->stream);
-
-    /*
-     * Flush unsent data to avoid timeouts after slow DNS lookups.
-     */
-    if (time((time_t *) 0) - vstream_ftime(session->stream) > 10)
-	vstream_fflush(session->stream);
-
-    /*
-     * Abort immediately if the connection is broken.
-     */
-    if (vstream_ftimeout(session->stream))
-        vstream_longjmp(session->stream, SMTP_ERR_TIME);
-    if (vstream_ferror(session->stream))
-	vstream_longjmp(session->stream, SMTP_ERR_EOF);
 }
 
 /* smtp_chat_resp - read and process SMTP server response */
@@ -266,7 +252,7 @@ void    smtp_chat_notify(SMTP_STATE *state)
 
     notice = post_mail_fopen_nowait(mail_addr_double_bounce(),
 				    var_error_rcpt,
-				    NULL_CLEANUP_FLAGS);
+				    NULL_CLEANUP_FLAGS, "NOTICE");
     if (notice == 0) {
 	msg_warn("postmaster notify: %m");
 	return;

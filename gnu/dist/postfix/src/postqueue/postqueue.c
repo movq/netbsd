@@ -26,23 +26,9 @@
 /*	by contacting the Postfix \fBqmgr\fR(8) daemon.
 /* .IP \fB-p\fR
 /*	Produce a traditional sendmail-style queue listing.
+/*
 /*	This option implements the traditional \fBmailq\fR command,
 /*	by contacting the Postfix \fBshowq\fR(8) daemon.
-/*
-/*	Each queue entry shows the queue file ID, message
-/*	size, arrival time, sender, and the recipients that still need to
-/*	be delivered.  If mail could not be delivered upon the last attempt,
-/*	the reason for failure is shown. This mode of operation is implemented
-/*	by executing the \fBpostqueue\fR(1) command. The queue ID string
-/*	is followed by an optional status character:
-/* .RS
-/* .IP \fB*\fR
-/*	The message is in the \fBactive\fR queue, i.e. the message is
-/*	selected for delivery.
-/* .IP \fB!\fR
-/*	The message is in the \fBhold\fR queue, i.e. no further delivery
-/*	attempt will be made until the mail is taken off hold.
-/* .RE
 /* .IP "\fB-s \fIsite\fR"
 /*	Schedule immediate delivery of all mail that is queued for the named
 /*	\fIsite\fR. The site must be eligible for the "fast flush" service.
@@ -75,7 +61,7 @@
 /*	standard \fBmain.cf\fR file, in the \fBalternate_config_directories\fR
 /*	configuration parameter value.
 /*
-/*	Only the superuser is allowed to specify arbitrary directory names.
+/*	Only the super-user is allowed to specify arbitrary directory names.
 /* FILES
 /*	/var/spool/postfix, mail queue
 /*	/etc/postfix, configuration files
@@ -118,7 +104,6 @@
 #include <stdlib.h>
 #include <signal.h>
 #include <sysexits.h>
-#include <errno.h>
 
 /* Utility library. */
 
@@ -185,27 +170,14 @@ static void show_queue(void)
      * Connect to the show queue service. Terminate silently when piping into
      * a program that terminates early.
      */
-    if ((showq = mail_connect(MAIL_CLASS_PUBLIC, var_showq_service, BLOCKING)) != 0) {
-	while ((n = vstream_fread(showq, buf, sizeof(buf))) > 0) {
+    if ((showq = mail_connect(MAIL_CLASS_PUBLIC, MAIL_SERVICE_SHOWQ, BLOCKING)) != 0) {
+	while ((n = vstream_fread(showq, buf, sizeof(buf))) > 0)
 	    if (vstream_fwrite(VSTREAM_OUT, buf, n) != n
-		|| vstream_fflush(VSTREAM_OUT) != 0) {
-		if (errno == EPIPE)
-		    break;
+		|| vstream_fflush(VSTREAM_OUT) != 0)
 		msg_fatal("write error: %m");
-	    }
-	}
-	if (vstream_fclose(showq) && errno != EPIPE)
-	    msg_warn("close: %m");
-    }
 
-    /*
-     * Don't assume that the mail system is down when the user has
-     * insufficient permission to access the showq socket.
-     */
-    else if (errno == EACCES) {
-	msg_fatal_status(EX_SOFTWARE,
-			 "Connect to the %s %s service: %m",
-			 var_mail_name, var_showq_service);
+	if (vstream_fclose(showq))
+	    msg_warn("close: %m");
     }
 
     /*
@@ -218,7 +190,7 @@ static void show_queue(void)
 
 	msg_warn("Mail system is down -- accessing queue directly");
 	argv = argv_alloc(6);
-	argv_add(argv, var_showq_service, "-u", "-S", (char *) 0);
+	argv_add(argv, MAIL_SERVICE_SHOWQ, "-u", "-S", (char *) 0);
 	for (n = 0; n < msg_verbose; n++)
 	    argv_add(argv, "-v", (char *) 0);
 	argv_terminate(argv);
@@ -247,9 +219,6 @@ static void flush_queue(void)
      * Trigger the flush queue service.
      */
     if (mail_flush_deferred() < 0)
-	msg_fatal_status(EX_UNAVAILABLE,
-			 "Cannot flush mail queue - mail system is down");
-    if (mail_flush_maildrop() < 0)
 	msg_fatal_status(EX_UNAVAILABLE,
 			 "Cannot flush mail queue - mail system is down");
 }
@@ -282,7 +251,7 @@ static void flush_site(const char *site)
 
 static NORETURN usage(void)
 {
-    msg_fatal_status(EX_USAGE, "usage: postqueue -f | postqueue -p | postqueue -s site");
+    msg_fatal_status(EX_USAGE, "usage: specify one of -f, -p, or -s");
 }
 
 /* main - the main program */
@@ -297,7 +266,6 @@ int     main(int argc, char **argv)
     char   *site_to_flush = 0;
     ARGV   *import_env;
     char   *last;
-    int     bad_site;
 
     /*
      * Be consistent with file permissions.
@@ -347,6 +315,7 @@ int     main(int argc, char **argv)
 		usage();
 	    mode = PQ_MODE_MAILQ_LIST;
 	    break;
+	    break;
 	case 's':				/* flush site */
 	    if (mode != PQ_MODE_DEFAULT)
 		usage();
@@ -360,8 +329,6 @@ int     main(int argc, char **argv)
 	    usage();
 	}
     }
-    if (argc > optind)
-	usage();
 
     /*
      * Further initialization...
@@ -369,17 +336,12 @@ int     main(int argc, char **argv)
     mail_conf_read();
 
     /*
-     * This program is designed to be set-gid, which makes it a potential
-     * target for attack. If not running as root, strip the environment so we
-     * don't have to trust the C library. If running as root, don't strip the
-     * environment so that showq can receive non-default configuration
-     * directory info when the mail system is down.
+     * Strip the environment so we don't have to trust the C library.
      */
-    if (geteuid() != 0) {
-	import_env = argv_split(var_import_environ, ", \t\r\n");
-	clean_env(import_env->argv);
-	argv_free(import_env);
-    }
+    import_env = argv_split(var_import_environ, ", \t\r\n");
+    clean_env(import_env->argv);
+    argv_free(import_env);
+
     if (chdir(var_queue_dir))
 	msg_fatal_status(EX_UNAVAILABLE, "chdir %s: %m", var_queue_dir);
 
@@ -391,20 +353,21 @@ int     main(int argc, char **argv)
      * Further input validation.
      */
     if (site_to_flush != 0) {
-	bad_site = 0;
 	if (*site_to_flush == '['
 	    && *(last = site_to_flush + strlen(site_to_flush) - 1) == ']') {
 	    *last = 0;
-	    bad_site = !valid_hostaddr(site_to_flush + 1, DONT_GRIPE);
+	    if (!valid_hostaddr(site_to_flush + 1, DONT_GRIPE))
+		site_to_flush = 0;
 	    *last = ']';
 	} else {
-	    bad_site = (!valid_hostname(site_to_flush, DONT_GRIPE)
-			&& !valid_hostaddr(site_to_flush, DONT_GRIPE));
+	    if (!valid_hostname(site_to_flush, DONT_GRIPE)
+		&& !valid_hostaddr(site_to_flush, DONT_GRIPE))
+		site_to_flush = 0;
 	}
-	if (bad_site)
+	if (site_to_flush == 0)
 	    msg_fatal_status(EX_USAGE,
 	      "Cannot flush mail queue - invalid destination: \"%.100s%s\"",
-		   site_to_flush, strlen(site_to_flush) > 100 ? "..." : "");
+			     optarg, strlen(optarg) > 100 ? "..." : "");
     }
 
     /*

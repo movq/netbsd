@@ -1,42 +1,39 @@
-/*	$NetBSD: percent_m.c,v 1.4 2000/01/21 17:08:39 mycroft Exp $	*/
-
  /*
   * Replace %m by system error message.
   * 
   * Author: Wietse Venema, Eindhoven University of Technology, The Netherlands.
   */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
 static char sccsid[] = "@(#) percent_m.c 1.1 94/12/28 17:42:37";
-#else
-__RCSID("$NetBSD: percent_m.c,v 1.4 2000/01/21 17:08:39 mycroft Exp $");
-#endif
 #endif
 
 #include <stdio.h>
 #include <errno.h>
 #include <string.h>
 
+extern int errno;
 #ifndef SYS_ERRLIST_DEFINED
 extern char *sys_errlist[];
 extern int sys_nerr;
 #endif
 
 #include "mystdarg.h"
-#include "percent_m.h"
 
 char   *percent_m(obuf, ibuf)
 char   *obuf;
-const char   *ibuf;
+char   *ibuf;
 {
     char   *bp = obuf;
-    const char   *cp = ibuf;
+    char   *cp = ibuf;
 
-    while ((*bp = *cp) != '\0')
+    while (*bp = *cp)
 	if (*cp == '%' && cp[1] == 'm') {
-	    strcpy(bp, strerror(errno));
+	    if (errno < sys_nerr && errno > 0) {
+		strcpy(bp, sys_errlist[errno]);
+	    } else {
+		sprintf(bp, "Unknown error %d", errno);
+	    }
 	    bp += strlen(bp);
 	    cp += 2;
 	} else {

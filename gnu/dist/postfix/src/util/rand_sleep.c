@@ -45,7 +45,6 @@
 /* Utility library. */
 
 #include <msg.h>
-#include <myrand.h>
 #include <iostuff.h>
 
 /* rand_sleep - block for random time */
@@ -53,6 +52,7 @@
 void    rand_sleep(unsigned delay, unsigned variation)
 {
     char   *myname = "rand_sleep";
+    static pid_t my_pid;
     unsigned usec;
 
     /*
@@ -66,7 +66,9 @@ void    rand_sleep(unsigned delay, unsigned variation)
     /*
      * Use the semi-crappy random number generator.
      */
-    usec = (delay - variation / 2) + variation * (double) myrand() / RAND_MAX;
+    if (my_pid == 0)
+	srandom((my_pid = getpid()) ^ time((time_t *) 0));
+    usec = (delay - variation / 2) + variation * (double) random() / RAND_MAX;
     doze(usec);
 }
 

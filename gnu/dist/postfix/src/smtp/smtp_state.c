@@ -43,7 +43,6 @@
 /* Global library. */
 
 #include <mail_conf.h>
-#include <mime_state.h>
 
 /* Application-specific. */
 
@@ -69,9 +68,6 @@ SMTP_STATE *smtp_state_alloc(void)
 #ifdef USE_SASL_AUTH
     smtp_sasl_connect(state);
 #endif
-    state->size_limit = 0;
-    state->space_left = 0;
-    state->mime_state = 0;
     return (state);
 }
 
@@ -85,7 +81,5 @@ void    smtp_state_free(SMTP_STATE *state)
 #ifdef USE_SASL_AUTH
     smtp_sasl_cleanup(state);
 #endif
-    if (state->mime_state)
-	mime_state_free(state->mime_state);
     myfree((char *) state);
 }

@@ -61,13 +61,14 @@ case "$SYSTEM.$RELEASE" in
    SCO_SV.3.2)	SYSTYPE=SCO5
 		# Use the native compiler by default
 		: ${CC="/usr/bin/cc -b elf"}
-		CCARGS="-DPIPES_CANT_FIONREAD $CCARGS"
+		: ${DEBUG=}
 		SYSLIBS="-lsocket -ldbm"
 		RANLIB=echo
 		;;
   UnixWare.5*)	SYSTYPE=UW7
 		# Use the native compiler by default
 		: ${CC=/usr/bin/cc}
+		: ${DEBUG=}
 		RANLIB=echo
 		SYSLIBS="-lresolv -lsocket -lnsl"
 		;;
@@ -88,11 +89,7 @@ case "$SYSTEM.$RELEASE" in
 		;;
   FreeBSD.4*)	SYSTYPE=FREEBSD4
 		;;
-  FreeBSD.5*)	SYSTYPE=FREEBSD5
-		;;
   OpenBSD.2*)	SYSTYPE=OPENBSD2
-		;;
-  OpenBSD.3*)	SYSTYPE=OPENBSD3
 		;;
    NetBSD.1*)	SYSTYPE=NETBSD1
 		;;
@@ -117,11 +114,6 @@ case "$SYSTEM.$RELEASE" in
 		    5.[0-4]) CCARGS="$CCARGS -DMISSING_USLEEP";;
 			  *) CCARGS="$CCARGS -DHAS_POSIX_REGEXP";;
 		esac
-		# Work around broken str*casecmp(). Do it all here instead
-		# of having half the solution in the sys_defs.h file.
-		CCARGS="$CCARGS -Dstrcasecmp=fix_strcasecmp \
-			-Dstrncasecmp=fix_strncasecmp"
-		STRCASE="strcasecmp.o"
 		# Avoid common types of braindamage
 		case "$LD_LIBRARY_PATH" in
 		?*) echo "Don't set LD_LIBRARY_PATH" 1>&2; exit 1;;
@@ -148,18 +140,12 @@ case "$SYSTEM.$RELEASE" in
 		done
 		;;
        AIX.*)	case "`uname -v`" in
-		5)	SYSTYPE=AIX4
-			case "$CC" in
-			cc|*/cc|xlc|*/xlc) CCARGS="$CCARGS -w -blibpath:/usr/lib:/lib:/usr/local/lib";;
-			esac
-			CCARGS="$CCARGS -D_ALL_SOURCE -DHAS_POSIX_REGEXP"
-			;;
 		4)	SYSTYPE=AIX4
 			# How embarrassing...
 			case "$CC" in
-			cc|*/cc|xlc|*/xlc) OPT=; CCARGS="$CCARGS -w -blibpath:/usr/lib:/lib:/usr/local/lib";;
+			cc|*/cc|xlc|*/xlc) OPT=; CCARGS="$CCARGS -w";;
 			esac
-			CCARGS="$CCARGS -D_ALL_SOURCE -DHAS_POSIX_REGEXP"
+			CCARGS="$CCARGS -D_ALL_SOURCE"
 			;;
 		3)	SYSTYPE=AIX3
 			# How embarrassing...
@@ -170,48 +156,16 @@ case "$SYSTEM.$RELEASE" in
 			;;
 		*)	echo "Unknown AIX version: `uname -v`." 1>&2; exit 1;;
 		esac;;
-		# Tested with RedHat 3.03 on 20020729.
-    Linux.1*)	SYSTYPE=LINUX1
-		SYSLIBS="-ldb"
-		;;
     Linux.2*)	SYSTYPE=LINUX2
-		# Postfix no longer needs DB 1.85 compatibility
-		if [ -f /usr/include/db.h ]
-		then
-		    : we are all set
-		elif [ -f /usr/include/db/db.h ]
-		then
-		    CCARGS="$CCARGS -I/usr/include/db"
-		else
-		    # No, we're not going to try db1 db2 db3 etc.
-		    # On a properly installed system, Postfix builds
-		    # by including <db.h> and by linking with -ldb
-		    echo "No <db.h> include file found." 1>&2
-		    echo "Install the appropriate db*-devel package first." 1>&2
-		    echo "See the RELEASE_NOTES file for more information." 1>&2
-		    exit 1
-		fi
-		if [ -f /usr/include/pcre/pcre.h ]
-		then
-		    CCARGS="$CCARGS -DHAS_PCRE -I/usr/include/pcre"
-		fi
-		# GDBM locks the DBM .pag file after open. This breaks postmap.
-		# if [ -f /usr/include/gdbm-ndbm.h ]
-		# then
-		#     CCARGS="$CCARGS -DHAS_DBM -DPATH_NDBM_H='<gdbm-ndbm.h>'"
-		#     GDBM_LIBS=gdbm
-		# elif [ -f /usr/include/gdbm/ndbm.h ]
-		# then
-		#     CCARGS="$CCARGS -DHAS_DBM -DPATH_NDBM_H='<gdbm/ndbm.h>'"
-		#     GDBM_LIBS=gdbm
-		# fi
-		SYSLIBS="-ldb"
-		for name in nsl resolv pcre $GDBM_LIBS
+		for name in db nsl resolv
 		do
-		    test -e /usr/lib/lib$name.a -o -e /usr/lib/lib$name.so \
-			-o -e /lib/lib$name.a -o -e /lib/lib$name.so \
-			    && SYSLIBS="$SYSLIBS -l$name"
+		    test -f /usr/lib/lib$name.a && SYSLIBS="$SYSLIBS -l$name"
 		done
+		if [ -f /usr/include/db_185.h ]; then
+		    CCARGS="$CCARGS -DPATH_DB_H='<db_185.h>'"
+		elif [ -f /usr/include/db/db.h ]; then
+		    CCARGS="$CCARGS -DPATH_DB_H='<db/db.h>'"
+		fi
 		;;
      IRIX*.5.*)	SYSTYPE=IRIX5
 		# Use the native compiler by default
@@ -250,19 +204,7 @@ ReliantUNIX-?.5.43) SYSTYPE=ReliantUnix543
 		RANLIB=echo
 		SYSLIBS="-lresolv -lsocket -lnsl"
 		;;
-Rhapsody.5*|Darwin.*)
-		SYSTYPE=RHAPSODY5
-		# Use the native compiler by default
-		: ${CC=cc}
-		AWK=gawk
-		case $RELEASE in
-		 1.[0-3]) ;;
-		       *) AWK=awk
-			  SYSLIBS=-flat_namespace
-			  ;;
-		esac
-		;;
-"Mac OS".10*)	SYSTYPE=MACOSX
+ Rhapsody.5*)	SYSTYPE=RHAPSODY5
 		# Use the native compiler by default
 		: ${CC=cc}
 		AWK=gawk
@@ -316,6 +258,4 @@ CC	= $CC $CCARGS
 OPT	= $OPT
 DEBUG	= $DEBUG
 AWK	= $AWK
-STRCASE = $STRCASE
-EXPORT	= AUXLIBS='$AUXLIBS' CCARGS='$CCARGS' OPT='$OPT' DEBUG='$DEBUG'
 EOF

@@ -1,5 +1,3 @@
-/*	$NetBSD: tcpdchk.c,v 1.10 2002/06/06 21:28:51 itojun Exp $	*/
-
  /*
   * tcpdchk - examine all tcpd access control rules and inetd.conf entries
   * 
@@ -16,13 +14,8 @@
   * Author: Wietse Venema, Eindhoven University of Technology, The Netherlands.
   */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#) tcpdchk.c 1.8 97/02/12 02:13:25";
-#else
-__RCSID("$NetBSD: tcpdchk.c,v 1.10 2002/06/06 21:28:51 itojun Exp $");
-#endif
+static char sccsid[] = "@(#) tcpdchk.c 1.7 96/02/11 17:01:34";
 #endif
 
 /* System libraries. */
@@ -37,8 +30,11 @@ __RCSID("$NetBSD: tcpdchk.c,v 1.10 2002/06/06 21:28:51 itojun Exp $");
 #include <errno.h>
 #include <netdb.h>
 #include <string.h>
-#include <stdlib.h>
-#include <unistd.h>
+
+extern int errno;
+extern void exit();
+extern int optind;
+extern char *optarg;
 
 #ifndef INADDR_NONE
 #define INADDR_NONE     (-1)		/* XXX should be 0xffffffff */
@@ -53,14 +49,6 @@ __RCSID("$NetBSD: tcpdchk.c,v 1.10 2002/06/06 21:28:51 itojun Exp $");
 #include "tcpd.h"
 #include "inetcf.h"
 #include "scaffold.h"
-
-#ifdef NO_NETGRENT
-	/* SCO has no *netgrent() support */
-#else
-# ifdef NETGROUP
-#  include <netgroup.h>
-# endif
-#endif
 
  /*
   * Stolen from hosts_access.c...
@@ -78,20 +66,15 @@ extern jmp_buf tcpd_buf;
  /*
   * Local stuff.
   */
-static void usage __P((void));
-static void parse_table __P((char *, struct request_info *));
-static void print_list __P((char *, char *));
-static void check_daemon_list __P((char *));
-static void check_client_list __P((char *));
-static void check_daemon __P((char *));
-static void check_user __P((char *));
-#ifdef INET6
-static int check_inet_addr __P((char *));
-#endif
-static int check_host __P((char *));
-static int reserved_name __P((char *));
-
-int main __P((int, char **));
+static void usage();
+static void parse_table();
+static void print_list();
+static void check_daemon_list();
+static void check_client_list();
+static void check_daemon();
+static void check_user();
+static int check_host();
+static int reserved_name();
 
 #define PERMIT	1
 #define DENY	0
@@ -117,7 +100,7 @@ char  **argv;
     /*
      * Parse the JCL.
      */
-    while ((c = getopt(argc, argv, "adi:v")) != -1) {
+    while ((c = getopt(argc, argv, "adi:v")) != EOF) {
 	switch (c) {
 	case 'a':
 	    allow_check = 1;
@@ -216,17 +199,13 @@ struct request_info *request;
     char    sv_list[BUFLEN];		/* becomes list of daemons */
     char   *cl_list;			/* becomes list of requests */
     char   *sh_cmd;			/* becomes optional shell command */
+    char    buf[BUFSIZ];
     int     verdict;
     struct tcpd_context saved_context;
-#ifdef __GNUC__
-    /* XXX hack to avoid gcc warnings */
-    (void) &real_verdict;
-    (void) &saved_context;
-#endif
 
     saved_context = tcpd_context;		/* stupid compilers */
 
-    if ((fp = fopen(table, "r")) != NULL) {
+    if (fp = fopen(table, "r")) {
 	tcpd_context.file = table;
 	tcpd_context.line = 0;
 	while (xgets(sv_list, sizeof(sv_list), fp)) {
@@ -257,8 +236,7 @@ struct request_info *request;
 #ifdef PROCESS_OPTIONS
 	    real_verdict = defl_verdict;
 	    if (sh_cmd) {
-		verdict = setjmp(tcpd_buf);
-		if (verdict != 0) {
+		if ((verdict = setjmp(tcpd_buf)) != 0) {
 		    real_verdict = (verdict == AC_PERMIT);
 		} else {
 		    dry_run = 1;
@@ -344,25 +322,15 @@ char   *list;
     char   *cp;
     char   *host;
     int     clients = 0;
-#ifdef INET6
-    int l;
-#endif
 
     strcpy(buf, list);
 
     for (cp = strtok(buf, sep); cp != 0; cp = strtok((char *) 0, sep)) {
-#ifdef INET6
-	l = strlen(cp);
-	if (cp[0] == '[' && cp[l - 1] == ']') {
-	    cp[l - 1] = '\0';
-	    cp++;
-	}
-#endif
 	if (STR_EQ(cp, "EXCEPT")) {
 	    clients = 0;
 	} else {
 	    clients++;
-	    if ((host = split_at(cp + 1, '@')) != NULL) {	/* user@host */
+	    if (host = split_at(cp + 1, '@')) {	/* user@host */
 		check_user(cp);
 		check_host(host);
 	    } else {
@@ -428,22 +396,8 @@ char   *pat;
     }
 }
 
-#ifdef INET6
-static int check_inet_addr(pat)
-char	*pat;
-{
-	struct addrinfo *res;
-
-	res = find_inet_addr(pat, AI_NUMERICHOST);
-	if (res) {
-		freeaddrinfo(res);
-		return 1;
-	} else
-		return 0;
-}
-#endif
-
 /* check_host - criticize host pattern */
+
 static int check_host(pat)
 char   *pat;
 {
@@ -455,9 +409,9 @@ char   *pat;
 	/* SCO has no *netgrent() support */
 #else
 #ifdef NETGROUP
-	const char   *machinep;
-	const char   *userp;
-	const char   *domainp;
+	char   *machinep;
+	char   *userp;
+	char   *domainp;
 
 	setnetgrent(pat + 1);
 	if (getnetgrent(&machinep, &userp, &domainp) == 0)
@@ -467,21 +421,9 @@ char   *pat;
 	tcpd_warn("netgroup support disabled");
 #endif
 #endif
-    } else if ((mask = split_at(pat, '/')) != NULL) {	/* network/netmask */
-#ifdef INET6
-	char *ep;
-#endif
-	if (dot_quad_addr(pat, NULL) != INADDR_NONE
-	    || dot_quad_addr(mask, NULL) != INADDR_NONE)
-	    ; /*okay*/
-#ifdef INET6
-	else if (check_inet_addr(pat) && check_inet_addr(mask))
-	    ; /*okay*/
-	else if (check_inet_addr(pat) &&
-	    (ep = NULL, strtoul(mask, &ep, 10), ep && !*ep))
-	    ; /*okay*/
-#endif
-	else
+    } else if (mask = split_at(pat, '/')) {	/* network/netmask */
+	if (dot_quad_addr(pat) == INADDR_NONE
+	    || dot_quad_addr(mask) == INADDR_NONE)
 	    tcpd_warn("%s/%s: bad net/mask pattern", pat, mask);
     } else if (STR_EQ(pat, "FAIL")) {		/* obsolete */
 	tcpd_warn("FAIL is no longer recognized");

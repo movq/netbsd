@@ -7,8 +7,8 @@
 /*	\fBpickup\fR [generic Postfix daemon options]
 /* DESCRIPTION
 /*	The \fBpickup\fR daemon waits for hints that new mail has been
-/*	dropped into the \fBmaildrop\fR directory, and feeds it into the
-/*	\fBcleanup\fR(8) daemon.
+/*	dropped into the world-writable \fBmaildrop\fR directory, and
+/*	feeds it into the \fBcleanup\fR(8) daemon.
 /*	Ill-formatted files are deleted without notifying the originator.
 /*	This program expects to be run from the \fBmaster\fR(8) process
 /*	manager.
@@ -19,12 +19,13 @@
 /* SECURITY
 /* .ad
 /* .fi
-/*	The \fBpickup\fR daemon is moderately security sensitive. It runs
-/*	with fixed low privilege and can run in a chrooted environment.
-/*	However, the program reads files from potentially hostile users.
-/*	The \fBpickup\fR daemon opens no files for writing, is careful about
-/*	what files it opens for reading, and does not actually touch any data
-/*	that is sent to its public service endpoint.
+/*	The \fBpickup\fR daemon runs with superuser privileges so that it
+/*	1) can open a queue file with the rights of the submitting user
+/*	and 2) can access the Postfix private IPC channels.
+/*	On the positive side, the program can run chrooted, opens no files
+/*	for writing, is careful about what files it opens for reading, and
+/*	does not actually touch any data that is sent to its public service
+/*	endpoint.
 /* DIAGNOSTICS
 /*	Problems and transactions are logged to \fBsyslogd\fR(8).
 /* BUGS
@@ -50,12 +51,13 @@
 /* .fi
 /* .IP \fBalways_bcc\fR
 /*	Address to send a copy of each message that enters the system.
+/* .IP \fBmail_owner\fR
+/*	The process privileges used while not opening a \fBmaildrop\fR file.
 /* .IP \fBqueue_directory\fR
 /*	Top-level directory of the Postfix queue.
 /* SEE ALSO
 /*	cleanup(8) message canonicalization
 /*	master(8) process manager
-/*	sendmail(1), postdrop(8) mail posting agent
 /*	syslogd(8) system logging
 /* LICENSE
 /* .ad
@@ -87,9 +89,8 @@
 #include <scan_dir.h>
 #include <vstring.h>
 #include <vstream.h>
-#include <set_ugid.h>
-#include <safe_open.h>
-#include <stringops.h>
+#include <open_as.h>
+#include <set_eugid.h>
 
 /* Global library. */
 
@@ -103,7 +104,6 @@
 #include <mail_conf.h>
 #include <record.h>
 #include <rec_type.h>
-#include <lex_822.h>
 
 /* Single-threaded server skeleton. */
 
@@ -158,21 +158,13 @@ static int copy_segment(VSTREAM *qfile, VSTREAM *cleanup, PICKUP_INFO *info,
 {
     int     type;
     int     check_first = (*expected == REC_TYPE_CONTENT[0]);
-    const char *error_text;
-    char   *attr_name;
-    char   *attr_value;
 
     /*
      * Limit the input record size. All front-end programs should protect the
      * mail system against unreasonable inputs. This also requires that we
      * limit the size of envelope records written by the local posting agent.
-     * 
      * As time stamp we use the scrutinized queue file modification time, and
      * ignore the time stamp embedded in the queue file.
-     * 
-     * Allow attribute records if the queue file is owned by the mail system
-     * (postsuper -r) or if the attribute specifies the MIME body type
-     * (sendmail -B).
      */
     for (;;) {
 	if ((type = rec_get(qfile, buf, var_line_limit)) < 0
@@ -183,49 +175,12 @@ static int copy_segment(VSTREAM *qfile, VSTREAM *cleanup, PICKUP_INFO *info,
 	if (type == REC_TYPE_FROM)
 	    if (info->sender == 0)
 		info->sender = mystrdup(vstring_str(buf));
-	if (type == REC_TYPE_ORCP)
-	    if (info->st.st_uid != var_owner_uid) {
-		msg_warn("uid=%ld: ignoring original recipient record: %.200s",
-			 (long) info->st.st_uid, vstring_str(buf));
-		continue;
-	    }
 	if (type == REC_TYPE_RCPT)
 	    if (info->rcpt == 0)
 		info->rcpt = mystrdup(vstring_str(buf));
 	if (type == REC_TYPE_TIME)
 	    continue;
-	if (type == REC_TYPE_ATTR) {
-	    if ((error_text = split_nameval(vstring_str(buf), &attr_name,
-					    &attr_value)) != 0) {
-		msg_warn("uid=%ld: malformed attribute record: %s: %.200s",
-		      (long) info->st.st_uid, error_text, vstring_str(buf));
-		continue;
-	    }
-#define STREQ(x,y) (strcmp(x,y) == 0)
-
-	    if (STREQ(attr_name, MAIL_ATTR_ENCODING)
-		&& (STREQ(attr_value, MAIL_ATTR_ENC_7BIT)
-		    || STREQ(attr_value, MAIL_ATTR_ENC_8BIT)
-		    || STREQ(attr_value, MAIL_ATTR_ENC_NONE))) {
-		rec_fprintf(cleanup, REC_TYPE_ATTR, "%s=%s",
-			    attr_name, attr_value);
-	    } else if (info->st.st_uid != var_owner_uid) {
-		msg_warn("uid=%ld: ignoring attribute record: %.200s=%.200s",
-			 (long) info->st.st_uid, attr_name, attr_value);
-	    }
-	    continue;
-	}
-	if (type == REC_TYPE_RRTO)
-	    /* Use message header extracted information instead. */
-	    continue;
-	if (type == REC_TYPE_ERTO)
-	    /* Use message header extracted information instead. */
-	    continue;
-	if (type == REC_TYPE_INSP)
-	    /* Use current content inspection settings instead. */
-	    continue;
-	if (type == REC_TYPE_FILT)
-	    /* Use current content filter settings instead. */
+	if (type == REC_TYPE_FILT && *expected == REC_TYPE_ENVELOPE[0])
 	    continue;
 	else {
 
@@ -236,7 +191,7 @@ static int copy_segment(VSTREAM *qfile, VSTREAM *cleanup, PICKUP_INFO *info,
 	     */
 	    if (check_first) {
 		check_first = 0;
-		if (VSTRING_LEN(buf) > 0 && IS_SPACE_TAB(vstring_str(buf)[0]))
+		if (VSTRING_LEN(buf) > 0 && ISSPACE(vstring_str(buf)[0]))
 		    rec_put(cleanup, REC_TYPE_NORM, "", 0);
 	    }
 	    if ((REC_PUT_BUF(cleanup, type, buf)) < 0)
@@ -282,12 +237,6 @@ static int pickup_copy(VSTREAM *qfile, VSTREAM *cleanup,
      */
     if (*var_filter_xport)
 	rec_fprintf(cleanup, REC_TYPE_FILT, "%s", var_filter_xport);
-
-    /*
-     * Origin is local.
-     */
-    rec_fprintf(cleanup, REC_TYPE_ATTR, "%s=%s",
-		MAIL_ATTR_ORIGIN, MAIL_ATTR_ORG_LOCAL);
 
     /*
      * Copy the message envelope segment. Allow only those records that we
@@ -346,9 +295,7 @@ static int pickup_copy(VSTREAM *qfile, VSTREAM *cleanup,
      * bounce, the cleanup service can report only soft errors here.
      */
     rec_fputs(cleanup, REC_TYPE_END, "");
-    if (attr_scan(cleanup, ATTR_FLAG_MISSING,
-		  ATTR_TYPE_NUM, MAIL_ATTR_STATUS, &status,
-		  ATTR_TYPE_END) != 1)
+    if (mail_scan(cleanup, "%d", &status) != 1)
 	return (cleanup_service_error(info, CLEANUP_STAT_WRITE));
 
     /*
@@ -368,10 +315,12 @@ static int pickup_copy(VSTREAM *qfile, VSTREAM *cleanup,
 
 static int pickup_file(PICKUP_INFO *info)
 {
-    VSTRING *buf = vstring_alloc(100);
+    struct stat st;
+    VSTRING *buf;
     int     status;
     VSTREAM *qfile;
     VSTREAM *cleanup;
+    int     fd;
 
     /*
      * Open the submitted file. If we cannot open it, and we're not having a
@@ -380,17 +329,27 @@ static int pickup_file(PICKUP_INFO *info)
      * Perhaps we should save "bad" files elsewhere for further inspection.
      * XXX How can we delete a file when open() fails with ENOENT?
      */
-    qfile = safe_open(info->path, O_RDONLY | O_NONBLOCK, 0,
-		      (struct stat *) 0, -1, -1, buf);
-    if (qfile == 0) {
+    fd = open_as(info->path, O_RDONLY | O_NONBLOCK, 0,
+		 info->st.st_uid, info->st.st_gid);
+    if (fd < 0) {
 	if (errno != ENOENT)
-	    msg_warn("open input file %s: %s", info->path, vstring_str(buf));
-	vstring_free(buf);
-	if (errno == EACCES)
-	    msg_warn("if this file was created by Postfix < 1.1, then you may have to chmod a+r %s/%s",
-		     var_queue_dir, info->path);
-	return (errno == EACCES ? KEEP_MESSAGE_FILE : REMOVE_MESSAGE_FILE);
+	    msg_fatal("open input file %s: %m", info->path);
+	msg_warn("open input file %s: %m", info->path);
+	return (REMOVE_MESSAGE_FILE);
     }
+
+    /*
+     * Like safe_open(pat, O_RDONLY, 0), but without any link count checks.
+     */
+    if (fstat(fd, &st) < 0)
+	msg_fatal("fstat: %m");
+    if (st.st_dev != info->st.st_dev
+	|| st.st_ino != info->st.st_ino
+	|| st.st_mode != info->st.st_mode) {
+	msg_warn("%s: uid %ld: file has changed", info->path, (long) st.st_uid);
+	return (REMOVE_MESSAGE_FILE);
+    }
+    qfile = vstream_fdopen(fd, O_RDONLY);
 
     /*
      * Contact the cleanup service and read the queue ID that it has
@@ -404,13 +363,10 @@ static int pickup_file(PICKUP_INFO *info)
      */
 #define PICKUP_CLEANUP_FLAGS	(CLEANUP_FLAG_BOUNCE | CLEANUP_FLAG_FILTER)
 
-    cleanup = mail_connect_wait(MAIL_CLASS_PUBLIC, var_cleanup_service);
-    if (attr_scan(cleanup, ATTR_FLAG_STRICT,
-		  ATTR_TYPE_STR, MAIL_ATTR_QUEUEID, buf,
-		  ATTR_TYPE_END) != 1
-	|| attr_print(cleanup, ATTR_FLAG_NONE,
-		      ATTR_TYPE_NUM, MAIL_ATTR_FLAGS, PICKUP_CLEANUP_FLAGS,
-		      ATTR_TYPE_END) != 0) {
+    buf = vstring_alloc(100);
+    cleanup = mail_connect_wait(MAIL_CLASS_PRIVATE, MAIL_SERVICE_CLEANUP);
+    if (mail_scan(cleanup, "%s", buf) != 1
+	|| mail_print(cleanup, "%d", PICKUP_CLEANUP_FLAGS) != 0) {
 	status = KEEP_MESSAGE_FILE;
     } else {
 	info->id = mystrdup(vstring_str(buf));
@@ -489,16 +445,11 @@ static void pickup_service(char *unused_buf, int unused_len,
     } while (file_count);
 }
 
-/* drop_privileges - drop privileges */
+/* drop_privileges - drop privileges most of the time */
 
 static void drop_privileges(char *unused_name, char **unused_argv)
 {
-
-    /*
-     * In case master.cf was not updated for unprivileged service.
-     */
-    if (getuid() != var_owner_uid)
-	set_ugid(var_owner_uid, var_owner_gid);
+    set_eugid(var_owner_uid, var_owner_gid);
 }
 
 /* main - pass control to the multi-threaded server skeleton */
@@ -518,6 +469,5 @@ int     main(int argc, char **argv)
     trigger_server_main(argc, argv, pickup_service,
 			MAIL_SERVER_STR_TABLE, str_table,
 			MAIL_SERVER_POST_INIT, drop_privileges,
-			MAIL_SERVER_SOLITARY,
 			0);
 }

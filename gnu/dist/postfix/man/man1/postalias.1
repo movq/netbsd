@@ -9,9 +9,8 @@ Postfix alias database maintenance
 .na
 .nf
 .fi
-\fBpostalias\fR [\fB-Nfinorvw\fR] [\fB-c \fIconfig_dir\fR]
-[\fB-d \fIkey\fR] [\fB-q \fIkey\fR]
-[\fIfile_type\fR:]\fIfile_name\fR ...
+\fBpostalias\fR [\fB-Ninvw\fR] [\fB-c \fIconfig_dir\fR]
+[\fB-q \fIkey\fR] [\fIfile_type\fR:]\fIfile_name\fR ...
 .SH DESCRIPTION
 .ad
 .fi
@@ -19,9 +18,6 @@ The \fBpostalias\fR command creates or queries one or more Postfix
 alias databases, or updates an existing one. The input and output
 file formats are expected to be compatible with Sendmail version 8,
 and are expected to be suitable for the use as NIS alias maps.
-
-If the result files do not exist they will be created with the
-same group and other read permissions as the source file.
 
 While a database update is in progress, signal delivery is
 postponed, and an exclusive, advisory, lock is placed on the
@@ -34,48 +30,24 @@ Include the terminating null character that terminates lookup keys
 and values. By default, Postfix does whatever is the default for
 the host operating system.
 .IP "\fB-c \fIconfig_dir\fR"
-Read the \fBmain.cf\fR configuration file in the named directory
-instead of the default configuration directory.
-.IP "\fB-d \fIkey\fR"
-Search the specified maps for \fIkey\fR and remove one entry per map.
-The exit status is zero when the requested information was found.
-
-If a key value of \fB-\fR is specified, the program reads key
-values from the standard input stream. The exit status is zero
-when at least one of the requested keys was found.
-.IP \fB-f\fR
-Do not fold the lookup key to lower case while creating or querying
-a map.
+Read the \fBmain.cf\fR configuration file in the named directory.
 .IP \fB-i\fR
 Incremental mode. Read entries from standard input and do not
 truncate an existing database. By default, \fBpostalias\fR creates
-a new database from the entries in \fIfile_name\fR.
+a new database from the entries in \fBfile_name\fR.
 .IP \fB-n\fR
 Don't include the terminating null character that terminates lookup
 keys and values. By default, Postfix does whatever is the default for
 the host operating system.
-.IP \fB-o\fR
-Do not release root privileges when processing a non-root
-input file. By default, \fBpostalias\fR drops root privileges
-and runs as the source file owner instead.
 .IP "\fB-q \fIkey\fR"
 Search the specified maps for \fIkey\fR and print the first value
-found on the standard output stream. The exit status is zero
-when the requested information was found.
-
-If a key value of \fB-\fR is specified, the program reads key
-values from the standard input stream and prints one line of
-\fIkey: value\fR output for each key that was found. The exit
-status is zero when at least one of the requested keys was found.
-.IP \fB-r\fR
-When updating a table, do not warn about duplicate entries; silently
-replace them.
+found on the standard output stream. The exit status is non-zero
+if the requested information was not found.
 .IP \fB-v\fR
 Enable verbose logging for debugging purposes. Multiple \fB-v\fR
 options make the software increasingly verbose.
 .IP \fB-w\fR
-When updating a table, do not warn about duplicate entries; silently
-ignore them.
+Do not warn about duplicate entries; silently ignore them.
 .PP
 Arguments:
 .IP \fIfile_type\fR
@@ -92,26 +64,18 @@ This is available only on systems with support for \fBdbm\fR databases.
 The output is a hashed file, named \fIfile_name\fB.db\fR.
 This is available only on systems with support for \fBdb\fR databases.
 .PP
-Use the command \fBpostconf -m\fR to find out what types of database
-your Postfix installation can support.
-
 When no \fIfile_type\fR is specified, the software uses the database
-type specified via the \fBdefault_database_type\fR configuration
-parameter.
+type specified via the \fBdatabase_type\fR configuration parameter.
 The default value for this parameter depends on the host environment.
 .RE
 .IP \fIfile_name\fR
-The name of the alias database source file when creating a database.
+The name of the alias database source file when rebuilding a database.
 .SH DIAGNOSTICS
 .ad
 .fi
 Problems are logged to the standard error stream. No output means
 no problems were detected. Duplicate entries are skipped and are
 flagged with a warning.
-
-\fBpostalias\fR terminates with zero exit status in case of success
-(including successful \fBpostalias -q\fR lookup) and terminates
-with non-zero exit status in case of failure.
 .SH ENVIRONMENT
 .na
 .nf
@@ -129,15 +93,9 @@ Enable verbose logging for debugging purposes.
 The following \fBmain.cf\fR parameters are especially relevant to
 this program. See the Postfix \fBmain.cf\fR file for syntax details
 and for default values.
-.IP \fBdefault_database_type\fR
-Default database type. On many UNIX systems, the default type
+.IP \fBdatabase_type\fR
+Default alias database type. On many UNIX systems, the default type
 is either \fBdbm\fR or \fBhash\fR.
-.IP \fBberkeley_db_create_buffer_size\fR
-Amount of buffer memory to be used when creating a Berkeley DB
-\fBhash\fR or \fBbtree\fR lookup table.
-.IP \fBberkeley_db_read_buffer_size\fR
-Amount of buffer memory to be used when reading a Berkeley DB
-\fBhash\fR or \fBbtree\fR lookup table.
 .SH STANDARDS
 .na
 .nf

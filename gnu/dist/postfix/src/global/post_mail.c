@@ -6,15 +6,17 @@
 /* SYNOPSIS
 /*	#include <post_mail.h>
 /*
-/*	VSTREAM	*post_mail_fopen(sender, recipient, flags)
+/*	VSTREAM	*post_mail_fopen(sender, recipient, flags, via)
 /*	const char *sender;
 /*	const char *recipient;
 /*	int	flags;
+/*	const char *via;
 /*
-/*	VSTREAM	*post_mail_fopen_nowait(sender, recipient, flags)
+/*	VSTREAM	*post_mail_fopen_nowait(sender, recipient, flags, via)
 /*	const char *sender;
 /*	const char *recipient;
 /*	int	flags;
+/*	const char *via;
 /*
 /*	int	post_mail_fprintf(stream, format, ...)
 /*	VSTREAM	*stream;
@@ -130,7 +132,7 @@
 /* post_mail_init - initial negotiations */
 
 static void post_mail_init(VSTREAM *stream, const char *sender,
-			           const char *recipient, int flags)
+		          const char *recipient, int flags, const char *via)
 {
     VSTRING *id = vstring_alloc(100);
     long    now = time((time_t *) 0);
@@ -139,21 +141,15 @@ static void post_mail_init(VSTREAM *stream, const char *sender,
     /*
      * Negotiate with the cleanup service. Give up if we can't agree.
      */
-    if (attr_scan(stream, ATTR_FLAG_STRICT,
-		  ATTR_TYPE_STR, MAIL_ATTR_QUEUEID, id,
-		  ATTR_TYPE_END) != 1
-	|| attr_print(stream, ATTR_FLAG_NONE,
-		      ATTR_TYPE_NUM, MAIL_ATTR_FLAGS, flags,
-		      ATTR_TYPE_END) != 0)
-	msg_fatal("unable to contact the %s service", var_cleanup_service);
+    if (mail_scan(stream, "%s", id) != 1
+	|| mail_print(stream, "%d", flags) != 0)
+	msg_fatal("unable to contact the %s service", MAIL_SERVICE_CLEANUP);
 
     /*
      * Generate a minimal envelope section. The cleanup service will add a
      * size record.
      */
     rec_fprintf(stream, REC_TYPE_TIME, "%ld", (long) now);
-    rec_fprintf(stream, REC_TYPE_ATTR, "%s=%s",
-		MAIL_ATTR_ORIGIN, MAIL_ATTR_ORG_LOCAL);
     rec_fputs(stream, REC_TYPE_FROM, sender);
     rec_fputs(stream, REC_TYPE_RCPT, recipient);
     rec_fputs(stream, REC_TYPE_MESG, "");
@@ -162,8 +158,8 @@ static void post_mail_init(VSTREAM *stream, const char *sender,
      * Do the Received: and Date: header lines. This allows us to shave a few
      * cycles by using the expensive date conversion result for both.
      */
-    post_mail_fprintf(stream, "Received: by %s (%s)",
-		      var_myhostname, var_mail_name);
+    post_mail_fprintf(stream, "Received: by %s (%s) via %s",
+		      var_myhostname, var_mail_name, via);
     post_mail_fprintf(stream, "\tid %s; %s", vstring_str(id), date);
     post_mail_fprintf(stream, "Date: %s", date);
     vstring_free(id);
@@ -171,25 +167,26 @@ static void post_mail_init(VSTREAM *stream, const char *sender,
 
 /* post_mail_fopen - prepare for posting a message */
 
-VSTREAM *post_mail_fopen(const char *sender, const char *recipient, int flags)
+VSTREAM *post_mail_fopen(const char *sender, const char *recipient,
+			         int flags, const char *via)
 {
     VSTREAM *stream;
 
-    stream = mail_connect_wait(MAIL_CLASS_PUBLIC, var_cleanup_service);
-    post_mail_init(stream, sender, recipient, flags);
+    stream = mail_connect_wait(MAIL_CLASS_PRIVATE, MAIL_SERVICE_CLEANUP);
+    post_mail_init(stream, sender, recipient, flags, via);
     return (stream);
 }
 
 /* post_mail_fopen_nowait - prepare for posting a message */
 
 VSTREAM *post_mail_fopen_nowait(const char *sender, const char *recipient,
-				        int flags)
+				        int flags, const char *via)
 {
     VSTREAM *stream;
 
-    if ((stream = mail_connect(MAIL_CLASS_PUBLIC, var_cleanup_service,
+    if ((stream = mail_connect(MAIL_CLASS_PRIVATE, MAIL_SERVICE_CLEANUP,
 			       BLOCKING)) != 0)
-	post_mail_init(stream, sender, recipient, flags);
+	post_mail_init(stream, sender, recipient, flags, via);
     return (stream);
 }
 
@@ -238,10 +235,7 @@ int     post_mail_fclose(VSTREAM *cleanup)
     } else {
 	rec_fputs(cleanup, REC_TYPE_XTRA, "");
 	rec_fputs(cleanup, REC_TYPE_END, "");
-	if (vstream_fflush(cleanup)
-	    || attr_scan(cleanup, ATTR_FLAG_MISSING,
-			 ATTR_TYPE_NUM, MAIL_ATTR_STATUS, &status,
-			 ATTR_TYPE_END) != 1)
+	if (vstream_fflush(cleanup) || mail_scan(cleanup, "%d", &status) != 1)
 	    status = CLEANUP_STAT_WRITE;
     }
     (void) vstream_fclose(cleanup);

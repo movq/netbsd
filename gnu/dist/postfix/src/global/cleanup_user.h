@@ -16,16 +16,7 @@
   */
 #define CLEANUP_FLAG_NONE	0	/* No special features */
 #define CLEANUP_FLAG_BOUNCE	(1<<0)	/* Bounce bad messages */
-#define CLEANUP_FLAG_FILTER	(1<<1)	/* Enable content filter */
-#define CLEANUP_FLAG_HOLD	(1<<2)	/* Place message on hold */
-#define CLEANUP_FLAG_DISCARD	(1<<3)	/* Discard message silently */
-
- /*
-  * These are set on the fly while processing SMTP envelopes or message
-  * content.
-  */
-#define CLEANUP_FLAG_MASK_EXTRA \
-	(CLEANUP_FLAG_HOLD | CLEANUP_FLAG_DISCARD)
+#define CLEANUP_FLAG_FILTER	(2<<0)	/* Enable content filter */
 
  /*
   * Diagnostics.
@@ -43,23 +34,7 @@
 #define CLEANUP_STAT_HOVFL	(1<<7)	/* Header overflow */
 #define CLEANUP_STAT_ROVFL	(1<<8)	/* Recipient overflow */
 
- /*
-  * These are set when we can't bounce even if we were asked to.
-  */
-#define CLEANUP_STAT_MASK_CANT_BOUNCE \
-	(CLEANUP_STAT_BAD | CLEANUP_STAT_WRITE)
-
- /*
-  * These are set when we can't examine every record of a message.
-  */
-#define CLEANUP_STAT_MASK_INCOMPLETE \
-	(CLEANUP_STAT_BAD | CLEANUP_STAT_WRITE | CLEANUP_STAT_SIZE)
-
- /*
-  * These are relevant for extracting recipients from headers.
-  */
-#define CLEANUP_STAT_MASK_EXTRACT_RCPT \
-	(CLEANUP_STAT_HOVFL | CLEANUP_STAT_ROVFL | CLEANUP_STAT_RCPT)
+#define CLEANUP_STAT_LETHAL	~(CLEANUP_STAT_HOVFL|CLEANUP_STAT_ROVFL)
 
 extern const char *cleanup_strerror(unsigned);
 

@@ -23,8 +23,6 @@ Makefile: Makefile.in
 
 test:	$(TESTPROG)
 
-tests:	test
-
 update: ../../libexec/$(PROG)
 
 ../../libexec/$(PROG): $(PROG)
@@ -70,15 +68,11 @@ showq.o: ../../include/mail_queue.h
 showq.o: ../../include/mail_open_ok.h
 showq.o: ../../include/mail_proto.h
 showq.o: ../../include/iostuff.h
-showq.o: ../../include/attr.h
 showq.o: ../../include/mail_date.h
 showq.o: ../../include/mail_params.h
 showq.o: ../../include/mail_scan_dir.h
 showq.o: ../../include/mail_conf.h
 showq.o: ../../include/record.h
 showq.o: ../../include/rec_type.h
-showq.o: ../../include/quote_822_local.h
-showq.o: ../../include/quote_flags.h
-showq.o: ../../include/mail_addr.h
 showq.o: ../../include/bounce_log.h
 showq.o: ../../include/mail_server.h
