@@ -1,4 +1,4 @@
-/*	$NetBSD: board.h,v 1.1 2003/12/26 17:57:03 christos Exp $	*/
+/*	$NetBSD: board.h,v 1.1.1.1 2003/12/26 17:57:03 christos Exp $	*/
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.

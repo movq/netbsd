@@ -1,4 +1,4 @@
-/*	$Header: /cvsroot/src/games/dab/random.h,v 1.1 2003/12/26 17:57:04 christos Exp $	*/
+/*	$Header: /cvsroot/src/games/dab/random.h,v 1.1.1.1 2003/12/26 17:57:04 christos Exp $	*/
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
