@@ -1,4 +1,4 @@
-/*	$NetBSD: edlabel.c,v 1.1 1995/10/08 22:39:09 gwr Exp $	*/
+/*	$NetBSD: edlabel.c,v 1.1.1.1 1995/10/08 22:39:09 gwr Exp $	*/
 
 /*
  * Copyright (c) 1995 Gordon W. Ross
