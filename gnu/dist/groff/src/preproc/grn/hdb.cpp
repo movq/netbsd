@@ -1,4 +1,4 @@
-/*	$NetBSD: hdb.cpp,v 1.1 2003/06/30 17:52:13 wiz Exp $	*/
+/*	$NetBSD: hdb.cpp,v 1.1.1.1 2003/06/30 17:52:13 wiz Exp $	*/
 
 /* Last non-groff version: hdb.c  1.8 (Berkeley) 84/10/20
  *

@@ -1,4 +1,4 @@
-/*	$NetBSD: color.cpp,v 1.1 2003/06/30 17:52:05 wiz Exp $	*/
+/*	$NetBSD: color.cpp,v 1.1.1.1 2003/06/30 17:52:05 wiz Exp $	*/
 
 // -*- C++ -*-
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: hpoint.cpp,v 1.1 2003/06/30 17:52:13 wiz Exp $	*/
+/*	$NetBSD: hpoint.cpp,v 1.1.1.1 2003/06/30 17:52:13 wiz Exp $	*/
 
 /* Last non-groff version: hpoint.c  1.1  84/10/08 */
 

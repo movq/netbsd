@@ -1,4 +1,4 @@
-/*	$NetBSD: htmlhint.cpp,v 1.1 2003/06/30 17:52:06 wiz Exp $	*/
+/*	$NetBSD: htmlhint.cpp,v 1.1.1.1 2003/06/30 17:52:06 wiz Exp $	*/
 
 /* Copyright (C) 2000, 2001, 2002 Free Software Foundation, Inc.
      Written by Gaius Mulley (gaius@glam.ac.uk)

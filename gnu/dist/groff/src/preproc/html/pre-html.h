@@ -1,4 +1,4 @@
-/*	$NetBSD: pre-html.h,v 1.1 2003/06/30 17:52:15 wiz Exp $	*/
+/*	$NetBSD: pre-html.h,v 1.1.1.1 2003/06/30 17:52:15 wiz Exp $	*/
 
 // -*- C++ -*-
 /* Copyright (C) 2000, 2001 Free Software Foundation, Inc.

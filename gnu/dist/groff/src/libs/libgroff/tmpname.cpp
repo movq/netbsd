@@ -1,4 +1,4 @@
-/*	$NetBSD: tmpname.cpp,v 1.1 2003/06/30 17:52:06 wiz Exp $	*/
+/*	$NetBSD: tmpname.cpp,v 1.1.1.1 2003/06/30 17:52:06 wiz Exp $	*/
 
 /* Copyright (C) 2001, 2003 Free Software Foundation, Inc.
      Written by Werner Lemberg (wl@gnu.org)

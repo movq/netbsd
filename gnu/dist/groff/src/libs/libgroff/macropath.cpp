@@ -1,4 +1,4 @@
-/*	$NetBSD: macropath.cpp,v 1.1 2003/06/30 17:52:06 wiz Exp $	*/
+/*	$NetBSD: macropath.cpp,v 1.1.1.1 2003/06/30 17:52:06 wiz Exp $	*/
 
 // -*- C++ -*-
 /* Copyright (C) 1989, 1990, 1991, 1992, 2000 Free Software Foundation, Inc.

@@ -1,4 +1,4 @@
-/*	$NetBSD: paper.h,v 1.1 2003/06/30 17:52:05 wiz Exp $	*/
+/*	$NetBSD: paper.h,v 1.1.1.1 2003/06/30 17:52:05 wiz Exp $	*/
 
 // -*- C++ -*-
 /* Copyright (C) 2002 Free Software Foundation, Inc.

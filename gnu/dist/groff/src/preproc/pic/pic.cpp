@@ -1,4 +1,4 @@
-/*	$NetBSD: pic.cpp,v 1.1 2003/06/30 17:52:12 wiz Exp $	*/
+/*	$NetBSD: pic.cpp,v 1.1.1.1 2003/06/30 17:52:12 wiz Exp $	*/
 
 #ifndef lint
 static char yysccsid[] = "@(#)yaccpar	1.9 (Berkeley) 02/21/93 (groff)";

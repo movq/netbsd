@@ -1,4 +1,4 @@
-/*	$NetBSD: fatal.cpp,v 1.1 2003/06/30 17:52:06 wiz Exp $	*/
+/*	$NetBSD: fatal.cpp,v 1.1.1.1 2003/06/30 17:52:06 wiz Exp $	*/
 
 /* Copyright (C) 1989, 1990, 1991, 1992 Free Software Foundation, Inc.
      Written by James Clark (jjc@jclark.com)

@@ -1,4 +1,4 @@
-/*	$NetBSD: dictionary.cpp,v 1.1 2003/06/30 17:52:07 wiz Exp $	*/
+/*	$NetBSD: dictionary.cpp,v 1.1.1.1 2003/06/30 17:52:07 wiz Exp $	*/
 
 // -*- C++ -*-
 /* Copyright (C) 1989, 1990, 1991, 1992, 2001 Free Software Foundation, Inc.

@@ -1,4 +1,4 @@
-/*	$NetBSD: strcasecmp.c,v 1.1 2003/06/30 17:52:06 wiz Exp $	*/
+/*	$NetBSD: strcasecmp.c,v 1.1.1.1 2003/06/30 17:52:06 wiz Exp $	*/
 
 /* strcasecmp.c -- case insensitive string comparator
    Copyright (C) 1998, 1999 Free Software Foundation, Inc.

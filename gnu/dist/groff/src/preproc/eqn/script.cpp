@@ -1,4 +1,4 @@
-/*	$NetBSD: script.cpp,v 1.1 2003/06/30 17:52:13 wiz Exp $	*/
+/*	$NetBSD: script.cpp,v 1.1.1.1 2003/06/30 17:52:13 wiz Exp $	*/
 
 // -*- C++ -*-
 /* Copyright (C) 1989, 1990, 1991, 1992, 2002 Free Software Foundation, Inc.
