@@ -20,7 +20,7 @@
  */
 #ifndef lint
 static  char rcsid[] =
-    "@(#)$Header: /home/mike/src/cvs/netbsd/src/lib/libpcap/Attic/pcap-null.c,v 1.1 1996/12/11 08:15:43 mikel Exp $ (LBL)";
+    "@(#)$Header: /home/mike/src/cvs/netbsd/src/lib/libpcap/Attic/pcap-null.c,v 1.1.1.1 1996/12/11 08:15:43 mikel Exp $ (LBL)";
 #endif
 
 #include <sys/param.h>			/* optionally get BSD define */

@@ -1,4 +1,4 @@
-dnl @(#) $Header: /home/mike/src/cvs/netbsd/src/lib/libpcap/Attic/configure.in,v 1.1 1996/12/11 08:15:29 mikel Exp $ (LBL)
+dnl @(#) $Header: /home/mike/src/cvs/netbsd/src/lib/libpcap/Attic/configure.in,v 1.1.1.1 1996/12/11 08:15:29 mikel Exp $ (LBL)
 dnl
 dnl Copyright (c) 1994, 1995, 1996
 dnl	The Regents of the University of California.  All rights reserved.

@@ -37,7 +37,7 @@
  *
  *      @(#)bpf.h       7.1 (Berkeley) 5/7/91
  *
- * @(#) $Header: /home/mike/src/cvs/netbsd/src/lib/libpcap/bpf/net/Attic/bpf.h,v 1.1 1996/12/11 08:15:50 mikel Exp $ (LBL)
+ * @(#) $Header: /home/mike/src/cvs/netbsd/src/lib/libpcap/bpf/net/Attic/bpf.h,v 1.1.1.1 1996/12/11 08:15:50 mikel Exp $ (LBL)
  */
 
 #ifndef BPF_MAJOR_VERSION
