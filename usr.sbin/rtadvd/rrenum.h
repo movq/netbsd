@@ -1,4 +1,5 @@
-/*	$NetBSD: rrenum.h,v 1.2 1999/07/06 13:02:09 itojun Exp $	*/
+/*	$NetBSD: rrenum.h,v 1.3 2000/05/23 11:37:59 itojun Exp $	*/
+/*	$KAME: rrenum.h,v 1.2 2000/05/16 13:34:14 itojun Exp $	*/
 
 /*
  * Copyright (C) 1998 WIDE Project.
