@@ -1,4 +1,4 @@
-/*	$NetBSD: ka410.c,v 1.12 1998/06/07 18:34:09 ragge Exp $ */
+/*	$NetBSD: ka410.c,v 1.13 1998/08/10 14:31:08 ragge Exp $ */
 /*
  * Copyright (c) 1996 Ludd, University of Lule}, Sweden.
  * All rights reserved.
@@ -54,6 +54,8 @@
 #include <machine/vsbus.h>
 
 #include "smg.h"
+#include "ry.h"
+#include "ncr.h"
 
 static	void	ka410_conf __P((struct device*, struct device*, void*));
 static	void	ka410_steal_pages __P((void));
@@ -136,6 +138,11 @@ ka410_steal_pages()
         extern  int clk_adrshift, clk_tweak;
 	int	junk, parctl = 0;
 
+	/* Interrupt vector number in interrupt mask table */
+	inr_ni = VS3100_NI;
+	inr_sr = VS3100_SR;
+	inr_st = VS3100_ST;
+	inr_vf = VS3100_VF;
 	/* 
 	 * SCB is already copied/initialized at addr avail_start
 	 * by pmap_bootstrap(), but it's not yet mapped. Thus we use
@@ -181,6 +188,24 @@ ka410_steal_pages()
 		pmap_map((vm_offset_t)sm_addr, (vm_offset_t)SMADDR,
 		    (vm_offset_t)SMADDR + SMSIZE, VM_PROT_READ|VM_PROT_WRITE);
 		((struct vs_cpu *)VS_REGS)->vc_vdcorg = 0;
+	}
+#endif
+#if NRD || NRX || NNCR
+	MAPVIRT(sca_regs, 1);
+	pmap_map((vm_offset_t)sca_regs, (vm_offset_t)KA410_DKC_BASE,
+	    (vm_offset_t)KA410_DKC_BASE + NBPG,
+	    VM_PROT_READ|VM_PROT_WRITE);
+
+	if (vax_boardtype == VAX_BTYP_410) {
+		MAPVIRT(dma_area, (KA410_DMA_SIZE / NBPG));
+		pmap_map((vm_offset_t)dma_area, (vm_offset_t)KA410_DMA_BASE,
+		    (vm_offset_t)KA410_DMA_BASE + KA410_DMA_SIZE,
+		    VM_PROT_READ|VM_PROT_WRITE);
+	} else {
+		MAPVIRT(dma_area, (KA420_DMA_SIZE / NBPG));
+		pmap_map((vm_offset_t)dma_area, (vm_offset_t)KA420_DMA_BASE,
+		    (vm_offset_t)KA420_DMA_BASE + KA420_DMA_SIZE,
+		    VM_PROT_READ|VM_PROT_WRITE);
 	}
 #endif
 	if ((vax_cputype == VAX_TYP_CVAX) &&
