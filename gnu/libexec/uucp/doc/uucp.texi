@@ -5649,7 +5649,7 @@ Keywords: UUCP, protocol, FAQ
 Approved: news-answers-request@@MIT.Edu
 
 Archive-name: uucp-internals
-Version: $Revision: 1.1 $
+Version: $Revision: 1.1.1.1 $
 Last-modified: $Date: 1999/03/29 11:16:59 $
 @end format
 @end ifset
