@@ -1,4 +1,4 @@
-/* $Id: safefile.h,v 1.1 2005/02/12 11:13:00 manu Exp $ */
+/* $Id: safefile.h,v 1.1.1.1 2005/02/12 11:13:00 manu Exp $ */
 
 /*
  * Copyright (C) 2000 WIDE Project.

@@ -1,4 +1,4 @@
-/* $Id: cfparse.y,v 1.1 2005/02/12 11:11:43 manu Exp $ */
+/* $Id: cfparse.y,v 1.1.1.1 2005/02/12 11:11:43 manu Exp $ */
 
 %{
 /*

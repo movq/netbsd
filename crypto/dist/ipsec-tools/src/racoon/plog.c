@@ -1,4 +1,4 @@
-/* $Id: plog.c,v 1.1 2005/02/12 11:12:47 manu Exp $ */
+/* $Id: plog.c,v 1.1.1.1 2005/02/12 11:12:47 manu Exp $ */
 
 /*
  * Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.
