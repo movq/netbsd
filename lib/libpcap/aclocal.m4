@@ -1,4 +1,4 @@
-dnl @(#) $Header: /cvsroot/src/lib/libpcap/Attic/aclocal.m4,v 1.1 1996/12/11 08:15:27 mikel Exp $ (LBL)
+dnl @(#) $Header: /cvsroot/src/lib/libpcap/Attic/aclocal.m4,v 1.1.1.1 1996/12/11 08:15:27 mikel Exp $ (LBL)
 dnl
 dnl Copyright (c) 1995, 1996
 dnl	The Regents of the University of California.  All rights reserved.
