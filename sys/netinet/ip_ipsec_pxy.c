@@ -1,4 +1,4 @@
-/*	$NetBSD: ip_ipsec_pxy.c,v 1.1 2002/01/24 08:20:13 martti Exp $	*/
+/*	$NetBSD: ip_ipsec_pxy.c,v 1.1.1.1 2002/01/24 08:20:13 martti Exp $	*/
 
 /*
  * Simple ISAKMP transparent proxy for in-kernel use.  For use with the NAT
