@@ -1,5 +1,5 @@
-.\" Copyright (c) 1983, 1990 The Regents of the University of California.
-.\" All rights reserved.
+.\" Copyright (c) 1983, 1990, 1993, 1994
+.\"	The Regents of the University of California.  All rights reserved.
 .\"
 .\" Redistribution and use in source and binary forms, with or without
 .\" modification, are permitted provided that the following conditions
@@ -29,9 +29,9 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\"     @(#)ruptime.1	6.9 (Berkeley) 4/23/91
+.\"     @(#)ruptime.1	8.2 (Berkeley) 4/5/94
 .\"
-.Dd April 23, 1991
+.Dd April 5, 1994
 .Dt RUPTIME 1
 .Os BSD 4.2
 .Sh NAME
@@ -50,7 +50,7 @@ broadcast by each host on the network once a minute.
 Machines for which no status report has been received for 11
 minutes are shown as being down.
 .Pp
-Options:
+The options are as follows:
 .Bl -tag -width Ds
 .It Fl a
 Users idle an hour or more are not counted unless the
@@ -68,8 +68,8 @@ Sort by number of users.
 .Pp
 The default listing is sorted by host name.
 .Sh FILES
-.Bl -tag -width /usr/var/rwho/whod.* -compact
-.It Pa /usr/var/rwho/whod.*
+.Bl -tag -width /var/rwho/whod.* -compact
+.It Pa /var/rwho/whod.*
 data files
 .El
 .Sh SEE ALSO
