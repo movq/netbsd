@@ -1,4 +1,4 @@
-/*	$NetBSD: mach_namemap.c,v 1.6 2002/11/26 08:10:16 manu Exp $ */
+/*	$NetBSD: mach_namemap.c,v 1.7 2002/12/07 21:23:04 manu Exp $ */
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -37,13 +37,14 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mach_namemap.c,v 1.6 2002/11/26 08:10:16 manu Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mach_namemap.c,v 1.7 2002/12/07 21:23:04 manu Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
 
 #include <compat/mach/mach_types.h>
 #include <compat/mach/mach_message.h>
+#include <compat/mach/mach_bootstrap.h>
 #include <compat/mach/mach_clock.h>
 #include <compat/mach/mach_host.h>
 #include <compat/mach/mach_port.h>
@@ -55,7 +56,9 @@ struct mach_subsystem_namemap mach_namemap[] = {
 	{ 200, mach_host_info, "host_info" },
 	{ 202, mach_host_page_size,"host_page_size" },
 	{ 206, mach_host_get_clock_service, "host_get_clock_service" },
+ 	{ 404, mach_bootstrap_look_up, "bootstrap_look_up" }, 
 	{ 1000, mach_clock_get_time, "clock_get_time" },
+	{ 3201, mach_port_type, "mach_port_type" },
 	{ 3204, mach_port_allocate, "port_allocate" },
 	{ 3206, mach_port_deallocate, "port_deallocate" },
 	{ 3214, mach_port_insert_right, "port_insert_right" },
