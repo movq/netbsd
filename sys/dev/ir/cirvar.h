@@ -1,4 +1,4 @@
-/*	$NetBSD: cirvar.h,v 1.1 2001/12/02 10:44:43 augustss Exp $	*/
+/*	$NetBSD: cirvar.h,v 1.2 2001/12/12 15:33:53 augustss Exp $	*/
 
 /*
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -41,12 +41,14 @@ struct cir_methods {
 	int (*im_close)(void *h, int flag, int mode, struct proc *p);
 	int (*im_read)(void *h, struct uio *uio, int flag);
 	int (*im_write)(void *h, struct uio *uio, int flag);
+	int (*im_setparams)(void *h, struct cir_params *params);
 };
 
 struct cir_softc {
 	struct	device		sc_dev;
-	struct	cir_methods	*sc_methods;
+	const struct cir_methods *sc_methods;
 	void			*sc_handle;
 	char			sc_open;
 	struct	selinfo		sc_rdsel;
+	struct	cir_params	sc_params;
 };
