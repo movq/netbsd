@@ -1,4 +1,4 @@
-/*	$NetBSD: dev_tape.c,v 1.1 1995/10/13 21:27:30 gwr Exp $	*/
+/*	$NetBSD: dev_tape.c,v 1.1.1.1 1995/10/13 21:27:30 gwr Exp $	*/
 
 /*
  * Copyright (c) 1993 Paul Kranenburg

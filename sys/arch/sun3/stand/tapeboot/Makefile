@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 1995/10/13 21:27:30 gwr Exp $
+#	$NetBSD: Makefile,v 1.1.1.1 1995/10/13 21:27:30 gwr Exp $
 
 SA_PROG= tapeboot
 SRCS=   boot.c conf.c dev_tape.c version.c
