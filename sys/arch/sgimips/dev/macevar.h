@@ -1,4 +1,4 @@
-/*	$NetBSD: macevar.h,v 1.1.14.1 2002/04/01 07:42:20 nathanw Exp $	*/
+/*	$NetBSD: macevar.h,v 1.1.14.2 2003/01/07 21:14:32 thorpej Exp $	*/
 
 /*
  * Copyright (c) 2000 Soren S. Jorvang
@@ -45,3 +45,4 @@ struct mace_attach_args {
 };
 
 extern void *	mace_intr_establish(int, int, int (*)(void *), void *);
+extern void	mace_intr(int);
