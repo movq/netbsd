@@ -1,4 +1,4 @@
-/*	$NetBSD: __sigaction14_sigtramp.c,v 1.2 2003/01/18 11:15:08 thorpej Exp $	*/
+/*	$NetBSD: __sigaction14_sigtramp.c,v 1.3 2003/10/12 14:42:03 pk Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -40,6 +40,7 @@
 
 #include <sys/types.h>
 #include <signal.h>
+#include <errno.h>
 
 #include "extern.h"
 
@@ -48,13 +49,25 @@ __weak_alias(__sigaction14, __libc_sigaction14)
 int
 __libc_sigaction14(int sig, const struct sigaction *act, struct sigaction *oact)
 {
-	extern int __sigtramp_sigcontext_1[];
+	int rv;
+	extern void __sigtramp_sigcontext_1(void);
+	extern void __sigtramp_siginfo_2(void);
 
 	/*
-	 * Right here we should select the SA_SIGINFO trampoline
-	 * if SA_SIGINFO is set in the sigaction.
+	 * We select the compatibility SIGCONTEXT trampoline if SA_SIGINFO
+	 * is not set in the sigaction.
 	 */
+	if (act && (act->sa_flags & SA_SIGINFO) == 0) {
+		rv =  __sigaction_sigtramp(sig, act, oact,
+					   __sigtramp_sigcontext_1, 1);
+		/*
+		 * EINVAL might indicate that trampoline version 1 is
+		 * not supported by the kernel; fall back on native
+		 * SIGINFO trampoline.
+		 */
+		if (rv >= 0 || errno != EINVAL)
+			return rv;
+	}
 
-	return (__sigaction_sigtramp(sig, act, oact,
-				     __sigtramp_sigcontext_1, 1));
+	return __sigaction_sigtramp(sig, act, oact, __sigtramp_siginfo_2, 2);
 }
