@@ -1,4 +1,4 @@
-/*	$NetBSD: libgnuintl.h,v 1.1 2003/01/17 14:54:19 wiz Exp $	*/
+/*	$NetBSD: libgnuintl.h,v 1.1.1.1 2003/01/17 14:54:19 wiz Exp $	*/
 
 /* Message catalogs for internationalization.
    Copyright (C) 1995-1997, 2000-2002 Free Software Foundation, Inc.

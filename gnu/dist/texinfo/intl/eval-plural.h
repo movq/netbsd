@@ -1,4 +1,4 @@
-/*	$NetBSD: eval-plural.h,v 1.1 2003/01/17 14:54:19 wiz Exp $	*/
+/*	$NetBSD: eval-plural.h,v 1.1.1.1 2003/01/17 14:54:19 wiz Exp $	*/
 
 /* Plural expression evaluation.
    Copyright (C) 2000-2002 Free Software Foundation, Inc.

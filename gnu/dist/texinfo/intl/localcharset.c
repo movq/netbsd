@@ -1,4 +1,4 @@
-/*	$NetBSD: localcharset.c,v 1.1 2003/01/17 14:54:20 wiz Exp $	*/
+/*	$NetBSD: localcharset.c,v 1.1.1.1 2003/01/17 14:54:20 wiz Exp $	*/
 
 /* Determine a canonical name for the current locale's character encoding.
 

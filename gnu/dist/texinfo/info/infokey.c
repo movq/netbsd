@@ -1,4 +1,4 @@
-/*	$NetBSD: infokey.c,v 1.1 2003/01/17 14:54:34 wiz Exp $	*/
+/*	$NetBSD: infokey.c,v 1.1.1.1 2003/01/17 14:54:34 wiz Exp $	*/
 
 /* infokey.c -- compile ~/.infokey to ~/.info.
    Id: infokey.c,v 1.2 2002/10/14 21:24:51 karl Exp
