@@ -1,44 +1,45 @@
-/*	$NetBSD: shl-coff.x,v 1.1 2001/03/22 18:35:33 uch Exp $	*/
+/*	$NetBSD: shl-coff.x,v 1.2 2001/07/07 16:35:22 uch Exp $	*/
 
 OUTPUT_FORMAT("coff-shl")
 OUTPUT_ARCH(sh)
+
 MEMORY
 {
   ram : o = 0x8C001000, l = 16M
 }
+
 SECTIONS
 {
-  ROM = 0x80001000;
-
+  _trap_base	= 0x8c000000;
+  PROVIDE (_trap_base = .);
   .text :
-  AT (ROM)
   {
+    _ftext = . ;
     *(.text)
+    *(.rodata)
     *(.strings)
-     _etext = . ; 
-  }  > ram
-  .tors :
-  AT ( ROM + SIZEOF(.text))
-  {
-    ___ctors = . ;
-    *(.ctors)
-    ___ctors_end = . ;
-    ___dtors = . ;
-    *(.dtors)
-    ___dtors_end = . ;
   } > ram
+  _etext = . ; 
+  PROVIDE (_etext = .);
+  . = ALIGN(8);
   .data :
-  AT ( ROM + SIZEOF(.text) + SIZEOF(.tors))
   {
+    _fdata = . ;
+    PROVIDE (_fdata = .);
     *(.data)
-     _edata = . ; 
-  }  > ram
+    CONSTRUCTORS
+  } > ram
+  _edata = . ; 
+  PROVIDE (_edata = .);
+  . = ALIGN(8);
   .bss :
-  AT ( ROM + SIZEOF(.text) + SIZEOF(.tors) + SIZEOF(.data))
   {
-     _bss_start = . ; 
+    _fbss = . ;
+    PROVIDE (_fbss = .);
     *(.bss)
     *(COMMON)
-     _end = . ;  
-  }  > ram
+  } > ram
+  . = ALIGN(4);
+  _end = . ;
+  PROVIDE (_end = .);
 }
