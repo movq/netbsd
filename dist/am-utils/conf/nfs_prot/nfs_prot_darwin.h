@@ -38,7 +38,7 @@
  *
  *      %W% (Berkeley) %G%
  *
- * $Id: nfs_prot_darwin.h,v 1.1 2001/05/13 17:33:47 veego Exp $
+ * $Id: nfs_prot_darwin.h,v 1.1.1.1 2001/05/13 17:33:47 veego Exp $
  *
  */
 
