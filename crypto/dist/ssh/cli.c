@@ -1,10 +1,10 @@
-/*	$NetBSD: cli.c,v 1.1 2001/01/14 04:51:06 itojun Exp $	*/
+/*	$NetBSD: cli.c,v 1.1.1.1 2001/01/14 04:51:06 itojun Exp $	*/
 
 /* from OpenBSD: cli.c,v 1.2 2000/10/16 09:38:44 djm Exp */
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: cli.c,v 1.1 2001/01/14 04:51:06 itojun Exp $");
+__RCSID("$NetBSD: cli.c,v 1.1.1.1 2001/01/14 04:51:06 itojun Exp $");
 #endif
 
 #include "includes.h"

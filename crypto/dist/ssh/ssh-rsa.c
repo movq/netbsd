@@ -1,4 +1,4 @@
-/*	$NetBSD: ssh-rsa.c,v 1.1 2001/01/14 04:51:09 itojun Exp $	*/
+/*	$NetBSD: ssh-rsa.c,v 1.1.1.1 2001/01/14 04:51:09 itojun Exp $	*/
 
 /*
  * Copyright (c) 2000 Markus Friedl.  All rights reserved.
@@ -28,7 +28,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: ssh-rsa.c,v 1.1 2001/01/14 04:51:09 itojun Exp $");
+__RCSID("$NetBSD: ssh-rsa.c,v 1.1.1.1 2001/01/14 04:51:09 itojun Exp $");
 #endif
 
 #include "includes.h"
