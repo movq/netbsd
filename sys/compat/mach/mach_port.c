@@ -1,4 +1,4 @@
-/*	$NetBSD: mach_port.c,v 1.6 2002/11/19 19:54:07 christos Exp $ */
+/*	$NetBSD: mach_port.c,v 1.7 2002/11/26 08:10:16 manu Exp $ */
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mach_port.c,v 1.6 2002/11/19 19:54:07 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mach_port.c,v 1.7 2002/11/26 08:10:16 manu Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -48,6 +48,7 @@ __KERNEL_RCSID(0, "$NetBSD: mach_port.c,v 1.6 2002/11/19 19:54:07 christos Exp $
 #include <compat/mach/mach_types.h>
 #include <compat/mach/mach_message.h>
 #include <compat/mach/mach_port.h>
+#include <compat/mach/mach_clock.h>
 #include <compat/mach/mach_syscallargs.h>
 
 int
