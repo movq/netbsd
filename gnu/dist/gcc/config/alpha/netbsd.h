@@ -1,87 +1,38 @@
-/* XXX */
+/* Definitions of target machine for GNU compiler,
+   for Alpha NetBSD systems.
+   Copyright (C) 1998 Free Software Foundation, Inc.
 
-#include "alpha/alpha.h"
+This file is part of GNU CC.
 
-#undef	WCHAR_TYPE
-#define	WCHAR_TYPE "int"
+GNU CC is free software; you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation; either version 2, or (at your option)
+any later version.
 
-#undef	WCHAR_TYPE_SIZE
-#define	WCHAR_TYPE_SIZE 32
+GNU CC is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
 
-/* NetBSD-specific things: */
+You should have received a copy of the GNU General Public License
+along with GNU CC; see the file COPYING.  If not, write to
+the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.  */
+
+#undef TARGET_DEFAULT
+#define TARGET_DEFAULT (MASK_FP | MASK_FPREGS | MASK_GAS)
 
 #undef CPP_PREDEFINES
-#define CPP_PREDEFINES "-D__NetBSD__ -D__alpha__ -D__alpha"
-
-/* Look for the include files in the system-defined places.  */
-
-#undef GPLUSPLUS_INCLUDE_DIR
-#define GPLUSPLUS_INCLUDE_DIR "/usr/include/g++"
-
-#undef GCC_INCLUDE_DIR
-#define GCC_INCLUDE_DIR "/usr/include"
-
-#undef INCLUDE_DEFAULTS
-#define INCLUDE_DEFAULTS                \
-  {                                     \
-    { GPLUSPLUS_INCLUDE_DIR, 1, 1 },    \
-    { GCC_INCLUDE_DIR, 0, 0 },          \
-    { 0, 0, 0 }                         \
-  }
-
-
-/* Under NetBSD, the normal location of the `ld' and `as' programs is the
-   /usr/bin directory.  */
-
-#undef MD_EXEC_PREFIX
-#define MD_EXEC_PREFIX "/usr/bin/"
-
-/* Under NetBSD, the normal location of the various *crt*.o files is the
-   /usr/lib directory.  */
-
-#undef MD_STARTFILE_PREFIX
-#define MD_STARTFILE_PREFIX "/usr/lib/"
-
-
-/* Provide a CPP_SPEC appropriate for NetBSD.  Current we just deal with
-   the GCC option `-posix'.  */
-
-#undef CPP_SPEC
-#define CPP_SPEC "%{posix:-D_POSIX_SOURCE}"
-
-/* Provide an ASM_SPEC appropriate for NetBSD. */
-
-#undef ASM_SPEC
-#define ASM_SPEC " %|"
-
-#undef ASM_FINAL_SPEC
-
-/* Provide a LIB_SPEC appropriate for NetBSD.  Just select the appropriate
-   libc, depending on whether we're doing profiling.  */
+#define CPP_PREDEFINES "-D_LONGLONG -Dnetbsd -Dunix " SUB_CPP_PREDEFINES
 
 #undef LIB_SPEC
-#define LIB_SPEC "%{!p:%{!pg:-lc}}%{p:-lc_p}%{pg:-lc_p}"
+#define LIB_SPEC "%{pg:-lgmon} %{pg:-lc_p} %{!pg:-lc}"
 
-/* Provide a LINK_SPEC appropriate for NetBSD.  Here we provide support
-   for the special GCC options -static, -assert, and -nostdlib.  */
-
-#undef LINK_SPEC
-#define LINK_SPEC \
-  "%{!nostdlib:%{!r*:%{!e*:-e __start}}} -dc -dp %{static:-Bstatic} %{assert*}"
-
-/* Output assembler code to FILE to increment profiler label # LABELNO
-   for profiling a function entry.  Under NetBSD/Alpha, the assembler does
-   nothing special with -pg. */
+/* Generate calls to memcpy, etc., not bcopy, etc. */
+#define TARGET_MEM_FUNCTIONS
 
 #undef FUNCTION_PROFILER
 #define FUNCTION_PROFILER(FILE, LABELNO)			\
-	fputs ("\tjsr $28,_mcount\n", (FILE)); /* at */
+	fputs ("\tlda $28,_mcount\n\tjsr $28,($28),_mcount\n", (FILE))
 
 /* Show that we need a GP when profiling.  */
 #define TARGET_PROFILING_NEEDS_GP
-
-#define bsd4_4
-#undef HAS_INIT_SECTION
-
-#undef PREFERRED_DEBUGGING_TYPE
-#define PREFERRED_DEBUGGING_TYPE DBX_DEBUG
