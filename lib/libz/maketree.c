@@ -1,4 +1,4 @@
-/* $NetBSD: maketree.c,v 1.1 1998/11/01 19:48:17 tron Exp $ */
+/* $NetBSD: maketree.c,v 1.1.1.1 1998/11/01 19:48:17 tron Exp $ */
 
 /* maketree.c -- make inffixed.h table for decoding fixed codes
  * Copyright (C) 1998 Mark Adler

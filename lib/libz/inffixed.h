@@ -1,4 +1,4 @@
-/* $NetBSD: inffixed.h,v 1.1 1998/11/01 19:48:19 tron Exp $ */
+/* $NetBSD: inffixed.h,v 1.1.1.1 1998/11/01 19:48:19 tron Exp $ */
 
 /* inffixed.h -- table for decoding fixed codes
  * Generated automatically by the maketree.c program
