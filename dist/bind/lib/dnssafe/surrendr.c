@@ -1,4 +1,4 @@
-/*	$NetBSD: surrendr.c,v 1.1 2001/05/17 20:47:14 itojun Exp $	*/
+/*	$NetBSD: surrendr.c,v 1.1.1.1 2001/05/17 20:47:14 itojun Exp $	*/
 
 /* Copyright (C) RSA Data Security, Inc. created 1992, 1996.  This is an
    unpublished work protected as such under copyright law.  This work

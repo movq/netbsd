@@ -1,4 +1,4 @@
-/*	$NetBSD: cencrint.h,v 1.1 2001/05/17 20:46:48 itojun Exp $	*/
+/*	$NetBSD: cencrint.h,v 1.1.1.1 2001/05/17 20:46:48 itojun Exp $	*/
 
 /*
  * Cylink Corporation © 1998
