@@ -1,4 +1,4 @@
-/*	$NetBSD: session.c,v 1.1 2000/09/28 22:10:23 thorpej Exp $	*/
+/*	$NetBSD: session.c,v 1.1.1.1 2000/09/28 22:10:23 thorpej Exp $	*/
 
 /*
  * Copyright (c) 1995 Tatu Ylonen <ylo@cs.hut.fi>, Espoo, Finland
@@ -38,7 +38,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: session.c,v 1.1 2000/09/28 22:10:23 thorpej Exp $");
+__RCSID("$NetBSD: session.c,v 1.1.1.1 2000/09/28 22:10:23 thorpej Exp $");
 #endif
 
 #include "includes.h"

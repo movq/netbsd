@@ -1,4 +1,4 @@
-/*	$NetBSD: crc32.c,v 1.1 2000/09/28 22:10:01 thorpej Exp $	*/
+/*	$NetBSD: crc32.c,v 1.1.1.1 2000/09/28 22:10:01 thorpej Exp $	*/
 
 /*
  *  COPYRIGHT (C) 1986 Gary S. Brown.  You may use this program, or
@@ -43,7 +43,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: crc32.c,v 1.1 2000/09/28 22:10:01 thorpej Exp $");
+__RCSID("$NetBSD: crc32.c,v 1.1.1.1 2000/09/28 22:10:01 thorpej Exp $");
 #endif
 
 #include "crc32.h"

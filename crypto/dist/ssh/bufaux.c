@@ -1,4 +1,4 @@
-/*	$NetBSD: bufaux.c,v 1.1 2000/09/28 22:09:46 thorpej Exp $	*/
+/*	$NetBSD: bufaux.c,v 1.1.1.1 2000/09/28 22:09:46 thorpej Exp $	*/
 
 /*
  * Author: Tatu Ylonen <ylo@cs.hut.fi>
@@ -42,7 +42,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: bufaux.c,v 1.1 2000/09/28 22:09:46 thorpej Exp $");
+__RCSID("$NetBSD: bufaux.c,v 1.1.1.1 2000/09/28 22:09:46 thorpej Exp $");
 #endif
 
 #include "includes.h"

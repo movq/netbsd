@@ -1,4 +1,4 @@
-/*	$NetBSD: atomicio.c,v 1.1 2000/09/28 22:09:38 thorpej Exp $	*/
+/*	$NetBSD: atomicio.c,v 1.1.1.1 2000/09/28 22:09:38 thorpej Exp $	*/
 
 /*
  * Copyright (c) 1995,1999 Theo de Raadt
@@ -29,7 +29,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: atomicio.c,v 1.1 2000/09/28 22:09:38 thorpej Exp $");
+__RCSID("$NetBSD: atomicio.c,v 1.1.1.1 2000/09/28 22:09:38 thorpej Exp $");
 #endif
 
 #include "includes.h"

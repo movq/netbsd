@@ -1,4 +1,4 @@
-/*	$NetBSD: auth-rhosts.c,v 1.1 2000/09/28 22:09:40 thorpej Exp $	*/
+/*	$NetBSD: auth-rhosts.c,v 1.1.1.1 2000/09/28 22:09:40 thorpej Exp $	*/
 
 /*
  * Author: Tatu Ylonen <ylo@cs.hut.fi>
@@ -19,7 +19,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: auth-rhosts.c,v 1.1 2000/09/28 22:09:40 thorpej Exp $");
+__RCSID("$NetBSD: auth-rhosts.c,v 1.1.1.1 2000/09/28 22:09:40 thorpej Exp $");
 #endif
 
 #include "includes.h"

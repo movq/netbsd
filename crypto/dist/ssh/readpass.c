@@ -1,4 +1,4 @@
-/*	$NetBSD: readpass.c,v 1.1 2000/09/28 22:10:10 thorpej Exp $	*/
+/*	$NetBSD: readpass.c,v 1.1.1.1 2000/09/28 22:10:10 thorpej Exp $	*/
 
 /*
  * Copyright (c) 1988, 1993
@@ -37,7 +37,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: readpass.c,v 1.1 2000/09/28 22:10:10 thorpej Exp $");
+__RCSID("$NetBSD: readpass.c,v 1.1.1.1 2000/09/28 22:10:10 thorpej Exp $");
 #endif
 
 #include "includes.h"

@@ -1,4 +1,4 @@
-/*	$NetBSD: compat.h,v 1.1 2000/09/28 22:10:00 thorpej Exp $	*/
+/*	$NetBSD: compat.h,v 1.1.1.1 2000/09/28 22:10:00 thorpej Exp $	*/
 
 /*
  * Copyright (c) 1999 Markus Friedl.  All rights reserved.

@@ -1,4 +1,4 @@
-/*	$NetBSD: radix.c,v 1.1 2000/09/28 22:10:08 thorpej Exp $	*/
+/*	$NetBSD: radix.c,v 1.1.1.1 2000/09/28 22:10:08 thorpej Exp $	*/
 
 /*
  * Copyright (c) 1999 Dug Song.  All rights reserved.
@@ -28,7 +28,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: radix.c,v 1.1 2000/09/28 22:10:08 thorpej Exp $");
+__RCSID("$NetBSD: radix.c,v 1.1.1.1 2000/09/28 22:10:08 thorpej Exp $");
 #endif
 
 #include "includes.h"

@@ -1,4 +1,4 @@
-/*	$NetBSD: xmalloc.c,v 1.1 2000/09/28 22:10:45 thorpej Exp $	*/
+/*	$NetBSD: xmalloc.c,v 1.1.1.1 2000/09/28 22:10:45 thorpej Exp $	*/
 
 /*
  * Author: Tatu Ylonen <ylo@cs.hut.fi>
@@ -18,7 +18,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: xmalloc.c,v 1.1 2000/09/28 22:10:45 thorpej Exp $");
+__RCSID("$NetBSD: xmalloc.c,v 1.1.1.1 2000/09/28 22:10:45 thorpej Exp $");
 #endif
 
 #include "includes.h"

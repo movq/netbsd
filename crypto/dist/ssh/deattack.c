@@ -1,4 +1,4 @@
-/*	$NetBSD: deattack.c,v 1.1 2000/09/28 22:10:01 thorpej Exp $	*/
+/*	$NetBSD: deattack.c,v 1.1.1.1 2000/09/28 22:10:01 thorpej Exp $	*/
 
 /*
  * Cryptographic attack detector for ssh - source code
@@ -23,7 +23,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: deattack.c,v 1.1 2000/09/28 22:10:01 thorpej Exp $");
+__RCSID("$NetBSD: deattack.c,v 1.1.1.1 2000/09/28 22:10:01 thorpej Exp $");
 #endif
 
 #include "includes.h"

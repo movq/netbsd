@@ -1,4 +1,4 @@
-/*	$NetBSD: compat.c,v 1.1 2000/09/28 22:10:00 thorpej Exp $	*/
+/*	$NetBSD: compat.c,v 1.1.1.1 2000/09/28 22:10:00 thorpej Exp $	*/
 
 /*
  * Copyright (c) 1999,2000 Markus Friedl.  All rights reserved.
@@ -28,7 +28,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: compat.c,v 1.1 2000/09/28 22:10:00 thorpej Exp $");
+__RCSID("$NetBSD: compat.c,v 1.1.1.1 2000/09/28 22:10:00 thorpej Exp $");
 #endif
 
 #include "includes.h"

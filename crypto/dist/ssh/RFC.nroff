@@ -1,6 +1,6 @@
 .\" -*- nroff -*-
 .\"
-.\" $NetBSD: RFC.nroff,v 1.1 2000/09/28 22:09:37 thorpej Exp $
+.\" $NetBSD: RFC.nroff,v 1.1.1.1 2000/09/28 22:09:37 thorpej Exp $
 .\"
 .pl 10.0i
 .po 0

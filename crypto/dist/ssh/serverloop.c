@@ -1,4 +1,4 @@
-/*	$NetBSD: serverloop.c,v 1.1 2000/09/28 22:10:20 thorpej Exp $	*/
+/*	$NetBSD: serverloop.c,v 1.1.1.1 2000/09/28 22:10:20 thorpej Exp $	*/
 
 /*
  * Author: Tatu Ylonen <ylo@cs.hut.fi>
@@ -38,7 +38,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: serverloop.c,v 1.1 2000/09/28 22:10:20 thorpej Exp $");
+__RCSID("$NetBSD: serverloop.c,v 1.1.1.1 2000/09/28 22:10:20 thorpej Exp $");
 #endif
 
 #include "includes.h"

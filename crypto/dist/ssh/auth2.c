@@ -1,4 +1,4 @@
-/*	$NetBSD: auth2.c,v 1.1 2000/09/28 22:09:43 thorpej Exp $	*/
+/*	$NetBSD: auth2.c,v 1.1.1.1 2000/09/28 22:09:43 thorpej Exp $	*/
 
 /*
  * Copyright (c) 2000 Markus Friedl.  All rights reserved.
@@ -28,7 +28,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: auth2.c,v 1.1 2000/09/28 22:09:43 thorpej Exp $");
+__RCSID("$NetBSD: auth2.c,v 1.1.1.1 2000/09/28 22:09:43 thorpej Exp $");
 #endif
 
 #include "includes.h"

@@ -1,4 +1,4 @@
-/*	$NetBSD: xmalloc.h,v 1.1 2000/09/28 22:10:45 thorpej Exp $	*/
+/*	$NetBSD: xmalloc.h,v 1.1.1.1 2000/09/28 22:10:45 thorpej Exp $	*/
 
 /*
  * Author: Tatu Ylonen <ylo@cs.hut.fi>

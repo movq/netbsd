@@ -1,4 +1,4 @@
-/*	$NetBSD: ssh.h,v 1.1 2000/09/28 22:10:34 thorpej Exp $	*/
+/*	$NetBSD: ssh.h,v 1.1.1.1 2000/09/28 22:10:34 thorpej Exp $	*/
 
 /*
  * Author: Tatu Ylonen <ylo@cs.hut.fi>

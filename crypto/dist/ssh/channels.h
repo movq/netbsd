@@ -1,4 +1,4 @@
-/*	$NetBSD: channels.h,v 1.1 2000/09/28 22:09:53 thorpej Exp $	*/
+/*	$NetBSD: channels.h,v 1.1.1.1 2000/09/28 22:09:53 thorpej Exp $	*/
 
 /*
  * Author: Tatu Ylonen <ylo@cs.hut.fi>

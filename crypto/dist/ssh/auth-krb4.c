@@ -1,4 +1,4 @@
-/*	$NetBSD: auth-krb4.c,v 1.1 2000/09/28 22:09:38 thorpej Exp $	*/
+/*	$NetBSD: auth-krb4.c,v 1.1.1.1 2000/09/28 22:09:38 thorpej Exp $	*/
 
 /*
  * Copyright (c) 1999 Dug Song.  All rights reserved.
@@ -28,7 +28,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: auth-krb4.c,v 1.1 2000/09/28 22:09:38 thorpej Exp $");
+__RCSID("$NetBSD: auth-krb4.c,v 1.1.1.1 2000/09/28 22:09:38 thorpej Exp $");
 #endif
 
 #include "includes.h"

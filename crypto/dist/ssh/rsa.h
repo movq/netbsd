@@ -1,4 +1,4 @@
-/*	$NetBSD: rsa.h,v 1.1 2000/09/28 22:10:11 thorpej Exp $	*/
+/*	$NetBSD: rsa.h,v 1.1.1.1 2000/09/28 22:10:11 thorpej Exp $	*/
 
 /*
  * Author: Tatu Ylonen <ylo@cs.hut.fi>

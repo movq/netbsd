@@ -1,4 +1,4 @@
-/*	$NetBSD: sshconnect.h,v 1.1 2000/09/28 22:10:36 thorpej Exp $	*/
+/*	$NetBSD: sshconnect.h,v 1.1.1.1 2000/09/28 22:10:36 thorpej Exp $	*/
 
 /*
  * Copyright (c) 2000 Markus Friedl.  All rights reserved.

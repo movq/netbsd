@@ -1,4 +1,4 @@
-/*	$NetBSD: uuencode.h,v 1.1 2000/09/28 22:10:45 thorpej Exp $	*/
+/*	$NetBSD: uuencode.h,v 1.1.1.1 2000/09/28 22:10:45 thorpej Exp $	*/
 
 /*
  * Copyright (c) 1999 Markus Friedl.  All rights reserved.

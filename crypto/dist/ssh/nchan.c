@@ -1,4 +1,4 @@
-/*	$NetBSD: nchan.c,v 1.1 2000/09/28 22:10:05 thorpej Exp $	*/
+/*	$NetBSD: nchan.c,v 1.1.1.1 2000/09/28 22:10:05 thorpej Exp $	*/
 
 /*
  * Copyright (c) 1999 Markus Friedl.  All rights reserved.
@@ -28,7 +28,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: nchan.c,v 1.1 2000/09/28 22:10:05 thorpej Exp $");
+__RCSID("$NetBSD: nchan.c,v 1.1.1.1 2000/09/28 22:10:05 thorpej Exp $");
 #endif
 
 #include "includes.h"

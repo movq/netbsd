@@ -1,4 +1,4 @@
-/*	$NetBSD: log-client.c,v 1.1 2000/09/28 22:10:03 thorpej Exp $	*/
+/*	$NetBSD: log-client.c,v 1.1.1.1 2000/09/28 22:10:03 thorpej Exp $	*/
 
 /*
  * Author: Tatu Ylonen <ylo@cs.hut.fi>
@@ -41,7 +41,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: log-client.c,v 1.1 2000/09/28 22:10:03 thorpej Exp $");
+__RCSID("$NetBSD: log-client.c,v 1.1.1.1 2000/09/28 22:10:03 thorpej Exp $");
 #endif
 
 #include "includes.h"
