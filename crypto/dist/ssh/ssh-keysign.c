@@ -1,4 +1,4 @@
-/*	$NetBSD: ssh-keysign.c,v 1.1 2002/06/24 05:26:12 itojun Exp $	*/
+/*	$NetBSD: ssh-keysign.c,v 1.1.1.1 2002/06/24 05:26:12 itojun Exp $	*/
 /*
  * Copyright (c) 2002 Markus Friedl.  All rights reserved.
  *

@@ -1,4 +1,4 @@
-/*	$NetBSD: msg.c,v 1.1 2002/06/24 05:26:11 itojun Exp $	*/
+/*	$NetBSD: msg.c,v 1.1.1.1 2002/06/24 05:26:11 itojun Exp $	*/
 /*
  * Copyright (c) 2002 Markus Friedl.  All rights reserved.
  *

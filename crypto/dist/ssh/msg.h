@@ -1,4 +1,4 @@
-/*	$NetBSD: msg.h,v 1.1 2002/06/24 05:26:12 itojun Exp $	*/
+/*	$NetBSD: msg.h,v 1.1.1.1 2002/06/24 05:26:12 itojun Exp $	*/
 /*	$OpenBSD: msg.h,v 1.1 2002/05/23 19:24:30 markus Exp $	*/
 /*
  * Copyright (c) 2002 Markus Friedl.  All rights reserved.
