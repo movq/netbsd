@@ -1,4 +1,4 @@
-/*	$NetBSD: pcmciadevs_data.h,v 1.36.2.1 1999/04/27 13:54:48 perry Exp $	*/
+/*	$NetBSD: pcmciadevs_data.h,v 1.36.2.1.4.1 1999/11/30 13:34:25 itojun Exp $	*/
 
 /*
  * THIS FILE AUTOMATICALLY GENERATED.  DO NOT EDIT.
@@ -297,11 +297,18 @@ struct pcmcia_knowndev pcmcia_knowndevs[] = {
 	    "Xircom CreditCard CE2 Ethernet"	},
 	},
 	{
-	    PCMCIA_VENDOR_TDK, PCMCIA_PRODUCT_TDK_XIR_CNW,
-	    PCMCIA_CIS_TDK_XIR_CNW,
+	    PCMCIA_VENDOR_TDK, PCMCIA_PRODUCT_TDK_XIR_CNW_801,
+	    PCMCIA_CIS_TDK_XIR_CNW_801,
 	    0,
 	    "TDK Corporation",
-	    "Xircom CreditCard Netwave"	},
+	    "Xircom CreditCard Netwave (Canada)"	},
+	},
+	{
+	    PCMCIA_VENDOR_TDK, PCMCIA_PRODUCT_TDK_XIR_CNW_802,
+	    PCMCIA_CIS_TDK_XIR_CNW_802,
+	    0,
+	    "TDK Corporation",
+	    "Xircom CreditCard Netwave (US)"	},
 	},
 	{
 	    PCMCIA_VENDOR_NEWMEDIA, PCMCIA_PRODUCT_NEWMEDIA_BASICS,
@@ -316,6 +323,20 @@ struct pcmcia_knowndev pcmcia_knowndevs[] = {
 	    0,
 	    "Standard Microsystems Corporation",
 	    "SMC 8016 EtherCard"	},
+	},
+	{
+	    PCMCIA_VENDOR_LUCENT, PCMCIA_PRODUCT_LUCENT_WAVELAN_IEEE,
+	    PCMCIA_CIS_LUCENT_WAVELAN_IEEE,
+	    0,
+	    "Lucent Technologies",
+	    "WaveLAN/IEEE"	},
+	},
+	{
+	    PCMCIA_VENDOR_BAY, PCMCIA_PRODUCT_BAY_STACK_650,
+	    PCMCIA_CIS_BAY_STACK_650,
+	    0,
+	    "Bay Networks",
+	    "BayStack 650 Wireless LAN"	},
 	},
 	{
 	    PCMCIA_VENDOR_UNKNOWN, PCMCIA_PRODUCT_MEGAHERTZ_XJ2288,
@@ -521,10 +542,24 @@ struct pcmcia_knowndev pcmcia_knowndevs[] = {
 	    NULL,
 	},
 	{
+	    PCMCIA_VENDOR_LUCENT, 0,
+	    PCMCIA_KNOWNDEV_NOPROD,
+	    PCMCIA_CIS_INVALID,
+	    "Lucent Technologies",
+	    NULL,
+	},
+	{
 	    PCMCIA_VENDOR_DAYNA, 0,
 	    PCMCIA_KNOWNDEV_NOPROD,
 	    PCMCIA_CIS_INVALID,
 	    "Dayna Corporation",
+	    NULL,
+	},
+	{
+	    PCMCIA_VENDOR_BAY, 0,
+	    PCMCIA_KNOWNDEV_NOPROD,
+	    PCMCIA_CIS_INVALID,
+	    "Bay Networks",
 	    NULL,
 	},
 	{

@@ -1,4 +1,4 @@
-/*	$NetBSD: if_arp.c,v 1.56.2.2 1999/05/04 22:28:45 perry Exp $	*/
+/*	$NetBSD: if_arp.c,v 1.56.2.2.4.1 1999/11/30 13:35:21 itojun Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -134,7 +134,9 @@ static	void arptimer __P((void *));
 static	struct llinfo_arp *arplookup __P((struct in_addr *, int, int));
 static	void in_arpinput __P((struct mbuf *));
 
+#if NLOOP > 0
 extern	struct ifnet loif[NLOOP];
+#endif
 LIST_HEAD(, llinfo_arp) llinfo_arp;
 struct	ifqueue arpintrq = {0, 0, 0, 50};
 int	arp_inuse, arp_allocated, arp_intimer;
@@ -328,8 +330,10 @@ arp_rtrequest(req, rt, sa)
 			    LLADDR(SDL(gate)),
 			    SDL(gate)->sdl_alen = 
 			    rt->rt_ifp->if_data.ifi_addrlen);
+#if NLOOP > 0
 			if (useloopback)
 				rt->rt_ifp = &loif[0];
+#endif
 		}
 		break;
 
@@ -691,6 +695,8 @@ reply:
 	ah->ar_op = htons(ARPOP_REPLY);
 	ah->ar_pro = htons(ETHERTYPE_IP); /* let's be sure! */
 	m->m_flags &= ~(M_BCAST|M_MCAST); /* never reply by broadcast */
+	m->m_len = sizeof(*ah) + (2 * ah->ar_pln) + (2 * ah->ar_hln);
+	m->m_pkthdr.len = m->m_len;
 	sa.sa_family = AF_ARP;
 	sa.sa_len = 2;
 	(*ifp->if_output)(ifp, m, &sa, (struct rtentry *)0);

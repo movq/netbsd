@@ -1,4 +1,4 @@
-/*	$NetBSD: uvm_map.h,v 1.11 1999/03/25 18:48:52 mrg Exp $	*/
+/*	$NetBSD: uvm_map.h,v 1.11.6.1 1999/11/30 13:36:27 itojun Exp $	*/
 
 /* 
  * Copyright (c) 1997 Charles D. Cranor and Washington University.
@@ -115,6 +115,14 @@
 #else 
 #define MAP_INLINE /* nothing */
 #endif /* UVM_MAP_INLINE */
+
+/*
+ * globals:
+ */
+
+#ifdef PMAP_GROWKERNEL
+extern vaddr_t	uvm_maxkaddr;
+#endif
 
 /*
  * protos: the following prototypes define the interface to vm_map
