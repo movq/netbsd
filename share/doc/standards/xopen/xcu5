@@ -1,4 +1,4 @@
-.\" $NetBSD: xcu5,v 1.1 1999/06/01 02:36:07 jwise Exp $
+.\" $NetBSD: xcu5,v 1.1.1.1 1999/06/01 02:36:07 jwise Exp $
 .de xopen
 .Tn X/Open
 ..
