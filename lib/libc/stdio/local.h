@@ -1,4 +1,4 @@
-/*	$NetBSD: local.h,v 1.7 1998/02/02 03:32:52 perry Exp $	*/
+/*	$NetBSD: local.h,v 1.8 1998/07/27 13:42:27 mycroft Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -61,6 +61,8 @@ extern int	__swsetup __P((FILE *));
 extern int	__sflags __P((const char *, int *));
 
 extern int	__sdidinit;
+
+extern int	__gettemp __P((char *, int *));
 
 /*
  * Return true iff the given FILE cannot be written now.
