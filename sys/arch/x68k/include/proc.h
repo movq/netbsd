@@ -1,4 +1,4 @@
-/*	$NetBSD: proc.h,v 1.1 1996/05/05 12:17:11 oki Exp $	*/
+/*	$NetBSD: proc.h,v 1.1.1.1 1996/05/05 12:17:03 oki Exp $	*/
 
 /*
  * Copyright (c) 1991, 1993

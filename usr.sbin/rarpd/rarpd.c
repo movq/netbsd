@@ -1,4 +1,4 @@
-/*	$NetBSD: rarpd.c,v 1.13 1997/01/18 02:22:21 mikel Exp $	*/
+/*	$NetBSD: rarpd.c,v 1.15 1997/03/10 19:26:23 is Exp $	*/
 
 /*
  * Copyright (c) 1990 The Regents of the University of California.
@@ -27,7 +27,7 @@ char    copyright[] =
 #endif				/* not lint */
 
 #ifndef lint
-static char rcsid[] = "$NetBSD: rarpd.c,v 1.13 1997/01/18 02:22:21 mikel Exp $";
+static char rcsid[] = "$NetBSD: rarpd.c,v 1.15 1997/03/10 19:26:23 is Exp $";
 #endif
 
 
