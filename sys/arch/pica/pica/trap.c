@@ -1,4 +1,4 @@
-/*	$NetBSD: trap.c,v 1.15 1999/03/18 04:56:03 chs Exp $	*/
+/*	$NetBSD: trap.c,v 1.15.6.1 1999/07/06 11:02:37 itojun Exp $	*/
 
 /*
  * Copyright (c) 1988 University of Utah.
@@ -1009,6 +1009,12 @@ interrupt(statusReg, causeReg, pc, what, args)
 		if (netisr & (1 << NETISR_IP)) {
 			netisr &= ~(1 << NETISR_IP);
 			ipintr();
+		}
+#endif
+#ifdef INET6
+		if (netisr & (1 << NETISR_IPV6)) {
+			netisr &= ~(1 << NETISR_IPV6);
+			ip6intr();
 		}
 #endif
 #ifdef NETATALK
