@@ -1,4 +1,4 @@
-/*	$NetBSD: amfs_generic.c,v 1.1 2004/11/27 01:00:38 christos Exp $	*/
+/*	$NetBSD: amfs_generic.c,v 1.1.1.1 2004/11/27 01:00:38 christos Exp $	*/
 
 /*
  * Copyright (c) 1997-2004 Erez Zadok
