@@ -1,4 +1,4 @@
-/*	$NetBSD: README,v 1.1 1995/02/14 22:56:35 gwr Exp $ */
+/*	$NetBSD: README,v 1.1.1.1 1995/02/14 22:56:36 gwr Exp $ */
 
 The sun bootblocks are split into two parts: a small 1st-level program that
 gets written right after the superblock in a partition (and is hence limited
