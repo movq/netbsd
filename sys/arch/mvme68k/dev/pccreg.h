@@ -1,4 +1,4 @@
-/* $Id: pccreg.h,v 1.1 1995/07/25 23:12:08 chuck Exp $ */
+/* $Id: pccreg.h,v 1.1.1.1 1995/07/25 23:12:08 chuck Exp $ */
 
 /*
  *

@@ -1,4 +1,4 @@
-/*	$NetBSD: scc.h,v 1.1 1995/07/25 23:12:07 chuck Exp $	*/
+/*	$NetBSD: scc.h,v 1.1.1.1 1995/07/25 23:12:07 chuck Exp $	*/
 
 /*
  * Copyright (c) 1993 Paul Mackerras.

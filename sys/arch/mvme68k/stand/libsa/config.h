@@ -1,4 +1,4 @@
-/*	$NetBSD: config.h,v 1.1 1995/07/25 23:12:24 chuck Exp $	*/
+/*	$NetBSD: config.h,v 1.1.1.1 1995/07/25 23:12:24 chuck Exp $	*/
 
 /* configuration information for base-line code */
 

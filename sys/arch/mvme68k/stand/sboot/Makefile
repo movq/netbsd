@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 1995/07/25 23:12:28 chuck Exp $
+#	$NetBSD: Makefile,v 1.1.1.1 1995/07/25 23:12:28 chuck Exp $
 
 #
 # sboot needs GNU ld because it can generate S-Records

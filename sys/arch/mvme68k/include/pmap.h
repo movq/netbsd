@@ -1,4 +1,4 @@
-/*	$NetBSD: pmap.h,v 1.1 1995/07/25 23:12:16 chuck Exp $	*/
+/*	$NetBSD: pmap.h,v 1.1.1.1 1995/07/25 23:12:16 chuck Exp $	*/
 
 /* 
  * Copyright (c) 1987 Carnegie-Mellon University

@@ -1,4 +1,4 @@
-/*	$NetBSD: genassym.c,v 1.1 1995/07/25 23:11:57 chuck Exp $	*/
+/*	$NetBSD: genassym.c,v 1.1.1.1 1995/07/25 23:11:57 chuck Exp $	*/
 
 /*
  * Copyright (c) 1982, 1990, 1993

@@ -1,4 +1,4 @@
-/*	$NetBSD: pmap_bootstrap.c,v 1.1 1995/07/25 23:12:02 chuck Exp $	*/
+/*	$NetBSD: pmap_bootstrap.c,v 1.1.1.1 1995/07/25 23:12:02 chuck Exp $	*/
 
 /* 
  * Copyright (c) 1991, 1993

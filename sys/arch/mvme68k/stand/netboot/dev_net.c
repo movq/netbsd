@@ -1,4 +1,4 @@
-/*	$NetBSD: dev_net.c,v 1.1 1995/07/25 23:12:26 chuck Exp $	*/
+/*	$NetBSD: dev_net.c,v 1.1.1.1 1995/07/25 23:12:26 chuck Exp $	*/
 
 /*
  * Copyright (c) 1995 Gordon W. Ross

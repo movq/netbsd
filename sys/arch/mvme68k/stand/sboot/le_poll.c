@@ -1,4 +1,4 @@
-/*	$NetBSD: le_poll.c,v 1.1 1995/07/25 23:12:31 chuck Exp $	*/
+/*	$NetBSD: le_poll.c,v 1.1.1.1 1995/07/25 23:12:31 chuck Exp $	*/
 
 /*
  * Copyright (c) 1993 Adam Glass

@@ -1,4 +1,4 @@
-/*	$NetBSD: libc_sa.c,v 1.1 1995/07/25 23:12:33 chuck Exp $	*/
+/*	$NetBSD: libc_sa.c,v 1.1.1.1 1995/07/25 23:12:33 chuck Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -172,7 +172,7 @@ bzero(dst, n)
 	}
 	return (dst);
 }
-/*	$NetBSD: libc_sa.c,v 1.1 1995/07/25 23:12:33 chuck Exp $	*/
+/*	$NetBSD: libc_sa.c,v 1.1.1.1 1995/07/25 23:12:33 chuck Exp $	*/
 
 /*-
  * Copyright (c) 1991 The Regents of the University of California.

@@ -1,4 +1,4 @@
-/*	$NetBSD: disksubr.c,v 1.1 1995/07/25 23:11:57 chuck Exp $ */
+/*	$NetBSD: disksubr.c,v 1.1.1.1 1995/07/25 23:11:57 chuck Exp $ */
 
 /*
  * Copyright (c) 1982, 1986, 1988, 1993

@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.1 1995/07/25 23:12:22 chuck Exp $	*/
+/*	$NetBSD: machdep.c,v 1.1.1.1 1995/07/25 23:12:22 chuck Exp $	*/
 
 #include <sys/param.h>
 #include <sys/types.h>

@@ -1,4 +1,4 @@
-/*	$NetBSD: locore.s,v 1.1 1995/07/25 23:11:58 chuck Exp $	*/
+/*	$NetBSD: locore.s,v 1.1.1.1 1995/07/25 23:11:58 chuck Exp $	*/
 
 #undef	STACKCHECK	/* doesn't work any more */
 

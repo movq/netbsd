@@ -1,4 +1,4 @@
-#	$NetBSD: VME147,v 1.1 1995/07/25 23:12:05 chuck Exp $
+#	$NetBSD: VME147,v 1.1.1.1 1995/07/25 23:12:05 chuck Exp $
 
 machine		mvme68k m68k
 
