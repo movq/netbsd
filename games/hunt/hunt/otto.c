@@ -8,7 +8,7 @@
  *	please let us know what subroutines you would expect in the
  *	subroutine library.
  *
- *	$Id: otto.c,v 1.1.1.1 1997/10/04 09:00:14 mrg Exp $
+ *	$Id: otto.c,v 1.1 1997/10/04 09:00:14 mrg Exp $
  */
 
 # include	<curses.h>
