@@ -1,25 +1,31 @@
-#	$NetBSD: DRACO,v 1.2 1996/05/16 17:52:22 is Exp $
+#	$NetBSD: DRACO,v 1.2.4.1 1996/05/30 21:25:55 is Exp $
 
 #
-# Macro System GmbH "DraCo"
+# Macro System GmbH "DraCo", currently 68060-only until FPE is integrated.
 #
 
-# look into this later.
+# this will be replace by std.amiga soon:
 include "std.draco"
 
 maxusers	8
 options		TIMEZONE=300, DST=1
 
+#
 # mainboards to support (in addition to Amiga)
+#
 options		DRACO
+
 #
 # processors this kernel should support
 #
-options		"M68060"	# support for 060 might still need M68040.
-options		"M68040"	# support for 040
-options		M060SP		# MC68060 software support (Required)
-options		FPSP		# MC68040 floating point support
+
+options		"M68060"	# support for 060
+options		"M060SP"	# MC68060 software support (Required for 060)
 options		FPCOPROC	# Support for MC6888[12] (Required)
+
+#
+# pagers:
+#
 
 options		SWAPPAGER	# Pager for processes (Required)
 options		VNODEPAGER	# Pager for vnodes (Required)
@@ -119,28 +125,23 @@ options		RETINACONSOLE	# enable code to allow retina to be console
 #options	RETINA_SPEED_HACK
 
 grfrh0		at zbus0		# Altais looks just like the Retina Z3
-grful0		at zbus0		# A2410, for poor ZZA
-
 grf2		at grfrh0
-grf4		at grful0
-
 ite2		at grf2			# terminal emulators for grf's
-ite4		at grf4			# terminal emulators for grf's
 
-#msc0		at zbus0		# A2232 MSC multiport serial.
-#mfc0		at zbus0		# MultiFaceCard I/O board
-#mfcs0		at mfc0 unit 0		# MFC serial
-#mfcs1		at mfc0 unit 1		# MFC serial
+msc0		at zbus0		# A2232 MSC multiport serial.
+mfc0		at zbus0		# MultiFaceCard I/O board
+mfcs0		at mfc0 unit 0		# MFC serial
+mfcs1		at mfc0 unit 1		# MFC serial
 #mfcp0		at mfc0 unit 0		# MFC parallel [not available yet]
 #mfc1		at zbus0		# MultiFaceCard 2nd I/O board
 #mfcs2		at mfc1 unit 0
 #mfcs3		at mfc1 unit 1
 #mfcp1		at mfc1 unit 0
 
-#le0		at zbus0		# Lance ethernet.
-#ed0		at zbus0		# dp8390 ethernet
-#es0		at zbus0		# SMC 91C90 ethernet
-#qn0		at zbus0		# quicknet ethernet
+le0		at zbus0		# Lance ethernet.
+ed0		at zbus0		# dp8390 ethernet
+es0		at zbus0		# SMC 91C90 ethernet
+qn0		at zbus0		# quicknet ethernet
 ae0		at zbus0		# Ariadne ethernet
 bah*		at zbus0		# C= arcnet
 
@@ -153,6 +154,7 @@ scsibus*	at drsc0
 # will configure to the next available sd unit number
 sd*	at scsibus? target ? lun ?	# scsi disks
 st*	at scsibus? target ? lun ?	# scsi tapes
+ss*	at scsibus? target ? lun ?	# scsi scanner
 cd*	at scsibus? target ? lun ?	# scsi cd's
 
 pseudo-device	pty 16			# pseudo terminals
