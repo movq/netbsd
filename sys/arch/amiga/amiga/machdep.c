@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.159 2001/02/14 20:24:17 is Exp $	*/
+/*	$NetBSD: machdep.c,v 1.165 2001/11/07 23:25:03 aymeric Exp $	*/
 
 /*
  * Copyright (c) 1988 University of Utah.
@@ -122,14 +122,16 @@ void ser_outintr __P((void));
 void fdintr __P((int));
 #endif
 
+volatile unsigned int interrupt_depth = 0;
+
 /*
  * patched by some devices at attach time (currently, only the coms)
  */
 u_int16_t amiga_serialspl = PSL_S|PSL_IPL4;
 
-vm_map_t exec_map = NULL;  
-vm_map_t mb_map = NULL;
-vm_map_t phys_map = NULL;
+struct vm_map *exec_map = NULL;  
+struct vm_map *mb_map = NULL;
+struct vm_map *phys_map = NULL;
 
 caddr_t	msgbufaddr;
 paddr_t msgbufpa;
@@ -234,6 +236,7 @@ cpu_startup()
 		pmap_enter(pmap_kernel(), (vaddr_t)msgbufaddr + i * NBPG,
 		    msgbufpa + i * NBPG, VM_PROT_READ|VM_PROT_WRITE,
 		    VM_PROT_READ|VM_PROT_WRITE|PMAP_WIRED);
+	pmap_update(pmap_kernel());
 	initmsgbuf(msgbufaddr, m68k_round_page(MSGBUFSIZE));
 
 	/*
@@ -262,7 +265,7 @@ cpu_startup()
 	if (uvm_map(kernel_map, (vm_offset_t *)&buffers, round_page(size),
 	    NULL, UVM_UNKNOWN_OFFSET, 0,
 	    UVM_MAPFLAG(UVM_PROT_NONE, UVM_PROT_NONE, UVM_INH_NONE,
-	    UVM_ADV_NORMAL, 0)) != KERN_SUCCESS)
+	    UVM_ADV_NORMAL, 0)) != 0)
 		panic("startup: cannot allocate VM for buffers");
 	minaddr = (vm_offset_t) buffers;
 	if ((bufpages / nbuf) >= btoc(MAXBSIZE)) {
@@ -296,6 +299,7 @@ cpu_startup()
 			curbufsize -= PAGE_SIZE;
 		}
 	}
+	pmap_update(pmap_kernel());
 
 	/*
 	 * Allocate a submap for exec arguments.  This map effectively
@@ -1591,3 +1595,31 @@ cpu_exec_aout_makecmds(p, epp)
 #endif
 	return(error);
 }
+
+#ifdef LKM
+
+int _spllkm6(void);
+int _spllkm7(void);
+
+#ifdef LEV6_DEFER
+int _spllkm6() {
+	return spl4();
+};
+
+int _spllkm7() {
+	return spl4();
+};
+
+#else
+
+int _spllkm6() {
+	return spl6();
+};
+
+int _spllkm7() {
+	return spl7();
+}; 
+
+#endif
+
+#endif

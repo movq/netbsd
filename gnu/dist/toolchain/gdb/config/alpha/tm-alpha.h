@@ -122,6 +122,7 @@ extern CORE_ADDR
 
 #define V0_REGNUM 0		/* Function integer return value */
 #define T7_REGNUM 8		/* Return address register for OSF/1 __add* */
+#define S0_REGNUM 9		/* First callee-saved register */
 #define GCC_FP_REGNUM 15	/* Used by gcc as frame register */
 #define A0_REGNUM 16		/* Loc of first arg during a subr call */
 #define T9_REGNUM 23		/* Return address register for OSF/1 __div* */
@@ -477,5 +478,16 @@ extern struct frame_info *setup_arbitrary_frame PARAMS ((int, CORE_ADDR *));
 #define FRAME_PAST_SIGTRAMP_FRAME(frame, pc) \
   (alpha_osf_skip_sigtramp_frame (frame, pc))
 extern CORE_ADDR alpha_osf_skip_sigtramp_frame PARAMS ((struct frame_info *, CORE_ADDR));
+
+/* Provide a default for sofware single-stepping (off by default).  */
+#ifndef SOFTWARE_SINGLE_STEP_P 
+#define SOFTWARE_SINGLE_STEP_P 0
+#endif
+#if SOFTWARE_SINGLE_STEP_P
+#define SOFTWARE_SINGLE_STEP(sig,bpt) alpha_software_single_step((sig), (bpt))
+void alpha_software_single_step PARAMS((int, int));
+#endif
+
+CORE_ADDR alpha_next_pc (CORE_ADDR pc);
 
 #endif /* TM_ALPHA_H */

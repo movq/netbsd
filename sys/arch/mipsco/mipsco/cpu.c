@@ -1,4 +1,4 @@
-/*	$NetBSD: cpu.c,v 1.1 2000/08/12 22:58:52 wdk Exp $	*/
+/*	$NetBSD: cpu.c,v 1.3 2001/11/14 18:15:29 thorpej Exp $	*/
 
 /*
  * Copyright (c) 1994, 1995 Carnegie-Mellon University.
@@ -33,6 +33,8 @@
 
 #include <machine/cpu.h>
 #include <machine/autoconf.h>
+
+#include <mips/locore.h>
 
 /* Definition of the driver for autoconfig. */
 static int	cpumatch(struct device *, struct cfdata *, void *);
@@ -69,6 +71,5 @@ cpuattach(parent, dev, aux)
 {
 
 	printf(": ");
-
 	cpu_identify();
 }

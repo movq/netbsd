@@ -1,4 +1,4 @@
-/* $NetBSD: siotty.c,v 1.6 2000/11/07 09:23:21 nisimura Exp $ */
+/* $NetBSD: siotty.c,v 1.8 2001/05/02 10:32:22 scw Exp $ */
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -38,7 +38,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: siotty.c,v 1.6 2000/11/07 09:23:21 nisimura Exp $");
+__KERNEL_RCSID(0, "$NetBSD: siotty.c,v 1.8 2001/05/02 10:32:22 scw Exp $");
 
 #include "opt_ddb.h"
 
@@ -189,10 +189,7 @@ siottyintr(chan)
 		sio->sio_cmd = WR0_RSTPEND;
 		if (tp != NULL) {
 			tp->t_state &= ~(TS_BUSY|TS_FLUSH);
-			if (tp->t_linesw)
-				(*tp->t_linesw->l_start)(tp);
-			else
-				siostart(tp);
+			(*tp->t_linesw->l_start)(tp);
 		}
 	}
 }
@@ -456,6 +453,18 @@ siowrite(dev, uio, flag)
 	struct tty *tp = sc->sc_tty;
  
 	return (*tp->t_linesw->l_write)(tp, uio, flag);
+}
+
+int
+siopoll(dev, events, p)
+	dev_t dev;
+	int events;
+	struct proc *p;
+{
+	struct siotty_softc *sc = siotty_cd.cd_devs[minor(dev)];
+	struct tty *tp = sc->sc_tty;
+ 
+	return ((*tp->t_linesw->l_poll)(tp, events, p));
 }
 
 int

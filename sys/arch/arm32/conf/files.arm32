@@ -1,4 +1,4 @@
-#	$NetBSD: files.arm32,v 1.98 2001/03/04 08:25:38 matt Exp $
+#	$NetBSD: files.arm32,v 1.125 2001/07/28 13:28:04 chris Exp $
 #
 # First try for arm-specific configuration info
 #
@@ -12,9 +12,6 @@ defopt	COMPAT_OLD_OFW
 # Maintain Interrupt statistics
 defopt	IRQSTATS
 
-# PMAP_DEBUG (heavily abused option)
-defopt	PMAP_DEBUG
-
 # X server support in console drivers
 defopt	XSERVER
 
@@ -22,8 +19,7 @@ defopt	XSERVER
 defopt	COMPAT_OLD_BOOTLOADER
 
 # Architectures and core logic
-defopt	EBSA285
-defopt	FOOTBRIDGE
+defopt	NETWINDER
 
 define todservice {}
 
@@ -31,6 +27,11 @@ define todservice {}
 # ISA and mixed ISA+EISA or ISA+PCI drivers
 #
 include "dev/isa/files.isa"
+
+# Include WSCONS stuff
+include "dev/wscons/files.wscons"
+include "dev/rasops/files.rasops"
+include "dev/wsfont/files.wsfont"
 
 #
 # Machine-independent ATA drivers
@@ -58,6 +59,11 @@ attach	ofbus at root with ofbus_root
 file	arch/arm32/ofw/ofw.c			ofw
 file	arch/arm32/ofw/openfirm.c		ofw
 file	arch/arm32/ofw/oftodclock.c		ofw & (shark | ofwgencfg)
+
+# OFW console initialization
+file	arch/arm32/ofw/consinit.c		ofw
+file	dev/cninit.c				ofw |
+						(vidc & (!rpckbd | !vidcvideo))
 
 # ISA DMA glue
 file	arch/arm32/isa/isadma_machdep.c		isadma
@@ -136,6 +142,13 @@ file    arch/arm32/dev/qms.c			qms needs-flag
 attach	qms at iomd with qms_iomd
 file    arch/arm32/iomd/qms_iomd.c		qms_iomd
 
+# wscons quadmouse device
+device	wsqms : wsmousedev
+file	arch/arm32/dev/wsqms.c			wsqms needs-flag
+
+attach wsqms at iomd with wsqms_iomd  
+file	arch/arm32/iomd/wsqms_iomd.c		wsqms_iomd
+
 # attribute used to represent the "keyboard controller" on the shark
 # XXX should be a real device
 define	spckbd { [irq = -1], [port = -1] }
@@ -155,6 +168,14 @@ file	arch/arm32/dev/kbd.c			kbd needs-flag
 
 attach	kbd at iomd with kbd_iomd
 file	arch/arm32/iomd/kbd_iomd.c		kbd_iomd
+
+# RPC wscons keyboard driver
+device rpckbd : wskbddev
+file   arch/arm32/dev/rpckbd.c			rpckbd  needs-flag
+file   arch/arm32/dev/wskbdmap_mfii.c		rpckbd
+
+attach rpckbd at iomd with rpckbd_iomd
+file   arch/arm32/iomd/rpckbd_iomd.c		rpckbd_iomd
 
 # IIC device
 device	iic { addr = -1 }
@@ -179,6 +200,12 @@ device	vidc { [base = -1], [dack = -1], [irq = -1] }
 attach	vidc at mainbus
 file	arch/arm32/vidc/vidc20.c		vidc needs-count
 
+# VIDC video wscons device
+device vidcvideo: rasops4, rasops8, rasops16, rasops32, wsemuldisplaydev
+attach vidcvideo at vidc
+file	arch/arm32/vidc/vidc20config.c		vidcvideo needs-flag
+file	arch/arm32/vidc/vidcvideo.c		vidcvideo needs-flag
+
 # Audio devices
 device	beep
 attach	beep at vidc
@@ -194,25 +221,20 @@ file	arch/arm32/vidc/lmcaudio.c		lmcaudio needs-flag
 file	arch/arm32/vidc/lmc1982.S		lmcaudio
 
 # Podule bus device
-device	podulebus { [slot = -1] }
+include "dev/podulebus/files.podulebus"
+
 attach	podulebus at root
 file	arch/arm32/podulebus/podulebus.c	podulebus needs-flag
 file	arch/arm32/podulebus/podulebus_io.c	podulebus
 file	arch/arm32/podulebus/podulebus_io_asm.S	podulebus
+file	arch/arm32/podulebus/netslot.c		podulebus
+
 
 # Ethernet devices
 
 # Novell NE1000 and NE2000 clones (EtherM, EtherH)
 attach	ne at podulebus with ne_pbus
 file	arch/arm32/podulebus/if_ne_pbus.c	ne_pbus
-
-device	ea: ether, ifnet, arp
-attach	ea at podulebus
-file	arch/arm32/podulebus/if_ea.c		ea
-
-device	eb: ether, ifnet, arp
-attach	eb at podulebus
-file	arch/arm32/podulebus/if_eb.c		eb
 
 device	ie: ether, ifnet, arp
 attach	ie at podulebus
@@ -244,7 +266,7 @@ define	sbic
 file	arch/arm32/podulebus/sbic.c		sbic
 
 # Acorn SCSI I specific layer for sbic
-device  asc: scsi, sbic
+device  asc: scsi, sbic, podloader
 attach	asc at podulebus
 file	arch/arm32/podulebus/asc.c		asc needs-flag
 
@@ -261,21 +283,16 @@ file	arch/arm32/podulebus/cosc.c		cosc
 define	sfas
 file	arch/arm32/podulebus/sfas.c		sfas
 
-device	ptsc: scsi, sfas
+device	ptsc: scsi, sfas, podloader
 attach	ptsc at podulebus
 file	arch/arm32/podulebus/ptsc.c		ptsc
 
-device	csc: scsi, sfas
+device	csc: scsi, sfas, podloader
 attach	csc at podulebus
 file	arch/arm32/podulebus/csc.c		csc
 
-# Oak specific layer for ncr5380
-device	oak: scsi, ncr5380sbc
-attach	oak at podulebus
-file	arch/arm32/podulebus/oak.c		oak
-
 # Cumana SCSI1 specific layer for ncr5380
-device	csa: scsi, ncr5380sbc
+device	csa: scsi, ncr5380sbc, podloader
 attach	csa at podulebus
 file	arch/arm32/podulebus/csa.c		csa
 
@@ -305,7 +322,8 @@ file	arch/arm32/podulebus/amps.c		amps
 
 device  vidcconsole   
 attach  vidcconsole at vidc   
-file    arch/arm32/vidc/console/vidcconsole.c     vidcconsole needs-count
+file	arch/arm32/vidc/console/vidcconsole.c	vidcconsole needs-count
+file	arch/arm32/vidc/console/consinit.c	vidc needs-count
 device  vt: tty
 attach  vt at vidc
 
@@ -319,36 +337,11 @@ file	arch/arm32/vidc/console/dumb.c 		vt
 
 # Generic MD files
 file	arch/arm32/arm32/autoconf.c
-file	arch/arm32/arm32/blockio.S
-file	arch/arm32/arm32/bus_dma.c
 file	arch/arm32/arm32/conf.c
-file	arch/arm32/arm32/cpuswitch.S
-file	arch/arm32/arm32/stubs.c
-file	arch/arm32/arm32/exception.S
-file	arch/arm32/arm32/ast.c
-file	arch/arm32/arm32/fault.c
-file	arch/arm32/arm32/undefined.c
-file	arch/arm32/arm32/mem.c
-file	arch/arm32/arm32/procfs_machdep.c	procfs
-file	arch/arm32/arm32/machdep.c
-file	arch/arm32/arm32/vm_machdep.c
-file	arch/arm32/arm32/fusu.S
-file	arch/arm32/arm32/cpufunc.c
-file	arch/arm32/arm32/cpufunc_asm.S
-file	arch/arm32/arm32/setcpsr.S
-file	arch/arm32/arm32/setstack.S
-file	arch/arm32/arm32/spl.S
-file	arch/arm32/arm32/intr.c
-file	arch/arm32/dev/bus_space_notimpl.S
 
-# files related to the shell
-file	arch/arm32/kshell/kshell_input.c	kshell
-file	arch/arm32/kshell/kshell_shell.c	kshell
-file	arch/arm32/kshell/kshell_disassem.c	kshell
-file	arch/arm32/kshell/kshell_dumphex.c	kshell
-file	arch/arm32/kshell/kshell_debug.c	kshell
-
-file	dev/cninit.c				!footbridge
+file	arch/arm/arm/disksubr.c			disk
+file	arch/arm/arm/disksubr_acorn.c		disk
+file	arch/arm/arm/disksubr_mbr.c		disk
 
 # ARM FPE
 file	arch/arm32/fpe-arm/armfpe_glue.S	armfpe
@@ -407,32 +400,7 @@ attach  scr at ofisascr
 # ISA Plug 'n Play autoconfiguration glue.
 file	arch/arm32/isa/isapnp_machdep.c		isapnp
 
-# DC21285 "Footbridge" specific files
-define	footbridge {}
-device	footbridge: pcibus, todservice
-attach	footbridge at mainbus
-file	arch/arm32/footbridge/footbridge.c		footbridge
-file	arch/arm32/footbridge/footbridge_machdep.c	footbridge
-file	arch/arm32/footbridge/footbridge_io.c		footbridge
-file	arch/arm32/footbridge/footbridge_io_asm.S	footbridge
-file	arch/arm32/footbridge/footbridge_pci.c		footbridge
-file	arch/arm32/footbridge/footbridge_irq.S		footbridge
-file	arch/arm32/footbridge/footbridge_irqhandler.c	footbridge
-file	arch/arm32/footbridge/footbridge_clock.c	footbridge
-
-# DC21285 "Footbridge" serial port
-device	fcom: tty
-attach	fcom at footbridge
-file	arch/arm32/footbridge/footbridge_com.c		fcom needs-flag
-file	arch/arm32/footbridge/footbridge_com_io.c	fcom
-file	arch/arm32/footbridge/footbridge_com_io_asm.S	fcom
-
 # EBSA285/CATS class board
-# DC21285 based board with cyclone firmware
-file	arch/arm32/footbridge/ebsa285_machdep.c		footbridge & ebsa285
-
-# CATS boards have an EBSA285 based core with an ISA bus
-file	arch/arm32/isa/isa_cats_machdep.c		isa & ebsa285
 
 device	sysbeep
 attach	sysbeep at pcppi with sysbeep_isa
@@ -448,6 +416,8 @@ file	arch/arm32/isa/dsrtc.c				dsrtc
 include "dev/i2o/files.i2o"
 
 # PCI devices
+
+include "arch/arm/conf/files.footbridge"
 
 #
 # Include PCI config
@@ -473,8 +443,5 @@ file	arch/arm32/pci/pciide_machdep.c	pciide
 
 # Include USB stuff
 include "dev/usb/files.usb"
-
-# Include WSCONS stuff
-include "dev/wscons/files.wscons"
 
 include "dev/pckbc/files.pckbc"

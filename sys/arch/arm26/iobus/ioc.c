@@ -1,4 +1,4 @@
-/* $NetBSD: ioc.c,v 1.9 2001/01/23 23:58:32 bjh21 Exp $ */
+/* $NetBSD: ioc.c,v 1.14 2001/08/25 17:59:38 bjh21 Exp $ */
 
 /*-
  * Copyright (c) 1998, 1999, 2000 Ben Harris
@@ -33,7 +33,7 @@
 
 #include <sys/param.h>
 
-__RCSID("$NetBSD: ioc.c,v 1.9 2001/01/23 23:58:32 bjh21 Exp $");
+__RCSID("$NetBSD: ioc.c,v 1.14 2001/08/25 17:59:38 bjh21 Exp $");
 
 #include <sys/device.h>
 #include <sys/kernel.h>
@@ -85,7 +85,7 @@ ioc_match(struct device *parent, struct cfdata *cf, void *aux)
 {
 
 	/*
-	 * This is tricky.  Accessing non-existant devices in iobus
+	 * This is tricky.  Accessing non-existent devices in iobus
 	 * space can hang the machine (MEMC datasheet section 5.3.3),
 	 * so probes would have to be very delicate.  This isn't
 	 * _much_ of a problem with the IOC, since all machines I know
@@ -117,13 +117,9 @@ ioc_attach(struct device *parent, struct device *self, void *aux)
 	/*
 	 * IRQ/FIQ: mask out all, leave clearing latched interrupts
 	 * till someone asks.
-	 *
-	 * In fact, the masks will be in this state already.  See
-	 * start.c for details.
 	 */
-	bus_space_write_1(bst, bsh, IOC_IRQMSKA, 0x00);
-	bus_space_write_1(bst, bsh, IOC_IRQMSKB, 0x00);
-	bus_space_write_1(bst, bsh, IOC_FIQMSK,  0x00);
+	ioc_irq_setmask(0);
+	ioc_fiq_setmask(0);
 	/*-
 	 * Timers:
 	 * Timers 0/1 are set up by ioc_initclocks (called by cpu_initclocks).
@@ -254,8 +250,8 @@ ioc_irq_status_full()
 	       bus_space_read_1(bst, bsh, IOC_IRQMSKA) | 
 	       (bus_space_read_1(bst, bsh, IOC_IRQMSKB) << 8));
 #endif
-	return bus_space_read_1(bst, bsh, IOC_IRQSTA) |
-	    (bus_space_read_1(bst, bsh, IOC_IRQSTB) << 8);
+	return bus_space_read_1(bst, bsh, IOC_IRQRQA) |
+	    (bus_space_read_1(bst, bsh, IOC_IRQRQB) << 8);
 }
 
 void
@@ -314,6 +310,21 @@ int ioc_get_irq_level(struct device *self, int irq)
 
 #endif /* 0 */
 
+/*
+ * FIQs
+ */
+
+void
+ioc_fiq_setmask(u_int32_t mask)
+{
+	struct ioc_softc *sc = (void *)the_ioc;
+	bus_space_tag_t bst = sc->sc_bst;
+	bus_space_handle_t bsh = sc->sc_bsh;
+
+	bus_space_write_1(bst, bsh, IOC_FIQMSK, mask);
+}
+
+
 
 /*
  * Counters
@@ -344,11 +355,22 @@ void ioc_counter_start(struct device *self, int counter, int value)
 
 /* Cache to save microtime recalculating it */
 static int t0_count;
+/*
+ * Statistics clock interval and variance, in ticks.  Variance must be a
+ * power of two.  Since this gives us an even number, not an odd number,
+ * we discard one case and compensate.  That is, a variance of 1024 would
+ * give us offsets in [0..1023].  Instead, we take offsets in [1..1023].
+ * This is symmetric about the point 512, or statvar/2, and thus averages
+ * to that value (assuming uniform random numbers).
+ */
+int statvar = 8192;
+int statmin;
 	
 void
 cpu_initclocks(void)
 {
 	struct ioc_softc *sc;
+	int minint, statint;
 
 	KASSERT(the_ioc != NULL);
 	sc = (struct ioc_softc *)the_ioc;
@@ -367,7 +389,19 @@ cpu_initclocks(void)
 		    the_ioc->dv_xname, hz, irq_string(sc->sc_clkirq));
 	
 	if (stathz) {
-		setstatclockrate(stathz);
+		profhz = stathz; /* Makes life simpler */
+		
+		if (stathz == 0 || IOC_TIMER_RATE % stathz != 0 ||
+		    (statint = IOC_TIMER_RATE / stathz) > 65535)
+			panic("Impossible statclock rate: %d Hz", stathz);
+
+		minint = statint / 2 + 100;
+		while (statvar > minint)
+			statvar >>= 1;
+		statmin = statint - (statvar >> 1);
+
+		ioc_counter_start(the_ioc, 1, statint);
+
 		evcnt_attach_dynamic(&sc->sc_sclkev, EVCNT_TYPE_INTR, NULL,
 		    sc->sc_dev.dv_xname, "statclock");
 		sc->sc_sclkirq = irq_establish(IOC_IRQ_TM1, IPL_STATCLOCK,
@@ -390,31 +424,46 @@ ioc_irq_clock(void *cookie)
 static int
 ioc_irq_statclock(void *cookie)
 {
+	struct ioc_softc *sc = (void *)the_ioc;
+	bus_space_tag_t bst = sc->sc_bst;
+	bus_space_handle_t bsh = sc->sc_bsh;
+	int r, newint;
 
 	statclock(cookie);
+
+	/* Generate a new randomly-distributed clock period. */
+	do {
+		r = random() & (statvar - 1);
+	} while (r == 0);
+	newint = statmin + r;
+
+	/*
+	 * Load the next clock period into the latch, but don't do anything
+	 * with it.  It'll be used for the _next_ statclock reload.
+	 */
+	bus_space_write_1(bst, bsh, IOC_T1LOW, newint & 0xff);
+	bus_space_write_1(bst, bsh, IOC_T1HIGH, newint >> 8 & 0xff);
 	return IRQ_HANDLED;
 }
 
 void
 setstatclockrate(int hzrate)
 {
-	int count;
 
-	KASSERT(the_ioc != NULL);
-	/* XXX This currently restarts the counter -- should it? */
-	if (hzrate == 0 || IOC_TIMER_RATE % hzrate != 0 ||
-	    (count = IOC_TIMER_RATE / hz) > 65535)
-		panic("Impossible statclock rate: %d Hz", hzrate);
-	ioc_counter_start(the_ioc, 1, count);
+	/* Nothing to do here -- we've forced stathz == profhz above. */
+	KASSERT(hzrate == stathz);
 }
 
 void
-microtime(struct timeval *tv)
+microtime(struct timeval *tvp)
 {
+	static struct timeval lasttime;
+	struct timeval t;
 	struct device *self;
 	struct ioc_softc *sc;
 	bus_space_tag_t bst;
 	bus_space_handle_t bsh;
+	long sec, usec;
 	int t0, s, intbefore, intafter;
 
 	KASSERT(the_ioc != NULL);
@@ -426,7 +475,7 @@ microtime(struct timeval *tv)
 
 	s = splclock();
 
-	*tv = time;
+	t = time;
 
 	intbefore = ioc_irq_status(IOC_IRQ_TM0);
 	bus_space_write_1(bst, bsh, IOC_T0LATCH, 0);
@@ -442,17 +491,45 @@ microtime(struct timeval *tv)
 	 * Things are complicated by the fact that this could happen
 	 * while we're trying to work out the time.  We include some
 	 * heuristics to spot this.
+	 *
+	 * NB: t0 counts down from t0_count to 0.
 	 */
-	
+
 	if (intbefore || (intafter && t0 < t0_count / 2))
 		t0 -= t0_count;
 
-	tv->tv_usec += (t0_count - t0) / (IOC_TIMER_RATE / 1000000);
-	
-	while (tv->tv_usec > 1000000) {
-		tv->tv_sec += 1;
-		tv->tv_usec -= 1000000;
+	t.tv_usec += (t0_count - t0) / (IOC_TIMER_RATE / 1000000);
+
+	while (t.tv_usec > 1000000) {
+		t.tv_usec -= 1000000;
+		t.tv_sec++;
 	}
+
+	/*
+	 * Ordinarily, the current clock time is guaranteed to be later
+	 * by at least one microsecond than the last time the clock was
+	 * read.  However, this rule applies only if the current time is
+	 * within one second of the last time.  Otherwise, the clock will
+	 * (shudder) be set backward.  The clock adjustment daemon or
+	 * human equivalent is presumed to be correctly implemented and
+	 * to set the clock backward only upon unavoidable crisis.
+	 */
+	sec = lasttime.tv_sec - t.tv_sec;
+	usec = lasttime.tv_usec - t.tv_usec;
+	if (usec < 0) {
+		usec += 1000000;
+		sec--;
+	}
+	if (sec == 0) {
+		t.tv_usec += usec + 1;
+		if (t.tv_usec >= 1000000) {
+			t.tv_usec -= 1000000;
+			t.tv_sec++;
+		}
+	}
+	lasttime = t;
+
+	*tvp = t;
 }
 
 void

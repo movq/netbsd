@@ -1,4 +1,4 @@
-/*	$NetBSD: mainbus.c,v 1.8 2000/08/24 11:19:19 uch Exp $	*/
+/*	$NetBSD: mainbus.c,v 1.14 2001/09/17 17:03:45 uch Exp $	*/
 
 /*-
  * Copyright (c) 1999
@@ -34,112 +34,91 @@
  *
  */
 
-#include "opt_vr41x1.h"
-#include "opt_tx39xx.h"
-
 #include <sys/param.h>
 #include <sys/systm.h>
-#include <sys/device.h>
 
 #include <machine/bus.h>
 #include <machine/autoconf.h>
+#include <machine/platid.h>
 
-struct mainbus_softc {
-	struct	device sc_dv;
-};
+#include "locators.h"
 
-/* Definition of the mainbus driver. */
-static int	mbmatch __P((struct device *, struct cfdata *, void *));
-static void	mbattach __P((struct device *, struct device *, void *));
-static int	mbprint __P((void *, const char *));
-bus_space_tag_t mb_bus_space_init __P((void));
-
-bus_space_tag_t	mb_bus_space_init __P((void));
-
-struct cfattach mainbus_ca = {
-	sizeof(struct mainbus_softc), mbmatch, mbattach
-};
-
-/* There can be only one. */
-static int mainbus_found;
-
-static int
-mbmatch(parent, cf, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	void *aux;
-{
-
-	if (mainbus_found)
-		return (0);
-
-	return (1);
-}
-
-int ncpus = 0;	/* only support uniprocessors, for now */
-bus_space_tag_t system_bus_iot; /* Serial console requires this */
-
-bus_space_tag_t
-mb_bus_space_init()
-{
-	bus_space_tag_t iot;
-
-	iot = hpcmips_alloc_bus_space_tag();
-	strcpy(iot->t_name, "System internal");
-	iot->t_base = 0x0;
-	iot->t_size = 0xffffffff;
-	iot->t_extent = 0; /* No extent for bootstraping */
-	system_bus_iot = iot;
-
-	return (iot);
-}
-
-static void
-mbattach(parent, self, aux)
-	struct device *parent;
-	struct device *self;
-	void *aux;
-{
-	int i;
-	register struct device *mb = self;
-	struct mainbus_attach_args ma;
-	char *devnames[] = {
-		"txsim", "vrip", "bivideo", "btnmgr", "hpcapm",
-	};
-
-	mainbus_found = 1;
-
-	printf("\n");
-
-	/* Attach CPU */
-	ma.ma_name = "cpu";
-	config_found(mb, &ma, mbprint);
-
-#if defined VR41X1 && defined TX39XX
-#error misconfiguration
-#elif defined VR41X1
-	if (!system_bus_iot) 
-	    mb_bus_space_init();
-	hpcmips_init_bus_space_extent(system_bus_iot); /* Now prepare extent */
-	ma.ma_iot = system_bus_iot;
+#ifdef DEBUG
+#define STATIC
+#else
+#define STATIC	static
 #endif
 
-	/* Attach devices */
-	for (i = 0; i < sizeof(devnames)/sizeof(*devnames); i++) {
+STATIC int mainbus_match(struct device *, struct cfdata *, void *);
+STATIC void mainbus_attach(struct device *, struct device *, void *);
+STATIC int mainbus_search(struct device *, struct cfdata *, void *);
+STATIC int mainbus_print(void *, const char *);
+
+struct cfattach mainbus_ca = {
+	sizeof(struct device), mainbus_match, mainbus_attach
+};
+
+STATIC int __mainbus_attached;
+
+int
+mainbus_match(struct device *parent, struct cfdata *cf, void *aux)
+{
+
+	return (__mainbus_attached ? 0 : 1);	/* don't attach twice */
+}
+
+void
+mainbus_attach(struct device *parent, struct device *self, void *aux)
+{
+	static const char *devnames[] = {	/* ATTACH ORDER */
+		"cpu",				/* 1. CPU */
+		"vrip", "txsim",		/* 2. System BUS */
+		"bivideo", "btnmgr", "hpcapm",	/* 3. misc */
+	};
+	struct mainbus_attach_args ma;
+	int i;
+
+	__mainbus_attached = 1;
+	
+	printf("\n");
+
+	/* default dumb bus_space */
+	ma.ma_iot = hpcmips_system_bus_space();
+	hpcmips_init_bus_space_extent(ma.ma_iot);
+
+	/* search and attach devices in order */
+	for (i = 0; i < sizeof(devnames) / sizeof(devnames[0]); i++) {
 		ma.ma_name = devnames[i];
-		config_found(mb, &ma, mbprint);
+		config_search(mainbus_search, self, &ma);
 	}
 }
 
+int
+mainbus_search(struct device *parent, struct cfdata *cf, void *aux)
+{
+	struct mainbus_attach_args *ma = (void *)aux;
+	int locator = cf->cf_loc[MAINBUSCF_ID];
 
-static int
-mbprint(aux, pnp)
-	void *aux;
-	const char *pnp;
+	/* check device name */
+	if (strcmp(ma->ma_name, cf->cf_driver->cd_name) != 0)
+		return (0);
+
+	/* check platform ID in config file */
+	if (locator != MAINBUSCF_ID_DEFAULT &&
+	    !platid_match(&platid, PLATID_DEREFP(locator)))
+		return (0);
+
+	/* attach device */
+	if ((*cf->cf_attach->ca_match)(parent, cf, ma))
+		config_attach(parent, cf, ma, mainbus_print);
+
+	return (0);
+}
+
+int
+mainbus_print(void *aux, const char *pnp)
 {
 
-	if (pnp)
-		return (QUIET);
-
-	return (UNCONF);
+	return (pnp ? QUIET : UNCONF);
 }
+

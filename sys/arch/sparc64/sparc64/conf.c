@@ -1,4 +1,4 @@
-/*	$NetBSD: conf.c,v 1.15 2001/02/28 00:06:28 mjacob Exp $ */
+/*	$NetBSD: conf.c,v 1.19 2001/10/06 14:50:22 mrg Exp $ */
 
 /*
  * Copyright (c) 1992, 1993
@@ -44,6 +44,8 @@
  *	@(#)conf.c	8.3 (Berkeley) 11/14/93
  */
 
+/* XXX KEEP THIS FILE IN SYNC WITH THE arch/sparc/sparc/conf.c VERSION */
+
 #include "opt_compat_svr4.h"
 
 #include <sys/param.h>
@@ -86,6 +88,8 @@
 #include "com.h"
 #include "bpp.h"
 #include "magma.h"		/* has NMTTY and NMBPP */
+#include "siosixteen.h"
+cdev_decl(cdtty);
 
 #include "fdc.h"		/* has NFDC and NFD; see files.sparc */
 #include "bwtwo.h"
@@ -100,40 +104,8 @@
 #include "ses.h"
 cdev_decl(ses);
 
-/* open, close, ioctl */
-#define cdev_i4bctl_init(c,n) { \
-	dev_init(c,n,open), dev_init(c,n,close), (dev_type_read((*))) enodev, \
-	(dev_type_write((*))) enodev, dev_init(c,n,ioctl), \
-	(dev_type_stop((*))) enodev, 0, seltrue, \
-	(dev_type_mmap((*))) enodev }
-
-/* open, close, read, write, poll */
-#define	cdev_i4brbch_init(c,n) { \
-	dev_init(c,n,open), dev_init(c,n,close), dev_init(c,n,read), \
-	dev_init(c,n,write), dev_init(c,n,ioctl), \
-	(dev_type_stop((*))) enodev, \
-	0, dev_init(c,n,poll), (dev_type_mmap((*))) enodev }
-
-/* open, close, read, write, poll */
-#define	cdev_i4btel_init(c,n) { \
-	dev_init(c,n,open), dev_init(c,n,close), dev_init(c,n,read), \
-	dev_init(c,n,write), (dev_type_ioctl((*))) enodev, \
-	(dev_type_stop((*))) enodev, \
-	0, dev_init(c,n,poll), (dev_type_mmap((*))) enodev, D_TTY }
-
-/* open, close, read, ioctl */
-#define cdev_i4btrc_init(c,n) { \
-	dev_init(c,n,open), dev_init(c,n,close), dev_init(c,n,read), \
-	(dev_type_write((*))) enodev, dev_init(c,n,ioctl), \
-	(dev_type_stop((*))) enodev, 0, (dev_type_poll((*))) enodev, \
-	(dev_type_mmap((*))) enodev }
-
-/* open, close, read, ioctl, poll */
-#define cdev_i4b_init(c,n) { \
-	dev_init(c,n,open), dev_init(c,n,close), dev_init(c,n,read), \
-	(dev_type_write((*))) enodev, dev_init(c,n,ioctl), \
-	(dev_type_stop((*))) enodev, 0, dev_init(c,n,poll), \
-	(dev_type_mmap((*))) enodev }	
+#include "vcoda.h"
+cdev_decl(vc_nb_);
 
 #include "i4b.h"
 #include "i4bctl.h"
@@ -145,6 +117,9 @@ cdev_decl(i4bctl);
 cdev_decl(i4btrc);
 cdev_decl(i4brbch);
 cdev_decl(i4btel);
+
+#include "pci.h"
+cdev_decl(pci);
 
 struct bdevsw	bdevsw[] =
 {
@@ -226,7 +201,7 @@ struct cdevsw	cdevsw[] =
 	cdev_notdef(),			/* 44 */
 	cdev_notdef(),			/* 45 */
 	cdev_notdef(),			/* 46 */
-	cdev_notdef(),			/* 47 */
+	cdev_vc_nb_init(NVCODA,vc_nb_),	/* 47: coda file system psuedo-device */
 	cdev_notdef(),			/* 48 */
 	cdev_notdef(),			/* 49 */
 	cdev_notdef(),			/* 50 */
@@ -248,7 +223,7 @@ struct cdevsw	cdevsw[] =
 	cdev_notdef(),			/* 66 */
 	cdev_fb_init(NCGSIX,cgsix),	/* 67: /dev/cgsix */
 	cdev_notdef(),			/* 68 */
-	cdev_gen_init(NAUDIO,audio),	/* 69: /dev/audio */
+	cdev__ocrwip_init(NAUDIO,audio),	/* 69: /dev/audio */
 	cdev_openprom_init(1,openprom),	/* 70: /dev/openprom */
 	cdev_notdef(),			/* 71 */
 	cdev_i4b_init(NI4B, i4b),		/* 72: i4b main device */
@@ -286,7 +261,7 @@ struct cdevsw	cdevsw[] =
 	cdev_notdef(),			/* 104 */
 	cdev_bpftun_init(NBPFILTER,bpf),/* 105: packet filter */
 	cdev_notdef(),			/* 106 */
-	cdev_gen_init(NBPP,bpp),	/* 107: on-board parallel port */
+	cdev__ocrwip_init(NBPP,bpp),	/* 107: on-board parallel port */
 	cdev_notdef(),			/* 108 */
 	cdev_fb_init(NTCX,tcx),		/* 109: /dev/tcx */
 	cdev_disk_init(NVND,vnd),	/* 110: vnode disk driver */
@@ -302,6 +277,8 @@ struct cdevsw	cdevsw[] =
 	cdev_scsibus_init(NSCSIBUS,scsibus), /* 120: SCSI bus */
 	cdev_disk_init(NRAID,raid),	/* 121: RAIDframe disk driver */
 	cdev_tty_init(NPCONS,pcons),	/* 122: PROM console */
+	cdev_pci_init(NPCI,pci),	/* 123: PCI bus access device */
+	cdev_tty_init(NCLCD,cdtty),	/* 124: Cirrus-Logic CD18xx */
 };
 int	nchrdev = sizeof(cdevsw) / sizeof(cdevsw[0]);
 

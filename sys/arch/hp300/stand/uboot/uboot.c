@@ -1,4 +1,4 @@
-/*	$NetBSD: uboot.c,v 1.5 2001/01/02 04:14:35 simonb Exp $	*/
+/*	$NetBSD: uboot.c,v 1.8 2001/10/09 16:03:11 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 1982, 1986, 1990, 1993
@@ -42,6 +42,8 @@
 
 #include <lib/libsa/stand.h>
 #include <lib/libsa/loadfile.h>
+
+#include <machine/bootinfo.h>
 
 #include <hp300/stand/common/samachdep.h>
 
@@ -114,7 +116,7 @@ getbootdev(howto)
 {
 	char c, *ptr = line;
 
-	printf("Boot: [[[%s%d%c:]%s][-s][-a][-d][-v][-q]] :- ",
+	printf("Boot: [[[%s%d%c:]%s][-a][-c][-d][-s][-v][-q]] :- ",
 	    devsw[bdev].dv_name, bctlr + (8 * badapt), 'a' + bpart, name);
 
 	if (tgets(line)) {
@@ -152,6 +154,7 @@ exec_hp300(file, loadaddr, howto)
 	int howto;
 {
 	u_long marks[MARK_MAX];
+	struct btinfo_magic *bt;
 	int fd;
 
 	marks[MARK_START] = loadaddr;
@@ -162,6 +165,11 @@ exec_hp300(file, loadaddr, howto)
 	printf("Start @ 0x%lx [%ld=0x%lx-0x%lx]...\n",
 	    marks[MARK_ENTRY], marks[MARK_NSYM],
 	    marks[MARK_SYM], marks[MARK_END]);
+
+	bt = (struct btinfo_magic *)lowram;
+        bt->common.type = BTINFO_MAGIC;
+        bt->magic1 = BOOTINFO_MAGIC1;
+        bt->magic2 = BOOTINFO_MAGIC2;
 
 	machdep_start((char *)marks[MARK_ENTRY], howto,
 	    (char *)loadaddr, (char *)marks[MARK_SYM],

@@ -1,4 +1,4 @@
-/*	$NetBSD: pms.c,v 1.21 2000/03/23 06:35:14 thorpej Exp $	*/
+/*	$NetBSD: pms.c,v 1.23 2001/09/16 16:34:28 wiz Exp $	*/
 
 /*-
  * Copyright (c) 1996 D.C. Tsen
@@ -342,7 +342,7 @@ pmsread(dev, uio, flag)
 	size_t length;
 	u_char buffer[PMS_CHUNK];
 
-	/* Block until mouse activity occured. */
+	/* Block until mouse activity occurred. */
 
 	s = spltty();
 	while (sc->sc_q.c_cc == 0) {
@@ -421,11 +421,6 @@ pmsioctl(dev, cmd, addr, flag, p)
 	case MOUSEIOC_SETMODE:
 	{
 		struct mousebufrec buffer;
-#ifdef MOUSE_IOC_ACK
-		int s;
-
-		s = spltty();
-#endif
 		sc->sc_mode = *(int *)addr;
 
 		buffer.status = IOC_ACK;
@@ -436,9 +431,8 @@ pmsioctl(dev, cmd, addr, flag, p)
 			printf("%s: setting mode with non empty buffer (%d)\n",
 			    sc->sc_dev.dv_xname, sc->sc_q.c_cc);
 		pmsputbuffer(sc, &buffer);
-		(void)splx(s);
 #endif
-		return 0;
+		break;
 	}
 	case MOUSEIOC_SETORIGIN:
 	{

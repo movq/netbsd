@@ -1,4 +1,4 @@
-/*	$NetBSD: vidc.h,v 1.10 2001/02/25 17:17:55 reinoud Exp $	*/
+/*	$NetBSD: vidc.h,v 1.14 2001/07/10 20:10:50 bjh21 Exp $	*/
 
 /*
  * Copyright (c) 1994,1995 Mark Brinicombe.
@@ -54,10 +54,6 @@
 
 #ifndef	_ARM32_VIDC_H_
 #define	_ARM32_VIDC_H_
-
-#if defined(_KERNEL) && !defined(_LKM)
-#include "opt_cputypes.h"
-#endif
 
 /* VIDC20 Base addresses */
 
@@ -201,11 +197,7 @@ struct vidc_state {
 	int dctl;
 };
 
-#ifdef CPU_ARM7500
-#define	VIDC_FREF	32000000
-#else
-#define VIDC_FREF	24000000
-#endif	/* CPU_ARM7500 */
+extern int vidc_fref;		/* reference frequency of detected VIDC */
 
 #ifdef _KERNEL
 extern int  vidc_write		__P((u_int /*reg*/, int /*value*/));
@@ -220,7 +212,7 @@ struct vidc_mode {
     int pixel_rate;
     int hswr, hbsr, hdsr, hder, hber, hcr;
     int vswr, vbsr, vdsr, vder, vber, vcr;
-    int bitsperpixel;
+    int log2_bpp;
     int sync_pol;
     int frame_rate;
 };
@@ -240,7 +232,7 @@ typedef struct
 
 #define XRES mode.hder
 #define YRES mode.vder
-#define BITSPERPIXEL mode.bitsperpixel
+#define NUMCOLOURS (1 << mode.log2_bpp)
 
 struct vidc_info
   {

@@ -1,4 +1,4 @@
-/*	$NetBSD: esp_obio.c,v 1.8 2000/07/09 20:57:46 pk Exp $	*/
+/*	$NetBSD: esp_obio.c,v 1.10 2001/04/25 17:53:22 bouyer Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.
@@ -262,10 +262,10 @@ espattach_obio(parent, self, aux)
 	    sc->sc_dev.dv_xname, "intr");
 
 	/* Do the common parts of attachment. */
-	ncr53c9x_attach(sc, NULL, NULL);
-
-	/* Turn on target selection using the `dma' method */
-	ncr53c9x_dmaselect = 1;
+	sc->sc_adapter.adapt_minphys = minphys;
+	sc->sc_adapter.adapt_request = ncr53c9x_scsipi_request;
+	ncr53c9x_attach(sc);
+	sc->sc_features |= NCR_F_DMASELECT;
 }
 
 /*

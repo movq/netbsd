@@ -1,4 +1,4 @@
-.\"	$NetBSD: kvm_getloadavg.3,v 1.4 1998/02/05 18:51:44 perry Exp $
+.\"	$NetBSD: kvm_getloadavg.3,v 1.7 2002/02/07 07:00:48 ross Exp $
 .\"
 .\" Copyright (c) 1992, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -42,8 +42,8 @@
 .Sh LIBRARY
 .Lb libkvm
 .Sh SYNOPSIS
-.Fd #include <sys/resource.h>
-.Fd #include <kvm.h>
+.Fd #include \*[Lt]sys/resource.h\*[Gt]
+.Fd #include \*[Lt]kvm.h\*[Gt]
 .br
 .Ft int
 .Fn kvm_getloadavg "kvm_t *kd" "double loadavg[]" "int nelem"
@@ -65,6 +65,7 @@ If the load average was unobtainable, \-1 is returned; otherwise,
 the number of samples actually retrieved is returned.
 .Sh SEE ALSO
 .Xr uptime 1 ,
+.Xr getloadavg 3 ,
 .Xr kvm 3 ,
-.Xr sysctl 3 ,
-.Xr getloadavg 3
+.Xr kvm_open 3 ,
+.Xr sysctl 3

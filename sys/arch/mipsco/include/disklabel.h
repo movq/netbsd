@@ -1,4 +1,4 @@
-/*	$NetBSD: disklabel.h,v 1.3 2000/09/16 08:27:16 wdk Exp $	*/
+/*	$NetBSD: disklabel.h,v 1.6 2001/07/26 22:47:35 wiz Exp $	*/
 
 /*
  * Copyright (c) 2000 Wayne Knowles.     All rights reserved.
@@ -43,7 +43,7 @@
  * Partition 10 - whole disk
  */
 
-#define MAXPARTITIONS	8	/* XXX - NetBSD Compatability */
+#define MAXPARTITIONS	8	/* XXX - NetBSD Compatibility */
 #define RAW_PART	2
 #define LABELSECTOR	1
 #define LABELOFFSET	0
@@ -52,7 +52,7 @@
 #define MIPS_NVOLDIR	15	/* Number of volume directory files */
 #define MIPS_VDIRSZ	8	/* File name size in volume directory */
 #define MIPS_BFSIZE	16	/* Boot filename size */
-#define	MIPS_VHSECTOR	0	/* Sector number for MIPS disklabel */
+#define	MIPS_VHSECTOR	0	/* Sector number for MIPS volume header */
 
 /*
  * Devices parameters that RISC/os uses for mapping logical block numbers
@@ -91,7 +91,7 @@ struct mips_voldir {			/* Disk volume directory */
 
 struct mips_partitions {
 	int32_t 	pt_size;	/* # of logical blocks in partition */
-	int32_t 	pt_offset;	/* first logical block of partiton */
+	int32_t 	pt_offset;	/* first logical block of partition */
 	int32_t 	pt_fstype;
 };
 
@@ -123,8 +123,9 @@ struct mips_volheader {
 #define MIPS_FS_SYSV    5
 #define MIPS_FS_VOLUME	6 /* Entire volume */
 
+/* Just a dummy */
 struct cpu_disklabel {
-	struct	mips_volheader cd_volhdr;
+	int	cd_dummy;			/* must have one element. */
 };
 
 #endif /* _MACHINE_DISKLABEL_H_ */

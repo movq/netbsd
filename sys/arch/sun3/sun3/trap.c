@@ -1,4 +1,4 @@
-/*	$NetBSD: trap.c,v 1.98 2001/02/22 07:11:12 chs Exp $	*/
+/*	$NetBSD: trap.c,v 1.103 2001/09/05 13:21:10 tsutsui Exp $	*/
 
 /*
  * Copyright (c) 1994 Gordon W. Ross
@@ -45,6 +45,7 @@
 
 #include "opt_ddb.h"
 #include "opt_execfmt.h"
+#include "opt_kgdb.h"
 #include "opt_compat_aout_m68k.h"
 #include "opt_compat_sunos.h"
 
@@ -167,8 +168,8 @@ int mmupid = -1;
  */
 static void
 userret(p, tf, oticks)
-	register struct proc *p;
-	register struct trapframe *tf;
+	struct proc *p;
+	struct trapframe *tf;
 	u_quad_t oticks;
 {
 	int sig;
@@ -228,10 +229,11 @@ trap(type, code, v, tf)
 	u_int code, v;
 	struct trapframe tf;
 {
-	register struct proc *p;
-	register int sig, tmp;
+	struct proc *p;
+	int sig, tmp;
 	u_int ucode;
 	u_quad_t sticks;
+	caddr_t onfault;
 
 	uvmexp.traps++;
 	p = curproc;
@@ -463,12 +465,12 @@ trap(type, code, v, tf)
 		/*FALLTHROUGH*/
 
 	case T_MMUFLT|T_USER: { 	/* page fault */
-		register vm_offset_t va;
-		register struct vmspace *vm = p->p_vmspace;
-		register vm_map_t map;
+		vaddr_t va;
+		struct vmspace *vm = p->p_vmspace;
+		struct vm_map *map;
 		int rv;
 		vm_prot_t ftype;
-		extern vm_map_t kernel_map;
+		extern struct vm_map *kernel_map;
 
 #ifdef DEBUG
 		if ((mmudebug & MDB_WBFOLLOW) || MDB_ISPID(p->p_pid))
@@ -495,7 +497,7 @@ trap(type, code, v, tf)
 			ftype = VM_PROT_READ | VM_PROT_WRITE;
 		else
 			ftype = VM_PROT_READ;
-		va = m68k_trunc_page((vm_offset_t)v);
+		va = m68k_trunc_page((vaddr_t)v);
 
 		/*
 		 * Need to resolve the fault.
@@ -507,7 +509,11 @@ trap(type, code, v, tf)
 		 * This function may also, for example, disallow any
 		 * faults in the kernel text segment, etc.
 		 */
+
+		onfault = p->p_addr->u_pcb.pcb_onfault;
+		p->p_addr->u_pcb.pcb_onfault = NULL;
 		rv = _pmap_fault(map, va, ftype);
+		p->p_addr->u_pcb.pcb_onfault = onfault;
 
 #ifdef	DEBUG
 		if (rv && MDB_ISPID(p->p_pid)) {
@@ -526,16 +532,16 @@ trap(type, code, v, tf)
 		 * error.
 		 */
 		if ((map != kernel_map) && ((caddr_t)va >= vm->vm_maxsaddr)) {
-			if (rv == KERN_SUCCESS) {
+			if (rv == 0) {
 				unsigned nss;
 
 				nss = btoc((u_int)(USRSTACK-va));
 				if (nss > vm->vm_ssize)
 					vm->vm_ssize = nss;
-			} else if (rv == KERN_PROTECTION_FAILURE)
-				rv = KERN_INVALID_ADDRESS;
+			} else if (rv == EACCES)
+				rv = EFAULT;
 		}
-		if (rv == KERN_SUCCESS)
+		if (rv == 0)
 			goto finish;
 
 		if ((type & T_USER) == 0) {
@@ -554,7 +560,7 @@ trap(type, code, v, tf)
 			goto dopanic;
 		}
 		ucode = v;
-		if (rv == KERN_RESOURCE_SHORTAGE) {
+		if (rv == ENOMEM) {
 			printf("UVM: pid %d (%s), uid %d killed: out of swap\n",
 			       p->p_pid, p->p_comm,
 			       p->p_cred && p->p_ucred ?

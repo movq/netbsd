@@ -1,4 +1,4 @@
-/* $NetBSD: dec_3maxplus.c,v 1.42 2001/02/18 06:51:18 tsutsui Exp $ */
+/* $NetBSD: dec_3maxplus.c,v 1.47 2001/09/18 16:15:20 tsutsui Exp $ */
 
 /*
  * Copyright (c) 1998 Jonathan Stone.  All rights reserved.
@@ -73,7 +73,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: dec_3maxplus.c,v 1.42 2001/02/18 06:51:18 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dec_3maxplus.c,v 1.47 2001/09/18 16:15:20 tsutsui Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -123,7 +123,7 @@ dec_3maxplus_init()
 	platform.cons_init = dec_3maxplus_cons_init;
 	platform.iointr = dec_3maxplus_intr;
 	platform.intr_establish = dec_3maxplus_intr_establish;
-	platform.memsize = memsize_scan;
+	platform.memsize = memsize_bitmap;
 	platform.clkread = kn03_clkread;
 	/* 3MAX+ has IOASIC free-running high resolution timer */
 
@@ -141,7 +141,7 @@ dec_3maxplus_init()
 	splvec.splbio = MIPS_SPL0;
 	splvec.splnet = MIPS_SPL0;
 	splvec.spltty = MIPS_SPL0;
-	splvec.splimp = MIPS_SPL0;
+	splvec.splvm = MIPS_SPL0;
 	splvec.splclock = MIPS_SPL_0_1;
 	splvec.splstatclock = MIPS_SPL_0_1;
 
@@ -177,7 +177,7 @@ dec_3maxplus_init()
 }
 
 /*
- * Initalize the memory system and I/O buses.
+ * Initialize the memory system and I/O buses.
  */
 static void
 dec_3maxplus_bus_reset()
@@ -303,7 +303,7 @@ dec_3maxplus_intr(status, cause, pc, ipending)
 		cf.pc = pc;
 		cf.sr = status;
 		hardclock(&cf);
-		intrcnt[HARDCLOCK]++;
+		pmax_clock_evcnt.ev_count++;
 		old_buscycle = latched_cycle_cnt - old_buscycle;
 		/* keep clock interrupts enabled when we return */
 		cause &= ~MIPS_INT_MASK_1;
@@ -380,8 +380,10 @@ dec_3maxplus_intr(status, cause, pc, ipending)
 			}
 		} while (ifound);
 	}
-	if (ipending & MIPS_INT_MASK_3)
+	if (ipending & MIPS_INT_MASK_3) {
 		dec_3maxplus_errintr();
+		pmax_memerr_evcnt.ev_count++;
+	}
 
 	_splset(MIPS_SR_INT_IE | (status & ~cause & MIPS_HARD_INT_MASK));
 }

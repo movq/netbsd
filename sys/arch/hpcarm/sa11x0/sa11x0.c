@@ -1,4 +1,4 @@
-/*	$NetBSD: sa11x0.c,v 1.4 2001/02/24 20:13:59 reinoud Exp $	*/
+/*	$NetBSD: sa11x0.c,v 1.17 2001/07/10 16:39:33 ichiro Exp $	*/
 
 /*-
  * Copyright (c) 2001, The NetBSD Foundation, Inc.  All rights reserved.
@@ -67,6 +67,13 @@
 #include <arm/mainbus/mainbus.h>
 #include <hpcarm/sa11x0/sa11x0_reg.h>
 #include <hpcarm/sa11x0/sa11x0_var.h>
+#include <hpcarm/sa11x0/sa11x0_dmacreg.h>
+#include <hpcarm/sa11x0/sa11x0_ppcreg.h>
+#include <hpcarm/sa11x0/sa11x0_gpioreg.h>
+
+#include <hpc/hpc/config_hook.h>
+#include <hpc/hpc/platid.h>
+#include <hpc/include/platid_mask.h>
 
 #include "locators.h"
 
@@ -85,24 +92,6 @@ extern struct bus_space sa11x0_bs_tag;
 extern vaddr_t saipic_base;
 
 extern int SetCPSR(int, int);
-
-#ifdef DEBUG  /* XXX */
-extern int sacomcncharpoll();
-
-int hoge(void *p)
-{
-	static int i = 0;
-	int c = sacomcncharpoll();
-	*(u_int32_t *)0xd0001010 = 8 | 2;       /* clear intr status bit */
-
-	i++;
-	if (! (i & 7))
-		printf("h %ld.%03ld\n", time.tv_sec, time.tv_usec / 1000);
-	if (c == 1)
-		cpu_Debugger();
-	return 1;
-}
-#endif
 
 /*
  * int sa11x0_print(void *aux, const char *name)
@@ -126,9 +115,8 @@ sa11x0_print(aux, name)
 		printf("-0x%lx", sa->sa_membase + sa->sa_memsize - 1);
         if (sa->sa_intr > 1)
                 printf(" intr %d", sa->sa_intr);
-	printf("\n");
-        return (UNCONF);
 
+        return (UNCONF);
 }
 
 int
@@ -146,16 +134,31 @@ sa11x0_attach(parent, self, aux)
 	struct device *self;
 	void *aux;
 {
-	struct mainbus_attach_args *ma = aux;
 	struct sa11x0_softc *sc = (struct sa11x0_softc*)self;
 
-	sc->sc_iot = ma->mb_iot;
+	sc->sc_iot = &sa11x0_bs_tag;
 
 	/* Map the SAIP */
 	if (bus_space_map(sc->sc_iot, SAIPIC_BASE, SAIPIC_NPORTS,
 			0, &sc->sc_ioh))
 		panic("%s: Cannot map registers\n", self->dv_xname);
 	saipic_base = sc->sc_ioh;
+
+	/* Map the GPIO registers */
+	if (bus_space_map(sc->sc_iot, SAGPIO_BASE, SAGPIO_NPORTS,
+			  0, &sc->sc_gpioh))
+		panic("%s: unable to map GPIO registers\n", self->dv_xname);
+	bus_space_write_4(sc->sc_iot, sc->sc_gpioh, SAGPIO_EDR, 0xffffffff);
+
+	/* Map the PPC registers */
+	if (bus_space_map(sc->sc_iot, SAPPC_BASE, SAPPC_NPORTS,
+			  0, &sc->sc_ppch))
+		panic("%s: unable to map PPC registers\n", self->dv_xname);
+
+	/* Map the DMA controller registers */
+	if (bus_space_map(sc->sc_iot, SADMAC_BASE, SADMAC_NPORTS,
+			  0, &sc->sc_dmach))
+		panic("%s: unable to map DMAC registers\n", self->dv_xname);
 
 	printf("\n");
 
@@ -168,13 +171,17 @@ sa11x0_attach(parent, self, aux)
 	/* Route all bits to IRQ */
 	bus_space_write_4(sc->sc_iot, sc->sc_ioh, SAIPIC_LR, 0);
 
-	/* Clear idle mask */
-	bus_space_write_4(sc->sc_iot, sc->sc_ioh, SAIPIC_CR, 0);
+	/* Exit idle mode only when unmasked intr is received */
+	bus_space_write_4(sc->sc_iot, sc->sc_ioh, SAIPIC_CR, 1);
 
-#ifdef DEBUG  /* XXX */
-	sa11x0_intr_establish(0, 30, 1, IPL_HIGH, hoge, 0);
-	*((u_int32_t *)0xd0001010) = 0x8;
-#endif
+	/* disable all DMAC channels */
+	bus_space_write_4(sc->sc_iot, sc->sc_dmach, SADMAC_DCR0_CLR, 1);
+	bus_space_write_4(sc->sc_iot, sc->sc_dmach, SADMAC_DCR1_CLR, 1);
+	bus_space_write_4(sc->sc_iot, sc->sc_dmach, SADMAC_DCR2_CLR, 1);
+	bus_space_write_4(sc->sc_iot, sc->sc_dmach, SADMAC_DCR3_CLR, 1);
+	bus_space_write_4(sc->sc_iot, sc->sc_dmach, SADMAC_DCR4_CLR, 1);
+	bus_space_write_4(sc->sc_iot, sc->sc_dmach, SADMAC_DCR5_CLR, 1);
+
 	/*
 	 * XXX this is probably a bad place, but intr bit shouldn't be
 	 * XXX enabled before intr mask is set.
@@ -185,7 +192,7 @@ sa11x0_attach(parent, self, aux)
 	/*
 	 *  Attach each devices
 	 */
-	config_search(sa11x0_search, self, sa11x0_print);
+	config_search(sa11x0_search, self, NULL);
 }
 
 int
@@ -205,11 +212,8 @@ sa11x0_search(parent, cf, aux)
         sa.sa_memsize = cf->cf_loc[SAIPCF_MEMSIZE];
         sa.sa_intr = cf->cf_loc[SAIPCF_INTR];
 
-        if (((*cf->cf_attach->ca_match)(parent, cf, &sa) == sc->sc_pri))
+        if ((*cf->cf_attach->ca_match)(parent, cf, &sa) > 0)
                 config_attach(parent, cf, &sa, sa11x0_print);
 
         return 0;
 }
-
-/* end of sa11x0.c */
-

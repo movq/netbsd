@@ -1,4 +1,4 @@
-# $NetBSD: GENERIC,v 1.18 2000/12/30 13:53:26 bjh21 Exp $
+# $NetBSD: GENERIC,v 1.27 2001/11/13 17:54:47 augustss Exp $
 
 # GENERIC arm26 configuration -- everything I've implemented so far
 
@@ -71,10 +71,10 @@ options 	INET6		# IPV6
 #options 	PPP_BSDCOMP	# BSD-Compress compression support for PPP
 #options 	PPP_DEFLATE	# Deflate compression support for PPP
 #options 	PPP_FILTER	# Active filter support for PPP (requires bpf)
-#options 	TCP_COMPAT_42   # TCP bug compatibility with 4.2BSD
+#options 	TCP_DEBUG	# Record last TCP_NDEBUG packets with SO_DEBUG
 
-# 4.3BSD compatibility.
-#options 	COMPAT_43
+#options 	TCP_COMPAT_42	# 4.2BSD TCP/IP bug compat. Not recommended.
+#options 	COMPAT_43	# 4.3BSD compatibility.
 
 # Binary compatibility with previous versions of NetBSD.
 # None yet, since NetBSD/arm26 hasn't been released.
@@ -82,6 +82,10 @@ options 	INET6		# IPV6
 # System V IPC
 options 	SYSVMSG		# System V-like message queues
 options 	SYSVSEM		# System V-like semaphores
+#options	SEMMNI=10	# number of semaphore identifiers
+#options	SEMMNS=60	# number of semaphores in system
+#options	SEMUME=10	# max number of undo entries per process
+#options	SEMMNU=30	# number of undo structures in system
 options 	SYSVSHM		# System V-like shared memory
 #options 	SHMMAXPGS=1024	# 1024 pages is the default
 
@@ -127,6 +131,7 @@ arcwsmouse0	at arckbd0
 wsmouse0	at arcwsmouse0
 
 ioeb0		at ioc0 bank 5		# I/O Extension Block (A5000)
+latches0	at ioc0 bank 5		# Printer/FDC control latches (Arc)
 
 podulebus0	at ioc0 bank 4		# Expansion card bus
 unixbp0 	at ioc0 bank 6		# Unix Backplane (interrupt routing)
@@ -135,22 +140,37 @@ ei*		at podulebus0 slot ?	# Acorn AKA25 (Ether1)
 ea*		at podulebus0 slot ?	# Atomwide Ether3
 eh*		at podulebus0 slot ?	# i-cubed EtherH (E100/200/500)
 
-#dtide*		at podulebus0 slot ?	# D.T. Software IDE interface
-#wd*		at dtide? channel ? drive ?
+dtide*		at podulebus0 slot ?	# D.T. Software IDE interface
+wd*		at dtide? channel ? drive ? # IDE hard discs
+atapibus*	at dtide? channel ?	# ATAPI devices
 
-#asc*		at podulebus0 slot ?	# Acorn SCSI card (AKA30, AKA31)
-#scsibus*	at asc?
+hcide*		at podulebus0 slot ?	# HCCS IDE interface
+wd*		at hcide? channel ? drive ? # IDE hard discs
+atapibus*	at hcide? channel ?	# ATAPI devices
+
+hcsc*		at podulebus0 slot ?	# HCCS 8-bit SCSI interface
+scsibus*	at hcsc?
+
+oak*		at podulebus0 slot ?	# Oak Solutions 16-bit SCSI interface
+scsibus*	at oak?
 
 upc0		at iobus0 base 0x010000	# I/O chip on IOEB machines
 com0		at upc0			# Serial port
 lpt0		at upc0			# Parallel port
 wdc0		at upc0			# IDE controller
-
 wd*		at wdc? drive ?		# IDE hard discs
-#atapibus*	at wdc?			# ATAPI devices
-#cd*     	at atapibus? drive ?	# ATAPI CD-ROM drives
-#sd*     	at atapibus? drive ? 	# ATAPI disk drives
-#uk*     	at atapibus? drive ?	# ATAPI unknown
+atapibus*	at wdc?			# ATAPI devices
+
+cd*     	at atapibus? drive ?	# ATAPI CD-ROM drives
+sd*     	at atapibus? drive ? 	# ATAPI disk drives
+uk*     	at atapibus? drive ?	# ATAPI unknown
+
+sd*		at scsibus? target ? lun ?	# SCSI disk drives
+st*		at scsibus? target ? lun ?	# SCSI tape drives
+cd*		at scsibus? target ? lun ?	# SCSI CD-ROM drives
+ch*		at scsibus? target ? lun ?	# SCSI auto-changers
+uk*		at scsibus? target ? lun ?	# SCSI unknown device
+ss*		at scsibus? target ? lun ?	# SCSI scanner
 
 arcvideo0	at root			# On-board video
 wsdisplay0	at arcvideo0
@@ -172,7 +192,8 @@ pseudo-device	gre		2	# generic L3 over IP tunnel
 pseudo-device	gif		4	# IPv[46] over IPv[46] tunnel (RFC1933)
 pseudo-device	faith		1	# IPv[46] tcp relay translation i/f
 pseudo-device	vlan			# IEEE 802.1q encapsulation
+#pseudo-device	bridge			# simple inter-network bridging
 pseudo-device	sequencer	1	# MIDI sequencer
-pseudo-device	wsmux		2	# keyboard/mouse multiplexor
+pseudo-device	wsmux			# keyboard/mouse multiplexor
 pseudo-device	rnd			# /dev/random and in-kernel generator
 

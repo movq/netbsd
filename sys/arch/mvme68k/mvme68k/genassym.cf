@@ -1,4 +1,4 @@
-#	$NetBSD: genassym.cf,v 1.19 2000/11/21 13:54:15 tsutsui Exp $
+#	$NetBSD: genassym.cf,v 1.21 2001/08/12 18:36:17 scw Exp $
 
 #
 # Copyright (c) 1982, 1990, 1993
@@ -35,7 +35,9 @@
 #	@(#)genassym.c	8.3 (Berkeley) 1/4/94
 #
 
+if defined(_KERNEL) && !defined(_LKM)
 include "opt_compat_svr4.h"
+endif
 
 include <sys/param.h>
 include <sys/buf.h>
@@ -58,7 +60,6 @@ include <machine/psl.h>
 include <machine/reg.h>
 include <machine/prom.h>
 include <machine/pte.h>
-include <mvme68k/mvme68k/clockreg.h>
 
 define	__XXX_BUG_FODDER	0
 

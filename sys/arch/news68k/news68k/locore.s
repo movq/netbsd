@@ -1,4 +1,4 @@
-/*	$NetBSD: locore.s,v 1.20 2001/03/04 16:24:39 tsutsui Exp $	*/
+/*	$NetBSD: locore.s,v 1.24 2001/07/22 13:34:06 wiz Exp $	*/
 
 /*
  * Copyright (c) 1988 University of Utah.
@@ -51,6 +51,7 @@
 #include "opt_compat_sunos.h"
 #include "opt_fpsp.h"
 #include "opt_ddb.h"
+#include "opt_kgdb.h"
 #include "opt_lockdebug.h"
 
 #include "assym.h"
@@ -528,7 +529,7 @@ Lbe10:
 #else
 	moveq	#1,%d0			| user program access FC
 #endif
-					| (we dont seperate data/program)
+					| (we dont separate data/program)
 	btst	#5,%sp@(FR_HW+8)	| supervisor mode?
 	jeq	Lbe10a			| if no, done
 	movql	#5,%d0			| else supervisor program access
@@ -969,7 +970,11 @@ GLOBAL(masterpaddr)		| XXXcompatibility (debuggers)
 
 ASLOCAL(mdpflag)
 	.byte	0		| copy of proc md_flags low byte
+#ifdef __ELF__
+	.align	4
+#else
 	.align	2
+#endif
 
 ASBSS(nullpcb,SIZEOF_PCB)
 
@@ -1389,7 +1394,11 @@ ENTRY_NOPROFILE(_delay)
 	 * operations and that the loop will run from a single cache
 	 * half-line.
 	 */
+#ifdef __ELF__
 	.align  8
+#else
+	.align	3
+#endif
 L_delay:
 	subl	%d1,%d0
 	jgt	L_delay
@@ -1422,8 +1431,8 @@ Lm68881rdone:
 
 /*
  * Handle the nitty-gritty of rebooting the machine.
- * Basically we just turn off the MMU, restore the Bug's initial VBR
- * and either return to Bug or jump through the ROM reset vector
+ * Basically we just turn off the MMU, restore the PROM's initial VBR
+ * and jump through the PROM halt vector with argument via %d7
  * depending on how the system was halted.
  */
 ENTRY_NOPROFILE(doboot)

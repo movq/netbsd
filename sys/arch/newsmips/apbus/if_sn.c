@@ -1,4 +1,4 @@
-/*	$NetBSD: if_sn.c,v 1.7 2000/11/15 01:02:13 thorpej Exp $	*/
+/*	$NetBSD: if_sn.c,v 1.9 2001/07/22 13:34:07 wiz Exp $	*/
 
 /*
  * National Semiconductor  DP8393X SONIC Driver
@@ -408,7 +408,7 @@ sninit(sc)
 
 	s = splnet();
 
-	NIC_PUT(sc, SNR_CR, CR_RST);	/* DCR only accessable in reset mode! */
+	NIC_PUT(sc, SNR_CR, CR_RST);	/* DCR only accessible in reset mode! */
 
 	/* config it */
 	NIC_PUT(sc, SNR_DCR, (sc->snr_dcr |
@@ -695,7 +695,7 @@ camprogram(sc)
 			 * addresses. It has no way to specify a range.
 			 * (Well, thats not exactly true. If the
 			 * range is small one could program each addr
-			 * within the range as a seperate CAM entry)
+			 * within the range as a separate CAM entry)
 			 */
 			ifp->if_flags |= IFF_ALLMULTI;
 			break;

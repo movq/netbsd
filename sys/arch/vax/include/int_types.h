@@ -1,4 +1,4 @@
-/*	$NetBSD: int_types.h,v 1.3 2001/01/03 10:09:05 takemura Exp $	*/
+/*	$NetBSD: int_types.h,v 1.6 2001/04/28 15:41:33 kleink Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -51,8 +51,8 @@ typedef	unsigned short int     __uint16_t;
 typedef	int			__int32_t;
 typedef	unsigned int	       __uint32_t;
 #ifdef __COMPILER_INT64__
-typedef	__COMPILER_INT64__		__int64_t;
-typedef	unsigned __COMPILER_INT64__	__uint64_t;
+typedef	__COMPILER_INT64__	__int64_t;
+typedef	__COMPILER_UINT64__    __uint64_t;
 #else
 /* LONGLONG */
 typedef	long long int		__int64_t;
@@ -60,9 +60,16 @@ typedef	long long int		__int64_t;
 typedef	unsigned long long int __uint64_t;
 #endif
 
+#define	__BIT_TYPES_DEFINED__
+
 /* 7.18.1.4 Integer types capable of holding object pointers */
 
+#ifdef __ELF__
+typedef	long int	       __intptr_t;
+typedef	unsigned long int      __uintptr_t;
+#else
 typedef	int		       __intptr_t;
 typedef	unsigned int	      __uintptr_t;
+#endif
 
 #endif	/* !_VAX_INT_TYPES_H_ */

@@ -1,4 +1,4 @@
-/*	$NetBSD: clockvar.h,v 1.2 2000/10/03 13:49:25 tsutsui Exp $	*/
+/*	$NetBSD: clockvar.h,v 1.3 2001/07/07 15:27:21 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -36,4 +36,5 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-void	clock_config __P((todr_chip_handle_t, void (*)(int, int)));
+void todclock_config(todr_chip_handle_t);
+void timer_config(void (*)(int, int));

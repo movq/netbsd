@@ -1,4 +1,4 @@
-/*	$NetBSD: locore.s,v 1.76 2001/02/09 21:47:46 leo Exp $	*/
+/*	$NetBSD: locore.s,v 1.84 2001/09/08 11:14:33 thomas Exp $	*/
 
 /*
  * Copyright (c) 1988 University of Utah.
@@ -54,7 +54,12 @@
 #include "opt_compat_sunos.h"
 #include "opt_ddb.h"
 #include "opt_fpsp.h"
+#include "opt_kgdb.h"
 #include "opt_lockdebug.h"
+#include "opt_mbtype.h"
+#include "kbd.h"
+#include "ncrscsi.h"
+#include "zs.h"
 
 #include "assym.h"
 #include <machine/asm.h>
@@ -65,7 +70,6 @@
  */
 	.text
 	GLOBAL(kernel_text)
-_kernel_text:
 
 /*
  * Clear & skip page zero, it will not be mapped
@@ -91,7 +95,6 @@ ENTRY_NOPROFILE(doadump)
 #include <m68k/m68k/trap_subr.s>
 
 #if defined(M68040) || defined(M68060)
-	.globl _C_LABEL(addrerr4060)
 ENTRY_NOPROFILE(addrerr4060)
 	clrl	%sp@-			| stack adjust count
 	moveml	#0xFFFF,%sp@-		| save user registers
@@ -122,7 +125,7 @@ ENTRY_NOPROFILE(buserr60)
 Lnobpe:
 | we need to adjust for misaligned addresses
 	movl	%sp@(FR_HW+8),%d1	| grab VA
-	btst	#27,d0			| check for mis-aligned access
+	btst	#27,%d0			| check for mis-aligned access
 	jeq	Lberr3			| no, skip
 	addl	#28,%d1			| yes, get into next page
 					| operand case: 3,
@@ -201,8 +204,8 @@ Lbe4:
 	jeq	Lbe10			| no, all done
 	subql	#2,%d1			| yes, adjust address
 Lbe10:
-	movl	%d1,sp@-		| push fault VA
-	movl	%d0,sp@-		| and padded SSW
+	movl	%d1,%sp@-		| push fault VA
+	movl	%d0,%sp@-		| and padded SSW
 	movw	%sp@(FR_HW+8+6),%d0	| get frame format/vector offset
 	andw	#0x0FFF,%d0		| clear out frame format
 	cmpw	#12,%d0			| address error vector?
@@ -278,7 +281,6 @@ ENTRY_NOPROFILE(fpfline)
 	cmpw	#0x202c,%sp@(6)		|  format type 2?
 	jne	_C_LABEL(illinst)	|  no, not an FP emulation
 #ifdef FPSP
-	.globl fpsp_unimp
 	jmp	_ASM_LABEL(fpsp_unimp)	|  yes, go handle it
 #endif
 fpfline_not40:
@@ -363,9 +365,98 @@ ENTRY_NOPROFILE(lev4intr)		|  VBL interrupt
 #endif /* FALCON_VIDEO */
 	rte
 
-ENTRY_NOPROFILE(lev3intr)
 ENTRY_NOPROFILE(lev5intr)
 ENTRY_NOPROFILE(lev6intr)
+
+#ifdef _MILANHW_
+	/* XXX
+	 * Need to find better places to define these (Leo)
+	 */
+#define	PLX_PCICR	0x4204
+#define	PLX_CNTRL	0x42ec
+#define	PLX_DMCFGA	0x42ac
+	moveml	%d0-%d2/%a0-%a1,%sp@-
+	movw	%sp@(20),%sp@-		|  push previous SR value
+	clrw	%sp@-			|	padded to longword
+	movl	_C_LABEL(stio_addr),%a0	| get KVA of ST-IO area
+	movew	#0xffff,%a0@(PLX_PCICR)	| clear PCI_SR error bits
+	movel	a0@(PLX_CNTRL),%d0	| Change PCI command code from
+	andw	#0xf0ff,%d0
+	movw	%sr,%d2			| Block interrupts for now
+	oriw	#0x0700,%sr
+	movl	%d0,%a0@(PLX_CNTRL)
+	movq	#0,%d1			| clear upper bits
+					| Read any (uncached!) PCI address
+					|  to fetch vector number
+	movl	_C_LABEL(pci_mem_uncached),%a1
+	movb	%a1@,%d1
+	orw	#0x0600,%d0		| Change PCI command code back
+	movel	%d0,%a0@(PLX_CNTRL)	|  to Read Cycle
+	movew	%d2,%sr			| Re-enable interrupts
+	movel	%d1,%sp@-		| Call handler
+	jbsr	_C_LABEL(milan_isa_intr)
+	addql	#8,%sp
+	moveml	%sp@+,%d0-%d2/%a0-%a1
+	jra	_ASM_LABEL(rei)
+
+/*
+ * Support functions for reading and writing the Milan PCI config space.
+ * Of interest:
+ *   - We need exclusive access to the PLX9080 during config space
+ *     access, hence the splhigh().
+ *   - The 'confread' function shortcircuits the NMI to make probes to
+ *     unexplored pci-config space possible.
+ */
+ENTRY(milan_pci_confread)
+	movl	%sp@(4),%d0		| get tag and regno
+	bset	#31,%d0			| add config space flag
+	andl	#~3,%d0			| access type 0
+	movl	_C_LABEL(stio_addr),%a0	| get KVA of ST-IO area
+	movw	%sr,%d1			| goto splhigh
+	oriw	#0x0700,%sr
+	movb	#1,_ASM_LABEL(plx_nonmi)| no NMI interrupts please!
+	movl	%d0,%a0@(PLX_DMCFGA)	| write tag to the config register
+	movl	_C_LABEL(pci_io_addr),%a1
+	movl	%a1@,%d0		| fetch value
+	movl	#0,%a0@(PLX_DMCFGA)	| back to normal PCI access
+
+					| Make sure the C-function can peek
+	movw	%a0@(PLX_PCICR),_C_LABEL(plx_status) | at the access results.
+
+	movw	#0xf900,%a0@(PLX_PCICR)	| Clear potential error bits
+	movb	#0, _ASM_LABEL(plx_nonmi)
+	movw	%d1,%sr			| splx
+	rts
+
+ENTRY(milan_pci_confwrite)
+	movl	%sp@(4),%d0		| get tag and regno
+	bset	#31,%d0			| add config space flag
+	andl	#~3,%d0			| access type 0
+	movl	_C_LABEL(stio_addr),%a0	| get KVA of ST-IO area
+	movw	%sr,%d1			| goto splhigh
+	oriw	#0x0700,%sr
+	movl	%d0,%a0@(PLX_DMCFGA)	| write tag to the config register
+	movl	_C_LABEL(pci_io_addr),%a1
+	movl	%sp@(8),%a1@		| write value
+	movl	#0,%a0@(PLX_DMCFGA)	| back to normal PCI access
+	movw	%d1,%sr			| splx
+	rts
+
+ENTRY_NOPROFILE(lev7intr)
+	tstl	_ASM_LABEL(plx_nonmi)	| milan_conf_read shortcut
+	jne	1f			| .... get out immediately
+	moveml	%d0-%d1/%a0-%a1,%sp@-
+	movl	_C_LABEL(stio_addr),%a0	| get KVA of ST-IO area
+	movw	%a0@(PLX_PCICR),_C_LABEL(plx_status)
+	movw	#0xf900,%a0@(PLX_PCICR)	| Clear error bits
+	jbsr	_C_LABEL(nmihandler)	| notify...
+	moveml	%sp@+,%d0-%d1/%a0-%a1
+	addql	#1,_C_LABEL(intrcnt)+28	| add another nmi interrupt
+1:
+	rte				| all done
+#endif /* _MILANHW_ */
+
+ENTRY_NOPROFILE(lev3intr)
 ENTRY_NOPROFILE(badtrap)
 	moveml	#0xC0C0,%sp@-		|  save scratch regs
 	movw	%sp@(22),%sp@-		|  push exception vector info
@@ -380,7 +471,7 @@ ENTRY_NOPROFILE(badmfpint)
 	moveml	#0xC0C0,%sp@-		|  save scratch regs
 	movw	%sp@(22),%sp@-		|  push exception vector info
 	clrw	%sp@-
-	movl	%sp@(22),sp@-		|  and PC
+	movl	%sp@(22),%sp@-		|  and PC
 	jbsr	_C_LABEL(straymfpint)	|  report
 	addql	#8,%sp			|  pop args
 	moveml	%sp@+,#0x0303		|  restore regs
@@ -494,8 +585,8 @@ Lbrkpt2:
 #endif
 #ifdef DDB
 	| Let DDB handle it
-	movl	%a2,sp@-		| push frame ptr
-	movl	%d2,sp@-		| push trap type
+	movl	%a2,%sp@-		| push frame ptr
+	movl	%d2,%sp@-		| push trap type
 	jbsr	_C_LABEL(kdb_trap)	| handle the trap
 	addql	#8,%sp			| pop args
 #if 0	/* not needed on atari */
@@ -567,6 +658,7 @@ ASENTRY_NOPROFILE(mfp_timc)
 	jra	_ASM_LABEL(rei)		|  all done
 #endif /* STATCLOCK */
 
+#if NKBD > 0
 	/* MFP ACIA handler --- keyboard/midi --- */
 ASENTRY_NOPROFILE(mfp_kbd)
 	addql	#1,_C_LABEL(intrcnt)+8	|  add another kbd/mouse interrupt
@@ -579,7 +671,9 @@ ASENTRY_NOPROFILE(mfp_kbd)
 	moveml	%sp@+,%d0-%d1/%a0-%a1
 	addql	#1,_C_LABEL(uvmexp)+UVMEXP_INTRS
 	jra	_ASM_LABEL(rei)
+#endif /* NKBD */
 
+#if NNCRSCSI > 0
 	/* MFP2 SCSI DMA handler --- NCR5380 --- */
 ASENTRY_NOPROFILE(mfp2_5380dm)
 	addql	#1,_C_LABEL(intrcnt)+24	|  add another 5380-DMA interrupt
@@ -601,11 +695,13 @@ ASENTRY_NOPROFILE(mfp2_5380)
 	movw	%sp@(16),%sp@-		|  push previous SR value
 	clrw	%sp@-			|     padded to longword
 	jbsr	_C_LABEL(scsi_ctrl)	|  handle interrupt
-	addql	#4,sp			|  pop SR
+	addql	#4,%sp			|  pop SR
 	moveml	%sp@+,%d0-%d1/%a0-%a1
 	addql	#1,_C_LABEL(uvmexp)+UVMEXP_INTRS
 	jra	_ASM_LABEL(rei)
+#endif /* NNCRSCSI > 0 */
 
+#if NZS > 0
 	/* SCC Interrupt --- modem2/serial2 --- */
 ASENTRY_NOPROFILE(sccint)
 	addql	#1,_C_LABEL(intrcnt)+32	|  add another SCC interrupt
@@ -618,7 +714,9 @@ ASENTRY_NOPROFILE(sccint)
 	moveml	%sp@+,%d0-%d1/%a0-%a1
 	addql	#1,_C_LABEL(uvmexp)+UVMEXP_INTRS
 	jra	_ASM_LABEL(rei)
+#endif /* NZS > 0 */
 
+#ifdef _ATARIHW_
 	/* Level 1 (Software) interrupt handler */
 ENTRY_NOPROFILE(lev1intr)
 	moveml	%d0-%d1/%a0-%a1,%sp@-
@@ -651,6 +749,8 @@ ENTRY_NOPROFILE(lev7intr)
 #endif
 	addql	#1,_C_LABEL(intrcnt)+28	|  add another nmi interrupt
 	rte				|  all done
+
+#endif /* _ATARIHW_ */
 
 
 /*
@@ -1322,7 +1422,7 @@ Lsldone:
 ENTRY(copyseg)
 	movl	_C_LABEL(curpcb),%a1	|  current pcb 
 	movl	#Lcpydone,%a1@(PCB_ONFAULT) |  where to return to on a fault 
-	movl	sp@(8),%d0		|  destination page number 
+	movl	%sp@(8),%d0		|  destination page number 
 	moveq	#PGSHIFT,%d1
 	lsll	%d1,%d0			|  convert to address 
 	orl	#PG_CI+PG_RW+PG_V,%d0	|  make sure valid and writable 
@@ -1390,7 +1490,7 @@ Lmc68851b:
 	pflushs	#0,#0,%a0@		|  flush address from both sides
 	rts
 Ltbis040:
-	moveq	#FC_SUPERD,d0		|  select supervisor
+	moveq	#FC_SUPERD,%d0		|  select supervisor
 	movc	%d0,%dfc
 	.word	0xf508			|  pflush a0@
 	moveq	#FC_USERD,%d0		|  select user
@@ -1419,13 +1519,11 @@ ENTRY(ecacheoff)
  * doesn't work because callee saved registers may be outside the stack frame
  * defined by A6 (e.g. GCC generated code).
  */
-	.globl	_C_LABEL(getsp)
 ENTRY_NOPROFILE(getsp)
 	movl	%sp,%d0			|  get current SP
 	addql	#4,%d0			|  compensate for return address
 	rts
 
-	.globl	_C_LABEL(getsfc), _C_LABEL(getdfc)
 ENTRY_NOPROFILE(getsfc)
 	movc	%sfc,%d0
 	rts
@@ -1494,7 +1592,7 @@ ENTRY(flushustp)
 	jeq	Lnot68851
 	tstl	_C_LABEL(mmutype)	|  68851 PMMU?
 	jle	Lnot68851		|  no, nothing to do
-	movl	sp@(4),%d0		|  get USTP to flush
+	movl	%sp@(4),%d0		|  get USTP to flush
 	moveq	#PGSHIFT,%d1
 	lsll	%d1,%d0			|  convert to address
 	movl	%d0,_C_LABEL(protorp)+4	|  stash USTP
@@ -1682,13 +1780,17 @@ L60bpe:		.long	0
 #endif
 #ifdef DEBUG
 
-GLOBAL(fulltflush)
+ASLOCAL(fulltflush)
 	.long	0
-GLOBAL(fullcflush)
+ASLOCAL(fullcflush)
 	.long	0
 GLOBAL(timebomb)
 	.long	0
 #endif
+ASLOCAL(plx_nonmi)
+	.long	0
+GLOBAL(plx_status)
+	.long	0
 
 /* interrupt counters & names */
 #include <atari/atari/intrcnt.h>

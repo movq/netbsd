@@ -1,4 +1,4 @@
-/*	$NetBSD: vmparam.h,v 1.11 2000/02/11 19:30:28 thorpej Exp $	*/
+/*	$NetBSD: vmparam.h,v 1.15 2001/10/24 06:26:10 billc Exp $	*/
 
 /*-
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -30,6 +30,11 @@
  * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
+
+#ifdef NEWPMAP
+#include <powerpc/mpc6xx/vmparam.h>
+#define _MACHINE_VMPARAM_H_
+#endif
 
 #ifndef	_MACHINE_VMPARAM_H_
 #define	_MACHINE_VMPARAM_H_
@@ -89,7 +94,19 @@
 #define	VM_MIN_KERNEL_ADDRESS	((vaddr_t)(KERNEL_SR << ADDR_SR_SHFT))
 #define	VM_MAX_KERNEL_ADDRESS	(VM_MIN_KERNEL_ADDRESS + SEGMENT_LENGTH - 1)
 
+/* XXX max. amount of KVM to be used by buffers. */
+#ifndef VM_MAX_KERNEL_BUF
+#define VM_MAX_KERNEL_BUF	(SEGMENT_LENGTH / 2)
+#endif
+
+/*
+ * Override the default pager_map size, there's not enough KVA.
+ */
+#define PAGER_MAP_SIZE		(4 * 1024 * 1024)
+
 #define	VM_PHYS_SIZE		(USRIOSIZE * NBPG)
+
+#define	__HAVE_PMAP_PHYSSEG
 
 struct pmap_physseg {
 	struct pv_entry *pvent;

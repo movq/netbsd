@@ -1,4 +1,4 @@
-/* $NetBSD: lock.h,v 1.13 2000/11/22 07:44:01 thorpej Exp $ */
+/* $NetBSD: lock.h,v 1.15 2001/04/20 22:58:40 thorpej Exp $ */
 
 /*-
  * Copyright (c) 1998, 1999, 2000 The NetBSD Foundation, Inc.
@@ -88,7 +88,7 @@ __cpu_simple_lock(__cpu_simple_lock_t *alp)
 		"3:	br	1b		\n"
 		"4:				\n"
 		"	# END __cpu_simple_lock\n"
-		: "=r" (t0), "=m" (*alp)
+		: "=r" (t0), "+m" (*alp)
 		: "i" (__SIMPLELOCK_LOCKED), "1" (*alp));
 }
 
@@ -112,7 +112,7 @@ __cpu_simple_lock_try(__cpu_simple_lock_t *alp)
 		"3:	br	1b		\n"
 		"4:				\n"
 		"	# END __cpu_simple_lock_try"
-		: "=r" (t0), "=r" (v0), "=m" (*alp)
+		: "=r" (t0), "=r" (v0), "+m" (*alp)
 		: "i" (__SIMPLELOCK_LOCKED), "2" (*alp));
 
 	return (v0 != 0);
@@ -137,17 +137,20 @@ __cpu_simple_unlock(__cpu_simple_lock_t *alp)
  * from a high'ish priority level: IPIs that come in will not be processed.
  * This can lead to deadlock.
  *
- * This hook allows IPIs to be processed when a spinlock's interlock
+ * This hook allows IPIs to be processed while a spinlock's interlock
  * is released.
  */
-#define	SPINLOCK_INTERLOCK_RELEASE_HOOK					\
+#define	SPINLOCK_SPIN_HOOK						\
 do {									\
 	struct cpu_info *__ci = curcpu();				\
+	int __s;							\
 									\
 	if (__ci->ci_ipis != 0) {					\
 		/* printf("CPU %lu has IPIs pending\n",			\
 		    __ci->ci_cpuid); */					\
+		__s = splipi();						\
 		alpha_ipi_process(__ci, NULL);				\
+		splx(__s);						\
 	}								\
 } while (0)
 #endif /* MULTIPROCESSOR */

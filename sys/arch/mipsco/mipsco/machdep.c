@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.17 2001/02/21 09:46:54 wdk Exp $	*/
+/*	$NetBSD: machdep.c,v 1.30 2001/09/15 01:19:38 wdk Exp $	*/
 
 /*
  * Copyright (c) 1988 University of Utah.
@@ -43,12 +43,14 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.17 2001/02/21 09:46:54 wdk Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.30 2001/09/15 01:19:38 wdk Exp $");
 
 /* from: Utah Hdr: machdep.c 1.63 91/04/24 */
 
+#include "opt_ddb.h"
+#include "opt_kgdb.h"
+
 #include <sys/param.h>
-#include <sys/systm.h>
 #include <sys/signalvar.h>
 #include <sys/kernel.h>
 #include <sys/map.h>
@@ -99,29 +101,36 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.17 2001/02/21 09:46:54 wdk Exp $");
 #include "opt_ddb.h"
 #include "opt_execfmt.h"
 
+#include "zsc.h"			/* XXX */
+#include "com.h"			/* XXX */
+
 /* the following is used externally (sysctl_hw) */
 char  machine[] = MACHINE;	/* from <machine/param.h> */
 char  machine_arch[] = MACHINE_ARCH;
 char  cpu_model[40];
-unsigned ssir;
 
 /* Our exported CPU info; we can have only one. */  
 struct cpu_info cpu_info_store;
 
 /* maps for VM objects */
 
-vm_map_t exec_map = NULL;
-vm_map_t mb_map = NULL;
-vm_map_t phys_map = NULL;
+struct vm_map *exec_map = NULL;
+struct vm_map *mb_map = NULL;
+struct vm_map *phys_map = NULL;
 
-int		physmem;		/* max supported memory, changes to actual */
-char		*bootinfo = NULL;	/* pointer to bootinfo structure */
+int	physmem;		/* max supported memory, changes to actual */
+char	*bootinfo = NULL;	/* pointer to bootinfo structure */
 
 phys_ram_seg_t mem_clusters[VM_PHYSSEG_MAX];
 int mem_cluster_cnt;
 
 void to_monitor __P((int)) __attribute__((__noreturn__));
 void prom_halt __P((int)) __attribute__((__noreturn__));
+
+#ifdef	KGDB
+void zs_kgdb_init __P((void));
+void kgdb_connect __P((int));
+#endif
 
 struct evcnt soft_evcnt[IPL_NSOFT];
 
@@ -132,7 +141,6 @@ int initcpu __P((void));
 void configure __P((void));
 
 void mach_init __P((int, char *[], char*[], u_int, char *));
-void softintr_init __P((void));
 int  memsize_scan __P((caddr_t));
 
 #ifdef DEBUG
@@ -235,7 +243,7 @@ mach_init(argc, argv, envp, bim, bip)
 
 	/* clear the BSS segment */
 	kernend = (caddr_t)mips_round_page(end);
-	bzero(edata, kernend - edata);
+	memset(edata, 0, end - edata);
 
 #ifdef DDB
 	bi_syms = lookup_bootinfo(BTINFO_SYMTAB);
@@ -308,6 +316,11 @@ mach_init(argc, argv, envp, bim, bip)
 	if (boothowto & RB_KDB)
 		Debugger();
 #endif
+#ifdef KGDB
+	zs_kgdb_init();			/* XXX */
+	if (boothowto & RB_KDB)
+		kgdb_connect(0);
+#endif
 
 #ifdef MFS
 	/*
@@ -332,9 +345,20 @@ mach_init(argc, argv, envp, bim, bip)
 	mips_init_msgbuf();
 
 	/*
+	 * Compute the size of system data structures.  pmap_bootstrap()
+	 * needs some of this information.
+	 */
+	size = (vsize_t)allocsys(NULL, NULL);
+
+	/*
+	 * Initialize the virtual memory system.
+	 */
+	pmap_bootstrap();
+
+	/*
 	 * Allocate space for proc0's USPACE.
 	 */
-	v = (caddr_t)pmap_steal_memory(USPACE, NULL, NULL); 
+	v = (caddr_t)uvm_pageboot_alloc(USPACE); 
 	proc0.p_addr = proc0paddr = (struct user *)v;
 	proc0.p_md.md_regs = (struct frame *)(v + USPACE) - 1;
 	curpcb = &proc0.p_addr->u_pcb;
@@ -346,8 +370,7 @@ mach_init(argc, argv, envp, bim, bip)
 	 * memory is directly addressable.  We don't have to map these into
 	 * virtual address space.
 	 */
-	size = (vsize_t)allocsys(NULL, NULL);
-	v = (caddr_t)pmap_steal_memory(size, NULL, NULL); 
+	v = (caddr_t)uvm_pageboot_alloc(size); 
 	if ((allocsys(v, NULL) - v) != size)
 		panic("mach_init: table size inconsistency");
 	/*
@@ -355,11 +378,6 @@ mach_init(argc, argv, envp, bim, bip)
 	 */
 
 	pizazz_init();
-
-	/*
-	 * Initialize the virtual memory system.
-	 */
-	pmap_bootstrap();
 }
 
 
@@ -400,7 +418,7 @@ cpu_startup()
 	if (uvm_map(kernel_map, (vaddr_t *)&buffers, round_page(size),
 		    NULL, UVM_UNKNOWN_OFFSET, 0,
 		    UVM_MAPFLAG(UVM_PROT_NONE, UVM_PROT_NONE, UVM_INH_NONE,
-				UVM_ADV_NORMAL, 0)) != KERN_SUCCESS)
+				UVM_ADV_NORMAL, 0)) != 0)
 		panic("startup: cannot allocate VM for buffers");
 	minaddr = (vaddr_t)buffers;
 	base = bufpages / nbuf;
@@ -430,6 +448,8 @@ cpu_startup()
 			curbufsize -= PAGE_SIZE;
 		}
 	}
+	pmap_update(pmap_kernel());
+
 	/*
 	 * Allocate a submap for exec arguments.  This map effectively
 	 * limits the number of processes exec'ing at any time.
@@ -460,18 +480,6 @@ cpu_startup()
 	 * Set up buffers, so they can be used to read disk labels.
 	 */
 	bufinit();
-}
-
-void
-softintr_init()
-{	
-    int i;
-    static const char *intr_names[] = IPL_SOFTNAMES;
-
-    for (i=0; i < IPL_NSOFT; i++) {
-	    evcnt_attach_dynamic(&soft_evcnt[i], EVCNT_TYPE_INTR, NULL,
-				 "soft", intr_names[i]);
-    }
 }
 
 /*
@@ -543,8 +551,6 @@ cpu_reboot(howto, bootstr)
 	volatile int howto;
 	char *bootstr;
 {
-	extern int cold;
-
 	/* take a snap shot before clobbering any registers */
 	if (curproc)
 		savectx((struct user *)curpcb);
@@ -639,7 +645,6 @@ microtime(tvp)
 int
 initcpu()
 {
-        softintr_init();
 	spl0();		/* safe to turn interrupts on now */
 	return 0;
 }
@@ -699,51 +704,6 @@ delay(n)
 	DELAY(n);
 }
 
-void
-cpu_intr(status, cause, pc, ipending)
-	u_int32_t status;
-	u_int32_t cause;
-	u_int32_t pc;
-	u_int32_t ipending;
-{
-	uvmexp.intrs++;
-
-	/* device interrupts */
-	(*platform.iointr)(status, cause, pc, ipending);
-
-	/* software simulated interrupt */
-	if ((ipending & MIPS_SOFT_INT_MASK_1) ||
-	    (ssir && (status & MIPS_SOFT_INT_MASK_1))) {
-
-#define DO_SIR(bit, fn, ev)			       		\
-	do {							\
-		if (n & (bit)) {				\
-			uvmexp.softs++;				\
-			soft_evcnt[ev].ev_count++;		\
-			fn;					\
-		}						\
-	} while (0)
-
-		unsigned n;
-		n = ssir; ssir = 0;
-		_clrsoftintr(MIPS_SOFT_INT_MASK_1);
-
-#if NZSC > 0
-		DO_SIR(SIR_SERIAL, zssoft(), IPL_SOFTSERIAL);
-#endif
-		DO_SIR(SIR_NET, netintr(), IPL_SOFTNET);
-#undef DO_SIR
-	}
-
-	/* 'softclock' interrupt */
-	if (ipending & MIPS_SOFT_INT_MASK_0) {
-		_clrsoftintr(MIPS_SOFT_INT_MASK_0);
-		uvmexp.softs++;
-		soft_evcnt[IPL_SOFTCLOCK].ev_count++;
-		softclock(NULL);
-	}
-}
-
 /*
  * Find out how much memory is available by testing memory.
  * Be careful to save and restore the original contents for msgbuf.
@@ -787,23 +747,6 @@ memsize_scan(first)
 	*vp0 = tmp0;
 	return mem;
 }
-
-
-#ifdef EXEC_ECOFF
-#include <sys/exec_ecoff.h>
-
-int
-cpu_exec_ecoff_hook(p, epp)
-	struct proc *p;
-	struct exec_package *epp;
-{
-	extern struct emul emul_netbsd;
-
-	epp->ep_emul = &emul_netbsd;
-
-	return 0;
-}
-#endif
 
 /*
  * Console initialization: called early on from main,
@@ -856,7 +799,4 @@ consinit()
 	cn_tab = &consdev_zs;
 
 	(*cn_tab->cn_init)(cn_tab);
-#ifdef KGDB
-	zs_kgdb_init();		/* XXX */
-#endif
 }

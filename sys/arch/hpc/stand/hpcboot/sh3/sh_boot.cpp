@@ -1,4 +1,4 @@
-/*	$NetBSD: sh_boot.cpp,v 1.1 2001/02/09 18:35:17 uch Exp $	*/
+/*	$NetBSD: sh_boot.cpp,v 1.4 2001/05/21 15:54:25 uch Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -46,11 +46,11 @@
 #include <sh3/sh_console.h>
 #include <sh3/sh_boot.h>
 
-SHBoot::SHBoot(void)
+SHBoot::SHBoot()
 {
 }
 
-SHBoot::~SHBoot(void)
+SHBoot::~SHBoot()
 {
 	if (_mem)
 		delete _mem;
@@ -61,8 +61,10 @@ SHBoot::~SHBoot(void)
 }
 
 BOOL
-SHBoot::setup(struct HpcMenuInterface::HpcMenuPreferences &pref)
+SHBoot::setup()
 {
+	struct HpcMenuInterface::HpcMenuPreferences &pref = HPC_PREFERENCE;
+
 	platid_t platid;
 	platid.dw.dw0 = pref.platid_hi;
 	platid.dw.dw1 = pref.platid_lo;
@@ -74,22 +76,25 @@ SHBoot::setup(struct HpcMenuInterface::HpcMenuPreferences &pref)
 	} else
 		return FALSE;
 
-	return Boot::setup(pref);
+	return super::setup();
 }
 
 BOOL
-SHBoot::create(void)
+SHBoot::create()
 {
 	BOOL(*lock_pages)(LPVOID, DWORD, PDWORD, int);
 	BOOL(*unlock_pages)(LPVOID, DWORD);
 
-	// Change console to serial if required.
+	// Setup console. this setting is passed to kernel bootinfo.
 	if (args.console == CONSOLE_SERIAL) {
 		_cons = SHConsole::Instance();
 		if (!_cons->init()) {
 			_cons = Console::Instance();
 			DPRINTF((TEXT("use LCD console instead.\n")));
 		}
+	} else {
+		_cons = Console::Instance();
+		SHConsole::selectBootConsole(*_cons, SHConsole::VIDEO);
 	}
 
 	// Architecture dependent ops.
@@ -127,11 +132,11 @@ SHBoot::create(void)
 		break;
 	case MEMORY_MANAGER_LOCKPAGES:
 		_mem = new MemoryManager_LockPages(lock_pages, unlock_pages,
-						   _cons, PAGE_SIZE);
+		    _cons, PAGE_SIZE);
 		break;
 	}
 	_mem->setDebug() = args.memorymanagerDebug;
 
 	// File Manager, Loader
-	return Boot::create();
+	return super::create();
 }

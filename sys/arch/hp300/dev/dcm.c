@@ -1,4 +1,4 @@
-/*	$NetBSD: dcm.c,v 1.45 2000/11/02 00:35:05 eeh Exp $	*/
+/*	$NetBSD: dcm.c,v 1.47 2001/05/30 15:24:29 lukem Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997 The NetBSD Foundation, Inc.
@@ -87,6 +87,9 @@
 /*
  *  98642/MUX
  */
+
+#include "opt_kgdb.h"
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/ioctl.h>
@@ -635,6 +638,26 @@ dcmwrite(dev, uio, flag)
 	tp = sc->sc_tty[port];
 
 	return ((*tp->t_linesw->l_write)(tp, uio, flag));
+}
+
+int
+dcmpoll(dev, events, p)
+	dev_t dev;
+	int events;
+	struct proc *p;
+{
+	int unit, board, port;
+	struct dcm_softc *sc;
+	struct tty *tp;
+
+	unit = DCMUNIT(dev);
+	board = DCMBOARD(unit);
+	port = DCMPORT(unit);
+
+	sc = dcm_cd.cd_devs[board];
+	tp = sc->sc_tty[port];
+ 
+	return ((*tp->t_linesw->l_poll)(tp, events, p));
 }
 
 struct tty *

@@ -1,4 +1,4 @@
-# 	$NetBSD: INSTALL,v 1.11 2001/02/18 05:24:43 tsutsui Exp $
+# 	$NetBSD: INSTALL,v 1.13 2001/07/08 16:32:21 abs Exp $
 
 #	config for bootable floppy kernel
 #
@@ -38,7 +38,8 @@ options 	MINIROOTSIZE=2880	# 1.44 Megabytes
 #options 	COMPAT_43		# compatibility with 4.3BSD binaries
 #options 	COMPAT_13		# NetBSD 1.3 binary compatibility
 #options 	COMPAT_14		# NetBSD 1.4 binary compatibility
-#options 	TCP_COMPAT_42		# compatibility with 4.2BSD TCP/IP
+
+#options 	TCP_COMPAT_42	# 4.2BSD TCP/IP bug compat. Not recommended.
 
 # File systems
 file-system	FFS		# Berkeley Fast Filesystem
@@ -64,6 +65,7 @@ options 	INET		# Internet protocols
 #options 	GATEWAY		# IP packet forwarding
 #options 	PFIL_HOOKS	# pfil(9) packet filter hooks
 #options 	IPFILTER_LOG	# ipmon(8) log support
+#options 	TCP_DEBUG	# Record last TCP_NDEBUG packets with SO_DEBUG
 #options 	NFS_BOOT_BOOTPARAM
 
 config	netbsd root on ? type ? dumps on none
@@ -78,9 +80,13 @@ mainbus0 at root
 hb0	at mainbus0 systype NEWS1700
 hb1	at mainbus0 systype NEWS1200
 
-# MK48T02 realtime clock
-clock0	at hb0 addr 0xe0d80000 ipl 6			# news1700
-clock0	at hb1 addr 0xe1420000 ipl 6			# news1200
+# interval timer
+timer0	at hb0 addr 0xe1000000 ipl 6			# news1700
+timer0	at hb1 addr 0xe1140000 ipl 6			# news1200
+
+# MK48T02 TOD clock
+mkclock0 at hb0 addr 0xe0d80000				# news1700
+mkclock0 at hb1 addr 0xe1420000				# news1200
 
 # onboard LANCE ethernet
 le0	at hb0 addr 0xe0f00000 ipl 4			# news1700

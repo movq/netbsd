@@ -1,4 +1,4 @@
-/*	$NetBSD: ofdev.c,v 1.5 2000/11/14 11:25:35 tsubai Exp $	*/
+/*	$NetBSD: ofdev.c,v 1.7 2001/08/13 15:38:11 tsubai Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -41,11 +41,11 @@
 #include <netinet/in.h>
 
 #include <lib/libsa/stand.h>
-#include <lib/libsa/ufs.h>
 #include <lib/libsa/cd9660.h>
 #include <lib/libsa/nfs.h>
-#include <hfs.h>
+#include <lib/libsa/ufs.h>
 
+#include "hfs.h"
 #include "ofdev.h"
 
 extern char bootdev[];
@@ -273,7 +273,7 @@ devopen(of, name, file)
 		*cp = 0;
 	}
 	if (!cp || !*buf)
-		strcpy(buf, DEFAULT_KERNEL);
+		return ENOENT;
 	if (!*fname)
 		strcpy(fname, bootdev);
 	strcpy(opened_name, fname);
@@ -301,7 +301,7 @@ devopen(of, name, file)
 #endif
 	if ((handle = OF_open(fname)) == -1)
 		return ENXIO;
-	bzero(&ofdev, sizeof ofdev);
+	memset(&ofdev, 0, sizeof ofdev);
 	ofdev.handle = handle;
 	ofdev.dmabuf = NULL;
 	OF_call_method("dma-alloc", handle, 1, 1, MAXPHYS, &ofdev.dmabuf);

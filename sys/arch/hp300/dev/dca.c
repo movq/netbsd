@@ -1,4 +1,4 @@
-/*	$NetBSD: dca.c,v 1.41 2000/11/27 15:28:42 tsutsui Exp $	*/
+/*	$NetBSD: dca.c,v 1.44 2001/06/12 15:17:18 wiz Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997 The NetBSD Foundation, Inc.
@@ -82,6 +82,8 @@
  *  be any harmful side-effects from setting this bit on non-affected
  *  machines.
  */
+
+#include "opt_kgdb.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -483,6 +485,18 @@ dcawrite(dev, uio, flag)
 	return ((*tp->t_linesw->l_write)(tp, uio, flag));
 }
 
+int
+dcapoll(dev, events, p)
+	dev_t dev;
+	int events;
+	struct proc *p;
+{
+	struct dca_softc *sc = dca_cd.cd_devs[DCAUNIT(dev)];
+	struct tty *tp = sc->sc_tty;
+ 
+	return ((*tp->t_linesw->l_poll)(tp, events, p));
+}
+
 struct tty *
 dcatty(dev)
 	dev_t dev;
@@ -796,7 +810,7 @@ dcaparam(tp, t)
 		(void) dcamctl(sc, 0, DMSET);	/* hang up line */
 
 	/*
-	 * Set the FIFO threshold based on the recieve speed, if we
+	 * Set the FIFO threshold based on the receive speed, if we
 	 * are changing it.
 	 */
 	if (tp->t_ispeed != t->c_ispeed) {

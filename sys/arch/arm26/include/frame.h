@@ -1,4 +1,4 @@
-/*	$NetBSD: frame.h,v 1.5 2001/01/22 22:10:46 bjh21 Exp $	*/
+/*	$NetBSD: frame.h,v 1.7 2001/08/31 04:44:55 simonb Exp $	*/
 
 /*
  * Copyright (c) 1999 Ben Harris.
@@ -80,21 +80,6 @@ typedef struct irqframe {
 
 #define clockframe irqframe
 
-/* All the CLKF_* macros take a struct clockframe * as an argument. */
-
-/* True if we took the interrupt in user mode */
-#define CLKF_USERMODE(frame)	((frame->if_r15 & R15_MODE) == R15_MODE_USR)
-
-/* True if we were at spl0 before the interrupt */
-#define CLKF_BASEPRI(frame)	0	/* FIXME */
-
-/* Extract the program counter from a clockframe */
-#define CLKF_PC(frame)		(frame->if_r15 & R15_PC)
-
-/* True if we took the interrupt from inside another interrupt handler. */
-/* Non-trivial to check because we handle interrupts in SVC mode. */
-#define CLKF_INTR(frame)	0	/* FIXME */
-
 /*
  * Switch frame
  */
@@ -121,7 +106,7 @@ struct fpframe {
 	register_t	ff_regs[8*3];
 };
  
-#endif _LOCORE
+#endif /* _LOCORE */
 
 #endif /* _ARM26_FRAME_H_ */
   

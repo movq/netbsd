@@ -1,4 +1,4 @@
-/*	$NetBSD: sa11x0_irq.S,v 1.3 2001/02/24 12:43:52 toshii Exp $	*/
+/*	$NetBSD: sa11x0_irq.S,v 1.6 2001/05/22 17:01:17 toshii Exp $	*/
 
 /*
  * Copyright (c) 1998 Mark Brinicombe.
@@ -50,9 +50,6 @@
 	.text
 	.align 0
 
-Ldisabled_mask:
-	.word	_C_LABEL(disabled_mask)
-
 Lcurrent_spl_level:	
 	.word	_C_LABEL(current_spl_level)
 
@@ -89,10 +86,10 @@ ASENTRY_NP(irq_entry)
 	/* Load r8 with the SAIPIC interrupt requests */
 
 	ldr	r10, [pc, #_C_LABEL(saipic_base) - . - 8]
-	ldr	r8, [r10, #(SAIPIC_IP << 2)]	/* Load IRQ pending register */
+	ldr	r8, [r10, #(SAIPIC_IP)]	/* Load IRQ pending register */
 
 #ifdef INTR_DEBUG
-	ldr	r2, [r10, #(SAIPIC_MR << 2)]
+	ldr	r2, [r10, #(SAIPIC_MR)]
 	add	r0, pc, #Ldbg_str - . - 8
 	mov	r1, r8
 	bl	_C_LABEL(printf)
@@ -108,12 +105,6 @@ ASENTRY_NP(irq_entry)
 	ldr	r1, [r0]
 	add	r1, r1, #1
 	str	r1, [r0]
-
-	/* Block the current requested interrupts */
-	ldr	r1, Ldisabled_mask
-	ldr	r0, [r1]
-	stmfd	sp!, {r0}
-	orr	r0, r0, r8
 
 	/*
  	 * Need to block all interrupts at the IPL or lower for
@@ -141,9 +132,6 @@ Lfind_highest_ipl:
 	add	r9, r9, #1
 	ldr	r2, [r7, r9, lsl #2]
 	mvn	r2, r2
-	orr	r0, r0, r2
-
-	str	r0, [r1]	
 
 	ldr	r0, Lcurrent_spl_level
 	ldr	r1, [r0]
@@ -210,7 +198,7 @@ irqchainloop:
 	add	lr, pc, #nextinchain - . - 8	/* return address */
 	ldr	r0, [r6, #(IH_ARG)]	/* Get argument pointer */
 	teq	r0, #0x00000000		/* If arg is zero pass stack frame */
-	addeq	r0, sp, #8		/* ... stack frame [XXX needs care] */
+	addeq	r0, sp, #4		/* ... stack frame [XXX needs care] */
 	ldr	pc, [r6, #(IH_FUNC)]	/* Call handler */
 
 nextinchain:
@@ -233,9 +221,6 @@ nextirq:
 	str	r2, [r1]
 
 	/* Restore previous disabled mask */
-	ldmfd	sp!, {r2}
-	ldr	r1, Ldisabled_mask
-	str	r2, [r1]
 	bl	_C_LABEL(irq_setmasks)
 
 	bl	_C_LABEL(dosoftints)	/* Handle the soft interrupts */
@@ -259,7 +244,7 @@ nextirq:
 #ifdef INTR_DEBUG
 	add	r0, pc, #Ldbg_str - . - 8
 	mov	r1, #3
-	ldr	r2, [r10, #(SAIPIC_MR << 2)]
+	ldr	r2, [r10, #(SAIPIC_MR)]
 	bl	_C_LABEL(printf)
 #endif
 
@@ -314,12 +299,6 @@ irqast:
 	b	. - 8
 	
 
-Lspl_mask:
-	.word	_C_LABEL(spl_mask)	/* irq's allowed at current spl level */
-
-Lcurrent_mask:
-	.word	_C_LABEL(current_mask)	/* irq's that are usable */
-
 ENTRY(irq_setmasks)
 	/* Disable interrupts */
 	mrs	r3, cpsr_all
@@ -327,17 +306,13 @@ ENTRY(irq_setmasks)
 	msr	cpsr_all, r1
 
 	/* Calculate interrupt mask */
-	ldr	r1, Lcurrent_mask	/* All the enabled interrupts */
-	ldr	r1, [r1]
-	ldr	r2, Lspl_mask		/* Block due to current spl level */
+	ldr	r0, Lspl_masks
+	ldr	r2, Lcurrent_spl_level
 	ldr	r2, [r2]
-	and	r1, r1, r2
-	ldr	r2, Ldisabled_mask	/* Block due to active interrupts */
-	ldr	r2, [r2]
-	bic	r1, r1, r2
+	ldr	r2, [r0, r2, lsl #2]
 
 	ldr	r0, [pc, #_C_LABEL(saipic_base) - . - 8]
-	str	r1, [r0, #(SAIPIC_MR << 2)]	/* Set mask register */
+	str	r2, [r0, #(SAIPIC_MR)]	/* Set mask register */
 
 	/* Restore old cpsr and exit */
 	msr	cpsr_all, r3

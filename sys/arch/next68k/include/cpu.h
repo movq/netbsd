@@ -1,4 +1,4 @@
-/*	$NetBSD: cpu.h,v 1.15 2000/12/19 21:09:57 scw Exp $	*/
+/*	$NetBSD: cpu.h,v 1.18 2001/05/30 12:28:48 mrg Exp $	*/
 
 /*
  * Copyright (c) 1988 University of Utah.
@@ -46,7 +46,7 @@
 #ifndef _CPU_MACHINE_
 #define _CPU_MACHINE_
 
-#if defined(_KERNEL) && !defined(_LKM)
+#if defined(_KERNEL_OPT)
 #include "opt_lockdebug.h"
 #endif
 
@@ -98,7 +98,7 @@ struct clockframe {
 	u_short	sr;		/* sr at time of interrupt */
 	u_long	pc;		/* pc at time of interrupt */
 	u_short	vo;		/* vector offset (4-word frame) */
-};
+} __attribute__((packed));
 
 #define	CLKF_USERMODE(framep)	(((framep)->sr & PSL_S) == 0)
 #define	CLKF_BASEPRI(framep)	(((framep)->sr & PSL_IPL) == 0)
@@ -190,11 +190,6 @@ void	doboot __P((void)) __attribute__((__noreturn__));
 /* sys_machdep.c functions */
 int	cachectl1 __P((unsigned long, vaddr_t, size_t, struct proc *));
 
-/* vm_machdep.c functions */
-void	physaccess __P((caddr_t, caddr_t, int, int));
-void	physunaccess __P((caddr_t, int));
-int	kvtop __P((caddr_t));
-
 /* clock.c functions */
 void	next68k_calibrate_delay __P((void));
 
@@ -208,7 +203,7 @@ void	next68k_calibrate_delay __P((void));
 #define	NEXT_SLOT_ID		0x0
 #ifdef	M68030
 #define	NEXT_SLOT_ID_BMAP	0x0
-#endif	M68030
+#endif	/* M68030 */
 #endif
 #ifdef	M68040
 #ifdef DISABLE_NEXT_BMAP_CHIP		/* @@@ For turbo testing */
@@ -217,7 +212,7 @@ void	next68k_calibrate_delay __P((void));
 #define	NEXT_SLOT_ID_BMAP	0x00100000
 #endif
 #define NEXT_SLOT_ID            0x0
-#endif	M68040
+#endif	/* M68040 */
 
 /****************************************************************/
 

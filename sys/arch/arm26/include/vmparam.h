@@ -1,4 +1,4 @@
-/*	$NetBSD: vmparam.h,v 1.3 2000/12/27 20:43:45 bjh21 Exp $	*/
+/*	$NetBSD: vmparam.h,v 1.5 2001/05/01 02:19:15 thorpej Exp $	*/
 
 /*
  * Copyright (c) 1988 The Regents of the University of California.
@@ -33,8 +33,8 @@
  * SUCH DAMAGE.
  */
 
-#ifndef	_ARM32_VMPARAM_H_
-#define	_ARM32_VMPARAM_H_
+#ifndef	_ARM26_VMPARAM_H_
+#define	_ARM26_VMPARAM_H_
 
 #define	USRTEXT		VM_MIN_ADDRESS
 #define	USRSTACK	VM_MAXUSER_ADDRESS
@@ -119,9 +119,6 @@
 #define VM_FREELIST_LOW		1 /* DMA-able memory (bottom 512k phys) */
 #define VM_FREELIST_DEFAULT	0 /* The rest */
 
-struct pmap_physseg {
-};
-
-#endif
+#endif /* _ARM26_VMPARAM_H_ */
 
 /* End of vmparam.h */

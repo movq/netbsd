@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.8 1999/03/15 07:46:11 leo Exp $
+#	$NetBSD: Makefile,v 1.11 2001/10/13 20:10:02 leo Exp $
 
 LIB=	sa
 
@@ -7,25 +7,25 @@ MKPROFILE=no
 OBJMACHINE=
 
 CPPFLAGS+=	${DEFS} ${INCL}
-CFLAGS+=	-fomit-frame-pointer -Wall
+CFLAGS+=	-fomit-frame-pointer -Wall -fno-function-cse -fstrength-reduce
 NO_NET=
 
-DEFS=	-D_STANDALONE
-INCL=	-I- -I${S_MACHSA} -I${S_KERN} -I${S_SA} -I${S}
+DEFS=	-D_STANDALONE -DHEAP_VARIABLE
+INCL=	-I/usr/include -I- -I${S_MACHSA} -I${S_KERN} -I${S_SA} -I${S} 
 
 #
 # NetBSD/Atari specific replacements: stand.h dev.c
 #
 
 # machine dependant routines
-SRCS=	consio.s diskio.c
+SRCS=	consio.S diskio.c
 
 # from lib/libkern
-SRCS+=	ashrdi3.c bzero.c strcmp.c strlen.c
+SRCS+=	ashldi3.c ashrdi3.c bzero.c strcmp.c strlen.c
 
 # stand routines
-SRCS+=	alloc.c bcopy.c exec.c getfile.c gets.c globals.c \
-	memcpy.c printf.c strerror.c subr_prf.c twiddle.c
+SRCS+=	alloc.c bcopy.c exec.c getfile.c gets.c globals.c panic.c \
+	memcpy.c printf.c strerror.c subr_prf.c twiddle.c 
 
 # io routines
 SRCS+=	close.c closeall.c dev.c disklabel.c dkcksum.c ioctl.c \

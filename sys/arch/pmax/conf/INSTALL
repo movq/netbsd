@@ -1,4 +1,4 @@
-# 	$NetBSD: INSTALL,v 1.39 2000/10/02 18:43:37 abs Exp $
+# 	$NetBSD: INSTALL,v 1.41 2001/08/26 11:47:20 simonb Exp $
 #
 # Distribution	install kernel (any model)
 #    netbsd:	cut-down kernel for miniroots.
@@ -57,12 +57,13 @@ options 	VNODE_OP_NOINLINE	# Save space by not inlining vnode op calls
 
 # Networking options
 options 	INET			# Internet protocols
-options 	"TCP_COMPAT_42"		# compatibility with 4.2BSD TCP/IP
+#options 	TCP_DEBUG	# Record last TCP_NDEBUG packets with SO_DEBUG
 
 
 options 	COMPAT_12
 options 	COMPAT_13
 options 	COMPAT_14
+#options 	TCP_COMPAT_42	# 4.2BSD TCP/IP bug compat. Not recommended.
 
 # Raster console options
 options 	FONT_BOLD8x16		# Font for fb devices
@@ -129,10 +130,11 @@ sii*	at	ibus0 addr ?		# DC7061 onboard SCSI
 # SCSI configuration							#
 #########################################################################
 
-# SCSI configuration for old 4.4BSD/pmax DECstation SCSI driver
-oldscsibus*	at sii?
-oldscsibus*	at asc?
-include 	"arch/pmax/conf/scsi.pmax"
+scsibus* at sii?
+scsibus* at asc?
+sd*	at scsibus? target ? lun ?	# SCSI disks
+st*	at scsibus? target ? lun ?	# SCSI tapes
+cd*	at scsibus? target ? lun ?	# SCSI CD-ROMs 
 
 #########################################################################
 # Pseudo-devices							#

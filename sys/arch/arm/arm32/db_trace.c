@@ -1,4 +1,4 @@
-/*	$NetBSD: db_trace.c,v 1.1 2001/03/04 05:11:41 matt Exp $	*/
+/*	$NetBSD: db_trace.c,v 1.3 2001/09/09 10:33:43 toshii Exp $	*/
 
 /* 
  * Copyright (c) 1996 Scott K. Stevens
@@ -121,11 +121,11 @@ db_stack_trace_print(addr, have_addr, count, modif, pr)
 		 * Switch to next frame up
 		 */
 		lastframe = frame;
+		if (frame->fr_fp == NULL)
+			break;
+
 		frame = (struct frame *)(frame->fr_fp - (sizeof(struct frame)
 		    - sizeof(u_int)));
-
-		if (frame == NULL)
-			break;
 
 		if (INKERNEL((int)frame)) {
 			/* staying in kernel */

@@ -1,4 +1,4 @@
-/*	$NetBSD: locore.s,v 1.112 2000/11/26 11:47:24 jdolecek Exp $	*/
+/*	$NetBSD: locore.s,v 1.116 2001/07/22 13:34:04 wiz Exp $	*/
 
 /*
  * Copyright (c) 1994, 1995 Gordon W. Ross
@@ -48,6 +48,7 @@
 #include "opt_compat_sunos.h"
 #include "opt_ddb.h"
 #include "opt_fpsp.h"
+#include "opt_kgdb.h"
 #include "opt_lockdebug.h"
 
 #include "assym.h"
@@ -686,7 +687,7 @@ Lbe10:
 	btst	#8,%d0			| data fault?
 	jne	Lbe10a
 	movql	#1,%d0			| user program access FC
-					| (we dont seperate data/program)
+					| (we dont separate data/program)
 	btst	#5,%sp@(FR_HW+8)		| supervisor mode?
 	jeq	Lbe10a			| if no, done
 	movql	#5,%d0			| else supervisor program access
@@ -1195,7 +1196,11 @@ GLOBAL(masterpaddr)		| XXX compatibility (debuggers)
 
 ASLOCAL(mdpflag)
 	.byte	0		| copy of proc md_flags low byte
+#ifdef __ELF__
+	.align	4
+#else
 	.align	2
+#endif
 
 ASBSS(nullpcb,SIZEOF_PCB)
 
@@ -1631,7 +1636,7 @@ Lmotommu7:
  * and TBI*.
  */
 ENTRY(DCIA)
-__DCIA:
+_C_LABEL(_DCIA):
 #if defined(M68040)
 	cmpl	#MMU_68040,_C_LABEL(mmutype) | 68040
 	jne	Lmotommu8		| no, skip
@@ -1860,7 +1865,11 @@ ENTRY_NOPROFILE(_delay)
 	 * operations and that the loop will run from a single cache
 	 * half-line.
 	 */
+#ifdef __ELF__
 	.align	8
+#else
+	.align	3
+#endif
 L_delay:
 	subl	%d1,%d0
 	jgt	L_delay

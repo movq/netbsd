@@ -1,4 +1,4 @@
-/*	$NetBSD: asc.c,v 1.1 2000/12/24 09:25:27 ur Exp $	*/
+/*	$NetBSD: asc.c,v 1.6 2001/11/14 18:15:15 thorpej Exp $	*/
 /*	$OpenBSD: asc.c,v 1.9 1998/03/16 09:38:39 pefo Exp $	*/
 /*	NetBSD: asc.c,v 1.10 1994/12/05 19:11:12 dean Exp 	*/
 
@@ -135,7 +135,8 @@
 #include <dev/scsipi/scsipi_all.h>
 #include <dev/scsipi/scsiconf.h>
 
-#include <mips/locore.h> /* for mips3_HitFlushDCache() */
+#include <mips/cache.h>
+
 #include <machine/cpu.h>
 #include <machine/autoconf.h>
 #include <machine/bus.h>
@@ -145,9 +146,9 @@
 #include <arc/jazz/dma.h>
 #include <arc/jazz/scsi.h>
 #include <arc/jazz/ascreg.h>
+#include <arc/jazz/ascvar.h>
 
 #include <arc/jazz/pica.h>
-#include <arc/arc/arctype.h>
 
 
 #define	readback(a)	{ register int foo; foo = (a); }
@@ -423,7 +424,6 @@ typedef struct scsi_state {
 #define DID_SYNC	0x020	/* true if synchronous offset was negotiated */
 #define TRY_SYNC	0x040	/* true if try neg. synchronous offset */
 #define PARITY_ERR	0x080	/* true if parity error seen */
-#define	CHECK_SENSE	0x100	/* true if doing sense command */
 
 /*
  * State kept for each active SCSI host interface (53C94).
@@ -447,7 +447,7 @@ struct asc_softc {
 	int		timeout_250;	/* 250ms timeout */
 	int		tb_ticks;	/* 4ns. ticks/tb channel ticks */
 	int		is24bit;	/* if 53CF94/96-2, 24bit address */
-	struct scsipi_link sc_link;	/* scsipi link struct */
+	struct scsipi_channel sc_channel;
 	struct scsipi_adapter sc_adapter;
 };
 
@@ -457,6 +457,34 @@ struct asc_softc {
 #define ASC_STATE_RESEL		3	/* currently waiting for reselect */
 
 typedef struct asc_softc *asc_softc_t;
+
+struct asc_timing {
+	int		min_period;	/* Min transfer period clk/byte */
+	int		max_period;	/* Max transfer period clk/byte */
+	int		ccf;		/* CCF, whatever that really is? */
+	int		timeout_250;	/* 250ms timeout */
+	int		tb_ticks;	/* 4ns. ticks/tb channel ticks */
+}	asc_timing_40mhz = {
+		ASC_MIN_PERIOD40,
+		ASC_MAX_PERIOD40,
+		ASC_CCF(40),
+		ASC_TIMEOUT_250(40, 8 /* exception for ASC_CCF(40) (== 0) */),
+		6, /* 6.25 */
+},	asc_timing_25mhz = {
+		ASC_MIN_PERIOD25,
+		ASC_MAX_PERIOD25,
+		ASC_CCF(25),
+		ASC_TIMEOUT_250(25, ASC_CCF(25)),
+		10,
+},	asc_timing_12mhz = {
+		ASC_MIN_PERIOD12,
+		ASC_MAX_PERIOD12,
+		ASC_CCF(13),
+		ASC_TIMEOUT_250(13, ASC_CCF(13)),
+		20,
+};
+
+struct asc_config *asc_conf = NULL;
 
 /*
  * Autoconfiguration data for config.
@@ -473,18 +501,11 @@ struct cfattach asc_ca = {
 /*
  *  Glue to the machine dependent scsi
  */
-int asc_scsi_cmd __P((struct scsipi_xfer *));
-void asc_minphys __P((struct buf *));
-
-struct scsipi_device asc_dev = {
-/*XXX*/	NULL,		/* Use default error handler */
-/*XXX*/	NULL,		/* have a queue, served by this */
-/*XXX*/	NULL,		/* have no async handler */
-/*XXX*/	NULL,		/* Use default 'done' routine */
-};
+void asc_scsipi_request __P((struct scsipi_channel *,
+				scsipi_adapter_req_t, void *));
 
 static int asc_intr __P((void *));
-static int asc_poll __P((struct asc_softc *, int));
+static void asc_poll __P((struct asc_softc *, int));
 #ifdef DEBUG
 static void asc_DumpLog __P((char *));
 #endif
@@ -517,6 +538,9 @@ ascattach(parent, self, aux)
 	int id, s, i;
 	int bufsiz;
 
+	if (asc_conf == NULL)
+		panic("asc_conf isn't initialized");
+
 	/*
 	 * Initialize hw descriptor, cache some pointers
 	 */
@@ -527,43 +551,22 @@ ascattach(parent, self, aux)
 	 * 1) how to do dma
 	 * 2) timing based on chip clock frequency
 	 */
-	switch (cputype) {
-	case ACER_PICA_61:
-	case MAGNUM:
-		bufsiz = 63 * 1024; /*XXX check if code handles 0 as 64k */
-		asc->dma = &asc->__dma;
-		asc_dma_init(asc->dma);
-		break;
-	default:
-		bufsiz = 64 * 1024;
-	};
+#if 1	/*XXX check if code handles 0 as 64k */
+	bufsiz = 63 * 1024;
+#else
+	bufsiz = 64 * 1024;
+#endif
+	asc->dma = &asc->__dma;
+	asc_dma_init(asc->dma);
+
 	/*
-	 * Now for timing. The pica has a 25Mhz, NEC M403 has a 40MHz.
+	 * Now for timing.
 	 */
-	switch (cputype) {
-	case MAGNUM: /* XXX - NEC M403 */
-		asc->min_period = ASC_MIN_PERIOD40;
-		asc->max_period = ASC_MAX_PERIOD40;
-		asc->ccf = ASC_CCF(40);
-		asc->timeout_250 = ASC_TIMEOUT_250(40,
-		    asc->ccf != 0 ? asc->ccf : 8);
-		asc->tb_ticks = 6; /* 6.25 */
-		break;
-	case ACER_PICA_61:
-		asc->min_period = ASC_MIN_PERIOD25;
-		asc->max_period = ASC_MAX_PERIOD25;
-		asc->ccf = ASC_CCF(25);
-		asc->timeout_250 = ASC_TIMEOUT_250(25, asc->ccf);
-		asc->tb_ticks = 10;
-		break;
-	default:
-		asc->min_period = ASC_MIN_PERIOD12;
-		asc->max_period = ASC_MAX_PERIOD12;
-		asc->ccf = ASC_CCF(13);
-		asc->timeout_250 = ASC_TIMEOUT_250(13, asc->ccf);
-		asc->tb_ticks = 20;
-		break;
-	};
+	asc->min_period = asc_conf->ac_timing->min_period;
+	asc->max_period = asc_conf->ac_timing->max_period;
+	asc->ccf = asc_conf->ac_timing->ccf;
+	asc->timeout_250 = asc_conf->ac_timing->timeout_250;
+	asc->tb_ticks = asc_conf->ac_timing->tb_ticks;
 
 	asc->state = ASC_STATE_IDLE;
 	asc->target = -1;
@@ -623,39 +626,26 @@ ascattach(parent, self, aux)
 	printf(": %s, target %d\n", asc->is24bit ? "NCR53CF9X-2" : "NCR53C94",
 	    id);
 
-	/*
-	 * Fill in the adapter.
-	 */
-	asc->sc_adapter.scsipi_cmd = asc_scsi_cmd;
-	asc->sc_adapter.scsipi_minphys = asc_minphys;
+	asc->sc_adapter.adapt_dev = &asc->sc_dev;
+	asc->sc_adapter.adapt_nchannels = 1;
+	asc->sc_adapter.adapt_openings = 7;
+	asc->sc_adapter.adapt_max_periph = 1;
+	asc->sc_adapter.adapt_ioctl = NULL;
+	asc->sc_adapter.adapt_minphys = minphys;
+	asc->sc_adapter.adapt_request = asc_scsipi_request;
 
-	/*
-	 * Fill in the prototype scsipi link.
-	 */
-	asc->sc_link.scsipi_scsi.channel = SCSI_CHANNEL_ONLY_ONE;
-	asc->sc_link.adapter_softc = asc;
-	asc->sc_link.scsipi_scsi.adapter_target = asc->sc_id;
-	asc->sc_link.adapter = &asc->sc_adapter;
-	asc->sc_link.device = &asc_dev;
-	asc->sc_link.openings = 2;
-	asc->sc_link.scsipi_scsi.max_target = 7;
-	asc->sc_link.scsipi_scsi.max_lun = 7;
-	asc->sc_link.type = BUS_SCSI;
+	memset(&asc->sc_channel, 0, sizeof(asc->sc_channel));
+	asc->sc_channel.chan_adapter = &asc->sc_adapter;
+	asc->sc_channel.chan_bustype = &scsi_bustype;
+	asc->sc_channel.chan_channel = 0;
+	asc->sc_channel.chan_ntargets = 8;
+	asc->sc_channel.chan_nluns = 8;
+	asc->sc_channel.chan_id = asc->sc_id;
 
 	/*
 	 * Now try to attach all the sub devices.
 	 */
-	config_found(self, &asc->sc_link, scsiprint);
-}
-
-/*
- *  Driver breaks down request transfer size.
- */
-void
-asc_minphys(bp)
-	struct buf *bp;
-{
-	minphys(bp);
+	config_found(self, &asc->sc_channel, scsiprint);
 }
 
 /*
@@ -663,66 +653,65 @@ asc_minphys(bp)
  * We maintain information on each device separately since devices can
  * connect/disconnect during an operation.
  */
-int
-asc_scsi_cmd(xs)
-	struct scsipi_xfer *xs;
+void
+asc_scsipi_request(chan, req, arg)
+	struct scsipi_channel *chan;
+	scsipi_adapter_req_t req;
+	void *arg;
 {
-	struct scsipi_link *sc_link = xs->sc_link;
-	struct asc_softc *asc = sc_link->adapter_softc;
+	struct scsipi_xfer *xs;
+	struct scsipi_periph *periph;
+	struct asc_softc *asc = (void *)chan->chan_adapter->adapt_dev;
+	int dontqueue, s;
 
-	int dontqueue = xs->xs_control & XS_CTL_POLL;
-	int s;
+	switch (req) {
+	case ADAPTER_REQ_RUN_XFER:
+		xs = arg;
+		periph = xs->xs_periph;
 
-	/*
-	 *  Flush caches for any data buffer
-	 */
-	if(xs->datalen != 0) {
-		mips3_HitFlushDCache((vaddr_t)xs->data, xs->datalen);
-	}
-	/*
-	 *  The hack on the next few lines are to avoid buffers
-	 *  mapped to UADDR. Realloc to the kva uarea address.
-	 */
-	if((u_int)(xs->data) >= UADDR) {
-		xs->data = ((u_int)(xs->data) & ~UADDR) + (u_char *)(curproc->p_addr);
-	}
+		dontqueue = xs->xs_control & XS_CTL_POLL;
 
-	/*
-	 * Check if another command is already in progress.
-	 * We may have to change this if we allow SCSI devices with
-	 * separate LUNs.
-	 */
-	s = splbio();
-	if (asc->cmd[sc_link->scsipi_scsi.target]) {
-		if (asc->cmdq[sc_link->scsipi_scsi.target]) {
-			splx(s);
-			printf("asc_scsi_cmd: called when target busy");
-			xs->error = XS_DRIVER_STUFFUP;
-			return TRY_AGAIN_LATER;
+		/*
+		 *  Flush caches for any data buffer
+		 */
+		if(xs->datalen != 0) {
+			mips_dcache_wbinv_range((vaddr_t)xs->data, xs->datalen);
 		}
-		asc->cmdq[sc_link->scsipi_scsi.target] = xs;
+		/*
+		 *  The hack on the next few lines are to avoid buffers
+		 *  mapped to UADDR. Realloc to the kva uarea address.
+		 */
+		if((u_int)(xs->data) >= UADDR) {
+			xs->data = ((u_int)(xs->data) & ~UADDR) + (u_char *)(curproc->p_addr);
+		}
+
+		s = splbio();
+		asc->cmd[periph->periph_target] = xs;
+
+		/*
+		 *  Going to launch.
+		 *  Make a local copy of the command and some pointers.
+		 */
+		asc_startcmd(asc, periph->periph_target);
+
+		/*
+		 *  If in startup, interrupts not usable yet.
+		 */
+		if(dontqueue) {
+			asc_poll(asc,periph->periph_target);
+		}
 		splx(s);
-		return SUCCESSFULLY_QUEUED;
+		return;
+	case ADAPTER_REQ_GROW_RESOURCES:
+		/* XXX Not supported. */
+		return;
+	case ADAPTER_REQ_SET_XFER_MODE:
+		/* XXX Not supported. */
+		return;
 	}
-	asc->cmd[sc_link->scsipi_scsi.target] = xs;
-
-	/*
-	 *  Going to launch.
-	 *  Make a local copy of the command and some pointers.
-	 */
-	asc_startcmd(asc, sc_link->scsipi_scsi.target);
-
-	/*
-	 *  If in startup, interrupts not usable yet.
-	 */
-	if(dontqueue) {
-		return(asc_poll(asc,sc_link->scsipi_scsi.target));
-	}
-	splx(s);
-	return SUCCESSFULLY_QUEUED;
 }
 
-int
+void
 asc_poll(asc, target)
 	struct asc_softc *asc;
 	int target;
@@ -743,7 +732,6 @@ asc_poll(asc, target)
 		scsicmd->error = XS_TIMEOUT;
 		asc_end(asc, 0, 0, 0);
 	}
-	return COMPLETE;
 }
 
 static void
@@ -772,15 +760,7 @@ asc_reset(asc, regs)
 	regs->asc_cnfg1 = asc->sc_id | ASC_CNFG1_P_CHECK;
 	/* include ASC_CNFG2_SCSI2 if you want to allow SCSI II commands */
 	regs->asc_cnfg2 = /* ASC_CNFG2_RFB | ASC_CNFG2_SCSI2 | */ ASC_CNFG2_EPL;
-	switch (cputype) {
-	case MAGNUM: /* XXX - NEC M403 */
-		/* only if EPL is FE (Feature Enable bit for 53CF94) */
-		regs->asc_cnfg3 = ASC_CNFG3_FCLK; /* clock 40MHz */
-		break;
-	default:
-		regs->asc_cnfg3 = 0;
-		break;
-	}
+	regs->asc_cnfg3 = asc_conf->ac_cnfg3;
 	/* zero anything else */
 	ASC_TC_PUT(regs, 0, asc->is24bit);
 	regs->asc_syn_p = asc->min_period;
@@ -827,19 +807,17 @@ asc_startcmd(asc, target)
 	/*
 	 * Init the chip and target state.
 	 */
-	state->flags = state->flags & (DID_SYNC | CHECK_SENSE);
+	state->flags = state->flags & DID_SYNC;
 	state->script = (script_t *)0;
 	state->msg_out = SCSI_NO_OP;
 
 	/*
 	 * Set up for DMA of command output. Also need to flush cache.
 	 */
-	if(!(state->flags & CHECK_SENSE)) {
-		bcopy(scsicmd->cmd, &state->cmd, scsicmd->cmdlen);
-		state->cmdlen = scsicmd->cmdlen;
-		state->buf = (vaddr_t)scsicmd->data;
-		state->buflen = scsicmd->datalen;
-	}
+	bcopy(scsicmd->cmd, &state->cmd, scsicmd->cmdlen);
+	state->cmdlen = scsicmd->cmdlen;
+	state->buf = (vaddr_t)scsicmd->data;
+	state->buflen = scsicmd->datalen;
 	len = state->cmdlen;
 	state->dmalen = len;
 	
@@ -852,11 +830,7 @@ asc_startcmd(asc, target)
 #endif
 
 	/* check for simple SCSI command with no data transfer */
-	if(state->flags & CHECK_SENSE) {
-		asc->script = &asc_scripts[SCRIPT_DATA_IN];
-		state->flags |= DMA_IN;
-	}
-	else if (scsicmd->xs_control & XS_CTL_DATA_OUT) {
+	if (scsicmd->xs_control & XS_CTL_DATA_OUT) {
 		asc->script = &asc_scripts[SCRIPT_DATA_OUT];
 		state->flags |= DMA_OUT;
 	}
@@ -895,7 +869,7 @@ asc_startcmd(asc, target)
 
 	/* preload the FIFO with the message and command to be sent */
 	regs->asc_fifo = SCSI_DIS_REC_IDENTIFY |
-	    (scsicmd->sc_link->scsipi_scsi.lun & 0x07);
+	    (scsicmd->xs_periph->periph_lun & 0x07);
 
 	for( i = 0; i < len; i++ ) {
 		regs->asc_fifo = ((caddr_t)&state->cmd)[i];
@@ -1229,7 +1203,7 @@ printf("asc_intr: fifo flush %d len %d fifo %x\n", fifo, len, regs->asc_fifo);
 					regs->asc_cmd = ASC_CMD_FLUSH;
 					readback(regs->asc_cmd);
 				}
-				asc->cmd[asc->target]->error = XS_DRIVER_STUFFUP;
+				asc->cmd[asc->target]->error = XS_SELTIMEOUT;
 				asc_end(asc, status, ss, ir);
 				return(1);
 			}
@@ -1386,7 +1360,7 @@ asc_end(asc, status, ss, ir)
 	int status, ss, ir;
 {
 	struct scsipi_xfer *scsicmd;
-	struct scsipi_link *sc_link;
+	struct scsipi_periph *periph;
 	State *state;
 	int i, target;
 
@@ -1394,7 +1368,7 @@ asc_end(asc, status, ss, ir)
 	target = asc->target;
 	asc->target = -1;
 	scsicmd = asc->cmd[target];
-	sc_link = scsicmd->sc_link;
+	periph = scsicmd->xs_periph;
 	asc->cmd[target] = (struct scsipi_xfer *)0;
 	state = &asc->st[target];
 
@@ -1421,47 +1395,20 @@ asc_end(asc, status, ss, ir)
 		break;
 	}
 
-	if(scsicmd->error == XS_NOERROR && !(state->flags & CHECK_SENSE)) {
+	if(scsicmd->error == XS_NOERROR) {
 		if((state->statusByte & ST_MASK) == SCSI_CHECK) {
-			struct scsipi_sense *ss = (void *)&state->cmd;
-			/* Save return values */
-			scsicmd->resid = state->buflen;
 			scsicmd->status = state->statusByte;
-			/* Set up sense request command */
-			bzero(ss, sizeof(*ss));
-			ss->opcode = REQUEST_SENSE;
-			ss->byte2 = sc_link->scsipi_scsi.lun << 5;
-			ss->length = sizeof(struct scsipi_sense_data);
-			state->cmdlen = sizeof(*ss);
-			state->buf = (vaddr_t)&scsicmd->sense.scsi_sense;
-			state->buflen = sizeof(struct scsipi_sense_data);
-			state->flags |= CHECK_SENSE;
-			mips3_HitFlushDCache(state->buf, state->buflen);
-			asc->cmd[target] = scsicmd;
-			asc_startcmd(asc, target);
-			return(0);
+			scsicmd->error = XS_BUSY;
 		}
 	}
 
-	if(scsicmd->error == XS_NOERROR && (state->flags & CHECK_SENSE)) {
-		scsicmd->error = XS_SENSE;
-	}
-	else {
-		scsicmd->resid = state->buflen;
-	}
-	state->flags &= ~CHECK_SENSE;
+	scsicmd->resid = state->buflen;
 
 	/*
 	 * Look for another device that is ready.
 	 * May want to keep last one started and increment for fairness
 	 * rather than always starting at zero.
 	 */
-	for (i = 0; i < ASC_NCMD; i++) {
-		if (asc->cmd[i] == 0 && asc->cmdq[i] != 0) {
-			asc->cmd[i] = asc->cmdq[i];
-			asc->cmdq[i] = 0;
-		}
-	}
 	for (i = 0; i < ASC_NCMD; i++) {
 		/* don't restart a disconnected command */
 		if (!asc->cmd[i] || (asc->st[i].flags & DISCONN))
@@ -1471,7 +1418,6 @@ asc_end(asc, status, ss, ir)
 	}
 
 	/* signal device driver that the command is done */
-	scsicmd->xs_status |= XS_STS_DONE;
 	scsipi_done(scsicmd);
 
 	return (0);
@@ -2067,10 +2013,8 @@ asc_disconnect(asc, status, ss, ir)
 	asc_softc_t asc;
 	int status, ss, ir;
 {
-	State *state = &asc->st[asc->target];
-
 #ifdef DIAGNOSTIC
-	if (!(state->flags & DISCONN)) {
+	if (!(asc->st[asc->target].flags & DISCONN)) {
 		printf("asc_disconnect: device %d: DISCONN not set!\n",
 			asc->target);
 	}

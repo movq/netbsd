@@ -1,7 +1,7 @@
-/*	$NetBSD: bus.h,v 1.23 2000/07/09 20:57:48 pk Exp $	*/
+/*	$NetBSD: bus.h,v 1.26 2001/09/24 23:49:31 eeh Exp $	*/
 
 /*-
- * Copyright (c) 1996, 1997, 1998 The NetBSD Foundation, Inc.
+ * Copyright (c) 1996, 1997, 1998, 2001 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -78,8 +78,13 @@
  */
 typedef	u_long	bus_space_handle_t;
 typedef u_long	bus_type_t;
-typedef u_long	bus_addr_t;
+typedef u_int64_t	bus_addr_t;
 typedef u_long	bus_size_t;
+
+/* bus_addr_t is extended to 64-bits and has the iospace encoded in it */
+#define	BUS_ADDR_IOSPACE(x)	((x)>>32)
+#define	BUS_ADDR_PADDR(x)	((x)&0xffffffff)
+#define	BUS_ADDR(io, pa)	((((u_int64_t)(io))<<32)|(pa))
 
 /*
  * Access methods for bus resources and address space.
@@ -116,12 +121,12 @@ struct sparc_bus_space_tag {
 				bus_size_t,		/*size*/
 				int));			/*flags*/
 
-	int	(*sparc_bus_mmap) __P((
+	paddr_t	(*sparc_bus_mmap) __P((
 				bus_space_tag_t,
-				bus_type_t,		/**/
-				bus_addr_t,		/**/
-				int,			/*flags*/
-				bus_space_handle_t *));
+				bus_addr_t,
+				off_t,
+				int,			/*prot*/
+				int));			/*flags*/
 
 	void	*(*sparc_intr_establish) __P((
 				bus_space_tag_t,
@@ -186,12 +191,12 @@ static void	bus_space_barrier __P((
 				bus_size_t,
 				bus_size_t,
 				int));
-static int	bus_space_mmap __P((
+static paddr_t	bus_space_mmap __P((
 				bus_space_tag_t,
-				bus_type_t,		/**/
 				bus_addr_t,		/**/
-				int,			/*flags*/
-				bus_space_handle_t *));
+				off_t,
+				int,			/*prot*/
+				int));			/*flags*/
 static void	*bus_intr_establish __P((
 				bus_space_tag_t,
 				int,			/*bus-specific intr*/
@@ -252,15 +257,15 @@ bus_space_subregion(t, h, o, s, hp)
 	_BS_CALL(t, sparc_bus_subregion)(t, h, o, s, hp);
 }
 
-__inline__ int
-bus_space_mmap(t, bt, a, f, hp)
+__inline__ paddr_t
+bus_space_mmap(t, a, o, p, f)
 	bus_space_tag_t	t;
-	bus_type_t	bt;
 	bus_addr_t	a;
+	off_t		o;
+	int		p;
 	int		f;
-	bus_space_handle_t *hp;
 {
-	_BS_CALL(t, sparc_bus_mmap)(t, bt, a, f, hp);
+	_BS_CALL(t, sparc_bus_mmap)(t, a, o, p, f);
 }
 
 __inline__ void *
@@ -899,14 +904,17 @@ bus_space_copy_region_8(t, h1, o1, h2, o2, c)
 /*
  * Flags used in various bus DMA methods.
  */
-#define	BUS_DMA_WAITOK		0x00	/* safe to sleep (pseudo-flag) */
-#define	BUS_DMA_NOWAIT		0x01	/* not safe to sleep */
-#define	BUS_DMA_ALLOCNOW	0x02	/* perform resource allocation now */
-#define	BUS_DMA_COHERENT	0x04	/* hint: map memory DMA coherent */
-#define	BUS_DMA_BUS1		0x10	/* placeholders for bus functions... */
-#define	BUS_DMA_BUS2		0x20
-#define	BUS_DMA_BUS3		0x40
-#define	BUS_DMA_BUS4		0x80
+#define	BUS_DMA_WAITOK		0x000	/* safe to sleep (pseudo-flag) */
+#define	BUS_DMA_NOWAIT		0x001	/* not safe to sleep */
+#define	BUS_DMA_ALLOCNOW	0x002	/* perform resource allocation now */
+#define	BUS_DMA_COHERENT	0x004	/* hint: map memory DMA coherent */
+#define	BUS_DMA_STREAMING	0x008	/* hint: sequential, unidirectional */
+#define	BUS_DMA_BUS1		0x010	/* placeholders for bus functions... */
+#define	BUS_DMA_BUS2		0x020
+#define	BUS_DMA_BUS3		0x040
+#define	BUS_DMA_BUS4		0x080
+#define	BUS_DMA_READ		0x100	/* mapping is device -> memory only */
+#define	BUS_DMA_WRITE		0x200	/* mapping is memory -> device only */
 
 /* For devices that have a 24-bit address space */
 #define BUS_DMA_24BIT		BUS_DMA_BUS1

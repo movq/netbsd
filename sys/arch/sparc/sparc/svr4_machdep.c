@@ -1,4 +1,4 @@
-/*	$NetBSD: svr4_machdep.c,v 1.40 2000/12/22 22:58:56 jdolecek Exp $	 */
+/*	$NetBSD: svr4_machdep.c,v 1.43 2001/05/30 12:28:51 mrg Exp $	 */
 
 /*-
  * Copyright (c) 1994 The NetBSD Foundation, Inc.
@@ -35,6 +35,10 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
+
+#if defined(_KERNEL_OPT)
+#include "opt_kgdb.h"
+#endif
 
 #include <sys/param.h>
 #include <sys/systm.h>

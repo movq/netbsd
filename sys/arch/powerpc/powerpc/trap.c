@@ -1,4 +1,4 @@
-/*	$NetBSD: trap.c,v 1.39 2001/02/12 21:20:32 manu Exp $	*/
+/*	$NetBSD: trap.c,v 1.53 2001/10/18 01:33:48 matt Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -34,6 +34,7 @@
 #include "opt_altivec.h"
 #include "opt_ddb.h"
 #include "opt_ktrace.h"
+#include "opt_multiprocessor.h"
 
 #include <sys/param.h>
 #include <sys/proc.h>
@@ -55,6 +56,7 @@
 #include <machine/pmap.h>
 #include <machine/psl.h>
 #include <machine/trap.h>
+#include <powerpc/spr.h>
 
 /* These definitions should probably be somewhere else			XXX */
 #define	FIRSTARG	3		/* first argument is in reg 3 */
@@ -65,6 +67,7 @@
 volatile int astpending;
 volatile int want_resched;
 #endif
+extern int intr_depth;
 
 void *syscall = NULL;	/* XXX dummy symbol for emul_netbsd */
 
@@ -85,8 +88,16 @@ trap(frame)
 	int type = frame->exc;
 	int ftype, rv;
 
+	curcpu()->ci_ev_traps.ev_count++;
+
 	if (frame->srr1 & PSL_PR)
 		type |= EXC_USER;
+
+#ifdef DIAGNOSTIC
+	if (curpcb->pcb_pmreal != curpm)
+		panic("trap: curpm (%p) != curpcb->pcb_pmreal (%p)",
+		    curpm, curpcb->pcb_pmreal);
+#endif
 
 	switch (type) {
 	case EXC_TRC|EXC_USER:
@@ -95,11 +106,16 @@ trap(frame)
 		trapsignal(p, SIGTRAP, EXC_TRC);
 		KERNEL_PROC_UNLOCK(p);
 		break;
-	case EXC_DSI:
-		{
-			vm_map_t map;
+	case EXC_DSI: {
+		faultbuf *fb;
+		/*
+		 * Only query UVM if no interrupts are active (this applies
+		 * "on-fault" as well.
+		 */
+		curcpu()->ci_ev_kdsi.ev_count++;
+		if (intr_depth < 0) {
+			struct vm_map *map;
 			vaddr_t va;
-			faultbuf *fb;
 
 			KERNEL_LOCK(LK_CANRECURSE|LK_EXCLUSIVE);
 			map = kernel_map;
@@ -111,6 +127,7 @@ trap(frame)
 				     : "=r"(user_sr) : "K"(USER_SR));
 				va &= ADDR_PIDX | ADDR_POFF;
 				va |= user_sr << ADDR_SR_SHFT;
+				/* KERNEL_PROC_LOCK(p); XXX */
 				map = &p->p_vmspace->vm_map;
 			}
 			if (frame->dsisr & DSISR_STORE)
@@ -118,34 +135,63 @@ trap(frame)
 			else
 				ftype = VM_PROT_READ;
 			rv = uvm_fault(map, trunc_page(va), 0, ftype);
-			KERNEL_UNLOCK();
-			if (rv == KERN_SUCCESS)
-				return;
-			if ((fb = p->p_addr->u_pcb.pcb_onfault) != NULL) {
-				frame->srr0 = (*fb)[0];
-				frame->fixreg[1] = (*fb)[1];
-				frame->fixreg[2] = (*fb)[2];
-				frame->cr = (*fb)[3];
-				bcopy(&(*fb)[4], &frame->fixreg[13],
-				      19 * sizeof(register_t));
-				return;
+			if (map != kernel_map) {
+				/*
+				 * Record any stack growth...
+				 */
+				if (rv == 0)
+					uvm_grow(p, trunc_page(va));
+				/* KERNEL_PROC_UNLOCK(p); XXX */
 			}
-			map = kernel_map;
+			KERNEL_UNLOCK();
+			if (rv == 0)
+				return;
+			if (rv == EACCES)
+				rv = EFAULT;
+		} else {
+			rv = EFAULT;
 		}
-		goto brain_damage;
+		if ((fb = p->p_addr->u_pcb.pcb_onfault) != NULL) {
+			frame->srr0 = (*fb)[0];
+			frame->fixreg[1] = (*fb)[1];
+			frame->fixreg[2] = (*fb)[2];
+			frame->fixreg[3] = rv;
+			frame->cr = (*fb)[3];
+			memcpy(&frame->fixreg[13], &(*fb)[4],
+				      19 * sizeof(register_t));
+			return;
+		}
+		printf("trap: kernel %s DSI @ %#x by %#x (DSISR %#x, err=%d)\n",
+		    (frame->dsisr & DSISR_STORE) ? "write" : "read",
+		    frame->dar, frame->srr0, frame->dsisr, rv);
+		goto brain_damage2;
+	}
 	case EXC_DSI|EXC_USER:
 		KERNEL_PROC_LOCK(p);
+		curcpu()->ci_ev_udsi.ev_count++;
 		if (frame->dsisr & DSISR_STORE)
 			ftype = VM_PROT_READ | VM_PROT_WRITE;
 		else
 			ftype = VM_PROT_READ;
-		if ((rv = uvm_fault(&p->p_vmspace->vm_map,
-				    trunc_page(frame->dar), 0, ftype))
-		    == KERN_SUCCESS) {
+		rv = uvm_fault(&p->p_vmspace->vm_map, trunc_page(frame->dar),
+		    0, ftype);
+		if (rv == 0) {
+			/*
+			 * Record any stack growth...
+			 */
+			uvm_grow(p, trunc_page(frame->dar));
 			KERNEL_PROC_UNLOCK(p);
 			break;
 		}
-		if (rv == KERN_RESOURCE_SHORTAGE) {
+		curcpu()->ci_ev_udsi_fatal.ev_count++;
+		if (cpu_printfataltraps) {
+			printf("trap: pid %d (%s): user %s DSI @ %#x "
+			    "by %#x (DSISR %#x, err=%d)\n",
+			    p->p_pid, p->p_comm,
+			    (frame->dsisr & DSISR_STORE) ? "write" : "read",
+			    frame->dar, frame->srr0, frame->dsisr, rv);
+		}
+		if (rv == ENOMEM) {
 			printf("UVM: pid %d (%s), uid %d killed: "
 			       "out of swap\n",
 			       p->p_pid, p->p_comm,
@@ -157,19 +203,31 @@ trap(frame)
 		}
 		KERNEL_PROC_UNLOCK(p);
 		break;
+	case EXC_ISI:
+		printf("trap: kernel ISI by %#x (SRR1 %#x)\n",
+		    frame->srr0, frame->srr1);
+		goto brain_damage2;
 	case EXC_ISI|EXC_USER:
 		KERNEL_PROC_LOCK(p);
+		curcpu()->ci_ev_isi.ev_count++;
 		ftype = VM_PROT_READ | VM_PROT_EXECUTE;
-		if (uvm_fault(&p->p_vmspace->vm_map,
-			     trunc_page(frame->srr0), 0, ftype)
-		    == KERN_SUCCESS) {
+		rv = uvm_fault(&p->p_vmspace->vm_map, trunc_page(frame->srr0),
+		    0, ftype);
+		if (rv == 0) {
 			KERNEL_PROC_UNLOCK(p);
 			break;
+		}
+		curcpu()->ci_ev_isi_fatal.ev_count++;
+		if (cpu_printfataltraps) {
+			printf("trap: pid %d (%s): user ISI trap @ %#x "
+			    "(SSR1=%#x)\n",
+			    p->p_pid, p->p_comm, frame->srr0, frame->srr1);
 		}
 		trapsignal(p, SIGSEGV, EXC_ISI);
 		KERNEL_PROC_UNLOCK(p);
 		break;
 	case EXC_SC|EXC_USER:
+		curcpu()->ci_ev_scalls.ev_count++;
 		{
 			const struct sysent *callp;
 			size_t argsize;
@@ -261,16 +319,27 @@ syscall_bad:
 		break;
 
 	case EXC_FPU|EXC_USER:
-		if (fpuproc)
+		curcpu()->ci_ev_fpu.ev_count++;
+		if (fpuproc) {
+			curcpu()->ci_ev_fpusw.ev_count++;
 			save_fpu(fpuproc);
+		}
+#if defined(MULTIPROCESSOR)
+		if (p->p_addr->u_pcb.pcb_fpcpu)
+			save_fpu_proc(p);
+#endif
 		fpuproc = p;
+		p->p_addr->u_pcb.pcb_fpcpu = curcpu();
 		enable_fpu(p);
 		break;
 
 #ifdef ALTIVEC
 	case EXC_VEC|EXC_USER:
-		if (vecproc)
+		curcpu()->ci_ev_vec.ev_count++;
+		if (vecproc) {
+			curcpu()->ci_ev_vecsw.ev_count++;
 			save_vec(vecproc);
+		}
 		vecproc = p;
 		enable_vec(p);
 		break;
@@ -292,9 +361,17 @@ syscall_bad:
 
 	case EXC_ALI|EXC_USER:
 		KERNEL_PROC_LOCK(p);
-		if (fix_unaligned(p, frame) != 0)
+		curcpu()->ci_ev_ali.ev_count++;
+		if (fix_unaligned(p, frame) != 0) {
+			curcpu()->ci_ev_ali_fatal.ev_count++;
+			if (cpu_printfataltraps) {
+				printf("trap: pid %d (%s): user ALI trap @ %#x "
+				    "(SSR1=%#x)\n",
+				    p->p_pid, p->p_comm, frame->srr0,
+				    frame->srr1);
+			}
 			trapsignal(p, SIGBUS, EXC_ALI);
-		else
+		} else
 			frame->srr0 += 4;
 		KERNEL_PROC_UNLOCK(p);
 		break;
@@ -302,33 +379,40 @@ syscall_bad:
 	case EXC_PGM|EXC_USER:
 /* XXX temporarily */
 		KERNEL_PROC_LOCK(p);
-		if (frame->srr1 & 0x0002000)
+		curcpu()->ci_ev_pgm.ev_count++;
+		if (cpu_printfataltraps) {
+			printf("trap: pid %d (%s): user PGM trap @ %#x "
+			    "(SSR1=%#x)\n",
+			    p->p_pid, p->p_comm, frame->srr0, frame->srr1);
+		}
+		if (frame->srr1 & 0x00020000)	/* Bit 14 is set if trap */
 			trapsignal(p, SIGTRAP, EXC_PGM);
 		else
 			trapsignal(p, SIGILL, EXC_PGM);
 		KERNEL_PROC_UNLOCK(p);
 		break;
 
-	case EXC_MCHK:
-		{
-			faultbuf *fb;
+	case EXC_MCHK: {
+		faultbuf *fb;
 
-			if ((fb = p->p_addr->u_pcb.pcb_onfault) != NULL) {
-				frame->srr0 = (*fb)[0];
-				frame->fixreg[1] = (*fb)[1];
-				frame->fixreg[2] = (*fb)[2];
-				frame->cr = (*fb)[3];
-				bcopy(&(*fb)[4], &frame->fixreg[13],
-				      19 * sizeof(register_t));
-				return;
-			}
+		if ((fb = p->p_addr->u_pcb.pcb_onfault) != NULL) {
+			frame->srr0 = (*fb)[0];
+			frame->fixreg[1] = (*fb)[1];
+			frame->fixreg[2] = (*fb)[2];
+			frame->fixreg[3] = EFAULT;
+			frame->cr = (*fb)[3];
+			memcpy(&frame->fixreg[13], &(*fb)[4],
+			      19 * sizeof(register_t));
+			return;
 		}
 		goto brain_damage;
+	}
 
 	default:
 brain_damage:
 		printf("trap type %x at %x\n", type, frame->srr0);
-#ifdef DDB
+brain_damage2:
+#ifdef DDBX
 		if (kdb_trap(type, frame))
 			return;
 #endif
@@ -351,7 +435,7 @@ brain_damage:
 	 * If someone stole the fp or vector unit while we were away,
 	 * disable it
 	 */
-	if (p != fpuproc)
+	if (p != fpuproc || p->p_addr->u_pcb.pcb_fpcpu != curcpu())
 		frame->srr1 &= ~PSL_FP;
 #ifdef ALTIVEC
 	if (p != vecproc)
@@ -373,7 +457,9 @@ child_return(arg)
 	tf->fixreg[FIRSTARG] = 0;
 	tf->fixreg[FIRSTARG + 1] = 1;
 	tf->cr &= ~0x10000000;
-	tf->srr1 &= ~(PSL_FP|PSL_VEC);	/* Disable FP & AltiVec, as we can't be them */
+	tf->srr1 &= ~(PSL_FP|PSL_VEC);	/* Disable FP & AltiVec, as we can't
+					   be them. */
+	p->p_addr->u_pcb.pcb_fpcpu = NULL;
 #ifdef	KTRACE
 	if (KTRPOINT(p, KTR_SYSRET)) {
 		KERNEL_PROC_LOCK(p);
@@ -402,12 +488,13 @@ copyin(udaddr, kaddr, len)
 	const char *up = udaddr;
 	char *kp = kaddr;
 	char *p;
+	int rv;
 	size_t l;
 	faultbuf env;
 
-	if (setfault(env)) {
+	if ((rv = setfault(env)) != 0) {
 		curpcb->pcb_onfault = 0;
-		return EFAULT;
+		return rv;
 	}
 	while (len > 0) {
 		p = (char *)USER_ADDR + ((u_int)up & ~SEGMENT_MASK);
@@ -415,7 +502,7 @@ copyin(udaddr, kaddr, len)
 		if (l > len)
 			l = len;
 		setusr(curpcb->pcb_pm->pm_sr[(u_int)up >> ADDR_SR_SHFT]);
-		bcopy(p, kp, l);
+		memcpy(kp, p, l);
 		up += l;
 		kp += l;
 		len -= l;
@@ -433,12 +520,13 @@ copyout(kaddr, udaddr, len)
 	const char *kp = kaddr;
 	char *up = udaddr;
 	char *p;
+	int rv;
 	size_t l;
 	faultbuf env;
 
-	if (setfault(env)) {
+	if ((rv = setfault(env)) != 0) {
 		curpcb->pcb_onfault = 0;
-		return EFAULT;
+		return rv;
 	}
 	while (len > 0) {
 		p = (char *)USER_ADDR + ((u_int)up & ~SEGMENT_MASK);
@@ -446,7 +534,7 @@ copyout(kaddr, udaddr, len)
 		if (l > len)
 			l = len;
 		setusr(curpcb->pcb_pm->pm_sr[(u_int)up >> ADDR_SR_SHFT]);
-		bcopy(kp, p, l);
+		memcpy(p, kp, l);
 		up += l;
 		kp += l;
 		len -= l;
@@ -472,14 +560,15 @@ kcopy(src, dst, len)
 	size_t len;
 {
 	faultbuf env, *oldfault;
+	int rv;
 
 	oldfault = curpcb->pcb_onfault;
-	if (setfault(env)) {
+	if ((rv = setfault(env)) != 0) {
 		curpcb->pcb_onfault = oldfault;
-		return EFAULT;
+		return rv;
 	}
 
-	bcopy(src, dst, len);
+	memcpy(dst, src, len);
 
 	curpcb->pcb_onfault = oldfault;
 	return 0;

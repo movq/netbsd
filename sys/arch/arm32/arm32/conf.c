@@ -1,4 +1,4 @@
-/*	$NetBSD: conf.c,v 1.49 2001/03/03 18:04:34 bjh21 Exp $	*/
+/*	$NetBSD: conf.c,v 1.52 2001/09/03 01:33:38 matt Exp $	*/
 
 /*
  * Copyright (c) 1994-1998 Mark Brinicombe.
@@ -146,41 +146,6 @@ struct bdevsw bdevsw[] = {
 
 int nblkdev = sizeof(bdevsw) / sizeof(bdevsw[0]);
 
-/* open, close, ioctl */
-#define cdev_i4bctl_init(c,n) { \
-	dev_init(c,n,open), dev_init(c,n,close), (dev_type_read((*))) enodev, \
-	(dev_type_write((*))) enodev, dev_init(c,n,ioctl), \
-	(dev_type_stop((*))) enodev, 0, seltrue, \
-	(dev_type_mmap((*))) enodev }
-
-/* open, close, read, write, poll */
-#define	cdev_i4brbch_init(c,n) { \
-	dev_init(c,n,open), dev_init(c,n,close), dev_init(c,n,read), \
-	dev_init(c,n,write), dev_init(c,n,ioctl), \
-	(dev_type_stop((*))) enodev, \
-	0, dev_init(c,n,poll), (dev_type_mmap((*))) enodev }
-
-/* open, close, read, write, poll */
-#define	cdev_i4btel_init(c,n) { \
-	dev_init(c,n,open), dev_init(c,n,close), dev_init(c,n,read), \
-	dev_init(c,n,write), (dev_type_ioctl((*))) enodev, \
-	(dev_type_stop((*))) enodev, \
-	0, dev_init(c,n,poll), (dev_type_mmap((*))) enodev, D_TTY }
-
-/* open, close, read, ioctl */
-#define cdev_i4btrc_init(c,n) { \
-	dev_init(c,n,open), dev_init(c,n,close), dev_init(c,n,read), \
-	(dev_type_write((*))) enodev, dev_init(c,n,ioctl), \
-	(dev_type_stop((*))) enodev, 0, (dev_type_poll((*))) enodev, \
-	(dev_type_mmap((*))) enodev }
-
-/* open, close, read, ioctl, poll */
-#define cdev_i4b_init(c,n) { \
-	dev_init(c,n,open), dev_init(c,n,close), dev_init(c,n,read), \
-	(dev_type_write((*))) enodev, dev_init(c,n,ioctl), \
-	(dev_type_stop((*))) enodev, 0, dev_init(c,n,poll), \
-	(dev_type_mmap((*))) enodev }	
-
 #include "i4b.h"
 #include "i4bctl.h"
 #include "i4btrc.h"
@@ -192,7 +157,8 @@ cdev_decl(i4btrc);
 cdev_decl(i4brbch);
 cdev_decl(i4btel);
 
-#include "vt.h"                                 
+#include "vt.h"
+#include "vidcconsole.h"                                 
 #include "pty.h"
 #define ptstty          ptytty
 #define ptsioctl        ptyioctl
@@ -248,7 +214,7 @@ struct cdevsw cdevsw[] = {
 	cdev_swap_init(1, sw),          /*  1: /dev/drum (swap pseudo-device) */
 	cdev_cn_init(1, cn),            /*  2: virtual console */
 	cdev_ctty_init(1,ctty),         /*  3: controlling terminal */
-#if	(defined(RISCPC) || defined(RC7500))
+#if	(defined(RISCPC) || defined(RC7500)) && (NVIDCCONSOLE>0)
 	cdev_physcon_init(NVT, physcon),/*  4: RPC console */
 #elif	defined(SHARK) && (NPC > 0)
 	cdev_pc_init(1,pc),		/*  4: PC console */
@@ -334,11 +300,12 @@ struct cdevsw cdevsw[] = {
 #else
 	cdev_notdef(),			/* 77: */
 #endif
-	cdev_i4b_init(NI4B, i4b),		/* 78: i4b main device */
-	cdev_i4bctl_init(NI4BCTL, i4bctl),	/* 79: i4b control device */
-	cdev_i4brbch_init(NI4BRBCH, i4brbch),	/* 80: i4b raw b-channel access */
-	cdev_i4btrc_init(NI4BTRC, i4btrc),	/* 81: i4b trace device */
-	cdev_i4btel_init(NI4BTEL, i4btel),	/* 82: i4b phone device */
+        cdev_notdef(),			/* 78: bicons pseudo-dev */
+	cdev_i4b_init(NI4B, i4b),		/* 79: i4b main device */
+	cdev_i4bctl_init(NI4BCTL, i4bctl),	/* 80: i4b control device */
+	cdev_i4brbch_init(NI4BRBCH, i4brbch),	/* 81: i4b raw b-channel access */
+	cdev_i4btrc_init(NI4BTRC, i4btrc),	/* 82: i4b trace device */
+	cdev_i4btel_init(NI4BTEL, i4btel),	/* 83: i4b phone device */
 
 };
 
@@ -464,6 +431,7 @@ static int chrtoblktbl[] = {
     /* 80 */	    NODEV,
     /* 81 */	    NODEV,
     /* 82 */	    NODEV,
+    /* 83 */	    NODEV,
 };
 
 /*

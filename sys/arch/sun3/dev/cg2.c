@@ -1,4 +1,4 @@
-/*	$NetBSD: cg2.c,v 1.13 2000/06/29 07:18:58 mrg Exp $	*/
+/*	$NetBSD: cg2.c,v 1.16 2001/09/19 18:10:34 thorpej Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -64,7 +64,7 @@
 
 #include <uvm/uvm_extern.h>
 
-#include <machine/fbio.h>
+#include <dev/sun/fbio.h>
 #include <machine/autoconf.h>
 #include <machine/pmap.h>
 #include <machine/cg2reg.h>
@@ -311,8 +311,8 @@ static int cg2getcmap(fb, data)
 	struct cg2_softc *sc = fb->fb_private;
 	u_char red[CMSIZE], green[CMSIZE], blue[CMSIZE];
 	int error, start, count, ecount;
-	register u_int i;
-	register u_short *p;
+	u_int i;
+	u_short *p;
 
 	start = cmap->index;
 	count = cmap->count;
@@ -352,9 +352,10 @@ static int cg2putcmap(fb, data)
 	struct fbcmap *cmap = data;
 	struct cg2_softc *sc = fb->fb_private;
 	u_char red[CMSIZE], green[CMSIZE], blue[CMSIZE];
-	int error, start, count, ecount;
-	register u_int i;
-	register u_short *p;
+	int error;
+	u_int start, count, ecount;
+	u_int i;
+	u_short *p;
 
 	start = cmap->index;
 	count = cmap->count;

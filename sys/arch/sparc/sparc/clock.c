@@ -1,4 +1,4 @@
-/*	$NetBSD: clock.c,v 1.78 2001/01/20 13:44:29 pk Exp $ */
+/*	$NetBSD: clock.c,v 1.81 2001/09/26 20:53:07 eeh Exp $ */
 
 /*
  * Copyright (c) 1992, 1993
@@ -531,7 +531,7 @@ clockattach(node, bt, bh)
 	if (CPU_ISSUN4)
 		model = "mk48t02";	/* Hard-coded sun4 clock */
 	else if (node != 0)
-		model = getpropstring(node, "model");
+		model = PROM_getpropstring(node, "model");
 	else
 		panic("clockattach: node == 0");
 
@@ -550,16 +550,17 @@ clockattach(node, bt, bh)
 	/* Establish clock write-enable method */
 	todr_handle->todr_setwen = clk_wenable;
 
+#if defined(SUN4)
 	if (CPU_ISSUN4) {
 		idp = &sun4_idprom_store;
-#if defined(SUN4)
 		if (cpuinfo.cpu_type == CPUTYP_4_300 ||
 		    cpuinfo.cpu_type == CPUTYP_4_400) {
 			eeprom_va = (char *)bh;
 			eeprom_nvram = 1;
 		}
+	} else
 #endif
-	} else {
+	{
 	/*
 	 * Location of IDPROM relative to the end of the NVRAM area
 	 */
@@ -1040,10 +1041,21 @@ statintr(cap)
 	newint = statmin + r;
 
 	if (CPU_ISSUN4M) {
-		counterreg4m->t_limit = tmr_ustolim4m(newint);
+		/*
+		 * Use the `non-resetting' limit register, so we don't
+		 * loose the counter ticks that happened since this
+		 * interrupt was raised.
+		 */
+		counterreg4m->t_limit_nr = tmr_ustolim4m(newint);
 	}
 
 	if (CPU_ISSUN4OR4C) {
+		/*
+		 * The sun4/4c timer has no `non-resetting' register;
+		 * use the current counter value to compensate the new
+		 * limit value for the number of counter ticks elapsed.
+		 */
+		newint -= tmr_cnttous(timerreg4->t_c14.t_counter);
 		timerreg4->t_c14.t_limit = tmr_ustolim(newint);
 	}
 	return (1);

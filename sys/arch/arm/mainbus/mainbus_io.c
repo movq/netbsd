@@ -1,4 +1,4 @@
-/*	$NetBSD: mainbus_io.c,v 1.1 2001/02/24 19:38:02 reinoud Exp $	*/
+/*	$NetBSD: mainbus_io.c,v 1.5 2001/09/10 21:19:35 chris Exp $	*/
 
 /*
  * Copyright (c) 1997 Mark Brinicombe.
@@ -70,6 +70,9 @@ struct bus_space mainbus_bs_tag = {
 
 	/* get kernel virtual address */
 	0, /* there is no linear mapping */
+
+	/* Mmap bus space for user */
+	mainbus_bs_mmap,
 
 	/* barrier */
 	mainbus_bs_barrier,
@@ -161,13 +164,14 @@ mainbus_bs_map(t, bpa, size, cacheable, bshp)
 
 	for(pa = startpa; pa < endpa; pa += PAGE_SIZE, va += PAGE_SIZE) {
 		pmap_kenter_pa(va, pa, VM_PROT_READ | VM_PROT_WRITE);
-		pte = pmap_pte(kernel_pmap, va);
+		pte = pmap_pte(pmap_kernel(), va);
 		if (cacheable)
 			*pte |= PT_CACHEABLE;
 		else
 			*pte &= ~PT_CACHEABLE;
 	}
-		
+	pmap_update(pmap_kernel());
+
 	return(0);
 }
 
@@ -218,6 +222,20 @@ mainbus_bs_subregion(t, bsh, offset, size, nbshp)
 
 	*nbshp = bsh + offset;
 	return (0);
+}
+
+paddr_t
+mainbus_bs_mmap(t, paddr, offset, prot, flags)
+	void *t;
+	bus_addr_t paddr;
+	off_t offset;
+	int prot;
+	int flags;
+{
+	/*
+	 * mmap from address `paddr+offset' for one page
+	 */
+	 return (arm_byte_to_page((paddr + offset)));
 }
 
 void

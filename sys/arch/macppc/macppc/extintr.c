@@ -1,6 +1,7 @@
-/*	$NetBSD: extintr.c,v 1.27 2001/02/23 23:07:15 matt Exp $	*/
+/*	$NetBSD: extintr.c,v 1.32 2001/07/22 11:29:47 wiz Exp $	*/
 
 /*-
+ * Copyright (c) 2000, 2001 Tsubai Masanari.
  * Copyright (c) 1995 Per Fogelstrom
  * Copyright (c) 1993, 1994 Charles M. Hannum.
  * Copyright (c) 1990 The Regents of the University of California.
@@ -53,22 +54,25 @@
 
 #include <powerpc/openpic.h>
 
+#include <dev/ofw/openfirm.h>
+
 #define NIRQ 32
 #define HWIRQ_MAX (NIRQ - 4 - 1)
 #define HWIRQ_MASK 0x0fffffff
 
 void intr_calculatemasks __P((void));
-char *intr_typename __P((int));
 int fakeintr __P((void *));
 
-static __inline int cntlzw __P((int));
-static __inline int read_irq __P((void));
-static __inline int mapirq __P((int));
-static void enable_irq __P((int));
+static inline int cntlzw __P((int));
+static inline int gc_read_irq __P((void));
+static inline int mapirq __P((int));
+static void gc_enable_irq __P((int));
+static void gc_disable_irq __P((int));
 
 static void do_pending_int __P((void));
+static void ext_intr_openpic __P((void));
+static void legacy_int_init __P((void));
 
-unsigned int imen = 0xffffffff;
 int imask[NIPL];
 
 int intrtype[NIRQ], intrmask[NIRQ], intrlevel[NIRQ];
@@ -77,7 +81,7 @@ struct intrhand *intrhand[NIRQ];
 static u_char hwirq[NIRQ], virq[ICU_LEN];
 static int virq_max = 0;
 
-static u_char *obio_base, *macppc_openpic_base;
+static u_char *obio_base;
 
 extern u_int *heathrow_FCR;
 
@@ -99,7 +103,7 @@ volatile int cpl, ipending;
 #define INT_CLEAR_REG_L  (interrupt_reg + 0x18)
 #define INT_LEVEL_REG_L  (interrupt_reg + 0x1c)
 
-#define have_openpic	(macppc_openpic_base != NULL)
+#define have_openpic	(openpic_base != NULL)
 
 /*
  * Map 64 irqs into 32 (bits).
@@ -135,13 +139,13 @@ cntlzw(x)
 {
 	int a;
 
-	__asm __volatile ("cntlzw %0,%1" : "=r"(a) : "r"(x));
+	asm volatile ("cntlzw %0,%1" : "=r"(a) : "r"(x));
 
 	return a;
 }
 
 int
-read_irq()
+gc_read_irq()
 {
 	int rv = 0;
 	int lo, hi, p;
@@ -173,28 +177,37 @@ read_irq()
 }
 
 void
-enable_irq(x)
-	int x;
-{
-	int lo, hi, v;
+gc_enable_irq(irq)
 	int irq;
+{
+	u_int x;
 
-	x &= HWIRQ_MASK;	/* XXX Higher bits are software interrupts. */
-
-	lo = hi = 0;
-	while (x) {
-		v = 31 - cntlzw(x);
-		irq = hwirq[v];
-		if (irq < 32)
-			lo |= 1 << irq;
-		else
-			hi |= 1 << (irq - 32);
-		x &= ~(1 << v);
+	if (irq < 32) {
+		x = in32rb(INT_ENABLE_REG_L);
+		x |= 1 << irq;
+		out32rb(INT_ENABLE_REG_L, x);
+	} else {
+		x = in32rb(INT_ENABLE_REG_H);
+		x |= 1 << (irq - 32);
+		out32rb(INT_ENABLE_REG_H, x);
 	}
+}
 
-	out32rb(INT_ENABLE_REG_L, lo);
-	if (heathrow_FCR)
-		out32rb(INT_ENABLE_REG_H, hi);
+void
+gc_disable_irq(irq)
+	int irq;
+{
+	u_int x;
+
+	if (irq < 32) {
+		x = in32rb(INT_ENABLE_REG_L);
+		x &= ~(1 << irq);
+		out32rb(INT_ENABLE_REG_L, x);
+	} else {
+		x = in32rb(INT_ENABLE_REG_H);
+		x &= ~(1 << (irq - 32));
+		out32rb(INT_ENABLE_REG_H, x);
+	}
 }
 
 /*
@@ -207,7 +220,6 @@ void
 intr_calculatemasks()
 {
 	int irq, level;
-	int irqs = 0;
 	struct intrhand *q;
 
 	/* First, figure out which levels each IRQ uses. */
@@ -290,21 +302,22 @@ intr_calculatemasks()
 		intrmask[irq] = irqs;
 	}
 
-	/* Lastly, determine which IRQs are actually in use. */
-	for (irq = 0; irq < NIRQ; irq++)
-		if (intrhand[irq])
-			irqs |= 1 << irq;
-
+	/* Lastly, enable IRQs actually in use. */
 	if (have_openpic) {
+		for (irq = 0; irq < ICU_LEN; irq++)
+			openpic_disable_irq(irq);
 		for (irq = 0; irq < NIRQ; irq++) {
-			if (irqs & (1 << irq))
+			if (intrhand[irq])
 				openpic_enable_irq(hwirq[irq], intrtype[irq]);
-			else
-				openpic_disable_irq(hwirq[irq]);
 		}
 	} else {
-		imen = ~irqs;
-		enable_irq(~imen);
+		out32rb(INT_ENABLE_REG_L, 0);
+		if (heathrow_FCR)
+			out32rb(INT_ENABLE_REG_H, 0);
+		for (irq = 0; irq < NIRQ; irq++) {
+			if (intrhand[irq])
+				gc_enable_irq(hwirq[irq]);
+		}
 	}
 }
 
@@ -325,17 +338,17 @@ intr_typename(type)
 
 	switch (type) {
         case IST_NONE :
-		return ("none");
+		return "none";
         case IST_PULSE:
-		return ("pulsed");
+		return "pulsed";
         case IST_EDGE:
-		return ("edge-triggered");
+		return "edge-triggered";
         case IST_LEVEL:
-		return ("level-triggered");
+		return "level-triggered";
 	default:
 		panic("intr_typename: invalid type %d", type);
 #if 1 /* XXX */
-		return ("unknown");
+		return "unknown";
 #endif
 	}
 }
@@ -362,7 +375,7 @@ intr_establish(irq, type, level, ih_fun, ih_arg)
 		panic("intr_establish: can't malloc handler info");
 
 	if (!LEGAL_IRQ(irq) || type == IST_NONE)
-		panic("intr_establish: bogus irq (%d) or type (%d), irq, type");
+		panic("intr_establish: bogus irq (%d) or type (%d)", irq, type);
 
 	switch (intrtype[irq]) {
 	case IST_NONE:
@@ -409,7 +422,7 @@ intr_establish(irq, type, level, ih_fun, ih_arg)
 	ih->ih_irq = irq;
 	*p = ih;
 
-	return (ih);
+	return ih;
 }
 
 /*
@@ -444,6 +457,10 @@ intr_disestablish(arg)
 		intrtype[irq] = IST_NONE;
 }
 
+#define HH_INTR_SECONDARY 0xf80000c0
+#define GC_IPI_IRQ	  30
+extern int cpuintr(void *);
+
 /*
  * external interrupt handler
  */
@@ -451,10 +468,74 @@ void
 ext_intr()
 {
 	int irq;
-	int o_imen, r_imen;
-	int pcpl;
+	int pcpl, msr, r_imen;
 	struct intrhand *ih;
 	u_long int_state;
+
+#ifdef MULTIPROCESSOR
+	/* Only cpu0 can handle external interrupts. */
+	if (cpu_number() != 0) {
+		/* XXX IPI should be maskable */
+		out32(HH_INTR_SECONDARY, ~0);
+		cpuintr(NULL);
+		return;
+	}
+#endif
+
+	pcpl = cpl;
+	asm volatile ("mfmsr %0" : "=r"(msr));
+
+	int_state = gc_read_irq();
+#ifdef MULTIPROCESSOR
+	r_imen = 1 << virq[GC_IPI_IRQ];
+	if (int_state & r_imen) {
+		/* XXX IPI should be maskable */
+		int_state &= ~r_imen;
+		cpuintr(NULL);
+	}
+#endif
+	if (int_state == 0)
+		return;
+
+start:
+	irq = 31 - cntlzw(int_state);
+	r_imen = 1 << irq;
+
+	if ((pcpl & r_imen) != 0) {
+		ipending |= r_imen;	/* Masked! Mark this as pending */
+		gc_disable_irq(hwirq[irq]);
+	} else {
+		splraise(intrmask[irq]);
+		asm volatile ("mtmsr %0" :: "r"(msr | PSL_EE));
+		KERNEL_LOCK(LK_CANRECURSE|LK_EXCLUSIVE);
+		ih = intrhand[irq];
+		while (ih) {
+			(*ih->ih_fun)(ih->ih_arg);
+			ih = ih->ih_next;
+		}
+		KERNEL_UNLOCK();
+		asm volatile ("mtmsr %0" :: "r"(msr));
+		cpl = pcpl;
+
+		uvmexp.intrs++;
+		intrcnt[hwirq[irq]]++;
+	}
+
+	int_state &= ~r_imen;
+	if (int_state)
+		goto start;
+
+	asm volatile ("mtmsr %0" :: "r"(msr | PSL_EE));
+	splx(pcpl);	/* Process pendings. */
+	asm volatile ("mtmsr %0" :: "r"(msr));
+}
+
+void
+ext_intr_openpic()
+{
+	int irq, realirq;
+	int pcpl, msr, r_imen;
+	struct intrhand *ih;
 
 #ifdef MULTIPROCESSOR
 	/* Only cpu0 can handle interrupts. */
@@ -462,75 +543,34 @@ ext_intr()
 		return;
 #endif
 
-	pcpl = splhigh();	/* Turn off all */
-
-	int_state = read_irq();
-	if (int_state == 0)
-		goto out;
-
-start:
-	irq = 31 - cntlzw(int_state);
-
-	o_imen = imen;
-	r_imen = 1 << irq;
-
-	if ((pcpl & r_imen) != 0) {
-		ipending |= r_imen;	/* Masked! Mark this as pending */
-		imen |= r_imen;
-		enable_irq(~imen);
-	} else {
-		KERNEL_LOCK(LK_CANRECURSE|LK_EXCLUSIVE);
-		ih = intrhand[irq];
-		while (ih) {
-			(*ih->ih_fun)(ih->ih_arg);
-			ih = ih->ih_next;
-		}
-
-		uvmexp.intrs++;
-		intrcnt[hwirq[irq]]++;
-		KERNEL_UNLOCK();
-	}
-
-	int_state &= ~r_imen;
-	if (int_state)
-		goto start;
-
-out:
-	splx(pcpl);	/* Process pendings. */
-}
-
-void
-ext_intr_openpic()
-{
-	int irq, realirq;
-	int r_imen;
-	int pcpl;
-	struct intrhand *ih;
-
-	pcpl = splhigh();	/* Turn off all */
+	pcpl = cpl;
+	asm volatile ("mfmsr %0" : "=r"(msr));
 
 	realirq = openpic_read_irq(0);
 	if (realirq == 255) {
-		printf("spurious interrupt\n");
-		goto out;
+		/* printf("spurious interrupt\n"); */
+		return;
 	}
 
 start:
-	irq = virq[realirq];
-
-	/* XXX check range */
-
+	irq = virq[realirq];		/* XXX check range */
 	r_imen = 1 << irq;
 
 	if ((pcpl & r_imen) != 0) {
 		ipending |= r_imen;	/* Masked! Mark this as pending */
 		openpic_disable_irq(realirq);
 	} else {
+		splraise(intrmask[irq]);
+		asm volatile ("mtmsr %0" :: "r"(msr | PSL_EE));
+		KERNEL_LOCK(LK_CANRECURSE|LK_EXCLUSIVE);
 		ih = intrhand[irq];
 		while (ih) {
 			(*ih->ih_fun)(ih->ih_arg);
 			ih = ih->ih_next;
 		}
+		KERNEL_UNLOCK();
+		asm volatile ("mtmsr %0" :: "r"(msr));
+		cpl = pcpl;
 
 		uvmexp.intrs++;
 		intrcnt[hwirq[irq]]++;
@@ -542,8 +582,9 @@ start:
 	if (realirq != 255)
 		goto start;
 
-out:
+	asm volatile ("mtmsr %0" :: "r"(msr | PSL_EE));
 	splx(pcpl);	/* Process pendings. */
+	asm volatile ("mtmsr %0" :: "r"(msr));
 }
 
 static void
@@ -554,36 +595,41 @@ do_pending_int()
 	int pcpl;
 	int hwpend;
 	int emsr, dmsr;
-	static int processing;
+	const int cpu_id = cpu_number();
+	static int processing[2];	/* XXX */
 
-	if (processing)
+	if (processing[cpu_id])
 		return;
 
-	processing = 1;
+	processing[cpu_id] = 1;
 	asm volatile("mfmsr %0" : "=r"(emsr));
 	dmsr = emsr & ~PSL_EE;
 	asm volatile("mtmsr %0" :: "r"(dmsr));
 
-	pcpl = splhigh();		/* Turn off all */
-	hwpend = ipending & ~pcpl;	/* Do now unmasked pendings */
+	pcpl = cpl;
+again:
 
-	KERNEL_LOCK(LK_CANRECURSE|LK_EXCLUSIVE);
 #ifdef MULTIPROCESSOR
-	if (cpu_number() == 0) {
+	if (cpu_id == 0) {
 #endif
-	if (!have_openpic) {
-		imen &= ~hwpend;
-		enable_irq(~imen);
-	}
-	hwpend &= HWIRQ_MASK;
-	while (hwpend) {
+	/* Do now unmasked pendings */
+	while ((hwpend = ipending & ~pcpl & HWIRQ_MASK) != 0) {
 		irq = 31 - cntlzw(hwpend);
-		hwpend &= ~(1L << irq);
+		if (!have_openpic)
+			gc_enable_irq(hwirq[irq]);
+
+		ipending &= ~(1 << irq);
+		splraise(intrmask[irq]);
+		asm volatile("mtmsr %0" :: "r"(emsr));
+		KERNEL_LOCK(LK_CANRECURSE|LK_EXCLUSIVE);
 		ih = intrhand[irq];
 		while(ih) {
 			(*ih->ih_fun)(ih->ih_arg);
 			ih = ih->ih_next;
 		}
+		KERNEL_UNLOCK();
+		asm volatile("mtmsr %0" :: "r"(dmsr));
+		cpl = pcpl;
 
 		intrcnt[hwirq[irq]]++;
 		if (have_openpic)
@@ -593,32 +639,52 @@ do_pending_int()
 	}
 #endif
 
-	/*out32rb(INT_ENABLE_REG, ~imen);*/
-
-softagain:
 	if ((ipending & ~pcpl) & (1 << SIR_SERIAL)) {
 		ipending &= ~(1 << SIR_SERIAL);
+		splsoftserial();
+		asm volatile("mtmsr %0" :: "r"(emsr));
+		KERNEL_LOCK(LK_CANRECURSE|LK_EXCLUSIVE);
 		softserial();
+		KERNEL_UNLOCK();
+		asm volatile("mtmsr %0" :: "r"(dmsr));
+		cpl = pcpl;
 		intrcnt[CNT_SOFTSERIAL]++;
-		goto softagain;
+		goto again;
 	}
 	if ((ipending & ~pcpl) & (1 << SIR_NET)) {
 		ipending &= ~(1 << SIR_NET);
+		splsoftnet();
+		asm volatile("mtmsr %0" :: "r"(emsr));
+		KERNEL_LOCK(LK_CANRECURSE|LK_EXCLUSIVE);
 		softnet();
+		KERNEL_UNLOCK();
+		asm volatile("mtmsr %0" :: "r"(dmsr));
+		cpl = pcpl;
 		intrcnt[CNT_SOFTNET]++;
-		goto softagain;
+		goto again;
 	}
 	if ((ipending & ~pcpl) & (1 << SIR_CLOCK)) {
 		ipending &= ~(1 << SIR_CLOCK);
+		splsoftclock();
+		asm volatile("mtmsr %0" :: "r"(emsr));
+		KERNEL_LOCK(LK_CANRECURSE|LK_EXCLUSIVE);
 		softclock(NULL);
+		KERNEL_UNLOCK();
+		asm volatile("mtmsr %0" :: "r"(dmsr));
+		cpl = pcpl;
 		intrcnt[CNT_SOFTCLOCK]++;
-		goto softagain;
+		goto again;
 	}
-	KERNEL_UNLOCK();
-	ipending &= pcpl;
+
+#if 0
+	if (ipending & ~pcpl) {
+		printf("do_pending_int (again) 0x%x\n", ipending & ~pcpl);
+		goto again;
+	}
+#endif
 	cpl = pcpl;	/* Don't use splx... we are here already! */
+	processing[cpu_id] = 0;
 	asm volatile("mtmsr %0" :: "r"(emsr));
-	processing = 0;
 }
 
 int
@@ -627,10 +693,10 @@ splraise(ncpl)
 {
 	int ocpl;
 
-	asm volatile("sync; eieio\n");	/* don't reorder.... */
+	asm volatile("sync; eieio");	/* don't reorder.... */
 	ocpl = cpl;
 	cpl = ocpl | ncpl;
-	asm volatile("sync; eieio\n");	/* reorder protect */
+	asm volatile("sync; eieio");	/* reorder protect */
 	return ocpl;
 }
 
@@ -639,11 +705,11 @@ splx(ncpl)
 	int ncpl;
 {
 
-	asm volatile("sync; eieio\n");	/* reorder protect */
+	asm volatile("sync; eieio");	/* reorder protect */
 	cpl = ncpl;
 	if (ipending & ~ncpl)
 		do_pending_int();
-	asm volatile("sync; eieio\n");	/* reorder protect */
+	asm volatile("sync; eieio");	/* reorder protect */
 }
 
 int
@@ -652,12 +718,12 @@ spllower(ncpl)
 {
 	int ocpl;
 
-	asm volatile("sync; eieio\n");	/* reorder protect */
+	asm volatile("sync; eieio");	/* reorder protect */
 	ocpl = cpl;
 	cpl = ncpl;
 	if (ipending & ~ncpl)
 		do_pending_int();
-	asm volatile("sync; eieio\n");	/* reorder protect */
+	asm volatile("sync; eieio");	/* reorder protect */
 	return ocpl;
 }
 
@@ -680,8 +746,6 @@ openpic_init()
 {
 	int irq;
 	u_int x;
-
-	openpic_base = (volatile unsigned char *) macppc_openpic_base;
 
 	/* disable all interrupts */
 	for (irq = 0; irq < 256; irq++)
@@ -707,6 +771,7 @@ openpic_init()
 		openpic_write(OPENPIC_SRC_VECTOR(irq), x);
 	}
 
+	/* XXX IPI */
 	/* XXX set spurious intr vector */
 
 	openpic_set_priority(0, 0);
@@ -728,6 +793,10 @@ legacy_int_init()
 {
 	out32rb(INT_ENABLE_REG_L, 0);		/* disable all intr. */
 	out32rb(INT_CLEAR_REG_L, 0xffffffff);	/* clear pending intr. */
+	if (heathrow_FCR) {
+		out32rb(INT_ENABLE_REG_H, 0);
+		out32rb(INT_CLEAR_REG_H, 0xffffffff);
+	}
 
 	install_extint(ext_intr);
 }
@@ -742,8 +811,6 @@ init_interrupt()
 	int mac_io, reg[5];
 	int32_t ictlr;
 	char type[32];
-
-	macppc_openpic_base = NULL;
 
 	mac_io = OF_finddevice("mac-io");
 	if (mac_io == -1)
@@ -764,7 +831,7 @@ init_interrupt()
 	obio_base = (void *)reg[2];
 	heathrow_FCR = (void *)(obio_base + HEATHROW_FCR_OFFSET);
 
-	bzero(type, sizeof(type));
+	memset(type, 0, sizeof(type));
 	chosen = OF_finddevice("/chosen");
 	if (OF_getprop(chosen, "interrupt-controller", &ictlr, 4) == 4)
 		OF_getprop(ictlr, "device_type", type, sizeof(type));
@@ -782,7 +849,7 @@ init_interrupt()
 		if (OF_getprop(ictlr, "reg", reg, sizeof(reg)) < 8)
 			goto failed;
 
-		macppc_openpic_base = (void *)(obio_base + reg[0]);
+		openpic_base = (void *)(obio_base + reg[0]);
 		openpic_init();
 		return;
 	}

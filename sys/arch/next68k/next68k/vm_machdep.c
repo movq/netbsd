@@ -1,4 +1,4 @@
-/*	$NetBSD: vm_machdep.c,v 1.20 2001/01/11 08:44:36 scw Exp $	*/
+/*	$NetBSD: vm_machdep.c,v 1.26 2001/09/10 21:19:21 chris Exp $	*/
 
 /*
  * This file was taken from mvme68k/mvme68k/vm_machdep.c
@@ -100,7 +100,6 @@ cpu_fork(p1, p2, stack, stacksize, func, arg)
 	struct trapframe *tf;
 	struct switchframe *sf;
 	extern struct pcb *curpcb;
-	extern void proc_trampoline();
 
 	p2->p_md.md_flags = p1->p_md.md_flags & ~MDP_HPUXTRACE;
 
@@ -133,25 +132,6 @@ cpu_fork(p1, p2, stack, stacksize, func, arg)
 	pcb->pcb_regs[6] = (int)func;		/* A2 */
 	pcb->pcb_regs[7] = (int)arg;		/* A3 */
 	pcb->pcb_regs[11] = (int)sf;		/* SSP */
-}
-
-/*
- * Arrange for in-kernel execution of a process to continue at the
- * named pc, as if the code at that address were called as a function
- * with argument, the current process's process pointer.
- *
- * Note that it's assumed that when the named process returns, rei()
- * should be invoked, to return to user mode.
- */
-void
-cpu_set_kpc(p, pc, arg)
-	struct proc *p;
-	void (*pc) __P((void *));
-	void *arg;
-{
-
-	p->p_addr->u_pcb.pcb_regs[6] = (u_long) pc;	/* A2 */
-	p->p_addr->u_pcb.pcb_regs[7] = (u_long) arg;	/* A3 */
 }
 
 /*
@@ -249,127 +229,16 @@ pagemove(from, to, size)
 		if (pmap_extract(pmap_kernel(), (vaddr_t)to, NULL) == TRUE)
 			panic("pagemove 3");
 #endif
-		pmap_remove(pmap_kernel(),
-			    (vaddr_t)from, (vaddr_t)from + PAGE_SIZE);
-		pmap_enter(pmap_kernel(),
-			   (vaddr_t)to, pa, VM_PROT_READ|VM_PROT_WRITE,
-			   VM_PROT_READ|VM_PROT_WRITE|PMAP_WIRED);
+		pmap_kremove((vaddr_t)from, PAGE_SIZE);
+		pmap_kenter_pa((vaddr_t)to, pa, VM_PROT_READ|VM_PROT_WRITE);
 		from += PAGE_SIZE;
 		to += PAGE_SIZE;
 		size -= PAGE_SIZE;
 	}
+	pmap_update(pmap_kernel());
 }
 
-/*
- * Map `size' bytes of physical memory starting at `paddr' into
- * kernel VA space at `vaddr'.  Read/write and cache-inhibit status
- * are specified by `prot'.
- */ 
-void
-physaccess(vaddr, paddr, size, prot)
-	caddr_t vaddr, paddr;
-	int size, prot;
-{
-	pt_entry_t *pte;
-	u_int page;
-
-	pte = kvtopte(vaddr);
-	page = (u_int)paddr & PG_FRAME;
-	for (size = btoc(size); size; size--) {
-		*pte++ = PG_V | prot | page;
-		page += NBPG;
-	}
-	TBIAS();
-}
-
-void
-physunaccess(vaddr, size)
-	caddr_t vaddr;
-	int size;
-{
-	pt_entry_t *pte;
-
-	pte = kvtopte(vaddr);
-	for (size = btoc(size); size; size--)
-		*pte++ = PG_NV;
-	TBIAS();
-}
-
-/*
- * Allocate/deallocate a cache-inhibited range of kernel virtual address
- * space mapping the indicated physical range [pa - pa+size].
- */
-void *
-iomap(paddr, size)
-	u_long paddr;
-	size_t size;
-{
-	u_long pa, off;
-	vaddr_t va, rval;
-
-	off = paddr & PGOFSET;
-	pa = m68k_trunc_page(paddr);
-	size += off;
-	size = m68k_round_page(size);
-
-	/* Get some kernel virtual space. */
-	va = uvm_km_alloc(kernel_map, size);
-	if (va == 0)
-		return (NULL);
-	rval = va + off;
-
-	/* Map the PA range. */
-	physaccess((caddr_t)va, (caddr_t)pa, size, PG_RW|PG_CI);
-
-	return ((void *)rval);
-}
-
-void
-iounmap(kva, size)
-	void *kva;
-	size_t size;
-{
-	vaddr_t va;
-
-	va = m68k_trunc_page((vaddr_t)kva);
-	size = m68k_round_page(size);
-
-	physunaccess((caddr_t)va, size);
-	uvm_km_free(kernel_map, va, size);
-}
-
-/*
- * Set a red zone in the kernel stack after the u. area.
- * We don't support a redzone right now.  It really isn't clear
- * that it is a good idea since, if the kernel stack were to roll
- * into a write protected page, the processor would lock up (since
- * it cannot create an exception frame) and we would get no useful
- * post-mortem info.  Currently, under the DEBUG option, we just
- * check at every clock interrupt to see if the current k-stack has
- * gone too far (i.e. into the "redzone" page) and if so, panic.
- * Look at _lev6intr in locore.s for more details.
- */
-/*ARGSUSED*/
-setredzone(pte, vaddr)
-	pt_entry_t *pte;
-	caddr_t vaddr;
-{
-}
-
-/*
- * Convert kernel VA to physical address
- */
-kvtop(addr)
-	caddr_t addr;
-{
-	paddr_t pa;
-
-	if (pmap_extract(pmap_kernel(), (vaddr_t)addr, &pa) == FALSE)
-		panic("kvtop: zero page frame");
-	return((int)pa);
-}
-
-extern vm_map_t phys_map;
+extern struct vm_map *phys_map;
 
 /*
  * Map a user I/O request into kernel virtual address space.
@@ -381,7 +250,7 @@ vmapbuf(bp, len)
 	struct buf *bp;
 	vsize_t len;
 {
-	struct pmap *upmap, *kpmap;
+	struct pmap *upmap;
 	vaddr_t uva;	/* User VA (map from) */
 	vaddr_t kva;	/* Kernel VA (new to) */
 	paddr_t pa; 	/* physical address */
@@ -397,16 +266,15 @@ vmapbuf(bp, len)
 	bp->b_data = (caddr_t)(kva + off);
 
 	upmap = vm_map_pmap(&bp->b_proc->p_vmspace->vm_map);
-	kpmap = vm_map_pmap(phys_map);
 	do {
 		if (pmap_extract(upmap, uva, &pa) == FALSE)
 			panic("vmapbuf: null page frame");
-		pmap_enter(kpmap, kva, pa, VM_PROT_READ|VM_PROT_WRITE,
-		    PMAP_WIRED);
+		pmap_kenter_pa(kva, pa, VM_PROT_READ | VM_PROT_WRITE);
 		uva += PAGE_SIZE;
 		kva += PAGE_SIZE;
 		len -= PAGE_SIZE;
 	} while (len);
+	pmap_update(kpmap);
 }
 
 /*
@@ -427,10 +295,8 @@ vunmapbuf(bp, len)
 	off = (vaddr_t)bp->b_data - kva;
 	len = m68k_round_page(off + len);
 
-	/*
-	 * pmap_remove() is unnecessary here, as kmem_free_wakeup()
-	 * will do it for us.
-	 */
+	pmap_kremove(kva, len);
+	pmap_update(pmap_kernel());
 	uvm_km_free_wakeup(phys_map, kva, len);
 	bp->b_data = bp->b_saveaddr;
 	bp->b_saveaddr = 0;

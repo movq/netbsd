@@ -1,4 +1,4 @@
-/*	$NetBSD: shark_machdep.c,v 1.20 2001/03/04 01:50:54 matt Exp $	*/
+/*	$NetBSD: shark_machdep.c,v 1.24 2001/11/09 07:21:38 thorpej Exp $	*/
 
 /*
  * Copyright 1997
@@ -105,9 +105,6 @@ extern void data_abort_handler		__P((trapframe_t *frame));
 extern void prefetch_abort_handler	__P((trapframe_t *frame));
 extern void undefinedinstruction_bounce	__P((trapframe_t *frame));
 extern void consinit		__P((void));
-#ifdef	DDB
-extern void db_machine_init     __P((void));
-#endif
 int	ofbus_match __P((struct device *, struct cfdata *, void *));
 void	ofbus_attach __P((struct device *, struct device *, void *));
 
@@ -309,15 +306,19 @@ initarm(ofw_handle)
 		panic("Cannot claim FIQ vector.\n");
 
 #ifdef DDB
-	printf("ddb: ");
 	db_machine_init();
+#ifdef __ELF__
+	ddb_init(0, NULL, NULL);	/* XXX */
+#else
 	{
-		struct exec *kernexec = (struct exec *)KERNEL_BASE;
+		struct exec *kernexec = (struct exec *)KERNEL_TEXT_BASE;
 		extern int end;
 		extern char *esym;
 
 		ddb_init(kernexec->a_syms, &end, esym);
 	}
+#endif /* __ELF__ */
+
 	if (boothowto & RB_KDB)
 		Debugger();
 #endif
@@ -453,9 +454,9 @@ ofw_device_register(struct device *dev, void *aux)
 		struct scsipibus_attach_args *sa = aux;
 		char *cp = strchr(boot_component, '@');
 		if (cp != NULL
-		    && sa->sa_sc_link->type == BUS_ATAPI
-		    && sa->sa_sc_link->scsipi_atapi.channel == 0
-		    && sa->sa_sc_link->scsipi_atapi.drive == strtoul(cp+1, NULL, 16)) {
+		    && sa->sa_periph->periph_channel->chan_bustype->bustype_type == SCSIPI_BUSTYPE_ATAPI
+		    && sa->sa_periph->periph_channel->chan_channel == 0
+		    && sa->sa_periph->periph_target == strtoul(cp+1, NULL, 16)) {
 			booted_device = dev;
 		}
 		return;

@@ -1,4 +1,4 @@
-/*	$NetBSD: sa11x0_irqhandler.c,v 1.2 2001/02/23 04:31:19 ichiro Exp $	*/
+/*	$NetBSD: sa11x0_irqhandler.c,v 1.7 2001/06/20 02:18:06 toshii Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997, 1998, 2001 The NetBSD Foundation, Inc.
@@ -98,10 +98,7 @@
 irqhandler_t *irqhandlers[NIRQS];
 
 int current_intr_depth;
-u_int current_mask;
 u_int actual_mask;
-u_int disabled_mask;
-u_int spl_mask;
 u_int imask[NIPL];
 u_int irqblock[NIRQS];
 
@@ -141,32 +138,18 @@ intr_calculatemasks()
 		imask[level] = irqs;
 	}
 
-#if 0
-	/*
-	 * Initialize soft interrupt masks to block themselves.
-	 */
-	imask[IPL_SOFTCLOCK] = 1 << SIR_CLOCK;
-	imask[IPL_SOFTNET] = 1 << SIR_NET;
-	imask[IPL_SOFTSERIAL] = 1 << SIR_SERIAL;
-
-	/*
-	 * IPL_NONE is used for hardware interrupts that are never blocked,
-	 * and do not block anything else.
-	 */
-	imask[IPL_NONE] = 0;
-#endif
 
 	/*
 	 * Enforce a hierarchy that gives slow devices a better chance at not
 	 * dropping data.
 	 */
-	for(level = NIPL - 1; level > 0; level--)
+	for (level = NIPL - 1; level > 0; level--)
 		imask[level - 1] |= imask[level];
 
 	/*
 	 * Calculate irqblock[], which emulates hardware interrupt levels.
 	 */
-	for(irq = 0; irq < ICU_LEN; irq++) {
+	for (irq = 0; irq < ICU_LEN; irq++) {
 		int irqs = 1 << irq;
 		for (q = irqhandlers[irq]; q; q = q->ih_next)
 			irqs |= ~imask[q->ih_level];
@@ -184,13 +167,8 @@ sa11x0_intr_evcnt(sa11x0_chipset_tag_t ic, int irq)
 }
 
 void *
-sa11x0_intr_establish(ic, irq, type, level, ih_fun, ih_arg)
-	sa11x0_chipset_tag_t ic;
-	int irq;
-	int type;
-	int level;
-	int (*ih_fun)(void *);
-	void *ih_arg;
+sa11x0_intr_establish(sa11x0_chipset_tag_t ic, int irq, int type, int level,
+		      int (*ih_fun)(void *), void *ih_arg)
 {
 	int saved_cpsr;
 	struct irqhandler **p, *q, *ih;
@@ -239,8 +217,8 @@ sa11x0_intr_establish(ic, irq, type, level, ih_fun, ih_arg)
 	saved_cpsr = SetCPSR(I32_bit, I32_bit);
 	set_spl_masks();
 
-	/* XXX what if irq is disabled in current spl level */
-	current_mask |= (1 << irq);
+	irq_setmasks();
+
 	SetCPSR(I32_bit, saved_cpsr & I32_bit);
 #ifdef DEBUG
 	dumpirqhandlers();
@@ -252,16 +230,14 @@ sa11x0_intr_establish(ic, irq, type, level, ih_fun, ih_arg)
  * Deregister an interrupt handler.
  */
 void
-sa11x0_intr_disestablish(ic, arg)
-	sa11x0_chipset_tag_t ic;
-	void *arg;
+sa11x0_intr_disestablish(sa11x0_chipset_tag_t ic, void *arg)
 {
 	struct irqhandler *ih = arg;
 	int irq = ih->ih_irq;
 	int saved_cpsr;
 	struct irqhandler **p, *q;
 
-#if DIAGNOSITC
+#if DIAGNOSTIC
 	if (irq < 0 || irq >= ICU_LEN)
 		panic("intr_disestablish: bogus irq");
 #endif
@@ -270,7 +246,8 @@ sa11x0_intr_disestablish(ic, arg)
 	 * Remove the handler from the chain.
 	 * This is O(n^2), too.
 	 */
-	for (p = &irqhandlers[irq]; (q = *p) != NULL && q != ih; p = &q->ih_next)
+	for (p = &irqhandlers[irq]; (q = *p) != NULL && q != ih;
+	     p = &q->ih_next)
 		;
 	if (q)
 		*p = q->ih_next;
@@ -282,7 +259,7 @@ sa11x0_intr_disestablish(ic, arg)
 	saved_cpsr = SetCPSR(I32_bit, I32_bit);
 	set_spl_masks();
 
-	current_mask &= ~(1 << irq);
+	irq_setmasks();
 	SetCPSR(I32_bit, saved_cpsr & I32_bit);
 
 }
@@ -290,12 +267,14 @@ sa11x0_intr_disestablish(ic, arg)
 void
 stray_irqhandler(void *p)
 {
+
 	printf("stray interrupt\n");
 }
 
 int
 fakeintr(void *p)
 {
+
 	return 0;
 }
 
@@ -306,10 +285,10 @@ dumpirqhandlers()
 	int irq;
 	struct irqhandler *p;
 
-	for(irq = 0; irq < ICU_LEN; irq++) {
+	for (irq = 0; irq < ICU_LEN; irq++) {
 		printf("irq %d:", irq);
 		p = irqhandlers[irq];
-		for(; p; p = p->ih_next)
+		for (; p; p = p->ih_next)
 			printf("ih_func: 0x%lx, ", (unsigned long)p->ih_func);
 		printf("\n");
 	}

@@ -1,4 +1,4 @@
-/*      $NetBSD: i8042reg.h,v 1.2 1998/05/01 21:14:46 cgd Exp $     */
+/*      $NetBSD: i8042reg.h,v 1.4 2001/07/26 22:53:13 wiz Exp $     */
 
 /*
  * Copyright 1997
@@ -119,7 +119,7 @@
 #define I8042_ANY_DATA   0xff            /* Wait for any input          */
 
 #define I8042_CMD         0     /* Command is for keyboard controller   */
-#define I8042_AUX_CMD     1     /* Command is for auxilliary port       */
+#define I8042_AUX_CMD     1     /* Command is for auxiliary port        */
 #define I8042_KBD_CMD     2     /* Write to keyboard device data area   */
 #define I8042_WRITE_CCB   3     /* Write Controller Command Byte        */
 
@@ -164,7 +164,7 @@ extern int  i8042_wait_input  __P((bus_space_tag_t,
 #define I8042_UNMAP(iot, ioh) \
     (bus_space_unmap((iot), (ioh), I8042_NPORTS))
 
-/* Macro to wait and retreive data from the Auxiliary device.  
+/* Macro to wait and retrieve data from the Auxiliary device.  
 ** NOTE: 
 **   We always check the status before reading the data port because some 8042
 **   firmware seems to update the status and data AFTER the interrupt has
@@ -184,7 +184,7 @@ extern int  i8042_wait_input  __P((bus_space_tag_t,
    } \
 }
 
-/* Macro to wait and retreive data from the Keyboard device.  
+/* Macro to wait and retrieve data from the Keyboard device.  
 ** NOTE: 
 **   We always check the status before reading the data port because some 8042
 **   firmware seems to update the status and data AFTER the interrupt has

@@ -1,4 +1,4 @@
-/* $NetBSD: isic_supio.c,v 1.4 2001/02/20 22:24:31 martin Exp $ */
+/* $NetBSD: isic_supio.c,v 1.7 2001/04/26 05:58:41 is Exp $ */
 
 /*
  *   Copyright (c) 1998,2001 Ignatios Souvatzis. All rights reserved.
@@ -74,6 +74,9 @@
 #include <dev/ic/hscx.h>
 #include <dev/ic/isac.h>
 
+/* XXX I think the following line should be elsewhere ... -is */
+extern const struct isdn_layer1_bri_driver isic_std_driver;
+
 /*static*/ int isic_supio_match __P((struct device *, struct cfdata *, void *));
 /*static*/ void isic_supio_attach __P((struct device *, struct device *, void *));
 
@@ -86,7 +89,7 @@
 /*static*/ void aster_write_fifo __P((struct l1_softc *sc, int what,
 	const void *data, size_t size));
 
-static int supio_isicattach __P((struct l1_softc *sc));
+static int supio_isicattach __P((struct l1_softc *sc, char *));
 
 struct isic_supio_softc {
 	struct l1_softc	sc_isic;
@@ -182,7 +185,7 @@ isic_supio_attach(parent, self, aux)
 	/* MI initialization of card */
 
 	printf("\n");
-	supio_isicattach(sc);
+	supio_isicattach(sc, sap->supio_name+6);
 
  	ssc->sc_isr.isr_intr = isicintr;
 	ssc->sc_isr.isr_arg = sc;
@@ -256,7 +259,7 @@ aster_write_reg(struct l1_softc *sc, int what, bus_size_t offs, u_int8_t data)
 #define	TERMFMT	"\n"
 
 int
-supio_isicattach(struct l1_softc *sc)
+supio_isicattach(struct l1_softc *sc, char *cardname)
 {
   	static char *ISACversion[] = {
   		"2085 Version A1/A2 or 2086/2186 Version 1.1",
@@ -276,7 +279,6 @@ supio_isicattach(struct l1_softc *sc)
 		"Unknown Version"
 	};
 
-	l1_sc[sc->sc_unit] = sc;		
 	sc->sc_isac_version = 0;
 	sc->sc_isac_version = ((ISAC_READ(I_RBCH)) >> 5) & 0x03;
 
@@ -318,9 +320,8 @@ supio_isicattach(struct l1_softc *sc)
 
 	/* HSCX setup */
 
-	isic_bchannel_setup(sc->sc_unit, HSCX_CH_A, BPROT_NONE, 0);
-	
-	isic_bchannel_setup(sc->sc_unit, HSCX_CH_B, BPROT_NONE, 0);
+	isic_bchannel_setup(sc, HSCX_CH_A, BPROT_NONE, 0);
+	isic_bchannel_setup(sc, HSCX_CH_B, BPROT_NONE, 0);
 
 	/* setup linktab */
 
@@ -351,7 +352,9 @@ supio_isicattach(struct l1_softc *sc)
 
 	/* init higher protocol layers */
 	
-	MPH_Status_Ind(sc->sc_unit, STI_ATTACH, sc->sc_cardtyp);	
+	/* MPH_Status_Ind(sc->sc_unit, STI_ATTACH, sc->sc_cardtyp); */
+	sc->sc_l2 = isdn_attach_layer1_bri(sc, sc->sc_dev.dv_xname,
+		cardname, &isic_std_driver);
 
 	/* announce chip versions */
 	

@@ -1,4 +1,4 @@
-/*	$NetBSD: pmap_bootstrap.c,v 1.15 2000/11/20 19:35:30 scw Exp $	*/
+/*	$NetBSD: pmap_bootstrap.c,v 1.17 2001/11/08 21:53:44 scw Exp $	*/
 
 /* 
  * Copyright (c) 1991, 1993
@@ -43,7 +43,6 @@
 #include <sys/kcore.h>
 #include <machine/kcore.h>
 #include <machine/pte.h>
-#include <mvme68k/mvme68k/clockreg.h>
 #include <machine/vmparam.h>
 #include <machine/cpu.h>
 
@@ -250,7 +249,7 @@ pmap_bootstrap(nextpa, firstpa)
 		 */
 		pte = (u_int *)kptmpa;
 		epte = &pte[nptpages+1];
-		protopte = kptpa | PG_RW | PG_CI | PG_V;
+		protopte = kptpa | PG_RW | PG_CI | PG_U | PG_V;
 		while (pte < epte) {
 			*pte++ = protopte;
 			protopte += NBPG;
@@ -262,7 +261,7 @@ pmap_bootstrap(nextpa, firstpa)
 		while (pte < epte) {
 			*pte++ = PG_NV;
 		}
-		*pte = lkptpa | PG_RW | PG_CI | PG_V;
+		*pte = lkptpa | PG_RW | PG_CI | PG_U | PG_V;
 	} else
 #endif /* M68040 || M68060 */
 	{
@@ -320,7 +319,7 @@ pmap_bootstrap(nextpa, firstpa)
 	 */
 	pte = &((u_int *)kptpa)[m68k_btop(KERNBASE)];
 	epte = &pte[m68k_btop(m68k_trunc_page(&etext))];
-	protopte = firstpa | PG_RO | PG_V;
+	protopte = firstpa | PG_RO | PG_U | PG_V;
 	while (pte < epte) {
 		*pte++ = protopte;
 		protopte += NBPG;
@@ -349,8 +348,8 @@ pmap_bootstrap(nextpa, firstpa)
 	epte = &((u_int *)kptpa)[m68k_btop(nextpa - firstpa)];
 	protopte = (protopte & ~PG_PROT) | PG_RW;
 	if (RELOC(mmutype, int) == MMU_68040) {
-		protopte &= ~PG_CCB;
-		protopte |= PG_CIN;
+		protopte &= ~PG_CMASK;
+		protopte |= PG_CI;
 	}
 	while (pte < epte) {
 		*pte++ = protopte;
@@ -361,7 +360,7 @@ pmap_bootstrap(nextpa, firstpa)
 	 */
 	pte = (u_int *)iiopa;
 	epte = (u_int *)kptmpa;
-	protopte = RELOC(intiobase_phys, u_int) | PG_RW | PG_CI | PG_V;
+	protopte = RELOC(intiobase_phys, u_int) | PG_RW | PG_CI | PG_U | PG_V;
 	while (pte < epte) {
 		*pte++ = protopte;
 		protopte += NBPG;

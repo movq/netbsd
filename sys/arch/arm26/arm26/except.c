@@ -1,4 +1,4 @@
-/* $NetBSD: except.c,v 1.28 2001/02/27 23:57:30 bjh21 Exp $ */
+/* $NetBSD: except.c,v 1.38 2001/10/18 22:53:39 bjh21 Exp $ */
 /*-
  * Copyright (c) 1998, 1999, 2000 Ben Harris
  * All rights reserved.
@@ -32,7 +32,7 @@
 
 #include <sys/param.h>
 
-__KERNEL_RCSID(0, "$NetBSD: except.c,v 1.28 2001/02/27 23:57:30 bjh21 Exp $");
+__KERNEL_RCSID(0, "$NetBSD: except.c,v 1.38 2001/10/18 22:53:39 bjh21 Exp $");
 
 #include "opt_cputypes.h"
 #include "opt_ddb.h"
@@ -66,8 +66,8 @@ __KERNEL_RCSID(0, "$NetBSD: except.c,v 1.28 2001/02/27 23:57:30 bjh21 Exp $");
 #endif
 
 void syscall(struct trapframe *);
-static void do_fault(struct trapframe *, struct proc *, vm_map_t, vaddr_t,
-    vm_prot_t);
+static void do_fault(struct trapframe *, struct proc *, struct vm_map *,
+    vaddr_t, vm_prot_t);
 static void data_abort_fixup(struct trapframe *);
 static vaddr_t data_abort_address(struct trapframe *, vsize_t *);
 static vm_prot_t data_abort_atype(struct trapframe *);
@@ -133,57 +133,6 @@ checkvectors()
 }
 #endif
 
-
-void
-undefined_handler(struct trapframe *tf)
-{
-	u_quad_t sticks;
-	struct proc *p;
-	u_int32_t insn;
-	vaddr_t pc;
-
-	pc = tf->tf_r15 & R15_PC;
-	insn =  *(register_t *)pc;
-#ifdef CPU_ARM2
-	/*
-	 * Check if the aborted instruction was a SWI (ARM2 bug --
-	 * ARM3 data sheet p87) and call SWI handler if so.
-	 */
-	if ((insn & 0x0f000000) == 0x0f000000) {
-		swi_handler(tf);
-		return;
-	}
-#endif
-	/* Enable interrupts if they were enabled before the trap. */
-	if ((tf->tf_r15 & R15_IRQ_DISABLE) == 0)
-		int_on();
-	uvmexp.traps++;
-	p = curproc;
-	if (p == NULL)
-		p = &proc0;
-	if (p->p_addr->u_pcb.pcb_onundef_lj != NULL)
-		longjmp(p->p_addr->u_pcb.pcb_onundef_lj);
-	if ((tf->tf_r15 & R15_MODE) != R15_MODE_USR) {
-#ifdef DDB
-		if (insn == 0xe7ffffff) {
-			kdb_trap(T_BREAKPOINT, (db_regs_t *)tf);
-			return;
-		}
-#endif
-#ifdef DEBUG
-		printf("Undefined instruction:\n");
-		printregs(tf);
-		printf("pc -> ");
-		disassemble(tf->tf_r15 & R15_PC);
-#endif
-		panic("undefined instruction in kernel mode");
-	} else {
-		p->p_addr->u_pcb.pcb_tf = tf;
-		sticks = p->p_sticks;
-		trapsignal(p, SIGILL, insn);
-		userret(p, pc, sticks);
-	}
-}
 
 void
 swi_handler(struct trapframe *tf)
@@ -396,7 +345,7 @@ data_abort_handler(struct trapframe *tf)
 	struct proc *p;
 	vm_prot_t atype;
 	boolean_t usrmode, twopages;
-	vm_map_t map;
+	struct vm_map *map;
 
 	/*
 	 * Data aborts in kernel mode are possible (copyout etc), so
@@ -442,40 +391,44 @@ data_abort_handler(struct trapframe *tf)
  */
 void
 do_fault(struct trapframe *tf, struct proc *p,
-    vm_map_t map, vaddr_t va, vm_prot_t atype)
+    struct vm_map *map, vaddr_t va, vm_prot_t atype)
 {
-	int ret;
+	int error;
 	struct pcb *curpcb;
 
 	if (pmap_fault(map->pmap, va, atype))
 		return;
+
+	KASSERT(current_intr_depth == 0);
+
 	for (;;) {
-		ret = uvm_fault(map, va, 0, atype);
-		if (ret != KERN_RESOURCE_SHORTAGE)
+		error = uvm_fault(map, va, 0, atype);
+		if (error != ENOMEM)
 			break;
 		log(LOG_WARNING, "pid %d: VM shortage, sleeping\n", p->p_pid);
 		tsleep(&lbolt, PVM, "abtretry", 0);
 	}
 
-	if (ret != KERN_SUCCESS) {
+	if (error != 0) {
 #ifdef DEBUG
-		printf("unhandled fault at %p (ret = %d)\n", (void *)va, ret);
+		printf("unhandled fault at %p (error = %d)\n",
+		    (void *)va, error);
 		printregs(tf);
-		printf("pc -> ");
-		disassemble(tf->tf_r15 & R15_PC);
+		if ((tf->tf_r15 & R15_PC) != va) {
+			printf("pc -> ");
+			disassemble(tf->tf_r15 & R15_PC);
+		}
 #ifdef DDB
 		Debugger();
 #endif
 #endif
 		curpcb = &p->p_addr->u_pcb;
 		if (curpcb->pcb_onfault != NULL) {
-			tf->tf_r0 = EFAULT;
+			tf->tf_r0 = error;
 			tf->tf_r15 = (tf->tf_r15 & ~R15_PC) |
 			    (register_t)curpcb->pcb_onfault;
 			return;
 		}
-		if (curpcb->pcb_onfault_lj != NULL)
-			longjmp(curpcb->pcb_onfault_lj);
 		trapsignal(p, SIGSEGV, va);
 	}
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: if_gm.c,v 1.10 2000/12/28 22:59:09 sommerfeld Exp $	*/
+/*	$NetBSD: if_gm.c,v 1.15 2001/07/26 21:31:45 mjl Exp $	*/
 
 /*-
  * Copyright (c) 2000 Tsubai Masanari.  All rights reserved.
@@ -28,6 +28,7 @@
 
 #include "opt_inet.h"
 #include "opt_ns.h"
+#include "rnd.h"
 #include "bpfilter.h"
 
 #include <sys/param.h>
@@ -38,6 +39,10 @@
 #include <sys/socket.h>
 #include <sys/systm.h>
 #include <sys/callout.h>
+
+#if NRND > 0
+#include <sys/rnd.h>
+#endif
 
 #include <uvm/uvm_extern.h>
 
@@ -81,6 +86,10 @@ struct gmac_softc {
 	struct mii_data sc_mii;
 	struct callout sc_tick_ch;
 	char sc_laddr[6];
+
+#if NRND > 0
+	rndsource_element_t sc_rnd_source; /* random source */
+#endif
 };
 
 #define sc_if sc_ethercom.ec_if
@@ -132,7 +141,8 @@ gmac_match(parent, match, aux)
 	struct pci_attach_args *pa = aux;
 
 	if (PCI_VENDOR(pa->pa_id) == PCI_VENDOR_APPLE &&
-	    PCI_PRODUCT(pa->pa_id) == PCI_PRODUCT_APPLE_GMAC)
+	    (PCI_PRODUCT(pa->pa_id) == PCI_PRODUCT_APPLE_GMAC ||
+	     PCI_PRODUCT(pa->pa_id) == PCI_PRODUCT_APPLE_GMAC2))
 		return 1;
 
 	return 0;
@@ -164,7 +174,7 @@ gmac_attach(parent, self, aux)
 	OF_getprop(node, "local-mac-address", laddr, sizeof laddr);
 	OF_getprop(node, "assigned-addresses", reg, sizeof reg);
 
-	bcopy(laddr, sc->sc_laddr, sizeof laddr);
+	memcpy(sc->sc_laddr, laddr, sizeof laddr);
 	sc->sc_reg = reg[2];
 
 	if (pci_intr_map(pa, &ih)) {
@@ -188,7 +198,7 @@ gmac_attach(parent, self, aux)
 		return;
 	}
 	p = (void *)roundup((vaddr_t)p, 0x800);
-	bzero(p, 2048 * (NRXBUF + NTXBUF) + 2 * 0x800);
+	memset(p, 0, 2048 * (NRXBUF + NTXBUF) + 2 * 0x800);
 
 	sc->sc_rxlist = (void *)p;
 	p += 0x800;
@@ -220,7 +230,7 @@ gmac_attach(parent, self, aux)
 	gmac_reset(sc);
 	gmac_init_mac(sc);
 
-	bcopy(sc->sc_dev.dv_xname, ifp->if_xname, IFNAMSIZ);
+	memcpy(ifp->if_xname, sc->sc_dev.dv_xname, IFNAMSIZ);
 	ifp->if_softc = sc;
 	ifp->if_ioctl = gmac_ioctl;
 	ifp->if_start = gmac_start;
@@ -245,6 +255,10 @@ gmac_attach(parent, self, aux)
 
 	if_attach(ifp);
 	ether_ifattach(ifp, laddr);
+#if NRND > 0 
+	rnd_attach_source(&sc->sc_rnd_source, sc->sc_dev.dv_xname,
+	    RND_TYPE_NET, 0); 
+#endif
 }
 
 u_int
@@ -337,6 +351,9 @@ gmac_intr(v)
 	if (status & GMAC_INT_TXEMPTY)
 		gmac_tint(sc);
 
+#if NRND > 0 
+	rnd_add_uint32(&sc->sc_rnd_source, status);
+#endif  
 	return 1;
 }
 
@@ -358,7 +375,7 @@ gmac_rint(sc)
 	struct ifnet *ifp = &sc->sc_if;
 	volatile struct gmac_dma *dp;
 	struct mbuf *m;
-	int i, len;
+	int i, j, len;
 	u_int cmd;
 
 	for (i = sc->sc_rxlast;; i++) {
@@ -400,6 +417,15 @@ next:
 		dp->cmd = htole32(GMAC_OWN);
 	}
 	sc->sc_rxlast = i;
+
+	/* XXX Make sure free buffers have GMAC_OWN. */
+	i++;
+	for (j = 1; j < NRXBUF; j++) {
+		if (i == NRXBUF)
+			i = 0;
+		dp = &sc->sc_rxlist[i++];
+		dp->cmd = htole32(GMAC_OWN);
+	}
 }
 
 struct mbuf *
@@ -440,7 +466,7 @@ gmac_get(sc, pkt, totlen)
 			len = MCLBYTES;
 		}
 		m->m_len = len = min(totlen, len);
-		bcopy(pkt, mtod(m, caddr_t), len);
+		memcpy(mtod(m, caddr_t), pkt, len);
 		pkt += len;
 		totlen -= len;
 		*mp = m;
@@ -526,7 +552,7 @@ gmac_put(sc, buff, m)
 			MFREE(m, n);
 			continue;
 		}
-		bcopy(mtod(m, caddr_t), buff, len);
+		memcpy(buff, mtod(m, caddr_t), len);
 		buff += len;
 		tlen += len;
 		MFREE(m, n);
@@ -700,7 +726,7 @@ gmac_setladrf(sc)
 
 	ETHER_FIRST_MULTI(step, ec, enm);
 	while (enm != NULL) {
-		if (bcmp(enm->enm_addrlo, enm->enm_addrhi, 6)) {
+		if (memcmp(enm->enm_addrlo, enm->enm_addrhi, 6)) {
 			/*
 			 * We must listen to a range of multicast addresses.
 			 * For now, just accept all multicasts, rather than
@@ -796,8 +822,8 @@ gmac_ioctl(ifp, cmd, data)
 				ina->x_host =
 				    *(union ns_host *)LLADDR(ifp->if_sadl);
 			else {
-				bcopy(ina->x_host.c_host,
-				    LLADDR(ifp->if_sadl),
+				memcpy(LLADDR(ifp->if_sadl),
+				    ina->x_host.c_host,
 				    sizeof(sc->sc_enaddr));
 			}
 			/* Set new address. */

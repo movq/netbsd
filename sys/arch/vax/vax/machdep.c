@@ -1,4 +1,4 @@
-/* $NetBSD: machdep.c,v 1.111 2001/01/15 20:19:58 thorpej Exp $	 */
+/* $NetBSD: machdep.c,v 1.120 2001/09/10 21:19:30 chris Exp $	 */
 
 /*
  * Copyright (c) 1994, 1998 Ludd, University of Lule}, Sweden.
@@ -49,6 +49,7 @@
 #include "opt_compat_netbsd.h"
 #include "opt_compat_ultrix.h"
 #include "opt_multiprocessor.h"
+#include "opt_lockdebug.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -104,13 +105,15 @@ char		cpu_model[100];
 caddr_t		msgbufaddr;
 int		physmem;
 int		dumpsize = 0;
+int		*symtab_start;
+int		symtab_nsyms;
 
 #define	IOMAPSZ	100
 static	struct map iomap[IOMAPSZ];
 
-vm_map_t exec_map = NULL;
-vm_map_t mb_map = NULL;
-vm_map_t phys_map = NULL;
+struct vm_map *exec_map = NULL;
+struct vm_map *mb_map = NULL;
+struct vm_map *phys_map = NULL;
 
 #ifdef DEBUG
 int iospace_inited = 0;
@@ -169,7 +172,7 @@ cpu_startup()
 	if (uvm_map(kernel_map, (vaddr_t *) &buffers, round_page(size),
 		    NULL, UVM_UNKNOWN_OFFSET, 0,
 		    UVM_MAPFLAG(UVM_PROT_NONE, UVM_PROT_NONE, UVM_INH_NONE,
-				UVM_ADV_NORMAL, 0)) != KERN_SUCCESS)
+				UVM_ADV_NORMAL, 0)) != 0)
 		panic("cpu_startup: cannot allocate VM for buffers");
 
 	minaddr = (vaddr_t) buffers;
@@ -199,13 +202,13 @@ cpu_startup()
 			if (pg == NULL)
 				panic("cpu_startup: "
 				    "not enough RAM for buffer cache");
-			pmap_enter(kernel_map->pmap, curbuf,
-			    VM_PAGE_TO_PHYS(pg), VM_PROT_READ|VM_PROT_WRITE,
-			    VM_PROT_READ|VM_PROT_WRITE|PMAP_WIRED);
+			pmap_kenter_pa(curbuf, VM_PAGE_TO_PHYS(pg),
+			    VM_PROT_READ | VM_PROT_WRITE);
 			curbuf += NBPG;
 			curbufsize -= NBPG;
 		}
 	}
+	pmap_update(kernel_map->pmap);
 
 	/*
 	 * Allocate a submap for exec arguments.  This map effectively limits
@@ -215,12 +218,14 @@ cpu_startup()
 	exec_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
 				 NCARGS, VM_MAP_PAGEABLE, FALSE, NULL);
 
+#if VAX46 || VAX48 || VAX49 || VAX53 || VAXANY
 	/*
 	 * Allocate a submap for physio.  This map effectively limits the
 	 * number of processes doing physio at any one time.
 	 */
 	phys_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
 				   VM_PHYS_SIZE, 0, FALSE, NULL);
+#endif
 
 	format_bytes(pbuf, sizeof(pbuf), ptoa(uvmexp.free));
 	printf("avail memory = %s\n", pbuf);
@@ -232,6 +237,10 @@ cpu_startup()
 	 */
 
 	bufinit();
+#ifdef DDB
+	if (boothowto & RB_KDB)
+		Debugger();
+#endif
 }
 
 long	dumplo = 0;
@@ -295,15 +304,14 @@ consinit()
 		extern int end; /* Contains pointer to symsize also */
 		extern int *esym;
 
-		ddb_init(*(int *)&end, ((int *)&end) + 1, esym);
+		if (symtab_start != NULL)
+			ddb_init(symtab_nsyms, symtab_start, esym);
+		else
+			ddb_init(*(int *)&end, ((int *)&end) + 1, esym);
 	}
 #ifdef DEBUG
 	if (sizeof(struct user) > REDZONEADDR)
 		panic("struct user inside red zone");
-#endif
-#ifdef donotworkbyunknownreason
-	if (boothowto & RB_KDB)
-		Debugger();
 #endif
 #endif
 }
@@ -775,3 +783,22 @@ bi_intr_establish(void *icookie, int vec, void (*func)(void *), void *arg,
 	scb_vecalloc(vec, func, arg, SCB_ISTACK, ev);
 }
 
+#if defined(MULTIPROCESSOR) || defined(LOCKDEBUG)
+/*
+ * Called from locore.
+ */
+void	krnlock(void);
+void	krnunlock(void);
+
+void
+krnlock()
+{
+	KERNEL_LOCK(LK_CANRECURSE|LK_EXCLUSIVE);
+}
+
+void
+krnunlock()
+{
+	KERNEL_UNLOCK();
+}
+#endif

@@ -1,4 +1,4 @@
-/*	$NetBSD: console.cpp,v 1.1 2001/02/09 18:34:35 uch Exp $	*/
+/* -*-C++-*-	$NetBSD: console.cpp,v 1.7 2001/06/19 16:48:49 uch Exp $ */
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -41,12 +41,21 @@
 
 Console *Console::_instance = 0;
 
+//
+// Display console
+//
 Console *
 Console::Instance()
 {
 	if (_instance == 0)
 		_instance = new Console;
 	return _instance;
+}
+
+Console::Console()
+{
+	// set default builtin console. (bicons)
+	setBootConsole(BI_CNUSE_BUILTIN);
 }
 
 void
@@ -60,20 +69,38 @@ Console::Destroy()
 void
 Console::print(const TCHAR *fmt, ...)
 {
-	TCHAR tmp[CONSOLE_BUFSIZE];
-
 	va_list ap;
 	va_start(ap, fmt);
-	wvsprintf(tmp, fmt, ap);
+	wvsprintf(_bufw, fmt, ap);
 	va_end(ap);
-	HpcMenuInterface::Instance().print(tmp);
+
+	// print to `Console Tab Window'
+	HPC_MENU.print(_bufw);
+}
+
+//
+// Serial console.
+//
+SerialConsole::SerialConsole()
+{
+	_handle = INVALID_HANDLE_VALUE;
+	// set default serial console.
+	setBootConsole(BI_CNUSE_SERIAL);
 }
 
 BOOL
-SerialConsole::setupBuffer()
+SerialConsole::init()
+{
+	// always open COM1 to supply clock and power for the
+	// sake of kernel serial driver 
+	return openCOM1();
+}
+
+BOOL
+SerialConsole::setupMultibyteBuffer()
 {
 	size_t len = WideCharToMultiByte(CP_ACP, 0, _bufw, wcslen(_bufw),
-					 0, 0, 0, 0);
+	    0, 0, 0, 0);
 	if (len + 1 > CONSOLE_BUFSIZE)
 		return FALSE;
 	if (!WideCharToMultiByte(CP_ACP, 0, _bufw, len, _bufm, len, 0, 0))
@@ -83,13 +110,26 @@ SerialConsole::setupBuffer()
 	return TRUE;
 }
 
-BOOL
-SerialConsole::openCOM1(void)
+void
+SerialConsole::print(const TCHAR *fmt, ...)
 {
+	SETUP_WIDECHAR_BUFFER();
+
+	if (!setupMultibyteBuffer())
+		return;
+
+	genericPrint(_bufm);
+}
+
+BOOL
+SerialConsole::openCOM1()
+{
+	int speed = HPC_PREFERENCE.serial_speed;
+
 	if (_handle == INVALID_HANDLE_VALUE) {
-		_handle = CreateFile(TEXT("COM1:"),
-				     GENERIC_READ | GENERIC_WRITE,
-				     0, NULL, OPEN_EXISTING, 0, NULL);
+		_handle = CreateFile(TEXT("COM1:"), 
+		    GENERIC_READ | GENERIC_WRITE, 0, NULL, OPEN_EXISTING, 0,
+		    NULL);
 		if (_handle == INVALID_HANDLE_VALUE) {
 			Console::print(TEXT("couldn't open COM1\n"));
 			return FALSE;
@@ -101,15 +141,15 @@ SerialConsole::openCOM1(void)
 			goto bad;
 		}
       
-		dcb.BaudRate = CBR_19200;
+		dcb.BaudRate = speed;
 		if (!SetCommState(_handle, &dcb)) {
-			Console::print(TEXT("couldn't set baud rate to 19200.\n"));
+			Console::print(TEXT("couldn't set baud rate to %s.\n"),
+			    speed);
 			goto bad;
 		}
 
 		Console::print(TEXT("BaudRate %d, ByteSize %#x, Parity %#x, StopBits %#x\n"),
-			       dcb.BaudRate, dcb.ByteSize, dcb.Parity,
-			       dcb.StopBits);
+		    dcb.BaudRate, dcb.ByteSize, dcb.Parity, dcb.StopBits);
 		const char msg[] = "--------HPCBOOT--------\r\n";
 		unsigned long wrote;
 		WriteFile(_handle, msg, sizeof msg, &wrote, 0);
@@ -120,4 +160,18 @@ SerialConsole::openCOM1(void)
 	CloseHandle(_handle);
 	_handle = INVALID_HANDLE_VALUE;
 	return FALSE;
+}
+
+void
+SerialConsole::genericPrint(const char *buf)
+{
+	unsigned long wrote;
+	int i;
+	
+	for (i = 0; *buf != '\0'; buf++) {
+		char c = *buf;
+		if (c == '\n')
+			WriteFile(_handle, "\r", 1, &wrote, 0);
+		WriteFile(_handle, &c, 1, &wrote, 0);
+	}
 }

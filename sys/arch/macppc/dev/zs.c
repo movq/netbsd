@@ -1,4 +1,4 @@
-/*	$NetBSD: zs.c,v 1.15 2000/06/07 17:37:07 tsubai Exp $	*/
+/*	$NetBSD: zs.c,v 1.18 2001/07/22 11:29:47 wiz Exp $	*/
 
 /*
  * Copyright (c) 1996, 1998 Bill Studenmund
@@ -257,7 +257,8 @@ zsc_attach(parent, self, aux)
 		zsc->zsc_txdmareg[channel] = mapiodev(regs[2], regs[3]);
 		zsc->zsc_txdmacmd[channel] =
 			dbdma_alloc(sizeof(dbdma_command_t) * 3);
-		bzero(zsc->zsc_txdmacmd[channel], sizeof(dbdma_command_t) * 3);
+		memset(zsc->zsc_txdmacmd[channel], 0,
+			sizeof(dbdma_command_t) * 3);
 		dbdma_reset(zsc->zsc_txdmareg[channel]);
 #endif
 		node = OF_peer(node);	/* ch-b */
@@ -284,8 +285,8 @@ zsc_attach(parent, self, aux)
 		cs->cs_reg_csr  = &zc->zc_csr;
 		cs->cs_reg_data = &zc->zc_data;
 
-		bcopy(zs_init_reg, cs->cs_creg, 16);
-		bcopy(zs_init_reg, cs->cs_preg, 16);
+		memcpy(cs->cs_creg, zs_init_reg, 16);
+		memcpy(cs->cs_preg, zs_init_reg, 16);
 
 		/* Current BAUD rate generator clock. */
 		cs->cs_brg_clk = PCLK / 16;	/* RTxC is 230400*16, so use 230400 */
@@ -443,6 +444,7 @@ void
 zsmd_setclock(cs)
 	struct zs_chanstate *cs;
 {
+#ifdef NOTYET
 	struct xzs_chanstate *xcs = (void *)cs;
 
 	if (cs->cs_channel != 0)
@@ -452,7 +454,8 @@ zsmd_setclock(cs)
 	 * If the new clock has the external bit set, then select the
 	 * external source.
 	 */
-	/*via_set_modem((xcs->cs_pclk_flag & ZSC_EXTERN) ? 1 : 0);*/
+	via_set_modem((xcs->cs_pclk_flag & ZSC_EXTERN) ? 1 : 0);
+#endif
 }
 
 static int zssoftpending;
@@ -625,7 +628,7 @@ zs_set_speed(cs, bps)
 	 */
 	for (i = 0; i < xcs->cs_clock_count; i++) {
 		if (xcs->cs_clocks[i].clk <= 0)
-			continue;	/* skip non-existant or bad clocks */
+			continue;	/* skip non-existent or bad clocks */
 		if (xcs->cs_clocks[i].flags & ZSC_BRG) {
 			/* check out BRG at /16 */
 			tc1 = BPS_TO_TCONST(xcs->cs_clocks[i].clk >> 4, bps);
@@ -1080,14 +1083,14 @@ zscnprobe(cp)
 	if ((pkg = OF_instance_to_package(stdin)) == -1)
 		return;
 
-	bzero(name, sizeof(name));
+	memset(name, 0, sizeof(name));
 	if (OF_getprop(pkg, "device_type", name, sizeof(name)) == -1)
 		return;
 
 	if (strcmp(name, "serial") != 0)
 		return;
 
-	bzero(name, sizeof(name));
+	memset(name, 0, sizeof(name));
 	if (OF_getprop(pkg, "name", name, sizeof(name)) == -1)
 		return;
 
@@ -1110,7 +1113,7 @@ zscninit(cp)
 	if ((escc_ch = OF_instance_to_package(stdin)) == -1)
 		return;
 
-	bzero(name, sizeof(name));
+	memset(name, 0, sizeof(name));
 	if (OF_getprop(escc_ch, "name", name, sizeof(name)) == -1)
 		return;
 

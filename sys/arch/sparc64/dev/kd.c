@@ -1,4 +1,4 @@
-/*	$NetBSD: kd.c,v 1.15 2000/11/09 00:02:54 eeh Exp $	*/
+/*	$NetBSD: kd.c,v 1.18 2001/09/26 20:53:10 eeh Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -63,7 +63,7 @@
 #include <machine/conf.h>
 
 #ifdef RASTERCONSOLE
-#include <machine/fbio.h>
+#include <dev/sun/fbio.h>
 #include <machine/fbvar.h>
 #endif
 
@@ -138,14 +138,14 @@ kd_init(kd)
 	}
 
 	if (kd->rows == 0 &&
-	    (prop = getpropstring(optionsnode, "screen-#rows"))) {
+	    (prop = PROM_getpropstring(optionsnode, "screen-#rows"))) {
 		i = 0;
 		while (*prop != '\0')
 			i = i * 10 + *prop++ - '0';
 		kd->rows = (unsigned short)i;
 	}
 	if (kd->cols == 0 &&
-	    (prop = getpropstring(optionsnode, "screen-#columns"))) {
+	    (prop = PROM_getpropstring(optionsnode, "screen-#columns"))) {
 		i = 0;
 		while (*prop != '\0')
 			i = i * 10 + *prop++ - '0';
@@ -281,6 +281,21 @@ kdwrite(dev, uio, flag)
 	tp = kd->kd_tty;
 
 	return ((*tp->t_linesw->l_write)(tp, uio, flag));
+}
+
+int
+kdpoll(dev, events, p)
+	dev_t dev;
+	int events;
+	struct proc *p;
+{
+	struct kd_softc *kd;
+	struct tty *tp;
+
+	kd = &kd_softc; 	/* XXX */
+	tp = kd->kd_tty;
+ 
+	return ((*tp->t_linesw->l_poll)(tp, events, p));
 }
 
 int

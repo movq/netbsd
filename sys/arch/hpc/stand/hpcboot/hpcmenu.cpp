@@ -1,4 +1,4 @@
-/* -*-C++-*-	$NetBSD: hpcmenu.cpp,v 1.3 2001/03/02 18:26:37 uch Exp $	*/
+/* -*-C++-*-	$NetBSD: hpcmenu.cpp,v 1.8 2001/05/17 01:50:35 enami Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -42,338 +42,15 @@
 #include <menu/window.h>
 #include <menu/tabwindow.h>
 #include <menu/rootwindow.h>
+#include <menu/menu.h>
 #include <machine/bootinfo.h>
 #include <framebuffer.h>
 #include <console.h>
 
-//
-// Main window
-//
-class MainTabWindow : public TabWindow
-{
-private:
-	HWND _edit_md_root;
-
-	int _item_idx;
-	void _insert_item(HWND w, TCHAR *name, int id) {
-		int idx = SendDlgItemMessage(w, id, CB_ADDSTRING, 0,
-					     reinterpret_cast <LPARAM>(name));
-		if (idx != CB_ERR)
-			SendDlgItemMessage(w, IDC_MAIN_DIR, CB_SETITEMDATA,
-					   idx, _item_idx++);
-	}
-
-public:
-	explicit MainTabWindow(TabWindowBase &base, int id)
-		: TabWindow(base, id, TEXT("WMain")) {
-		_item_idx = 0;
-	}
-	virtual ~MainTabWindow(void) { /* NO-OP */ }
-	virtual void init(HWND w) {
-		HpcMenuInterface &menu = HpcMenuInterface::Instance();
-		struct HpcMenuInterface::HpcMenuPreferences
-			*pref = &menu._pref;
-		_window = w;
-		// insert myself to tab-control
-		TabWindow::init(w);
-
-		// setup child.
-		TCHAR *entry;
-		int i;
-		// kernel directory path
-		for (i = 0; entry = menu.dir(i); i++)
-			_insert_item(w, entry, IDC_MAIN_DIR);
-		SendDlgItemMessage(w, IDC_MAIN_DIR, CB_SETCURSEL,
-				   menu.dir_default(), 0);
-		// platform
-		for (i = 0; entry = menu.platform_get(i); i++)
-			_insert_item(w, entry, IDC_MAIN_PLATFORM);
-		SendDlgItemMessage(w, IDC_MAIN_PLATFORM, CB_SETCURSEL,
-				   menu.platform_default(), 0);
-		// kernel file name.
-		Edit_SetText(GetDlgItem(w, IDC_MAIN_KERNEL),
-			     pref->kernel_user ? pref->kernel_user_file :
-			     TEXT("netbsd.gz"));
-
-		// root file system.
-		int fs = pref->rootfs + IDC_MAIN_ROOT_;
-		_set_check(fs, TRUE);
-
-		_edit_md_root = GetDlgItem(w, IDC_MAIN_ROOT_MD_OPS);
-		Edit_SetText(_edit_md_root, pref->rootfs_file);
-		EnableWindow(_edit_md_root, fs == IDC_MAIN_ROOT_MD
-			     ? TRUE : FALSE);
-
-		// kernel boot options.
-		_set_check(IDC_MAIN_OPTION_A, pref->boot_ask_for_name);
-		_set_check(IDC_MAIN_OPTION_S, pref->boot_single_user);
-		_set_check(IDC_MAIN_OPTION_V, pref->boot_verbose);
-		_set_check(IDC_MAIN_OPTION_H, pref->boot_serial);
-	}
-
-	void get(void) {
-		HpcMenuInterface &menu = HpcMenuInterface::Instance();
-		struct HpcMenuInterface::HpcMenuPreferences
-			*pref = &menu._pref;
-
-		HWND w = GetDlgItem(_window, IDC_MAIN_DIR);
-		ComboBox_GetText(w, pref->dir_user_path, MAX_PATH);
-		pref->dir_user = TRUE;
-		w = GetDlgItem(_window, IDC_MAIN_KERNEL);
-		Edit_GetText(w, pref->kernel_user_file, MAX_PATH);
-		pref->kernel_user = TRUE;
-
-		int i = ComboBox_GetCurSel(GetDlgItem(_window,
-						      IDC_MAIN_PLATFORM));
-		menu.platform_set(i);
-
-		if (_is_checked(IDC_MAIN_ROOT_WD))
-			pref->rootfs = 0;
-		else if (_is_checked(IDC_MAIN_ROOT_SD))
-			pref->rootfs = 1;
-		else if (_is_checked(IDC_MAIN_ROOT_MD))
-			pref->rootfs = 2;
-		else if (_is_checked(IDC_MAIN_ROOT_NFS))
-			pref->rootfs = 3;
-
-		pref->boot_ask_for_name	= _is_checked(IDC_MAIN_OPTION_A);
-		pref->boot_verbose	= _is_checked(IDC_MAIN_OPTION_V);
-		pref->boot_single_user	= _is_checked(IDC_MAIN_OPTION_S);
-		pref->boot_serial	= _is_checked(IDC_MAIN_OPTION_H);
-		Edit_GetText(_edit_md_root, pref->rootfs_file, MAX_PATH);
-	}
-
-	virtual void command(int id, int msg) {
-		EnableWindow(_edit_md_root,
-			     _is_checked(IDC_MAIN_ROOT_MD) ? TRUE : FALSE);
-	}
-};
-
-//
-// Option window
-//
-class OptionTabWindow : public TabWindow
-{
-public:
-	HWND _spin_edit;
-	HWND _spin;
-#define IS_CHECKED(x)	_is_checked(IDC_OPT_##x)
-#define SET_CHECK(x, b)	_set_check(IDC_OPT_##x,(b))
-
-public:
-	explicit OptionTabWindow(TabWindowBase &base, int id)
-		: TabWindow(base, id, TEXT("WOption")) {
-		_spin_edit = NULL;
-		_spin = NULL;
-	}
-	virtual ~OptionTabWindow(void) { /* NO-OP */ }
-	virtual void init(HWND w) {
-		HpcMenuInterface &menu = HpcMenuInterface::Instance();
-		struct HpcMenuInterface::HpcMenuPreferences
-			*pref = &menu._pref;
-		_window = w;
-
-		TabWindow::init(_window);
-		_spin_edit = GetDlgItem(_window, IDC_OPT_AUTO_INPUT);
-		_spin = CreateUpDownControl(WS_CHILD | WS_BORDER | WS_VISIBLE |
-					    UDS_SETBUDDYINT | UDS_ALIGNRIGHT,
-					    80, 0, 50, 50, _window,
-					    IDC_OPT_AUTO_UPDOWN,
-					    _app._instance, _spin_edit,
-					    60, 1, 30);
-		BOOL onoff = pref->auto_boot ? TRUE : FALSE;
-		EnableWindow(_spin_edit, onoff);
-		EnableWindow(_spin, onoff);
-
-		SET_CHECK(AUTO, pref->auto_boot);
-		if (pref->auto_boot)
-		{
-			TCHAR tmp[32];
-			wsprintf(tmp, TEXT("%d"), pref->auto_boot);
-			Edit_SetText(_spin_edit, tmp);
-		}
-		SET_CHECK(VIDEO,	pref->reverse_video);
-		SET_CHECK(PAUSE,	pref->pause_before_boot);
-		SET_CHECK(DEBUG,	pref->load_debug_info);
-		SET_CHECK(SAFETY,	pref->safety_message);
-	}
-
-	virtual void command(int id, int msg) {
-		switch(id) {
-		case IDC_OPT_AUTO:
-			if (IS_CHECKED(AUTO)) {
-				EnableWindow(_spin_edit, TRUE);
-				EnableWindow(_spin, TRUE);
-			} else {
-				EnableWindow(_spin_edit, FALSE);
-				EnableWindow(_spin, FALSE);
-			}
-			break;
-		}
-	}
-
-	void get(void) {
-		HpcMenuInterface &menu = HpcMenuInterface::Instance();
-		struct HpcMenuInterface::HpcMenuPreferences
-			*pref = &menu._pref;
-		if (IS_CHECKED(AUTO)) {
-			TCHAR tmp[32];
-			Edit_GetText(_spin_edit, tmp, 32);
-			pref->auto_boot = _wtoi(tmp);
-		} else
-			pref->auto_boot = 0;
-		pref->reverse_video		= IS_CHECKED(VIDEO);
-		pref->pause_before_boot	= IS_CHECKED(PAUSE);
-		pref->load_debug_info	= IS_CHECKED(DEBUG);
-		pref->safety_message	= IS_CHECKED(SAFETY);
-	}
-};
-
-//
-// Console window
-//
-class ConsoleTabWindow : public TabWindow
-{
-public:
-	HWND _edit;
-
-public:
-	explicit ConsoleTabWindow(TabWindowBase &base, int id)
-		: TabWindow(base, id, TEXT("WConsole")) {
-		_edit = NULL;
-	}
-	virtual ~ConsoleTabWindow(void) { /* NO-OP */ }
-	virtual void init(HWND w) {
-		// at this time _window is NULL.
-		// use argument of window procedure.
-		TabWindow::init(w);
-		_edit = GetDlgItem(w, IDC_CONS_EDIT);
-		MoveWindow(_edit, 5, 20, _rect.right - _rect.left - 10,
-			   _rect.bottom - _rect.top - 20, TRUE);
-		Edit_FmtLines(_edit, TRUE);
-	}
-	virtual void command(int id, int msg) {
-		HpcMenuInterface &menu = HpcMenuInterface::Instance();
-		struct HpcMenuInterface::cons_hook_args *hook = 0;
-		int bit;
-
-		switch(id) {
-		case IDC_CONS_CHK0:
-			/* FALLTHROUGH */
-		case IDC_CONS_CHK1:
-			/* FALLTHROUGH */
-		case IDC_CONS_CHK2:
-			/* FALLTHROUGH */
-		case IDC_CONS_CHK3:
-			/* FALLTHROUGH */
-		case IDC_CONS_CHK4:
-			/* FALLTHROUGH */
-		case IDC_CONS_CHK5:
-			/* FALLTHROUGH */
-		case IDC_CONS_CHK6:
-			/* FALLTHROUGH */
-		case IDC_CONS_CHK7:
-			bit = 1 << (id - IDC_CONS_CHK_);
-			if (SendDlgItemMessage(_window, id, BM_GETCHECK, 0, 0))
-				menu._cons_parameter |= bit;
-			else
-				menu._cons_parameter &= ~bit;
-			break;
-		case IDC_CONS_BTN0:
-			/* FALLTHROUGH */
-		case IDC_CONS_BTN1:
-			/* FALLTHROUGH */
-		case IDC_CONS_BTN2:
-			/* FALLTHROUGH */
-		case IDC_CONS_BTN3:
-			hook = &menu._cons_hook[id - IDC_CONS_BTN_];
-			if (hook->func)
-				hook->func(hook->arg, menu._cons_parameter);
-			
-			break;
-		}
-	}
-
-	void print(TCHAR *buf);
-};
-
-void
-ConsoleTabWindow::print(TCHAR *buf)
-{
-	int cr;
-	TCHAR *p;
-
-	// count # of '\n'
-	for (cr = 0, p = buf; p = wcschr(p, TEXT('\n')); cr++, p++)
-		;
-	// total length of new buffer('\n' -> "\r\n" + '\0')
-	int ln = wcslen(buf) + cr + 1;
-
-	// get old buffer.
-	int lo = Edit_GetTextLength(_edit);
-	size_t sz =(lo  + ln) * sizeof(TCHAR);
-
-	p = reinterpret_cast <TCHAR *>(malloc(sz));
-	if (p == NULL)
-		return;
-
-	memset(p, 0, sz);
-	Edit_GetText(_edit, p, lo + 1);
-
-	// put new buffer to end of old buffer.
-	TCHAR *d = p + lo;
-	while (*buf != TEXT('\0')) {
-		TCHAR c = *buf++;
-		if (c == TEXT('\n'))
-			*d++ = TEXT('\r');
-		*d++ = c;
-	}
-	*d = TEXT('\0');
-    
-	// display total buffer.
-	Edit_SetText(_edit, p);
-//  Edit_Scroll(_edit, Edit_GetLineCount(_edit), 0);
-	UpdateWindow(_edit);
-
-	free(p);
-}
-
-TabWindow *
-TabWindowBase::boot(int id)
-{
-	TabWindow *w = NULL;
-	HpcMenuInterface &menu = HpcMenuInterface::Instance();
-
-	switch(id) {
-	default:
-		break;
-	case IDC_BASE_MAIN:
-		menu._main = new MainTabWindow(*this, IDC_BASE_MAIN);
-		w = menu._main;
-		break;
-	case IDC_BASE_OPTION:
-		menu._option = new OptionTabWindow(*this, IDC_BASE_OPTION);
-		w = menu._option;
-		break;
-	case IDC_BASE_CONSOLE:
-		menu._console = new ConsoleTabWindow(*this, IDC_BASE_CONSOLE);
-		w = menu._console;
-		break;
-	}
-
-	if (w)
-		w->create(0);
-
-	return w;
-}
-
-//
-// External Interface
-//
 HpcMenuInterface *HpcMenuInterface::_instance = 0;
 
 HpcMenuInterface &
-HpcMenuInterface::Instance(void)
+HpcMenuInterface::Instance()
 {
 	if (!_instance)
 		_instance = new HpcMenuInterface();
@@ -381,10 +58,22 @@ HpcMenuInterface::Instance(void)
 }
 
 void
-HpcMenuInterface::Destroy(void)
+HpcMenuInterface::Destroy()
 {
 	if (_instance)
 		delete _instance;
+}
+
+HpcMenuInterface::HpcMenuInterface()
+{
+	if (!load())
+		_set_default_pref();
+	_pref._version	= HPCBOOT_VERSION;
+	_pref._size	= sizeof(HpcMenuPreferences);
+    
+	_cons_parameter = 0;
+	memset(_cons_hook, 0, sizeof(struct cons_hook_args) * 4);
+	memset(&_boot_hook, 0, sizeof(struct boot_hook_args));
 }
 
 void
@@ -395,7 +84,7 @@ HpcMenuInterface::print(TCHAR *buf)
 }
 
 void
-HpcMenuInterface::get_options(void)
+HpcMenuInterface::get_options()
 {
 	_main->get();
 	_option->get();
@@ -413,19 +102,49 @@ HpcMenuInterface::dir(int i)
 	}
 
 	TCHAR *s = reinterpret_cast <TCHAR *>
-		(LoadString(_root->_app._instance, res, 0, 0));
+	    (LoadString(_root->_app._instance, res, 0, 0));
   
 	return s;
 }
 
 int
-HpcMenuInterface::dir_default(void)
+HpcMenuInterface::dir_default()
 {
 	return _pref.dir_user ? IDS_DIR_SEQ(IDS_DIR_USER_DEFINED) : 0;
 }
 
+void
+HpcMenuInterface::_set_default_pref()
+{
+	_pref._magic		= HPCBOOT_MAGIC;
+	_pref.dir		= 0;
+	_pref.dir_user		= FALSE;
+	_pref.kernel_user	= FALSE;
+	_pref.platid_hi		= 0;
+	_pref.platid_lo		= 0;
+	_pref.rootfs		= 0;
+	wsprintf(_pref.rootfs_file, TEXT("miniroot.fs"));
+	_pref.boot_serial	= FALSE;
+	_pref.boot_verbose	= FALSE;
+	_pref.boot_single_user	= FALSE;
+	_pref.boot_ask_for_name	= FALSE;
+	_pref.boot_debugger	= FALSE;
+	_pref.auto_boot		= 0;
+	_pref.reverse_video	= FALSE;
+	_pref.pause_before_boot	= TRUE;
+	_pref.safety_message	= TRUE;
+#ifdef MIPS
+	_pref.serial_speed	= 9600; // historical reason.
+#else
+	_pref.serial_speed	= 19200;
+#endif
+}
+
+//
+// load and save current menu status.
+//
 BOOL
-HpcMenuInterface::load(void)
+HpcMenuInterface::load()
 {
 	TCHAR path[MAX_PATH];
 
@@ -435,7 +154,7 @@ HpcMenuInterface::load(void)
 	TCHAR filename[MAX_PATH];
 	wsprintf(filename, TEXT("\\%s\\hpcboot.cnf"), path);
 	HANDLE file = CreateFile(filename, GENERIC_READ, 0, 0, OPEN_EXISTING,
-				 FILE_ATTRIBUTE_NORMAL, 0);
+	    FILE_ATTRIBUTE_NORMAL, 0);
 	if (file == INVALID_HANDLE_VALUE)
 		return FALSE;
   
@@ -458,7 +177,7 @@ HpcMenuInterface::load(void)
 }
 
 BOOL
-HpcMenuInterface::save(void)
+HpcMenuInterface::save()
 {
 	TCHAR path[MAX_PATH];
   
@@ -466,38 +185,13 @@ HpcMenuInterface::save(void)
 		TCHAR filename[MAX_PATH];
 		wsprintf(filename, TEXT("\\%s\\hpcboot.cnf"), path);
 		HANDLE file = CreateFile(filename, GENERIC_WRITE, 0, 0,
-					 CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL,
-					 0);
+		    CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0);
 		DWORD cnt;
 		WriteFile(file, &_pref, _pref._size, &cnt, 0);
 		CloseHandle(file);
 		return cnt == _pref._size;
 	}
 
-	return FALSE;
-}
-
-BOOL
-HpcMenuInterface::_find_pref_dir(TCHAR *path)
-{
-	WIN32_FIND_DATA fd;
-	HANDLE find;
-
-	lstrcpy(path, TEXT("\\*.*"));
-	find = FindFirstFile(path, &fd);
-
-	if (find != INVALID_HANDLE_VALUE) {
-		do {
-			int attr = fd.dwFileAttributes;
-			if ((attr & FILE_ATTRIBUTE_DIRECTORY) &&
-			    (attr & FILE_ATTRIBUTE_TEMPORARY)) {
-				wcscpy(path, fd.cFileName);
-				FindClose(find);
-				return TRUE;
-			}
-		} while (FindNextFile(find, &fd));
-	}
-	FindClose(find);
 	return FALSE;
 }
 
@@ -508,7 +202,7 @@ HpcMenuInterface::setup_kernel_args(vaddr_t v, paddr_t p)
 	int argc = 0;
 	kaddr_t *argv = reinterpret_cast <kaddr_t *>(v);
 	char *loc = reinterpret_cast <char *>
-		(v + sizeof(char **) * MAX_KERNEL_ARGS);
+	    (v + sizeof(char **) * MAX_KERNEL_ARGS);
 	paddr_t locp = p + sizeof(char **) * MAX_KERNEL_ARGS;
 	size_t len;
 	TCHAR *w;
@@ -539,6 +233,8 @@ __END_MACRO
 		SETOPT('s');
 	if (_pref.boot_ask_for_name)	// ask for file name to boot from
 		SETOPT('a');
+	if (_pref.boot_debugger)	// break into the kernel debugger
+		SETOPT('d');
 
 	// boot from
 	switch(_pref.rootfs) {
@@ -596,7 +292,30 @@ HpcMenuInterface::setup_bootinfo(struct bootinfo &bi)
 
 // Progress bar
 void
-HpcMenuInterface::progress(void)
+HpcMenuInterface::progress()
 {
 	SendMessage(_root->_progress_bar->_window, PBM_STEPIT, 0, 0);
+}
+
+// Boot kernel.
+void
+HpcMenuInterface::boot()
+{
+	struct support_status *tab = _unsupported;
+	u_int32_t cpu = _pref.platid_hi;
+	u_int32_t machine = _pref.platid_lo;
+
+	if (_pref.safety_message)
+		for (; tab->cpu; tab++) {
+			if (tab->cpu == cpu && tab->machine == machine) {
+				MessageBox(_root->_window,
+				    tab->cause ? tab->cause :
+				    L"not supported yet.",
+				    TEXT("BOOT FAILED"), 0);
+				return;
+			}
+		}
+
+	if (_boot_hook.func)
+		_boot_hook.func(_boot_hook.arg);
 }

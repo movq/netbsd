@@ -1,4 +1,4 @@
-/*	$NetBSD: intr.c,v 1.38 2001/01/15 20:19:58 thorpej Exp $ */
+/*	$NetBSD: intr.c,v 1.41 2001/09/25 00:06:55 eeh Exp $ */
 
 /*
  * Copyright (c) 1992, 1993
@@ -178,7 +178,7 @@ setsoftnet() {
  * Only `prewired' interrupts appear here; boot-time configured devices
  * are attached via intr_establish() below.
  */
-struct intrhand *intrhand[15] = {
+struct intrhand *intrhand[16] = {
 	NULL,			/*  0 = error */
 	&soft01intr,		/*  1 = software level 1 + Sbus */
 	NULL,	 		/*  2 = Sbus level 2 (4m: Sbus L1) */
@@ -193,7 +193,8 @@ struct intrhand *intrhand[15] = {
 	NULL,			/* 11 = floppy */
 	NULL,			/* 12 = zs hardware interrupt */
 	NULL,			/* 13 = audio chip */
-	NULL			/* 14 = counter 1 = profiling timer */
+	NULL,			/* 14 = counter 1 = profiling timer */
+	NULL			/* 15 = async faults */
 };
 
 int fastvec = 0;
@@ -267,8 +268,10 @@ intr_establish(level, ih)
 			 * Interrupt is already there.  We need to create a
 			 * new interrupt handler and interpose it.
 			 */
-			printf("intr_establish: intr reused %d\n", ih->ih_number);
-
+#ifdef DEBUG
+			printf("intr_establish: intr reused %x\n", 
+				ih->ih_number);
+#endif
 			if (q->ih_fun != intr_list_handler) {
 				nih = (struct intrhand *)
 					malloc(sizeof(struct intrhand),
@@ -286,12 +289,15 @@ intr_establish(level, ih)
 		else
 			intrlev[ih->ih_number] = ih;
 #ifdef NOT_DEBUG
-		printf("\nintr_establish: vector %x pil %x mapintr %p clrintr %p fun %p arg %p\n",
-		       ih->ih_number, ih->ih_pil, (long)ih->ih_map, (long)ih->ih_clr, ih->ih_fun, ih->ih_arg);
+		printf("\nintr_establish: vector %x pil %x mapintr %p "
+			"clrintr %p fun %p arg %p\n",
+			ih->ih_number, ih->ih_pil, (void *)ih->ih_map,
+			(void *)ih->ih_clr, (void *)ih->ih_fun,
+			(void *)ih->ih_arg);
 		/*Debugger();*/
 #endif
 	} else
-		panic("intr_establish: bad intr number %d", ih->ih_number);
+		panic("intr_establish: bad intr number %x", ih->ih_number);
 	splx(s);
 }
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: gayle_pcmcia.c,v 1.7 2001/02/11 09:54:48 is Exp $	*/
+/*	$NetBSD: gayle_pcmcia.c,v 1.10 2001/09/10 21:19:09 chris Exp $	*/
 
 /* public domain */
 
@@ -131,7 +131,7 @@ pccard_attach(parent, myself, aux)
 		UVM_UNKNOWN_OFFSET, 0,
 		UVM_MAPFLAG(UVM_PROT_NONE, UVM_PROT_NONE,
 		UVM_INH_NONE, UVM_ADV_RANDOM, 0));
-	if (ret != KERN_SUCCESS) {
+	if (ret != 0) {
 		printf("attach failed (no virtual memory)\n");
 		return;
 	}
@@ -140,6 +140,7 @@ pccard_attach(parent, myself, aux)
 		pmap_enter(kernel_map->pmap,
 		    i - GAYLE_PCMCIA_START + pcmcia_base, i,
 		    VM_PROT_READ | VM_PROT_WRITE, TRUE);
+	pmap_update(kernel_map->pmap);
 
 	/* override the one-byte access methods for I/O space */
 	pcmio_bs_methods = amiga_bus_stride_1;

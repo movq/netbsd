@@ -1,4 +1,4 @@
-/*	$NetBSD: trap_subr.S,v 1.3 2001/01/01 04:33:39 tsubai Exp $	*/
+/*	$NetBSD: trap_subr.S,v 1.11 2001/08/30 22:00:48 matt Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -73,13 +73,8 @@ _C_LABEL(trapcode):
 	mfsrr1	31
 	mtcr	31
 	bc	4,17,1f			/* branch if PSL_PR is clear */
-#if defined(MULTIPROCESSOR)
-	GET_CPUINFO(1)
-	lwz	1,CI_CURPCB(1)
-#else
 	lis	1,_C_LABEL(curpcb)@ha
 	lwz	1,_C_LABEL(curpcb)@l(1)
-#endif
 	addi	1,1,USPACE		/* stack is top of user struct */
 1:
 	bla	s_trap
@@ -101,13 +96,8 @@ _C_LABEL(alitrap):
 	mfsrr1	31
 	mtcr	31
 	bc	4,17,1f			/* branch if PSL_PR is clear */
-#if defined(MULTIPROCESSOR)
-	GET_CPUINFO(1)
-	lwz	1,CI_CURPCB(1)
-#else
 	lis	1,_C_LABEL(curpcb)@ha
 	lwz	1,_C_LABEL(curpcb)@l(1)
-#endif
 	addi	1,1,USPACE		/* stack is top of user struct */
 1:
 	bla	s_trap
@@ -239,20 +229,31 @@ _C_LABEL(decrsize) = .-_C_LABEL(decrint)
  * (Code essentially from the 603e User Manual, Chapter 5, but
  * corrected a lot.)
  */
-#define	DMISS	976
-#define	DCMP	977
-#define	HASH1	978
-#define	HASH2	979
-#define	IMISS	980
-#define	ICMP	981
-#define	RPA	982
 
 	.globl	_C_LABEL(tlbimiss),_C_LABEL(tlbimsize)
 _C_LABEL(tlbimiss):
-	mfspr	2,HASH1			/* get first pointer */
+#ifdef PMAPDEBUG
+	mfspr	2,SPR_IMISS		/* exception address */
+	li	1,24			/* get rid of the lower */
+	srw	2,2,1			/*   24 bits */
+	li	1,1			/* Load 1 */
+	cmpl	2,1,1			/* is it > 16MB */
+	blt	99f			/* nope, skip saving these SPRs */
+	li	1,0xc0			/* arbitrary */
+	mfspr	2,SPR_HASH1
+	stw	2,0(1)
+	mfspr	2,SPR_HASH2
+	stw	2,4(1)
+	mfspr	2,SPR_IMISS
+	stw	2,8(1)
+	mfspr	2,SPR_ICMP
+	stw	2,12(1)
+99:
+#endif /* PMAPDEBUG */
+	mfspr	2,SPR_HASH1		/* get first pointer */
 	li	1,8
 	mfctr	0			/* save counter */
-	mfspr	3,ICMP			/* get first compare value */
+	mfspr	3,SPR_ICMP		/* get first compare value */
 	addi	2,2,-8			/* predec pointer */
 1:
 	mtctr	1			/* load counter */
@@ -265,11 +266,11 @@ _C_LABEL(tlbimiss):
 	andi.	3,1,8			/* check G-bit */
 	bne	4f			/* if guarded, take ISI */
 	mtctr	0			/* restore counter */
-	mfspr	0,IMISS			/* get the miss address for the tlbli */
+	mfspr	0,SPR_IMISS		/* get the miss address for the tlbli */
 	mfsrr1	3			/* get the saved cr0 bits */
 	mtcrf	0x80,3			/* and restore */
 	ori	1,1,0x100		/* set the reference bit */
-	mtspr	RPA,1			/* set the pte */
+	mtspr	SPR_RPA,1		/* set the pte */
 	srwi	1,1,8			/* get byte 7 of pte */
 	tlbli	0			/* load the itlb */
 	stb	1,6(2)			/* update page table */
@@ -278,7 +279,7 @@ _C_LABEL(tlbimiss):
 3:	/* not found in pteg */
 	andi.	1,3,0x40		/* have we already done second hash? */
 	bne	5f
-	mfspr	2,HASH2			/* get the second pointer */
+	mfspr	2,SPR_HASH2		/* get the second pointer */
 	ori	3,3,0x40		/* change the compare value */
 	li	1,8
 	addi	2,2,-8			/* predec pointer */
@@ -305,10 +306,10 @@ _C_LABEL(tlbimsize) = .-_C_LABEL(tlbimiss)
 
 	.globl	_C_LABEL(tlbdlmiss),_C_LABEL(tlbdlmsize)
 _C_LABEL(tlbdlmiss):
-	mfspr	2,HASH1			/* get first pointer */
+	mfspr	2,SPR_HASH1		/* get first pointer */
 	li	1,8
 	mfctr	0			/* save counter */
-	mfspr	3,DCMP			/* get first compare value */
+	mfspr	3,SPR_DCMP		/* get first compare value */
 	addi	2,2,-8			/* predec pointer */
 1:
 	mtctr	1			/* load counter */
@@ -319,11 +320,11 @@ _C_LABEL(tlbdlmiss):
 	bne	3f			/* not found */
 	lwz	1,4(2)			/* load tlb entry lower word */
 	mtctr	0			/* restore counter */
-	mfspr	0,DMISS			/* get the miss address for the tlbld */
+	mfspr	0,SPR_DMISS		/* get the miss address for the tlbld */
 	mfsrr1	3			/* get the saved cr0 bits */
 	mtcrf	0x80,3			/* and restore */
 	ori	1,1,0x100		/* set the reference bit */
-	mtspr	RPA,1			/* set the pte */
+	mtspr	SPR_RPA,1			/* set the pte */
 	srwi	1,1,8			/* get byte 7 of pte */
 	tlbld	0			/* load the dtlb */
 	stb	1,6(2)			/* update page table */
@@ -332,7 +333,7 @@ _C_LABEL(tlbdlmiss):
 3:	/* not found in pteg */
 	andi.	1,3,0x40		/* have we already done second hash? */
 	bne	5f
-	mfspr	2,HASH2			/* get the second pointer */
+	mfspr	2,SPR_HASH2		/* get the second pointer */
 	ori	3,3,0x40		/* change the compare value */
 	li	1,8
 	addi	2,2,-8			/* predec pointer */
@@ -344,7 +345,7 @@ _C_LABEL(tlbdlmiss):
 	andi.	2,3,0xffff		/* clean upper srr1 */
 	mtsrr1	2
 	mtdsisr	1			/* load the dsisr */
-	mfspr	1,DMISS			/* get the miss address */
+	mfspr	1,SPR_DMISS		/* get the miss address */
 	mtdar	1			/* put in dar */
 	mfmsr	0
 	xoris	0,0,0x20000@h		/* flip the msr<tgpr> bit */
@@ -356,10 +357,10 @@ _C_LABEL(tlbdlmsize) = .-_C_LABEL(tlbdlmiss)
 
 	.globl	_C_LABEL(tlbdsmiss),_C_LABEL(tlbdsmsize)
 _C_LABEL(tlbdsmiss):
-	mfspr	2,HASH1			/* get first pointer */
+	mfspr	2,SPR_HASH1		/* get first pointer */
 	li	1,8
 	mfctr	0			/* save counter */
-	mfspr	3,DCMP			/* get first compare value */
+	mfspr	3,SPR_DCMP		/* get first compare value */
 	addi	2,2,-8			/* predec pointer */
 1:
 	mtctr	1			/* load counter */
@@ -373,17 +374,17 @@ _C_LABEL(tlbdsmiss):
 	beq	4f
 5:
 	mtctr	0			/* restore counter */
-	mfspr	0,DMISS			/* get the miss address for the tlbld */
+	mfspr	0,SPR_DMISS		/* get the miss address for the tlbld */
 	mfsrr1	3			/* get the saved cr0 bits */
 	mtcrf	0x80,3			/* and restore */
-	mtspr	RPA,1			/* set the pte */
+	mtspr	SPR_RPA,1		/* set the pte */
 	tlbld	0			/* load the dtlb */
 	rfi
 
 3:	/* not found in pteg */
 	andi.	1,3,0x40		/* have we already done second hash? */
 	bne	5f
-	mfspr	2,HASH2			/* get the second pointer */
+	mfspr	2,SPR_HASH2		/* get the second pointer */
 	ori	3,3,0x40		/* change the compare value */
 	li	1,8
 	addi	2,2,-8			/* predec pointer */
@@ -399,7 +400,7 @@ _C_LABEL(tlbdsmiss):
 					   on store */
 	b	1f
 7:	/* found, PP=1x */
-	mfspr	3,DMISS			/* get the miss address */
+	mfspr	3,SPR_DMISS		/* get the miss address */
 	mfsrin	1,3			/* get the segment register */
 	mfsrr1	3
 	rlwinm	3,3,18,31,31		/* get PR-bit */
@@ -419,7 +420,7 @@ _C_LABEL(tlbdsmiss):
 	andi.	2,3,0xffff		/* clean upper srr1 */
 	mtsrr1	2
 	mtdsisr	1			/* load the dsisr */
-	mfspr	1,DMISS			/* get the miss address */
+	mfspr	1,SPR_DMISS		/* get the miss address */
 	mtdar	1			/* put in dar */
 	mfmsr	0
 	xoris	0,0,0x20000@h		/* flip the msr<tgpr> bit */
@@ -539,7 +540,24 @@ _C_LABEL(ipkdbsize) = .-_C_LABEL(ipkdblow)
 	mtcr	3;							\
 	bc	4,17,1f;		/* branch if PSL_PR is false */	\
 /* Restore user & kernel access SR: */					\
-	GET_CURPM(2);			/* get real address of pmap */	\
+	lis	2,_C_LABEL(curpm)@ha;	/* get real address of pmap */	\
+	lwz	2,_C_LABEL(curpm)@l(2);					\
+	lwz	3,PM_SR+0(2);						\
+	mtsr	0,3;			/* restore SR0 */		\
+	lwz	3,PM_SR+4(2);						\
+	mtsr	1,3;			/* restore SR1 */		\
+	lwz	3,PM_SR+8(2);						\
+	mtsr	2,3;			/* restore SR2 */		\
+	lwz	3,PM_SR+12(2);						\
+	mtsr	3,3;			/* restore SR3 */		\
+	lwz	3,PM_SR+16(2);						\
+	mtsr	4,3;			/* restore SR4 */		\
+	lwz	3,PM_SR+20(2);						\
+	mtsr	5,3;			/* restore SR5 */		\
+	lwz	3,PM_SR+24(2);						\
+	mtsr	6,3;			/* restore SR6 */		\
+	lwz	3,PM_SR+28(2);						\
+	mtsr	7,3;			/* restore SR7 */		\
 	lwz	3,PM_USRSR(2);						\
 	mtsr	USER_SR,3;						\
 	lwz	3,PM_KERNELSR(2);					\
@@ -552,16 +570,6 @@ _C_LABEL(ipkdbsize) = .-_C_LABEL(ipkdblow)
 	mtsrr1	3;							\
 	mfsprg	2,2;			/* restore r2 & r3 */		\
 	mfsprg	3,3
-
-#if defined(MULTIPROCESSOR)
-#define	GET_CURPM(r)							\
-	GET_CPUINFO(r);							\
-	lwz	r,CI_CURPM(r);
-#else
-#define	GET_CURPM(r)							\
-	lis	r,_C_LABEL(curpm)@ha;					\
-	lwz	r,_C_LABEL(curpm)@l(r);
-#endif
 
 /*
  * Preamble code for DSI/ISI traps
@@ -581,13 +589,8 @@ realtrap:
 	mfsprg	1,1			/* restore SP (might have been
 					   overwritten) */
 	bc	4,17,s_trap		/* branch if PSL_PR is false */
-#if defined(MULTIPROCESSOR)
-	GET_CPUINFO(1)
-	lwz	1,CI_CURPCB(1)
-#else
 	lis	1,_C_LABEL(curpcb)@ha
 	lwz	1,_C_LABEL(curpcb)@l(1)
-#endif
 	addi	1,1,USPACE		/* stack is top of user struct */
 
 /*
@@ -598,6 +601,16 @@ s_trap:
 	lis	31,KERNEL_SEGMENT@h
 	ori	31,31,KERNEL_SEGMENT@l
 	mtsr	KERNEL_SR,31
+/* Obliterate SRs so BAT spills work correctly */
+	lis	31,EMPTY_SEGMENT@h
+	ori	31,31,EMPTY_SEGMENT@l
+	mtsr	1,31
+	mtsr	2,31
+	mtsr	3,31
+	mtsr	4,31
+	mtsr	5,31
+	mtsr	6,31
+	mtsr	7,31
 	FRAME_SETUP(tempsave)
 /* Now we can recover interrupts again: */
 	mfmsr	7
@@ -608,7 +621,8 @@ s_trap:
 trapagain:
 	addi	3,1,8
 	bl	_C_LABEL(trap)
-trapexit:
+	.globl	_C_LABEL(trapexit)
+_C_LABEL(trapexit):
 /* Disable interrupts: */
 	mfmsr	3
 	andi.	3,3,~PSL_EE@l
@@ -617,13 +631,8 @@ trapexit:
 	lwz	5,FRAME_SRR1+8(1)
 	mtcr	5
 	bc	4,17,1f			/* branch if PSL_PR is false */
-#if defined(MULTIPROCESSOR)
-	GET_CPUINFO(3)
-	lwz	4,CI_ASTPENDING(3)
-#else
 	lis	3,_C_LABEL(astpending)@ha
 	lwz	4,_C_LABEL(astpending)@l(3)
-#endif
 	andi.	4,4,1
 	beq	1f
 	li	6,EXC_AST
@@ -660,7 +669,7 @@ s_dsitrap:
 	mfctr	31			/* & CTR */
 	mfdar	3
 s_pte_spill:
-	bl	_C_LABEL(pte_spill)	/* try a spill */
+	bl	_C_LABEL(pmap_pte_spill)	/* try a spill */
 	or.	3,3,3
 	mtctr	31			/* restore CTR */
 	mtlr	30			/* and trap type */
@@ -746,11 +755,22 @@ s_isitrap:
 	stw	5,20(1);						\
 	stw	4,12(1);						\
 	stw	3,8(1);							\
+	mtcr	3;							\
+	bc	4,17,99f;	/* branch if PSL_PR is false */		\
+	lis	3,EMPTY_SEGMENT@h;					\
+	ori	3,3,EMPTY_SEGMENT@l;					\
+	mtsr	1,3;		/* reset SRs so BAT spills work */	\
+	mtsr	2,3;							\
+	mtsr	3,3;							\
+	mtsr	4,3;							\
+	mtsr	5,3;							\
+	mtsr	6,3;							\
+	mtsr	7,3;							\
 /* interrupts are recoverable here, and enable translation */		\
 	lis	3,(KERNEL_SEGMENT|SR_SUKEY|SR_PRKEY)@h;			\
 	ori	3,3,(KERNEL_SEGMENT|SR_SUKEY|SR_PRKEY)@l;		\
 	mtsr	KERNEL_SR,3;						\
-	mfmsr	5;							\
+99:	mfmsr	5;							\
 	ori	5,5,(PSL_IR|PSL_DR|PSL_RI);				\
 	mtmsr	5;							\
 	isync
@@ -785,21 +805,28 @@ intr_exit:
 /* Returning to user mode? */
 	mtcr	6			/* saved SRR1 */
 	bc	4,17,1f			/* branch if PSL_PR is false */
-#if defined(MULTIPROCESSOR)
-	GET_CPUINFO(4)
-	lwz	3,CI_CURPM(4)
-#else
 	lis	3,_C_LABEL(curpm)@ha	/* get current pmap real address */
 	lwz	3,_C_LABEL(curpm)@l(3)
-#endif
+	lwz	4,PM_SR+0(3)
+	mtsr	0,4			/* Restore SR0 */
+	lwz	4,PM_SR+4(3)
+	mtsr	1,4			/* Restore SR1 */
+	lwz	4,PM_SR+8(3)
+	mtsr	2,4			/* Restore SR2 */
+	lwz	4,PM_SR+12(3)
+	mtsr	3,4			/* Restore SR3 */
+	lwz	4,PM_SR+16(3)
+	mtsr	4,4			/* Restore SR4 */
+	lwz	4,PM_SR+20(3)
+	mtsr	5,4			/* Restore SR5 */
+	lwz	4,PM_SR+24(3)
+	mtsr	6,4			/* Restore SR6 */
+	lwz	4,PM_SR+28(3)
+	mtsr	7,4			/* Restore SR7 */
 	lwz	3,PM_KERNELSR(3)
 	mtsr	KERNEL_SR,3		/* Restore kernel SR */
-#if defined(MULTIPROCESSOR)
-	lwz	4,CI_ASTPENDING(4)	 /* Test AST pending */
-#else
 	lis	3,_C_LABEL(astpending)@ha /* Test AST pending */
 	lwz	4,_C_LABEL(astpending)@l(3)
-#endif
 	andi.	4,4,1
 	beq	1f
 /* Setup for entry to realtrap: */

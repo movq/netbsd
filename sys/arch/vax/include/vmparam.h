@@ -1,4 +1,4 @@
-/*	$NetBSD: vmparam.h,v 1.33 2000/11/14 19:49:57 thorpej Exp $	*/
+/*	$NetBSD: vmparam.h,v 1.36 2001/11/15 18:06:18 soren Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -100,28 +100,12 @@
 #define SHMMAXPGS	64		/* XXXX should be 1024 */
 #endif
 
-/*
- * The time for a process to be blocked before being very swappable.
- * This is a number of seconds which the system takes as being a non-trivial
- * amount of real time.	 You probably shouldn't change this;
- * it is used in subtle ways (fractions and multiples of it are, that is, like
- * half of a ``long time'', almost a long time, etc.)
- * It is related to human patience and other factors which don't really
- * change over time.
- */
-
-#define MAXSLP		20
-
 #define VM_PHYSSEG_MAX		1
 #define VM_PHYSSEG_NOADD
 #define VM_PHYSSEG_STRAT	VM_PSTRAT_BSEARCH /* XXX */
 
 #define	VM_NFREELIST		1
 #define	VM_FREELIST_DEFAULT	0
-
-struct pmap_physseg {
-	int	dummy;
-};
 
 /* MD round macros */
 #define	vax_round_page(x) (((vaddr_t)(x) + VAX_PGOFSET) & ~VAX_PGOFSET)

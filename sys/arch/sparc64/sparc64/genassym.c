@@ -1,4 +1,4 @@
-/*	$NetBSD: genassym.c,v 1.19 2000/08/01 00:31:15 eeh Exp $ */
+/*	$NetBSD: genassym.c,v 1.22 2001/10/22 15:19:55 mrg Exp $ */
 
 /*
  * Copyright (c) 1992, 1993
@@ -63,7 +63,6 @@
 #include <machine/pmap.h>
 #include <machine/cpu.h>
 
-#include <machine/bsd_openprom.h>
 #include <machine/reg.h>
 
 #ifdef notyet
@@ -73,10 +72,10 @@
 
 #include <dev/ic/am7930reg.h>
 #include <dev/ic/am7930var.h>
-#endif
 
-#include <sparc64/dev/fdreg.h>
-#include <sparc64/dev/fdvar.h>
+#include <dev/sun/fdreg.h>
+#include <dev/sun/fdvar.h>
+#endif
 
 #include <stdio.h>
 #include <stddef.h>
@@ -237,6 +236,12 @@ main()
 	off("NO_NEXTNODE", struct nodeops, no_nextnode);
 	off("NO_GETPROP", struct nodeops, no_getprop);
 
+	/* mbuf fields of import */
+	off("M_NEXT", struct mbuf, m_next);
+	off("M_DATA", struct mbuf, m_data);
+	off("M_LEN", struct mbuf, m_len);
+
+#if 0
 	/* floppy trap handler fields */
 	off("FDC_REG_MSR", struct fdcio, fdcio_reg_msr);
 	off("FDC_REG_FIFO", struct fdcio, fdcio_reg_fifo);
@@ -247,7 +252,6 @@ main()
 	off("FDC_TC", struct fdcio, fdcio_tc);
 	off("FDC_EVCNT", struct fdcio, fdcio_intrcnt.ev_count);
 
-#if 0
 	/* db_regs structure so we can save all registers */
 	off("DBR_TRAPS", struct db_regs, dbr_traps);
 	off("DBR_Y", struct db_regs, dbr_y);

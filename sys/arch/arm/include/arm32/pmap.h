@@ -1,4 +1,4 @@
-/*	$NetBSD: pmap.h,v 1.4 2001/03/04 19:05:56 matt Exp $	*/
+/*	$NetBSD: pmap.h,v 1.16 2001/11/03 00:01:23 rearnsha Exp $	*/
 
 /*
  * Copyright (c) 1994,1995 Mark Brinicombe.
@@ -35,6 +35,33 @@
 
 #include <machine/cpufunc.h>
 #include <machine/pte.h>
+#include <uvm/uvm_object.h>
+
+/*
+ * a pmap describes a processes' 4GB virtual address space.  this
+ * virtual address space can be broken up into 4096 1MB regions which
+ * are described by PDEs in the PDP.  the PDEs are defined as follows:
+ *
+ * (ranges are inclusive -> exclusive, just like vm_map_entry start/end)
+ * (the following assumes that KERNBASE is 0xf0000000)
+ *
+ * PDE#s	VA range		usage
+ * 0->3835	0x0 -> 0xefc00000	user address space
+ * 3836->3839	0xefc00000->		recursive mapping of PDP (used for
+ *			0xf0000000	linear mapping of PTPs)
+ * 3840->3851	0xf0000000->		kernel text address space (constant
+ *			0xf0c00000	across all pmap's/processes)
+ * 3852->3855	0xf0c00000->		"alternate" recursive PDP mapping
+ *			0xf1000000	(for other pmaps)
+ * 3856->4095	0xf1000000->		KVM and device mappings, constant
+ *			0x00000000	across all pmaps
+ *
+ * The maths works out that to then map each 1MB block into 4k pages requires
+ * 256 entries, of 4 bytes each, totaling 1k per 1MB.  However as we use 4k
+ * pages we allocate 4 PDE's at a time, allocating the same access permissions
+ * to them all.  This means we only need 1024 entries in the page table page
+ * table, IE we use 1 4k page to linearly map all the other page tables used.
+ */
 
 /*
  * Data structures used by pmap
@@ -58,54 +85,33 @@ struct l1pt {
  * The pmap structure itself.
  */
 struct pmap {
+	struct uvm_object	pm_obj;		/* uvm_object */
+#define	pm_lock	pm_obj.vmobjlock	
 	pd_entry_t		*pm_pdir;	/* KVA of page directory */
 	struct l1pt		*pm_l1pt;	/* L1 descriptor */
-	void			*pm_unused1;	/* Reserved for l2 map */
-	paddr_t			pm_pptpt;	/* PA of pt's page table */
-	vaddr_t			pm_vptpt;	/* VA of pt's page table */
-	short			pm_dref;	/* page directory ref count */
-	short			pm_count;	/* pmap reference count */
-	simple_lock_data_t	pm_lock;	/* lock on pmap */
+	paddr_t                 pm_pptpt;	/* PA of pt's page table */
+	vaddr_t                 pm_vptpt;	/* VA of pt's page table */
 	struct pmap_statistics	pm_stats;	/* pmap statistics */
 };
 
 typedef struct pmap *pmap_t;
 
 /*
- * For each vm_page_t, there is a list of all currently valid virtual
- * mappings of that page.  An entry is a pv_entry_t, the list is pv_table.
- */
-typedef struct pv_entry {
-	struct pv_entry *pv_next;       /* next pv_entry */
-	pmap_t          pv_pmap;        /* pmap where mapping lies */
-	vaddr_t         pv_va;          /* virtual address for mapping */
-	int             pv_flags;       /* flags */
-} *pv_entry_t;
-
-/*
- * A pv_page_info struture looks like this. It is used to contain status
- * information for pv_entry freelists.
- */
-struct pv_page;
-
-struct pv_page_info {
-	TAILQ_ENTRY(pv_page) pgi_list;
-	struct pv_entry *pgi_freelist;
-	int pgi_nfree;
-};
-
-/*
- * A pv_page itself looks like this. pv_entries are requested from the VM a
- * pv_page at a time.
+ * for each managed physical page we maintain a list of <PMAP,VA>'s
+ * which it is mapped at.  the list is headed by a pv_head structure.
+ * there is one pv_head per managed phys page (allocated at boot time).
+ * the pv_head structure points to a list of pv_entry structures (each
+ * describes one mapping).
  *
- * We also define a macro that states the number of pv_entries per page
- * allocated.
+ * pv_entry's are only visible within pmap.c, so only provide a placeholder
+ * here
  */
-#define NPVPPG	((NBPG - sizeof(struct pv_page_info)) / sizeof(struct pv_entry))
 
-struct pv_page {
-	struct pv_page_info pvp_pgi;
-	struct pv_entry pvp_pv[NPVPPG];
+struct pv_entry;
+
+struct pv_head {
+	struct simplelock pvh_lock;	/* locks every pv on this list */
+	struct pv_entry *pvh_list;	/* head of list (locked by pvh_lock) */
 };
 
 /*
@@ -138,16 +144,15 @@ typedef struct {
 /*
  * Commonly referenced structures
  */
-extern pv_entry_t	pv_table;	/* Phys to virt mappings, per page. */
-extern pmap_t		kernel_pmap;	/* pmap pointer used for the kernel */
-extern struct pmap	kernel_pmap_store;  /* kernel_pmap points to this */
+extern struct pv_entry	*pv_table;	/* Phys to virt mappings, per page. */
+extern struct pmap	kernel_pmap_store;
 extern int		pmap_debug_level; /* Only exists if PMAP_DEBUG */
 
 /*
  * Macros that we need to export
  */
 #define pmap_kernel()			(&kernel_pmap_store)
-#define pmap_update()			/*cpu_tlb_flushID()*/
+#define pmap_update(pmap)		/* nothing (yet) */
 #define	pmap_resident_count(pmap)	((pmap)->pm_stats.resident_count)
 #define	pmap_wired_count(pmap)		((pmap)->pm_stats.wired_count)
 
@@ -156,8 +161,6 @@ extern int		pmap_debug_level; /* Only exists if PMAP_DEBUG */
 /*
  * Functions that we need to export
  */
-extern boolean_t pmap_testbit __P((paddr_t, int));
-extern void pmap_changebit __P((paddr_t, int, int));
 extern vaddr_t pmap_map __P((vaddr_t, vaddr_t, vaddr_t, int));
 extern void pmap_procwr __P((struct proc *, vaddr_t, int));
 #define	PMAP_NEED_PROCWR
@@ -165,12 +168,18 @@ extern void pmap_procwr __P((struct proc *, vaddr_t, int));
 /*
  * Functions we use internally
  */
-extern void pmap_bootstrap __P((pd_entry_t *, pv_addr_t));
-extern void pmap_debug	__P((int));
-extern int pmap_handled_emulation __P((pmap_t, vaddr_t));
-extern int pmap_modified_emulation __P((pmap_t, vaddr_t));
-extern void pmap_postinit __P((void));
-extern pt_entry_t *pmap_pte __P((pmap_t, vaddr_t));
+void pmap_bootstrap __P((pd_entry_t *, pv_addr_t));
+void pmap_debug	__P((int));
+int pmap_handled_emulation __P((struct pmap *, vaddr_t));
+int pmap_modified_emulation __P((struct pmap *, vaddr_t));
+void pmap_postinit __P((void));
+pt_entry_t *pmap_pte __P((struct pmap *, vaddr_t));
+
+/*
+ * Special page zero routine for use by the idle loop (no cache cleans). 
+ */
+boolean_t	pmap_pageidlezero __P((paddr_t));
+#define PMAP_PAGEIDLEZERO(pa)	pmap_pageidlezero((pa))
 
 #endif	/* _KERNEL */
 
@@ -191,6 +200,10 @@ extern pt_entry_t *pmap_pte __P((pmap_t, vaddr_t));
 #define pmap_pde(m, v) (&((m)->pm_pdir[((vaddr_t)(v) >> PDSHIFT)&4095]))
 #define pmap_pte_pa(pte)	(*(pte) & PG_FRAME)
 #define pmap_pde_v(pde)		(*(pde) != 0)
+#define pmap_pde_section(pde)	((*(pde) & L1_MASK) == L1_SECTION)
+#define pmap_pde_page(pde)	((*(pde) & L1_MASK) == L1_PAGE)
+#define pmap_pde_fpage(pde)	((*(pde) & L1_MASK) == L1_FPAGE)
+
 #define pmap_pte_v(pte)		(*(pte) != 0)
 
 /* Size of the kernel part of the L1 page table */

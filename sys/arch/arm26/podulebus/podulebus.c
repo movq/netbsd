@@ -1,4 +1,4 @@
-/* $NetBSD: podulebus.c,v 1.8 2001/01/23 23:58:32 bjh21 Exp $ */
+/* $NetBSD: podulebus.c,v 1.15 2001/08/20 23:09:12 bjh21 Exp $ */
 
 /*-
  * Copyright (c) 2000 Ben Harris
@@ -30,7 +30,7 @@
 
 #include <sys/param.h>
 
-__RCSID("$NetBSD: podulebus.c,v 1.8 2001/01/23 23:58:32 bjh21 Exp $");
+__RCSID("$NetBSD: podulebus.c,v 1.15 2001/08/20 23:09:12 bjh21 Exp $");
 
 #include <sys/device.h>
 #include <sys/malloc.h>
@@ -43,7 +43,7 @@ __RCSID("$NetBSD: podulebus.c,v 1.8 2001/01/23 23:58:32 bjh21 Exp $");
 
 #include <arch/arm26/iobus/iocreg.h>
 #include <arch/arm26/iobus/iocvar.h>
-#include <arch/arm26/podulebus/podulebus.h>
+#include <dev/podulebus/podulebus.h>
 #include <arch/arm26/podulebus/podulebusreg.h>
 
 #include "locators.h"
@@ -138,12 +138,18 @@ podulebus_probe_podule(struct device *self, int slotnum)
 				    slotnum * PODULE_GAP, PODULE_GAP,
 				    &pa.pa_sync_h);
 		/* XXX This is a hack! */
-		pa.pa_memc_t = 2;
-		bus_space_subregion(pa.pa_memc_t,
-		    (bus_space_handle_t)MEMC_IO_BASE, slotnum * PODULE_GAP,
-		    PODULE_GAP, &pa.pa_memc_h);
+		pa.pa_mod_t = 2;
+		bus_space_map(pa.pa_mod_t,
+		    (bus_addr_t)MEMC_IO_BASE + slotnum * (PODULE_GAP << 2),
+		    (PODULE_GAP << 2), 0, &pa.pa_mod_h);
 		bus_space_read_region_1(id_bst, id_bsh, 0,
 					extecid, EXTECID_SIZE);
+		/* XXX If you thought that was a hack... */
+		pa.pa_mod_base = pa.pa_mod_h.a1;
+		pa.pa_fast_base = pa.pa_fast_h.a1;
+		pa.pa_medium_base = pa.pa_medium_h.a1;
+		pa.pa_slow_base = pa.pa_slow_h.a1;
+		pa.pa_sync_base = pa.pa_sync_h.a1;
 		pa.pa_ecid = ecid;
 		pa.pa_flags1 = extecid[EXTECID_F1];
 		pa.pa_manufacturer = (extecid[EXTECID_MLO] |
@@ -151,6 +157,7 @@ podulebus_probe_podule(struct device *self, int slotnum)
 		pa.pa_product = (extecid[EXTECID_PLO] |
 				 extecid[EXTECID_PHI] << 8);
 		pa.pa_slotnum = slotnum;
+		pa.pa_ih = slotnum;
 		if (pa.pa_flags1 & EXTECID_F1_CD) {
 			w = pa.pa_flags1 & EXTECID_F1_W_MASK;
 			if (w != EXTECID_F1_W_8BIT) {
@@ -164,6 +171,7 @@ podulebus_probe_podule(struct device *self, int slotnum)
 							  CHUNK_DEV_DESCR);
 			}
 		}
+		pa.pa_slotflags = 0;
 		config_found_sm(self, &pa,
 				podulebus_print, podulebus_submatch);
 		if (pa.pa_chunks)
@@ -249,6 +257,8 @@ int
 podulebus_initloader(struct podulebus_attach_args *pa)
 {
 
+	if (pa->pa_loader != NULL)
+		return 0;
 	pa->pa_loader = podulebus_get_chunk(pa, CHUNK_RISCOS_LOADER);
 	if (pa->pa_loader == NULL)
 		return -1;
@@ -263,28 +273,28 @@ int
 podloader_readbyte(struct podulebus_attach_args *pa, u_int addr)
 {
 
-	return podloader_call(0, addr, pa->pa_sync_h, pa->pa_loader, 0);
+	return podloader_call(0, addr, pa->pa_sync_base, pa->pa_loader, 0);
 }
 
 void
 podloader_writebyte(struct podulebus_attach_args *pa, u_int addr, int val)
 {
 
-	podloader_call(val, addr, pa->pa_sync_h, pa->pa_loader, 1);
+	podloader_call(val, addr, pa->pa_sync_base, pa->pa_loader, 1);
 }
 
 void
 podloader_reset(struct podulebus_attach_args *pa)
 {
 
-	podloader_call(0, 0, pa->pa_sync_h, pa->pa_loader, 2);
+	podloader_call(0, 0, pa->pa_sync_base, pa->pa_loader, 2);
 }
 
 int
 podloader_callloader(struct podulebus_attach_args *pa, u_int r0, u_int r1)
 {
 
-	return podloader_call(r0, r1, pa->pa_sync_h, pa->pa_loader, 3);
+	return podloader_call(r0, r1, pa->pa_sync_base, pa->pa_loader, 3);
 }
 
 void
@@ -332,8 +342,8 @@ podulebus_submatch(struct device *parent, struct cfdata *cf, void *aux)
 	return 0;
 }
 
-struct irq_handler *
-podulebus_irq_establish(struct device *self, int slot, int ipl,
+void *
+podulebus_irq_establish(podulebus_intr_handle_t slot, int ipl,
 			int (*func)(void *), void *arg, struct evcnt *ev)
 {
 

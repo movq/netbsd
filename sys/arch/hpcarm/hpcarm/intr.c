@@ -1,4 +1,4 @@
-/*	$NetBSD: intr.c,v 1.1 2001/02/23 03:48:11 ichiro Exp $	*/
+/*	$NetBSD: intr.c,v 1.4 2001/06/20 02:34:26 toshii Exp $	*/
 
 /*
  * Copyright (c) 1994-1998 Mark Brinicombe.
@@ -52,6 +52,7 @@
 u_int soft_interrupts = 0;
 
 extern int current_spl_level;
+extern int softintr_dispatch(int);
 
 /* Generate soft interrupt counts if IRQSTATS is defined */
 #ifdef IRQSTATS
@@ -92,30 +93,12 @@ clearsoftintr(intrmask)
 }
 
 void
-setsoftclock()
-{
-	atomic_set_bit(&soft_interrupts, SOFTIRQ_BIT(SOFTIRQ_CLOCK));
-}
-
-void
 setsoftnet()
 {
 	atomic_set_bit(&soft_interrupts, SOFTIRQ_BIT(SOFTIRQ_NET));
 }
 
-void
-setsoftserial()
-{
-	atomic_set_bit(&soft_interrupts, SOFTIRQ_BIT(SOFTIRQ_SERIAL));
-}
-
 int astpending;
-
-void
-setsoftast()
-{
-	astpending = 1;
-}
 
 /* Handle software interrupts */
 
@@ -125,21 +108,10 @@ dosoftints()
 	u_int softints;
 	int s;
 
+	softintr_dispatch(current_spl_level);
+
 	softints = soft_interrupts & spl_smasks[current_spl_level];
 	if (softints == 0) return;
-
-	/*
-	 * Software clock interrupts
-	 */
-
-	if (softints & SOFTIRQ_BIT(SOFTIRQ_CLOCK)) {
-		s = splsoftclock();
-		++COUNT;
-		INC_SINTRCNT(SOFTIRQ_CLOCK);
-		clearsoftintr(SOFTIRQ_BIT(SOFTIRQ_CLOCK));
-		softclock(NULL);
-		(void)splx(s);
-	}
 
 	/*
 	 * Network software interrupts
@@ -162,23 +134,6 @@ dosoftints()
 
 #undef DONETISR
 
-		(void)splx(s);
-	}
-	/*
-	 * Serial software interrupts
-	 */
-
-	if (softints & SOFTIRQ_BIT(SOFTIRQ_SERIAL)) {
-		s = splsoftserial();
-		++COUNT;
-		INC_SINTRCNT(SOFTIRQ_SERIAL);
-		clearsoftintr(SOFTIRQ_BIT(SOFTIRQ_SERIAL));
-#if NCOM > 0
-		comsoft();
-#endif	/* NCOM > 0 */
-#if NSACOM > 0
-		sacomsoft();
-#endif
 		(void)splx(s);
 	}
 }

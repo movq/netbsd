@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.259 2000/12/05 21:38:38 scottr Exp $	*/
+/*	$NetBSD: machdep.c,v 1.265 2001/09/10 21:19:16 chris Exp $	*/
 
 /*
  * Copyright (c) 1988 University of Utah.
@@ -78,6 +78,7 @@
 
 #include "opt_adb.h"
 #include "opt_ddb.h"
+#include "opt_kgdb.h"
 #include "opt_compat_netbsd.h"
 #include "akbd.h"
 #include "macfb.h"
@@ -183,9 +184,9 @@ u_int32_t mac68k_vidlen;	/* mem length */
 int	(*mac68k_bell_callback) __P((void *, int, int, int));
 caddr_t	mac68k_bell_cookie;
 
-vm_map_t exec_map = NULL;  
-vm_map_t mb_map = NULL;
-vm_map_t phys_map = NULL;
+struct vm_map *exec_map = NULL;  
+struct vm_map *mb_map = NULL;
+struct vm_map *phys_map = NULL;
 
 caddr_t	msgbufaddr;
 int	maxmem;			/* max memory per process */
@@ -286,6 +287,7 @@ mac68k_init()
 		    high[numranges - 1] + i * NBPG, VM_PROT_READ|VM_PROT_WRITE,
 		    VM_PROT_READ|VM_PROT_WRITE|PMAP_WIRED);
 	initmsgbuf(msgbufaddr, m68k_round_page(MSGBUFSIZE));
+	pmap_update(pmap_kernel());
 }
 
 /*
@@ -424,7 +426,7 @@ cpu_startup(void)
 	if (uvm_map(kernel_map, (vaddr_t *) &buffers, round_page(size),
 	    NULL, UVM_UNKNOWN_OFFSET, 0,
 	    UVM_MAPFLAG(UVM_PROT_NONE, UVM_PROT_NONE,
-	    UVM_INH_NONE, UVM_ADV_NORMAL, 0)) != KERN_SUCCESS)
+	    UVM_INH_NONE, UVM_ADV_NORMAL, 0)) != 0)
 		panic("startup: cannot allocate VM for buffers");
 	minaddr = (vaddr_t)buffers;
 	base = bufpages / nbuf;
@@ -455,6 +457,8 @@ cpu_startup(void)
 			curbufsize -= PAGE_SIZE;
 		}
 	}
+	pmap_update(kernel_map->pmap);
+
 	/*
 	 * Allocate a submap for exec arguments.  This map effectively
 	 * limits the number of processes exec'ing at any time.
@@ -645,6 +649,7 @@ cpu_reboot(howto, bootstr)
 	/* Map the last physical page VA = PA for doboot() */
 	pmap_enter(pmap_kernel(), (vaddr_t)maxaddr, (vaddr_t)maxaddr,
 	    VM_PROT_ALL, VM_PROT_ALL|PMAP_WIRED);
+	pmap_update(pmap_kernel());
 
 	printf("rebooting...\n");
 	DELAY(1000000);
@@ -872,6 +877,7 @@ dumpsys()
 		}
 		pmap_enter(pmap_kernel(), (vaddr_t)vmmap, maddr,
 		    VM_PROT_READ, VM_PROT_READ|PMAP_WIRED);
+		pmap_update(pmap_kernel());
 
 		error = (*dump)(dumpdev, blkno, vmmap, NBPG);
  bad:
@@ -1153,19 +1159,6 @@ getenvvars(flag, buf)
 	HwCfgFlags3 = getenv("HWCFGFLAG3");
  	ADBReInit_JTBL = getenv("ADBREINIT_JTBL");
  	mrg_ADBIntrPtr = (caddr_t)getenv("ADBINTERRUPT");
-}
-
-static char	toupper __P((char));
-
-static char
-toupper(c)
-	char c;
-{
-	if (c >= 'a' && c <= 'z') {
-		return c - 'a' + 'A';
-	} else {
-		return c;
-	}
 }
 
 static long

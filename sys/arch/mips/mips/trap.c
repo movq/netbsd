@@ -1,4 +1,4 @@
-/*	$NetBSD: trap.c,v 1.160 2001/01/16 06:01:27 thorpej Exp $	*/
+/*	$NetBSD: trap.c,v 1.165 2001/11/14 18:15:26 thorpej Exp $	*/
 
 /*
  * Copyright (c) 1988 University of Utah.
@@ -44,11 +44,12 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.160 2001/01/16 06:01:27 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.165 2001/11/14 18:15:26 thorpej Exp $");
 
 #include "opt_cputype.h"	/* which mips CPU levels do we support? */
 #include "opt_ktrace.h"
 #include "opt_ddb.h"
+#include "opt_kgdb.h"
 
 #if !defined(MIPS1) && !defined(MIPS3)
 #error  Neither  "MIPS1" (r2000 family), "MIPS3" (r4000 family) was configured.
@@ -66,6 +67,7 @@ __KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.160 2001/01/16 06:01:27 thorpej Exp $");
 #include <sys/ktrace.h>
 #endif
 
+#include <mips/cache.h>
 #include <mips/locore.h>
 #include <mips/mips_opcode.h>
 
@@ -189,8 +191,13 @@ trap(status, cause, vaddr, opc, frame)
 		type |= T_USER;
 
 	if (status & ((CPUISMIPS3) ? MIPS_SR_INT_IE : MIPS1_SR_INT_ENA_PREV)) {
-		if (type != T_BREAK)
+		if (type != T_BREAK) {
+#ifdef IPL_ICU_MASK
+			spllowersofthigh();
+#else
 			_splset((status & MIPS_HARD_INT_MASK) | MIPS_SR_INT_IE);
+#endif
+		}
 	}
 
 	switch (type) {
@@ -328,7 +335,7 @@ trap(status, cause, vaddr, opc, frame)
 	    {
 		vaddr_t va;
 		struct vmspace *vm;
-		vm_map_t map;
+		struct vm_map *map;
 		int rv;
 
 		vm = p->p_vmspace;
@@ -358,17 +365,17 @@ trap(status, cause, vaddr, opc, frame)
 		 * error.
 		 */
 		if ((caddr_t)va >= vm->vm_maxsaddr) {
-			if (rv == KERN_SUCCESS) {
+			if (rv == 0) {
 				unsigned nss;
 
 				nss = btoc(USRSTACK-(unsigned)va);
 				if (nss > vm->vm_ssize)
 					vm->vm_ssize = nss;
 			}
-			else if (rv == KERN_PROTECTION_FAILURE)
-				rv = KERN_INVALID_ADDRESS;
+			else if (rv == EACCES)
+				rv = EFAULT;
 		}
-		if (rv == KERN_SUCCESS) {
+		if (rv == 0) {
 			if (type & T_USER) {
 				userret(p);
 			}
@@ -376,15 +383,14 @@ trap(status, cause, vaddr, opc, frame)
 		}
 		if ((type & T_USER) == 0)
 			goto copyfault;
-		if (rv == KERN_RESOURCE_SHORTAGE) {
+		if (rv == ENOMEM) {
 			printf("UVM: pid %d (%s), uid %d killed: out of swap\n",
 			       p->p_pid, p->p_comm,
 			       p->p_cred && p->p_ucred ?
 			       p->p_ucred->cr_uid : -1);
 			sig = SIGKILL;
 		} else {
-			sig = (rv == KERN_PROTECTION_FAILURE) ?
-				SIGBUS : SIGSEGV;
+			sig = (rv == EACCES) ? SIGBUS : SIGSEGV;
 		}
 		ucode = vaddr;
 		break; /* SIGNAL */
@@ -396,7 +402,7 @@ trap(status, cause, vaddr, opc, frame)
 
 		va = trunc_page(vaddr);
 		rv = uvm_fault(kernel_map, va, 0, ftype);
-		if (rv == KERN_SUCCESS)
+		if (rv == 0)
 			return; /* KERN */
 		/*FALLTHROUGH*/
 	    }
@@ -472,13 +478,14 @@ trap(status, cause, vaddr, opc, frame)
 			ea = round_page(va + sizeof(int) - 1);
 			rv = uvm_map_protect(&p->p_vmspace->vm_map,
 				sa, ea, VM_PROT_DEFAULT, FALSE);
-			if (rv == KERN_SUCCESS) {
+			if (rv == 0) {
 				rv = suiword((void *)va, MIPS_BREAK_SSTEP);
 				(void)uvm_map_protect(&p->p_vmspace->vm_map,
 				sa, ea, VM_PROT_READ|VM_PROT_EXECUTE, FALSE);
 			}
 		}
-		MachFlushCache();
+		mips_icache_sync_all();		/* XXXJRT -- necessary? */
+		mips_dcache_wbinv_all();	/* XXXJRT -- necessary? */
 
 		if (rv < 0)
 			printf("Warning: can't restore instruction at 0x%x: 0x%x\n",
@@ -488,7 +495,14 @@ trap(status, cause, vaddr, opc, frame)
 		break; /* SIGNAL */
 	    }
 	case T_RES_INST+T_USER:
+#if defined(MIPS3_5900) && defined(SOFTFLOAT)
+		MachFPInterrupt(status, cause, opc, p->p_md.md_regs);
+		userret(p);
+		return; /* GEN */
+#else
 		sig = SIGILL;
+		break; /* SIGNAL */
+#endif
 		break; /* SIGNAL */
 	case T_COP_UNUSABLE+T_USER:
 #if defined(NOFPU) && !defined(SOFTFLOAT)
@@ -747,7 +761,7 @@ mips_singlestep(p)
 		ea = round_page(va + sizeof(int) - 1);
 		rv = uvm_map_protect(&p->p_vmspace->vm_map,
 		    sa, ea, VM_PROT_DEFAULT, FALSE);
-		if (rv == KERN_SUCCESS) {
+		if (rv == 0) {
 			rv = suiword((void *)va, MIPS_BREAK_SSTEP);
 			(void)uvm_map_protect(&p->p_vmspace->vm_map,
 			    sa, ea, VM_PROT_READ|VM_PROT_EXECUTE, FALSE);

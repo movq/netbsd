@@ -1,4 +1,4 @@
-/*	$NetBSD: if_ie.c,v 1.9 2001/01/22 22:28:44 bjh21 Exp $ */
+/*	$NetBSD: if_ie.c,v 1.12 2001/07/07 07:51:37 scw Exp $ */
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -71,6 +71,7 @@ struct ie_pcctwo_softc {
 	struct ie_softc ps_ie;
 	bus_space_tag_t ps_bust;
 	bus_space_handle_t ps_bush;
+	struct evcnt ps_evcnt;
 };
 
 struct cfattach ie_pcctwo_ca = {
@@ -84,7 +85,7 @@ extern struct cfdriver ie_cd;
 static void ie_reset __P((struct ie_softc *, int));
 static int ie_intrhook __P((struct ie_softc *, int));
 static void ie_hwinit __P((struct ie_softc *));
-static void ie_atten __P((struct ie_softc *));
+static void ie_atten __P((struct ie_softc *, int));
 
 static void ie_copyin __P((struct ie_softc *, void *, int, size_t));
 static void ie_copyout __P((struct ie_softc *, const void *, int, size_t));
@@ -140,7 +141,10 @@ ie_intrhook(sc, when)
 	struct ie_softc *sc;
 	int when;
 {
+	struct ie_pcctwo_softc *ps;
 	u_int8_t reg;
+
+	ps = (struct ie_pcctwo_softc *) sc;
 
 	if (when == INTR_EXIT) {
 		reg = pcc2_reg_read(sys_pcctwo, PCC2REG_ETH_ICSR);
@@ -162,9 +166,11 @@ ie_hwinit(sc)
 	pcc2_reg_write(sys_pcctwo, PCC2REG_ETH_ICSR, reg);
 }
 
+/* ARGSUSED */
 static void
-ie_atten(sc)
+ie_atten(sc, reason)
 	struct ie_softc *sc;
+	int reason;
 {
 	struct ie_pcctwo_softc *ps;
 
@@ -186,7 +192,7 @@ ie_copyin(sc, dst, offset, size)
 	bus_space_read_region_1(sc->bt, sc->bh, offset, dst, size);
 #else
 	/* A minor optimisation ;-) */
-	bcopy((void *) ((u_long) sc->bh + (u_long) offset), dst, size);
+	memcpy(dst, (void *) ((u_long) sc->bh + (u_long) offset), size);
 #endif
 }
 
@@ -204,7 +210,7 @@ ie_copyout(sc, src, offset, size)
 	bus_space_write_region_1(sc->bt, sc->bh, offset, src, size);
 #else
 	/* A minor optimisation ;-) */
-	bcopy(src, (void *) ((u_long) sc->bh + (u_long) offset), size);
+	memcpy((void *) ((u_long) sc->bh + (u_long) offset), src, size);
 #endif
 }
 
@@ -336,6 +342,11 @@ ie_pcctwo_attach(parent, self, args)
 	/* Attach the MI back-end */
 	i82586_attach(sc, "onboard", mvme_ea, NULL, 0, 0);
 
+	/* Register the event counter */
+	evcnt_attach_dynamic(&ps->ps_evcnt, EVCNT_TYPE_INTR,
+	    pcctwointr_evcnt(pa->pa_ipl), "ether", sc->sc_dev.dv_xname);
+
 	/* Finally, hook the hardware interrupt */
-	pcctwointr_establish(PCCTWOV_LANC_IRQ, i82586_intr, pa->pa_ipl, sc);
+	pcctwointr_establish(PCCTWOV_LANC_IRQ, i82586_intr, pa->pa_ipl, sc,
+	    &ps->ps_evcnt);
 }

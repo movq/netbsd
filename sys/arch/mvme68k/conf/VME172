@@ -1,4 +1,4 @@
-#	$NetBSD: VME172,v 1.4 2000/12/07 08:40:06 scw Exp $
+#	$NetBSD: VME172,v 1.9 2001/07/27 18:40:28 scw Exp $
 
 include		"arch/mvme68k/conf/std.mvme68k"
 
@@ -29,22 +29,25 @@ file-system 	CD9660
 
 # Networking options
 options 	INET
-#options 	TCP_COMPAT_42   # compatibility with 4.2BSD TCP/IP
 #options        GATEWAY         # IP packet forwarding
 #options        ISO             # OSI networking
 #options        TPIP
 #options        EON
+#options 	TCP_DEBUG	# Record last TCP_NDEBUG packets with SO_DEBUG
 
 options 	COMPAT_AOUT_M68K	# compatibility with NetBSD/m68k a.out
 #options 	COMPAT_15, COMPAT_14, COMPAT_13, COMPAT_12
 #options 	COMPAT_SUNOS
 #options 	COMPAT_M68K4K	# compatibility with NetBSD/m68k4k binaries
+#options 	TCP_COMPAT_42	# 4.2BSD TCP/IP bug compat. Not recommended.
 
 ## force NFS root and swap
 #config	netbsd		root on ? type nfs
 ## "generic" boot (put root on boot device)
 config netbsd		root on ? type ?
 
+options 	NFS_BOOT_DHCP		# Diskless client w/ dhcp
+options 	NFS_BOOT_BOOTP		# Diskless client w/ bootp
 options 	NFS_BOOT_BOOTPARAM	# Diskless client w/ bootparamd
 
 
@@ -53,16 +56,15 @@ pseudo-device	ppp 2
 pseudo-device	loop
 pseudo-device	bpfilter
 pseudo-device	pty
-pseudo-device	vnd 2
+pseudo-device	rnd
 
 mainbus0	at root
 
 pcctwo0		at mainbus0
-memc*		at pcctwo? ipl 6
 clock0		at pcctwo? ipl 5
 zsc*		at pcctwo? ipl 4
 ie0		at pcctwo? ipl 3
-ncrsc0		at pcctwo? ipl 2
+osiop0		at pcctwo? ipl 2
 
 zstty*		at zsc? channel ?
 
@@ -73,8 +75,11 @@ vme0 		at vmetwo0
 # Example VMEbus device
 #foo0 		at vme0 addr 0x10001000 am 0x0d irq 3 vect 0x80
 
+# Memory Controller Support (MCECC and MEMC040)
+memc*		at mainbus0
+
 # SCSI Bus Support
-scsibus*	at ncrsc?
+scsibus*	at osiop?
 
 sd*		at scsibus? target ? lun ?
 st*		at scsibus? target ? lun ?

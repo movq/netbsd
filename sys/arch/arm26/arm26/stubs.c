@@ -1,11 +1,11 @@
-/* $NetBSD: stubs.c,v 1.7 2001/02/13 22:54:26 bjh21 Exp $ */
+/* $NetBSD: stubs.c,v 1.9 2001/07/28 19:12:50 bjh21 Exp $ */
 /*
  * stubs.c -- functions I haven't written yet
  */
 
 #include <sys/param.h>
 
-__RCSID("$NetBSD: stubs.c,v 1.7 2001/02/13 22:54:26 bjh21 Exp $");
+__RCSID("$NetBSD: stubs.c,v 1.9 2001/07/28 19:12:50 bjh21 Exp $");
 
 #include <sys/kernel.h>
 #include <sys/systm.h>
@@ -93,29 +93,10 @@ fuiword(base)
 	panic("fuiword not implemented");
 }
 
-int
-cpu_sysctl(name, namelen, oldval, oldlenp, newval, newlen, p)
-	int *name;
-	u_int namelen;
-	void *oldval, *newval;
-	size_t *oldlenp, newlen;
-	struct proc *p;
-{
-	panic("cpu_sysctl not implemented");
-}
-
 void
 pagemove(foo, bar, len)
 	caddr_t foo, bar;
 	size_t len;
 {
 	panic("pagemove not implemented");
-}
-
-int sys_sysarch(p, v, retval)
-	struct proc *p;
-	void *v;
-	register_t *retval;
-{
-	panic("sys_sysarch not implemented");
 }

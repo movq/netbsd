@@ -1,7 +1,7 @@
-/* $NetBSD: intr.h,v 1.40 2001/01/15 20:19:51 thorpej Exp $ */
+/* $NetBSD: intr.h,v 1.49 2001/07/27 00:25:19 thorpej Exp $ */
 
 /*-
- * Copyright (c) 2000 The NetBSD Foundation, Inc.
+ * Copyright (c) 2000, 2001 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -73,6 +73,34 @@
 #include <machine/atomic.h>
 
 /*
+ * The Alpha System Control Block.  This is 8k long, and you get
+ * 16 bytes per vector (i.e. the vector numbers are spaced 16
+ * apart).
+ *
+ * This is sort of a "shadow" SCB -- rather than the CPU jumping
+ * to (SCBaddr + (16 * vector)), like it does on the VAX, we get
+ * a vector number in a1.  We use the SCB to look up a routine/arg
+ * and jump to it.
+ *
+ * Since we use the SCB only for I/O interrupts, we make it shorter
+ * than normal, starting it at vector 0x800 (the start of the I/O
+ * interrupt vectors).
+ */
+#define	SCB_IOVECBASE	0x0800
+#define	SCB_VECSIZE	0x0010
+#define	SCB_SIZE	0x2000
+
+#define	SCB_VECTOIDX(x)	((x) >> 4)
+#define	SCB_IDXTOVEC(x)	((x) << 4)
+
+#define	SCB_NIOVECS	SCB_VECTOIDX(SCB_SIZE - SCB_IOVECBASE)
+
+struct scbvec { 
+	void	(*scb_func)(void *, u_long);
+	void	*scb_arg;
+};
+
+/*
  * Alpha interrupts come in at one of 4 levels:
  *
  *	software interrupt level
@@ -114,12 +142,16 @@
 
 #ifdef	_KERNEL
 
+/* Simulated software interrupt register. */
+extern __volatile unsigned long ssir;
+
 /* IPL-lowering/restoring macros */
 void	spl0(void);
+
 static __inline void
 splx(int s)
 {
-	if (s == ALPHA_PSL_IPL_0)
+	if (s == ALPHA_PSL_IPL_0 && ssir != 0)
 		spl0();
 	else
 		alpha_pal_swpipl(s);
@@ -139,7 +171,6 @@ _splraise(int s)
 #define splsoftnet()		splsoft()
 #define splnet()		_splraise(ALPHA_PSL_IPL_IO)
 #define splbio()		_splraise(ALPHA_PSL_IPL_IO)
-#define splimp()		_splraise(ALPHA_PSL_IPL_IO)
 #define splvm()			_splraise(ALPHA_PSL_IPL_IO)
 #define spltty()		_splraise(ALPHA_PSL_IPL_IO)
 #define splserial()		_splraise(ALPHA_PSL_IPL_IO)
@@ -149,20 +180,21 @@ _splraise(int s)
 
 #define	splsched()		splhigh()
 #define	spllock()		splhigh()
+#define	splipi()		splclock()	/* AARM, 5-2, II-B */
 #define spllpt()		spltty()
 
 /*
  * Interprocessor interrupts.  In order how we want them processed.
  */
-#define	ALPHA_IPI_HALT		0x0000000000000001UL
-#define	ALPHA_IPI_TBIA		0x0000000000000002UL
-#define	ALPHA_IPI_TBIAP		0x0000000000000004UL
-#define	ALPHA_IPI_SHOOTDOWN	0x0000000000000008UL
-#define	ALPHA_IPI_IMB		0x0000000000000010UL
-#define	ALPHA_IPI_AST		0x0000000000000020UL
-#define	ALPHA_IPI_SYNCH_FPU	0x0000000000000040UL
-#define	ALPHA_IPI_DISCARD_FPU	0x0000000000000080UL
-#define	ALPHA_IPI_PAUSE		0x0000000000000100UL
+#define	ALPHA_IPI_HALT			(1UL << 0)
+#define	ALPHA_IPI_MICROSET		(1UL << 1)
+#define	ALPHA_IPI_SHOOTDOWN		(1UL << 2)
+#define	ALPHA_IPI_IMB			(1UL << 3)
+#define	ALPHA_IPI_AST			(1UL << 4)
+#define	ALPHA_IPI_SYNCH_FPU		(1UL << 5)
+#define	ALPHA_IPI_DISCARD_FPU		(1UL << 6)
+#define	ALPHA_IPI_PAUSE			(1UL << 7)
+#define	ALPHA_IPI_PMAP_REACTIVATE	(1UL << 8)
 
 #define	ALPHA_NIPIS		9	/* must not exceed 64 */
 
@@ -205,15 +237,10 @@ struct alpha_shared_intr {
 	((asi)[num].intr_maxstrays != 0 &&				\
 	 (asi)[num].intr_nstrays == (asi)[num].intr_maxstrays)
 
-/*
- * simulated software interrupt register
- */
-extern u_int64_t ssir;
-
 #define	setsoft(x)	atomic_setbits_ulong(&ssir, 1 << (x))
 
 struct alpha_soft_intrhand {
-	LIST_ENTRY(alpha_soft_intrhand)
+	TAILQ_ENTRY(alpha_soft_intrhand)
 		sih_q;
 	struct alpha_soft_intr *sih_intrhead;
 	void	(*sih_fn)(void *);
@@ -222,7 +249,7 @@ struct alpha_soft_intrhand {
 };
 
 struct alpha_soft_intr {
-	LIST_HEAD(, alpha_soft_intrhand)
+	TAILQ_HEAD(, alpha_soft_intrhand)
 		softintr_q;
 	struct evcnt softintr_evcnt;
 	struct simplelock softintr_slock;
@@ -237,8 +264,18 @@ void	softintr_dispatch(void);
 #define	softintr_schedule(arg)						\
 do {									\
 	struct alpha_soft_intrhand *__sih = (arg);			\
-	__sih->sih_pending = 1;						\
-	setsoft(__sih->sih_intrhead->softintr_ipl);			\
+	struct alpha_soft_intr *__si = __sih->sih_intrhead;		\
+	int __s;							\
+									\
+	__s = splhigh();						\
+	simple_lock(&__si->softintr_slock);				\
+	if (__sih->sih_pending == 0) {					\
+		TAILQ_INSERT_TAIL(&__si->softintr_q, __sih, sih_q);	\
+		__sih->sih_pending = 1;					\
+		setsoft(__si->softintr_ipl);				\
+	}								\
+	simple_unlock(&__si->softintr_slock);				\
+	splx(__s);							\
 } while (0)
 
 /* XXX For legacy software interrupts. */
@@ -257,6 +294,8 @@ int	alpha_shared_intr_get_sharetype(struct alpha_shared_intr *,
 	    unsigned int);
 int	alpha_shared_intr_isactive(struct alpha_shared_intr *,
 	    unsigned int);
+int	alpha_shared_intr_firstactive(struct alpha_shared_intr *,
+	    unsigned int);
 void	alpha_shared_intr_set_dfltsharetype(struct alpha_shared_intr *,
 	    unsigned int, int);
 void	alpha_shared_intr_set_maxstrays(struct alpha_shared_intr *,
@@ -272,7 +311,14 @@ char	*alpha_shared_intr_string(struct alpha_shared_intr *,
 struct evcnt *alpha_shared_intr_evcnt(struct alpha_shared_intr *,
 	    unsigned int);
 
-void	set_iointr(void (*)(void *, unsigned long));
+extern struct scbvec scb_iovectab[];
+
+void	scb_init(void);
+void	scb_set(u_long, void (*)(void *, u_long), void *);
+u_long	scb_alloc(void (*)(void *, u_long), void *);
+void	scb_free(u_long);
+
+#define	SCB_ALLOC_FAILED	((u_long) -1)
 
 #endif /* _KERNEL */
 #endif /* ! _ALPHA_INTR_H_ */

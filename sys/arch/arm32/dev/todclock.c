@@ -1,4 +1,4 @@
-/*	$NetBSD: todclock.c,v 1.7 2000/02/19 00:27:16 tsutsui Exp $	*/
+/*	$NetBSD: todclock.c,v 1.9 2001/08/05 05:22:10 matt Exp $	*/
 
 /*
  * Copyright (c) 1994-1997 Mark Brinicombe.
@@ -196,7 +196,11 @@ resettodr()
 
 	/* We need a todclock device and should always have one */
 	if (!todclock_sc)
+#ifdef NC
+		return;
+#else
 		panic("resettodr: No todclock device attached\n");
+#endif /* NC */
 
 	/* Abort early if there is not actually an RTC write routine */
 	if (todclock_sc->sc_rtc_write == NULL)
@@ -273,8 +277,10 @@ inittodr(base)
 	 */
 
 	/* We expect a todclock device */
+#ifndef NC
 	if (!todclock_sc)
 		panic("inittodr: No todclock device attached\n");
+#endif /* NC */
 
 	/* Use the suggested time as a fall back */
 	time.tv_sec = base;
@@ -328,8 +334,10 @@ inittodr(base)
 		if (n > base + 60) {
 			days = (n - base) / SECPERDAY;
 			printf("Clock has gained %d day%c %ld hours %ld minutes %ld secs\n",
-			    days, ((days == 1) ? 0 : 's'), ((n - base)  / 3600) % 24,
-			    ((n - base) / 60) % 60, (n - base) % 60);
+			    days, ((days == 1) ? 0 : 's'),
+			    (long)((n - base) / 3600) % 24,
+			    (long)((n - base) / 60)   % 60,
+			    (long) (n - base)         % 60);
 		}
 	}
 }  

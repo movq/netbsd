@@ -1,4 +1,4 @@
-/*	$NetBSD: hpcboot.cpp,v 1.1 2001/02/09 18:34:41 uch Exp $	*/
+/*	$NetBSD: hpcboot.cpp,v 1.4 2001/05/08 18:51:22 uch Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -52,10 +52,10 @@
 
 int WINAPI
 WinMain(HINSTANCE instance, HINSTANCE prev_instance,
-	LPTSTR cmd_line, int window_show)
+    LPTSTR cmd_line, int window_show)
 {
-	HpcMenuInterface::Instance();
-	HpcBootApp *app = 0;	// Application body.
+	HpcMenuInterface::Instance();	// Menu System
+	HpcBootApp *app = 0;		// Application body.
 	int ret = 0;
 
 	InitCommonControls();
@@ -70,9 +70,9 @@ WinMain(HINSTANCE instance, HINSTANCE prev_instance,
 	if (!app->_root->create(0))
 		goto failed;
 
-	Boot::Instance();
+	Boot::Instance();	// Boot loader
 
-	ret = app->run();
+	ret = app->run();	// Main loop.
 	// NOTREACHED
 
  failed:
@@ -87,18 +87,21 @@ WinMain(HINSTANCE instance, HINSTANCE prev_instance,
 	return ret;
 }	 
 
+//
+// boot sequence. 
+//
 void
-hpcboot(void *arg, struct HpcMenuInterface::HpcMenuPreferences &pref)
+hpcboot(void *arg)
 {
 	size_t sz = 0;
 	paddr_t p = 0;
-	Boot &f = Boot::Instance();
-	HpcMenuInterface &menu = HpcMenuInterface::Instance();
-	Console *_cons = Console::Instance();
 	TCHAR *error_message = 0;
 
+	HpcMenuInterface &menu = HPC_MENU;
+	Boot &f = Boot::Instance();
+
 	menu.progress();
-	if (!f.setup(pref))
+	if (!f.setup())
 		return;
 
 	menu.progress();
@@ -125,7 +128,7 @@ hpcboot(void *arg, struct HpcMenuInterface::HpcMenuPreferences &pref)
 	{
 		if (!f._file->open(f.args.mfsName)) {
 			error_message =
-				TEXT("couldn't open file system image.\n");
+			    TEXT("couldn't open file system image.\n");
 			goto failed;
 		}
 		sz = f._file->size();
@@ -167,10 +170,11 @@ hpcboot(void *arg, struct HpcMenuInterface::HpcMenuPreferences &pref)
 	menu.progress();
 	if (!f._loader->load()) {
 		error_message =
-			TEXT("couldn't load kernel image to memory.\n");
+		    TEXT("couldn't load kernel image to memory.\n");
 		goto failed;
 	}
 	menu.progress();
+	f._file->close();
 
 	// load file system image to memory
 	if (f.args.loadmfs) {
@@ -188,9 +192,9 @@ hpcboot(void *arg, struct HpcMenuInterface::HpcMenuPreferences &pref)
 	f._loader->tagDump(3); // dump page chain.(print first 3 links)
 
 	// jump to kernel entry.
-	if (menu._pref.pause_before_boot) {
+	if (HPC_PREFERENCE.pause_before_boot) {
 		if (MessageBox(menu._root->_window, TEXT("Push OK to boot."),
-			       TEXT("Last chance..."), MB_YESNO) != IDYES)
+		    TEXT("Last chance..."), MB_YESNO) != IDYES)
 			goto failed;
 	}
 
@@ -200,8 +204,9 @@ hpcboot(void *arg, struct HpcMenuInterface::HpcMenuPreferences &pref)
  failed:
 	if (error_message == 0)
 		error_message = TEXT("can't jump to kernel.\n");
+	f._file->close();
 	MessageBox(menu._root->_window, error_message,
-		   TEXT("BOOT FAILED"), 0);
+	    TEXT("BOOT FAILED"), 0);
 }
 
 //
@@ -211,13 +216,12 @@ int
 HpcBootApp::run(void)
 {
 	MSG msg;
-	HpcMenuInterface &menu = HpcMenuInterface::Instance();
 
 	while (GetMessage(&msg, 0, 0, 0)) {
 		// cancel auto-boot.
-		if (menu._pref.auto_boot > 0 && _root &&
+		if (HPC_PREFERENCE.auto_boot > 0 && _root &&
 		    (msg.message == WM_KEYDOWN ||
-		     msg.message == WM_LBUTTONDOWN)) {
+			msg.message == WM_LBUTTONDOWN)) {
 			_root->disableTimer();
 		}
 		if (!_root->isDialogMessage(msg)) {
@@ -236,7 +240,7 @@ HpcBootApp::registerClass(WNDPROC proc)
 
 	memset(&wc, 0, sizeof(WNDCLASS));
 	wc_name		= reinterpret_cast <TCHAR *>
-		(LoadString(_instance, IDS_HPCMENU, 0, 0));
+	    (LoadString(_instance, IDS_HPCMENU, 0, 0));
 	wc.lpfnWndProc	= proc;
 	wc.hInstance	= _instance;
 	wc.hIcon	= LoadIcon(_instance, MAKEINTRESOURCE(IDI_ICON));

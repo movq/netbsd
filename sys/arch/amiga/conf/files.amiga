@@ -1,4 +1,4 @@
-#	$NetBSD: files.amiga,v 1.104 2001/02/02 21:52:12 is Exp $
+#	$NetBSD: files.amiga,v 1.110 2001/11/05 21:29:43 aymeric Exp $
 
 # maxpartitions must be first item in files.${ARCH}.newconf
 maxpartitions 16			# NOTE THAT AMIGA IS SPECIAL!
@@ -16,12 +16,16 @@ defopt	opt_amigaccgrf.h	USE_C_BFOPS
 defopt	opt_amigacons.h		RETINACONSOLE ULOWELLCONSOLE CL5426CONSOLE
 defopt	opt_amigacons.h		CV64CONSOLE CV3DCONSOLE TSENGCONSOLE
 defopt	opt_amigacons.h		CV3DONZORRO2
+defopt	opt_amigacons.h		SERCONSOLE
 
 defopt	opt_retina.h		RH_MEMCLK RH_64BIT_SPRITE RH_HARDWARECURSOR
 defopt	opt_retina.h		RETINA_SPEED_HACK
 
 defopt				BB060STUPIDROM
 defopt				P5PPC68KBOARD
+defopt				LEV6_DEFER
+
+defopt				IOBZCLOCK
 
 device  mainbus {}
 attach  mainbus at root
@@ -42,6 +46,9 @@ file	arch/amiga/amiga/amiga_bus_simple_1word.c
 
 define	amibus_b16
 file	arch/amiga/amiga/amiga_bus_simple_16.c	amibus_b16
+
+define	amibus_b800
+file	arch/amiga/amiga/amiga_bus_simple_0x800.c	amibus_b800
 
 # zorro expansion bus.
 device	zbus {}
@@ -90,6 +97,10 @@ file	arch/amiga/dev/aucc.c		aucc needs-flag
 device	melody: audio, tms320av110
 attach	melody at zbus
 file	arch/amiga/dev/melody.c		melody
+
+device repulse: audio, ac97, mulaw
+attach	repulse at zbus
+file	arch/amiga/dev/repulse.c	repulse
 
 # mouse
 device	ms: event
@@ -462,6 +473,7 @@ include "compat/svr4/files.svr4"
 # Linux binary compatibility (COMPAT_LINUX)
 include "compat/linux/files.linux"
 include "compat/linux/arch/m68k/files.linux_m68k"
+file arch/m68k/m68k/linux_trap.c		compat_linux
 
 # OSS audio driver compatibility
 include "compat/ossaudio/files.ossaudio"

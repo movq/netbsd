@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.18 2001/02/25 13:33:54 tsutsui Exp $	*/
+/*	$NetBSD: machdep.c,v 1.26 2001/09/10 21:19:33 chris Exp $	*/
 
 /*
  * Copyright (c) 1988 University of Utah.
@@ -101,9 +101,9 @@ char	machine[] = MACHINE;	/* from <machine/param.h> */
 /* Our exported CPU info; we can have only one. */  
 struct cpu_info cpu_info_store;
 
-vm_map_t exec_map = NULL;  
-vm_map_t mb_map = NULL;
-vm_map_t phys_map = NULL;
+struct vm_map *exec_map = NULL;
+struct vm_map *mb_map = NULL;
+struct vm_map *phys_map = NULL;
 
 caddr_t	msgbufaddr;
 int	maxmem;			/* max memory per process */
@@ -196,6 +196,7 @@ news68k_init()
 		pmap_enter(pmap_kernel(), (vaddr_t)msgbufaddr + i * NBPG,
 		    avail_end + i * NBPG, VM_PROT_READ|VM_PROT_WRITE,
 		    VM_PROT_READ|VM_PROT_WRITE|PMAP_WIRED);
+	pmap_update(pmap_kernel());
 	initmsgbuf(msgbufaddr, m68k_round_page(MSGBUFSIZE));
 }
 
@@ -234,7 +235,7 @@ cpu_startup()
 
 	/*
 	 * Find out how much space we need, allocate it,
-	 * and the give everything true virtual addresses.
+	 * and then give everything true virtual addresses.
 	 */
 	size = (vsize_t)allocsys(NULL, NULL);
 	if ((v = (caddr_t)uvm_km_zalloc(kernel_map, round_page(size))) == 0)
@@ -248,9 +249,9 @@ cpu_startup()
 	 */
 	size = MAXBSIZE * nbuf;
 	if (uvm_map(kernel_map, (vaddr_t *) &buffers, round_page(size),
-		    NULL, UVM_UNKNOWN_OFFSET, 0,
-		    UVM_MAPFLAG(UVM_PROT_NONE, UVM_PROT_NONE, UVM_INH_NONE,
-				UVM_ADV_NORMAL, 0)) != KERN_SUCCESS)
+	    NULL, UVM_UNKNOWN_OFFSET, 0,
+	    UVM_MAPFLAG(UVM_PROT_NONE, UVM_PROT_NONE, UVM_INH_NONE,
+	    UVM_ADV_NORMAL, 0)) != 0)
 		panic("startup: cannot allocate VM for buffers");
 	minaddr = (vaddr_t)buffers;
 	base = bufpages / nbuf;
@@ -267,39 +268,39 @@ cpu_startup()
 		 * "base" pages for the rest.
 		 */
 		curbuf = (vaddr_t) buffers + (i * MAXBSIZE);
-		curbufsize = NBPG * ((i < residual) ? (base+1) : base);
+		curbufsize = NBPG * ((i < residual) ? (base + 1) : base);
 
 		while (curbufsize) {
 			pg = uvm_pagealloc(NULL, 0, NULL, 0);
-			if (pg == NULL) 
+			if (pg == NULL)
 				panic("cpu_startup: not enough memory for "
 				    "buffer cache");
 			pmap_kenter_pa(curbuf, VM_PAGE_TO_PHYS(pg),
-					VM_PROT_READ|VM_PROT_WRITE);
+			    VM_PROT_READ|VM_PROT_WRITE);
 			curbuf += PAGE_SIZE;
 			curbufsize -= PAGE_SIZE;
 		}
 	}
+	pmap_update(pmap_kernel());
 
 	/*
 	 * Allocate a submap for exec arguments.  This map effectively
 	 * limits the number of processes exec'ing at any time.
 	 */
 	exec_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
-				   16*NCARGS, VM_MAP_PAGEABLE, FALSE, NULL);
+	    16 * NCARGS, VM_MAP_PAGEABLE, FALSE, NULL);
 
 	/*
 	 * Allocate a submap for physio
 	 */
 	phys_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
-				   VM_PHYS_SIZE, 0, FALSE, NULL);
+	    VM_PHYS_SIZE, 0, FALSE, NULL);
 
 	/*
 	 * Finally, allocate mbuf cluster submap.
 	 */
 	mb_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
-				 nmbclusters * mclbytes, VM_MAP_INTRSAFE,
-				 FALSE, NULL);
+	    nmbclusters * mclbytes, VM_MAP_INTRSAFE, FALSE, NULL);
 
 #ifdef DEBUG
 	pmapdebug = opmapdebug;
@@ -317,17 +318,15 @@ cpu_startup()
 	 * XXX VM_MIN_KERNEL_ADDRESS, but not right now.
 	 */
 	if (uvm_map_protect(kernel_map, 0, m68k_round_page(&kernel_text),
-	    UVM_PROT_NONE, TRUE) != KERN_SUCCESS)
+	    UVM_PROT_NONE, TRUE) != 0)
 		panic("can't mark pre-text pages off-limits");
 
 	/*
-	 * Tell the VM system that writing to kernel text isn't allowed.
+	 * Tell the VM system that writing to the kernel text isn't allowed.
 	 * If we don't, we might end up COW'ing the text segment!
-	 *
 	 */
 	if (uvm_map_protect(kernel_map, m68k_trunc_page(&kernel_text),
-	    m68k_round_page(&etext), UVM_PROT_READ|UVM_PROT_EXEC, TRUE)
-	    != KERN_SUCCESS)
+	    m68k_round_page(&etext), UVM_PROT_READ|UVM_PROT_EXEC, TRUE) != 0)
 		panic("can't protect kernel text");
 
 	/*
@@ -463,7 +462,7 @@ cpu_reboot(howto, bootstr)
 	/* Disable interrupts. */
 	splhigh();
 
-	/* If rebooting and a dump is requested do it. */
+	/* If rebooting and a dump is requested, do it. */
 	if (howto & RB_DUMP)
 		dumpsys();
 
@@ -507,7 +506,7 @@ cpu_init_kcore_hdr()
 	cpu_kcore_hdr_t *h = &cpu_kcore_hdr;
 	struct m68k_kcore_hdr *m = &h->un._m68k;
 
-	bzero(&cpu_kcore_hdr, sizeof(cpu_kcore_hdr));
+	memset(&cpu_kcore_hdr, 0, sizeof(cpu_kcore_hdr));
 
 	/*
 	 * Initialize the `dispatcher' portion of the header.
@@ -592,7 +591,7 @@ cpu_dump(dump, blknop)
 	CORE_SETMAGIC(*kseg, KCORE_MAGIC, MID_MACHINE, CORE_CPU);
 	kseg->c_size = dbtob(1) - ALIGN(sizeof(kcore_seg_t));
 
-	bcopy(&cpu_kcore_hdr, chdr, sizeof(cpu_kcore_hdr_t));
+	memcpy(chdr, &cpu_kcore_hdr, sizeof(cpu_kcore_hdr_t));
 	error = (*dump)(dumpdev, *blknop, (caddr_t)buf, sizeof(buf));
 	*blknop += btodb(sizeof(buf));
 	return (error);
@@ -699,6 +698,7 @@ dumpsys()
 		pmap_enter(pmap_kernel(), (vaddr_t)vmmap, maddr,
 		    VM_PROT_READ, VM_PROT_READ|PMAP_WIRED);
 
+		pmap_update(pmap_kernel());
 		error = (*dump)(dumpdev, blkno, vmmap, NBPG);
  bad:
 		switch (error) {
@@ -758,7 +758,7 @@ straytrap(pc, evec)
 	u_short evec;
 {
 	printf("unexpected trap (vector offset %x) from %x\n",
-	       evec & 0xFFF, pc);
+	    evec & 0xFFF, pc);
 }
 
 /* XXX should change the interface, and make one badaddr() function */
@@ -872,7 +872,7 @@ cpu_exec_aout_makecmds(p, epp)
 static volatile u_char *dip_switch, *int_status;
 
 volatile u_char *idrom_addr, *ctrl_ast, *ctrl_int2;
-volatile u_char *lance_mem, *ctrl_timer, *ctrl_led, *sccport0a;
+volatile u_char *lance_mem, *ctrl_led, *sccport0a;
 
 #ifdef news1700
 static volatile u_char *ctrl_parity, *ctrl_parity_clr, *parity_vector;
@@ -943,7 +943,6 @@ news1700_init()
 	ctrl_int2	= (u_char *)IIOV(0xe1180000);
 
 	lance_mem	= (u_char *)IIOV(0xe0e00000);
-	ctrl_timer	= (u_char *)IIOV(0xe1000000);
 	ctrl_led	= (u_char *)IIOV(0xe0dc0000);
 	sccport0a	= (u_char *)IIOV(0xe0d40002);
 
@@ -987,7 +986,7 @@ parityenable()
 	*parity_vector = PARITY_VECT;
 
 	isrlink_vectored((int (*) __P((void *)))parityerror, NULL,
-			 PARITY_PRI, PARITY_VECT);
+	    PARITY_PRI, PARITY_VECT);
 
 	*ctrl_parity_clr = 1;
 	*ctrl_parity = 1;
@@ -1034,7 +1033,6 @@ news1200_init()
 	ctrl_int2	= (u_char *)IIOV(0xe10c0000);
 
 	lance_mem	= (u_char *)IIOV(0xe1a00000);
-	ctrl_timer	= (u_char *)IIOV(0xe1140000);
 	ctrl_led	= (u_char *)IIOV(0xe1500001);
 	sccport0a	= (u_char *)IIOV(0xe1780002);
 

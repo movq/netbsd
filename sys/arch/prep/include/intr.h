@@ -1,4 +1,4 @@
-/*	$NetBSD: intr.h,v 1.6 2001/01/14 02:00:42 thorpej Exp $	*/
+/*	$NetBSD: intr.h,v 1.11 2001/08/26 02:47:34 matt Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -67,7 +67,7 @@
  * the list.  The handler is called with its (single) argument.
  */
 struct intrhand {
-	int	(*ih_fun) __P((void *));
+	int	(*ih_fun)(void *);
 	void	*ih_arg;
 	u_long	ih_count;
 	struct	intrhand *ih_next;
@@ -75,35 +75,42 @@ struct intrhand {
 	int	ih_irq;
 };
 
-void setsoftclock __P((void));
-void clearsoftclock __P((void));
-int  splsoftclock __P((void));
-void setsoftnet   __P((void));
-void clearsoftnet __P((void));
-int  splsoftnet   __P((void));
+void setsoftclock(void);
+void clearsoftclock(void);
+int  splsoftclock(void);
+void setsoftnet(void);
+void clearsoftnet(void);
+int  splsoftnet(void);
 
-void do_pending_int __P((void));
+void do_pending_int(void);
 
-void ext_intr __P((void));
+void ext_intr(void);
 
-void enable_intr __P((void));
-void disable_intr __P((void));
+void enable_intr(void);
+void disable_intr(void);
 
-void *intr_establish __P((int, int, int, int (*) __P((void *)), void *));
-void intr_disestablish __P((void *));
+void *intr_establish(int, int, int, int (*)(void *), void *);
+void intr_disestablish(void *);
 
-void softnet __P((void));
-void softserial __P((void));
+void softnet(void);
+void softserial(void);
+int isa_intr(void);
+void isa_intr_mask(int);
+void isa_intr_clr(int);
+void isa_setirqstat(int, int, int);
 
-static __inline int splraise __P((int));
-static __inline void spllower __P((int));
-static __inline void set_sint __P((int));
+static __inline int splraise(int);
+static __inline void spllower(int);
+static __inline void set_sint(int);
 
 extern volatile int cpl, ipending, astpending, tickspending;
+extern int imen;
 extern int imask[];
 extern long intrcnt[];
+extern unsigned intrcnt2[];
 extern struct intrhand *intrhand[];
 extern int intrtype[];
+extern paddr_t prep_intr_reg;
 
 /*
  *  Reorder protection in the following inline functions is
@@ -111,8 +118,7 @@ extern int intrtype[];
  * seems to detect and then doen't move instructions past....
  */
 static __inline int
-splraise(newcpl)
-	int newcpl;
+splraise(int newcpl)
 {
 	int oldcpl;
 
@@ -124,8 +130,7 @@ splraise(newcpl)
 }
 
 static __inline void
-spllower(newcpl)
-	int newcpl;
+spllower(int newcpl)
 {
 
 	__asm__ volatile("sync; eieio\n");	/* reorder protect */
@@ -138,8 +143,7 @@ spllower(newcpl)
 /* Following code should be implemented with lwarx/stwcx to avoid
  * the disable/enable. i need to read the manual once more.... */
 static __inline void
-set_sint(pending)
-	int	pending;
+set_sint(int pending)
 {
 	int	msrsave;
 
@@ -171,7 +175,6 @@ set_sint(pending)
 #define splnet()	splraise(imask[IPL_NET])
 #define spltty()	splraise(imask[IPL_TTY])
 #define splclock()	splraise(imask[IPL_CLOCK])
-#define splimp()	splraise(imask[IPL_IMP])
 #define splvm()		splraise(imask[IPL_IMP])
 #define splaudio()	splraise(imask[IPL_AUDIO])
 #define	splserial()	splraise(imask[IPL_SERIAL])

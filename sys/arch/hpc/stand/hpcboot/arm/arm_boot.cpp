@@ -1,4 +1,4 @@
-/*	$NetBSD: arm_boot.cpp,v 1.1 2001/02/09 18:34:52 uch Exp $	*/
+/*	$NetBSD: arm_boot.cpp,v 1.5 2001/06/18 11:31:04 uch Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -45,11 +45,11 @@
 #include <arm/arm_boot.h>
 #include <arm/arm_console.h>
 
-ARMBoot::ARMBoot(void)
+ARMBoot::ARMBoot()
 {
 }
 
-ARMBoot::~ARMBoot(void)
+ARMBoot::~ARMBoot()
 {
 	if (_mem)
 		delete _mem;
@@ -60,24 +60,28 @@ ARMBoot::~ARMBoot(void)
 }
 
 BOOL
-ARMBoot::setup(struct HpcMenuInterface::HpcMenuPreferences &pref)
+ARMBoot::setup()
 {
+	struct HpcMenuInterface::HpcMenuPreferences &pref = HPC_PREFERENCE;
+
 	platid_t platid;
 	platid.dw.dw0 = pref.platid_hi;
 	platid.dw.dw1 = pref.platid_lo;
 
 	if (platid_match(&platid, &platid_mask_CPU_ARM_STRONGARM_SA1100))
 		args.architecture = ARCHITECTURE_ARM_SA1100;
+	else if (platid_match(&platid, &platid_mask_CPU_ARM_STRONGARM_SA1110))
+		args.architecture = ARCHITECTURE_ARM_SA1100;
 	else
 		return FALSE;
 
 	args.memory = MEMORY_MANAGER_LOCKPAGES;
 
-	return Boot::setup(pref);
+	return super::setup();
 }
 
 BOOL
-ARMBoot::create(void)
+ARMBoot::create()
 {
 	BOOL(*lock_pages)(LPVOID, DWORD, PDWORD, int);
 	BOOL(*unlock_pages)(LPVOID, DWORD);
@@ -107,7 +111,7 @@ ARMBoot::create(void)
 		return FALSE;
 	case MEMORY_MANAGER_LOCKPAGES:
 		_mem = new MemoryManager_LockPages(lock_pages, unlock_pages,
-						   _cons, 4096);
+		    _cons, 4096);
 		break;
 	}
 	_mem->setDebug() = args.memorymanagerDebug;
@@ -119,8 +123,10 @@ ARMBoot::create(void)
 			_cons = Console::Instance();
 			DPRINTF((TEXT("use LCD console instead.\n")));
 		}
+	} else {
+		_cons = Console::Instance();
 	}
   
 	// File Manager, Loader
-	return Boot::create();
+	return super::create();
 }

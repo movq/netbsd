@@ -1,4 +1,4 @@
-/* $NetBSD: upc_iobus.c,v 1.5 2001/01/23 23:58:32 bjh21 Exp $ */
+/* $NetBSD: upc_iobus.c,v 1.7 2001/03/20 00:04:28 bjh21 Exp $ */
 /*-
  * Copyright (c) 2000 Ben Harris
  * All rights reserved.
@@ -32,7 +32,7 @@
 
 #include <sys/param.h>
 
-__RCSID("$NetBSD: upc_iobus.c,v 1.5 2001/01/23 23:58:32 bjh21 Exp $");
+__RCSID("$NetBSD: upc_iobus.c,v 1.7 2001/03/20 00:04:28 bjh21 Exp $");
 
 #include <sys/device.h>
 

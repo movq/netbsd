@@ -1,4 +1,4 @@
-/*	$NetBSD: bus.c,v 1.4 2000/06/29 07:44:10 mrg Exp $	*/
+/*	$NetBSD: bus.c,v 1.11 2001/11/14 18:15:35 thorpej Exp $	*/
 
 /*
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -55,6 +55,7 @@
 
 #include <mips/cpuregs.h>
 #include <mips/locore.h>
+#include <mips/cache.h>
 
 static int	_bus_dmamap_load_buffer(bus_dmamap_t, void *, bus_size_t,
 				struct proc *, int, vaddr_t *, int *, int);
@@ -285,7 +286,7 @@ _bus_dmamap_create(t, size, nsegments, maxsegsz, boundary, flags, dmamp)
 	    (flags & BUS_DMA_NOWAIT) ? M_NOWAIT : M_WAITOK)) == NULL)
 		return ENOMEM;
 
-	bzero(mapstore, mapsize);
+	memset(mapstore, 0, mapsize);
 	map = (struct sgimips_bus_dmamap *)mapstore;
 	map->_dm_size = size;
 	map->_dm_segcnt = nsegments;
@@ -670,14 +671,14 @@ _bus_dmamap_sync(t, map, offset, len, ops)
 
 #ifdef BUS_DMA_DEBUG
 		printf("bus_dmamap_sync: flushing segment %d "
-		    "(0x%lx..0x%lx) ...", i, addr + offset,
-		    addr + offset + minlen - 1);
-#endif
-#if 1
-		MachFlushDCache(addr + offset, minlen);
+		    "(0x%lx+%lx, 0x%lx+0x%lx) (olen = %ld)...", i,
+		    addr, offset, addr, offset + minlen - 1, len);
 #endif
 #if 0
-		mips3_HitFlushDCache(map->dm_segs[i]._ds_vaddr + offset, len);
+		MachFlushDCache(addr + offset, minlen);
+#endif
+#if 1
+		mips_dcache_wbinv_range(map->dm_segs[i]._ds_vaddr + offset, len);
 #endif
 #if 0
 		MachFlushCache();
@@ -707,7 +708,7 @@ _bus_dmamem_alloc(t, size, alignment, boundary, segs, nsegs, rsegs, flags)
 	extern paddr_t avail_start, avail_end;
 	vaddr_t curaddr, lastaddr;
 	psize_t high;
-	vm_page_t m;
+	struct vm_page *m;
 	struct pglist mlist;
 	int curseg, error;
 
@@ -739,7 +740,7 @@ _bus_dmamem_alloc(t, size, alignment, boundary, segs, nsegs, rsegs, flags)
 		curaddr = VM_PAGE_TO_PHYS(m);
 #ifdef DIAGNOSTIC
 		if (curaddr < avail_start || curaddr >= high) {
-			printf("vm_page_alloc_memory returned non-sensical"
+			printf("uvm_pglistalloc returned non-sensical"
 			    " address 0x%lx\n", curaddr);
 			panic("_bus_dmamem_alloc");
 		}
@@ -769,7 +770,7 @@ _bus_dmamem_free(t, segs, nsegs)
 	bus_dma_segment_t *segs;
 	int nsegs;
 {
-	vm_page_t m;
+	struct vm_page *m;
 	bus_addr_t addr;
 	struct pglist mlist;
 	int curseg;
@@ -841,6 +842,7 @@ _bus_dmamem_map(t, segs, nsegs, size, kvap, flags)
 			/* XXX Do something about COHERENT here. */
 		}
 	}
+	pmap_update(pmap_kernel());
 
 	return 0;
 }

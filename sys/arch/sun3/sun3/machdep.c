@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.143 2001/02/22 07:11:12 chs Exp $	*/
+/*	$NetBSD: machdep.c,v 1.152 2001/09/11 20:37:12 chs Exp $	*/
 
 /*
  * Copyright (c) 1994, 1995 Gordon W. Ross
@@ -44,6 +44,7 @@
  */
 
 #include "opt_ddb.h"
+#include "opt_kgdb.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -102,16 +103,16 @@ extern char etext[];
 /* Our exported CPU info; we can have only one. */  
 struct cpu_info cpu_info_store;
 
-vm_map_t exec_map = NULL;  
-vm_map_t mb_map = NULL;
-vm_map_t phys_map = NULL;
+struct vm_map *exec_map = NULL;  
+struct vm_map *mb_map = NULL;
+struct vm_map *phys_map = NULL;
 
 int	physmem;
 int	fputype;
 caddr_t	msgbufaddr;
 
 /* Virtual page frame for /dev/mem (see mem.c) */
-vm_offset_t vmmap;
+vaddr_t vmmap;
 
 /*
  * safepri is a safe priority for sleep to set for a spin-wait
@@ -120,7 +121,7 @@ vm_offset_t vmmap;
 int	safepri = PSL_LOWIPL;
 
 /* Our private scratch page for dumping the MMU. */
-static vm_offset_t dumppage;
+static vaddr_t dumppage;
 
 static void identifycpu __P((void));
 static void initcpu __P((void));
@@ -179,9 +180,9 @@ cpu_startup()
 {
 	caddr_t v;
 	int sz, i;
-	vm_size_t size;
+	vsize_t size;
 	int base, residual;
-	vm_offset_t minaddr, maxaddr;
+	vaddr_t minaddr, maxaddr;
 	char pbuf[9];
 
 	/*
@@ -226,12 +227,12 @@ cpu_startup()
 	 * in that they usually occupy more virtual memory than physical.
 	 */
 	size = MAXBSIZE * nbuf;
-	if (uvm_map(kernel_map, (vm_offset_t *) &buffers, round_page(size),
+	if (uvm_map(kernel_map, (vaddr_t *) &buffers, round_page(size),
 		    NULL, UVM_UNKNOWN_OFFSET, 0,
 		    UVM_MAPFLAG(UVM_PROT_NONE, UVM_PROT_NONE, UVM_INH_NONE,
-				UVM_ADV_NORMAL, 0)) != KERN_SUCCESS)
+				UVM_ADV_NORMAL, 0)) != 0)
 		panic("startup: cannot allocate VM for buffers");
-	minaddr = (vm_offset_t)buffers;
+	minaddr = (vaddr_t)buffers;
 	if ((bufpages / nbuf) >= btoc(MAXBSIZE)) {
 		/* don't want to alloc more physical mem than needed */
 		bufpages = btoc(MAXBSIZE) * nbuf;
@@ -239,8 +240,8 @@ cpu_startup()
 	base = bufpages / nbuf;
 	residual = bufpages % nbuf;
 	for (i = 0; i < nbuf; i++) {
-		vm_size_t curbufsize;
-		vm_offset_t curbuf;
+		vsize_t curbufsize;
+		vaddr_t curbuf;
 		struct vm_page *pg;
 
 		/*
@@ -249,7 +250,7 @@ cpu_startup()
 		 * for the first "residual" buffers, and then we allocate
 		 * "base" pages for the rest.
 		 */
-		curbuf = (vm_offset_t) buffers + (i * MAXBSIZE);
+		curbuf = (vaddr_t) buffers + (i * MAXBSIZE);
 		curbufsize = NBPG * ((i < residual) ? (base+1) : base);
 
 		while (curbufsize) {
@@ -263,6 +264,7 @@ cpu_startup()
 			curbufsize -= PAGE_SIZE;
 		}
 	}
+	pmap_update(pmap_kernel());
 
 	/*
 	 * Allocate a submap for exec arguments.  This map effectively
@@ -289,15 +291,6 @@ cpu_startup()
 	printf("avail memory = %s\n", pbuf);
 	format_bytes(pbuf, sizeof(pbuf), bufpages * NBPG);
 	printf("using %d buffers containing %s of memory\n", nbuf, pbuf);
-
-	/*
-	 * Tell the VM system that writing to kernel text isn't allowed.
-	 * If we don't, we might end up COW'ing the text segment!
-	 */
-	if (uvm_map_protect(kernel_map, (vm_offset_t) kernel_text,
-	    m68k_trunc_page((vm_offset_t) etext),
-	    UVM_PROT_READ|UVM_PROT_EXEC, TRUE) != KERN_SUCCESS)
-		panic("can't protect kernel text");
 
 	/*
 	 * Allocate a virtual page (for use by /dev/mem)
@@ -589,7 +582,7 @@ cpu_dumpconf()
 
 /* Note: gdb looks for "dumppcb" in a kernel crash dump. */
 struct pcb dumppcb;
-extern vm_offset_t avail_start;
+extern paddr_t avail_start;
 
 /*
  * Write a crash dump.  The format while in swap is:
@@ -607,7 +600,7 @@ dumpsys()
 	cpu_kcore_hdr_t *chdr_p;
 	struct sun3_kcore_hdr *sh;
 	char *vaddr;
-	vm_offset_t paddr;
+	paddr_t paddr;
 	int psize, todo, chunk;
 	daddr_t blkno;
 	int error = 0;
@@ -646,7 +639,7 @@ dumpsys()
 	blkno = dumplo;
 	todo = dumpsize;	/* pages */
 	vaddr = (char*)dumppage;
-	bzero(vaddr, NBPG);
+	memset(vaddr, 0, NBPG);
 
 	/* Set pointers to all three parts. */
 	kseg_p = (kcore_seg_t *)vaddr;
@@ -718,10 +711,11 @@ dumpsys()
 	do {
 		if ((todo & 0xf) == 0)
 			printf("\r%4d", todo);
-		pmap_enter(pmap_kernel(), vmmap, paddr | PMAP_NC,
-		    VM_PROT_READ, VM_PROT_READ);
+		pmap_kenter_pa(vmmap, paddr | PMAP_NC, VM_PROT_READ);
+		pmap_update(pmap_kernel());
 		error = (*dsw->d_dump)(dumpdev, blkno, vaddr, NBPG);
-		pmap_remove(pmap_kernel(), vmmap, vmmap + NBPG);
+		pmap_kremove(vmmap, NBPG);
+		pmap_update(pmap_kernel());
 		if (error)
 			goto fail;
 		paddr += NBPG;

@@ -1,4 +1,4 @@
-/*	$NetBSD: pcons.c,v 1.6 2000/11/10 17:47:55 eeh Exp $	*/
+/*	$NetBSD: pcons.c,v 1.8 2001/10/05 21:53:56 eeh Exp $	*/
 
 /*-
  * Copyright (c) 2000 Eduardo E. Horvath
@@ -49,7 +49,6 @@
 
 #include <machine/autoconf.h>
 #include <machine/openfirm.h>
-#include <machine/bsd_openprom.h>
 #include <machine/conf.h>
 #include <machine/cpu.h>
 #include <machine/eeprom.h>
@@ -187,6 +186,18 @@ pconswrite(dev, uio, flag)
 	struct tty *tp = sc->of_tty;
 	
 	return (*tp->t_linesw->l_write)(tp, uio, flag);
+}
+
+int
+pconspoll(dev, events, p)
+	dev_t dev;
+	int events;
+	struct proc *p;
+{
+	struct pconssoftc *sc = pcons_cd.cd_devs[minor(dev)];
+	struct tty *tp = sc->of_tty;
+ 
+	return ((*tp->t_linesw->l_poll)(tp, events, p));
 }
 
 int

@@ -1,4 +1,4 @@
-/* $NetBSD: alpha.h,v 1.14 2000/12/13 03:16:38 mycroft Exp $ */
+/* $NetBSD: alpha.h,v 1.17 2001/06/14 22:56:55 thorpej Exp $ */
 
 /*
  * Copyright (c) 1988 University of Utah.
@@ -44,9 +44,25 @@
 
 #ifndef _ALPHA_H_
 #define _ALPHA_H_
+
+typedef union alpha_s_float {
+	u_int32_t i;
+	u_int32_t frac: 23,
+		  exp:   8,
+		  sign:  1;
+} s_float;
+
+typedef union alpha_t_float {
+	u_int64_t i;
+	u_int64_t frac: 52,
+		  exp:  11,
+		  sign:  1;
+} t_float;
+
 #ifdef _KERNEL
 
 #include <machine/bus.h>
+#include <machine/stdarg.h>
 
 struct pcb;
 struct proc;
@@ -54,7 +70,11 @@ struct reg;
 struct rpb;
 struct trapframe;
 
+extern u_long cpu_implver;		/* from IMPLVER instruction */
+extern u_long cpu_amask;		/* from AMASK instruction */
 extern int bootdev_debug;
+extern int alpha_fp_sync_complete;
+extern int alpha_unaligned_print, alpha_unaligned_fix, alpha_unaligned_sigbus;
 
 void	XentArith(u_int64_t, u_int64_t, u_int64_t);		/* MAGIC */
 void	XentIF(u_int64_t, u_int64_t, u_int64_t);		/* MAGIC */
@@ -68,7 +88,6 @@ int	alpha_pa_access(u_long);
 void	ast(struct trapframe *);
 int	badaddr(void *, size_t);
 int	badaddr_read(void *, size_t, void *);
-void	child_return(void *);
 u_int64_t console_restart(struct trapframe *);
 void	do_sir(void);
 void	dumpconf(void);
@@ -98,6 +117,7 @@ void	fpusave_cpu(struct cpu_info *, int);
 void	fpusave_proc(struct proc *, int);
 
 /* Multiprocessor glue; cpu.c */
+
 struct cpu_info;
 int	cpu_iccb_send(long, const char *);
 void	cpu_iccb_receive(void);
@@ -109,6 +129,26 @@ void	cpu_resume(unsigned long);
 #if defined(DDB)
 void	cpu_debug_dump(void);
 #endif
+
+/* IEEE and VAX FP completion */
+
+void alpha_sts(int, s_float *);					/* MAGIC */
+void alpha_stt(int, t_float *);					/* MAGIC */
+void alpha_lds(int, s_float *);					/* MAGIC */
+void alpha_ldt(int, t_float *);					/* MAGIC */
+
+uint64_t alpha_read_fpcr(void);					/* MAGIC */
+void alpha_write_fpcr(u_int64_t);				/* MAGIC */
+
+u_int64_t alpha_read_fp_c(struct proc *);
+void alpha_write_fp_c(struct proc *, u_int64_t);
+
+void alpha_enable_fp(struct proc *, int);
+int alpha_fp_complete(u_long, u_long, struct proc *, u_int64_t *);
+
+/* Security sensitive rate limiting printf */
+
+void rlprintf(struct timeval *t, const char *fmt, ...);
 
 #endif /* _KERNEL */
 #endif /* _ALPHA_H_ */

@@ -1,4 +1,4 @@
-/*	$NetBSD: dma.c,v 1.2 2001/02/17 04:27:55 tsutsui Exp $	*/
+/*	$NetBSD: dma.c,v 1.8 2001/07/24 16:26:53 tsutsui Exp $	*/
 /*	$OpenBSD: dma.c,v 1.5 1998/03/01 16:49:57 niklas Exp $	*/
 
 /*
@@ -62,7 +62,7 @@
 
 #include <arc/jazz/pica.h>
 #include <arc/jazz/rd94.h>
-#include <arc/arc/arctype.h>
+#include <arc/jazz/jazziovar.h>
 #include <arc/jazz/jazzdmatlbreg.h>
 #include <arc/jazz/jazzdmatlbvar.h>
 #include <arc/jazz/dma.h>
@@ -71,27 +71,13 @@ void picaDmaReset __P((dma_softc_t *sc));
 void picaDmaEnd __P((dma_softc_t *sc));
 void picaDmaNull __P((dma_softc_t *sc));
 
-extern struct arc_bus_space pica_bus;	/* XXX */
-
 /*
  *  Initialize the dma mapping register area and pool.
  */
 void
 picaDmaInit()
 {
-	switch (cputype) {
-	case ACER_PICA_61:
-	case MAGNUM:
-		jazz_dmatlb_init(&pica_bus, R4030_SYS_TL_BASE);
-		break;
-	case NEC_R94:
-	case NEC_RAx94:
-	case NEC_RD94:
-	case NEC_R96:
-	case NEC_JC94:
-		jazz_dmatlb_init(&pica_bus, RD94_SYS_TL_BASE);
-		break;
-	}
+	jazz_dmatlb_init(&jazzio_bus, jazzio_conf->jc_dmatlbreg);
 }
 
 /*
@@ -145,10 +131,11 @@ picaDmaStart(sc, addr, size, datain)
 
 	/* Load new transfer parameters */
 	regs->dma_addr = sc->dma_va + va;
+	regs->dma_count = size;
 	regs->dma_mode = sc->mode & R4030_DMA_MODE;
 
 	sc->sc_active = 1;
-	if(datain == DMA_FROM_DEV) {
+	if (datain == DMA_FROM_DEV) {
 		sc->mode &= ~DMA_DIR_WRITE;
 		regs->dma_enab = R4030_DMA_ENAB_RUN | R4030_DMA_ENAB_READ;
 	}
@@ -219,6 +206,7 @@ picaDmaEnd(dma_softc_t *sc)
 	pDmaReg regs = sc->dma_reg;
 
 	/* Halt DMA */
+	regs->dma_count = 0;
 	regs->dma_enab = 0;
 	regs->dma_mode = 0;
 	sc->sc_active = 0;
@@ -250,7 +238,7 @@ asc_dma_init(sc)
 	sc->end = picaDmaEnd;
 
 	sc->dma_reg = (pDmaReg)R4030_SYS_DMA0_REGS;
-	sc->pte_size = 32;
+	sc->pte_size = (MAXPHYS / JAZZ_DMA_PAGE_SIZE) + 1;
 	sc->mode = R4030_DMA_MODE_160NS | R4030_DMA_MODE_16;
 	picaDmaTLBAlloc(sc);
 }
@@ -269,39 +257,8 @@ fdc_dma_init(dma_softc_t *sc)
 	sc->intr = (int(*)(struct dma_softc *))picaDmaNull;
 	sc->end = picaDmaEnd;
 
-	switch (cputype) {
-	case NEC_R94:
-	case NEC_RAx94:
-	case NEC_RD94:
-	case NEC_R96:
-	case NEC_JC94:
-		sc->dma_reg = (pDmaReg)RD94_SYS_DMA0_REGS;
-		break;
-	default:
-		sc->dma_reg = (pDmaReg)R4030_SYS_DMA1_REGS;
-		break;
-	}
-	sc->pte_size = 32;
+	sc->dma_reg = (pDmaReg)jazzio_conf->jc_fdcdmareg;
+	sc->pte_size = (MAXPHYS / JAZZ_DMA_PAGE_SIZE) + 1;
 	sc->mode = R4030_DMA_MODE_160NS | R4030_DMA_MODE_8;
-	picaDmaTLBAlloc(sc);
-}
-/*
- *  dma_init..
- *	Called from sonic to set up dma
- */
-void
-sn_dma_init(dma_softc_t *sc, int pages)
-{
-	sc->reset = picaDmaNull;
-	sc->enintr = picaDmaNull;
-	sc->start = picaDmaFlush;
-	sc->map = picaDmaMap;
-	sc->isintr = (int(*)(struct dma_softc *))picaDmaNull;
-	sc->intr = (int(*)(struct dma_softc *))picaDmaNull;
-	sc->end = picaDmaNull;
-
-	sc->dma_reg = (pDmaReg)NULL;
-	sc->pte_size = pages;
-	sc->mode = 0;
 	picaDmaTLBAlloc(sc);
 }

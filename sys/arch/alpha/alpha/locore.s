@@ -1,4 +1,4 @@
-/* $NetBSD: locore.s,v 1.88 2001/01/19 18:51:17 thorpej Exp $ */
+/* $NetBSD: locore.s,v 1.97 2001/07/13 00:06:06 thorpej Exp $ */
 
 /*-
  * Copyright (c) 1999, 2000 The NetBSD Foundation, Inc.
@@ -67,12 +67,13 @@
 .stabs	__FILE__,100,0,0,kernel_text
 
 #include "opt_ddb.h"
+#include "opt_kgdb.h"
 #include "opt_multiprocessor.h"
 #include "opt_lockdebug.h"
 
 #include <machine/asm.h>
 
-__KERNEL_RCSID(0, "$NetBSD: locore.s,v 1.88 2001/01/19 18:51:17 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: locore.s,v 1.97 2001/07/13 00:06:06 thorpej Exp $");
 
 #include "assym.h"
 
@@ -106,18 +107,18 @@ __KERNEL_RCSID(0, "$NetBSD: locore.s,v 1.88 2001/01/19 18:51:17 thorpej Exp $");
 
 #else	/* if not MULTIPROCESSOR... */
 
-IMPORT(cpu_info_store, CPU_INFO_SIZEOF)
+IMPORT(cpu_info_primary, CPU_INFO_SIZEOF)
 
-#define	GET_CPUINFO		lda v0, cpu_info_store
+#define	GET_CPUINFO		lda v0, cpu_info_primary
 
-#define	GET_CURPROC		lda v0, cpu_info_store + CPU_INFO_CURPROC
+#define	GET_CURPROC		lda v0, cpu_info_primary + CPU_INFO_CURPROC
 
-#define	GET_FPCURPROC		lda v0, cpu_info_store + CPU_INFO_FPCURPROC
+#define	GET_FPCURPROC		lda v0, cpu_info_primary + CPU_INFO_FPCURPROC
 
-#define	GET_CURPCB		lda v0, cpu_info_store + CPU_INFO_CURPCB
+#define	GET_CURPCB		lda v0, cpu_info_primary + CPU_INFO_CURPCB
 
 #define	GET_IDLE_PCB(reg)						\
-	lda	reg, cpu_info_store				;	\
+	lda	reg, cpu_info_primary				;	\
 	ldq	reg, CPU_INFO_IDLE_PCB_PADDR(reg)
 #endif
 
@@ -253,12 +254,12 @@ NESTED_NOPROFILE(locorestart,1,0,ra,0,0)
 
 /**************************************************************************/
 
-#if defined(DDB)
+#if defined(DDB) || defined(KGDB)
 /*
  * Pull in debugger glue.
  */
 #include <alpha/alpha/debug.s>
-#endif /* DDB */
+#endif /* DDB || KGDB */
 
 /**************************************************************************/
 
@@ -303,7 +304,7 @@ XNESTED(esigcode,0)
  * exception_return: return from trap, exception, or syscall
  */
 
-BSS(ssir, 8)
+IMPORT(ssir, 8)
 
 LEAF(exception_return, 1)			/* XXX should be NESTED */
 	br	pv, 1f
@@ -743,9 +744,15 @@ LEAF(idle, 0)
 #endif
 	mov	zero, a0			/* enable all interrupts */
 	call_pal PAL_OSF1_swpipl
-2:	ldl	t0, sched_whichqs		/* look for non-empty queue */
+	ldl	t0, sched_whichqs		/* look for non-empty queue */
+	bne	t0, 4f
+2:	lda	t0, uvm
+	ldl	t0, UVM_PAGE_IDLE_ZERO(t0)	/* should we zero some pages? */
+	beq	t0, 3f				/* nope. */
+	CALL(uvm_pageidlezero)
+3:	ldl	t0, sched_whichqs		/* look for non-empty queue */
 	beq	t0, 2b
-	ldiq	a0, ALPHA_PSL_IPL_HIGH		/* disable all interrupts */
+4:	ldiq	a0, ALPHA_PSL_IPL_HIGH		/* disable all interrupts */
 	call_pal PAL_OSF1_swpipl
 #if defined(MULTIPROCESSOR) || defined(LOCKDEBUG)
 	CALL(sched_lock_idle)			/* acquire sched_lock */
@@ -1084,237 +1091,6 @@ NESTED(copyoutstr, 4, 16, ra, IM_RA|IM_S0, 0)
 	END(copyoutstr)
 
 /*
- * Copy a bytes within the kernel's address space.
- *
- * Although bcopy() is not specified to handle overlapping regions,
- * this version does do so.
- *
- * void bcopy(char *from, char *to, size_t len);
- */
-LEAF(bcopy,3)
-
-	/* Check for negative length */
-	ble	a2,bcopy_done
-
-	/* Check for overlap */
-	subq	a1,a0,t5
-	cmpult	t5,a2,t5
-	bne	t5,bcopy_overlap
-
-	/* a3 = end address */
-	addq	a0,a2,a3
-
-	/* Get the first word */
-	ldq_u	t2,0(a0)
-
-	/* Do they have the same alignment? */
-	xor	a0,a1,t0
-	and	t0,7,t0
-	and	a1,7,t1
-	bne	t0,bcopy_different_alignment
-
-	/* src & dst have same alignment */
-	beq	t1,bcopy_all_aligned
-
-	ldq_u	t3,0(a1)
-	addq	a2,t1,a2
-	mskqh	t2,a0,t2
-	mskql	t3,a0,t3
-	or	t2,t3,t2
-
-	/* Dst is 8-byte aligned */
-
-bcopy_all_aligned:
-	/* If less than 8 bytes,skip loop */
-	subq	a2,1,t0
-	and	a2,7,a2
-	bic	t0,7,t0
-	beq	t0,bcopy_samealign_lp_end
-
-bcopy_samealign_lp:
-	stq_u	t2,0(a1)
-	addq	a1,8,a1
-	ldq_u	t2,8(a0)
-	subq	t0,8,t0
-	addq	a0,8,a0
-	bne	t0,bcopy_samealign_lp
-
-bcopy_samealign_lp_end:
-	/* If we're done, exit */
-	bne	a2,bcopy_small_left
-	stq_u	t2,0(a1)
-	RET
-
-bcopy_small_left:
-	mskql	t2,a2,t4
-	ldq_u	t3,0(a1)
-	mskqh	t3,a2,t3
-	or	t4,t3,t4
-	stq_u	t4,0(a1)
-	RET
-
-bcopy_different_alignment:
-	/*
-	 * this is the fun part
-	 */
-	addq	a0,a2,a3
-	cmpule	a2,8,t0
-	bne	t0,bcopy_da_finish
-
-	beq	t1,bcopy_da_noentry
-
-	/* Do the initial partial word */
-	subq	zero,a1,t0
-	and	t0,7,t0
-	ldq_u	t3,7(a0)
-	extql	t2,a0,t2
-	extqh	t3,a0,t3
-	or	t2,t3,t5
-	insql	t5,a1,t5
-	ldq_u	t6,0(a1)
-	mskql	t6,a1,t6
-	or	t5,t6,t5
-	stq_u	t5,0(a1)
-	addq	a0,t0,a0
-	addq	a1,t0,a1
-	subq	a2,t0,a2
-	ldq_u	t2,0(a0)
-
-bcopy_da_noentry:
-	subq	a2,1,t0
-	bic	t0,7,t0
-	and	a2,7,a2
-	beq	t0,bcopy_da_finish2
-
-bcopy_da_lp:
-	ldq_u	t3,7(a0)
-	addq	a0,8,a0
-	extql	t2,a0,t4
-	extqh	t3,a0,t5
-	subq	t0,8,t0
-	or	t4,t5,t5
-	stq	t5,0(a1)
-	addq	a1,8,a1
-	beq	t0,bcopy_da_finish1
-	ldq_u	t2,7(a0)
-	addq	a0,8,a0
-	extql	t3,a0,t4
-	extqh	t2,a0,t5
-	subq	t0,8,t0
-	or	t4,t5,t5
-	stq	t5,0(a1)
-	addq	a1,8,a1
-	bne	t0,bcopy_da_lp
-
-bcopy_da_finish2:
-	/* Do the last new word */
-	mov	t2,t3
-
-bcopy_da_finish1:
-	/* Do the last partial word */
-	ldq_u	t2,-1(a3)
-	extql	t3,a0,t3
-	extqh	t2,a0,t2
-	or	t2,t3,t2
-	br	zero,bcopy_samealign_lp_end
-
-bcopy_da_finish:
-	/* Do the last word in the next source word */
-	ldq_u	t3,-1(a3)
-	extql	t2,a0,t2
-	extqh	t3,a0,t3
-	or	t2,t3,t2
-	insqh	t2,a1,t3
-	insql	t2,a1,t2
-	lda	t4,-1(zero)
-	mskql	t4,a2,t5
-	cmovne	t5,t5,t4
-	insqh	t4,a1,t5
-	insql	t4,a1,t4
-	addq	a1,a2,a4
-	ldq_u	t6,0(a1)
-	ldq_u	t7,-1(a4)
-	bic	t6,t4,t6
-	bic	t7,t5,t7
-	and	t2,t4,t2
-	and	t3,t5,t3
-	or	t2,t6,t2
-	or	t3,t7,t3
-	stq_u	t3,-1(a4)
-	stq_u	t2,0(a1)
-	RET
-
-bcopy_overlap:
-	/*
-	 * Basically equivalent to previous case, only backwards.
-	 * Not quite as highly optimized
-	 */
-	addq	a0,a2,a3
-	addq	a1,a2,a4
-
-	/* less than 8 bytes - don't worry about overlap */
-	cmpule	a2,8,t0
-	bne	t0,bcopy_ov_short
-
-	/* Possibly do a partial first word */
-	and	a4,7,t4
-	beq	t4,bcopy_ov_nostart2
-	subq	a3,t4,a3
-	subq	a4,t4,a4
-	ldq_u	t1,0(a3)
-	subq	a2,t4,a2
-	ldq_u	t2,7(a3)
-	ldq	t3,0(a4)
-	extql	t1,a3,t1
-	extqh	t2,a3,t2
-	or	t1,t2,t1
-	mskqh	t3,t4,t3
-	mskql	t1,t4,t1
-	or	t1,t3,t1
-	stq	t1,0(a4)
-
-bcopy_ov_nostart2:
-	bic	a2,7,t4
-	and	a2,7,a2
-	beq	t4,bcopy_ov_lp_end
-
-bcopy_ov_lp:
-	/* This could be more pipelined, but it doesn't seem worth it */
-	ldq_u	t0,-8(a3)
-	subq	a4,8,a4
-	ldq_u	t1,-1(a3)
-	subq	a3,8,a3
-	extql	t0,a3,t0
-	extqh	t1,a3,t1
-	subq	t4,8,t4
-	or	t0,t1,t0
-	stq	t0,0(a4)
-	bne	t4,bcopy_ov_lp
-
-bcopy_ov_lp_end:
-	beq	a2,bcopy_done
-
-	ldq_u	t0,0(a0)
-	ldq_u	t1,7(a0)
-	ldq_u	t2,0(a1)
-	extql	t0,a0,t0
-	extqh	t1,a0,t1
-	or	t0,t1,t0
-	insql	t0,a1,t0
-	mskql	t2,a1,t2
-	or	t2,t0,t2
-	stq_u	t2,0(a1)
-
-bcopy_done:
-	RET
-
-bcopy_ov_short:
-	ldq_u	t2,0(a0)
-	br	zero,bcopy_da_finish
-
-	END(bcopy)
-
-/*
  * kcopy(const void *src, void *dst, size_t len);
  *
  * Copy len bytes from src to dst, aborting if we encounter a fatal
@@ -1330,20 +1106,22 @@ NESTED(kcopy, 3, 32, ra, IM_RA|IM_S0|IM_S1, 0)
 	stq	ra, (32-8)(sp)			/* save ra		     */
 	stq	s0, (32-16)(sp)			/* save s0		     */
 	stq	s1, (32-24)(sp)			/* save s1		     */
+	/* Swap a0, a1, for call to memcpy(). */
+	mov	a1, v0
+	mov	a0, a1
+	mov	v0, a0
 	/* Note: GET_CURPROC clobbers v0, t0, t8...t11. */
 	GET_CURPROC
-	mov	v0, s1
+	ldq	s1, 0(v0)			/* s1 = curproc		     */
 	lda	v0, kcopyerr			/* set up fault handler.     */
 	.set noat
-	ldq	at_reg, 0(s1)
-	ldq	at_reg, P_ADDR(at_reg)
+	ldq	at_reg, P_ADDR(s1)
 	ldq	s0, U_PCB_ONFAULT(at_reg)	/* save old handler.	     */
 	stq	v0, U_PCB_ONFAULT(at_reg)
 	.set at
-	CALL(bcopy)				/* do the copy.		     */
+	CALL(memcpy)				/* do the copy.		     */
 	.set noat
-	ldq	at_reg, 0(s1)			/* restore the old handler.  */
-	ldq	at_reg, P_ADDR(at_reg)
+	ldq	at_reg, P_ADDR(s1)		/* restore the old handler.  */
 	stq	s0, U_PCB_ONFAULT(at_reg)
 	.set at
 	ldq	ra, (32-8)(sp)			/* restore ra.		     */
@@ -1357,8 +1135,7 @@ NESTED(kcopy, 3, 32, ra, IM_RA|IM_S0|IM_S1, 0)
 LEAF(kcopyerr, 0)
 	LDGP(pv)
 	.set noat
-	ldq	at_reg, 0(s1)			/* restore the old handler.  */
-	ldq	at_reg, P_ADDR(at_reg)
+	ldq	at_reg, P_ADDR(s1)		/* restore the old handler.  */
 	stq	s0, U_PCB_ONFAULT(at_reg)
 	.set at
 	ldq	ra, (32-8)(sp)			/* restore ra.		     */
@@ -1377,19 +1154,21 @@ NESTED(copyin, 3, 16, ra, IM_RA|IM_S0, 0)
 	ldiq	t0, VM_MAX_ADDRESS		/* make sure that src addr   */
 	cmpult	a0, t0, t1			/* is in user space.	     */
 	beq	t1, copyerr			/* if it's not, error out.   */
+	/* Swap a0, a1, for call to memcpy(). */
+	mov	a1, v0
+	mov	a0, a1
+	mov	v0, a0
 	/* Note: GET_CURPROC clobbers v0, t0, t8...t11. */
 	GET_CURPROC
-	mov	v0, s0
+	ldq	s0, 0(v0)			/* s0 = curproc		     */
 	lda	v0, copyerr			/* set up fault handler.     */
 	.set noat
-	ldq	at_reg, 0(s0)
-	ldq	at_reg, P_ADDR(at_reg)
+	ldq	at_reg, P_ADDR(s0)
 	stq	v0, U_PCB_ONFAULT(at_reg)
 	.set at
-	CALL(bcopy)				/* do the copy.		     */
+	CALL(memcpy)				/* do the copy.		     */
 	.set noat
-	ldq	at_reg, 0(s0)			/* kill the fault handler.   */
-	ldq	at_reg, P_ADDR(at_reg)
+	ldq	at_reg, P_ADDR(s0)		/* kill the fault handler.   */
 	stq	zero, U_PCB_ONFAULT(at_reg)
 	.set at
 	ldq	ra, (16-8)(sp)			/* restore ra.		     */
@@ -1407,19 +1186,21 @@ NESTED(copyout, 3, 16, ra, IM_RA|IM_S0, 0)
 	ldiq	t0, VM_MAX_ADDRESS		/* make sure that dest addr  */
 	cmpult	a1, t0, t1			/* is in user space.	     */
 	beq	t1, copyerr			/* if it's not, error out.   */
+	/* Swap a0, a1, for call to memcpy(). */
+	mov	a1, v0
+	mov	a0, a1
+	mov	v0, a0
 	/* Note: GET_CURPROC clobbers v0, t0, t8...t11. */
 	GET_CURPROC
-	mov	v0, s0
+	ldq	s0, 0(v0)			/* s0 = curproc		     */
 	lda	v0, copyerr			/* set up fault handler.     */
 	.set noat
-	ldq	at_reg, 0(s0)
-	ldq	at_reg, P_ADDR(at_reg)
+	ldq	at_reg, P_ADDR(s0)
 	stq	v0, U_PCB_ONFAULT(at_reg)
 	.set at
-	CALL(bcopy)				/* do the copy.		     */
+	CALL(memcpy)				/* do the copy.		     */
 	.set noat
-	ldq	at_reg, 0(s0)			/* kill the fault handler.   */
-	ldq	at_reg, P_ADDR(at_reg)
+	ldq	at_reg, P_ADDR(s0)		/* kill the fault handler.   */
 	stq	zero, U_PCB_ONFAULT(at_reg)
 	.set at
 	ldq	ra, (16-8)(sp)			/* restore ra.		     */
@@ -1454,18 +1235,16 @@ XLEAF(fuiword, 1)
 	beq	t1, fswberr			/* if it's not, error out. */
 	/* Note: GET_CURPROC clobbers v0, t0, t8...t11. */
 	GET_CURPROC
-	mov	v0, t1
+	ldq	t1, 0(v0)
 	lda	t0, fswberr
 	.set noat
-	ldq	at_reg, 0(t1)
-	ldq	at_reg, P_ADDR(at_reg)
+	ldq	at_reg, P_ADDR(t1)
 	stq	t0, U_PCB_ONFAULT(at_reg)
 	.set at
 	ldq	v0, 0(a0)
 	zap	v0, 0xf0, v0
 	.set noat
-	ldq	at_reg, 0(t1)
-	ldq	at_reg, P_ADDR(at_reg)
+	ldq	at_reg, P_ADDR(t1)
 	stq	zero, U_PCB_ONFAULT(at_reg)
 	.set at
 	RET
@@ -1479,17 +1258,15 @@ XLEAF(fuisword, 1)
 	beq	t1, fswberr			/* if it's not, error out. */
 	/* Note: GET_CURPROC clobbers v0, t0, t8...t11. */
 	GET_CURPROC
-	mov	v0, t1
+	ldq	t1, 0(v0)
 	lda	t0, fswberr
 	.set noat
-	ldq	at_reg, 0(t1)
-	ldq	at_reg, P_ADDR(at_reg)
+	ldq	at_reg, P_ADDR(t1)
 	stq	t0, U_PCB_ONFAULT(at_reg)
 	.set at
 	/* XXX FETCH IT */
 	.set noat
-	ldq	at_reg, 0(t1)
-	ldq	at_reg, P_ADDR(at_reg)
+	ldq	at_reg, P_ADDR(t1)
 	stq	zero, U_PCB_ONFAULT(at_reg)
 	.set at
 	RET
@@ -1503,17 +1280,15 @@ XLEAF(fuibyte, 1)
 	beq	t1, fswberr			/* if it's not, error out. */
 	/* Note: GET_CURPROC clobbers v0, t0, t8...t11. */
 	GET_CURPROC
-	mov	v0, t1
+	ldq	t1, 0(v0)
 	lda	t0, fswberr
 	.set noat
-	ldq	at_reg, 0(t1)
-	ldq	at_reg, P_ADDR(at_reg)
+	ldq	at_reg, P_ADDR(t1)
 	stq	t0, U_PCB_ONFAULT(at_reg)
 	.set at
 	/* XXX FETCH IT */
 	.set noat
-	ldq	at_reg, 0(t1)
-	ldq	at_reg, P_ADDR(at_reg)
+	ldq	at_reg, P_ADDR(t1)
 	stq	zero, U_PCB_ONFAULT(at_reg)
 	.set at
 	RET
@@ -1526,17 +1301,15 @@ LEAF(suword, 2)
 	beq	t1, fswberr			/* if it's not, error out. */
 	/* Note: GET_CURPROC clobbers v0, t0, t8...t11. */
 	GET_CURPROC
-	mov	v0, t1
+	ldq	t1, 0(v0)
 	lda	t0, fswberr
 	.set noat
-	ldq	at_reg, 0(t1)
-	ldq	at_reg, P_ADDR(at_reg)
+	ldq	at_reg, P_ADDR(t1)
 	stq	t0, U_PCB_ONFAULT(at_reg)
 	.set at
 	stq	a1, 0(a0)			/* do the store. */
 	.set noat
-	ldq	at_reg, 0(t1)
-	ldq	at_reg, P_ADDR(at_reg)
+	ldq	at_reg, P_ADDR(t1)
 	stq	zero, U_PCB_ONFAULT(at_reg)
 	.set at
 	mov	zero, v0
@@ -1551,17 +1324,15 @@ LEAF(suiword, 2)
 	beq	t1, fswberr			/* if it's not, error out. */
 	/* Note: GET_CURPROC clobbers v0, t0, t8...t11. */
 	GET_CURPROC
-	mov	v0, t1
+	ldq	t1, 0(v0)
 	lda	t0, fswberr
 	.set noat
-	ldq	at_reg, 0(t1)
-	ldq	at_reg, P_ADDR(at_reg)
+	ldq	at_reg, P_ADDR(t1)
 	stq	t0, U_PCB_ONFAULT(at_reg)
 	.set at
 	/* XXX STORE IT */
 	.set noat
-	ldq	at_reg, 0(t1)
-	ldq	at_reg, P_ADDR(at_reg)
+	ldq	at_reg, P_ADDR(t1)
 	stq	zero, U_PCB_ONFAULT(at_reg)
 	.set at
 	call_pal PAL_OSF1_imb			/* sync instruction stream */
@@ -1576,17 +1347,15 @@ LEAF(susword, 2)
 	beq	t1, fswberr			/* if it's not, error out. */
 	/* Note: GET_CURPROC clobbers v0, t0, t8...t11. */
 	GET_CURPROC
-	mov	v0, t1
+	ldq	t1, 0(v0)
 	lda	t0, fswberr
 	.set noat
-	ldq	at_reg, 0(t1)
-	ldq	at_reg, P_ADDR(at_reg)
+	ldq	at_reg, P_ADDR(t1)
 	stq	t0, U_PCB_ONFAULT(at_reg)
 	.set at
 	/* XXX STORE IT */
 	.set noat
-	ldq	at_reg, 0(t1)
-	ldq	at_reg, P_ADDR(at_reg)
+	ldq	at_reg, P_ADDR(t1)
 	stq	zero, U_PCB_ONFAULT(at_reg)
 	.set at
 	mov	zero, v0
@@ -1600,17 +1369,15 @@ LEAF(suisword, 2)
 	beq	t1, fswberr			/* if it's not, error out. */
 	/* Note: GET_CURPROC clobbers v0, t0, t8...t11. */
 	GET_CURPROC
-	mov	v0, t1
+	ldq	t1, 0(v0)
 	lda	t0, fswberr
 	.set noat
-	ldq	at_reg, 0(t1)
-	ldq	at_reg, P_ADDR(at_reg)
+	ldq	at_reg, P_ADDR(t1)
 	stq	t0, U_PCB_ONFAULT(at_reg)
 	.set at
 	/* XXX STORE IT */
 	.set noat
-	ldq	at_reg, 0(t1)
-	ldq	at_reg, P_ADDR(at_reg)
+	ldq	at_reg, P_ADDR(t1)
 	stq	zero, U_PCB_ONFAULT(at_reg)
 	.set at
 	call_pal PAL_OSF1_imb			/* sync instruction stream */
@@ -1626,11 +1393,10 @@ LEAF(subyte, 2)
 	beq	t1, fswberr			/* if it's not, error out. */
 	/* Note: GET_CURPROC clobbers v0, t0, t8...t11. */
 	GET_CURPROC
-	mov	v0, t1
+	ldq	t1, 0(v0)
 	lda	t0, fswberr
 	.set noat
-	ldq	at_reg, 0(t1)
-	ldq	at_reg, P_ADDR(at_reg)
+	ldq	at_reg, P_ADDR(t1)
 	stq	t0, U_PCB_ONFAULT(at_reg)
 	.set at
 	zap	a1, 0xfe, a1			/* kill arg's high bytes */
@@ -1640,8 +1406,7 @@ LEAF(subyte, 2)
 	or	t0, a1, a1			/* put the result together */
 	stq_u	a1, 0(a0)			/* and store it. */
 	.set noat
-	ldq	at_reg, 0(t1)
-	ldq	at_reg, P_ADDR(at_reg)
+	ldq	at_reg, P_ADDR(t1)
 	stq	zero, U_PCB_ONFAULT(at_reg)
 	.set at
 	mov	zero, v0
@@ -1655,11 +1420,10 @@ LEAF(suibyte, 2)
 	beq	t1, fswberr			/* if it's not, error out. */
 	/* Note: GET_CURPROC clobbers v0, t0, t8...t11. */
 	GET_CURPROC
-	mov	v0, t1
+	ldq	t1, 0(v0)
 	lda	t0, fswberr
 	.set noat
-	ldq	at_reg, 0(t1)
-	ldq	at_reg, P_ADDR(at_reg)
+	ldq	at_reg, P_ADDR(t1)
 	stq	t0, U_PCB_ONFAULT(at_reg)
 	.set at
 	zap	a1, 0xfe, a1			/* kill arg's high bytes */
@@ -1669,8 +1433,7 @@ LEAF(suibyte, 2)
 	or	t0, a1, a1			/* put the result together */
 	stq_u	a1, 0(a0)			/* and store it. */
 	.set noat
-	ldq	at_reg, 0(t1)
-	ldq	at_reg, P_ADDR(at_reg)
+	ldq	at_reg, P_ADDR(t1)
 	stq	zero, U_PCB_ONFAULT(at_reg)
 	.set at
 	call_pal PAL_OSF1_imb			/* sync instruction stream */
@@ -1700,18 +1463,16 @@ LEAF(fuswintr, 2)
 	beq	t1, fswintrberr			/* if it's not, error out. */
 	/* Note: GET_CURPROC clobbers v0, t0, t8...t11. */
 	GET_CURPROC
-	mov	v0, t1
+	ldq	t1, 0(v0)
 	lda	t0, fswintrberr
 	.set noat
-	ldq	at_reg, 0(t1)
-	ldq	at_reg, P_ADDR(at_reg)
+	ldq	at_reg, P_ADDR(t1)
 	stq	t0, U_PCB_ONFAULT(at_reg)
 	stq	a0, U_PCB_ACCESSADDR(at_reg)
 	.set at
 	/* XXX FETCH IT */
 	.set noat
-	ldq	at_reg, 0(t1)
-	ldq	at_reg, P_ADDR(at_reg)
+	ldq	at_reg, P_ADDR(t1)
 	stq	zero, U_PCB_ONFAULT(at_reg)
 	.set at
 	RET
@@ -1724,18 +1485,16 @@ LEAF(suswintr, 2)
 	beq	t1, fswintrberr			/* if it's not, error out. */
 	/* Note: GET_CURPROC clobbers v0, t0, t8...t11. */
 	GET_CURPROC
-	mov	v0, t1
+	ldq	t1, 0(v0)
 	lda	t0, fswintrberr
 	.set noat
-	ldq	at_reg, 0(t1)
-	ldq	at_reg, P_ADDR(at_reg)
+	ldq	at_reg, P_ADDR(t1)
 	stq	t0, U_PCB_ONFAULT(at_reg)
 	stq	a0, U_PCB_ACCESSADDR(at_reg)
 	.set at
 	/* XXX STORE IT */
 	.set noat
-	ldq	at_reg, 0(t1)
-	ldq	at_reg, P_ADDR(at_reg)
+	ldq	at_reg, P_ADDR(t1)
 	stq	zero, U_PCB_ONFAULT(at_reg)
 	.set at
 	mov	zero, v0
@@ -1880,8 +1639,57 @@ longjmp_botchmsg:
 	.text
 END(longjmp)
 
-NESTED(transfer_check,0,0,ra,0,0)
-	CALL(U_need_2_run_config)
-	END(transfer_check)
+/*
+ * void sts(int rn, u_int32_t *rval);
+ * void stt(int rn, u_int64_t *rval);
+ * void lds(int rn, u_int32_t *rval);
+ * void ldt(int rn, u_int64_t *rval);
+ */
 
-/**************************************************************************/
+.macro	make_freg_util name, op
+	LEAF(alpha_\name, 2)
+	and	a0, 0x1f, a0
+	s8addq	a0, pv, pv
+	addq	pv, 1f - alpha_\name, pv
+	jmp	(pv)
+1:
+	rn = 0
+	.rept	32
+	\op	$f0 + rn, 0(a1)
+	RET
+	rn = rn + 1
+	.endr
+	END(alpha_\name)
+.endm
+/*
+LEAF(alpha_sts, 2)
+LEAF(alpha_stt, 2)
+LEAF(alpha_lds, 2)
+LEAF(alpha_ldt, 2)
+ */
+	make_freg_util sts, sts
+	make_freg_util stt, stt
+	make_freg_util lds, lds
+	make_freg_util ldt, ldt
+
+LEAF(alpha_read_fpcr, 0); f30save = 0; rettmp = 8; framesz = 16
+	lda	sp, -framesz(sp)
+	stt	$f30, f30save(sp)
+	mf_fpcr	$f30
+	stt	$f30, rettmp(sp)
+	ldt	$f30, f30save(sp)
+	ldq	v0, rettmp(sp)
+	lda	sp, framesz(sp)
+	RET
+END(alpha_read_fpcr)
+
+LEAF(alpha_write_fpcr, 1); f30save = 0; fpcrtmp = 8; framesz = 16
+	lda	sp, -framesz(sp)
+	stq	a0, fpcrtmp(sp)
+	stt	$f30, f30save(sp)
+	ldt	$f30, fpcrtmp(sp)
+	mt_fpcr	$f30
+	ldt	$f30, f30save(sp)
+	lda	sp, framesz(sp)
+	RET
+END(alpha_write_fpcr)

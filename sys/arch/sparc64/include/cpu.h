@@ -1,4 +1,4 @@
-/*	$NetBSD: cpu.h,v 1.27 2001/01/15 20:19:57 thorpej Exp $ */
+/*	$NetBSD: cpu.h,v 1.29 2001/09/03 13:07:21 mrg Exp $ */
 
 /*
  * Copyright (c) 1992, 1993
@@ -222,7 +222,7 @@ struct intrhand {
 	volatile u_int64_t	*ih_map;	/* Interrupt map reg */
 	volatile u_int64_t	*ih_clr;	/* clear interrupt reg */
 };
-extern struct intrhand *intrhand[15];
+extern struct intrhand *intrhand[];
 extern struct intrhand *intrlev[MAXINTNUM];
 
 void	intr_establish __P((int level, struct intrhand *));
@@ -269,7 +269,6 @@ void	remrq __P((struct proc *));
 /* trap.c */
 void	kill_user_windows __P((struct proc *));
 int	rwindow_save __P((struct proc *));
-void	child_return __P((void *));
 /* amd7930intr.s */
 void	amd7930_trap __P((void));
 /* cons.c */

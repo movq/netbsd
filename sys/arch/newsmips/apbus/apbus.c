@@ -1,4 +1,4 @@
-/*	$NetBSD: apbus.c,v 1.5 2000/12/03 01:42:29 matt Exp $	*/
+/*	$NetBSD: apbus.c,v 1.8 2001/11/14 18:15:29 thorpej Exp $	*/
 
 /*-
  * Copyright (C) 1999 SHIMIZU Ryo.  All rights reserved.
@@ -30,6 +30,7 @@
 #include <sys/systm.h>
 #include <sys/malloc.h>
 #include <sys/device.h>
+#include <sys/proc.h>
 
 #include <uvm/uvm_extern.h>
 
@@ -491,11 +492,11 @@ apbus_dmamap_sync(t, map, offset, len, ops)
 {
 
 	/*
-	 * Flush DMA cache by issueing IO read for the AProm of specified slot.
+	 * Flush DMA cache by issuing IO read for the AProm of specified slot.
 	 */
 	bus_space_read_4(t->_slotbaset, t->_slotbaseh, 0);
 
-	_bus_dmamap_sync(t, map, offset, len, ops);
+	bus_dmamap_sync(&newsmips_default_bus_dma_tag, map, offset, len, ops);
 }
 
 struct newsmips_bus_dma_tag apbus_dma_tag = {

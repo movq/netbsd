@@ -1,4 +1,4 @@
-# $NetBSD: Makefile.sun3,v 1.86 2001/02/22 07:11:08 chs Exp $
+# $NetBSD: Makefile.sun3,v 1.89 2001/10/26 06:45:40 jmc Exp $
 
 # Makefile for NetBSD
 #
@@ -12,12 +12,13 @@
 #	/sys/arch/sun3/conf/Makefile.sun3
 # after which config should be rerun for all machines of that type.
 
+MACHINE_ARCH=m68k
+USETOOLS?=	no
+
+.include <bsd.own.mk>
+
 # DEBUG is set to -g if debugging.
 # PROF is set to -pg if profiling.
-
-# XXX - Make cross-build work...
-MACHINE_ARCH=m68k
-MACHINE=sun3
 
 AR?=	ar
 AS?=	as
@@ -51,7 +52,7 @@ TEXTADDR=0E004000
 HAVE_EGCS!=	${CC} --version | egrep "^(2\.[89]|egcs)" ; echo 
 INCLUDES=	-nostdinc -I. -I$S/arch -I$S
 XDEFS=		-undef -D__NetBSD__ -Dm68k -Dmc68000 -D__m68k__ -D__ELF__
-DEFINES=	-D_KERNEL -Dsun3
+DEFINES=	-D_KERNEL -D_KERNEL_OPT -Dsun3
 CPPFLAGS=	${INCLUDES} ${XDEFS} ${DEFINES} ${IDENT} ${PARAM}
 # Make it easy to override this on the command line...
 CWARNFLAGS?= 	-Werror -Wall -Wstrict-prototypes -Wmissing-prototypes \

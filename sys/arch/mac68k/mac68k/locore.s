@@ -1,4 +1,4 @@
-/*	$NetBSD: locore.s,v 1.133 2000/12/29 17:23:31 briggs Exp $	*/
+/*	$NetBSD: locore.s,v 1.135 2001/07/22 13:34:05 wiz Exp $	*/
 
 /*
  * Copyright (c) 1988 University of Utah.
@@ -81,6 +81,7 @@
 #include "opt_compat_svr4.h"
 #include "opt_compat_sunos.h"
 #include "opt_ddb.h"
+#include "opt_kgdb.h"
 #include "opt_lockdebug.h"
 #include "assym.h"
 #include "opt_fpsp.h"
@@ -509,7 +510,7 @@ Lbe10:
 	btst	#8,d0			| data fault?
 	jne	Lbe10a
 	movql	#1,d0			| user program access FC
-					| (we dont seperate data/program)
+					| (we dont separate data/program)
 	btst	#5,sp@(FR_HW+8)		| supervisor mode?
 	jeq	Lbe10a			| if no, done
 	movql	#5,d0			| else supervisor program access

@@ -1,4 +1,4 @@
-/*	$NetBSD: joy.c,v 1.3 2000/06/20 08:26:55 soda Exp $	*/
+/*	$NetBSD: joy.c,v 1.5 2001/06/13 15:03:53 soda Exp $	*/
 /*	NetBSD: joy.c,v 1.3 1996/05/05 19:46:15 christos Exp 	*/
 
 /*-
@@ -17,7 +17,7 @@
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
  * 3. The name of the author may not be used to endorse or promote products
- *    derived from this software withough specific prior written permission
+ *    derived from this software without specific prior written permission
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -44,7 +44,7 @@
 
 #include <dev/isa/isavar.h>
 #include <dev/isa/isareg.h>
-#include <arc/isa/timerreg.h>
+#include <dev/ic/i8253reg.h>
 
 /*
  * The game port can manage 4 buttons and 4 variable resistors (usually 2

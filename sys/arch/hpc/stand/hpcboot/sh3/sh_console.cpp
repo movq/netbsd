@@ -1,4 +1,4 @@
-/*	$NetBSD: sh_console.cpp,v 1.1 2001/02/09 18:35:18 uch Exp $	*/
+/* -*-C++-*-	$NetBSD: sh_console.cpp,v 1.7 2001/05/21 15:54:25 uch Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -36,20 +36,117 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <hpcmenu.h>
 #include <sh3/sh_console.h>
+#include <sh3/hd64461.h>
+
+// XXX don't define here. arch/hpcsh/include/bootinfo.h
+#define BI_CNUSE_SCI		2
+#define BI_CNUSE_SCIF		3
+#define BI_CNUSE_HD64461COM	4
+#define BI_CNUSE_HD64461VIDEO	5
 
 SHConsole *SHConsole::_instance = 0;
+
+struct SHConsole::console_info
+SHConsole::_console_info[] = {
+	{ PLATID_CPU_SH_3        , PLATID_MACH_HP                          , SCIFPrint       , BI_CNUSE_SCIF       , BI_CNUSE_HD64461VIDEO},
+	{ PLATID_CPU_SH_3_7709   , PLATID_MACH_HITACHI                     , HD64461COMPrint , BI_CNUSE_HD64461COM , BI_CNUSE_HD64461VIDEO},
+	{ PLATID_CPU_SH_3_7709   , PLATID_MACH_CASIO_CASSIOPEIAA_A55V      , 0               , BI_CNUSE_BUILTIN    , BI_CNUSE_BUILTIN },
+	{ 0, 0, 0 } // terminator.
+};
+
+struct SHConsole::console_info *
+SHConsole::selectBootConsole(Console &cons, enum consoleSelect select)
+{
+	struct console_info *tab = _console_info;
+	platid_mask_t target, entry;
+
+	target.dw.dw0 = HPC_PREFERENCE.platid_hi;
+	target.dw.dw1 = HPC_PREFERENCE.platid_lo;
+
+	// search apriori setting if any.
+	for (; tab->cpu; tab++) {
+		entry.dw.dw0 = tab->cpu;
+		entry.dw.dw1 = tab->machine;
+		if (platid_match(&target, &entry)) {
+			switch (select) {
+			case SERIAL:
+				cons.setBootConsole(tab->serial_console);
+				break;
+			case VIDEO:
+				cons.setBootConsole(tab->video_console);
+				break;
+			}
+		}
+	}
+
+	return tab;
+}
+
+SHConsole::SHConsole()
+{
+	_print = 0;
+}
+
+SHConsole::~SHConsole()
+{
+	// NO-OP
+}
+
+SHConsole *
+SHConsole::Instance()
+{
+	if (!_instance)
+		_instance = new SHConsole();
+
+	return _instance;
+}
+
+BOOL
+SHConsole::init()
+{
+	
+	if (!super::init())
+		return FALSE;
+
+	_kmode = SetKMode(1);
+
+	struct console_info *tab = selectBootConsole(*this, SERIAL);
+	if (tab != 0)
+		_print = tab->print;
+	
+	return TRUE;
+}
 
 void
 SHConsole::print(const TCHAR *fmt, ...)
 {
-	va_list ap;
-	va_start(ap, fmt);
-	wvsprintf(_bufw, fmt, ap);
-	va_end(ap);
+	SETUP_WIDECHAR_BUFFER();
 
-	if (!setupBuffer())
+	if (!setupMultibyteBuffer())
 		return;
 
-	PRINT(_bufm);
+	if (_print == 0)
+		super::genericPrint(_bufm);
+	else
+		_print(_bufm);
+}
+
+void
+SHConsole::SCIPrint(const char *buf)
+{
+	SCI_PRINT(buf);
+}
+
+void
+SHConsole::SCIFPrint(const char *buf)
+{
+	SCIF_PRINT(buf);
+}
+
+void
+SHConsole::HD64461COMPrint(const char *buf)
+{
+	HD64461COM_PRINT(buf);
 }

@@ -1,4 +1,4 @@
-/* $NetBSD: bus_dma.h,v 1.6 2000/11/24 09:36:41 scw Exp $	*/
+/* $NetBSD: bus_dma.h,v 1.9 2001/07/19 15:32:15 thorpej Exp $	*/
 
 /*
  * This file was extracted from from next68k/include/bus.h
@@ -7,7 +7,7 @@
  */
 
 /*-
- * Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.
+ * Copyright (c) 1997, 1998, 2001 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -80,14 +80,17 @@
 /*
  * Flags used in various bus DMA methods.
  */
-#define	BUS_DMA_WAITOK		0x00	/* safe to sleep (pseudo-flag) */
-#define	BUS_DMA_NOWAIT		0x01	/* not safe to sleep */
-#define	BUS_DMA_ALLOCNOW	0x02	/* perform resource allocation now */
-#define	BUS_DMA_COHERENT	0x04	/* hint: map memory DMA coherent */
-#define	BUS_DMA_BUS1		0x10	/* placeholders for bus functions... */
-#define	BUS_DMA_BUS2		0x20
-#define	BUS_DMA_BUS3		0x40
-#define	BUS_DMA_BUS4		0x80
+#define	BUS_DMA_WAITOK		0x000	/* safe to sleep (pseudo-flag) */
+#define	BUS_DMA_NOWAIT		0x001	/* not safe to sleep */
+#define	BUS_DMA_ALLOCNOW	0x002	/* perform resource allocation now */
+#define	BUS_DMA_COHERENT	0x004	/* hint: map memory DMA coherent */
+#define	BUS_DMA_STREAMING	0x008	/* hint: sequential, unidirectional */
+#define	BUS_DMA_BUS1		0x010	/* placeholders for bus functions... */
+#define	BUS_DMA_BUS2		0x020
+#define	BUS_DMA_BUS3		0x040
+#define	BUS_DMA_BUS4		0x080
+#define	BUS_DMA_READ		0x100	/* mapping is device -> memory only */
+#define	BUS_DMA_WRITE		0x200	/* mapping is memory -> device only */
 
 /*
  * Flags to constrain the physical memory allocated for DMA
@@ -122,7 +125,7 @@ struct mvme68k_bus_dma_segment {
 
 	/* PRIVATE */
 	bus_addr_t	_ds_cpuaddr;	/* CPU-relative phys addr of segment */
-	int		_ds_padding;
+	int		_ds_flags;
 };
 typedef struct mvme68k_bus_dma_segment	bus_dma_segment_t;
 

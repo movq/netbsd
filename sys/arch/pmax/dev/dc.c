@@ -1,4 +1,4 @@
-/*	$NetBSD: dc.c,v 1.65 2000/11/03 15:01:10 simonb Exp $	*/
+/*	$NetBSD: dc.c,v 1.68 2001/07/07 14:21:00 simonb Exp $	*/
 
 /*-
  * Copyright (c) 1992, 1993
@@ -39,7 +39,7 @@
  */
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
-__KERNEL_RCSID(0, "$NetBSD: dc.c,v 1.65 2000/11/03 15:01:10 simonb Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dc.c,v 1.68 2001/07/07 14:21:00 simonb Exp $");
 
 /*
  * devDC7085.c --
@@ -502,8 +502,7 @@ dcopen(dev, flag, mode, p)
 	while (!(flag & O_NONBLOCK) && !(tp->t_cflag & CLOCAL) &&
 	       !(tp->t_state & TS_CARR_ON)) {
 		tp->t_wopen++;
-		error = ttysleep(tp, (caddr_t)&tp->t_rawq,
-		    TTIPRI | PCATCH, ttopen, 0);
+		error = ttysleep(tp, &tp->t_rawq, TTIPRI | PCATCH, ttopen, 0);
 		tp->t_wopen--;
 		if (error != 0)
 			break;
@@ -578,6 +577,20 @@ dcwrite(dev, uio, flag)
 	sc = dc_cd.cd_devs[DCUNIT(dev)];
 	tp = sc->dc_tty[DCLINE(dev)];
 	return ((*tp->t_linesw->l_write)(tp, uio, flag));
+}
+
+int
+dcpoll(dev, events, p)
+	dev_t dev;
+	int events;
+	struct proc *p;
+{
+	struct dc_softc *sc;
+	struct tty *tp;
+
+	sc = dc_cd.cd_devs[DCUNIT(dev)];
+	tp = sc->dc_tty[DCLINE(dev)];
+	return ((*tp->t_linesw->l_poll)(tp, events, p));
 }
 
 struct tty *
@@ -823,7 +836,7 @@ dcrint(sc)
 			}
 		}
 		if (!(tp->t_state & TS_ISOPEN)) {
-			wakeup((caddr_t)&tp->t_rawq);
+			wakeup(&tp->t_rawq);
 #ifdef PORTSELECTOR
 			if (tp->t_wopen == 0)
 #endif
@@ -908,10 +921,7 @@ dcxint(tp)
 		ndflush(&tp->t_outq, dp->p_mem - (caddr_t) tp->t_outq.c_cf);
 		dp->p_end = dp->p_mem = tp->t_outq.c_cf;
 	}
-	if (tp->t_linesw)
-		(*tp->t_linesw->l_start)(tp);
-	else
-		dcstart(tp);
+	(*tp->t_linesw->l_start)(tp);
 	if (tp->t_outq.c_cc == 0 || !(tp->t_state & TS_BUSY)) {
 		dcaddr = (dcregs *)dp->p_addr;
 		dcaddr->dc_tcr &= ~(1 << line);
@@ -940,7 +950,7 @@ dcstart(tp)
 	if (tp->t_outq.c_cc <= tp->t_lowat) {
 		if (tp->t_state & TS_ASLEEP) {
 			tp->t_state &= ~TS_ASLEEP;
-			wakeup((caddr_t)&tp->t_outq);
+			wakeup(&tp->t_outq);
 		}
 		selwakeup(&tp->t_wsel);
 	}

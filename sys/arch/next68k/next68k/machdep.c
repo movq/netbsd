@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.39 2000/09/24 12:32:37 jdolecek Exp $	*/
+/*	$NetBSD: machdep.c,v 1.45 2001/09/10 21:19:20 chris Exp $	*/
 
 /*
  * Copyright (c) 1988 University of Utah.
@@ -44,6 +44,7 @@
  */
 
 #include "opt_ddb.h"
+#include "opt_kgdb.h"
 #include "opt_compat_hpux.h"
 
 #include <sys/param.h>
@@ -101,6 +102,9 @@
 #include <next68k/next68k/rtc.h>
 #include <next68k/next68k/seglist.h>
 
+int nsym;
+char *ssym, *esym;
+
 #define	MAXMEM	64*1024	/* XXX - from cmap.h */
 
 /* the following is used externally (sysctl_hw) */
@@ -109,9 +113,9 @@ char	machine[] = MACHINE;	/* from <machine/param.h> */
 /* Our exported CPU info; we can have only one. */  
 struct cpu_info cpu_info_store;
 
-vm_map_t exec_map = NULL;
-vm_map_t mb_map = NULL;
-vm_map_t phys_map = NULL;
+struct vm_map *exec_map = NULL;
+struct vm_map *mb_map = NULL;
+struct vm_map *phys_map = NULL;
 
 caddr_t	msgbufaddr;		/* KVA of message buffer */
 paddr_t msgbufpa;		/* PA of message buffer */
@@ -171,7 +175,7 @@ int	mem_cluster_cnt;
  * Early initialization, before main() is called.
  */
 void
-next68k_init()
+next68k_init(void)
 {
 	int i;
 
@@ -190,9 +194,10 @@ next68k_init()
 		 * list we want to put the memory on.
 		 */
 		uvm_page_physload(atop(phys_seg_list[i].ps_start),
-				 atop(phys_seg_list[i].ps_end),
-				 atop(phys_seg_list[i].ps_start),
-				 atop(phys_seg_list[i].ps_end), VM_FREELIST_DEFAULT);
+				  atop(phys_seg_list[i].ps_end),
+				  atop(phys_seg_list[i].ps_start),
+				  atop(phys_seg_list[i].ps_end),
+				  VM_FREELIST_DEFAULT);
 	}
 
 	{
@@ -204,11 +209,11 @@ next68k_init()
 		}
 	}
 
-  /* Initialize the interrupt handlers. */
-  isrinit();
+	/* Initialize the interrupt handlers. */
+	isrinit();
 
-  /* Calibrate the delay loop. */
-  next68k_calibrate_delay();
+	/* Calibrate the delay loop. */
+	next68k_calibrate_delay();
 
 	/*
 	 * Initialize error message buffer (at end of core).
@@ -218,6 +223,7 @@ next68k_init()
 		    msgbufpa + i * NBPG, VM_PROT_READ|VM_PROT_WRITE,
 		    VM_PROT_READ|VM_PROT_WRITE|PMAP_WIRED);
 	initmsgbuf(msgbufaddr, round_page(MSGBUFSIZE));
+	pmap_update(pmap_kernel());
 }
 
 /*
@@ -228,31 +234,23 @@ next68k_init()
 void
 consinit()
 {
-  /*
-   * Generic console: sys/dev/cons.c
-   *	Initializes either ite or ser as console.
-   *	Can be called from locore.s and init_main.c.
-   */
-  static int init = 0;
-  
-  if (!init) {
+	static int init = 0;
 
+	/*
+	 * Generic console: sys/dev/cons.c
+	 *	Initializes either ite or ser as console.
+	 *	Can be called from locore.s and init_main.c.
+	 */
+
+	if (!init) {
 		cninit();
-
 #ifdef KGDB
 		zs_kgdb_init();
 #endif
-
 #ifdef  DDB
 		/* Initialize kernel debugger, if compiled in. */
-		{
-			extern int end;
-			extern int *esym; 
-
-			ddb_init(*(int *)&end, ((int *)&end) + 1, esym);
-		}
+		ddb_init(nsym, ssym, esym);
 #endif
-
 		if (boothowto & RB_KDB) {
 #if defined(KGDB)
 			kgdb_connect(1);
@@ -261,10 +259,10 @@ consinit()
 #endif
 		}
 
-    init = 1;
-  }
-  else
-    next68k_calibrate_delay();
+		init = 1;
+	} else {
+		next68k_calibrate_delay();
+	}
 }
 
 /*
@@ -320,7 +318,7 @@ cpu_startup()
 	if (uvm_map(kernel_map, (vaddr_t *) &buffers, round_page(size),
 		    NULL, UVM_UNKNOWN_OFFSET, 0,
 		    UVM_MAPFLAG(UVM_PROT_NONE, UVM_PROT_NONE, UVM_INH_NONE,
-				UVM_ADV_NORMAL, 0)) != KERN_SUCCESS)
+				UVM_ADV_NORMAL, 0)) != 0)
 		panic("startup: cannot allocate VM for buffers");
 	minaddr = (vaddr_t)buffers;
 	base = bufpages / nbuf;
@@ -350,6 +348,7 @@ cpu_startup()
 			curbufsize -= PAGE_SIZE;
 		}
 	}
+	pmap_update(pmap_kernel());
 
 	/*
 	 * Allocate a submap for exec arguments.  This map effectively
@@ -386,7 +385,7 @@ cpu_startup()
 	 * XXX but not right now.
 	 */
 	if (uvm_map_protect(kernel_map, 0, round_page((vaddr_t)&kernel_text),
-	    UVM_PROT_NONE, TRUE) != KERN_SUCCESS)
+	    UVM_PROT_NONE, TRUE) != 0)
 		panic("can't mark pre-text pages off-limits");
 
 	/*
@@ -395,7 +394,7 @@ cpu_startup()
 	 */
 	if (uvm_map_protect(kernel_map, trunc_page((vaddr_t)&kernel_text),
 	    round_page((vaddr_t)&etext), UVM_PROT_READ|UVM_PROT_EXEC, TRUE)
-	    != KERN_SUCCESS)
+	    != 0)
 		panic("can't protect kernel text");
 
 	/*
@@ -849,6 +848,7 @@ dumpsys()
 #undef NPGMB
 		pmap_enter(pmap_kernel(), (vm_offset_t)vmmap, maddr,
 		    VM_PROT_READ, VM_PROT_READ|PMAP_WIRED);
+		pmap_update(pmap_kernel());
 
 		error = (*dump)(dumpdev, blkno, vmmap, NBPG);
  bad:

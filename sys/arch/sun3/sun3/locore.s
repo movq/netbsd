@@ -1,4 +1,4 @@
-/*	$NetBSD: locore.s,v 1.78 2001/02/22 07:11:12 chs Exp $	*/
+/*	$NetBSD: locore.s,v 1.81 2001/08/04 04:06:29 chs Exp $	*/
 
 /*
  * Copyright (c) 1994, 1995 Gordon W. Ross
@@ -46,6 +46,7 @@
 #include "opt_compat_netbsd.h"
 #include "opt_compat_svr4.h"
 #include "opt_compat_sunos.h"
+#include "opt_kgdb.h"
 #include "opt_lockdebug.h"
 
 #include "assym.h"
@@ -459,7 +460,11 @@ Lbrkpt2:
  * for which the CPU provides the vector=0x18+level.
  * These are installed in the interrupt vector table.
  */
+#ifdef __ELF__
+	.align	4
+#else
 	.align	2
+#endif
 GLOBAL(_isr_autovec)
 	INTERRUPT_SAVEREG
 	jbsr	_C_LABEL(isr_autovec)
@@ -467,7 +472,11 @@ GLOBAL(_isr_autovec)
 	jra	_ASM_LABEL(rei)
 
 /* clock: see clock.c */
+#ifdef __ELF__
+	.align	4
+#else
 	.align	2
+#endif
 GLOBAL(_isr_clock)
 	INTERRUPT_SAVEREG
 	jbsr	_C_LABEL(clock_intr)
@@ -475,7 +484,11 @@ GLOBAL(_isr_clock)
 	jra	_ASM_LABEL(rei)
 
 | Handler for all vectored interrupts (i.e. VME interrupts)
+#ifdef __ELF__
+	.align	4
+#else
 	.align	2
+#endif
 GLOBAL(_isr_vectored)
 	INTERRUPT_SAVEREG
 	jbsr	_C_LABEL(isr_vectored)
@@ -973,10 +986,45 @@ GLOBAL(_delay)
 	 * operations and that the loop will run from a single cache
 	 * half-line.
 	 */
+#ifdef __ELF__
 	.align	8
+#else
+	.align	3
+#endif
 L_delay:
 	subl	%d1,%d0
 	jgt	L_delay
+	rts
+
+/*
+ * void set_segmap_allctx(vaddr_t va, int sme)
+ */
+ENTRY(set_segmap_allctx)
+	linkw	%fp,#0
+	moveml	#0x3000,%sp@-
+	movl	8(%fp),%d3		| d3 = va
+	andl	#0xffffffc,%d3
+	bset	#29,%d3
+	movl	%d3,%a1			| a1 = ctrladdr, d3 avail
+	movl	12(%fp),%d1		| d1 = sme
+	moveq	#FC_CONTROL,%d0
+	movl	#CONTEXT_REG,%a0	| a0 = ctxreg
+	movc	%sfc,%d3		| d3 = oldsfc
+	movc	%d0,%sfc
+	movsb	%a0@,%d2
+	andi	#7,%d2			| d2 = oldctx
+	movc	%d3,%sfc		| restore sfc, d3 avail
+	movc	%dfc,%d3		| d3 = olddfc
+	movc	%d0,%dfc
+	movl	#(CONTEXT_NUM - 1),%d0	| d0 = ctx number
+1:
+	movsb	%d0,%a0@		| change to ctx
+	movsb	%d1,%a1@		| set segmap
+	dbf	%d0,1b			| loop setting each ctx
+	movsb	%d2,%a0@		| restore ctx
+	movc	%d3,%dfc		| restore dfc
+	moveml	%sp@+,#0x000c
+	unlk	%fp
 	rts
 
 | Define some addresses, mostly so DDB can print useful info.

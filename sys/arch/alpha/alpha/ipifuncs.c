@@ -1,7 +1,7 @@
-/* $NetBSD: ipifuncs.c,v 1.24 2001/01/19 18:51:17 thorpej Exp $ */
+/* $NetBSD: ipifuncs.c,v 1.30 2001/07/15 16:42:18 thorpej Exp $ */
 
 /*-
- * Copyright (c) 1998, 1999, 2000 The NetBSD Foundation, Inc.
+ * Copyright (c) 1998, 1999, 2000, 2001 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -39,7 +39,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: ipifuncs.c,v 1.24 2001/01/19 18:51:17 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ipifuncs.c,v 1.30 2001/07/15 16:42:18 thorpej Exp $");
 
 /*
  * Interprocessor interrupt handlers.
@@ -64,8 +64,6 @@ __KERNEL_RCSID(0, "$NetBSD: ipifuncs.c,v 1.24 2001/01/19 18:51:17 thorpej Exp $"
 typedef void (*ipifunc_t)(struct cpu_info *, struct trapframe *);
 
 void	alpha_ipi_halt(struct cpu_info *, struct trapframe *);
-void	alpha_ipi_tbia(struct cpu_info *, struct trapframe *);
-void	alpha_ipi_tbiap(struct cpu_info *, struct trapframe *);
 void	alpha_ipi_imb(struct cpu_info *, struct trapframe *);
 void	alpha_ipi_ast(struct cpu_info *, struct trapframe *);
 void	alpha_ipi_synch_fpu(struct cpu_info *, struct trapframe *);
@@ -78,26 +76,26 @@ void	alpha_ipi_pause(struct cpu_info *, struct trapframe *);
  */
 ipifunc_t ipifuncs[ALPHA_NIPIS] = {
 	alpha_ipi_halt,
-	alpha_ipi_tbia,
-	alpha_ipi_tbiap,
+	microset,
 	pmap_do_tlb_shootdown,
 	alpha_ipi_imb,
 	alpha_ipi_ast,
 	alpha_ipi_synch_fpu,
 	alpha_ipi_discard_fpu,
 	alpha_ipi_pause,
+	pmap_do_reactivate,
 };
 
 const char *ipinames[ALPHA_NIPIS] = {
 	"halt ipi",
-	"tbia ipi",
-	"tbiap ipi",
+	"microset ipi",
 	"shootdown ipi",
 	"imb ipi",
 	"ast ipi",
 	"synch fpu ipi",
 	"discard fpu ipi",
 	"pause ipi",
+	"pmap reactivate ipi",
 };
 
 /*
@@ -167,13 +165,13 @@ alpha_send_ipi(u_long cpu_id, u_long ipimask)
 
 #ifdef DIAGNOSTIC
 	if (cpu_id >= hwrpb->rpb_pcs_cnt ||
-	    cpu_info[cpu_id].ci_softc == NULL)
+	    cpu_info[cpu_id] == NULL)
 		panic("alpha_send_ipi: bogus cpu_id");
 	if (((1UL << cpu_id) & cpus_running) == 0)
 		panic("alpha_send_ipi: CPU %ld not running", cpu_id);
 #endif
 
-	atomic_setbits_ulong(&cpu_info[cpu_id].ci_ipis, ipimask);
+	atomic_setbits_ulong(&cpu_info[cpu_id]->ci_ipis, ipimask);
 	alpha_pal_wripir(cpu_id);
 }
 
@@ -183,15 +181,17 @@ alpha_send_ipi(u_long cpu_id, u_long ipimask)
 void
 alpha_broadcast_ipi(u_long ipimask)
 {
-	u_long i, cpu_id = cpu_number();
+	struct cpu_info *ci;
+	CPU_INFO_ITERATOR cii;
+	u_long cpu_id = cpu_number();
 	u_long cpumask;
 
 	cpumask = cpus_running & ~(1UL << cpu_id);
 
-	for (i = 0; i < hwrpb->rpb_pcs_cnt; i++) {
-		if ((cpumask & (1UL << i)) == 0)
+	for (CPU_INFO_FOREACH(cii, ci)) {
+		if ((cpumask & (1UL << ci->ci_cpuid)) == 0)
 			continue;
-		alpha_send_ipi(i, ipimask);
+		alpha_send_ipi(ci->ci_cpuid, ipimask);
 	}
 }
 
@@ -201,17 +201,18 @@ alpha_broadcast_ipi(u_long ipimask)
 void
 alpha_multicast_ipi(u_long cpumask, u_long ipimask)
 {
-	u_long i;
+	struct cpu_info *ci;
+	CPU_INFO_ITERATOR cii;
 
 	cpumask &= cpus_running;
 	cpumask &= ~(1UL << cpu_number());
 	if (cpumask == 0)
 		return;
 
-	for (i = 0; i < hwrpb->rpb_pcs_cnt; i++) {
-		if ((cpumask & (1UL << i)) == 0)
+	for (CPU_INFO_FOREACH(cii, ci)) {
+		if ((cpumask & (1UL << ci->ci_cpuid)) == 0)
 			continue;
-		alpha_send_ipi(i, ipimask);
+		alpha_send_ipi(ci->ci_cpuid, ipimask);
 	}
 }
 
@@ -251,30 +252,6 @@ alpha_ipi_halt(struct cpu_info *ci, struct trapframe *framep)
 }
 
 void
-alpha_ipi_tbia(struct cpu_info *ci, struct trapframe *framep)
-{
-
-	/* If we're doing a TBIA, we don't need to do a TBIAP or a SHOOTDOWN. */
-	atomic_clearbits_ulong(&ci->ci_ipis,
-	    ALPHA_IPI_TBIAP|ALPHA_IPI_SHOOTDOWN);
-	
-	pmap_tlb_shootdown_q_drain(ci->ci_cpuid, TRUE);
-
-	ALPHA_TBIA();
-}
-
-void
-alpha_ipi_tbiap(struct cpu_info *ci, struct trapframe *framep)
-{
-
-	/* Can't clear SHOOTDOWN here; might have PG_ASM mappings. */
-
-	pmap_tlb_shootdown_q_drain(ci->ci_cpuid, FALSE);
-
-	ALPHA_TBIAP();
-}
-
-void
 alpha_ipi_imb(struct cpu_info *ci, struct trapframe *framep)
 {
 
@@ -293,6 +270,8 @@ void
 alpha_ipi_synch_fpu(struct cpu_info *ci, struct trapframe *framep)
 {
 
+	if (ci->ci_flags & CPUF_FPUSAVE)
+		return;
 	fpusave_cpu(ci, 1);
 }
 
@@ -300,6 +279,8 @@ void
 alpha_ipi_discard_fpu(struct cpu_info *ci, struct trapframe *framep)
 {
 
+	if (ci->ci_flags & CPUF_FPUSAVE)
+		return;
 	fpusave_cpu(ci, 0);
 }
 

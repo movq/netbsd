@@ -1,4 +1,4 @@
-/* $NetBSD: vmparam.h,v 1.19 2000/11/19 03:16:55 thorpej Exp $ */
+/* $NetBSD: vmparam.h,v 1.23 2001/05/01 02:53:06 thorpej Exp $ */
 
 /*
  * Copyright (c) 1988 University of Utah.
@@ -51,9 +51,7 @@
 
 /*
  * USRTEXT is the start of the user text/data space, while USRSTACK
- * is the top (end) of the user stack.  Immediately above the user stack
- * resides the user structure, which is UPAGES long and contains the
- * kernel stack.
+ * is the top (end) of the user stack.
  *
  * Digital UNIX (formerly DEC OSF/1) places the stack below the
  * text segment (i.e. growing downward from 4G).  We may want to
@@ -134,10 +132,19 @@
 #define	VM_FREELIST_DEFAULT	0
 
 /*
- * pmap-specific data stored in the vm_physmem[] array.
+ * pmap-specific data store in the vm_page structure.
  */
-struct pmap_physseg {
-	struct pv_head *pvhead;		/* pv list of this seg */
+#define	__HAVE_VM_PAGE_MD
+struct vm_page_md {
+	struct pv_entry *pvh_list;		/* pv_entry list */
+	struct simplelock pvh_slock;		/* lock on this head */
+	int pvh_attrs;				/* page attributes */
 };
+
+#define	VM_MDPAGE_INIT(pg)						\
+do {									\
+	(pg)->mdpage.pvh_list = NULL;					\
+	simple_lock_init(&(pg)->mdpage.pvh_slock);			\
+} while (/*CONSTCOND*/0)
 
 #endif	/* ! _ALPHA_VMPARAM_H_ */

@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.52 2001/02/05 13:10:07 tsutsui Exp $	*/
+/*	$NetBSD: machdep.c,v 1.60 2001/11/14 18:15:31 thorpej Exp $	*/
 
 /*
  * Copyright (c) 1988 University of Utah.
@@ -43,7 +43,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.52 2001/02/05 13:10:07 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.60 2001/11/14 18:15:31 thorpej Exp $");
 
 /* from: Utah Hdr: machdep.c 1.63 91/04/24 */
 
@@ -87,6 +87,9 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.52 2001/02/05 13:10:07 tsutsui Exp $")
 #include <machine/apcall.h>
 #include <mips/locore.h>		/* wbflush() */
 
+#define	_NEWSMIPS_BUS_DMA_PRIVATE
+#include <machine/bus.h>
+
 #ifdef DDB
 #include <machine/db_machdep.h>
 #include <ddb/db_access.h>
@@ -111,9 +114,9 @@ struct cpu_info cpu_info_store;
 
 /* maps for VM objects */
 
-vm_map_t exec_map = NULL;
-vm_map_t mb_map = NULL;
-vm_map_t phys_map = NULL;
+struct vm_map *exec_map = NULL;
+struct vm_map *mb_map = NULL;
+struct vm_map *phys_map = NULL;
 
 char *bootinfo = NULL;		/* pointer to bootinfo structure */
 int physmem;			/* max supported memory, changes to actual */
@@ -280,6 +283,13 @@ mach_init(x_boothowto, x_bootdev, x_bootname, x_maxmem)
 	 * Clear out the I and D caches.
 	 */
 	mips_vector_init();
+
+	/*
+	 * We know the CPU type now.  Initialize our DMA tags (might
+	 * need this early).
+	 */
+	newsmips_bus_dma_init();
+
 #if 0
 	if (systype == NEWS5000) {
 		mips_L2CacheSize = 1024 * 1024;		/* XXX to be safe */
@@ -319,9 +329,20 @@ mach_init(x_boothowto, x_bootdev, x_bootname, x_maxmem)
 	mips_init_msgbuf();
 
 	/*
+	 * Compute the size of system data structures.  pmap_bootstrap()
+	 * needs some of this information.
+	 */
+	size = (vsize_t)allocsys(NULL, NULL);
+
+	/*
+	 * Initialize the virtual memory system.
+	 */
+	pmap_bootstrap();
+
+	/*
 	 * Allocate space for proc0's USPACE.
 	 */
-	v = (caddr_t)pmap_steal_memory(USPACE, NULL, NULL); 
+	v = (caddr_t)uvm_pageboot_alloc(USPACE); 
 	proc0.p_addr = proc0paddr = (struct user *)v;
 	proc0.p_md.md_regs = (struct frame *)(v + USPACE) - 1;
 	curpcb = &proc0.p_addr->u_pcb;
@@ -333,8 +354,7 @@ mach_init(x_boothowto, x_bootdev, x_bootname, x_maxmem)
 	 * memory is directly addressable.  We don't have to map these into
 	 * virtual address space.
 	 */
-	size = (vsize_t)allocsys(NULL, NULL);
-	v = (caddr_t)pmap_steal_memory(size, NULL, NULL); 
+	v = (caddr_t)uvm_pageboot_alloc(size); 
 	if ((allocsys(v, NULL) - v) != size)
 		panic("mach_init: table size inconsistency");
 
@@ -383,11 +403,6 @@ mach_init(x_boothowto, x_bootdev, x_bootname, x_maxmem)
 		printf("kernel not configured for systype %d\n", systype);
 		break;
 	}
-
-	/*
-	 * Initialize the virtual memory system.
-	 */
-	pmap_bootstrap();
 }
 
 /*
@@ -425,7 +440,7 @@ cpu_startup()
 	if (uvm_map(kernel_map, (vaddr_t *)&buffers, round_page(size),
 		    NULL, UVM_UNKNOWN_OFFSET, 0,
 		    UVM_MAPFLAG(UVM_PROT_NONE, UVM_PROT_NONE, UVM_INH_NONE,
-				UVM_ADV_NORMAL, 0)) != KERN_SUCCESS)
+				UVM_ADV_NORMAL, 0)) != 0)
 		panic("startup: cannot allocate VM for buffers");
 	minaddr = (vaddr_t)buffers;
 	base = bufpages / nbuf;
@@ -455,6 +470,8 @@ cpu_startup()
 			curbufsize -= PAGE_SIZE;
 		}
 	}
+	pmap_update(pmap_kernel());
+
 	/*
 	 * Allocate a submap for exec arguments.  This map effectively
 	 * limits the number of processes exec'ing at any time.

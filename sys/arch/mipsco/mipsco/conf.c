@@ -1,4 +1,4 @@
-/*	$NetBSD: conf.c,v 1.2 2000/10/02 07:56:31 wdk Exp $	*/
+/*	$NetBSD: conf.c,v 1.4 2001/09/15 01:11:02 wdk Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -58,6 +58,11 @@
 #include "uk.h"
 #include "raid.h"
 #include "fd.h"
+#include "com.h"
+#include "lpt.h"
+
+cdev_decl(com);
+cdev_decl(lpt);
 
 struct bdevsw	bdevsw[] =
 {
@@ -134,9 +139,9 @@ struct cdevsw	cdevsw[] =
 	cdev_notdef(),			/* 12: ms */
 	cdev_notdef(),			/* 13: xio */
 	cdev_notdef(),			/* 14: frame buffer */
-	cdev_notdef(),			/* 15: */
+	cdev_tty_init(NCOM,com),	/* 15: serial port */
 	cdev_tape_init(NST,st),		/* 16: SCSI tape */
-	cdev_notdef(),			/* 17: lbp */
+	cdev_lpt_init(NLPT,lpt),	/* 17: parallel printer */
 	cdev_notdef(),			/* 18: ir */
 	cdev_notdef(),			/* 19: vme */
 	cdev_notdef(),			/* 20: gpib */

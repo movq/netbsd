@@ -1,4 +1,4 @@
-# $NetBSD: files.next68k,v 1.18 2001/01/17 00:07:31 fvdl Exp $
+# $NetBSD: files.next68k,v 1.20 2001/06/18 02:00:50 christos Exp $
 
 # next68k-specific configuration info
 
@@ -95,6 +95,9 @@ major	{md = 13}
 # RAIDframe
 major	{raid = 20}
 
+# NetBSD m68k a.out Binary Compatibility (COMPAT_AOUT_M68K)
+include "compat/aoutm68k/files.aoutm68k"
+
 # SunOS Binary Compatibility (COMPAT_SUNOS)
 include "compat/sunos/files.sunos"
 file	arch/m68k/m68k/sunos_machdep.c	compat_sunos
@@ -105,6 +108,7 @@ include "compat/svr4/files.svr4"
 # Linux binary compatibility (COMPAT_LINUX)
 include "compat/linux/files.linux"
 include "compat/linux/arch/m68k/files.linux_m68k"
+file arch/m68k/m68k/linux_trap.c		compat_linux
 
 # OSS audio driver compatibility
 include "compat/ossaudio/files.ossaudio"

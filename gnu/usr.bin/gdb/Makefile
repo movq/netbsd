@@ -1,14 +1,24 @@
-#	$NetBSD: Makefile,v 1.46 2001/02/23 23:16:44 matt Exp $
+#	$NetBSD: Makefile,v 1.51 2001/12/19 23:54:29 tv Exp $
 
-# for OBJECT_FMT
 .include <bsd.own.mk>
 
+.if defined(USE_NEW_TOOLCHAIN)
+
+SUBDIR=		gdb.new # gdbreplay gdbserver
+
+.include <bsd.subdir.mk>
+
+.else
+#
+# XXX - BEGIN - Old toolchain build goop - delete when everything migrated - XXX
+#
 .if (${OBJECT_FMT} == "ELF") || defined(BOOTSTRAP_ELF)
 ELF_PLEASE=
 .endif
 
-PROG=		gdb
 MAN=		gdb.1
+.if (${MACHINE_ARCH} != "sparc64")
+PROG=		gdb
 SRCS=		main.c ${COMMON_SRCS} annotate.c inflow.c gnu-regex.c
 OBJS=		init.o
 DPSRCS=		nm.h tm.h
@@ -58,8 +68,7 @@ XDEPFILES= ser-tcp.c
 SER_HARDWIRE= ser-unix.c
 NATDEPFILES= infptrace.c inftarg.c fork-child.c corelow.c \
 	${NATDEPFILES.${MACHINE_ARCH}}
-.if (${MACHINE_ARCH} != "arm32") \
-	&& (${MACHINE_ARCH} != "sh3eb") && (${MACHINE_ARCH} != "sh3el")
+.if (${MACHINE_CPU} != "arm") && (${MACHINE_CPU} != "sh3")
 NATDEPFILES+= kcore-nbsd.c
 .endif
 NATDEPFILES+= solib.c
@@ -103,14 +112,16 @@ TDEPFILES.sparc64=	sparc-tdep.c
 NATDEPFILES.vax=	vaxnbsd-nat.c
 TDEPFILES.vax=		vax-tdep.c
 
-DIST=		${.CURDIR}/../../dist
 BFDOBJ!=	cd ${.CURDIR}/../../lib/libbfd && ${PRINTOBJDIR}
+.endif
+DIST=		${.CURDIR}/../../dist
 
 .PATH: ${DIST}/gdb ${DIST}/gdb/doc
 
 .include <bsd.info.mk>
 .include <bsd.prog.mk>
 
+.if (${MACHINE_ARCH} != "sparc64")
 init.o: ${OBJS:Ninit.o} Makefile
 	@-rm -f init.c
 	NM=${NM} sh ${.CURDIR}/mkinit.sh ${OBJS:Ninit.o} >init.c
@@ -127,3 +138,8 @@ nm.h: ${DIST}/gdb/config/${ARCHSUBDIR}/nm-nbsd.h
 tm.h: ${DIST}/gdb/config/${ARCHSUBDIR}/tm-nbsd.h
 	@-rm -f $@
 	cp $> $@
+.endif
+#
+# XXX - END - Old toolchain build goop - delete when everything migrated - XXX
+#
+.endif

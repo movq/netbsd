@@ -1,4 +1,4 @@
-$NetBSD: TODO,v 1.1 2000/12/14 20:30:14 scw Exp $
+$NetBSD: TODO,v 1.5 2001/08/12 19:28:28 scw Exp $
 
 NetBSD/mvme68k's "ToDo" List (In no particular order)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -6,7 +6,8 @@ NetBSD/mvme68k's "ToDo" List (In no particular order)
 These are `difficulty' rated on a scale of 1-10, where `1' is easy.
 
 
-1.    Flesh out the "Memory Controller" (memc) driver (3)
+1.    [Partially Done]
+      Flesh out the "Memory Controller" (memc) driver (3)
 
 2.    Enhance the PCC2/MC2 driver to support its "Memory Controller"
       functionality on older MVME1x2 boards. (2)
@@ -15,7 +16,8 @@ These are `difficulty' rated on a scale of 1-10, where `1' is easy.
       (Need to come up with an MI interface for this, since various
       other non-mvme68k SBCs have IP sites too)
 
-4.    Switch over to the MI mk48txx TOD-chip driver (1)
+4.    [DONE]
+      Switch over to the MI mk48txx TOD-chip driver (1)
       (I already have most of this done)
 
 5.    Support for the NVRAM part of the above chips (2)
@@ -46,9 +48,11 @@ These are `difficulty' rated on a scale of 1-10, where `1' is easy.
 13.   Fix the case where VMEbus RAM is mapped through a translated
       address space on MVME boards with the VMEChip2 (2)
 
-14.   Add/Flesh out evcnt(9) support where useful (1)
+14.   [DONE]
+      Add/Flesh out evcnt(9) support where useful (1)
 
-15.   The siop driver *badly* needs to be bus_space(9)'d, and made MI (5)
+15.   [DONE. See osiop(4)]
+      The siop driver *badly* needs to be bus_space(9)'d, and made MI (5)
       (Apparently, Manuel Bouyer (bouyer@netbsd.org) is working on this)
 
 16.   The sbic driver *badly* needs re-written from scratch, and made MI (5)
@@ -60,7 +64,8 @@ These are `difficulty' rated on a scale of 1-10, where `1' is easy.
       (Should be fairly easy, although sysinst doesn't do `tapes', so
       there's a bunch of code to write)
 
-18.   Use hardware-assisted softints (3)
+18.   [DONE]
+      Use hardware-assisted softints (3)
       (What to do on MVME1x2 boards with no VMEChip2?)
 
 19.   Make the ZS driver *properly* MI (4)

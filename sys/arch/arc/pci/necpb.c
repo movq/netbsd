@@ -1,4 +1,4 @@
-/*	$NetBSD: necpb.c,v 1.7 2001/01/13 10:46:18 ur Exp $	*/
+/*	$NetBSD: necpb.c,v 1.9 2001/08/17 11:11:57 ur Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.
@@ -85,6 +85,7 @@
 
 #include <machine/autoconf.h>
 #include <machine/cpu.h>
+#include <machine/platform.h>
 
 #include <dev/pci/pcivar.h>
 #include <dev/pci/pcireg.h>
@@ -126,7 +127,7 @@ static struct necpb_intrhand	*necpb_inttbl[4];
 
 /* There can be only one. */
 int necpbfound;
-struct necpb_config necpb_configuration;
+struct necpb_context necpb_main_context;
 static long necpb_mem_ex_storage[EXTENT_FIXED_STORAGE_SIZE(10) / sizeof(long)];
 static long necpb_io_ex_storage[EXTENT_FIXED_STORAGE_SIZE(10) / sizeof(long)];
 
@@ -152,7 +153,7 @@ necpbmatch(parent, match, aux)
  */
 void
 necpb_init(ncp)
-	struct necpb_config *ncp;
+	struct necpb_context *ncp;
 {
 	pcitag_t tag;
 	pcireg_t csr;
@@ -182,24 +183,32 @@ necpb_init(ncp)
 	ncp->nc_pc.pc_intr_establish = necpb_intr_establish;
 	ncp->nc_pc.pc_intr_disestablish = necpb_intr_disestablish;
 
-	/* XXX: enable all mem/io/busmaster */
+	/*
+	 * XXX:
+	 *  NEC's firmware does not configure PCI devices completely.
+	 *  We need to disable expansion ROM and enable mem/io/busmaster
+	 *  bits here.
+	 */
 	tag = necpb_make_tag(&ncp->nc_pc, 0, 3, 0);
 	csr = necpb_conf_read(&ncp->nc_pc, tag, PCI_COMMAND_STATUS_REG);
 	csr |= PCI_COMMAND_IO_ENABLE | PCI_COMMAND_MEM_ENABLE |
 	    PCI_COMMAND_MASTER_ENABLE;
 	necpb_conf_write(&ncp->nc_pc, tag, PCI_COMMAND_STATUS_REG, csr);
+	necpb_conf_write(&ncp->nc_pc, tag, PCI_MAPREG_ROM, 0);
 
 	tag = necpb_make_tag(&ncp->nc_pc, 0, 4, 0);
 	csr = necpb_conf_read(&ncp->nc_pc, tag, PCI_COMMAND_STATUS_REG);
 	csr |= PCI_COMMAND_IO_ENABLE | PCI_COMMAND_MEM_ENABLE |
 	    PCI_COMMAND_MASTER_ENABLE;
 	necpb_conf_write(&ncp->nc_pc, tag, PCI_COMMAND_STATUS_REG, csr);
+	necpb_conf_write(&ncp->nc_pc, tag, PCI_MAPREG_ROM, 0);
 
 	tag = necpb_make_tag(&ncp->nc_pc, 0, 5, 0);
 	csr = necpb_conf_read(&ncp->nc_pc, tag, PCI_COMMAND_STATUS_REG);
 	csr |= PCI_COMMAND_IO_ENABLE | PCI_COMMAND_MEM_ENABLE |
 	    PCI_COMMAND_MASTER_ENABLE;
 	necpb_conf_write(&ncp->nc_pc, tag, PCI_COMMAND_STATUS_REG, csr);
+	necpb_conf_write(&ncp->nc_pc, tag, PCI_MAPREG_ROM, 0);
 
 	ncp->nc_initialized = 1;
 }
@@ -217,7 +226,7 @@ necpbattach(parent, self, aux)
 
 	printf("\n");
 
-	sc->sc_ncp = &necpb_configuration;
+	sc->sc_ncp = &necpb_main_context;
 	necpb_init(sc->sc_ncp);
 
 	out32(RD94_SYS_PCI_INTMASK, 0xf);
@@ -225,7 +234,7 @@ necpbattach(parent, self, aux)
 	for (i = 0; i < 4; i++)
 		necpb_inttbl[i] = NULL;
 
-	set_intr(MIPS_INT_MASK_2, necpb_intr, 3);
+	(*platform->set_intr)(MIPS_INT_MASK_2, necpb_intr, 3);
 
 	pba.pba_busname = "pci";
 	pba.pba_iot = &sc->sc_ncp->nc_iot;

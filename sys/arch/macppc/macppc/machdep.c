@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.90 2001/02/24 22:39:18 matt Exp $	*/
+/*	$NetBSD: machdep.c,v 1.104 2001/09/10 21:19:17 chris Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -58,6 +58,10 @@
 
 #include <net/netisr.h>
 
+#include <machine/db_machdep.h>
+#include <ddb/db_extern.h>
+
+#include <machine/autoconf.h>
 #include <machine/bat.h>
 #include <machine/powerpc.h>
 #include <machine/trap.h>
@@ -71,9 +75,11 @@
 
 #include <dev/usb/ukbdvar.h>
 
-vm_map_t exec_map = NULL;
-vm_map_t mb_map = NULL;
-vm_map_t phys_map = NULL;
+#include <macppc/dev/adbvar.h>
+
+struct vm_map *exec_map = NULL;
+struct vm_map *mb_map = NULL;
+struct vm_map *phys_map = NULL;
 
 /*
  * Global variables used here and there
@@ -110,35 +116,40 @@ struct ofw_translations {
 int ofkbd_cngetc(dev_t);
 void cninit_kd(void);
 int lcsplx(int);
-void install_extint(void (*)(void));
 int save_ofmap(struct ofw_translations *, int);
 void restore_ofmap(struct ofw_translations *, int);
+static void dumpsys(void);
 
 void
 initppc(startkernel, endkernel, args)
 	u_int startkernel, endkernel;
 	char *args;
 {
-	extern trapcode, trapsize;
-	extern alitrap, alisize;
-	extern dsitrap, dsisize;
-	extern isitrap, isisize;
-	extern decrint, decrsize;
-	extern tlbimiss, tlbimsize;
-	extern tlbdlmiss, tlbdlmsize;
-	extern tlbdsmiss, tlbdsmsize;
+	extern int trapcode, trapsize;
+	extern int alitrap, alisize;
+	extern int dsitrap, dsisize;
+	extern int isitrap, isisize;
+	extern int decrint, decrsize;
+	extern int tlbimiss, tlbimsize;
+	extern int tlbdlmiss, tlbdlmsize;
+	extern int tlbdsmiss, tlbdsmsize;
 #ifdef DDB
-	extern ddblow, ddbsize;
+	extern int ddblow, ddbsize;
 #endif
 #ifdef IPKDB
-	extern ipkdblow, ipkdbsize;
+	extern int ipkdblow, ipkdbsize;
 #endif
-	extern void callback(void *);
-	extern void ext_intr(void);
 	int exc, scratch;
 	struct mem_region *allmem, *availmem, *mp;
 	struct ofw_translations *ofmap;
 	int ofmaplen;
+#ifdef MULTIPROCESSOR
+	struct cpu_info *ci = &cpu_info[0];
+#else
+	struct cpu_info *ci = &cpu_info_store;
+#endif
+
+	asm volatile ("mtsprg 0,%0" :: "r"(ci));
 
 	/*
 	 * Initialize BAT registers to unmapped to not generate
@@ -156,8 +167,8 @@ initppc(startkernel, endkernel, args)
 	/*
 	 * Set up BAT0 to only map the lowest 256 MB area
 	 */
-	battable[0].batl = BATL(0x00000000, BAT_M, BAT_PP_RW);
-	battable[0].batu = BATU(0x00000000, BAT_BL_256M, BAT_Vs);
+	battable[0x0].batl = BATL(0x00000000, BAT_M, BAT_PP_RW);
+	battable[0x0].batu = BATU(0x00000000, BAT_BL_256M, BAT_Vs);
 
 	/*
 	 * Map PCI memory space.
@@ -170,6 +181,9 @@ initppc(startkernel, endkernel, args)
 
 	battable[0xa].batl = BATL(0xa0000000, BAT_I, BAT_PP_RW);
 	battable[0xa].batu = BATU(0xa0000000, BAT_BL_256M, BAT_Vs);
+
+	battable[0xb].batl = BATL(0xb0000000, BAT_I, BAT_PP_RW);
+	battable[0xb].batu = BATU(0xb0000000, BAT_BL_256M, BAT_Vs);
 
 	/*
 	 * Map obio devices.
@@ -212,8 +226,9 @@ initppc(startkernel, endkernel, args)
 	ofmap = alloca(ofmaplen);
 	save_ofmap(ofmap, ofmaplen);
 
+	proc0.p_cpu = ci;
 	proc0.p_addr = proc0paddr;
-	bzero(proc0.p_addr, sizeof *proc0.p_addr);
+	memset(proc0.p_addr, 0, sizeof *proc0.p_addr);
 
 	curpcb = &proc0paddr->u_pcb;
 
@@ -229,7 +244,7 @@ initppc(startkernel, endkernel, args)
 	for (exc = EXC_RSVD; exc <= EXC_LAST; exc += 0x100)
 		switch (exc) {
 		default:
-			bcopy(&trapcode, (void *)exc, (size_t)&trapsize);
+			memcpy((void *)exc, &trapcode, (size_t)&trapsize);
 			break;
 		case EXC_EXI:
 			/*
@@ -237,34 +252,34 @@ initppc(startkernel, endkernel, args)
 			 */
 			break;
 		case EXC_ALI:
-			bcopy(&alitrap, (void *)EXC_ALI, (size_t)&alisize);
+			memcpy((void *)EXC_ALI, &alitrap, (size_t)&alisize);
 			break;
 		case EXC_DSI:
-			bcopy(&dsitrap, (void *)EXC_DSI, (size_t)&dsisize);
+			memcpy((void *)EXC_DSI, &dsitrap, (size_t)&dsisize);
 			break;
 		case EXC_ISI:
-			bcopy(&isitrap, (void *)EXC_ISI, (size_t)&isisize);
+			memcpy((void *)EXC_ISI, &isitrap, (size_t)&isisize);
 			break;
 		case EXC_DECR:
-			bcopy(&decrint, (void *)EXC_DECR, (size_t)&decrsize);
+			memcpy((void *)EXC_DECR, &decrint, (size_t)&decrsize);
 			break;
 		case EXC_IMISS:
-			bcopy(&tlbimiss, (void *)EXC_IMISS, (size_t)&tlbimsize);
+			memcpy((void *)EXC_IMISS, &tlbimiss, (size_t)&tlbimsize);
 			break;
 		case EXC_DLMISS:
-			bcopy(&tlbdlmiss, (void *)EXC_DLMISS, (size_t)&tlbdlmsize);
+			memcpy((void *)EXC_DLMISS, &tlbdlmiss, (size_t)&tlbdlmsize);
 			break;
 		case EXC_DSMISS:
-			bcopy(&tlbdsmiss, (void *)EXC_DSMISS, (size_t)&tlbdsmsize);
+			memcpy((void *)EXC_DSMISS, &tlbdsmiss, (size_t)&tlbdsmsize);
 			break;
 #if defined(DDB) || defined(IPKDB)
 		case EXC_PGM:
 		case EXC_TRC:
 		case EXC_BPT:
 #if defined(DDB)
-			bcopy(&ddblow, (void *)exc, (size_t)&ddbsize);
+			memcpy((void *)exc, &ddblow, (size_t)&ddbsize);
 #else
-			bcopy(&ipkdblow, (void *)exc, (size_t)&ipkdbsize);
+			memcpy((void *)exc, &ipkdblow, (size_t)&ipkdbsize);
 #endif
 			break;
 #endif /* DDB || IPKDB */
@@ -296,8 +311,8 @@ initppc(startkernel, endkernel, args)
 	 * Parse arg string.
 	 */
 #ifdef DDB
-	bcopy(args + strlen(args) + 1, &startsym, sizeof(startsym));
-	bcopy(args + strlen(args) + 5, &endsym, sizeof(endsym));
+	memcpy(&startsym, args + strlen(args) + 1, sizeof(startsym));
+	memcpy(&endsym, args + strlen(args) + 5, sizeof(endsym));
 	if (startsym == NULL || endsym == NULL)
 		startsym = endsym = NULL;
 #endif
@@ -349,7 +364,7 @@ save_ofmap(ofmap, maxlen)
 	mmu = OF_instance_to_package(mmui);
 
 	if (ofmap) {
-		bzero(ofmap, maxlen);	/* to be safe */
+		memset(ofmap, 0, maxlen);	/* to be safe */
 		len = OF_getprop(mmu, "translations", ofmap, maxlen);
 	} else
 		len = OF_getproplen(mmu, "translations");
@@ -385,12 +400,12 @@ restore_ofmap(ofmap, len)
 			len -= NBPG;
 		}
 	}
+	pmap_update(&ofw_pmap);
 }
 
 /*
  * This should probably be in autoconf!				XXX
  */
-char cpu_model[80];
 char machine[] = MACHINE;		/* from <machine/param.h> */
 char machine_arch[] = MACHINE_ARCH;	/* from <machine/param.h> */
 
@@ -398,7 +413,7 @@ void
 install_extint(handler)
 	void (*handler) __P((void));
 {
-	extern extint, extsize;
+	extern int extint, extsize;
 	extern u_long extint_call;
 	u_long offset = (u_long)handler - (u_long)&extint_call;
 	int omsr, msr;
@@ -410,7 +425,7 @@ install_extint(handler)
 	asm volatile ("mfmsr %0; andi. %1,%0,%2; mtmsr %1"
 		      : "=r"(omsr), "=r"(msr) : "K"((u_short)~PSL_EE));
 	extint_call = (extint_call & 0xfc000003) | offset;
-	bcopy(&extint, (void *)EXC_EXI, (size_t)&extsize);
+	memcpy((void *)EXC_EXI, &extint, (size_t)&extsize);
 	__syncicache((void *)&extint_call, sizeof extint_call);
 	__syncicache((void *)EXC_EXI, (int)&extsize);
 	asm volatile ("mtmsr %0" :: "r"(omsr));
@@ -434,9 +449,9 @@ cpu_startup()
 	v = (caddr_t)proc0paddr + USPACE;
 
 	printf("%s", version);
-	identifycpu(cpu_model);
+	cpu_identify(NULL, 0);
 
-	format_bytes(pbuf, sizeof(pbuf), ctob(physmem));
+	format_bytes(pbuf, sizeof(pbuf), ctob((u_int)physmem));
 	printf("total memory = %s\n", pbuf);
 
 	/*
@@ -458,7 +473,7 @@ cpu_startup()
 	if (uvm_map(kernel_map, (vaddr_t *)&minaddr, round_page(sz),
 		NULL, UVM_UNKNOWN_OFFSET, 0,
 		UVM_MAPFLAG(UVM_PROT_NONE, UVM_PROT_NONE, UVM_INH_NONE,
-			    UVM_ADV_NORMAL, 0)) != KERN_SUCCESS)
+			    UVM_ADV_NORMAL, 0)) != 0)
 		panic("startup: cannot allocate VM for buffers");
 	buffers = (char *)minaddr;
 	base = bufpages / nbuf;
@@ -481,13 +496,13 @@ cpu_startup()
 			if (pg == NULL)
 				panic("cpu_startup: not enough memory for "
 				    "buffer cache");
-			pmap_enter(kernel_map->pmap, curbuf,
-			    VM_PAGE_TO_PHYS(pg), VM_PROT_READ|VM_PROT_WRITE,
-			    VM_PROT_READ|VM_PROT_WRITE|PMAP_WIRED);
+			pmap_kenter_pa(curbuf, VM_PAGE_TO_PHYS(pg),
+			    VM_PROT_READ|VM_PROT_WRITE);
 			curbuf += PAGE_SIZE;
 			curbufsize -= PAGE_SIZE;
 		}
 	}
+	pmap_update(pmap_kernel());
 
 	/*
 	 * Allocate a submap for exec arguments.  This map effectively
@@ -502,11 +517,15 @@ cpu_startup()
 	phys_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
 				 VM_PHYS_SIZE, 0, FALSE, NULL);
 
+#ifndef PMAP_MAP_POOLPAGE
 	/*
 	 * No need to allocate an mbuf cluster submap.  Mbuf clusters
 	 * are allocated via the pool allocator, and we use direct-mapped
 	 * pool pages.
 	 */
+	mb_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
+	    mclbytes*nmbclusters, VM_MAP_INTRSAFE, FALSE, NULL);
+#endif
 
 	format_bytes(pbuf, sizeof(pbuf), ptoa(uvmexp.free));
 	printf("avail memory = %s\n", pbuf);
@@ -576,13 +595,14 @@ void
 softserial()
 {
 #if NZSC > 0
-	zssoft();
+	zssoft(NULL);
 #endif
 #if NCOM > 0
 	comsoft();
 #endif
 }
 
+#if 0
 /*
  * Stray interrupts.
  */
@@ -592,6 +612,7 @@ strayintr(irq)
 {
 	log(LOG_ERR, "stray interrupt %d\n", irq);
 }
+#endif
 
 /*
  * Halt or reboot the machine after syncing/dumping according to howto.
@@ -611,6 +632,12 @@ cpu_reboot(howto, what)
 		vfs_shutdown();		/* sync */
 		resettodr();		/* set wall clock */
 	}
+
+#ifdef MULTIPROCESSOR
+	/* Halt other CPU.  XXX for now... */
+	macppc_send_ipi(&cpu_info[1 - cpu_number()], MACPPC_IPI_HALT);
+	delay(100000);	/* XXX */
+#endif
 
 	splhigh();
 
@@ -661,9 +688,10 @@ cpu_reboot(howto, what)
 #if NADB > 0
 	adb_restart();	/* not return */
 #endif
-	ppc_boot(str);
+	ppc_exit();
 }
 
+#if 0
 /*
  * OpenFirmware callback routine
  */
@@ -673,6 +701,7 @@ callback(p)
 {
 	panic("callback");	/* for now			XXX */
 }
+#endif
 
 int
 lcsplx(ipl)
@@ -728,11 +757,11 @@ mapiodev(pa, len)
 		return NULL;
 
 	for (; len > 0; len -= NBPG) {
-		pmap_enter(pmap_kernel(), taddr, faddr,
-			   VM_PROT_READ | VM_PROT_WRITE, PMAP_WIRED);
+		pmap_kenter_pa(taddr, faddr, VM_PROT_READ | VM_PROT_WRITE);
 		faddr += NBPG;
 		taddr += NBPG;
 	}
+	pmap_update(pmap_kernel());
 	return (void *)(va + off);
 }
 
@@ -754,7 +783,7 @@ cninit()
 		goto nocons;
 
 	node = OF_instance_to_package(stdout);
-	bzero(type, sizeof(type));
+	memset(type, 0, sizeof(type));
 	if (OF_getprop(node, "device_type", type, sizeof(type)) == -1)
 		goto nocons;
 
@@ -804,10 +833,14 @@ struct usb_kbd_ihandles {
 void
 cninit_kd()
 {
-	int stdin, akbd;
-	int node;
-	struct usb_kbd_ihandles *ukbds;
+	int stdin, node;
 	char name[16];
+#if NAKBD > 0
+	int akbd;
+#endif
+#if NUKBD > 0
+	struct usb_kbd_ihandles *ukbds;
+#endif
 
 	/*
 	 * Attach the console output now (so we can see debugging messages,
@@ -825,7 +858,7 @@ cninit_kd()
 	}
 
 	node = OF_instance_to_package(stdin);
-	bzero(name, sizeof(name));
+	memset(name, 0, sizeof(name));
 	OF_getprop(node, "name", name, sizeof(name));
 	if (strcmp(name, "keyboard") != 0) {
 		printf("WARNING: stdin is not a keyboard: %s\n", name);
@@ -833,7 +866,7 @@ cninit_kd()
 	}
 
 #if NAKBD > 0
-	bzero(name, sizeof(name));
+	memset(name, 0, sizeof(name));
 	OF_getprop(OF_parent(node), "name", name, sizeof(name));
 	if (strcmp(name, "adb") == 0) {
 		printf("console keyboard type: ADB\n");
@@ -900,12 +933,23 @@ cninit_kd()
 	}
 #endif
 
+#if NUKBD > 0
+	/*
+	 * XXX Old firmware does not have `usb-kbd-ihandles method.  Assume
+	 * XXX USB keyboard anyway.
+	 */
+	printf("console keyboard type: USB\n");
+	ukbd_cnattach();
+	goto kbd_found;
+#endif
+
 	/*
 	 * No keyboard is found.  Just return.
 	 */
 	printf("no console keyboard\n");
 	return;
 
+#if NAKBD + NUKBD > 0
 kbd_found:
 	/*
 	 * XXX This is a little gross, but we don't get to call
@@ -913,6 +957,7 @@ kbd_found:
 	 */
 	ofkbd_ihandle = stdin;
 	wsdisplay_set_cons_kbd(ofkbd_cngetc, NULL, NULL);
+#endif
 }
 #endif
 
@@ -932,3 +977,45 @@ ofkbd_cngetc(dev)
 
 	return c;
 }
+
+#ifdef MULTIPROCESSOR
+void
+save_fpu_proc(p)
+	struct proc *p;
+{
+	volatile struct cpu_info *fpcpu;
+	int i;
+	extern volatile int IPI[];	/* XXX */
+
+	fpcpu = p->p_addr->u_pcb.pcb_fpcpu;
+	if (fpcpu == curcpu()) {
+		save_fpu(p);
+		return;
+	}
+
+#if 0
+	printf("save_fpu_proc{%d} pid = %d, fpcpu->ci_cpuid = %d\n",
+	    cpu_number(), p->p_pid, fpcpu->ci_cpuid);
+#endif
+
+	macppc_send_ipi(fpcpu, MACPPC_IPI_FLUSH_FPU);
+
+	/* Wait for flush. */
+#if 0
+	while (fpcpu->ci_fpuproc);
+#else
+	for (i = 0; i < 0x3fffffff; i++) {
+		if (fpcpu->ci_fpuproc == NULL)
+			goto done;
+	}
+	printf("save_fpu_proc{%d} pid = %d, fpcpu->ci_cpuid = %d\n",
+	    cpu_number(), p->p_pid, fpcpu->ci_cpuid);
+	printf("IPI[0] = 0x%x, IPI[1] = 0x%x\n", IPI[0], IPI[1]);
+	printf("cpl 0x%x 0x%x\n", cpu_info[0].ci_cpl, cpu_info[1].ci_cpl);
+	printf("ipending 0x%x 0x%x\n", cpu_info[0].ci_ipending, cpu_info[1].ci_ipending);
+	panic("save_fpu_proc");
+done:;
+
+#endif
+}
+#endif /* MULTIPROCESSOR */

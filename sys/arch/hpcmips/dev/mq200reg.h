@@ -1,7 +1,7 @@
-/*	$NetBSD: mq200reg.h,v 1.4 2001/01/07 07:29:33 takemura Exp $	*/
+/*	$NetBSD: mq200reg.h,v 1.6 2001/03/25 13:06:53 takemura Exp $	*/
 
 /*-
- * Copyright (c) 2000 Takemura Shin
+ * Copyright (c) 2000, 2001 TAKEMURA Shin
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -38,6 +38,11 @@
 #define MQ200_POWERSTATE_D2	2
 #define MQ200_POWERSTATE_D3	3
 
+#define MQ200_CLOCK_BUS		0
+#define MQ200_CLOCK_PLL1	1
+#define MQ200_CLOCK_PLL2	2
+#define MQ200_CLOCK_PLL3	3
+
 #define MQ200_FRAMEBUFFER	0x000000	/* frame buffer base address */
 #define MQ200_PM		0x600000	/* power management	*/
 #define MQ200_CC		0x602000	/* CPU interface	*/
@@ -63,11 +68,24 @@
  */
 #define MQ200_MMR(n)		(MQ200_MM+(n)*4)
 #	define MQ200_MM00_ENABLE		(1<<0)
-#	define MQ200_MM00_RESET		(1<<1)
-#	define MQ200_MM00_DRAM_RESET	(1<<2)
-#	define MQ200_MM01_CLK_PLL1	(0<<0)
-#	define MQ200_MM01_CLK_BUS	(1<<0)
-#	define MQ200_MM01_CLK_PLL2	(1<<0)
+#	define MQ200_MM00_RESET			(1<<1)
+#	define MQ200_MM00_DRAM_RESET		(1<<2)
+#	define MQ200_MM01_CLK_PLL1		(0<<0)
+#	define MQ200_MM01_CLK_BUS		(1<<0)
+#	define MQ200_MM01_CLK_PLL2		(1<<0)
+#	define MQ200_MM01_SLOW_REFRESH_EN	(1<<1)
+#	define MQ200_MM01_CPU_PB_EN		(1<<2)
+#	define MQ200_MM01_GC1_PB_EN		(1<<3)
+#	define MQ200_MM01_GC2_PB_EN		(1<<4)
+#	define MQ200_MM01_STN_READ_PB_EN	(1<<5)
+#	define MQ200_MM01_STN_WRITE_PB_EN	(1<<6)
+#	define MQ200_MM01_GE_PB_EN		(1<<7)
+	/* bits 11-8 is reserved */
+#	define MQ200_MM01_REFRESH_SHIFT		12
+#	define MQ200_MM01_REFRESH_MASK		0x03fff000
+	/* bits 29 is reserved	*/
+#	define MQ200_MM01_DRAM_AUTO_REFRESH_EN	(1<<30)
+#	define MQ200_MM01_DRAM_STANDBY_EN	(1<<31)
 
 /*
  * Interrupt Controller
@@ -78,7 +96,7 @@
  */
 #define MQ200_GC1		0	/* graphice controller 1*/
 #define MQ200_GC2		1	/* graphice controller 2*/
-#define MQ200_GCR(n)		(MQ200_GC(1)+(n)*4)
+#define MQ200_GCR(n)		(MQ200_GC(0)+(n)*4)
 /* GC Control (GC00R and GC20R)	*/
 #define MQ200_GCCR(n)		(MQ200_GC(n)+0x00)
 #	define MQ200_GCC_ENABLE		(1<<0)
@@ -612,6 +630,7 @@
  */
 #define MQ200_PMCR	(MQ200_PM + 0x00)
 #	define MQ200_PMC_PLL1_N		(1<<0)
+#	define MQ200_PMC_PLL1_N_SHIFT	5
 #	define MQ200_PMC_PLL2_ENABLE	(1<<2)
 #	define MQ200_PMC_PLL3_ENABLE	(1<<3)
 #	define MQ200_PMC_IMMEDIATELY	(1<<5)
@@ -667,6 +686,7 @@
  * Fout: PLL output frequency
  * Fref: reference frequency(internal oscillator or external clock)
  */
+#define MQ200_PLL1R	(MQ200_DC + 0x00)
 #define MQ200_PLL2R	(MQ200_PM + 0x18)
 #define MQ200_PLL3R	(MQ200_PM + 0x1c)
 #define MQ200_PLL_EXTCLK	(1<<0)
@@ -677,5 +697,6 @@
 #define MQ200_PLL_N_SHIFT	8
 #define MQ200_PLL_M_MASK	0x00ff0000
 #define MQ200_PLL_M_SHIFT	16
+#define MQ200_PLL_PARAM_MASK	(MQ200_PLL_P_MASK|MQ200_PLL_N_MASK|MQ200_PLL_M_MASK)
 #define MQ200_PLL_TRIM_MASK	0xf0000000
 #define MQ200_PLL_TRIM_SHIFT	28

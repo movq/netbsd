@@ -1,4 +1,4 @@
-/* -*-C++-*-	$NetBSD: load_elf.h,v 1.1 2001/02/09 18:34:47 uch Exp $	*/
+/* -*-C++-*-	$NetBSD: load_elf.h,v 1.4 2001/07/03 20:38:03 uch Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -45,16 +45,29 @@ class ElfLoader : public Loader {
 private:
 	Elf_Ehdr _eh;
 	Elf_Phdr _ph[16];
+	Elf_Shdr _sh[16];
+
+	struct _symbol_block {
+		BOOL enable;
+		char *header;
+		size_t header_size;
+		Elf_Shdr *shstr;
+		off_t stroff;
+		Elf_Shdr *shsym;
+		off_t symoff;
+	} _sym_blk;
 
 	BOOL is_elf_file(void) {
 		return
-			_eh.e_ident[EI_MAG0] == ELFMAG0 &&
-			_eh.e_ident[EI_MAG1] == ELFMAG1 &&
-			_eh.e_ident[EI_MAG2] == ELFMAG2 &&
-			_eh.e_ident[EI_MAG3] == ELFMAG3;
+		    _eh.e_ident[EI_MAG0] == ELFMAG0 &&
+		    _eh.e_ident[EI_MAG1] == ELFMAG1 &&
+		    _eh.e_ident[EI_MAG2] == ELFMAG2 &&
+		    _eh.e_ident[EI_MAG3] == ELFMAG3;
 	}
 	BOOL read_header(void);
 	struct PageTag *load_page(vaddr_t, off_t, size_t, struct PageTag *);
+	size_t symbol_block_size(void);
+	void load_symbol_block(vaddr_t);
 			     
 public:
 	ElfLoader(Console *&, MemoryManager *&);

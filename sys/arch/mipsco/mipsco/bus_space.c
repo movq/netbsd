@@ -1,4 +1,4 @@
-/*	$NetBSD: bus_space.c,v 1.1 2000/08/12 22:58:51 wdk Exp $ 	*/
+/*	$NetBSD: bus_space.c,v 1.3 2001/09/15 00:49:54 wdk Exp $ 	*/
 
 /*
  * Copyright (c) 1996, 1997, 1998 The NetBSD Foundation, Inc.
@@ -67,13 +67,12 @@ mipsco_bus_space_init(bst, name, paddr, vaddr, start, size)
 	bst->bs_map = mipsco_bus_space_map;
 	bst->bs_unmap = mipsco_bus_space_unmap;
 	bst->bs_subregion = mipsco_bus_space_subregion;
+	bst->bs_mmap = mipsco_bus_space_mmap;
 	bst->bs_alloc = mipsco_bus_space_alloc;
 	bst->bs_free = mipsco_bus_space_free;
 	bst->bs_aux = NULL;
-	bst->bs_stride_1 = 0;
-	bst->bs_stride_2 = 0;
-	bst->bs_stride_4 = 0;
-	bst->bs_stride_8 = 0;
+	bst->bs_bswap = 0; /* No byte swap for stream methods */
+	mipsco_bus_space_set_aligned_stride(bst, 0);
 }
 
 void
@@ -86,25 +85,26 @@ mipsco_bus_space_init_extent(bst, storage, storagesize)
 	    bst->bs_start, bst->bs_start + bst->bs_size, M_DEVBUF,
 	    storage, storagesize, EX_NOWAIT);
 	if (bst->bs_extent == NULL)
-		panic("mipsco_bus_space_init_extent: cannot create extent map %s",
-		    bst->bs_name);
+	    panic("mipsco_bus_space_init_extent: cannot create extent map %s",
+		  bst->bs_name);
 }
 
 void
-mipsco_bus_space_set_aligned_stride(bst, alignment_shift)
+mipsco_bus_space_set_aligned_stride(bst, shift)
 	bus_space_tag_t bst;
-	unsigned int alignment_shift;		/* log2(alignment) */
+	unsigned int shift;		/* log2(alignment) */
 {
-	bst->bs_stride_1 = alignment_shift;
-	if (alignment_shift > 0)
-		--alignment_shift;
-	bst->bs_stride_2 = alignment_shift;
-	if (alignment_shift > 0)
-		--alignment_shift;
-	bst->bs_stride_4 = alignment_shift;
-	if (alignment_shift > 0)
-		--alignment_shift;
-	bst->bs_stride_8 = alignment_shift;
+	bst->bs_stride = shift;
+
+	if (shift == 2) {		/* XXX Assumes Big Endian & 4B */
+	    bst->bs_offset_1 = 3;
+	    bst->bs_offset_2 = 2;
+	} else {
+	    bst->bs_offset_1 = 0;
+	    bst->bs_offset_2 = 0;
+	}
+	bst->bs_offset_4 = 0;
+	bst->bs_offset_8 = 0;
 }
 
 static int malloc_safe = 0;
@@ -129,7 +129,8 @@ mipsco_bus_space_compose_handle(bst, addr, size, flags, bshp)
 	int flags;
 	bus_space_handle_t *bshp;
 {
-	bus_space_handle_t bsh = bst->bs_vbase + (addr - bst->bs_start);
+	bus_space_handle_t bsh = bst->bs_vbase +
+	    ((addr - bst->bs_start) << bst->bs_stride);
 
 	/*
 	 * Since all buses can be linearly mappable, we don't have to check
@@ -246,8 +247,29 @@ mipsco_bus_space_subregion(bst, bsh, offset, size, nbshp)
 	bus_size_t size;
 	bus_space_handle_t *nbshp;
 {
-	*nbshp = bsh + offset;
+	*nbshp = bsh + (offset << bst->bs_stride);
 	return (0);
+}
+
+paddr_t
+mipsco_bus_space_mmap(bst, addr, off, prot, flags)
+	bus_space_tag_t bst;
+	bus_addr_t addr;
+	off_t off;
+	int prot;
+	int flags;
+{
+
+	/*
+	 * XXX We do not disallow mmap'ing of I/O space here,
+	 * XXX which we should be doing.
+	 */
+
+	if (addr < bst->bs_start ||
+	    (addr + off) >= (bst->bs_start + bst->bs_size))
+		return (-1);
+
+	return (mips_btop(bst->bs_pbase + (addr - bst->bs_start) + off));
 }
 
 int

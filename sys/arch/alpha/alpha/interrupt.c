@@ -1,7 +1,7 @@
-/* $NetBSD: interrupt.c,v 1.55 2001/01/15 20:19:50 thorpej Exp $ */
+/* $NetBSD: interrupt.c,v 1.63 2001/07/27 00:25:18 thorpej Exp $ */
 
 /*-
- * Copyright (c) 2000 The NetBSD Foundation, Inc.
+ * Copyright (c) 2000, 2001 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -72,7 +72,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: interrupt.c,v 1.55 2001/01/15 20:19:50 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: interrupt.c,v 1.63 2001/07/27 00:25:18 thorpej Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -80,6 +80,8 @@ __KERNEL_RCSID(0, "$NetBSD: interrupt.c,v 1.55 2001/01/15 20:19:50 thorpej Exp $
 #include <sys/vmmeter.h>
 #include <sys/sched.h>
 #include <sys/malloc.h>
+#include <sys/kernel.h>
+#include <sys/time.h>
 
 #include <machine/cpuvar.h>
 
@@ -101,12 +103,110 @@ __KERNEL_RCSID(0, "$NetBSD: interrupt.c,v 1.55 2001/01/15 20:19:50 thorpej Exp $
 #include <sys/device.h>
 #endif
 
+struct scbvec scb_iovectab[SCB_VECTOIDX(SCB_SIZE - SCB_IOVECBASE)];
+
 void	netintr(void);
+
+void	scb_stray(void *, u_long);
+
+void
+scb_init(void)
+{
+	u_long i;
+
+	for (i = 0; i < SCB_NIOVECS; i++) {
+		scb_iovectab[i].scb_func = scb_stray;
+		scb_iovectab[i].scb_arg = NULL;
+	}
+}
+
+void
+scb_stray(void *arg, u_long vec)
+{
+
+	printf("WARNING: stray interrupt, vector 0x%lx\n", vec);
+}
+
+void
+scb_set(u_long vec, void (*func)(void *, u_long), void *arg)
+{
+	u_long idx;
+	int s;
+
+	s = splhigh();
+
+	if (vec < SCB_IOVECBASE || vec >= SCB_SIZE ||
+	    (vec & (SCB_VECSIZE - 1)) != 0)
+		panic("scb_set: bad vector 0x%lx", vec);
+
+	idx = SCB_VECTOIDX(vec - SCB_IOVECBASE);
+
+	if (scb_iovectab[idx].scb_func != scb_stray)
+		panic("scb_set: vector 0x%lx already occupied", vec);
+
+	scb_iovectab[idx].scb_func = func;
+	scb_iovectab[idx].scb_arg = arg;
+
+	splx(s);
+}
+
+u_long
+scb_alloc(void (*func)(void *, u_long), void *arg)
+{
+	u_long vec, idx;
+	int s;
+
+	s = splhigh();
+
+	/*
+	 * Allocate "downwards", to avoid bumping into
+	 * interrupts which are likely to be at the lower
+	 * vector numbers.
+	 */
+	for (vec = SCB_SIZE - SCB_VECSIZE;
+	     vec >= SCB_IOVECBASE; vec -= SCB_VECSIZE) {
+		idx = SCB_VECTOIDX(vec - SCB_IOVECBASE);
+		if (scb_iovectab[idx].scb_func == scb_stray) {
+			scb_iovectab[idx].scb_func = func;
+			scb_iovectab[idx].scb_arg = arg;
+			splx(s);
+			return (vec);
+		}
+	}
+
+	splx(s);
+
+	return (SCB_ALLOC_FAILED);
+}
+
+void
+scb_free(u_long vec)
+{
+	u_long idx;
+	int s;
+
+	s = splhigh();
+
+	if (vec < SCB_IOVECBASE || vec >= SCB_SIZE ||
+	    (vec & (SCB_VECSIZE - 1)) != 0)
+		panic("scb_free: bad vector 0x%lx", vec);
+
+	idx = SCB_VECTOIDX(vec - SCB_IOVECBASE); 
+
+	if (scb_iovectab[idx].scb_func == scb_stray)
+		panic("scb_free: vector 0x%lx is empty", vec);
+
+	scb_iovectab[idx].scb_func = scb_stray;
+	scb_iovectab[idx].scb_arg = (void *) vec;
+
+	splx(s);
+}
 
 void
 interrupt(unsigned long a0, unsigned long a1, unsigned long a2,
     struct trapframe *framep)
 {
+	static int microset_iter;	/* call microset() once per sec. */
 	struct cpu_info *ci = curcpu();
 	struct cpu_softc *sc = ci->ci_softc;
 	struct proc *p;
@@ -141,6 +241,23 @@ interrupt(unsigned long a0, unsigned long a1, unsigned long a2,
 		 */
 		sc->sc_evcnt_clock.ev_count++;
 		uvmexp.intrs++;
+		/*
+		 * Update the PCC frequency for use by microtime().
+		 */
+		if (
+#if defined(MULTIPROCESSOR)
+		    CPU_IS_PRIMARY(ci) &&
+#endif
+
+		    microset_iter-- == 0) {
+			microset_iter = hz-1;
+			microset_time = time;
+#if defined(MULTIPROCESSOR)
+			alpha_multicast_ipi(cpus_running,
+			    ALPHA_IPI_MICROSET);
+#endif
+			microset(ci, framep);
+		}
 		if (platform.clockintr) {
 			/*
 			 * Call hardclock().  This will also call
@@ -162,7 +279,8 @@ interrupt(unsigned long a0, unsigned long a1, unsigned long a2,
 	case ALPHA_INTR_ERROR:	/* Machine Check or Correctable Error */
 		atomic_add_ulong(&ci->ci_intrdepth, 1);
 		a0 = alpha_pal_rdmces();
-		if (platform.mcheck_handler)
+		if (platform.mcheck_handler != NULL &&
+		    (void *)framep->tf_regs[FRAME_PC] != XentArith)
 			(*platform.mcheck_handler)(a0, framep, a1, a2);
 		else
 			machine_check(a0, framep, a1, a2);
@@ -170,19 +288,26 @@ interrupt(unsigned long a0, unsigned long a1, unsigned long a2,
 		break;
 
 	case ALPHA_INTR_DEVICE:	/* I/O device interrupt */
+	    {
+		struct scbvec *scb;
+
+		KDASSERT(a1 >= SCB_IOVECBASE && a1 < SCB_SIZE);
+
 		atomic_add_ulong(&sc->sc_evcnt_device.ev_count, 1);
 		atomic_add_ulong(&ci->ci_intrdepth, 1);
 
 		KERNEL_LOCK(LK_CANRECURSE|LK_EXCLUSIVE);
 
 		uvmexp.intrs++;
-		if (platform.iointr)
-			(*platform.iointr)(framep, a1);
+
+		scb = &scb_iovectab[SCB_VECTOIDX(a1 - SCB_IOVECBASE)];
+		(*scb->scb_func)(scb->scb_arg, a1);
 
 		KERNEL_UNLOCK();
 
 		atomic_sub_ulong(&ci->ci_intrdepth, 1);
 		break;
+	    }
 
 	case ALPHA_INTR_PERF:	/* performance counter interrupt */
 		printf("WARNING: received performance counter interrupt!\n");
@@ -212,21 +337,12 @@ interrupt(unsigned long a0, unsigned long a1, unsigned long a2,
 }
 
 void
-set_iointr(void (*niointr)(void *, unsigned long))
-{
-
-	if (platform.iointr)
-		panic("set iointr twice");
-	platform.iointr = niointr;
-}
-
-
-void
 machine_check(unsigned long mces, struct trapframe *framep,
     unsigned long vector, unsigned long param)
 {
 	const char *type;
 	struct mchkinfo *mcp;
+	static struct timeval ratelimit[1];
 
 	mcp = &curcpu()->ci_mcinfo;
 	/* Make sure it's an error we know about. */
@@ -259,8 +375,11 @@ machine_check(unsigned long mces, struct trapframe *framep,
 	return;
 
 fatal:
-	/* Clear pending machine checks and correctable errors */
 	alpha_pal_wrmces(mces);
+	if ((void *)framep->tf_regs[FRAME_PC] == XentArith) {
+		rlprintf(ratelimit, "Stray machine check\n");
+		return;
+	}
 
 	printf("\n");
 	printf("%s:\n", type);
@@ -270,6 +389,7 @@ fatal:
 	printf("    param   = 0x%lx\n", param);
 	printf("    pc      = 0x%lx\n", framep->tf_regs[FRAME_PC]);
 	printf("    ra      = 0x%lx\n", framep->tf_regs[FRAME_RA]);
+	printf("    code    = 0x%lx\n", *(unsigned long *)(param + 0x10));
 	printf("    curproc = %p\n", curproc);
 	if (curproc != NULL)
 		printf("        pid = %d, comm = %s\n", curproc->p_pid,
@@ -381,9 +501,28 @@ netintr()
 }
 
 struct alpha_soft_intr alpha_soft_intrs[IPL_NSOFT];
+__volatile unsigned long ssir;
 
 /* XXX For legacy software interrupts. */
 struct alpha_soft_intrhand *softnet_intrhand;
+
+/*
+ * spl0:
+ *
+ *	Lower interrupt priority to IPL 0 -- must check for
+ *	software interrupts.
+ */
+void
+spl0(void)
+{
+
+	if (ssir) {
+		(void) alpha_pal_swpipl(ALPHA_PSL_IPL_SOFT);
+		softintr_dispatch();
+	}
+
+	(void) alpha_pal_swpipl(ALPHA_PSL_IPL_0);
+}
 
 /*
  * softintr_init:
@@ -399,7 +538,7 @@ softintr_init()
 
 	for (i = 0; i < IPL_NSOFT; i++) {
 		asi = &alpha_soft_intrs[i];
-		LIST_INIT(&asi->softintr_q);
+		TAILQ_INIT(&asi->softintr_q);
 		simple_lock_init(&asi->softintr_slock);
 		asi->softintr_ipl = i;
 		evcnt_attach_dynamic(&asi->softintr_evcnt, EVCNT_TYPE_INTR,
@@ -425,30 +564,49 @@ softintr_dispatch()
 	struct alpha_soft_intrhand *sih;
 	u_int64_t n, i;
 
+#ifdef DEBUG
+	n = alpha_pal_rdps() & ALPHA_PSL_IPL_MASK;
+	if (n != ALPHA_PSL_IPL_SOFT)
+		panic("softintr_dispatch: entry at ipl %ld", n);
+#endif
+
 	KERNEL_LOCK(LK_CANRECURSE|LK_EXCLUSIVE);
+
+#ifdef DEBUG
+	n = alpha_pal_rdps() & ALPHA_PSL_IPL_MASK;
+	if (n != ALPHA_PSL_IPL_SOFT)
+		panic("softintr_dispatch: after kernel lock at ipl %ld", n);
+#endif
 
 	while ((n = atomic_loadlatch_ulong(&ssir, 0)) != 0) {
 		for (i = 0; i < IPL_NSOFT; i++) {
 			if ((n & (1 << i)) == 0)
 				continue;
-			asi = &alpha_soft_intrs[i];
 
-			/* Already at splsoft() */
-			simple_lock(&asi->softintr_slock);
+			asi = &alpha_soft_intrs[i];
 
 			asi->softintr_evcnt.ev_count++;
 
-			for (sih = LIST_FIRST(&asi->softintr_q);
-			     sih != NULL;
-			     sih = LIST_NEXT(sih, sih_q)) {
-				if (sih->sih_pending) {
-					uvmexp.softs++;
-					sih->sih_pending = 0;
-					(*sih->sih_fn)(sih->sih_arg);
-				}
-			}
+			for (;;) {
+				(void) alpha_pal_swpipl(ALPHA_PSL_IPL_HIGH);
+				simple_lock(&asi->softintr_slock);
 
-			simple_unlock(&asi->softintr_slock);
+				sih = TAILQ_FIRST(&asi->softintr_q);
+				if (sih != NULL) {
+					TAILQ_REMOVE(&asi->softintr_q, sih,
+					    sih_q);
+					sih->sih_pending = 0;
+				}
+
+				simple_unlock(&asi->softintr_slock);
+				(void) alpha_pal_swpipl(ALPHA_PSL_IPL_SOFT);
+
+				if (sih == NULL)
+					break;
+
+				uvmexp.softs++;
+				(*sih->sih_fn)(sih->sih_arg);
+			}
 		}
 	}
 
@@ -465,7 +623,6 @@ softintr_establish(int ipl, void (*func)(void *), void *arg)
 {
 	struct alpha_soft_intr *asi;
 	struct alpha_soft_intrhand *sih;
-	int s;
 
 	if (__predict_false(ipl >= IPL_NSOFT || ipl < 0))
 		panic("softintr_establish");
@@ -478,11 +635,6 @@ softintr_establish(int ipl, void (*func)(void *), void *arg)
 		sih->sih_fn = func;
 		sih->sih_arg = arg;
 		sih->sih_pending = 0;
-		s = splsoft();
-		simple_lock(&asi->softintr_slock);
-		LIST_INSERT_HEAD(&asi->softintr_q, sih, sih_q);
-		simple_unlock(&asi->softintr_slock);
-		splx(s);
 	}
 	return (sih);
 }
@@ -499,13 +651,27 @@ softintr_disestablish(void *arg)
 	struct alpha_soft_intr *asi = sih->sih_intrhead;
 	int s;
 
-	(void) asi;	/* XXX Unused if simple locks are noops. */
-
-	s = splsoft();
+	s = splhigh();
 	simple_lock(&asi->softintr_slock);
-	LIST_REMOVE(sih, sih_q);
+	if (sih->sih_pending) {
+		TAILQ_REMOVE(&asi->softintr_q, sih, sih_q);
+		sih->sih_pending = 0;
+	}
 	simple_unlock(&asi->softintr_slock);
 	splx(s);
 
 	free(sih, M_DEVBUF);
+}
+
+/*
+ * Security sensitive rate limiting printf
+ */
+void
+rlprintf(struct timeval *t, const char *fmt, ...)
+{
+	va_list ap;
+	static const struct timeval msgperiod[1] = {{ 5, 0 }};
+
+	if (ratecheck(t, msgperiod))
+		vprintf(fmt, ap);
 }

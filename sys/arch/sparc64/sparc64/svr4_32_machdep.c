@@ -1,4 +1,4 @@
-/*	$NetBSD: svr4_32_machdep.c,v 1.1 2001/02/11 00:39:37 eeh Exp $	 */
+/*	$NetBSD: svr4_32_machdep.c,v 1.4 2001/06/17 13:10:05 kleink Exp $	 */
 
 /*-
  * Copyright (c) 1994 The NetBSD Foundation, Inc.
@@ -154,7 +154,7 @@ svr4_32_getmcontext(p, mc, flags)
 	/*
 	 * Get the general purpose registers
 	 */
-	r[SVR4_SPARC_PSR] = tf->tf_tstate;
+	r[SVR4_SPARC_PSR] = TSTATECCR_TO_PSR(tf->tf_tstate);
 	r[SVR4_SPARC_PC] = tf->tf_pc;
 	r[SVR4_SPARC_nPC] = tf->tf_npc;
 	r[SVR4_SPARC_Y] = tf->tf_y;
@@ -180,7 +180,8 @@ svr4_32_getmcontext(p, mc, flags)
 	/*
 	 * Get the floating point registers
 	 */
-	bcopy(fps->fs_regs, f->fpu_regs, sizeof(fps->fs_regs));
+	/* Note: copies only pre-v9 floating point registers. */
+	bcopy(fps->fs_regs, f->fpu_regs, sizeof(f->fpu_regs));
 	f->fp_nqsize = sizeof(struct fp_qentry);
 	f->fp_nqel = fps->fs_qsize;
 	f->fp_fsr = fps->fs_fsr;
@@ -192,7 +193,7 @@ svr4_32_getmcontext(p, mc, flags)
 #endif
 			return;
 		}
-		if (copyout(fps->fs_queue, f->fp_q, sz) != 0) {
+		if (copyout(fps->fs_queue, (void *)(u_long)f->fp_q, sz) != 0) {
 #ifdef DIAGNOSTIC
 			printf("getcontext: copy of fp_queue failed %d\n",
 			    error);
@@ -270,8 +271,8 @@ svr4_32_setmcontext(p, mc, flags)
 		}
 
 		/* take only psr ICC field */
-		tf->tf_tstate = (tf->tf_tstate & ~PSR_ICC) |
-		    (r[SVR4_SPARC_PSR] & PSR_ICC);
+		tf->tf_tstate = (tf->tf_tstate & ~TSTATE_CCR) |
+		    PSRCC_TO_TSTATE(r[SVR4_SPARC_PSR]);
 		tf->tf_pc = r[SVR4_SPARC_PC];
 		tf->tf_npc = r[SVR4_SPARC_nPC];
 		tf->tf_y = r[SVR4_SPARC_Y];
@@ -309,11 +310,13 @@ svr4_32_setmcontext(p, mc, flags)
 #endif
 			return EINVAL;
 		}
-		bcopy(f->fpu_regs, fps->fs_regs, sizeof(fps->fs_regs));
+		/* Note: touches only pre-v9 floating point registers. */
+		bcopy(f->fpu_regs, fps->fs_regs, sizeof(f->fpu_regs));
 		fps->fs_qsize = f->fp_nqel;
 		fps->fs_fsr = f->fp_fsr;
-		if (f->fp_q != NULL) {
-			if ((error = copyin(f->fp_q, fps->fs_queue,
+		if (f->fp_q != 0) {
+			if ((error = copyin((void *)(u_long)f->fp_q,
+			                    fps->fs_queue,
 					    f->fp_nqel * f->fp_nqsize)) != 0) {
 #ifdef DIAGNOSTIC
 				printf("setmcontext: fp_queue copy failed\n");

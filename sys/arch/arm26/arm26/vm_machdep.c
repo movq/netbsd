@@ -1,4 +1,4 @@
-/* $NetBSD: vm_machdep.c,v 1.14 2001/03/04 23:25:01 bjh21 Exp $ */
+/* $NetBSD: vm_machdep.c,v 1.19 2001/09/10 21:19:33 chris Exp $ */
 
 /*-
  * Copyright (c) 2000, 2001 Ben Harris
@@ -66,7 +66,7 @@
 
 #include <sys/param.h>
 
-__RCSID("$NetBSD: vm_machdep.c,v 1.14 2001/03/04 23:25:01 bjh21 Exp $");
+__RCSID("$NetBSD: vm_machdep.c,v 1.19 2001/09/10 21:19:33 chris Exp $");
 
 #include <sys/buf.h>
 #include <sys/mount.h> /* XXX syscallargs.h uses fhandle_t and fsid_t */
@@ -81,7 +81,7 @@ __RCSID("$NetBSD: vm_machdep.c,v 1.14 2001/03/04 23:25:01 bjh21 Exp $");
 #include <machine/intr.h>
 #include <machine/machdep.h>
 
-extern vm_map_t phys_map; /* XXX where? */
+extern struct vm_map *phys_map; /* XXX where? */
 
 /*
  * Finish a fork operation, with process p2 nearly set up.
@@ -192,8 +192,8 @@ vmapbuf(struct buf *bp, vsize_t len)
 	taddr = uvm_km_valloc_wait(phys_map, len);
 	bp->b_data = (caddr_t)(taddr + off);
 	len = atop(len);
-	prot = bp->b_flags & B_READ ? VM_PROT_READ :
-				      VM_PROT_READ | VM_PROT_WRITE;
+	prot = bp->b_flags & B_READ ? VM_PROT_READ | VM_PROT_WRITE :
+				      VM_PROT_READ;
 	while (len--) {
 		if (pmap_extract(vm_map_pmap(&p->p_vmspace->vm_map), faddr,
 		    &pa) == FALSE)
@@ -203,6 +203,7 @@ vmapbuf(struct buf *bp, vsize_t len)
 		faddr += PAGE_SIZE;
 		taddr += PAGE_SIZE;
 	}
+	pmap_update(vm_map_pmap(phys_map));
 }
 
 /*
@@ -218,6 +219,8 @@ vunmapbuf(struct buf *bp, vsize_t len)
 	addr = trunc_page((vaddr_t)bp->b_data);
 	off = (vaddr_t)bp->b_data - addr;
 	len = round_page(off + len);
+	pmap_remove(vm_map_pmap(phys_map), addr, addr + len);
+	pmap_update(vm_map_pmap(phys_map));
 	uvm_km_free_wakeup(phys_map, addr, len);
 	bp->b_data = bp->b_saveaddr;
 	bp->b_saveaddr = NULL;

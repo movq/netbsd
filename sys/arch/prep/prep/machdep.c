@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.15 2001/02/24 22:39:18 matt Exp $	*/
+/*	$NetBSD: machdep.c,v 1.27 2001/09/10 21:19:34 chris Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -58,11 +58,13 @@
 
 #include <net/netisr.h>
 
+#include <machine/autoconf.h>
 #include <machine/bat.h>
 #include <machine/bootinfo.h>
 #include <machine/bus.h>
 #include <machine/intr.h>
 #include <machine/pmap.h>
+#include <machine/platform.h>
 #include <machine/powerpc.h>
 #include <machine/residual.h>
 #include <machine/trap.h>
@@ -93,13 +95,13 @@
 #include <dev/ic/i8042reg.h>
 #include <dev/ic/pckbcvar.h>
 #endif
-#include "pckbd.h" /* for pckbc_machdep_cnattach */
 
 #include "com.h"
 #if (NCOM > 0)
 #include <sys/termios.h>
 #include <dev/ic/comreg.h>
 #include <dev/ic/comvar.h>
+void comsoft(void);
 #endif
 
 #ifdef DDB
@@ -108,7 +110,6 @@
 #endif
 
 void initppc __P((u_long, u_long, u_int, void *));
-void identifycpu __P((void));
 void dumpsys __P((void));
 void strayintr __P((int));
 int lcsplx __P((int));
@@ -119,15 +120,14 @@ struct cpu_info cpu_info_store;
 /*
  * Global variables used here and there
  */
-vm_map_t exec_map = NULL;
-vm_map_t mb_map = NULL;
-vm_map_t phys_map = NULL;
+struct vm_map *exec_map = NULL;
+struct vm_map *mb_map = NULL;
+struct vm_map *phys_map = NULL;
 
 char bootinfo[BOOTINFO_MAXSIZE];
 
 char machine[] = MACHINE;		/* machine */
 char machine_arch[] = MACHINE_ARCH;	/* machine architecture */
-char cpu_model[80];
 
 struct pcb *curpcb;
 struct pmap *curpm;
@@ -141,10 +141,6 @@ paddr_t prep_intr_reg;			/* PReP interrupt vector register */
 
 #define	OFMEMREGIONS	32
 struct mem_region physmemr[OFMEMREGIONS], availmemr[OFMEMREGIONS];
-
-int astpending;
-
-char *bootpath;
 
 paddr_t msgbuf_paddr;
 vaddr_t msgbuf_vaddr;
@@ -162,16 +158,16 @@ initppc(startkernel, endkernel, args, btinfo)
 	u_int args;
 	void *btinfo;
 {
-	extern trapcode, trapsize;
-	extern alitrap, alisize;
-	extern dsitrap, dsisize;
-	extern isitrap, isisize;
-	extern decrint, decrsize;
-	extern tlbimiss, tlbimsize;
-	extern tlbdlmiss, tlbdlmsize;
-	extern tlbdsmiss, tlbdsmsize;
+	extern int trapcode, trapsize;
+	extern int alitrap, alisize;
+	extern int dsitrap, dsisize;
+	extern int isitrap, isisize;
+	extern int decrint, decrsize;
+	extern int tlbimiss, tlbimsize;
+	extern int tlbdlmiss, tlbdlmsize;
+	extern int tlbdsmiss, tlbdsmsize;
 #ifdef DDB
-	extern ddblow, ddbsize;
+	extern int ddblow, ddbsize;
 	extern void *startsym, *endsym;
 #endif
 	int exc, scratch;
@@ -179,7 +175,7 @@ initppc(startkernel, endkernel, args, btinfo)
 	/*
 	 * copy bootinfo
 	 */
-	bcopy(btinfo, bootinfo, sizeof(bootinfo));
+	memcpy(bootinfo, btinfo, sizeof(bootinfo));
 
 	/*
 	 * copy residual data
@@ -194,7 +190,7 @@ initppc(startkernel, endkernel, args, btinfo)
 
 		if (((RESIDUAL *)resinfo->addr != 0) &&
 		    ((RESIDUAL *)resinfo->addr)->ResidualLength != 0) {
-			bcopy(resinfo->addr, &resdata, sizeof(resdata));
+			memcpy(&resdata, resinfo->addr, sizeof(resdata));
 			res = &resdata;
 		} else
 			panic("No residual data.");
@@ -229,8 +225,11 @@ initppc(startkernel, endkernel, args, btinfo)
 		ns_per_tick = 1000000000 / ticks_per_sec;
 	}
 
+	/* Initialize the CPU type */
+	ident_platform();
+
 	proc0.p_addr = proc0paddr;
-	bzero(proc0.p_addr, sizeof *proc0.p_addr);
+	memset(proc0.p_addr, 0, sizeof *proc0.p_addr);
 
 	curpcb = &proc0paddr->u_pcb;
 
@@ -301,7 +300,7 @@ initppc(startkernel, endkernel, args, btinfo)
 	for (exc = EXC_RSVD; exc <= EXC_LAST; exc += 0x100)
 		switch (exc) {
 		default:
-			bcopy(&trapcode, (void *)exc, (size_t)&trapsize);
+			memcpy((void *)exc, &trapcode, (size_t)&trapsize);
 			break;
 		case EXC_EXI:
 			/*
@@ -309,31 +308,34 @@ initppc(startkernel, endkernel, args, btinfo)
 			 */
 			break;
 		case EXC_ALI:
-			bcopy(&alitrap, (void *)EXC_ALI, (size_t)&alisize);
+			memcpy((void *)EXC_ALI, &alitrap, (size_t)&alisize);
 			break;
 		case EXC_DSI:
-			bcopy(&dsitrap, (void *)EXC_DSI, (size_t)&dsisize);
+			memcpy((void *)EXC_DSI, &dsitrap, (size_t)&dsisize);
 			break;
 		case EXC_ISI:
-			bcopy(&isitrap, (void *)EXC_ISI, (size_t)&isisize);
+			memcpy((void *)EXC_ISI, &isitrap, (size_t)&isisize);
 			break;
 		case EXC_DECR:
-			bcopy(&decrint, (void *)EXC_DECR, (size_t)&decrsize);
+			memcpy((void *)EXC_DECR, &decrint, (size_t)&decrsize);
 			break;
 		case EXC_IMISS:
-			bcopy(&tlbimiss, (void *)EXC_IMISS, (size_t)&tlbimsize);
+			memcpy((void *)EXC_IMISS, &tlbimiss,
+			    (size_t)&tlbimsize);
 			break;
 		case EXC_DLMISS:
-			bcopy(&tlbdlmiss, (void *)EXC_DLMISS, (size_t)&tlbdlmsize);
+			memcpy((void *)EXC_DLMISS, &tlbdlmiss,
+			    (size_t)&tlbdlmsize);
 			break;
 		case EXC_DSMISS:
-			bcopy(&tlbdsmiss, (void *)EXC_DSMISS, (size_t)&tlbdsmsize);
+			memcpy((void *)EXC_DSMISS, &tlbdsmiss,
+			    (size_t)&tlbdsmsize);
 			break;
 #ifdef DDB
 		case EXC_PGM:
 		case EXC_TRC:
 		case EXC_BPT:
-			bcopy(&ddblow, (void *)exc, (size_t)&ddbsize);
+			memcpy((void *)exc, &ddblow, (size_t)&ddbsize);
 			break;
 #endif
 		}
@@ -343,7 +345,7 @@ initppc(startkernel, endkernel, args, btinfo)
 	/*
 	 * external interrupt handler install
 	 */
-	install_extint(ext_intr);
+	install_extint(*platform->ext_intr);
 
 	/*
 	 * Now enable translation (and machine checks/recoverable interrupts).
@@ -378,52 +380,6 @@ mem_regions(mem, avail)
 	*avail = availmemr;
 }
 
-/*
- * This should probably be in autoconf!				XXX
- */
-void
-identifycpu()
-{
-	int cpu, pvr;
-
-	asm ("mfpvr %0" : "=r"(pvr));
-	cpu = pvr >> 16;
-	switch (cpu) {
-	case 1:
-		sprintf(cpu_model, "601");
-		break;
-	case 3:
-		sprintf(cpu_model, "603");
-		break;
-	case 4:
-		sprintf(cpu_model, "604");
-		break;
-	case 5:
-		sprintf(cpu_model, "602");
-		break;
-	case 6:
-		sprintf(cpu_model, "603e");
-		break;
-	case 7:
-		sprintf(cpu_model, "603ev");
-		break;
-	case 8:
-		sprintf(cpu_model, "750");
-		break;
-	case 9:
-		sprintf(cpu_model, "604ev");
-		break;
-	case 20:
-		sprintf(cpu_model, "620");
-		break;
-	default:
-		sprintf(cpu_model, "Version %x", cpu);
-		break;
-	}
-	sprintf(cpu_model + strlen(cpu_model), " (Revision %x)", pvr & 0xffff);
-	printf("CPU: PowerPC %s\n", cpu_model);
-}
-
 void
 install_extint(handler)
 	void (*handler) __P((void));
@@ -441,7 +397,7 @@ install_extint(handler)
 	asm volatile ("mfmsr %0; andi. %1,%0,%2; mtmsr %1"
 		      : "=r"(omsr), "=r"(msr) : "K"((u_short)~PSL_EE));
 	extint_call = (extint_call & 0xfc000003) | offset;
-	bcopy(&extint, (void *)EXC_EXI, (size_t)&extsize);
+	memcpy((void *)EXC_EXI, &extint, (size_t)&extsize);
 	__syncicache((void *)&extint_call, sizeof extint_call);
 	__syncicache((void *)EXC_EXI, (int)&extsize);
 	asm volatile ("mtmsr %0" :: "r"(omsr));
@@ -469,6 +425,7 @@ cpu_startup()
 		panic("startup: no room for interrupt register");
 	pmap_enter(pmap_kernel(), prep_intr_reg, PREP_INTR_REG,
 	    VM_PROT_READ|VM_PROT_WRITE, VM_PROT_READ|VM_PROT_WRITE|PMAP_WIRED);
+	pmap_update(pmap_kernel());
 
 	/*
 	 * Initialize error message buffer (at end of core).
@@ -479,12 +436,13 @@ cpu_startup()
 		pmap_enter(pmap_kernel(), msgbuf_vaddr + i * NBPG,
 		    msgbuf_paddr + i * NBPG, VM_PROT_READ|VM_PROT_WRITE,
 		    VM_PROT_READ|VM_PROT_WRITE|PMAP_WIRED);
+	pmap_update(pmap_kernel());
 	initmsgbuf((caddr_t)msgbuf_vaddr, round_page(MSGBUFSIZE));
 
 	printf("%s", version);
 
 	printf("Model: %s\n", res->VitalProductData.PrintableModel);
-	identifycpu();
+	cpu_identify(NULL, 0);
 
 	format_bytes(pbuf, sizeof(pbuf), ctob(physmem));
 	printf("total memory = %s\n", pbuf);
@@ -507,7 +465,7 @@ cpu_startup()
 	if (uvm_map(kernel_map, (vaddr_t *)&buffers, round_page(sz),
 		    NULL, UVM_UNKNOWN_OFFSET, 0,
 		    UVM_MAPFLAG(UVM_PROT_NONE, UVM_PROT_NONE, UVM_INH_NONE,
-				UVM_ADV_NORMAL, 0)) != KERN_SUCCESS)
+				UVM_ADV_NORMAL, 0)) != 0)
 		panic("startup: cannot allocate VM for buffers");
 	minaddr = (vaddr_t)buffers;
 	base = bufpages / nbuf;
@@ -536,13 +494,13 @@ cpu_startup()
 			if (pg == NULL)
 				panic("startup: not enough memory for "
 					"buffer cache");
-			pmap_enter(kernel_map->pmap, curbuf,
-			    VM_PAGE_TO_PHYS(pg), VM_PROT_READ|VM_PROT_WRITE,
-			    VM_PROT_READ|VM_PROT_WRITE|PMAP_WIRED);
+			pmap_kenter_pa(curbuf, VM_PAGE_TO_PHYS(pg),
+			    VM_PROT_READ | VM_PROT_WRITE);
 			curbuf += PAGE_SIZE;
 			curbufsize -= PAGE_SIZE;
 		}
 	}
+	pmap_update(kernel_map->pmap);
 
 	/*
 	 * Allocate a submap for exec arguments.  This map effectively
@@ -557,11 +515,14 @@ cpu_startup()
 	phys_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
 				 VM_PHYS_SIZE, 0, FALSE, NULL);
 
+#ifndef PMAP_MAP_POOLPAGE
 	/*
-	 * No need to allocate an mbuf cluster submap.  Mbuf clusters
-	 * are allocated via the pool allocator, and we use direct-mapped
-	 * pool pages.
+	 * We need to allocate an mbuf cluster submap if the pool
+	 * allocater isn't using direct-mapped pool pages.
 	 */
+	mb_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
+				 nmbcluters & mclsize, 0, FALSE, NULL);
+#endif
 
 	format_bytes(pbuf, sizeof(pbuf), ptoa(uvmexp.free));
 	printf("avail memory = %s\n", pbuf);
@@ -678,25 +639,6 @@ dokbd:
 	panic("invalid console device %s", consinfo->devname);
 }
 
-#if (NPCKBC > 0) && (NPCKBD == 0)
-/*
- * glue code to support old console code with the
- * mi keyboard controller driver
- */
-int
-pckbc_machdep_cnattach(kbctag, kbcslot)
-	pckbc_tag_t kbctag;
-	pckbc_slot_t kbcslot;
-{
-
-#if (NPC > 0) && (NPCCONSKBD > 0)
-	return (pcconskbd_cnattach(kbctag, kbcslot));
-#else
-	return (ENXIO);
-#endif
-}
-#endif
-
 void
 dumpsys()
 {
@@ -792,24 +734,10 @@ halt_sys:
 
 	printf("rebooting...\n\n");
 
-	{
-		/* XXX: ibm_machdep */
-		int msr;
-		u_char reg;
+	(*platform->reset)();
 
-		asm volatile("mfmsr %0" : "=r"(msr));
-		msr |= PSL_IP;
-		asm volatile("mtmsr %0" :: "r"(msr));
-
-		reg = *(volatile u_char *)(PREP_BUS_SPACE_IO + 0x92);
-		reg &= ~1UL;
-		*(volatile u_char *)(PREP_BUS_SPACE_IO + 0x92) = reg;
-		reg = *(volatile u_char *)(PREP_BUS_SPACE_IO + 0x92);
-		reg |= 1;
-		*(volatile u_char *)(PREP_BUS_SPACE_IO + 0x92) = reg;
-	}
-
-	while(1);
+	for (;;)
+		continue;
 	/* NOTREACHED */
 }
 
@@ -859,6 +787,7 @@ mapiodev(pa, len)
 		faddr += NBPG;
 		taddr += NBPG;
 	}
+	pmap_update(pmap_kernel());
 
 	return (void *)(va + off);
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.77 2000/12/02 13:57:05 scw Exp $	*/
+/*	$NetBSD: machdep.c,v 1.86 2001/09/10 21:19:19 chris Exp $	*/
 
 /*
  * Copyright (c) 1988 University of Utah.
@@ -93,7 +93,6 @@
 #include <machine/kcore.h>	/* XXX should be pulled in by sys/kcore.h */
 
 #include <mvme68k/dev/mainbus.h>
-#include <mvme68k/mvme68k/isr.h>
 #include <mvme68k/mvme68k/seglist.h>
 
 #ifdef DDB
@@ -110,9 +109,9 @@ char	machine[] = MACHINE;	/* from <machine/param.h> */
 /* Our exported CPU info; we can have only one. */  
 struct cpu_info cpu_info_store;
 
-vm_map_t exec_map = NULL;
-vm_map_t mb_map = NULL;
-vm_map_t phys_map = NULL;
+struct vm_map *exec_map = NULL;
+struct vm_map *mb_map = NULL;
+struct vm_map *phys_map = NULL;
 
 /*
  * Model information, filled in by the Bug; see locore.s
@@ -160,7 +159,6 @@ void	cpu_init_kcore_hdr __P((void));
 u_long	cpu_dump_mempagecnt __P((void));
 int	cpu_exec_aout_makecmds __P((struct proc *, struct exec_package *));
 void	straytrap __P((int, u_short));
-void	nmintr __P((struct frame));
 
 /*
  * Machine-independent crash dump header info.
@@ -182,17 +180,21 @@ phys_ram_seg_t mem_clusters[VM_PHYSSEG_MAX];
 int	mem_cluster_cnt;
 
 /*
- * On the 68020/68030, the value of delay_divisor is roughly
+ * On the 68020/68030 (mvme14x), the value of delay_divisor is roughly
  * 8192 / cpuspeed (where cpuspeed is in MHz).
  *
- * On the 68040, the value of delay_divisor is roughly
- * 3072 / cpuspeed (where cpuspeed is in MHz).
- *
- * On the 68060, the value of delay_divisor is roughly
- * 1024 / cpuspeed (where cpuspeed is in MHz).
+ * On the other boards (mvme162 and up), the cpuspeed is passed
+ * in from the firmware.
  */
 int	cpuspeed;		/* only used for printing later */
 int	delay_divisor = 512;	/* assume some reasonable value to start */
+
+/*
+ * Since mvme68k boards can have anything from 4MB of onboard RAM, we
+ * would rather set the PAGER_MAP_SIZE at runtime based on the amount
+ * of onboard RAM.
+ */
+int	mvme68k_pager_map_size;
 
 /* Machine-dependent initialization routines. */
 void	mvme68k_init __P((void));
@@ -216,6 +218,15 @@ mvme68k_init()
 	int i;
 
 	/*
+	 * Set PAGER_MAP_SIZE to half the size of onboard RAM, up to a
+	 * maximum of 16MB.
+	 * (Note: Just use ps_end here since onboard RAM starts at 0x0)
+	 */
+	mvme68k_pager_map_size = phys_seg_list[0].ps_end / 2;
+	if (mvme68k_pager_map_size > (16 * 1024 * 1024))
+		mvme68k_pager_map_size = 16 * 1024 * 1024;
+
+	/*
 	 * Tell the VM system about available physical memory.
 	 */
 	for (i = 0; i < mem_cluster_cnt; i++) {
@@ -235,9 +246,6 @@ mvme68k_init()
 				 atop(phys_seg_list[i].ps_start),
 				 atop(phys_seg_list[i].ps_end), i);
 	}
-
-	/* Initialize interrupt handlers. */
-	isrinit();
 
 	switch (machineid) {
 #ifdef MVME147
@@ -273,6 +281,7 @@ mvme68k_init()
 		    msgbufpa + i * NBPG, VM_PROT_READ|VM_PROT_WRITE,
 		    VM_PROT_READ|VM_PROT_WRITE|PMAP_WIRED);
 	initmsgbuf(msgbufaddr, round_page(MSGBUFSIZE));
+	pmap_update(pmap_kernel());
 }
 
 #ifdef MVME147
@@ -288,8 +297,7 @@ mvme147_init()
 	/*
 	 * Set up a temporary mapping to the PCC's registers
 	 */
-	bus_space_map(bt, intiobase_phys + MAINBUS_PCC_OFFSET + PCC_REG_OFF,
-	    PCCREG_SIZE, 0, &bh);
+	bus_space_map(bt, intiobase_phys + MAINBUS_PCC_OFFSET, PCCREG_SIZE, 0, &bh);
 
 	/*
 	 * calibrate delay() using the 6.25 usec counter.
@@ -316,10 +324,13 @@ mvme147_init()
 
 	/* calculate cpuspeed */
 	cpuspeed = 8192 / delay_divisor;
+	cpuspeed *= 100;
 }
 #endif /* MVME147 */
 
 #if defined(MVME162) || defined(MVME167) || defined(MVME172) || defined(MVME177)
+int	get_cpuspeed __P((void));
+
 /*
  * MVME-1[67]x specific initializaion.
  */
@@ -351,7 +362,33 @@ mvme1xx_init()
 	bus_space_unmap(bt, bh, PCC2REG_SIZE);
 
 	/* calculate cpuspeed */
-	cpuspeed = ((cputype == CPU_68060) ? 1024 : 3072) / delay_divisor;
+	cpuspeed = get_cpuspeed();
+	if (cpuspeed < 1250 || cpuspeed > 6000) {
+		printf("mvme1xx_init: Warning! Firmware has " \
+		    "bogus CPU speed: `%s'\n", boardid.speed);
+		cpuspeed = ((cputype == CPU_68060) ? 1000 : 3072) /
+		    delay_divisor;
+		cpuspeed *= 100;
+		printf("mvme1xx_init: Approximating speed using "\
+		    "delay_divisor\n");
+	}
+}
+
+/*
+ * Parse the `speed' field of Bug's boardid structure.
+ */
+int
+get_cpuspeed()
+{
+	int rv, i;
+
+	for (i = 0, rv = 0; i < sizeof(boardid.speed); i++) {
+		if (boardid.speed[i] < '0' || boardid.speed[i] > '9')
+			return (0);
+		rv = (rv * 10) + (boardid.speed[i] - '0');
+	}
+
+	return (rv);
 }
 #endif
 
@@ -451,7 +488,7 @@ cpu_startup()
 	if (uvm_map(kernel_map, (vaddr_t *) &buffers, round_page(size),
 		    NULL, UVM_UNKNOWN_OFFSET, 0,
 		    UVM_MAPFLAG(UVM_PROT_NONE, UVM_PROT_NONE, UVM_INH_NONE,
-				UVM_ADV_NORMAL, 0)) != KERN_SUCCESS)
+				UVM_ADV_NORMAL, 0)) != 0)
 		panic("startup: cannot allocate VM for buffers");
 	minaddr = (vaddr_t)buffers;
 	base = bufpages / nbuf;
@@ -481,6 +518,7 @@ cpu_startup()
 			curbufsize -= PAGE_SIZE;
 		}
 	}
+	pmap_update(pmap_kernel());
 
 	/*
 	 * Allocate a submap for exec arguments.  This map effectively
@@ -517,7 +555,7 @@ cpu_startup()
 	 * XXX but not right now.
 	 */
 	if (uvm_map_protect(kernel_map, 0, round_page((vaddr_t)&kernel_text),
-	    UVM_PROT_NONE, TRUE) != KERN_SUCCESS)
+	    UVM_PROT_NONE, TRUE) != 0)
 		panic("can't mark pre-text pages off-limits");
 
 	/*
@@ -526,7 +564,7 @@ cpu_startup()
 	 */
 	if (uvm_map_protect(kernel_map, trunc_page((vaddr_t)&kernel_text),
 	    round_page((vaddr_t)&etext), UVM_PROT_READ|UVM_PROT_EXEC, TRUE)
-	    != KERN_SUCCESS)
+	    != 0)
 		panic("can't protect kernel text");
 
 	/*
@@ -591,11 +629,11 @@ identifycpu()
 	char fpu_str[16];
 	int len = 0;
 
-	bzero(cpu_model, sizeof(cpu_model));
-	bzero(board_str, sizeof(board_str));
-	bzero(cpu_str, sizeof(cpu_str));
-	bzero(mmu_str, sizeof(mmu_str));
-	bzero(fpu_str, sizeof(cpu_str));
+	memset(cpu_model, 0, sizeof(cpu_model));
+	memset(board_str, 0, sizeof(board_str));
+	memset(cpu_str, 0, sizeof(cpu_str));
+	memset(mmu_str, 0, sizeof(mmu_str));
+	memset(fpu_str, 0, sizeof(cpu_str));
 
 	/* Fill in the CPU string. */
 	switch (cputype) {
@@ -672,8 +710,10 @@ identifycpu()
 		panic("startup");
 	}
 
-	len = sprintf(cpu_model, "Motorola MVME-%s: %dMHz %s", board_str,
-	    cpuspeed, cpu_str);
+	len = sprintf(cpu_model, "Motorola MVME-%s: %d.%dMHz %s", board_str,
+	    cpuspeed / 100, (cpuspeed % 100) / 10, cpu_str);
+
+	cpuspeed /= 100;
 
 	if (mmu_str[0] != '\0')
 		len += sprintf(cpu_model + len, ", %s", mmu_str);
@@ -810,7 +850,7 @@ cpu_init_kcore_hdr()
 	int i;
 	extern char end[];
 
-	bzero(&cpu_kcore_hdr, sizeof(cpu_kcore_hdr)); 
+	memset(&cpu_kcore_hdr, 0, sizeof(cpu_kcore_hdr)); 
 
 	/*
 	 * Initialize the `dispatcher' portion of the header.
@@ -914,7 +954,7 @@ cpu_dump(dump, blknop)
 	CORE_SETMAGIC(*kseg, KCORE_MAGIC, MID_MACHINE, CORE_CPU);
 	kseg->c_size = dbtob(1) - ALIGN(sizeof(kcore_seg_t));
 
-	bcopy(&cpu_kcore_hdr, chdr, sizeof(cpu_kcore_hdr_t));
+	memcpy(chdr, &cpu_kcore_hdr, sizeof(cpu_kcore_hdr_t));
 	error = (*dump)(dumpdev, *blknop, (caddr_t)buf, sizeof(buf));
 	*blknop += btodb(sizeof(buf));
 	return (error);
@@ -1037,6 +1077,7 @@ dumpsys()
 
 			pmap_enter(pmap_kernel(), (vaddr_t)vmmap, maddr,
 			    VM_PROT_READ, VM_PROT_READ|PMAP_WIRED);
+			pmap_update(pmap_kernel());
 
 			error = (*dump)(dumpdev, blkno, vmmap, n);
 			if (error)
@@ -1141,14 +1182,6 @@ straytrap(pc, evec)
 {
 	printf("unexpected trap (vector offset %x) from %x\n",
 	       evec & 0xFFF, pc);
-}
-
-/* XXX wrapper for locore.s; used only my level 7 autovector */
-void
-nmintr(frame)
-	struct frame frame;
-{
-	(void) nmihand(&frame);
 }
 
 /*

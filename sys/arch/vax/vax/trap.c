@@ -1,4 +1,4 @@
-/*	$NetBSD: trap.c,v 1.60 2000/12/31 19:41:41 matt Exp $     */
+/*	$NetBSD: trap.c,v 1.66 2001/06/28 21:54:23 ragge Exp $     */
 
 /*
  * Copyright (c) 1994 Ludd, University of Lule}, Sweden.
@@ -146,7 +146,7 @@ trap(struct trapframe *frame)
 	u_int	rv, addr, umode;
 	struct	proc *p = curproc;
 	u_quad_t oticks = 0;
-	vm_map_t map;
+	struct vm_map *map;
 	vm_prot_t ftype;
 	
 	uvmexp.traps++;
@@ -208,6 +208,8 @@ if(faultdebug)printf("trap accflt type %lx, code %lx, pc %lx, psl %lx\n",
 		if (p == 0)
 			panic("trap: access fault: addr %lx code %lx",
 			    frame->pc, frame->code);
+		if (frame->psl & PSL_IS)
+			panic("trap: pflt on IS");
 #endif
 
 		/*
@@ -228,14 +230,19 @@ if(faultdebug)printf("trap accflt type %lx, code %lx, pc %lx, psl %lx\n",
 		else
 			ftype = VM_PROT_READ;
 
+		if (umode)
+			KERNEL_PROC_LOCK(p);
+		else
+			KERNEL_LOCK(LK_CANRECURSE|LK_EXCLUSIVE);
 		rv = uvm_fault(map, addr, 0, ftype);
-		if (rv != KERN_SUCCESS) {
+		if (rv != 0) {
 			if (umode == 0) {
+				KERNEL_UNLOCK();
 				FAULTCHK;
 				panic("Segv in kernel mode: pc %x addr %x",
 				    (u_int)frame->pc, (u_int)frame->code);
 			}
-			if (rv == KERN_RESOURCE_SHORTAGE) {
+			if (rv == ENOMEM) {
 				printf("UVM: pid %d (%s), uid %d killed: "
 				       "out of swap\n",
 				       p->p_pid, p->p_comm,
@@ -247,6 +254,10 @@ if(faultdebug)printf("trap accflt type %lx, code %lx, pc %lx, psl %lx\n",
 			}
 		} else
 			trapsig = 0;
+		if (umode) 
+			KERNEL_PROC_UNLOCK(p);
+		else
+			KERNEL_UNLOCK();
 		break;
 
 	case T_PTELEN:
@@ -298,7 +309,9 @@ if(faultdebug)printf("trap accflt type %lx, code %lx, pc %lx, psl %lx\n",
 			printf("pid %d (%s): sig %d: type %lx, code %lx, pc %lx, psl %lx\n",
 			       p->p_pid, p->p_comm, sig, frame->trap,
 			       frame->code, frame->pc, frame->psl);
+		KERNEL_PROC_LOCK(p);
 		trapsignal(p, sig, frame->code);
+		KERNEL_PROC_UNLOCK(p);
 	}
 
 	if (umode == 0)
@@ -331,6 +344,7 @@ syscall(struct trapframe *frame)
 	struct trapframe *exptr;
 	struct proc *p = curproc;
 
+
 #ifdef TRAPDEBUG
 if(startsysc)printf("trap syscall %s pc %lx, psl %lx, sp %lx, pid %d, frame %p\n",
 	       syscallnames[frame->code], frame->pc, frame->psl,frame->sp,
@@ -358,6 +372,7 @@ if(startsysc)printf("trap syscall %s pc %lx, psl %lx, sp %lx, pid %d, frame %p\n
 
 	rval[0] = 0;
 	rval[1] = frame->r1;
+	KERNEL_PROC_LOCK(p);
 	if (callp->sy_narg) {
 		err = copyin((char*)frame->ap + 4, args, callp->sy_argsize);
 		if (err) {
@@ -374,6 +389,7 @@ if(startsysc)printf("trap syscall %s pc %lx, psl %lx, sp %lx, pid %d, frame %p\n
 		ktrsyscall(p, frame->code, callp->sy_argsize, args);
 #endif
 	err = (*callp->sy_call)(curproc, args, rval);
+	KERNEL_PROC_UNLOCK(p);
 	exptr = curproc->p_addr->u_pcb.framep;
 
 #ifdef TRAPDEBUG
@@ -392,7 +408,7 @@ bad:
 		break;
 
 	case EJUSTRETURN:
-		return;
+		break;
 
 	case ERESTART:
 		exptr->pc -= (exptr->code > 63 ? 4 : 2);
@@ -407,8 +423,11 @@ bad:
 	userret(p, frame, oticks);
 
 #ifdef KTRACE
-	if (KTRPOINT(p, KTR_SYSRET))
+	if (KTRPOINT(p, KTR_SYSRET)) {
+		KERNEL_PROC_LOCK(p);
 		ktrsysret(p, frame->code, err, rval[0]);
+		KERNEL_PROC_UNLOCK(p);
+	}
 #endif
 }
 
@@ -417,10 +436,14 @@ child_return(void *arg)
 {
         struct proc *p = arg;
 
+	KERNEL_PROC_UNLOCK(p);
 	userret(p, p->p_addr->u_pcb.framep, 0);
 
 #ifdef KTRACE
-	if (KTRPOINT(p, KTR_SYSRET))
+	if (KTRPOINT(p, KTR_SYSRET)) {
+		KERNEL_PROC_LOCK(p);
 		ktrsysret(p, SYS_fork, 0, 0);
+		KERNEL_PROC_UNLOCK(p);
+	}
 #endif
 }

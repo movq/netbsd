@@ -1,4 +1,4 @@
-/*	$NetBSD: psychovar.h,v 1.4 2000/07/18 11:35:03 pk Exp $	*/
+/*	$NetBSD: psychovar.h,v 1.6 2001/07/20 00:07:13 eeh Exp $	*/
 
 /*
  * Copyright (c) 1999, 2000 Matthew R. Green
@@ -45,8 +45,6 @@ struct psycho_pbm {
 	 */
 	struct psycho_registers		*pp_regs;
 	struct psycho_ranges		*pp_range;
-	struct psycho_interrupt_map	*pp_intmap;
-	struct psycho_interrupt_map_mask pp_intmapmask;
 
 	/* counts of above */
 	int				pp_nregs;
@@ -78,11 +76,8 @@ struct psycho_softc {
 	 * one sabre has two simba's.  psycho's are separately attached,
 	 * with the `other' psycho_pbm allocated at the first's attach.
 	 */
-	struct psycho_pbm		*sc_sabre;
 	struct psycho_pbm		*__sc_psycho_this;
 	struct psycho_pbm		*__sc_psycho_other;
-#define	sc_simba_a	__sc_psycho_this
-#define	sc_simba_b	__sc_psycho_other
 #define	sc_psycho_this	__sc_psycho_this
 #define	sc_psycho_other	__sc_psycho_other
 
@@ -120,7 +115,5 @@ bus_space_tag_t psycho_alloc_bus_tag __P((struct psycho_pbm *, int));
 #define psycho_alloc_config_tag(pp) psycho_alloc_bus_tag((pp), PCI_CONFIG_BUS_SPACE)
 #define psycho_alloc_mem_tag(pp) psycho_alloc_bus_tag((pp), PCI_MEMORY_BUS_SPACE)
 #define psycho_alloc_io_tag(pp) psycho_alloc_bus_tag((pp), PCI_IO_BUS_SPACE)
-
-int psycho_intr_map __P((pcitag_t, int, int, pci_intr_handle_t *));
 
 #endif /* _SPARC64_DEV_PSYCHOVAR_H_ */

@@ -1,16 +1,16 @@
-#	$NetBSD: Makefile,v 1.6 2001/01/21 10:58:04 scw Exp $
+#	$NetBSD: Makefile,v 1.9 2001/10/31 21:39:03 thorpej Exp $
 
 S=${.CURDIR}/../../../../
-PROG=	wrtvid
+HOSTPROG=	wrtvid
 MKMAN=	no
 LIBSA=${.CURDIR}/../../../../lib/libsa
 COPTS+= -Wall -Wstrict-prototypes -Wmissing-prototypes
-CPPFLAGS+= -I. -I${LIBSA}
+HOST_CPPFLAGS+= -I. -I${LIBSA}
 DPADD+=	machine m68k
 
 .PATH.c: ${LIBSA}
 
-SRCS=	wrtvid.c loadfile.c
+SRCS=	wrtvid.c byteorder.c loadfile.c loadfile_aout.c loadfile_elf32.c
 CLEANFILES+= machine m68k
 
 # only needed during build
@@ -25,4 +25,4 @@ m68k::
 	-rm -f ${.TARGET}
 	ln -s $S/arch/m68k/include m68k
 
-.include <bsd.prog.mk>
+.include <bsd.hostprog.mk>

@@ -1,4 +1,4 @@
-;	$NetBSD: arm.asm,v 1.1 2001/02/09 18:34:49 uch Exp $	
+;	$NetBSD: arm.asm,v 1.3 2001/07/17 01:43:42 toshii Exp $	
 ;
 ; Copyright (c) 2001 The NetBSD Foundation, Inc.
 ; All rights reserved.
@@ -285,7 +285,7 @@
 	
 	; FlatJump (kaddr_t bootinfo, kaddr_t pvec, kaddr_t stack
 	;		kaddr_t jump)
-	;	bootinfo	boot infomation block address.
+	;	bootinfo	boot information block address.
 	;	pvec		page vector of kernel.
 	;	stack		physical address of stack
 	;	jump		physical address of boot function 
@@ -407,8 +407,11 @@
 	
 |page_memcpy4|			; memcpy (dst, src, sz) uncached.
 	ldr	r0, [r3], #4
+	ldr	r5, [r3], #4
 	str	r0, [r4], #4
 	cmp	r4, r6
+	strlt	r5, [r4], #4
+	cmplt	r4, r6
 	blt	|page_memcpy4|
 
 	b	|page_loop|
@@ -423,9 +426,19 @@
 ;	ldr	r0, [r7]
 ;	ldr	r0, [r0]
 ;	bl	hexdump	
-	
-	ldr	r0, [r7]
-	mov	pc, r0
+
+	; set stack pointer
+	mov	r5, #4096
+	add	r6, r6, #8192
+	sub	r5, r5, #1
+	bic	sp, r6, r5
+
+	; set bootargs
+	ldr	r4, [r7]
+	ldr	r0, [r7, #4]
+	ldr	r1, [r7, #8]
+	ldr	r2, [r7, #12]
+	mov	pc, r4
 	; NOTREACHED
 	
 |infinite_loop|

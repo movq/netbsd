@@ -1,4 +1,4 @@
-/*	$NetBSD: ser.c,v 1.12 2000/11/02 00:32:52 eeh Exp $	*/
+/*	$NetBSD: ser.c,v 1.14 2001/05/02 10:32:15 scw Exp $	*/
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -104,6 +104,7 @@
  */
 
 #include "opt_ddb.h"
+#include "opt_mbtype.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -125,8 +126,24 @@
 #include <machine/iomap.h>
 #include <machine/mfp.h>
 #include <atari/atari/intr.h>
-#include <atari/dev/ym2149reg.h>
 #include <atari/dev/serreg.h>
+
+#if !defined(_MILANHW_)
+#include <atari/dev/ym2149reg.h>
+#else
+	/* MILAN has no ym2149 */
+#define ym2149_dtr(set) {					\
+	if (set)						\
+		single_inst_bset_b(MFP->mf_gpip, 0x08);		\
+	else single_inst_bclr_b(MFP->mf_gpip, 0x08);		\
+}
+
+#define ym2149_rts(set) {					\
+	if (set)						\
+		single_inst_bset_b(MFP->mf_gpip, 0x01);		\
+	else single_inst_bclr_b(MFP->mf_gpip, 0x01);		\
+}
+#endif /* _MILANHW_ */
 
 /* #define SER_DEBUG */
 
@@ -522,6 +539,18 @@ serwrite(dev, uio, flag)
 	struct tty *tp = sc->sc_tty;
  
 	return ((*tp->t_linesw->l_write)(tp, uio, flag));
+}
+
+int
+serpoll(dev, events, p)
+	dev_t dev;
+	int events;
+	struct proc *p;
+{
+	struct ser_softc *sc = ser_cd.cd_devs[SERUNIT(dev)];
+	struct tty *tp = sc->sc_tty;
+ 
+	return ((*tp->t_linesw->l_poll)(tp, events, p));
 }
 
 struct tty *

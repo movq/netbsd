@@ -1,4 +1,4 @@
-/*	$NetBSD: asm.h,v 1.1 2001/01/10 19:02:05 bjh21 Exp $	*/
+/*	$NetBSD: asm.h,v 1.4 2001/07/16 05:43:32 matt Exp $	*/
 
 /*
  * Copyright (c) 1990 The Regents of the University of California.
@@ -76,8 +76,13 @@
 	.text; _ALIGN_TEXT; .globl x; .type x,_ASM_TYPE_FUNCTION; x:
 
 #ifdef GPROF
-# define _PROF_PROLOGUE	\
+# ifdef __ELF__
+#  define _PROF_PROLOGUE	\
+	mov ip, lr; bl __mcount
+# else
+#  define _PROF_PROLOGUE	\
 	mov ip,lr; bl mcount
+# endif
 #else
 # define _PROF_PROLOGUE
 #endif
@@ -88,6 +93,16 @@
 #define	ASENTRY_NP(y)	_ENTRY(_ASM_LABEL(y))
 
 #define	ASMSTR		.asciz
+
+#if defined(__ELF__) && defined(PIC)
+#ifdef __STDC__
+#define	PIC_SYM(x,y)	x ## ( ## y ## )
+#else
+#define	PIC_SYM(x,y)	x/**/(/**/y/**/)
+#endif
+#else
+#define	PIC_SYM(x,y)	x
+#endif
 
 #ifdef __ELF__
 #define RCSID(x)	.section ".ident"; .asciz x

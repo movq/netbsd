@@ -1,4 +1,4 @@
-/*	$NetBSD: fd.c,v 1.35 2000/06/29 07:07:52 mrg Exp $	*/
+/*	$NetBSD: fd.c,v 1.37 2001/07/08 18:06:45 wiz Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -231,8 +231,8 @@ struct fd_softc {
 	int sc_bcount;		/* byte count left */
  	int sc_opts;			/* user-set options */
 	int sc_skip;		/* bytes already transferred */
-	int sc_nblks;		/* number of blocks currently tranferring */
-	int sc_nbytes;		/* number of bytes currently tranferring */
+	int sc_nblks;		/* number of blocks currently transferring */
+	int sc_nbytes;		/* number of bytes currently transferring */
 
 	int sc_drive;		/* physical unit number */
 	int sc_flags;
@@ -448,7 +448,8 @@ fdcattach(parent, self, aux)
 					     ia->ia_dmaintr, fdcdmaintr, fdc,
 					     ia->ia_dmaintr+1, fdcdmaerrintr,
 					     fdc);
-	if (bus_dmamap_create(fdc->sc_dmat, FDC_MAXIOSIZE, 16, 0xf000, 0,
+	if (bus_dmamap_create(fdc->sc_dmat, FDC_MAXIOSIZE, 16,
+			      DMAC_MAXSEGSZ, 0,
 			      BUS_DMA_NOWAIT|BUS_DMA_ALLOCNOW,
 			      &fdc->sc_dmamap)) {
 		printf("%s: can't set up intio DMA map\n",

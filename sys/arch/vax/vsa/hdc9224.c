@@ -1,4 +1,4 @@
-/*	$NetBSD: hdc9224.c,v 1.14 2001/02/04 20:36:33 ragge Exp $ */
+/*	$NetBSD: hdc9224.c,v 1.17 2001/11/09 05:31:44 matt Exp $ */
 /*
  * Copyright (c) 1996 Ludd, University of Lule}, Sweden.
  * All rights reserved.
@@ -197,7 +197,7 @@ struct	cfattach rd_ca = {
 /* At least 0.7 uS between register accesses */
 static int rd_dmasize, inq = 0;
 static int u;
-#define	WAIT	asm("movl _u,_u;movl _u,_u;movl _u,_u; movl _u,_u")
+#define	WAIT	asm("movl %0,%0;movl %0,%0;movl %0,%0; movl %0,%0" :: "m"(u))
 
 #define	HDC_WREG(x)	*(volatile char *)(sc->sc_regs) = (x)
 #define	HDC_RREG	*(volatile char *)(sc->sc_regs)
@@ -347,7 +347,7 @@ rdattach(struct device *parent, struct device *self, void *aux)
 
 	/*
 	 * if it's not a floppy then evaluate the on-disk geometry.
-	 * if neccessary correct the label...
+	 * if necessary correct the label...
 	 */
 	rd_readgeom(sc, rd);
 	disk_printtype(rd->sc_drive, rd->sc_xbn.media_id);
@@ -446,7 +446,7 @@ rdstrategy(struct buf *bp)
 	    bp->b_blkno + lp->d_partitions[DISKPART(bp->b_dev)].p_offset;
 	bp->b_cylinder = bp->b_rawblkno / lp->d_secpercyl;
 
-	s = splimp();
+	s = splbio();
 	disksort_cylinder(&sc->sc_q, bp);
 	if (inq == 0) {
 		inq = 1;

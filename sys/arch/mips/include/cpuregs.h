@@ -1,4 +1,4 @@
-/*	$NetBSD: cpuregs.h,v 1.38 2000/11/27 06:38:54 soren Exp $	*/
+/*	$NetBSD: cpuregs.h,v 1.47 2001/10/16 16:31:34 uch Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -92,6 +92,8 @@
 #define MIPS3_VA_TO_CINDEX(x) \
 		((unsigned)(x) & 0xffffff | MIPS_KSEG0_START)
 
+/* CPU dependent mtc0 hazard hook */
+#define COP0_SYNC	/* nothing */
 
 /*
  * The bits in the cause register.
@@ -367,18 +369,47 @@
 /*
  * Coprocessor 0 registers:
  *
- *	MIPS_COP_0_TLB_INDEX	TLB index.
- *	MIPS_COP_0_TLB_RANDOM	TLB random.
- *	MIPS_COP_0_TLB_LOW	r3k TLB entry low.
- *	MIPS_COP_0_TLB_LO0	r4k TLB entry low.
- *	MIPS_COP_0_TLB_LO1	r4k TLB entry low, extended.
- *	MIPS_COP_0_TLB_CONTEXT	TLB context.
- *	MIPS_COP_0_BAD_VADDR	Bad virtual address.
- *	MIPS_COP_0_TLB_HI	TLB entry high.
- *	MIPS_COP_0_STATUS	Status register.
- *	MIPS_COP_0_CAUSE	Exception cause register.
- *	MIPS_COP_0_EXC_PC	Exception PC.
- *	MIPS_COP_0_PRID		Processor revision identifier.
+ *				v--- width for mips I,III,32,64
+ *				     (3=32bit, 6=64bit, i=impl dep)
+ *  0	MIPS_COP_0_TLB_INDEX	3333 TLB Index.
+ *  1	MIPS_COP_0_TLB_RANDOM	3333 TLB Random.
+ *  2	MIPS_COP_0_TLB_LOW	3... r3k TLB entry low.
+ *  2	MIPS_COP_0_TLB_LO0	.636 r4k TLB entry low.
+ *  3	MIPS_COP_0_TLB_LO1	.636 r4k TLB entry low, extended.
+ *  4	MIPS_COP_0_TLB_CONTEXT	3636 TLB Context.
+ *  5	MIPS_COP_0_TLB_PG_MASK	.333 TLB Page Mask register.
+ *  6	MIPS_COP_0_TLB_WIRED	.333 Wired TLB number.
+ *  8	MIPS_COP_0_BAD_VADDR	3636 Bad virtual address.
+ *  9	MIPS_COP_0_COUNT	.333 Count register.
+ * 10	MIPS_COP_0_TLB_HI	3636 TLB entry high.
+ * 11	MIPS_COP_0_COMPARE	.333 Compare (against Count).
+ * 12	MIPS_COP_0_STATUS	3333 Status register.
+ * 13	MIPS_COP_0_CAUSE	3333 Exception cause register.
+ * 14	MIPS_COP_0_EXC_PC	3636 Exception PC.
+ * 15	MIPS_COP_0_PRID		3333 Processor revision identifier.
+ * 16	MIPS_COP_0_CONFIG	3333 Configuration register.
+ * 16/1	MIPS_COP_0_CONFIG1	..33 Configuration register 1.
+ * 16/2	MIPS_COP_0_CONFIG2	..33 Configuration register 2.
+ * 16/3	MIPS_COP_0_CONFIG3	..33 Configuration register 3.
+ * 17	MIPS_COP_0_LLADDR	.336 Load Linked Address.
+ * 18	MIPS_COP_0_WATCH_LO	.336 WatchLo register.
+ * 19	MIPS_COP_0_WATCH_HI	.333 WatchHi register.
+ * 20	MIPS_COP_0_TLB_XCONTEXT .6.6 TLB XContext register.
+ * 23	MIPS_COP_0_DEBUG	.... Debug JTAG register.
+ * 24	MIPS_COP_0_DEPC		.... DEPC JTAG register.
+ * 25	MIPS_COP_0_PERFCNT	..36 Performance Counter register.
+ * 26	MIPS_COP_0_ECC		.3ii ECC / Error Control register.
+ * 27	MIPS_COP_0_CACHE_ERR	.3ii Cache Error register.
+ * 28/0	MIPS_COP_0_TAG_LO	.3ii Cache TagLo register (instr).
+ * 28/1	MIPS_COP_0_DATA_LO	..ii Cache DataLo register (instr).
+ * 28/2	MIPS_COP_0_TAG_LO	..ii Cache TagLo register (data).
+ * 28/3	MIPS_COP_0_DATA_LO	..ii Cache DataLo register (data).
+ * 29/0	MIPS_COP_0_TAG_HI	.3ii Cache TagHi register (instr).
+ * 29/1	MIPS_COP_0_DATA_HI	..ii Cache DataHi register (instr).
+ * 29/2	MIPS_COP_0_TAG_HI	..ii Cache TagHi register (data).
+ * 29/3	MIPS_COP_0_DATA_HI	..ii Cache DataHi register (data).
+ * 30	MIPS_COP_0_ERROR_PC	.636 Error EPC register.
+ * 31	MIPS_COP_0_DESAVE	.... DESAVE JTAG register.
  */
 #define MIPS_COP_0_TLB_INDEX	$0
 #define MIPS_COP_0_TLB_RANDOM	$1
@@ -420,7 +451,13 @@
 #define MIPS_COP_0_TAG_HI	$29
 #define MIPS_COP_0_ERROR_PC	$30
 
-
+/* MIPS32/64 */
+#define	MIPS_COP_0_DEBUG	$23
+#define	MIPS_COP_0_DEPC		$24
+#define	MIPS_COP_0_PERFCNT	$25
+#define	MIPS_COP_0_DATA_LO	$28
+#define	MIPS_COP_0_DATA_HI	$29
+#define	MIPS_COP_0_DESAVE	$31
 
 /*
  * Values for the code field in a break instruction.
@@ -495,7 +532,6 @@
 #define MIPS_OPCODE_LDC1	0x35
 #define MIPS_OPCODE_SWC1	0x39
 #define MIPS_OPCODE_SDC1	0x3d
-
 
 
 /*
@@ -608,7 +644,7 @@
 #endif
 
 /*
- * CPU processor revision ID
+ * CPU processor revision IDs for company ID == 0 (non mips32/64 chips)
  */
 #define MIPS_R2000	0x01	/* MIPS R2000 			ISA I	*/
 #define MIPS_R3000	0x02	/* MIPS R3000 			ISA I	*/
@@ -624,18 +660,39 @@
 #define MIPS_R12000	0x0e	/* MIPS R12000			ISA IV	*/
 #define MIPS_R14000	0x0f	/* MIPS R14000			ISA IV	*/
 #define MIPS_R8000	0x10	/* MIPS R8000 Blackbird/TFP	ISA IV	*/
+#define MIPS_RC32300	0x18	/* IDT RC32334,332,355		ISA 32  */
 #define MIPS_R4600	0x20	/* QED R4600 Orion		ISA III */
 #define MIPS_R4700	0x21	/* QED R4700 Orion		ISA III */
 #define MIPS_R3SONY	0x21	/* Sony R3000 based 		ISA I	*/
 #define MIPS_R4650	0x22	/* QED R4650 			ISA III */
-#define MIPS_TX3900	0x22	/* Toshiba R3000		ISA I	*/
+#define MIPS_TX3900	0x22	/* Toshiba TX39 family		ISA I	*/
 #define MIPS_R5000	0x23	/* MIPS R5000 			ISA IV	*/
 #define MIPS_R3NKK	0x23	/* NKK R3000 based 		ISA I	*/
-#define MIPS_RC32364	0x26	/* IDT RC32364 			ISA II	*/
+#define MIPS_RC32364	0x26	/* IDT RC32364 			ISA 32	*/
 #define MIPS_RM7000	0x27	/* QED RM7000			ISA IV  */
 #define MIPS_RM5200	0x28	/* QED RM5200s 			ISA IV	*/
+#define MIPS_TX4900	0x2d	/* Toshiba TX49 family		ISA III */
+#define MIPS_R5900	0x2e	/* Toshiba R5900 (EECore)	ISA --- */
 #define MIPS_RC64470	0x30	/* IDT RC64474/RC64475 		ISA III */
 #define MIPS_R5400	0x54	/* NEC VR5400 			ISA IV	*/
+
+/*
+ * CPU processor revision IDs for company ID == 1 (MIPS)
+ */
+#define MIPS_4Kc	0x80	/* MIPS 4Kc			ISA 32  */
+#define MIPS_5Kc	0x81	/* MIPS 5Kc			ISA 64  */
+#define MIPS_4KEc	0x84	/* MIPS 4KEc			ISA 32  */
+#define MIPS_4KSc	0x86	/* MIPS 4KSc			ISA 32  */
+
+/*
+ * CPU processor revision IDs for company ID == 3 (Alchemy)
+ */
+#define MIPS_AU1000	0x01	/* Alchemy Au1000 		ISA 32  */
+
+/*
+ * CPU processor revision IDs for company ID == 4 (SiByte)
+ */
+#define MIPS_SB1	0x01	/* SiByte SB1	 		ISA 64  */
 
 /*
  * FPU processor revision ID
@@ -651,6 +708,9 @@
 
 #ifdef ENABLE_MIPS_TX3900
 #include <mips/r3900regs.h>
+#endif
+#ifdef MIPS3_5900
+#include <mips/r5900/cpuregs.h>
 #endif
 
 #endif /* _MIPS_CPUREGS_H_ */

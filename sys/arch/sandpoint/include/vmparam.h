@@ -1,5 +1,8 @@
-/*	$NetBSD: vmparam.h,v 1.1 2001/02/04 18:32:16 briggs Exp $	*/
+/*	$NetBSD: vmparam.h,v 1.6 2001/06/21 16:30:05 briggs Exp $	*/
 
+#ifdef NEWPMAP
+#include <powerpc/mpc6xx/vmparam.h>
+#else
 /*-
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
  * Copyright (C) 1995, 1996 TooLs GmbH.
@@ -38,19 +41,19 @@
 #define	USRSTACK	VM_MAXUSER_ADDRESS
 
 #ifndef	MAXTSIZ
-#define	MAXTSIZ		(16*1024*1024)		/* max text size */
+#define	MAXTSIZ		(64*1024*1024)		/* max text size */
 #endif
 
 #ifndef	DFLDSIZ
-#define	DFLDSIZ		(16*1024*1024)		/* default data size */
+#define	DFLDSIZ		(128*1024*1024)		/* default data size */
 #endif
 
 #ifndef	MAXDSIZ
-#define	MAXDSIZ		(512*1024*1024)		/* max data size */
+#define	MAXDSIZ		(1*1024*1024*1024)	/* max data size */
 #endif
 
 #ifndef	DFLSSIZ
-#define	DFLSSIZ		(1*1024*1024)		/* default stack size */
+#define	DFLSSIZ		(2*1024*1024)		/* default stack size */
 #endif
 
 #ifndef	MAXSSIZ
@@ -91,10 +94,14 @@
 
 #define	VM_PHYS_SIZE		(USRIOSIZE * NBPG)
 
+#define	__HAVE_PMAP_PHYSSEG
+
+#ifndef _LOCORE
 struct pmap_physseg {
 	struct pv_entry *pvent;
 	char *attrs;
 };
+#endif
 
 #define VM_PHYSSEG_MAX		32
 #define VM_PHYSSEG_STRAT	VM_PSTRAT_BSEARCH
@@ -104,3 +111,4 @@ struct pmap_physseg {
 #define VM_FREELIST_DEFAULT	0
 
 #endif /* _MACHINE_VMPARAM_H_ */
+#endif

@@ -1,4 +1,4 @@
-/*	$NetBSD: load.cpp,v 1.1 2001/02/09 18:34:44 uch Exp $	*/
+/*	$NetBSD: load.cpp,v 1.4 2001/05/08 18:51:22 uch Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -103,12 +103,12 @@ Loader::tagDump(int n)
 	int i = 0;
   
 	DPRINTF((TEXT("page tag start physical address: 0x%08x\n"),
-		 _page_tag_start));
+	    _page_tag_start));
 	p = reinterpret_cast <struct PageTag *>(_page_tag_start);
 	do  {
 		if (i < n || p->src == ~0)
 			DPRINTF((TEXT("[%d] next 0x%08x src 0x%08x dst 0x%08x sz 0x%x\n"),
-				 i, p->next, p->src, p->dst, p->sz));
+			    i, p->next, p->src, p->dst, p->sz));
 		else if (i == n)
 			DPRINTF((TEXT("[...]\n")));
 		op = p;
@@ -116,7 +116,7 @@ Loader::tagDump(int n)
 	} while ((p = reinterpret_cast <struct PageTag *>(p->next)) != ~0);
   
 	DPRINTF((TEXT("[%d(last)] next 0x%08x src 0x%08x dst 0x%08x sz 0x%x\n"),
-		 i - 1, op->next, op->src, op->dst, op->sz));
+	    i - 1, op->next, op->src, op->dst, op->sz));
 #endif // PAGE_LINK_DUMP
 }
 
@@ -151,7 +151,7 @@ Loader::_load_segment_end(void)
 {
 	_opvec_prev->next = ~0; // terminate
 	DPRINTF((TEXT("load link %d zero clear link %d.\n"),
-		 _nload_link, _n0clr_link));
+	    _nload_link, _n0clr_link));
 }
 
 void
@@ -161,13 +161,15 @@ Loader::_load_segment(vaddr_t kv, vsize_t memsz, off_t fileofs, size_t filesz)
 	vaddr_t kv_start = kv;
 
 	DPRINTF((TEXT("\t->load 0x%08x+0x%08x=0x%08x ofs=0x%08x+0x%x\n"),
-		 kv, memsz, kv + memsz, fileofs, filesz));
+	    kv, memsz, kv + memsz, fileofs, filesz));
+	_kernend = kv + memsz;
+
 	if (filesz) {
 		n = filesz / _tpsz;
 		for (j = 0; j < n; j++) {
 			_opvec_prev = _pvec_prev;
 			_pvec_prev = _load_page(kv, fileofs,
-						_tpsz, _pvec_prev);
+			    _tpsz, _pvec_prev);
 			kv += _tpsz;
 			fileofs += _tpsz;
 			++_nload_link;
@@ -191,14 +193,44 @@ Loader::_load_segment(vaddr_t kv, vsize_t memsz, off_t fileofs, size_t filesz)
 		_pvec_prev->next = ptokv(_pvec_clr_paddr);
 #endif
 		DPRINTF((TEXT("[zero clear] ->0x%08x+0x%08x=0x%08x\n"), 
-			 _pvec_prev->dst, _pvec_prev->sz,
-			 _pvec_prev->dst + _pvec_prev->sz));
+		    _pvec_prev->dst, _pvec_prev->sz,
+		    _pvec_prev->dst + _pvec_prev->sz));
 		_opvec_prev = _pvec_prev;
 		_pvec_prev = _pvec_clr++;
 		_pvec_clr_paddr += sizeof(struct PageTag);
 		++_n0clr_link;
 	}
+}
+
+void
+Loader::_load_memory(vaddr_t kv, vsize_t memsz, void *data)
+{
+	struct PageTag *pvec;
+	vaddr_t kv_start = kv, v;
+	paddr_t p, pvec_paddr;
+
+	DPRINTF((TEXT("\t->load 0x%08x+0x%08x=0x%08x\n"),
+	    kv, memsz, kv + memsz));
+	if (memsz > _tpsz) {
+		/* XXX failure */
+		return;
+	}
+
+	_opvec_prev = _pvec_prev;
+	_mem->getTaggedPage(v, p, &pvec, pvec_paddr);      
+	memcpy((void *)v, data, memsz);
+	_pvec_prev->src = ptokv(p);
+	_pvec_prev->dst = kv;
+	_pvec_prev->sz = memsz;
+#ifdef PAGE_LINK_DUMP
+	_pvec_prev->next =(u_int32_t)pvec;
+#else
+	_pvec_prev->next = ptokv(pvec_paddr);
+#endif
+	_pvec_prev = pvec;
+
 	_kernend = kv + memsz;
+	++_nload_link;
 }
 
 struct PageTag *

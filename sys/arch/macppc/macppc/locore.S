@@ -1,4 +1,4 @@
-/*	$NetBSD: locore.S,v 1.36 2001/02/25 20:34:24 matt Exp $	*/
+/*	$NetBSD: locore.S,v 1.41 2001/06/23 02:07:07 matt Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -44,7 +44,11 @@
 #include <machine/psl.h>
 #include <machine/trap.h>
 #include <machine/asm.h>
+#ifdef NEWPMAP
+#include <machine/vmparam.h>
+#endif
 
+#include <powerpc/spr.h>
 /*
  * Some instructions gas doesn't understand (yet?)
  */
@@ -54,12 +58,12 @@
 /*
  * Get varios per-cpu values.
  */
-#ifdef notyet
+#if 1
 #define GET_CPUINFO(r)	\
 	mfsprg	r,0
 #else
 #define	GET_CPUINFO(r)						\
-	mfspr	r,1023;			/* r = cpu_number() */	\
+	mfspr	r,SPR_PIR;		/* r = cpu_number() */	\
 	mulli	r,r,CI_SIZE;					\
 	addis	r,r,_C_LABEL(cpu_info)@ha;			\
 	addi	r,r,_C_LABEL(cpu_info)@l;
@@ -351,20 +355,13 @@ _C_LABEL(cpu_spinup_trampoline):
 	mtmsr	0
 	isync
 
-	lis	3,cpu_hatchstack@ha
-	lwz	1,cpu_hatchstack@l(3)
+	lis	3,_C_LABEL(cpu_hatch_stack)@ha
+	lwz	1,_C_LABEL(cpu_hatch_stack)@l(3)
 
 	bl	_C_LABEL(cpu_hatch)
-
-/* Loop forever. */
-1:
-	sync
-	mfmsr	3
-	oris	3,3,PSL_POW@h
-	mtmsr	3
-	isync
-	b	1b
-
+	bl      _C_LABEL(sched_lock_idle)
+	li      30,0
+	b       _ASM_LABEL(Idle)
 #endif
 
 /*
@@ -375,5 +372,8 @@ _C_LABEL(cpu_spinup_trampoline):
 /*
  * Pull in common trap vector code.
  */
+#if defined(MULTIPROCESSOR)
+#include <powerpc/powerpc/trap_subr_mp.S>
+#else
 #include <powerpc/powerpc/trap_subr.S>
-
+#endif

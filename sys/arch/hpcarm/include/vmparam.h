@@ -1,4 +1,4 @@
-/*	$NetBSD: vmparam.h,v 1.1 2001/02/23 03:48:20 ichiro Exp $	*/
+/*	$NetBSD: vmparam.h,v 1.7 2001/11/11 16:44:16 thorpej Exp $	*/
 
 /*
  * Copyright (c) 1988 The Regents of the University of California.
@@ -33,11 +33,13 @@
  * SUCH DAMAGE.
  */
 
-#ifndef	_ARM32_VMPARAM_H_
-#define	_ARM32_VMPARAM_H_
+#ifndef	_HPCARM_VMPARAM_H_
+#define	_HPCARM_VMPARAM_H_
 
 /* for pt_entry_t definition */
 #include <machine/pte.h>
+
+#include <arm/arm32/vmparam.h>
 
 #define	USRTEXT		VM_MIN_ADDRESS
 #define	USRSTACK	VM_MAXUSER_ADDRESS
@@ -103,7 +105,7 @@
 #else /* defined(HPCARM) */
 #define	KERNEL_SPACE_START	0xc0000000
 #define	PAGE_TABLE_SPACE_START	(KERNEL_SPACE_START - PAGE_TABLE_SPACE)
-#define	KERNEL_BASE		0xc0100000
+#define	KERNEL_BASE		0xc0040000
 #define	KERNEL_TEXT_BASE	KERNEL_BASE
 #define	ALT_PAGE_TBLS_BASE	0xc0800000
 #define	KERNEL_VM_BASE		0xc0c00000
@@ -194,11 +196,13 @@
  * for each chunk of noncontig RAM you have.
  */
 
+#define	__HAVE_PMAP_PHYSSEG
+
 struct pmap_physseg {
-	struct pv_entry *pvent;		/* pv_entry array */
+	struct pv_head *pvhead;		/* pv_entry array */
 	char *attrs;			/* attrs array */
 };
 
-#endif	/* _ARM32_VMPARAM_H_ */
+#endif	/* _HPCARM_VMPARAM_H_ */
 
 /* End of vmparam.h */

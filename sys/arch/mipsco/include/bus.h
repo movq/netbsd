@@ -1,6 +1,7 @@
-/*	$NetBSD: bus.h,v 1.3 2000/09/04 22:18:58 wdk Exp $	*/
+/*	$NetBSD: bus.h,v 1.8 2001/11/14 18:15:28 thorpej Exp $	*/
+
 /*-
- * Copyright (c) 1996, 1997, 1998 The NetBSD Foundation, Inc.
+ * Copyright (c) 1996, 1997, 1998, 2001 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -130,11 +131,13 @@ struct mipsco_bus_space {
 	paddr_t		bs_pbase;
 	vaddr_t		bs_vbase;
 
-	/* sparse addressing shift count */
-	u_int8_t	bs_stride_1;
-	u_int8_t	bs_stride_2;
-	u_int8_t	bs_stride_4;
-	u_int8_t	bs_stride_8;
+	u_int8_t	bs_stride;	/* log2(stride) */
+	u_int8_t	bs_bswap;	/* byte swap in stream methods */
+
+	u_int8_t	bs_offset_1;
+	u_int8_t	bs_offset_2;
+	u_int8_t	bs_offset_4;
+	u_int8_t	bs_offset_8;
 
 	/* compose a bus_space handle from tag/handle/addr/size/flags (MD) */
 	int	(*bs_compose_handle) __P((bus_space_tag_t, bus_addr_t,
@@ -155,6 +158,8 @@ struct mipsco_bus_space {
 				bus_size_t));
 	int	(*bs_subregion) __P((bus_space_tag_t, bus_space_handle_t,
 				bus_size_t, bus_size_t,	bus_space_handle_t *));
+	paddr_t	(*bs_mmap) __P((bus_space_tag_t, bus_addr_t, off_t, int, int));
+
 
 	/* allocation/deallocation */
 	int	(*bs_alloc) __P((bus_space_tag_t, bus_addr_t, bus_addr_t,
@@ -214,6 +219,8 @@ void	mipsco_bus_space_unmap __P((bus_space_tag_t, bus_space_handle_t,
 	    bus_size_t));
 int	mipsco_bus_space_subregion __P((bus_space_tag_t, bus_space_handle_t,
 	    bus_size_t, bus_size_t, bus_space_handle_t *));
+paddr_t	mipsco_bus_space_mmap __P((bus_space_tag_t, bus_addr_t, off_t,
+	    int, int));
 int	mipsco_bus_space_alloc __P((bus_space_tag_t, bus_addr_t, bus_addr_t,
 	    bus_size_t, bus_size_t, bus_size_t, int, bus_addr_t *,
 	    bus_space_handle_t *));
@@ -262,6 +269,15 @@ int	mipsco_bus_space_alloc __P((bus_space_tag_t, bus_addr_t, bus_addr_t,
  */
 #define bus_space_vaddr(bst, bsh)					\
 	((void *)(bsh))
+
+/*
+ *	paddr_t bus_space_mmap __P((bus_space_tag_t, bus_addr_t, off_t,
+ *	    int, int));
+ *
+ * Mmap bus space on behalf of the user.
+ */
+#define	bus_space_mmap(bst, addr, off, prot, flags)			\
+	(*(bst)->bs_mmap)((bst), (addr), (off), (prot), (flags))
 
 /*
  *	int bus_space_map __P((bus_space_tag_t t, bus_addr_t addr,
@@ -331,6 +347,22 @@ int	mipsco_bus_space_alloc __P((bus_space_tag_t, bus_addr_t, bus_addr_t,
 #define bus_intr_establish(t, i, c, f, ihf, iha)			\
 	(*(t)->bs_intr_establish)((t), (i), (c), (f), (ihf), (iha))
 
+
+/*
+ * Utility macros; do not use outside this file.
+ */
+#define	__BS_TYPENAME(BITS)		__CONCAT3(u_int,BITS,_t)
+#define __BS_OFFSET(t, o, BYTES)	((o) << (t)->bs_stride)
+#define __BS_FUNCTION(func,BYTES)	__CONCAT3(func,_,BYTES)
+
+/*
+ * Calculate the target address using the bus_space parameters
+ */
+#define __BS_ADDR(t, h, offset, BITS, BYTES)				\
+	((volatile __CONCAT3(u_int,BITS,_t) *)				\
+	 ((h) + __BS_OFFSET(t, offset, BYTES) +				\
+	 (t)->__CONCAT(bs_offset_,BYTES)))
+
 /*
  *	u_intN_t bus_space_read_N __P((bus_space_tag_t tag,
  *	    bus_space_handle_t bsh, bus_size_t offset));
@@ -339,19 +371,18 @@ int	mipsco_bus_space_alloc __P((bus_space_tag_t, bus_addr_t, bus_addr_t,
  * described by tag/handle/offset.
  */
 
-#define bus_space_read(BYTES,BITS)					\
+#define __bus_space_read(BYTES,BITS)					\
 static __inline __CONCAT3(u_int,BITS,_t)				\
 __CONCAT(bus_space_read_,BYTES)(bus_space_tag_t bst,			\
     bus_space_handle_t bsh, bus_size_t offset)				\
 {									\
-	return (*(volatile __CONCAT3(u_int,BITS,_t) *)			\
-	    (bsh + (offset << __CONCAT(bst->bs_stride_,BYTES))));	\
+	return (*__BS_ADDR(bst, bsh, offset, BITS, BYTES));		\
 }
 
-bus_space_read(1,8)
-bus_space_read(2,16)
-bus_space_read(4,32)
-bus_space_read(8,64)
+__bus_space_read(1,8)
+__bus_space_read(2,16)
+__bus_space_read(4,32)
+__bus_space_read(8,64)
 
 /*
  *	void bus_space_read_multi_N __P((bus_space_tag_t tag,
@@ -362,24 +393,29 @@ bus_space_read(8,64)
  * described by tag/handle/offset and copy into buffer provided.
  */
 
-#define bus_space_read_multi(BYTES,BITS)				\
-static __inline void							\
-__CONCAT(bus_space_read_multi_,BYTES)(bus_space_tag_t bst,		\
-    bus_space_handle_t bsh, bus_size_t offset,				\
-    __CONCAT3(u_int,BITS,_t) *datap, bus_size_t count)			\
-{									\
-	volatile __CONCAT3(u_int,BITS,_t) *p =				\
-	    (volatile __CONCAT3(u_int,BITS,_t) *)			\
-	    (bsh + (offset << __CONCAT(bst->bs_stride_,BYTES)));	\
+#define __bus_space_read_multi(BYTES,BITS)				\
+static __inline void __BS_FUNCTION(bus_space_read_multi,BYTES)		\
+	__P((bus_space_tag_t, bus_space_handle_t, bus_size_t,		\
+	__BS_TYPENAME(BITS) *, size_t));				\
 									\
-	for (; count > 0; --count)					\
-		*datap++ = *p;						\
+static __inline void							\
+__BS_FUNCTION(bus_space_read_multi,BYTES)(t, h, o, a, c)		\
+	bus_space_tag_t t;						\
+	bus_space_handle_t h;						\
+	bus_size_t o;							\
+	__BS_TYPENAME(BITS) *a;						\
+	size_t c;							\
+{									\
+									\
+	while (c--)							\
+		*a++ = __BS_FUNCTION(bus_space_read,BYTES)(t, h, o);	\
 }
 
-bus_space_read_multi(1,8)
-bus_space_read_multi(2,16)
-bus_space_read_multi(4,32)
-bus_space_read_multi(8,64)
+__bus_space_read_multi(1,8)
+__bus_space_read_multi(2,16)
+__bus_space_read_multi(4,32)
+__bus_space_read_multi(8,64)
+
 
 /*
  *	void bus_space_read_region_N __P((bus_space_tag_t tag,
@@ -391,27 +427,31 @@ bus_space_read_multi(8,64)
  * buffer provided.
  */
 
-#define bus_space_read_region(BYTES,BITS)				\
-static __inline void							\
-__CONCAT(bus_space_read_region_,BYTES)(bus_space_tag_t bst,		\
-    bus_space_handle_t bsh, bus_size_t offset,				\
-    __CONCAT3(u_int,BITS,_t) *datap, bus_size_t count)			\
-{									\
-	int stride = 1 << __CONCAT(bst->bs_stride_,BYTES);		\
-	volatile __CONCAT3(u_int,BITS,_t) *p =				\
-	    (volatile __CONCAT3(u_int,BITS,_t) *)			\
-	    (bsh + (offset << __CONCAT(bst->bs_stride_,BYTES)));	\
+#define __bus_space_read_region(BYTES,BITS)				\
+static __inline void __BS_FUNCTION(bus_space_read_region,BYTES)		\
+	__P((bus_space_tag_t, bus_space_handle_t, bus_size_t,		\
+	__BS_TYPENAME(BITS) *, size_t));				\
 									\
-	for (; count > 0; --count) {					\
-		*datap++ = *p;						\
-		p += stride;						\
+static __inline void							\
+__BS_FUNCTION(bus_space_read_region,BYTES)(t, h, o, a, c)		\
+	bus_space_tag_t t;						\
+	bus_space_handle_t h;						\
+	bus_size_t o;							\
+	__BS_TYPENAME(BITS) *a;						\
+	size_t c;							\
+{									\
+									\
+	while (c--) {							\
+		*a++ = __BS_FUNCTION(bus_space_read,BYTES)(t, h, o);	\
+		o += BYTES;						\
 	}								\
 }
 
-bus_space_read_region(1,8)
-bus_space_read_region(2,16)
-bus_space_read_region(4,32)
-bus_space_read_region(8,64)
+__bus_space_read_region(1,8)
+__bus_space_read_region(2,16)
+__bus_space_read_region(4,32)
+__bus_space_read_region(8,64)
+
 
 /*
  *	void bus_space_write_N __P((bus_space_tag_t tag,
@@ -422,21 +462,20 @@ bus_space_read_region(8,64)
  * described by tag/handle/offset.
  */
 
-#define bus_space_write(BYTES,BITS)					\
+#define __bus_space_write(BYTES,BITS)					\
 static __inline void							\
 __CONCAT(bus_space_write_,BYTES)(bus_space_tag_t bst,			\
     bus_space_handle_t bsh,						\
     bus_size_t offset, __CONCAT3(u_int,BITS,_t) data)			\
 {									\
-	*(volatile __CONCAT3(u_int,BITS,_t) *)				\
-	    (bsh + (offset << __CONCAT(bst->bs_stride_,BYTES))) = data; \
+	*__BS_ADDR(bst, bsh, offset, BITS, BYTES) = data;		\
 	wbflush();							\
 }
 
-bus_space_write(1,8)
-bus_space_write(2,16)
-bus_space_write(4,32)
-bus_space_write(8,64)
+__bus_space_write(1,8)
+__bus_space_write(2,16)
+__bus_space_write(4,32)
+__bus_space_write(8,64)
 
 /*
  *	void bus_space_write_multi_N __P((bus_space_tag_t tag,
@@ -447,26 +486,29 @@ bus_space_write(8,64)
  * provided to bus space described by tag/handle/offset.
  */
 
-#define bus_space_write_multi(BYTES,BITS)				\
-static __inline void							\
-__CONCAT(bus_space_write_multi_,BYTES)(bus_space_tag_t bst,		\
-    bus_space_handle_t bsh, bus_size_t offset,				\
-    const __CONCAT3(u_int,BITS,_t) *datap, bus_size_t count)		\
-{									\
-	volatile __CONCAT3(u_int,BITS,_t) *p =				\
-	    (volatile __CONCAT3(u_int,BITS,_t) *)			\
-	    (bsh + (offset << __CONCAT(bst->bs_stride_,BYTES)));	\
+#define __bus_space_write_multi(BYTES,BITS)				\
+static __inline void __BS_FUNCTION(bus_space_write_multi,BYTES)       	\
+	__P((bus_space_tag_t, bus_space_handle_t, bus_size_t,		\
+	__BS_TYPENAME(BITS) *, size_t));				\
 									\
-	while (count--) {						\
-		*p = *datap++;						\
-		wbflush();						\
-	}								\
+static __inline void							\
+__BS_FUNCTION(bus_space_write_multi,BYTES)(t, h, o, a, c)     		\
+	bus_space_tag_t t;						\
+	bus_space_handle_t h;						\
+	bus_size_t o;							\
+	__BS_TYPENAME(BITS) *a;						\
+	size_t c;							\
+{									\
+									\
+	while (c--)							\
+		__BS_FUNCTION(bus_space_write,BYTES)(t, h, o, *a++);	\
 }
 
-bus_space_write_multi(1,8)
-bus_space_write_multi(2,16)
-bus_space_write_multi(4,32)
-bus_space_write_multi(8,64)
+__bus_space_write_multi(1,8)
+__bus_space_write_multi(2,16)
+__bus_space_write_multi(4,32)
+__bus_space_write_multi(8,64)
+
 
 /*
  *	void bus_space_write_region_N __P((bus_space_tag_t tag,
@@ -477,28 +519,31 @@ bus_space_write_multi(8,64)
  * to bus space described by tag/handle starting at `offset'.
  */
 
-#define bus_space_write_region(BYTES,BITS)				\
-static __inline void							\
-__CONCAT(bus_space_write_region_,BYTES)(bus_space_tag_t bst,		\
-    bus_space_handle_t bsh, bus_size_t offset,				\
-    const __CONCAT3(u_int,BITS,_t) *datap, bus_size_t count)		\
-{									\
-	int stride = 1 << __CONCAT(bst->bs_stride_,BYTES);		\
-	volatile __CONCAT3(u_int,BITS,_t) *p =				\
-	    (volatile __CONCAT3(u_int,BITS,_t) *)			\
-	    (bsh + (offset << __CONCAT(bst->bs_stride_,BYTES)));	\
+#define __bus_space_write_region(BYTES,BITS)				\
+static __inline void __BS_FUNCTION(bus_space_write_region,BYTES)      	\
+	__P((bus_space_tag_t, bus_space_handle_t, bus_size_t,		\
+	const __BS_TYPENAME(BITS) *, size_t));				\
 									\
-	while (count--) {						\
-		*p = *datap++;						\
-		p += stride;						\
+static __inline void							\
+__BS_FUNCTION(bus_space_write_region,BYTES)(t, h, o, a, c)    		\
+	bus_space_tag_t t;						\
+	bus_space_handle_t h;						\
+	bus_size_t o;							\
+	const __BS_TYPENAME(BITS) *a;					\
+	size_t c;							\
+{									\
+									\
+	while (c--) {							\
+		__BS_FUNCTION(bus_space_write,BYTES)(t, h, o, *a++);	\
+		o += BYTES;						\
 	}								\
-	wbflush();							\
 }
 
-bus_space_write_region(1,8)
-bus_space_write_region(2,16)
-bus_space_write_region(4,32)
-bus_space_write_region(8,64)
+__bus_space_write_region(1,8)
+__bus_space_write_region(2,16)
+__bus_space_write_region(4,32)
+__bus_space_write_region(8,64)
+
 
 /*
  *	void bus_space_set_multi_N __P((bus_space_tag_t tag,
@@ -509,24 +554,29 @@ bus_space_write_region(8,64)
  * by tag/handle/offset `count' times.
  */
 
-#define bus_space_set_multi(BYTES,BITS)					\
-static __inline void							\
-__CONCAT(bus_space_set_multi_,BYTES)(bus_space_tag_t bst,		\
-    bus_space_handle_t bsh, bus_size_t offset,				\
-    const __CONCAT3(u_int,BITS,_t) data, bus_size_t count)		\
-{									\
-	volatile __CONCAT3(u_int,BITS,_t) *p =				\
-	    (volatile __CONCAT3(u_int,BITS,_t) *)			\
-	    (bsh + (offset << __CONCAT(bst->bs_stride_,BYTES)));	\
+#define __bus_space_set_multi(BYTES,BITS)				\
+static __inline void __BS_FUNCTION(bus_space_set_multi,BYTES)		\
+	__P((bus_space_tag_t, bus_space_handle_t, bus_size_t,		\
+	__BS_TYPENAME(BITS), size_t));					\
 									\
-	while (count--)							\
-		*p = data;						\
+static __inline void							\
+__BS_FUNCTION(bus_space_set_multi,BYTES)(t, h, o, v, c)       		\
+	bus_space_tag_t t;						\
+	bus_space_handle_t h;						\
+	bus_size_t o;							\
+	__BS_TYPENAME(BITS) v;						\
+	size_t c;							\
+{									\
+									\
+	while (c--)							\
+		__BS_FUNCTION(bus_space_write,BYTES)(t, h, o, v);	\
 }
 
-bus_space_set_multi(1,8)
-bus_space_set_multi(2,16)
-bus_space_set_multi(4,32)
-bus_space_set_multi(8,64)
+__bus_space_set_multi(1,8)
+__bus_space_set_multi(2,16)
+__bus_space_set_multi(4,32)
+__bus_space_set_multi(8,64)
+
 
 /*
  *	void bus_space_set_region_N __P((bus_space_tag_t tag,
@@ -537,72 +587,75 @@ bus_space_set_multi(8,64)
  * by tag/handle starting at `offset'.
  */
 
-#define bus_space_set_region(BYTES,BITS)				\
-static __inline void							\
-__CONCAT(bus_space_set_region_,BYTES)(bus_space_tag_t bst,		\
-    bus_space_handle_t bsh, bus_size_t offset,				\
-    __CONCAT3(u_int,BITS,_t) data, bus_size_t count)			\
-{									\
-	int stride = 1 << __CONCAT(bst->bs_stride_,BYTES);		\
-	volatile __CONCAT3(u_int,BITS,_t) *p =				\
-	    (volatile __CONCAT3(u_int,BITS,_t) *)			\
-	    (bsh + (offset << __CONCAT(bst->bs_stride_,BYTES)));	\
+#define __bus_space_set_region(BYTES,BITS)				\
+static __inline void __BS_FUNCTION(bus_space_set_region,BYTES)		\
+	__P((bus_space_tag_t, bus_space_handle_t, bus_size_t,		\
+	__BS_TYPENAME(BITS), size_t));					\
 									\
-	while (count--) {						\
-		*p = data;						\
-		p += stride;						\
+static __inline void							\
+__BS_FUNCTION(bus_space_set_region,BYTES)(t, h, o, v, c)		\
+	bus_space_tag_t t;						\
+	bus_space_handle_t h;						\
+	bus_size_t o;							\
+	__BS_TYPENAME(BITS) v;						\
+	size_t c;							\
+{									\
+									\
+	while (c--) {							\
+		__BS_FUNCTION(bus_space_write,BYTES)(t, h, o, v);     	\
+		o += BYTES;						\
 	}								\
-	wbflush();							\
 }
 
-bus_space_set_region(1,8)
-bus_space_set_region(2,16)
-bus_space_set_region(4,32)
-bus_space_set_region(8,64)
+__bus_space_set_region(1,8)
+__bus_space_set_region(2,16)
+__bus_space_set_region(4,32)
+__bus_space_set_region(8,64)
+
 
 /*
  *	void bus_space_copy_region_N __P((bus_space_tag_t tag,
  *	    bus_space_handle_t bsh1, bus_size_t off1,
  *	    bus_space_handle_t bsh2, bus_size_t off2,
- *	    size_t count));
+ *	    bus_size_t count));
  *
  * Copy `count' 1, 2, 4, or 8 byte values from bus space starting
  * at tag/bsh1/off1 to bus space starting at tag/bsh2/off2.
  */
 
-#define bus_space_copy_region(BYTES,BITS)				\
-static __inline void							\
-__CONCAT(bus_space_copy_region_,BYTES)(bus_space_tag_t bst,		\
-    bus_space_handle_t srcbsh, bus_size_t srcoffset,			\
-    bus_space_handle_t dstbsh, bus_size_t dstoffset, bus_size_t count)	\
-{									\
-	int stride = 1 << __CONCAT(bst->bs_stride_,BYTES);		\
-	volatile __CONCAT3(u_int,BITS,_t) *srcp =			\
-	    (volatile __CONCAT3(u_int,BITS,_t) *)			\
-	    (srcbsh + (srcoffset << __CONCAT(bst->bs_stride_,BYTES)));	\
-	volatile __CONCAT3(u_int,BITS,_t) *dstp =			\
-	    (volatile __CONCAT3(u_int,BITS,_t) *)			\
-	    (dstbsh + (dstoffset << __CONCAT(bst->bs_stride_,BYTES)));	\
-	bus_size_t offset;						\
+#define	__bus_space_copy_region(BYTES)					\
+static __inline void __BS_FUNCTION(bus_space_copy_region,BYTES)		\
+	__P((bus_space_tag_t,						\
+	    bus_space_handle_t bsh1, bus_size_t off1,			\
+	    bus_space_handle_t bsh2, bus_size_t off2,			\
+	    bus_size_t count));						\
 									\
-	if (srcp >= dstp) {						\
+static __inline void							\
+__BS_FUNCTION(bus_space_copy_region,BYTES)(t, h1, o1, h2, o2, c)	\
+	bus_space_tag_t t;						\
+	bus_space_handle_t h1, h2;					\
+	bus_size_t o1, o2, c;						\
+{									\
+	bus_size_t o;							\
+									\
+	if ((h1 + o1) >= (h2 + o2)) {					\
 		/* src after dest: copy forward */			\
-		for (offset = 0; count > 0; --count, offset += stride)	\
-			dstp[offset] = srcp[offset];			\
+		for (o = 0; c != 0; c--, o += BYTES)			\
+		   __BS_FUNCTION(bus_space_write,BYTES)(t, h2, o2 + o,	\
+		       __BS_FUNCTION(bus_space_read,BYTES)(t, h1, o1 + o)); \
 	} else {							\
-		/* dest after src: copy backward */			\
-		offset = (count << __CONCAT(bst->bs_stride_,BYTES))	\
-		    - stride;						\
-		for (; count > 0; --count, offset -= stride)		\
-			dstp[offset] = srcp[offset];			\
+		/* dest after src: copy backwards */			\
+		for (o = (c - 1) * BYTES; c != 0; c--, o -= BYTES)	\
+		   __BS_FUNCTION(bus_space_write,BYTES)(t, h2, o2 + o,	\
+		       __BS_FUNCTION(bus_space_read,BYTES)(t, h1, o1 + o)); \
 	}								\
-	wbflush();							\
 }
 
-bus_space_copy_region(1,8)
-bus_space_copy_region(2,16)
-bus_space_copy_region(4,32)
-bus_space_copy_region(8,64)
+__bus_space_copy_region(1)
+__bus_space_copy_region(2)
+__bus_space_copy_region(4)
+__bus_space_copy_region(8)
+
 
 /*
  * Operations which handle byte stream data on word access.
@@ -614,65 +667,92 @@ bus_space_copy_region(8,64)
  * - When bus bridge performs automatic byte swap, these functions
  *   perform byte swap once more, to cancel the bridge's behavior.
  *
- * Currently these are just same as normal operations, since all
- * supported buses are same endian with CPU (i.e. little-endian).
+ * Mips Computer Systems platforms perform harware byte swapping -
+ * therefore the streaming methods can byte swap as determined from
+ * the bus space tag settings
  *
  */
 #define __BUS_SPACE_HAS_STREAM_METHODS
-#define bus_space_read_stream_2(tag, bsh, offset)			\
-	bus_space_read_2(tag, bsh, offset)
-#define bus_space_read_stream_4(tag, bsh, offset)			\
-	bus_space_read_4(tag, bsh, offset)
-#define bus_space_read_stream_8(tag, bsh, offset)			\
-	bus_space_read_8(tag, bsh, offset)
-#define bus_space_read_multi_stream_2(tag, bsh, offset, datap, count)	\
-	bus_space_read_multi_2(tag, bsh, offset, datap, count)
-#define bus_space_read_multi_stream_4(tag, bsh, offset, datap, count)	\
-	bus_space_read_multi_4(tag, bsh, offset, datap, count)
-#define bus_space_read_multi_stream_8(tag, bsh, offset, datap, count)	\
-	bus_space_read_multi_8(tag, bsh, offset, datap, count)
-#define bus_space_read_region_stream_2(tag, bsh, offset, datap, count)	\
-	bus_space_read_region_2(tag, bsh, offset, datap, count)
-#define bus_space_read_region_stream_4(tag, bsh, offset, datap, count)	\
-	bus_space_read_region_4(tag, bsh, offset, datap, count)
-#define bus_space_read_region_stream_8(tag, bsh, offset, datap, count)	\
-	bus_space_read_region_8(tag, bsh, offset, datap, count)
-#define bus_space_write_stream_2(tag, bsh, offset, data)		\
-	bus_space_write_2(tag, bsh, offset, data)
-#define bus_space_write_stream_4(tag, bsh, offset, data)		\
-	bus_space_write_4(tag, bsh, offset, data)
-#define bus_space_write_stream_8(tag, bsh, offset, data)		\
-	bus_space_write_8(tag, bsh, offset, data)
-#define bus_space_write_multi_stream_2(tag, bsh, offset, datap, count)	\
-	bus_space_write_multi_2(tag, bsh, offset, datap, count)
-#define bus_space_write_multi_stream_4(tag, bsh, offset, datap, count)	\
-	bus_space_write_multi_4(tag, bsh, offset, datap, count)
-#define bus_space_write_multi_stream_8(tag, bsh, offset, datap, count)	\
-	bus_space_write_multi_8(tag, bsh, offset, datap, count)
-#define bus_space_write_region_stream_2(tag, bsh, offset, datap, count)	\
-	bus_space_write_region_2(tag, bsh, offset, datap, count)
-#define bus_space_write_region_stream_4(tag, bsh, offset, datap, count)	\
-	bus_space_write_region_4(tag, bsh, offset, datap, count)
-#define bus_space_write_region_stream_8(tag, bsh, offset, datap, count)	\
-	bus_space_write_region_8(tag, bsh, offset, datap, count)
-#define bus_space_write_region_stream_2(tag, bsh, offset, datap, count)	\
-	bus_space_write_region_2(tag, bsh, offset, datap, count)
-#define bus_space_write_region_stream_4(tag, bsh, offset, datap, count)	\
-	bus_space_write_region_4(tag, bsh, offset, datap, count)
-#define bus_space_write_region_stream_8(tag, bsh, offset, datap, count)	\
-	bus_space_write_region_8(tag, bsh, offset, datap, count)
-#define bus_space_set_multi_stream_2(tag, bsh, offset, data, count)	\
-	bus_space_set_multi_2(tag, bsh, offset, data, count)
-#define bus_space_set_multi_stream_4(tag, bsh, offset, data, count)	\
-	bus_space_set_multi_4(tag, bsh, offset, data, count)
-#define bus_space_set_multi_stream_8(tag, bsh, offset, data, count)	\
-	bus_space_set_multi_8(tag, bsh, offset, data, count)
-#define bus_space_set_region_stream_2(tag, bsh, offset, data, count)	\
-	bus_space_set_region_2(tag, bsh, offset, data, count)
-#define bus_space_set_region_stream_4(tag, bsh, offset, data, count)	\
-	bus_space_set_region_4(tag, bsh, offset, data, count)
-#define bus_space_set_region_stream_8(tag, bsh, offset, data, count)	\
-	bus_space_set_region_8(tag, bsh, offset, data, count)
+
+/* Force creation of stream methods using the standard template macros */
+#undef  __BS_FUNCTION
+#define __BS_FUNCTION(func,BYTES)	__CONCAT3(func,_stream_,BYTES)
+
+#define __BS_BSWAP(bst, val, BITS)					\
+	((bst->bs_bswap) ? __CONCAT(bswap,BITS)(val) : (val))
+
+
+#define __bus_space_read_stream(BYTES,BITS)				\
+static __inline __BS_TYPENAME(BITS)					\
+__CONCAT(bus_space_read_stream_,BYTES)(bus_space_tag_t bst,		\
+    bus_space_handle_t bsh, bus_size_t offset)				\
+{									\
+	register __BS_TYPENAME(BITS) val =				\
+		__CONCAT(bus_space_read_,BYTES)(bst, bsh, offset);	\
+									\
+	return __BS_BSWAP(bst, val, BITS);				\
+}
+
+__bus_space_read_stream(2, 16)		/* bus_space_read_stream_2 */
+__bus_space_read_stream(4, 32)		/* bus_space_read_stream_4 */
+__bus_space_read_stream(8, 64)		/* bus_space_read_stream_8 */
+
+
+#define __bus_space_write_stream(BYTES,BITS)				\
+static __inline void							\
+__CONCAT(bus_space_write_stream_,BYTES)(bus_space_tag_t bst,		\
+    bus_space_handle_t bsh,						\
+    bus_size_t offset, __CONCAT3(u_int,BITS,_t) data)			\
+{									\
+	*__BS_ADDR(bst, bsh, offset, BITS, BYTES) =			\
+		__BS_BSWAP(bst, data, BITS);				\
+	wbflush();							\
+}
+
+__bus_space_write_stream(2,16)		/* bus_space_write_stream_2 */
+__bus_space_write_stream(4,32)		/* bus_space_write_stream_4 */
+__bus_space_write_stream(8,64)		/* bus_space_write_stream_8 */
+
+__bus_space_read_multi(2,16)		/* bus_space_read_multi_stream_2 */
+__bus_space_read_multi(4,32)		/* bus_space_read_multi_stream_4 */
+__bus_space_read_multi(8,64)		/* bus_space_read_multi_stream_8 */
+
+__bus_space_read_region(2,16)		/* bus_space_read_region_stream_2 */
+__bus_space_read_region(4,32)		/* bus_space_read_region_stream_4 */
+__bus_space_read_region(8,64)		/* bus_space_read_region_stream_8 */
+
+__bus_space_write_multi(2,16)		/* bus_space_write_multi_stream_2 */
+__bus_space_write_multi(4,32)		/* bus_space_write_multi_stream_4 */
+__bus_space_write_multi(8,64)		/* bus_space_write_multi_stream_8 */
+
+__bus_space_write_region(2,16)		/* bus_space_write_region_stream_2 */
+__bus_space_write_region(4,32)		/* bus_space_write_region_stream_4 */
+__bus_space_write_region(8,64)		/* bus_space_write_region_stream_8 */
+
+__bus_space_set_multi(2,16)		/* bus_space_set_multi_stream_2 */
+__bus_space_set_multi(4,32)		/* bus_space_set_multi_stream_4 */
+__bus_space_set_multi(8,64)		/* bus_space_set_multi_stream_8 */
+
+__bus_space_set_region(2,16)		/* bus_space_set_region_stream_2 */
+__bus_space_set_region(4,32)		/* bus_space_set_region_stream_4 */
+__bus_space_set_region(8, 64)		/* bus_space_set_region_stream_8 */
+
+#undef __bus_space_read
+#undef __bus_space_write
+#undef __bus_space_read_stream
+#undef __bus_space_write_stream
+#undef __bus_space_read_multi
+#undef __bus_space_read_region
+#undef __bus_space_write_multi
+#undef __bus_space_write_region
+#undef __bus_space_set_multi
+#undef __bus_space_set_region
+#undef __bus_space_copy_region
+
+#undef __BS_TYPENAME
+#undef __BS_OFFSET
+#undef __BS_FUNCTION
+#undef __BS_ADDR
 
 /*
  * Bus read/write barrier methods.
@@ -693,14 +773,17 @@ bus_space_copy_region(8,64)
 /*
  * Flags used in various bus DMA methods.
  */
-#define BUS_DMA_WAITOK		0x00	/* safe to sleep (pseudo-flag) */
-#define BUS_DMA_NOWAIT		0x01	/* not safe to sleep */
-#define BUS_DMA_ALLOCNOW	0x02	/* perform resource allocation now */
-#define BUS_DMA_COHERENT	0x04	/* hint: map memory DMA coherent */
-#define BUS_DMA_BUS1		0x10	/* placeholders for bus functions... */
-#define BUS_DMA_BUS2		0x20
-#define BUS_DMA_BUS3		0x40
-#define BUS_DMA_BUS4		0x80
+#define BUS_DMA_WAITOK		0x000	/* safe to sleep (pseudo-flag) */
+#define BUS_DMA_NOWAIT		0x001	/* not safe to sleep */
+#define BUS_DMA_ALLOCNOW	0x002	/* perform resource allocation now */
+#define BUS_DMA_COHERENT	0x004	/* hint: map memory DMA coherent */
+#define	BUS_DMA_STREAMING	0x008	/* hint: sequential, unidirectional */
+#define BUS_DMA_BUS1		0x010	/* placeholders for bus functions... */
+#define BUS_DMA_BUS2		0x020
+#define BUS_DMA_BUS3		0x040
+#define BUS_DMA_BUS4		0x080
+#define	BUS_DMA_READ		0x100	/* mapping is device -> memory only */
+#define	BUS_DMA_WRITE		0x200	/* mapping is memory -> device only */
 
 #define MIPSCO_DMAMAP_COHERENT	0x100	/* no cache flush necessary on sync */
 
@@ -849,9 +932,7 @@ int	_bus_dmamap_load_uio __P((bus_dma_tag_t, bus_dmamap_t,
 int	_bus_dmamap_load_raw __P((bus_dma_tag_t, bus_dmamap_t,
 	    bus_dma_segment_t *, int, bus_size_t, int));
 void	_bus_dmamap_unload __P((bus_dma_tag_t, bus_dmamap_t));
-void	_mips1_bus_dmamap_sync __P((bus_dma_tag_t, bus_dmamap_t, bus_addr_t,
-	    bus_size_t, int));
-void	_mips3_bus_dmamap_sync __P((bus_dma_tag_t, bus_dmamap_t, bus_addr_t,
+void	_bus_dmamap_sync __P((bus_dma_tag_t, bus_dmamap_t, bus_addr_t,
 	    bus_size_t, int));
 
 int	_bus_dmamem_alloc __P((bus_dma_tag_t tag, bus_size_t size,
@@ -877,8 +958,6 @@ int	_bus_dmamem_alloc_range __P((bus_dma_tag_t tag, bus_size_t size,
 #endif /* _MIPSCO_BUS_DMA_PRIVATE */
 
 void	_bus_dma_tag_init __P((bus_dma_tag_t tag));
-void	jazz_bus_dma_tag_init __P((bus_dma_tag_t tag));
-void	isadma_bounce_tag_init __P((bus_dma_tag_t tag));
 
 #endif /* _KERNEL */
 #endif /* _MIPSCO_BUS_H_ */

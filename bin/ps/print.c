@@ -1,4 +1,4 @@
-/*	$NetBSD: print.c,v 1.65 2001/01/15 21:02:58 christos Exp $	*/
+/*	$NetBSD: print.c,v 1.71 2002/02/21 19:31:03 martin Exp $	*/
 
 /*
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -74,7 +74,7 @@
 #if 0
 static char sccsid[] = "@(#)print.c	8.6 (Berkeley) 4/16/94";
 #else
-__RCSID("$NetBSD: print.c,v 1.65 2001/01/15 21:02:58 christos Exp $");
+__RCSID("$NetBSD: print.c,v 1.71 2002/02/21 19:31:03 martin Exp $");
 #endif
 #endif /* not lint */
 
@@ -310,20 +310,37 @@ command(ki, ve, mode)
 					p++;
 					fmt_putc(' ', &left);
 				}
-			}
-			/*
-			 * append the real command name within
-			 * parentheses, if the command name does
-			 * not match the one in the argument vector
-			 */
-			if (titlecmp(name, argv)) {
-				fmt_putc('(', &left);
-				fmt_puts(name, &left);
-				fmt_putc(')', &left);
-			}
-			if (use_procfs && argv) {
-				free(argv[0]);
-				free(argv);
+				if (titlecmp(name, argv)) {
+					/*
+					 * append the real command name within
+					 * parentheses, if the command name 
+					 * does not match the one in the
+					 * argument vector
+					 */
+					fmt_putc('(', &left);
+					fmt_puts(name, &left);
+					fmt_putc(')', &left);
+				}
+				if (use_procfs) {
+					free(argv[0]);
+					free(argv);
+				}
+			} else {
+				/*
+				 * Commands that don't set an argv vector
+				 * are printed with square brackets if they
+				 * are system commands.  Otherwise they are
+				 * printed within parentheses.
+				 */
+				if (ki->p_flag & P_SYSTEM) {
+					fmt_putc('[', &left);
+					fmt_puts(name, &left);
+					fmt_putc(']', &left);
+				} else {
+					fmt_putc('(', &left);
+					fmt_puts(name, &left);
+					fmt_putc(')', &left);
+				}
 			}
 		} else {
 			fmt_puts(name, &left);
@@ -381,7 +398,7 @@ state(k, ve, mode)
 
 	case SSLEEP:
 		if (flag & P_SINTR)	/* interuptable (long) */
-			*cp = k->p_slptime >= MAXSLP ? 'I' : 'S';
+			*cp = k->p_slptime >= maxslp ? 'I' : 'S';
 		else
 			*cp = 'D';
 		break;
@@ -579,14 +596,6 @@ started(k, ve, mode)
 	struct tm *tp;
 	char buf[100], *cp;
 
-	/*
-	 * XXX: The maximum width of this field is the same as the header
-	 *      "STARTED" for locales that have 3 letter abbreviated month
-	 *      names and 2 letter am/pm descriptions.
-	 */
-	if (mode == WIDTHMODE)
-		return;
-
 	v = ve->var;
 	if (!k->p_uvalid) {
 		if (mode == PRINTMODE)
@@ -719,8 +728,8 @@ cputime(k, ve, mode)
 	int mode;
 {
 	VAR *v;
-	long secs;
-	long psecs;	/* "parts" of a second. first micro, then centi */
+	int32_t secs;
+	int32_t psecs;	/* "parts" of a second. first micro, then centi */
 	int fmtlen;
 
 	v = ve->var;
@@ -763,8 +772,8 @@ cputime(k, ve, mode)
 				v->width = fmtlen;
 		}
 	} else {
-		printf("%*ld:%02ld.%02ld", v->width - 6, secs / SECSPERMIN,
-		    secs % SECSPERMIN, psecs);
+		printf("%*ld:%02ld.%02ld", v->width - 6, (long)(secs / SECSPERMIN),
+		    (long)(secs % SECSPERMIN), (long)psecs);
 	}
 }
 
@@ -819,7 +828,7 @@ getpmem(k)
 	if ((k->p_flag & P_INMEM) == 0)
 		return (0.0);
 	/* XXX want pmap ptpages, segtab, etc. (per architecture) */
-	szptudot = USPACE/getpagesize();
+	szptudot = uspace/getpagesize();
 	/* XXX don't have info about shared */
 	fracmem = ((float)k->p_vm_rssize + szptudot)/mempages;
 	return (100.0 * fracmem);

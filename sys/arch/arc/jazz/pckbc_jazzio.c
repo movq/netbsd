@@ -1,4 +1,4 @@
-/* $NetBSD: pckbc_jazzio.c,v 1.2 2000/12/24 09:25:29 ur Exp $ */
+/* $NetBSD: pckbc_jazzio.c,v 1.4 2001/07/23 21:03:19 jdolecek Exp $ */
 /* NetBSD: pckbc_isa.c,v 1.2 2000/03/23 07:01:35 thorpej Exp  */
 
 /*
@@ -51,6 +51,7 @@
 #include <dev/ic/pckbcvar.h>
 #include <arc/jazz/pckbc_jazzioreg.h>
 
+#define PMS_INTR 7	/* XXX - should be obtained from firmware */
 #define PICA_KBCMDP	(PICA_SYS_KBD + JAZZIO_KBCMDP)
 
 int	pckbc_jazzio_match __P((struct device *, struct cfdata *, void *));
@@ -84,6 +85,8 @@ pckbc_jazzio_match(parent, match, aux)
 		return(0);
 
 	if (pckbc_is_console(iot, addr) == 0) {
+		struct pckbc_internal t;
+
 		if (bus_space_map(iot, addr + KBDATAP, 1, 0, &ioh_d))
 			return (0);
 		if (bus_space_map(iot, PICA_KBCMDP, 1, 0, &ioh_c)) {
@@ -91,15 +94,20 @@ pckbc_jazzio_match(parent, match, aux)
 			return (0);
 		}
 
+		memset(&t, 0, sizeof(t));
+		t.t_iot = iot;
+		t.t_ioh_d = ioh_d;
+		t.t_ioh_c = ioh_c;
+
 		/* flush KBC */
-		(void) pckbc_poll_data1(iot, ioh_d, ioh_c, PCKBC_KBD_SLOT, 0);
+		(void) pckbc_poll_data1(&t, PCKBC_KBD_SLOT, 0);
 
 		/* KBC selftest */
 		if (pckbc_send_cmd(iot, ioh_c, KBC_SELFTEST) == 0) {
 			ok = 0;
 			goto out;
 		}
-		res = pckbc_poll_data1(iot, ioh_d, ioh_c, PCKBC_KBD_SLOT, 0);
+		res = pckbc_poll_data1(&t, PCKBC_KBD_SLOT, 0);
 		if (res != 0x55) {
 			printf("kbc selftest: %x\n", res);
 			ok = 0;
@@ -133,7 +141,7 @@ pckbc_jazzio_attach(parent, self, aux)
 	 * XXX handcrafting "aux" slot...
 	 */
 	jsc->sc_intr[PCKBC_KBD_SLOT] = ja->ja_intr;
-	jsc->sc_intr[PCKBC_AUX_SLOT] = 8;		/* XXX */
+	jsc->sc_intr[PCKBC_AUX_SLOT] = PMS_INTR;		/* XXX */
 
 	if (pckbc_is_console(iot, addr)) {
 		t = &pckbc_consdata;

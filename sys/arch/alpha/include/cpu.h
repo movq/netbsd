@@ -1,7 +1,7 @@
-/* $NetBSD: cpu.h,v 1.52 2001/02/27 22:00:19 mjacob Exp $ */
+/* $NetBSD: cpu.h,v 1.58 2001/05/30 12:28:38 mrg Exp $ */
 
 /*-
- * Copyright (c) 1998, 1999, 2000 The NetBSD Foundation, Inc.
+ * Copyright (c) 1998, 1999, 2000, 2001 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -82,7 +82,7 @@
 #ifndef _ALPHA_CPU_H_
 #define _ALPHA_CPU_H_
 
-#if defined(_KERNEL) && !defined(_LKM)
+#if defined(_KERNEL_OPT)
 #include "opt_multiprocessor.h"
 #include "opt_lockdebug.h"
 #endif
@@ -115,6 +115,7 @@ struct cpu_info {
 	u_long ci_simple_locks;		/* # of simple locks held */
 #endif
 	struct proc *ci_curproc;	/* current owner of the processor */
+	struct cpu_info *ci_next;	/* next cpu_info structure */
 
 	/*
 	 * Private members.
@@ -129,6 +130,15 @@ struct cpu_info {
 	u_long ci_want_resched;		/* preempt current process */
 	u_long ci_intrdepth;		/* interrupt trap depth */
 	struct trapframe *ci_db_regs;	/* registers for debuggers */
+
+	/*
+	 * Variables used by microtime().
+	 */
+	struct timeval ci_pcc_time;
+	long ci_pcc_pcc;
+	long ci_pcc_ms_delta;
+	long ci_pcc_denom;
+
 #if defined(MULTIPROCESSOR)
 	__volatile u_long ci_flags;	/* flags; see below */
 	__volatile u_long ci_ipis;	/* interprocessor interrupts pending */
@@ -139,11 +149,19 @@ struct cpu_info {
 #define	CPUF_PRESENT	0x02		/* CPU is present */
 #define	CPUF_RUNNING	0x04		/* CPU is running */
 #define	CPUF_PAUSED	0x08		/* CPU is paused */
+#define	CPUF_FPUSAVE	0x10		/* CPU is currently in fpusave_cpu() */
+
+extern	struct cpu_info cpu_info_primary;
+extern	struct cpu_info *cpu_info_list;
+
+#define	CPU_INFO_ITERATOR		int
+#define	CPU_INFO_FOREACH(cii, ci)	cii = 0, ci = cpu_info_list; \
+					ci != NULL; ci = ci->ci_next
 
 #if defined(MULTIPROCESSOR)
 extern	__volatile u_long cpus_running;
 extern	__volatile u_long cpus_paused;
-extern	struct cpu_info cpu_info[];
+extern	struct cpu_info *cpu_info[];
 
 #define	curcpu()		((struct cpu_info *)alpha_pal_rdval())
 #define	CPU_IS_PRIMARY(ci)	((ci)->ci_flags & CPUF_PRIMARY)
@@ -153,17 +171,12 @@ void	cpu_boot_secondary_processors(void);
 void	cpu_pause_resume(unsigned long, int);
 void	cpu_pause_resume_all(int);
 #else /* ! MULTIPROCESSOR */
-extern	struct cpu_info cpu_info_store;
-
-#define	curcpu()	(&cpu_info_store)
+#define	curcpu()	(&cpu_info_primary)
 #endif /* MULTIPROCESSOR */
 
 #define	curproc		curcpu()->ci_curproc
 #define	fpcurproc	curcpu()->ci_fpcurproc
 #define	curpcb		curcpu()->ci_curpcb
-
-extern	u_long cpu_implver;		/* from IMPLVER instruction */
-extern	u_long cpu_amask;		/* from AMASK instruction */
 
 /*
  * definitions of cpu-dependent requirements
@@ -245,7 +258,8 @@ do {									\
 #define	CPU_UNALIGNED_FIX	4	/* int: fix unaligned accesses */
 #define	CPU_UNALIGNED_SIGBUS	5	/* int: SIGBUS unaligned accesses */
 #define	CPU_BOOTED_KERNEL	6	/* string: booted kernel name */
-#define	CPU_MAXID		7	/* 6 valid machdep IDs */
+#define	CPU_FP_SYNC_COMPLETE	7	/* int: always fixup sync fp traps */
+#define	CPU_MAXID		8	/* 7 valid machdep IDs */
 
 #define	CTL_MACHDEP_NAMES { \
 	{ 0, 0 }, \
@@ -255,6 +269,7 @@ do {									\
 	{ "unaligned_fix", CTLTYPE_INT }, \
 	{ "unaligned_sigbus", CTLTYPE_INT }, \
 	{ "booted_kernel", CTLTYPE_STRING }, \
+	{ "fp_sync_complete", CTLTYPE_INT }, \
 }
 
 #ifdef _KERNEL
@@ -265,7 +280,10 @@ struct reg;
 struct rpb;
 struct trapframe;
 
+extern struct timeval microset_time;
+
 int	badaddr(void *, size_t);
+void	microset(struct cpu_info *, struct trapframe *);
 
 #endif /* _KERNEL */
 #endif /* _ALPHA_CPU_H_ */

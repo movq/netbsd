@@ -1,4 +1,4 @@
-/*	$NetBSD: vm_machdep.c,v 1.68 2001/02/04 20:36:32 ragge Exp $	     */
+/*	$NetBSD: vm_machdep.c,v 1.75 2001/09/10 21:19:29 chris Exp $	     */
 
 /*
  * Copyright (c) 1994 Ludd, University of Lule}, Sweden.
@@ -79,6 +79,20 @@ pagemove(caddr_t from, caddr_t to, size_t size)
 	mtpr(0, PR_TBIA);
 }
 
+#ifdef MULTIPROCESSOR
+static void
+procjmp(void *arg)
+{
+	struct pcb *pcb = arg;
+	void (*func)(void *);
+
+	func = (void *)pcb->R[0];
+	arg = (void *)pcb->R[1];
+	proc_trampoline_mp();
+	(*func)(arg);
+}
+#endif
+
 /*
  * Finish a fork operation, with process p2 nearly set up.
  * Copy and update the pcb and trap frame, making the child ready to run.
@@ -158,7 +172,14 @@ cpu_fork(struct proc *p1, struct proc *p2, void *stack, size_t stacksize,
 	pcb->KSP = (long)cf;
 	pcb->FP = (long)cf;
 	pcb->AP = (long)&cf->ca_argno;
+#ifdef MULTIPROCESSOR
+	cf->ca_arg1 = (long)pcb;
+	pcb->PC = (long)procjmp + 2;
+	pcb->R[0] = (int)func;
+	pcb->R[1] = (int)arg;
+#else
 	pcb->PC = (int)func + 2;	/* Skip save mask */
+#endif
 
 	/*
 	 * If specified, give the child a different stack.
@@ -241,11 +262,18 @@ cpu_coredump(p, vp, cred, chdr)
 
 /*
  * Kernel stack red zone need to be set when a process is swapped in.
+ * Be sure that all pages are valid.
  */
 void
 cpu_swapin(p)
 	struct proc *p;
 {
+	struct pte *pte;
+	int i;
+
+	pte = kvtopte((vaddr_t)p->p_addr);
+	for (i = 0; i < (USPACE/VAX_NBPG); i ++)
+		pte[i].pg_v = 1;
 	kvtopte((vaddr_t)p->p_addr + REDZONEADDR)->pg_v = 0;
 }
 
@@ -281,7 +309,7 @@ iounaccess(vaddr, npgs)
 	mtpr(0, PR_TBIA);
 }
 
-extern vm_map_t phys_map;
+extern struct vm_map *phys_map;
 
 /*
  * Map a user I/O request into kernel virtual address space.
@@ -293,7 +321,7 @@ vmapbuf(bp, len)
 	struct buf *bp;
 	vsize_t len;
 {
-#if VAX46 || VAX48 || VAX49 || VAX53
+#if VAX46 || VAX48 || VAX49 || VAX53 || VAXANY
 	vaddr_t faddr, taddr, off;
 	paddr_t pa;
 	struct proc *p;
@@ -321,6 +349,7 @@ vmapbuf(bp, len)
 		faddr += PAGE_SIZE;
 		taddr += PAGE_SIZE;
 	}
+	pmap_update(vm_map_pmap(phys_map));
 #endif
 }
 
@@ -332,7 +361,7 @@ vunmapbuf(bp, len)
 	struct buf *bp;
 	vsize_t len;
 {
-#if VAX46 || VAX48 || VAX49 || VAX53
+#if VAX46 || VAX48 || VAX49 || VAX53 || VAXANY
 	vaddr_t addr, off;
 
 	if (vax_boardtype != VAX_BTYP_46
@@ -345,6 +374,8 @@ vunmapbuf(bp, len)
 	addr = trunc_page((vaddr_t)bp->b_data);
 	off = (vaddr_t)bp->b_data - addr;
 	len = round_page(off + len);
+	pmap_remove(vm_map_pmap(phys_map), addr, addr + len);
+	pmap_update(vm_map_pmap(phys_map));
 	uvm_km_free_wakeup(phys_map, addr, len);
 	bp->b_data = bp->b_saveaddr;
 	bp->b_saveaddr = NULL;

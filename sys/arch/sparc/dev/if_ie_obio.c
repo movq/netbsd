@@ -1,4 +1,4 @@
-/*	$NetBSD: if_ie_obio.c,v 1.18 2001/01/22 22:28:44 bjh21 Exp $	*/
+/*	$NetBSD: if_ie_obio.c,v 1.23 2001/09/10 21:19:23 chris Exp $	*/
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -126,7 +126,7 @@ struct ieob {
 
 
 static void ie_obreset __P((struct ie_softc *, int));
-static void ie_obattend __P((struct ie_softc *));
+static void ie_obattend __P((struct ie_softc *, int));
 static void ie_obrun __P((struct ie_softc *));
 
 int ie_obio_match __P((struct device *, struct cfdata *, void *));
@@ -156,8 +156,9 @@ ie_obreset(sc, what)
 	ieo->obctrl = IEOB_NORSET;
 }
 void
-ie_obattend(sc)
+ie_obattend(sc, why)
 	struct ie_softc *sc;
+	int why;
 {
 	volatile struct ieob *ieo = (struct ieob *) sc->sc_reg;
 
@@ -343,8 +344,9 @@ extern	void myetheraddr(u_char *);	/* should be elsewhere */
 	}
 
 	/* Load the segment */
-	if ((error = bus_dmamap_load_raw(dmatag, sc->sc_dmamap,
-				&seg, rseg, msize, BUS_DMA_NOWAIT)) != 0) {
+	if ((error = bus_dmamap_load(dmatag, sc->sc_dmamap,
+				     sc->sc_maddr, msize, NULL,
+				     BUS_DMA_NOWAIT)) != 0) {
 		printf("%s: DMA buffer map load error %d\n",
 			sc->sc_dev.dv_xname, error);
 		bus_dmamem_unmap(dmatag, sc->sc_maddr, msize);
@@ -388,6 +390,7 @@ extern	void myetheraddr(u_char *);	/* should be elsewhere */
 	pmap_enter(pmap_kernel(), trunc_page(IEOB_ADBASE+IE_SCP_ADDR),
 	    pa | PMAP_NC /*| PMAP_IOC*/,
 	    VM_PROT_READ | VM_PROT_WRITE, PMAP_WIRED);
+	pmap_update(pmap_kernel());
 
 	/* Map iscp at location 0 (relative to `maddr') */
 	sc->iscp = 0;

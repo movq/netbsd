@@ -1,4 +1,4 @@
-/*	$NetBSD: limits.h,v 1.1 2001/01/10 19:02:06 bjh21 Exp $	*/
+/*	$NetBSD: limits.h,v 1.3 2001/09/03 01:51:39 matt Exp $	*/
 
 /*
  * Copyright (c) 1988 The Regents of the University of California.
@@ -48,20 +48,24 @@
 #define	CHAR_MAX	0xff		/* max value for a char */
 #define	CHAR_MIN	0		/* min value for a char */
 
-#define	USHRT_MAX	0xffff		/* max value for an unsigned short */
+#define	USHRT_MAX	0xffffU		/* max value for an unsigned short */
 #define	SHRT_MAX	0x7fff		/* max value for a short */
 #define SHRT_MIN        (-0x7fff-1)     /* min value for a short */
 
-#define	UINT_MAX	0xffffffff	/* max value for an unsigned int */
+#define	UINT_MAX	0xffffffffU	/* max value for an unsigned int */
 #define	INT_MAX		0x7fffffff	/* max value for an int */
 #define	INT_MIN		(-0x7fffffff-1)	/* min value for an int */
 
-#define	ULONG_MAX	0xffffffff	/* max value for an unsigned long */
-#define	LONG_MAX	0x7fffffff	/* max value for a long */
-#define	LONG_MIN	(-0x7fffffff-1)	/* min value for a long */
+#define	ULONG_MAX	0xffffffffUL	/* max value for an unsigned long */
+#define	LONG_MAX	0x7fffffffL	/* max value for a long */
+#define	LONG_MIN	(-0x7fffffffL-1)	/* min value for a long */
 
 #if !defined(_ANSI_SOURCE)
+#ifdef __ELF__
+#define	SSIZE_MAX	LONG_MAX	/* max value for a ssize_t */
+#else
 #define	SSIZE_MAX	INT_MAX		/* max value for a ssize_t */
+#endif
 
 #if !defined(_POSIX_C_SOURCE) && !defined(_XOPEN_SOURCE) || \
      defined(_ISOC99_SOURCE) || (__STDC_VERSION__ - 0) >= 199901L
@@ -71,7 +75,11 @@
 #endif
 
 #if !defined(_POSIX_C_SOURCE) && !defined(_XOPEN_SOURCE)
+#ifdef __ELF__
+#define	SIZE_T_MAX	LONG_MAX	/* max value for a size_t */
+#else
 #define	SIZE_T_MAX	UINT_MAX	/* max value for a size_t */
+#endif
 
 #define	UQUAD_MAX	0xffffffffffffffffLL		/* max unsigned quad */
 #define	QUAD_MAX	0x7fffffffffffffffLL		/* max signed quad */

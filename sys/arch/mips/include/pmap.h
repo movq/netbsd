@@ -1,4 +1,4 @@
-/*	$NetBSD: pmap.h,v 1.30 2000/12/25 08:56:12 nisimura Exp $	*/
+/*	$NetBSD: pmap.h,v 1.37 2001/09/10 21:19:18 chris Exp $	*/
 
 /*
  * Copyright (c) 1987 Carnegie-Mellon University
@@ -83,7 +83,7 @@ struct segtab {
  */
 typedef struct pmap {
 	int			pm_count;	/* pmap reference count */
-	simple_lock_data_t	pm_lock;	/* lock on pmap */
+	struct simplelock	pm_lock;	/* lock on pmap */
 	struct pmap_statistics	pm_stats;	/* pmap statistics */
 	unsigned		pm_asid;	/* TLB address space tag */
 	unsigned		pm_asidgen;	/* its generation number */
@@ -91,7 +91,7 @@ typedef struct pmap {
 } *pmap_t;
 
 /*
- * For each vm_page_t, there is a list of all currently valid virtual
+ * For each struct vm_page, there is a list of all currently valid virtual
  * mappings of that page.  An entry is a pv_entry_t, the list is pv_table.
  * XXX really should do this as a part of the higher level code.
  */
@@ -115,6 +115,8 @@ extern struct pmap kernel_pmap_store;
 #define pmap_kernel()		(&kernel_pmap_store)
 #define	pmap_wired_count(pmap) 	((pmap)->pm_stats.wired_count)
 #define pmap_resident_count(pmap) ((pmap)->pm_stats.resident_count)
+
+#define	pmap_update(pmap)	/* nothing (yet) */
 
 /*
  *	Bootstrap the system enough to run with virtual memory.
@@ -142,12 +144,6 @@ void	pmap_prefer __P((vaddr_t, vaddr_t *));
  */
 #define	PMAP_MAP_POOLPAGE(pa)	MIPS_PHYS_TO_KSEG0((pa))
 #define	PMAP_UNMAP_POOLPAGE(va)	MIPS_KSEG0_TO_PHYS((va))
-
-/*
- * Do idle page zero'ing uncached to avoid polluting the cache.
- */
-boolean_t pmap_zero_page_uncached __P((paddr_t));
-#define PMAP_PAGEIDLEZERO(pa)	pmap_zero_page_uncached((pa))
 
 #endif	/* _KERNEL */
 #endif	/* _PMAP_MACHINE_ */

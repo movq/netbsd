@@ -1,3 +1,3 @@
-/*	$NetBSD: pte.h,v 1.1 2001/02/04 18:32:14 briggs Exp $	*/
+/*	$NetBSD: pte.h,v 1.3 2001/06/21 16:28:51 briggs Exp $	*/
 
 #include <powerpc/pte.h>

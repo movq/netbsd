@@ -1,4 +1,4 @@
-/*	$NetBSD: gapspci_dma.c,v 1.3 2001/02/01 19:56:44 thorpej Exp $	*/
+/*	$NetBSD: gapspci_dma.c,v 1.7 2002/06/02 14:44:44 drochner Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -496,7 +496,7 @@ gaps_dmamem_alloc(bus_dma_tag_t t, bus_size_t size, bus_size_t alignment,
 
 	struct pglist mlist;
 	paddr_t curaddr, lastaddr;
-	vm_page_t m;
+	struct vm_page *m;
 	int curseg, error;
 
 	/* Always round the size. */
@@ -505,7 +505,6 @@ gaps_dmamem_alloc(bus_dma_tag_t t, bus_size_t size, bus_size_t alignment,
 	/*
 	 * Allocate the pages from the VM system.
 	 */
-	TAILQ_INIT(&mlist);
 	error = uvm_pglistalloc(size, avail_start, avail_end - PAGE_SIZE,
 	    alignment, boundary, &mlist, nsegs, (flags & BUS_DMA_NOWAIT) == 0);
 	if (error)
@@ -542,7 +541,7 @@ void
 gaps_dmamem_free(bus_dma_tag_t t, bus_dma_segment_t *segs, int nsegs)
 {
 	struct pglist mlist;
-	vm_page_t m;
+	struct vm_page *m;
 	bus_addr_t addr;
 	int curseg;
 
@@ -598,6 +597,7 @@ gaps_dmamem_map(bus_dma_tag_t t, bus_dma_segment_t *segs, int nsegs,
 			    VM_PROT_READ | VM_PROT_WRITE);
 		}
 	}
+	pmap_update(pmap_kernel());
 
 	return (0);
 }
@@ -620,6 +620,7 @@ gaps_dmamem_unmap(bus_dma_tag_t t, caddr_t kva, size_t size)
 
 	size = round_page(size);
 	pmap_kremove((vaddr_t) kva, size);
+	pmap_update(pmap_kernel());
 	uvm_km_free(kernel_map, (vaddr_t) kva, size);
 }
 

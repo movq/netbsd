@@ -1,11 +1,11 @@
-#	$NetBSD: GENERIC,v 1.4 2001/02/08 20:27:24 briggs Exp $
+#	$NetBSD: GENERIC,v 1.14 2001/09/12 21:05:38 manu Exp $
 #
 # GENERIC for Motorola Sandpoint
 #
 
 include "arch/sandpoint/conf/std.sandpoint"
 
-#ident 		"GENERIC-$Revision: 1.4 $"
+#ident 		"GENERIC-$Revision: 1.14 $"
 
 maxusers	32
 
@@ -14,16 +14,19 @@ maxusers	32
 # HMAC key to be used for debugging sessions
 #options 	IPKDBKEY="\"HMAC pass phrase text\""
 #options 	IPKDBSECURE	# Allow debugging even when securelevel > 0
-makeoptions	DEBUG="-g"
+#makeoptions	DEBUG="-g"
 
-options 	DEBUG
+#options 	DEBUG
 options 	DIAGNOSTIC
 options 	TRAP_PANICWAIT
 options 	DDB
 #options 	DDB_HISTORY_SIZE=100	# Enable history editing in DDB
 options 	KTRACE
+#options 	NEWPMAP
+#options 	PMAPCHECK
+#options 	PMAPDEBUG
+options 	OPENPIC_SERIAL_MODE
 
-options 	TCP_COMPAT_42
 options 	COMPAT_43
 options 	COMPAT_09
 options 	COMPAT_10
@@ -31,7 +34,10 @@ options 	COMPAT_12
 options 	COMPAT_13
 options 	COMPAT_14
 options 	COMPAT_386BSD_MBRPART	# recognize old partition ID
+#options 	COMPAT_LINUX   # Linux binary compatibility
+#options 	TCP_COMPAT_42	# 4.2BSD TCP/IP bug compat. Not recommended.
 
+options 	MSGBUFSIZE=65536
 file-system 	FFS
 file-system 	MFS
 file-system 	NFS
@@ -49,6 +55,7 @@ file-system 	UNION
 options 	SOFTDEP         # FFS soft updates support.
 
 options 	INET
+#options 	TCP_DEBUG	# Record last TCP_NDEBUG packets with SO_DEBUG
 
 options		NFS_BOOT_BOOTPARAM,NFS_BOOT_BOOTP
 
@@ -56,6 +63,7 @@ config		netbsd	root on ? type ?
 
 # network psuedo-devices
 pseudo-device	bpfilter	8	# packet filter
+#pseudo-device	bridge			# simple inter-network bridging
 #pseudo-device	ipfilter
 pseudo-device	loop
 
@@ -78,6 +86,7 @@ options 	PCI_NETBSD_CONFIGURE	# Have NetBSD configure PCI I/O & Mem
 
 mainbus0 at root
 
+cpu*	at mainbus0
 pci*	at mainbus0 bus ?
 
 ppb*	at pci? dev ? function ?	# PCI-PCI bridges
@@ -92,8 +101,13 @@ isa*	at pcib?			# ISA on PCI-ISA bridge
 
 vga*	at pci? dev ? function ?
 
-ep*	at pci? dev ? function ?	# 3Com 3c59x
 ex*	at pci? dev ? function ?	# 3Com 90x[B]
+sip*	at pci? dev ? function ?	# SiS 900 Ethernet
+options 	TLP_MATCH_21040
+options 	TLP_MATCH_21041
+options 	TLP_MATCH_21140
+options 	TLP_MATCH_21142
+tlp*	at pci? dev ? function ?	# DEC Tulip and similar
 
 ukphy*	at mii? phy ?			# generic unknown PHYs
 exphy*	at mii? phy ?			# 3Com internal PHYs
@@ -115,3 +129,17 @@ lpt0	at isa? port 0x278 irq 7	# standard PC parallel ports
 fdc0	at isa? port 0x3f0 irq 6 drq 2	# standard PC floppy controllers
 fd*	at fdc? drive ?			# the drives themselves
 
+adw*	at pci? dev ? function ?	# AdvanSys 9x0UW[D], 3940U[2,3]W SCSI
+dpt*	at pci? dev ? function ?	# DPT SmartCache/SmartRAID
+siop*	at pci? dev ? function ?	# NCR/Symbios 53c8xx SCSI
+scsibus* at adw?
+scsibus* at dpt?
+scsibus* at siop?
+
+sd*	at scsibus? target ? lun ?	# SCSI disk drives
+#st*	at scsibus? target ? lun ?	# SCSI tape drives
+#cd*	at scsibus? target ? lun ?	# SCSI CD-ROM drives
+#ch*	at scsibus? target ? lun ?	# SCSI autochangers
+#ses*	at scsibus? target ? lun ?	# SCSI Enclosure Services devices
+#ss*	at scsibus? target ? lun ?	# SCSI scanners
+#uk*	at scsibus? target ? lun ?	# SCSI unknown

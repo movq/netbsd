@@ -1,4 +1,4 @@
-/*	$NetBSD: crime.c,v 1.2 2000/06/29 15:44:10 soren Exp $	*/
+/*	$NetBSD: crime.c,v 1.4 2001/07/08 23:59:31 thorpej Exp $	*/
 
 /*
  * Copyright (c) 2000 Soren S. Jorvang
@@ -45,6 +45,7 @@
 #include <machine/autoconf.h>
 #include <machine/bus.h>
 #include <machine/intr.h>
+#include <machine/machtype.h>
 
 #include <dev/pci/pcivar.h>
 
@@ -69,17 +70,14 @@ crime_match(parent, match, aux)
 	struct cfdata *match;
 	void *aux;
 {
-	struct mainbus_attach_args *ma = aux;
 
 	/*
 	 * The CRIME is in the O2.
 	 */
-	switch (ma->ma_arch) {
-	case 32:
-		return 1;
-	default:
-		return 0;
-	}
+	if (mach_type == MACH_SGI_IP32)
+		return (1);
+
+	return (0);
 }
 
 static void
@@ -94,7 +92,7 @@ crime_attach(parent, self, aux)
 
 	rev = bus_space_read_4(ma->ma_iot, ma->ma_ioh, 4) & 0xff;
 
-	major = rev > 4;
+	major = rev >> 4;
 	minor = rev & 0x0f;
 
 	if (major == 0 && minor == 0)

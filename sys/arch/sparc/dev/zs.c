@@ -1,4 +1,4 @@
-/*	$NetBSD: zs.c,v 1.81 2000/10/18 23:55:11 pk Exp $	*/
+/*	$NetBSD: zs.c,v 1.84 2001/09/26 20:53:06 eeh Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -45,6 +45,7 @@
  */
 
 #include "opt_ddb.h"
+#include "opt_kgdb.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -250,7 +251,7 @@ zs_attach_mainbus(parent, self, aux)
 
 	zsc->zsc_bustag = ma->ma_bustag;
 	zsc->zsc_dmatag = ma->ma_dmatag;
-	zsc->zsc_promunit = getpropint(ma->ma_node, "slave", -2);
+	zsc->zsc_promunit = PROM_getpropint(ma->ma_node, "slave", -2);
 	zsc->zsc_node = ma->ma_node;
 
 	/*
@@ -303,7 +304,7 @@ zs_attach_obio(parent, self, aux)
 		/*
 		 * Check if power state can be set, e.g. Tadpole 3GX
 		 */
-		if (getpropint(sa->sa_node, "pwr-on-auxio2", 0))
+		if (PROM_getpropint(sa->sa_node, "pwr-on-auxio2", 0))
 		{
 			printf (" powered via auxio2");
 			for (channel = 0; channel < 2; channel++) {
@@ -315,7 +316,7 @@ zs_attach_obio(parent, self, aux)
 
 		zsc->zsc_bustag = sa->sa_bustag;
 		zsc->zsc_dmatag = sa->sa_dmatag;
-		zsc->zsc_promunit = getpropint(sa->sa_node, "slave", -2);
+		zsc->zsc_promunit = PROM_getpropint(sa->sa_node, "slave", -2);
 		zsc->zsc_node = sa->sa_node;
 		zs_attach(zsc, va, sa->sa_pri);
 	} else {
@@ -790,8 +791,8 @@ zs_abort(cs)
 #endif
 }
 
-static int  zs_getc __P((void *arg));
-static void zs_putc __P((void *arg, int c));
+int  zs_getc __P((void *arg));
+void zs_putc __P((void *arg, int c));
 
 /*
  * Polled input char.

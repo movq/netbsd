@@ -1,12 +1,12 @@
-/* $NetBSD: trap.c,v 1.66 2001/01/03 22:15:38 thorpej Exp $ */
+/* $NetBSD: trap.c,v 1.77 2001/07/18 22:22:02 thorpej Exp $ */
 
 /*-
- * Copyright (c) 2000 The NetBSD Foundation, Inc.
+ * Copyright (c) 2000, 2001 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
  * by Jason R. Thorpe of the Numerical Aerospace Simulation Facility,
- * NASA Ames Research Center, and by Charles M. Hannum.
+ * NASA Ames Research Center, by Charles M. Hannum, and by Ross Harvey.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -95,12 +95,11 @@
  */
 
 #include "opt_fix_unaligned_vax_fp.h"
-#include "opt_compat_osf1.h"
 #include "opt_ddb.h"
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.66 2001/01/03 22:15:38 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.77 2001/07/18 22:22:02 thorpej Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -115,15 +114,18 @@ __KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.66 2001/01/03 22:15:38 thorpej Exp $");
 #include <machine/cpu.h>
 #include <machine/reg.h>
 #include <machine/alpha.h>
+#include <machine/rpb.h>
 #ifdef DDB
 #include <machine/db_machdep.h>
 #endif
-#include <alpha/alpha/db_instruction.h>		/* for handle_opdec() */
+#include <alpha/alpha/db_instruction.h>
 #include <machine/userret.h>
 
-int		unaligned_fixup(unsigned long, unsigned long,
-		    unsigned long, struct proc *);
-int		handle_opdec(struct proc *p, u_int64_t *ucodep);
+static int unaligned_fixup(u_long, u_long, u_long, struct proc *);
+static int handle_opdec(struct proc *p, u_int64_t *ucodep);
+
+struct evcnt fpevent_use;
+struct evcnt fpevent_reuse;
 
 /*
  * Initialize the trap vectors for the current processor.
@@ -148,6 +150,17 @@ trap_init(void)
 	 */
 	alpha_pal_wrmces(alpha_pal_rdmces() & 
 	    ~(ALPHA_MCES_DSC|ALPHA_MCES_DPC));
+
+	/*
+	 * If this is the primary processor, initialize some trap
+	 * event counters.
+	 */
+	if (cpu_number() == hwrpb->rpb_primary_cpu_id) {
+		evcnt_attach_dynamic(&fpevent_use, EVCNT_TYPE_MISC, NULL,
+		    "FP", "proc use");
+		evcnt_attach_dynamic(&fpevent_reuse, EVCNT_TYPE_MISC, NULL,
+		    "FP", "proc re-use");
+	}
 }
 
 static void
@@ -196,6 +209,8 @@ printtrap(const u_long a0, const u_long a1, const u_long a2,
 	    framep->tf_regs[FRAME_PC]);
 	printf("CPU %lu    ra         = 0x%lx\n", cpu_id,
 	    framep->tf_regs[FRAME_RA]);
+	printf("CPU %lu    pv         = 0x%lx\n", cpu_id,
+	    framep->tf_regs[FRAME_T12]);
 	printf("CPU %lu    curproc    = %p\n", cpu_id, curproc);
 	if (curproc != NULL)
 		printf("CPU %lu        pid = %d, comm = %s\n", cpu_id,
@@ -254,7 +269,7 @@ trap(const u_long a0, const u_long a1, const u_long a2, const u_long entry,
 		 *
 		 * It's an error if a copy fault handler is set because
 		 * the various routines which do user-initiated copies
-		 * do so in a bcopy-like manner.  In other words, the
+		 * do so in a memcpy-like manner.  In other words, the
 		 * kernel never assumes that pointers provided by the
 		 * user are properly aligned, and so if the kernel
 		 * does cause an unaligned access it's a kernel bug.
@@ -262,21 +277,14 @@ trap(const u_long a0, const u_long a1, const u_long a2, const u_long entry,
 		goto dopanic;
 
 	case ALPHA_KENTRY_ARITH:
-		/* 
-		 * If user-land, just give a SIGFPE.  Should do
-		 * software completion and IEEE handling, if the
-		 * user has requested that.
+		/*
+		 * Resolve trap shadows, interpret FP ops requiring infinities,
+		 * NaNs, or denorms, and maintain FPCR corrections.
 		 */
 		if (user) {
-#ifdef COMPAT_OSF1
-			extern struct emul emul_osf1;
-
-			/* just punt on OSF/1.  XXX THIS IS EVIL */
-			if (p->p_emul == &emul_osf1) 
+			i = alpha_fp_complete(a0, a1, p, &ucode);
+			if (i == 0)
 				goto out;
-#endif
-			i = SIGFPE;
-			ucode =  a0;		/* exception summary */
 			break;
 		}
 
@@ -329,57 +337,9 @@ trap(const u_long a0, const u_long a1, const u_long a2, const u_long entry,
 			break;
 
 		case ALPHA_IF_CODE_FEN:
-		    {
-			struct cpu_info *ci = curcpu();
-#if defined(MULTIPROCESSOR)
-			int s;
-#endif
-
-#if defined(MULTIPROCESSOR)
-			/* Block IPIs while we clean house. */
-			s = splhigh();
-#endif
-			/*
-			 * on exit from the kernel, if proc == fpcurproc,
-			 * FP is enabled.
-			 */
-			if (ci->ci_fpcurproc == p) {
-				printf("trap: fp disabled for fpcurproc == %p",
-				    p);
-				goto dopanic;
-			}
-	
-			if (ci->ci_fpcurproc != NULL)
-				fpusave_cpu(ci, 1);
-#if defined(MULTIPROCESSOR)
-			splx(s);
-#endif
-			KDASSERT(ci->ci_fpcurproc == NULL);
-
-#if defined(MULTIPROCESSOR)
-			if (p->p_addr->u_pcb.pcb_fpcpu != NULL)
-				fpusave_proc(p, 1);
-#else
-			KDASSERT(p->p_addr->u_pcb.pcb_fpcpu == NULL);
-#endif
-
-#if defined(MULTIPROCESSOR)
-			s = splhigh();
-#endif
-			p->p_addr->u_pcb.pcb_fpcpu = ci;
-			ci->ci_fpcurproc = p;
-#if defined(MULTIPROCESSOR)
-			splx(s);
-			alpha_mb();
-#endif
-
-			alpha_pal_wrfen(1);
-			restorefpstate(&p->p_addr->u_pcb.pcb_fp);
+			alpha_enable_fp(p, 0);
 			alpha_pal_wrfen(0);
-
-			p->p_md.md_flags |= MDP_FPUSED;
 			goto out;
-		    }
 
 		default:
 			printf("trap: unknown IF type 0x%lx\n", a0);
@@ -391,11 +351,19 @@ trap(const u_long a0, const u_long a1, const u_long a2, const u_long entry,
 		switch (a1) {
 		case ALPHA_MMCSR_FOR:
 		case ALPHA_MMCSR_FOE:
-			pmap_emulate_reference(p, a0, user, 0);
-			goto out;
-
 		case ALPHA_MMCSR_FOW:
-			pmap_emulate_reference(p, a0, user, 1);
+			if (user)
+				KERNEL_PROC_LOCK(p);
+			else
+				KERNEL_LOCK(LK_CANRECURSE|LK_EXCLUSIVE);
+
+			pmap_emulate_reference(p, a0, user,
+			    a1 == ALPHA_MMCSR_FOW ? 1 : 0);
+
+			if (user)
+				KERNEL_PROC_UNLOCK(p);
+			else
+				KERNEL_UNLOCK();
 			goto out;
 
 		case ALPHA_MMCSR_INVALTRANS:
@@ -403,13 +371,15 @@ trap(const u_long a0, const u_long a1, const u_long a2, const u_long entry,
 	    	{
 			register vaddr_t va;
 			register struct vmspace *vm = NULL;
-			register vm_map_t map;
+			register struct vm_map *map;
 			vm_prot_t ftype;
 			int rv;
 
 			if (user)
 				KERNEL_PROC_LOCK(p);
 			else {
+				struct cpu_info *ci = curcpu();
+
 				if (p == NULL) {
 					/*
 					 * If there is no current process,
@@ -435,6 +405,13 @@ trap(const u_long a0, const u_long a1, const u_long a2, const u_long entry,
 					p->p_addr->u_pcb.pcb_onfault = 0;
 					goto out;
 				}
+
+				/*
+				 * If we're in interrupt context at this
+				 * point, this is an error.
+				 */
+				if (ci->ci_intrdepth != 0)
+					goto dopanic;
 
 				KERNEL_LOCK(LK_CANRECURSE|LK_EXCLUSIVE);
 			}
@@ -487,17 +464,17 @@ trap(const u_long a0, const u_long a1, const u_long a2, const u_long entry,
 			if (map != kernel_map &&
 			    (caddr_t)va >= vm->vm_maxsaddr &&
 			    va < USRSTACK) {
-				if (rv == KERN_SUCCESS) {
+				if (rv == 0) {
 					unsigned nss;
 	
 					nss = btoc(USRSTACK -
 					    (unsigned long)va);
 					if (nss > vm->vm_ssize)
 						vm->vm_ssize = nss;
-				} else if (rv == KERN_PROTECTION_FAILURE)
-					rv = KERN_INVALID_ADDRESS;
+				} else if (rv == EACCES)
+					rv = EFAULT;
 			}
-			if (rv == KERN_SUCCESS) {
+			if (rv == 0) {
 				if (user)
 					KERNEL_PROC_UNLOCK(p);
 				else
@@ -519,7 +496,7 @@ trap(const u_long a0, const u_long a1, const u_long a2, const u_long entry,
 				goto dopanic;
 			}
 			ucode = a0;
-			if (rv == KERN_RESOURCE_SHORTAGE) {
+			if (rv == ENOMEM) {
 				printf("UVM: pid %d (%s), uid %d killed: "
 				       "out of swap\n", p->p_pid, p->p_comm,
 				       p->p_cred && p->p_ucred ?
@@ -567,6 +544,63 @@ dopanic:
 #endif
 
 	panic("trap");
+}
+
+/*
+ * Set the float-point enable for the current process, and return
+ * the FPU context to the named process. If check == 0, it is an
+ * error for the named process to already be fpcurproc.
+ */
+void
+alpha_enable_fp(struct proc *p, int check)
+{
+#if defined(MULTIPROCESSOR)
+	int s;
+#endif
+	struct cpu_info *ci = curcpu();
+
+	if (check && ci->ci_fpcurproc == p) {
+		alpha_pal_wrfen(1);
+		return;
+	}
+	if (ci->ci_fpcurproc == p)
+		panic("trap: fp disabled for fpcurproc == %p", p);
+
+	if (ci->ci_fpcurproc != NULL)
+		fpusave_cpu(ci, 1);
+
+	KDASSERT(ci->ci_fpcurproc == NULL);
+
+#if defined(MULTIPROCESSOR)
+	if (p->p_addr->u_pcb.pcb_fpcpu != NULL)
+		fpusave_proc(p, 1);
+#else
+	KDASSERT(p->p_addr->u_pcb.pcb_fpcpu == NULL);
+#endif
+
+	FPCPU_LOCK(&p->p_addr->u_pcb, s);
+
+	p->p_addr->u_pcb.pcb_fpcpu = ci;
+	ci->ci_fpcurproc = p;
+
+	FPCPU_UNLOCK(&p->p_addr->u_pcb, s);
+
+	/*
+	 * Instrument FP usage -- if a process had not previously
+	 * used FP, mark it as having used FP for the first time,
+	 * and count this event.
+	 *
+	 * If a process has used FP, count a "used FP, and took
+	 * a trap to use it again" event.
+	 */
+	if ((p->p_md.md_flags & MDP_FPUSED) == 0) {
+		atomic_add_ulong(&fpevent_use.ev_count, 1);
+		p->p_md.md_flags |= MDP_FPUSED;
+	} else
+		atomic_add_ulong(&fpevent_reuse.ev_count, 1);
+
+	alpha_pal_wrfen(1);
+	restorefpstate(&p->p_addr->u_pcb.pcb_fp);
 }
 
 /*
@@ -776,9 +810,6 @@ Gfloat_reg_cvt(u_long input)
 }
 #endif /* FIX_UNALIGNED_VAX_FP */
 
-extern int	alpha_unaligned_print, alpha_unaligned_fix;
-extern int	alpha_unaligned_sigbus;
-
 struct unaligned_fixup_data {
 	const char *type;	/* opcode name */
 	int fixable;		/* fixable, 0 if fixup not supported */
@@ -873,10 +904,12 @@ unaligned_fixup(u_long va, u_long opcode, u_long reg, struct proc *p)
 	 */
 	if (doprint) {
 		uprintf(
-		"pid %d (%s): unaligned access: va=0x%lx pc=0x%lx ra=0x%lx op=",
+		"pid %d (%s): unaligned access: "
+		"va=0x%lx pc=0x%lx ra=0x%lx sp=0x%lx op=",
 		    p->p_pid, p->p_comm, va,
 		    p->p_md.md_tf->tf_regs[FRAME_PC] - 4,
-		    p->p_md.md_tf->tf_regs[FRAME_RA]);
+		    p->p_md.md_tf->tf_regs[FRAME_RA],
+		    p->p_md.md_tf->tf_regs[FRAME_SP]);
 		uprintf(selected_tab->type,opcode);
 		uprintf("\n");
 	}

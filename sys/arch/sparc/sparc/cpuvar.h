@@ -1,4 +1,4 @@
-/*	$NetBSD: cpuvar.h,v 1.30 2001/01/21 07:48:30 christos Exp $ */
+/*	$NetBSD: cpuvar.h,v 1.38 2001/07/10 15:11:54 mrg Exp $ */
 
 /*
  *  Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -39,9 +39,10 @@
 #ifndef _sparc_cpuvar_h
 #define _sparc_cpuvar_h
 
-#if defined(_KERNEL) && !defined(_LKM)
+#if defined(_KERNEL_OPT)
 #include "opt_multiprocessor.h"
 #include "opt_lockdebug.h"
+#include "opt_ddb.h"
 #endif
 
 #include <sys/device.h>
@@ -64,26 +65,26 @@ struct cpu_info;
 struct module_info {
 	int  cpu_type;
 	enum vactype vactype;
-	void (*cpu_match)__P((struct cpu_info *, struct module_info *, int));
-	void (*getcacheinfo)__P((struct cpu_info *sc, int node));
-	void (*hotfix) __P((struct cpu_info *));
-	void (*mmu_enable)__P((void));
-	void (*cache_enable)__P((void));
+	void (*cpu_match)(struct cpu_info *, struct module_info *, int);
+	void (*getcacheinfo)(struct cpu_info *sc, int node);
+	void (*hotfix)(struct cpu_info *);
+	void (*mmu_enable)(void);
+	void (*cache_enable)(void);
 	int  ncontext;			/* max. # of contexts (that we use) */
 
-	void (*get_syncflt)__P((void));
-	int  (*get_asyncflt)__P((u_int *, u_int *));
-	void (*sp_cache_flush)__P((caddr_t, u_int));
-	void (*sp_vcache_flush_page)__P((int));
-	void (*sp_vcache_flush_segment)__P((int, int));
-	void (*sp_vcache_flush_region)__P((int));
-	void (*sp_vcache_flush_context)__P((void));
-	void (*pcache_flush_page)__P((paddr_t, int));
-	void (*pure_vcache_flush)__P((void));
-	void (*cache_flush_all)__P((void));
-	void (*memerr)__P((unsigned, u_int, u_int, struct trapframe *));
-	void (*zero_page)__P((paddr_t));
-	void (*copy_page)__P((paddr_t, paddr_t));
+	void (*get_syncflt)(void);
+	int  (*get_asyncflt)(u_int *, u_int *);
+	void (*sp_cache_flush)(caddr_t, u_int);
+	void (*sp_vcache_flush_page)(int);
+	void (*sp_vcache_flush_segment)(int, int);
+	void (*sp_vcache_flush_region)(int);
+	void (*sp_vcache_flush_context)(void);
+	void (*pcache_flush_page)(paddr_t, int);
+	void (*pure_vcache_flush)(void);
+	void (*cache_flush_all)(void);
+	void (*memerr)(unsigned, u_int, u_int, struct trapframe *);
+	void (*zero_page)(paddr_t);
+	void (*copy_page)(paddr_t, paddr_t);
 };
 
 struct xpmsg {
@@ -92,10 +93,12 @@ struct xpmsg {
 #define	XPMSG_SAVEFPU			1
 #define	XPMSG_PAUSECPU			2
 #define	XPMSG_RESUMECPU			3
+#define	XPMSG_FUNC			4
 #define	XPMSG_DEMAP_TLB_PAGE		10
 #define	XPMSG_DEMAP_TLB_SEGMENT		11
 #define	XPMSG_DEMAP_TLB_REGION		12
 #define	XPMSG_DEMAP_TLB_CONTEXT		13
+#define	XPMSG_DEMAP_TLB_ALL		14
 #define	XPMSG_VCACHE_FLUSH_PAGE		20
 #define	XPMSG_VCACHE_FLUSH_SEGMENT	21
 #define	XPMSG_VCACHE_FLUSH_REGION	22
@@ -103,6 +106,14 @@ struct xpmsg {
 #define	XPMSG_VCACHE_FLUSH_RANGE	24
 
 	union {
+		struct xpmsg_func {
+			int	(*func)(int, int, int, int);
+			int	arg0;
+			int	arg1;
+			int	arg2;
+			int	arg3;
+			int	retval;
+		} xpmsg_func;
 		struct xpmsg_flush_page {
 			int	ctx;
 			int	va;
@@ -126,6 +137,16 @@ struct xpmsg {
 		} xpmsg_flush_range;
 	} u;
 };
+
+/*
+ * This must be locked around all message transactions to ensure only
+ * one CPU is generating them.
+ * XXX deal with different level priority IPI's.
+ */
+extern struct simplelock xpmsg_lock;
+
+#define LOCK_XPMSG()	simple_lock(&xpmsg_lock);
+#define UNLOCK_XPMSG()	simple_unlock(&xpmsg_lock);
 
 /*
  * The cpuinfo structure. This structure maintains information about one
@@ -180,10 +201,6 @@ struct cpu_info {
 	/* Context administration */
 	int		*ctx_tbl;	/* [4m] SRMMU-edible context table */
 	paddr_t		ctx_tbl_pa;	/* [4m] ctx table physical address */
-	union ctxinfo	*ctxinfo;
-	union ctxinfo	*ctx_freelist;  /* context free list */
-	int		ctx_kick;	/* allocation rover when none free */
-	int		ctx_kickdir;	/* ctx_kick roves both directions */
 
 /* XXX - of these, we currently use only cpu_type */
 	int		arch;		/* Architecture: CPU_SUN4x */
@@ -223,6 +240,8 @@ struct cpu_info {
 
 	struct	proc	*ci_curproc;		/* CPU owner */
 	struct	proc 	*fpproc;		/* FPU owner */
+	/* XXX */
+	void		*ci_ddb_regs;		/* DDB regs */
 
 	/*
 	 * Idle PCB and Interrupt stack;
@@ -241,15 +260,15 @@ struct cpu_info {
 	 */
 
 	/* bootup things: access to physical memory */
-	u_int	(*read_physmem) __P((u_int addr, int space));
-	void	(*write_physmem) __P((u_int addr, u_int data));
-	void	(*cache_tablewalks) __P((void));
-	void	(*mmu_enable) __P((void));
-	void	(*hotfix) __P((struct cpu_info *));
+	u_int	(*read_physmem)(u_int addr, int space);
+	void	(*write_physmem)(u_int addr, u_int data);
+	void	(*cache_tablewalks)(void);
+	void	(*mmu_enable)(void);
+	void	(*hotfix)(struct cpu_info *);
 
 	/* locore defined: */
-	void	(*get_syncflt) __P((void));		/* Not C-callable */
-	int	(*get_asyncflt) __P((u_int *, u_int *));
+	void	(*get_syncflt)(void);		/* Not C-callable */
+	int	(*get_asyncflt)(u_int *, u_int *);
 
 	/* Synchronous Fault Status; temporary storage */
 	struct {
@@ -264,41 +283,40 @@ struct cpu_info {
 	 * uses inter-processor signals to flush the cache on
 	 * all processor modules.
 	 */
-	void	(*cache_enable) __P((void));
-	void	(*cache_flush)__P((caddr_t, u_int));
-	void	(*sp_cache_flush)__P((caddr_t, u_int));
-	void	(*vcache_flush_page)__P((int));
-	void	(*sp_vcache_flush_page)__P((int));
-	void	(*vcache_flush_segment)__P((int, int));
-	void	(*sp_vcache_flush_segment)__P((int, int));
-	void	(*vcache_flush_region)__P((int));
-	void	(*sp_vcache_flush_region)__P((int));
-	void	(*vcache_flush_context)__P((void));
-	void	(*sp_vcache_flush_context)__P((void));
+	void	(*cache_enable)(void);
+	void	(*cache_flush)(caddr_t, u_int);
+	void	(*sp_cache_flush)(caddr_t, u_int);
+	void	(*vcache_flush_page)(int);
+	void	(*sp_vcache_flush_page)(int);
+	void	(*vcache_flush_segment)(int, int);
+	void	(*sp_vcache_flush_segment)(int, int);
+	void	(*vcache_flush_region)(int);
+	void	(*sp_vcache_flush_region)(int);
+	void	(*vcache_flush_context)(void);
+	void	(*sp_vcache_flush_context)(void);
 
-	void	(*pcache_flush_page)__P((paddr_t, int));
-	void	(*pure_vcache_flush)__P((void));
-	void	(*cache_flush_all)__P((void));
+	void	(*pcache_flush_page)(paddr_t, int);
+	void	(*pure_vcache_flush)(void);
+	void	(*cache_flush_all)(void);
 
 	/* Support for hardware-assisted page clear/copy */
-	void	(*zero_page)__P((paddr_t));
-	void	(*copy_page)__P((paddr_t, paddr_t));
+	void	(*zero_page)(paddr_t);
+	void	(*copy_page)(paddr_t, paddr_t);
 
 #if 0
 	/* hardware-assisted block operation routines */
-	void		(*hwbcopy)
-				__P((const void *from, void *to, size_t len));
-	void		(*hwbzero) __P((void *buf, size_t len));
+	void		(*hwbcopy)(const void *from, void *to, size_t len);
+	void		(*hwbzero)(void *buf, size_t len);
 
 	/* routine to clear mbus-sbus buffers */
-	void		(*mbusflush) __P((void));
+	void		(*mbusflush)(void);
 #endif
 
 	/*
 	 * Memory error handler; parity errors, unhandled NMIs and other
 	 * unrecoverable faults end up here.
 	 */
-	void	(*memerr)__P((unsigned, u_int, u_int, struct trapframe *));
+	void		(*memerr)(unsigned, u_int, u_int, struct trapframe *);
 
 	/* Inter-processor message area */
 	struct xpmsg msg;
@@ -381,14 +399,31 @@ struct cpu_info {
 #define CPUFLG_SUN4CACHEBUG	0x8	/* trap page can't be cached */
 #define CPUFLG_CACHE_MANDATORY	0x10	/* if cache is on, don't use
 					   uncached access */
+#define CPUFLG_PAUSED		0x2000	/* CPU is paused */
+#define CPUFLG_GOTMSG		0x4000	/* CPU got an IPI */
+#define CPUFLG_READY		0x8000	/* CPU available for IPI */
+
+
+#define CPU_INFO_ITERATOR		int
+#define CPU_INFO_FOREACH(cii, ci)	cii = 0; ci = cpus[cii], cii < ncpu; cii++
+
+/*
+ * Useful macros.
+ */
+#define CPU_READY(cpi)	((cpi) == NULL || cpuinfo.mid == (cpi)->mid || \
+			    ((cpi)->flags & CPUFLG_READY) == 0)
 
 /*
  * Related function prototypes
  */
-void getcpuinfo __P((struct cpu_info *sc, int node));
-void mmu_install_tables __P((struct cpu_info *));
-void pmap_alloc_cpu __P((struct cpu_info *));
-void pmap_globalize_boot_cpu __P((struct cpu_info *));
+void getcpuinfo (struct cpu_info *sc, int node);
+void mmu_install_tables (struct cpu_info *);
+void pmap_alloc_cpu (struct cpu_info *);
+void pmap_globalize_boot_cpu (struct cpu_info *);
+#if defined(MULTIPROCESSOR)
+void raise_ipi_wait_and_unlock (struct cpu_info *);
+void cross_call (int (*)(int, int, int, int), int, int, int, int, int);
+#endif
 
 extern struct cpu_info **cpus;
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: param.h,v 1.3 2000/06/30 17:55:14 itojun Exp $	*/
+/*	$NetBSD: param.h,v 1.6 2001/09/15 15:04:45 uch Exp $	*/
 
 /*
  * Copyright (c) 1988 University of Utah.
@@ -89,9 +89,9 @@
 
 #ifndef NMBCLUSTERS
 
-#if defined(_KERNEL) && !defined(_LKM)
+#if defined(_KERNEL_OPT)
 #include "opt_gateway.h"
-#endif /* _KERNEL && ! _LKM */
+#endif
 
 #ifdef GATEWAY
 #define	NMBCLUSTERS	2048		/* map size, max cluster allocation */
@@ -100,14 +100,14 @@
 #endif
 #endif
 
-#include <machine/intr.h>
-
 #ifdef _KERNEL
 #ifndef _LOCORE
 
-extern void delay __P((int n));
+extern void delay(int);
 extern int cpuspeed;
 #define	DELAY(n)	{ register int N = cpuspeed * (n); while (--N > 0); }
+
+#include <machine/intr.h>
 
 #endif	/* !_LOCORE */
 #endif	/* _KERNEL */

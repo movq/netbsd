@@ -1,4 +1,4 @@
-.\"	$NetBSD: kvm_dump.3,v 1.6 1999/07/02 15:28:49 simonb Exp $
+.\"	$NetBSD: kvm_dump.3,v 1.10 2002/02/07 07:00:48 ross Exp $
 .\"
 .\" Copyright (c) 1996 Leo Weppelman
 .\" All rights reserved.
@@ -41,7 +41,7 @@
 .Sh LIBRARY
 .Lb libkvm
 .Sh SYNOPSIS
-.Fd #include <kvm.h>
+.Fd #include \*[Lt]kvm.h\*[Gt]
 .br
 .Ft int
 .Fn kvm_dump_mkheader "kvm_t *kd" "off_t dump_off"
@@ -99,14 +99,15 @@ All functions except
 return 0 on success, -1 on failure. The function
 .Fn kvm_dump_mkheader
 returns the size of the headers present before the actual dumpdata starts. If
-no valid headers were found but no fatal errors occured, 0 is returned. On
+no valid headers were found but no fatal errors occurred, 0 is returned. On
 fatal errors the return value is -1.
 .Pp
 In the case of failure,
 .Xr kvm_geterr 3
 can be used to retrieve the cause of the error.
+.Sh SEE ALSO
+.Xr kvm 3 ,
+.Xr kvm_open 3
 .Sh HISTORY
 These functions first appeared in
 .Nx 1.2 .
-.Sh SEE ALSO
-.Xr kvm 3

@@ -1,4 +1,4 @@
-/*	$NetBSD: netbsd32_machdep.c,v 1.12 2001/02/12 16:07:38 mrg Exp $	*/
+/*	$NetBSD: netbsd32_machdep.c,v 1.18 2001/09/21 17:12:22 thorpej Exp $	*/
 
 /*
  * Copyright (c) 1998 Matthew R. Green
@@ -28,7 +28,9 @@
  * SUCH DAMAGE.
  */
 
+#ifdef _KERNEL_OPT
 #include "opt_compat_netbsd.h"
+#endif
 
 #include <sys/param.h>
 #include <sys/exec.h>
@@ -42,14 +44,20 @@
 #include <sys/buf.h>
 #include <sys/vnode.h>
 #include <sys/map.h>
+#include <sys/select.h>
 
 #include <machine/frame.h>
 #include <machine/reg.h>
 #include <machine/vmparam.h>
+#include <machine/vuid_event.h>
 #include <machine/netbsd32_machdep.h>
 
 #include <compat/netbsd32/netbsd32.h>
 #include <compat/netbsd32/netbsd32_syscallargs.h>
+
+#include <dev/sun/event_var.h>
+
+static int ev_out32 __P((struct firm_event *, int, struct uio *));
 
 /*
  * Set up registers on exec.
@@ -72,6 +80,12 @@ netbsd32_setregs(p, pack, stack)
 
 	/* Mark this as a 32-bit emulation */
 	p->p_flag |= P_32;
+
+	/* Setup the coredump32 and ev_out32 hook's */
+	if (coredump32_hook == NULL)
+		coredump32_hook = coredump32;
+	if (ev_out32_hook == NULL)
+		ev_out32_hook = ev_out32;
 
 	/*
 	 * Set the registers to 0 except for:
@@ -169,7 +183,7 @@ netbsd32_sendsig(catcher, sig, mask, code)
 	 */
 	sf.sf_signo = sig;
 	sf.sf_code = (u_int)code;
-#ifdef COMPAT_SUNOS
+#if defined(COMPAT_SUNOS) || defined(LKM)
 	sf.sf_scp = (u_long)&fp->sf_sc;
 #endif
 	sf.sf_addr = 0;			/* XXX */
@@ -182,7 +196,7 @@ netbsd32_sendsig(catcher, sig, mask, code)
 	sf.sf_sc.sc_sp = (u_long)oldsp;
 	sf.sf_sc.sc_pc = tf->tf_pc;
 	sf.sf_sc.sc_npc = tf->tf_npc;
-	sf.sf_sc.sc_tstate = TSTATECCR_TO_PSR(tf->tf_tstate); /* XXX */
+	sf.sf_sc.sc_psr = TSTATECCR_TO_PSR(tf->tf_tstate); /* XXX */
 	sf.sf_sc.sc_g1 = tf->tf_global[1];
 	sf.sf_sc.sc_o0 = tf->tf_out[0];
 
@@ -405,7 +419,7 @@ netbsd32___sigreturn14(p, v, retval)
 		return (EINVAL);
 #endif
 	/* take only psr ICC field */
-	tf->tf_tstate = (int64_t)(tf->tf_tstate & ~TSTATE_CCR) | (scp->sc_tstate & TSTATE_CCR);
+	tf->tf_tstate = (int64_t)(tf->tf_tstate & ~TSTATE_CCR) | PSRCC_TO_TSTATE(sc.sc_psr);
 	tf->tf_pc = (int64_t)scp->sc_pc;
 	tf->tf_npc = (int64_t)scp->sc_npc;
 	tf->tf_global[1] = (int64_t)scp->sc_g1;
@@ -558,8 +572,10 @@ cpu_coredump32(p, vp, cred, chdr)
 	}
 
 	if (p->p_md.md_fpstate) {
-		if (p == fpproc)
+		if (p == fpproc) {
 			savefpstate(p->p_md.md_fpstate);
+			fpproc = NULL;
+		}
 		/* Copy individual fields */
 		for (i=0; i<32; i++)
 			md_core.md_fpstate.fs_regs[i] = 
@@ -590,4 +606,27 @@ cpu_coredump32(p, vp, cred, chdr)
 		chdr->c_nseg++;
 
 	return error;
+}
+
+/*
+ * Write out a series of 32-bit firm_events.
+ */
+int
+ev_out32(e, n, uio)
+	struct firm_event *e;
+	int n;
+	struct uio *uio;
+{
+	struct firm_event32 e32;
+	int error = 0;
+
+	while (n-- && error == 0) {
+		e32.id = e->id;
+		e32.value = e->value;
+		e32.time.tv_sec = e->time.tv_sec;
+		e32.time.tv_usec = e->time.tv_usec;
+		error = uiomove((caddr_t)&e32, sizeof(e32), uio);
+		e++;
+	}
+	return (error);
 }

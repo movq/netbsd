@@ -1,4 +1,4 @@
-/* $NetBSD: kvm_alpha.c,v 1.18 2000/06/29 06:34:23 mrg Exp $ */
+/* $NetBSD: kvm_alpha.c,v 1.20 2001/08/05 17:51:40 matt Exp $ */
 
 /*
  * Copyright (c) 1994, 1995 Carnegie-Mellon University.
@@ -40,6 +40,8 @@
 #include <kvm.h>
 
 #include <uvm/uvm_extern.h>
+#include <machine/pmap.h>
+#include <machine/vmparam.h>
 
 #include <limits.h>
 #include <db.h>
