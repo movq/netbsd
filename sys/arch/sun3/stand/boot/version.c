@@ -1,4 +1,4 @@
-/*	$NetBSD: version.c,v 1.1 1995/02/14 22:56:36 gwr Exp $ */
+/*	$NetBSD: version.c,v 1.1.1.1 1995/02/14 22:56:37 gwr Exp $ */
 
 /*
  * Copyright (c) 1993 Paul Kranenburg
@@ -37,4 +37,4 @@
  *	1.2	get it to work with V0 bootproms.
  */
 
-char *version = "$Revision: 1.1 $";
+char *version = "$Revision: 1.1.1.1 $";
