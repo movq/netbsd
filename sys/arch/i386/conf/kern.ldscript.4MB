@@ -1,4 +1,4 @@
-/*	$NetBSD: kern.ldscript.4MB,v 1.1 2000/09/07 06:36:24 thorpej Exp $	*/
+/*	$NetBSD: kern.ldscript.4MB,v 1.2 2001/01/20 01:05:23 thorpej Exp $	*/
 
 /*
  * Kernel linker script for NetBSD/i386 which generates a kernel
@@ -60,11 +60,11 @@ SECTIONS
     *(.gnu.warning)
     *(.gnu.linkonce.t*)
   } =0x9090
-  _etext = .;
-  PROVIDE (etext = .);
   .fini      : { *(.fini)    } =0x9090
   .rodata    : { *(.rodata) *(.gnu.linkonce.r*) }
   .rodata1   : { *(.rodata1) }
+  _etext = .;
+  PROVIDE (etext = .);
   /* Adjust the address for the data segment.  We push the data segment
      up to the next 4MB boundary so that we can map the text with large
      pages.  We then scoot forward to the distance we are within the
