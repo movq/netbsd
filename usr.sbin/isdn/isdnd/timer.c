@@ -27,7 +27,7 @@
  *	i4b daemon - timer/timing support routines
  *	------------------------------------------
  *
- *	$Id: timer.c,v 1.1 2001/01/06 13:00:26 martin Exp $ 
+ *	$Id: timer.c,v 1.1.1.1 2001/01/06 13:00:26 martin Exp $ 
  *
  * $FreeBSD$
  *

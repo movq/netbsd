@@ -27,7 +27,7 @@
  *	i4b daemon - main header file
  *	-----------------------------
  *
- *	$Id: isdnd.h,v 1.1 2001/01/06 13:00:16 martin Exp $ 
+ *	$Id: isdnd.h,v 1.1.1.1 2001/01/06 13:00:16 martin Exp $ 
  *
  * $FreeBSD$
  *

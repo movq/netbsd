@@ -27,7 +27,7 @@
  *	i4b daemon - main program entry
  *	-------------------------------
  *
- *	$Id: main.c,v 1.1 2001/01/06 13:00:18 martin Exp $ 
+ *	$Id: main.c,v 1.1.1.1 2001/01/06 13:00:18 martin Exp $ 
  *
  * $FreeBSD$
  *

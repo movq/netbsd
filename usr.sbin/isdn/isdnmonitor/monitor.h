@@ -33,7 +33,7 @@
  *	i4b daemon - network monitor protocol definition
  *	------------------------------------------------
  *
- *	$Id: monitor.h,v 1.1 2001/01/06 13:00:29 martin Exp $
+ *	$Id: monitor.h,v 1.1.1.1 2001/01/06 13:00:29 martin Exp $
  *
  * $FreeBSD$
  *

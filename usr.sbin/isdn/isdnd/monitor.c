@@ -33,7 +33,7 @@
  *	i4b daemon - network monitor server module
  *	------------------------------------------
  *
- *	$Id: monitor.c,v 1.1 2001/01/06 13:00:21 martin Exp $
+ *	$Id: monitor.c,v 1.1.1.1 2001/01/06 13:00:21 martin Exp $
  *
  * $FreeBSD$
  *

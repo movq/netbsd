@@ -35,7 +35,7 @@
  *	trace.h - header file for isdn trace
  *	------------------------------------
  *
- *	$Id: trace.h,v 1.1 2001/01/06 13:00:34 martin Exp $ 
+ *	$Id: trace.h,v 1.1.1.1 2001/01/06 13:00:34 martin Exp $ 
  *
  * $FreeBSD$
  *

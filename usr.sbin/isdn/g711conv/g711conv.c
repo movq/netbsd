@@ -67,7 +67,7 @@
  *
  *	last edit-date: [Sat Jan  6 12:37:35 2001]
  *
- *	$Id: g711conv.c,v 1.1 2001/01/06 13:00:36 martin Exp $
+ *	$Id: g711conv.c,v 1.1.1.1 2001/01/06 13:00:36 martin Exp $
  *
  * $FreeBSD$
  *

@@ -27,7 +27,7 @@
  *	pcause1tr6.h - 1TR6 causes definitions
  *	--------------------------------------
  *
- *	$Id: pcause_1tr6.h,v 1.1 2001/01/06 13:00:30 martin Exp $
+ *	$Id: pcause_1tr6.h,v 1.1.1.1 2001/01/06 13:00:30 martin Exp $
  *
  * $FreeBSD$
  *

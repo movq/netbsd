@@ -27,7 +27,7 @@
  *	i4b daemon - logging routines
  *	-----------------------------
  *
- *	$Id: log.c,v 1.1 2001/01/06 13:00:18 martin Exp $ 
+ *	$Id: log.c,v 1.1.1.1 2001/01/06 13:00:18 martin Exp $ 
  *
  * $FreeBSD$
  *

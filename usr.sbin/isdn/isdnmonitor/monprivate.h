@@ -27,7 +27,7 @@
  *	i4b remote monitor - private header
  *	-----------------------------------
  *
- *	$Id: monprivate.h,v 1.1 2001/01/06 13:00:29 martin Exp $
+ *	$Id: monprivate.h,v 1.1.1.1 2001/01/06 13:00:29 martin Exp $
  *
  * $FreeBSD$
  *

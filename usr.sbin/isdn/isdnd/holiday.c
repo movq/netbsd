@@ -27,7 +27,7 @@
  *	isdnd - holiday file handling
  *      =============================
  *
- *      $Id: holiday.c,v 1.1 2001/01/06 13:00:14 martin Exp $
+ *      $Id: holiday.c,v 1.1.1.1 2001/01/06 13:00:14 martin Exp $
  *
  * $FreeBSD$
  *

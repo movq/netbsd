@@ -27,7 +27,7 @@
  *	isdntel - isdn4bsd telephone answering support
  *      ==============================================
  *
- *	$Id: defs.h,v 1.1 2001/01/06 13:00:35 martin Exp $ 
+ *	$Id: defs.h,v 1.1.1.1 2001/01/06 13:00:35 martin Exp $ 
  *
  * $FreeBSD$
  *

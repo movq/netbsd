@@ -33,7 +33,7 @@
  *	i4b daemon - network monitor client
  *	-----------------------------------
  *
- *	$Id: main.c,v 1.1 2001/01/06 13:00:28 martin Exp $
+ *	$Id: main.c,v 1.1.1.1 2001/01/06 13:00:28 martin Exp $
  *
  * $FreeBSD$
  *

@@ -27,7 +27,7 @@
  *	i4b daemon - misc support routines
  *	----------------------------------
  *
- *	$Id: support.c,v 1.1 2001/01/06 13:00:12 martin Exp $ 
+ *	$Id: support.c,v 1.1.1.1 2001/01/06 13:00:12 martin Exp $ 
  *
  * $FreeBSD$
  *

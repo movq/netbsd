@@ -1,4 +1,4 @@
-# $NetBSD: Makefile,v 1.1 2001/01/06 13:00:36 martin Exp $
+# $NetBSD: Makefile,v 1.1.1.1 2001/01/06 13:00:36 martin Exp $
 
 PROG            =       dtmfdecode
 SRC             =       dtmfdecode.c

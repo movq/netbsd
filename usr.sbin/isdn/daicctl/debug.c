@@ -1,4 +1,4 @@
-/*	$NetBSD: debug.c,v 1.1 2001/01/06 13:00:47 martin Exp $	*/
+/*	$NetBSD: debug.c,v 1.1.1.1 2001/01/06 13:00:47 martin Exp $	*/
 
 /*-
  * Copyright (c) 1997 Martin Husemann <martin@duskware.de>

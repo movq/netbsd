@@ -6,7 +6,7 @@
  * this stuff is worth it, you can buy me a beer in return.   Poul-Henning Kamp
  * ----------------------------------------------------------------------------
  *
- * $Id: dtmfdecode.c,v 1.1 2001/01/06 13:00:36 martin Exp $
+ * $Id: dtmfdecode.c,v 1.1.1.1 2001/01/06 13:00:36 martin Exp $
  *
  * $FreeBSD$
  *

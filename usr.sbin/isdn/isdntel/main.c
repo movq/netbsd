@@ -27,7 +27,7 @@
  *	isdntel - isdn4bsd telephone answering machine support
  *      ======================================================
  *
- *      $Id: main.c,v 1.1 2001/01/06 13:00:34 martin Exp $ 
+ *      $Id: main.c,v 1.1.1.1 2001/01/06 13:00:34 martin Exp $ 
  *
  * $FreeBSD$
  *

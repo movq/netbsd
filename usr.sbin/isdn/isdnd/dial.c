@@ -27,7 +27,7 @@
  *	i4b daemon - dial handling routines
  *	-----------------------------------
  *
- *	$Id: dial.c,v 1.1 2001/01/06 13:00:13 martin Exp $ 
+ *	$Id: dial.c,v 1.1.1.1 2001/01/06 13:00:13 martin Exp $ 
  *
  * $FreeBSD$
  *

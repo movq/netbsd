@@ -27,7 +27,7 @@
  *	q932_fac.c - decode Q.932 facilities
  *	------------------------------------
  *
- *	$Id: q932_fac.c,v 1.1 2001/01/06 13:00:32 martin Exp $ 
+ *	$Id: q932_fac.c,v 1.1.1.1 2001/01/06 13:00:32 martin Exp $ 
  *
  * $FreeBSD$
  *

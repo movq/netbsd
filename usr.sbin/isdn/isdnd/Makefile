@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 2001/01/06 13:00:26 martin Exp $
+#	$NetBSD: Makefile,v 1.1.1.1 2001/01/06 13:00:26 martin Exp $
 
 PROG	=	isdnd
 SRCS	=	rc_parse.y rc_scan.l main.c rc_config.c log.c curses.c	\

@@ -27,7 +27,7 @@
  *	i4b daemon - message from kernel handling routines
  *	--------------------------------------------------
  *
- *	$Id: msghdl.c,v 1.1 2001/01/06 13:00:23 martin Exp $ 
+ *	$Id: msghdl.c,v 1.1.1.1 2001/01/06 13:00:23 martin Exp $ 
  *
  * $FreeBSD$
  *
