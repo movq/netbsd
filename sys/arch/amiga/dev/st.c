@@ -45,13 +45,22 @@
  *
  * Specific to Exabyte:
  * mt status: residual="Mbytes to LEOM"
+#if !defined(TWO_BITS_DENSITY) || defined(SPLIT_DENSITY_BIT_3_AND_6)
  * minor bit 4 [b1bbbb] (aka /dev/rst16) selects short filemarks
  * minor bit 5 [1bbbbb] (aka /dev/rst32) selects fix block mode, 1k blocks.
+#else
+ * minor bit 5 [b1bbbbb] (aka /dev/rst32) selects short filemarks
+ * Specific to Python and Exabyte:
+ * minor bit 6 [1bbbbbb] (aka /dev/rst64) selects fix block mode, 1k blocks.
+#endif
  *
  * Archive drive:
  * can read both QIC-24 and QIC-II. But only writes
  * QIC-24.
  * 
+ * Supports Archive Viper 2525 tape drive.
+ *     Reads:  QIC-525,QIC-150,QIC-120,QIC-24
+ *     Writes: QIC-525,QIC-150,QIC-120
  * Supports Archive Viper QIC-150 tape drive, but scsi.c reports selection
  * errors.
  *
@@ -148,6 +157,13 @@ struct	st_softc {
 #define STF_LEOT	0x0020
 #define STF_MOVED	0x0040
 
+/* QIC Tape Densities */
+#define QIC_11  0x04
+#define QIC_24  0x05
+#define QIC_120 0x0f
+#define QIC_150 0x10
+#define QIC_525 0x11
+
 struct	st_mode st_mode[NST];
 
 /*
@@ -176,9 +192,26 @@ struct buf stbuf[NST];
 #define stpunit(x)	((x) & 7)
 
 #define STDEV_NOREWIND	0x04
-#define STDEV_HIDENSITY	0x08
+#if !defined(TWO_BITS_DENSITY)
+/* We'll use 1 bit for density just as before, but we'll use a macro for testing */
+#define DSTY(x) ((minor(x)>>3) & 0x01)
+#else
+#if defined(SPLIT_DENSITY_BIT_3_AND_6)
+/* We'll use bits 3 and 6 for density */
+#define DSTY(x) (((minor(x) >> 5) &0x02) | ((minor(x)>>3) & 0x01))
+#else
+/* We'll use bits  3 and 4 for density */
+#define DSTY(x) ((minor(x)>>3) & 0x03)
+#endif
+#endif
+#if !defined(TWO_BITS_DENSITY) || defined(SPLIT_DENSITY_BIT_3_AND_6)
+/* Code will work just like before */
 #define STDEV_EXSFMK	0x10
 #define STDEV_FIXEDBLK	0x20
+#else
+#define STDEV_EXSFMK	0x20
+#define STDEV_FIXEDBLK	0x40
+#endif
 
 #ifdef DEBUG
 #define ST_OPEN		0x0001
@@ -334,26 +367,34 @@ stident(sc, ad)
 		goto failed;
 	}
 
-	if (bcmp("EXB-8200", &idstr[8], 8) == 0) {
+#define IS_ATAPE(x) (bcmp(x,&idstr[8],sizeof(x) -1) == 0)
+
+	if (IS_ATAPE("EXB-8200")) {
 		sc->sc_tapeid = MT_ISEXABYTE;
 		sc->sc_datalen[CMD_REQUEST_SENSE] = 26;
 		sc->sc_datalen[CMD_INQUIRY] = 52;
 		sc->sc_datalen[CMD_MODE_SELECT] = 17;
 		sc->sc_datalen[CMD_MODE_SENSE] = 17;
-	} else if (bcmp("VIPER 150", &idstr[8], 9) == 0) {
+     	} else if (IS_ATAPE("VIPER 2525")) {
+		sc->sc_tapeid = MT_ISVIPER2525;
+		sc->sc_datalen[CMD_REQUEST_SENSE] = 14;
+		sc->sc_datalen[CMD_INQUIRY] = 36;
+		sc->sc_datalen[CMD_MODE_SELECT] = 12;
+		sc->sc_datalen[CMD_MODE_SENSE] = 12;
+	} else if (IS_ATAPE("VIPER 150")) {
 		sc->sc_tapeid = MT_ISVIPER1;
 		sc->sc_datalen[CMD_REQUEST_SENSE] = 14;
 		sc->sc_datalen[CMD_INQUIRY] = 36;
 		sc->sc_datalen[CMD_MODE_SELECT] = 12;
 		sc->sc_datalen[CMD_MODE_SENSE] = 12;
-	} else if (bcmp("Python 27216", &idstr[8], 12) == 0
-		   || bcmp("Python 25501", &idstr[8], 12) == 0) {
+	} else if (IS_ATAPE("Python 27216") ||
+                   IS_ATAPE("Python 25501")) {
 		sc->sc_tapeid = MT_ISPYTHON;
 		sc->sc_datalen[CMD_REQUEST_SENSE] = 14;
 		sc->sc_datalen[CMD_INQUIRY] = 36;
 		sc->sc_datalen[CMD_MODE_SELECT] = 12;
 		sc->sc_datalen[CMD_MODE_SENSE] = 12;
-	} else if (bcmp("HP35450A", &idstr[8], 8) == 0) {
+	} else if (IS_ATAPE("HP35450A")) {
 		/* XXX "extra" stat makes the HP drive happy at boot time */
 		stat = scsi_test_unit_rdy(ctlr, slave, unit);
 		sc->sc_tapeid = MT_ISHPDAT;
@@ -361,21 +402,27 @@ stident(sc, ad)
 		sc->sc_datalen[CMD_INQUIRY] = 36;
 		sc->sc_datalen[CMD_MODE_SELECT] = 12;
 		sc->sc_datalen[CMD_MODE_SENSE] = 12;
-	} else if (bcmp("5150ES", &idstr[8], 6) == 0) {
+	} else if (IS_ATAPE("5150ES")) {
 		sc->sc_tapeid = MT_ISWANGTEK;
 		sc->sc_datalen[CMD_REQUEST_SENSE] = 14;
 		sc->sc_datalen[CMD_INQUIRY] = 36;
 		sc->sc_datalen[CMD_MODE_SELECT] = 12;
 		sc->sc_datalen[CMD_MODE_SENSE] = 12;
-	} else if (bcmp("CP150", &idstr[8], 5) == 0) {
+	} else if (IS_ATAPE("CP150")) {
 		sc->sc_tapeid = MT_ISCALIPER;
+		sc->sc_datalen[CMD_REQUEST_SENSE] = 14;
+		sc->sc_datalen[CMD_INQUIRY] = 36;
+		sc->sc_datalen[CMD_MODE_SELECT] = 12;
+		sc->sc_datalen[CMD_MODE_SENSE] = 12;
+	} else if (bcmp("5099ES", &idstr[8], 6) == 0) {
+	        sc->sc_tapeid = MT_ISWTEK5099;
 		sc->sc_datalen[CMD_REQUEST_SENSE] = 14;
 		sc->sc_datalen[CMD_INQUIRY] = 36;
 		sc->sc_datalen[CMD_MODE_SELECT] = 12;
 		sc->sc_datalen[CMD_MODE_SENSE] = 12;
 	} else {
 		if (idstr[8] == '\0')
-			printf("st%d: No ID, assuming Archive\n", ad->amiga_unit);
+			printf("st%d: No ID, assuming Wangtek\n", ad->amiga_unit);
 		else
 			printf("st%d: Unsupported tape device\n", ad->amiga_unit);
 #if 0
@@ -461,6 +508,9 @@ stopen(dev, flag, type, p)
 	stat = scsi_immed_command(ctlr, slave, unit, &modsense,
 				  (u_char *)&mode, modlen, B_READ);
 
+printf("st: stat = %d, blklen = %d\n", stat, 
+       (mode.md.blklen2 << 16 | mode.md.blklen1 << 8 | mode.md.blklen0));
+
 	/* set record length */
 	switch (sc->sc_tapeid) {
 	case MT_ISAR:
@@ -475,11 +525,15 @@ stopen(dev, flag, type, p)
 	case MT_ISHPDAT:
 		sc->sc_blklen = 512;
 		break;
+	case MT_ISVIPER2525:
 	case MT_ISVIPER1:
 		sc->sc_blklen = 512;
 		break;
 	case MT_ISPYTHON:
-		sc->sc_blklen = 512;
+		if (minor(dev) & STDEV_FIXEDBLK)
+		  sc->sc_blklen = 20*512;
+		else
+		  sc->sc_blklen = 512;
 		break;
 	case MT_ISWANGTEK:
 	case MT_ISCALIPER:
@@ -489,6 +543,9 @@ stopen(dev, flag, type, p)
  		 */
  		if (xsense->cpr_xsense.b11)
  			skip_modsel = 1;
+		sc->sc_blklen = 512;
+		break;
+	case MT_ISWTEK5099:
 		sc->sc_blklen = 512;
 		break;
 	default:
@@ -523,25 +580,25 @@ stopen(dev, flag, type, p)
 
 	switch (sc->sc_tapeid) {
 	case MT_ISAR:
-		if (minor(dev) & STDEV_HIDENSITY)
-			msd.density = 0x5;
+		if (DSTY(dev))
+			msd.density = QIC_24;
 		else {
 			if (flag & FWRITE) {
 				uprintf("Can only write QIC-24\n");
 				return(EIO);
 			}
-			msd.density = 0x4;
+			msd.density = QIC_11;
 		}
 		break;
 	case MT_ISCALIPER:
 	case MT_ISWANGTEK:
-		if (minor (dev) & STDEV_HIDENSITY)
-			msd.density = 0x10;
+		if (DSTY(dev))
+			msd.density = QIC_150;
 		else
-			msd.density = 0x0F;
+			msd.density = QIC_120;
 		break;
 	case MT_ISEXABYTE:
-		if (minor(dev) & STDEV_HIDENSITY)
+		if (DSTY(dev))
 			uprintf("EXB-8200 density support only\n");
 		msd.vupb = (u_char)st_exvup;
 		msd.rsvd5 = 0;
@@ -553,9 +610,37 @@ stopen(dev, flag, type, p)
 	case MT_ISHPDAT:
 	case MT_ISVIPER1:
 	case MT_ISPYTHON:
-		if (minor(dev) & STDEV_HIDENSITY)
+	case MT_ISWTEK5099:
+		if (DSTY(dev))
 			uprintf("Only one density supported\n");
 		break;
+        case MT_ISVIPER2525:
+                /*density =  0 Is default and works for reading sun QIC-24 Tapes */
+                /* The drive starts out at the highest density and works its way
+                   down the chain of recognized densities.
+                */
+		switch (DSTY(dev))
+		{
+                  /* For QIC-525 use /dev/rst0 */
+		  case 3:/* use /dev/rst24 */
+		     msd.density = QIC_150; /* QIC-150 */
+                     break;
+		  case 2:/* Use /dev/rst16 */
+                     msd.density = QIC_120; /* QIC-120 */
+                     break;
+		  case 1:/* Use /dev/rst8 */
+		     if (flag & FWRITE) {
+			uprintf("Can only read QIC-24\n");
+			return(EIO);
+		     }
+		     msd.density = QIC_24; /* QIC-24 */
+		     break;
+		   case 0:/* use /dev/rst0 */
+		   default:
+		     msd.density = 0; /* Auto density */
+		     break;
+                }
+                break;
 	default:
 		uprintf("Unsupported drive\n");
 		return(EIO);
@@ -642,10 +727,12 @@ mode_selected:
 			}
 			break;
 		case MT_ISHPDAT:
-		case MT_ISVIPER1:
+		case MT_ISVIPER2525:
+        	case MT_ISVIPER1:
 		case MT_ISPYTHON:
 		case MT_ISCALIPER:
 		case MT_ISWANGTEK:
+		case MT_ISWTEK5099:
 			if (xsense->sc_xsense.key == XSK_UNTATTEN)
 				stat = scsi_test_unit_rdy(ctlr, slave, unit);
 			if (stat == STS_CHECKCOND) {

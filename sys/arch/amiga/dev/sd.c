@@ -43,7 +43,7 @@
 #if NSD > 0
 
 #ifndef lint
-static char rcsid[] = "$Header: /cvsroot/src/sys/arch/amiga/dev/Attic/sd.c,v 1.4 1993/10/30 23:41:36 mw Exp $";
+static char rcsid[] = "$Header: /cvsroot/src/sys/arch/amiga/dev/Attic/sd.c,v 1.5 1994/01/26 21:06:17 mw Exp $";
 #endif
 
 #include "sys/param.h"
@@ -174,8 +174,8 @@ struct	scsi_fmt_sense sdsense[NSD];
 static struct scsi_fmt_cdb sd_read_cmd = { 10, CMD_READ_EXT };
 static struct scsi_fmt_cdb sd_write_cmd = { 10, CMD_WRITE_EXT };
 
-#define	sdunit(x)	(minor(x) >> 3)
-#define sdpart(x)	(minor(x) & 0x7)
+#define	sdunit(x)	(minor (x) >> 3 & 0x7)
+#define sdpart(x)	(minor (x) & 0x7 | minor (x) >> 3 & 0x18)
 #define	sdpunit(x)	((x) & 7)
 #define	b_cylin		b_resid
 
@@ -286,8 +286,10 @@ retry_TUR:
 	case 7:		/* Magneto-optical */
 		break;
 	default:	/* not a disk */
+#ifdef DEBUG
 		if (sddebug)
 		  printf ("Unit %d unknown scsi-type: %d\n", slave, inqbuf.type);
+#endif
 		goto failed;
 	}
 	/*
@@ -365,7 +367,7 @@ sdinit(ad)
 	static u_int block [DEV_BSIZE / 4];
 	struct RigidDiskBlock *rdb = (struct RigidDiskBlock *) block;
 	struct PartitionBlock *pb  = (struct PartitionBlock *) block;
-	int bnum, npbnum, num_bsd_part = 0;
+	int bnum, npbnum, num_bsd_part = 0, num_part = 0, non_bsd_part = 8;
 	struct disklabel *dl;
 	int s;
 
@@ -448,11 +450,11 @@ no_rdb:
 
 	/* ok, go thru the partition blocks, and check for BSD ID's */
 	
-	for (npbnum = rdb->rdb_PartitionList; npbnum; )
+	for (npbnum = rdb->rdb_PartitionList; npbnum != 0xffffffff; )
 	  {
 	    u_int start_block, end_block, nblocks;
 	    u_int reserved;
-	    int part;
+	    int part, bsd_part;
 
 	    if (scsi_tt_read (ad->amiga_ctlr, ad->amiga_slave, sc->sc_punit,
 			      (char *) block, DEV_BSIZE, npbnum, sc->sc_bshift))
@@ -466,9 +468,11 @@ no_rdb:
 	    npbnum      = pb->pb_Next;
 	    start_block = pb->pb_Environment[DE_LOWCYL] * dl->d_secpercyl;
 	    reserved    = pb->pb_Environment[DE_RESERVEDBLKS];
-	    end_block   = pb->pb_Environment[DE_UPPERCYL] * dl->d_secpercyl;
+	    end_block   = 
+	      (1 + pb->pb_Environment[DE_UPPERCYL]) * dl->d_secpercyl - 1;
 
 	    part = -1;
+	    bsd_part = 1;
 	    switch (pb->pb_Environment[DE_DOSTYPE])
 	      {
 	      case DOSTYPE_BSD_ROOT:
@@ -526,30 +530,69 @@ no_rdb:
 	        if (! dl->d_partitions[7].p_size)
 	          part = 7;
 	        break;
+
+	      default:
+		/* Not a BSD partition, let's put it at a minor device number
+		   above 0x3f (== 077 == 63).  */
+		part = non_bsd_part++;
+		bsd_part = 0;
+		if (part >= MAXPARTITIONS)
+		  {
+		    printf ("Ignoring partition at %d due to sd slave table "
+			    "overflow.\n", start_block);
+		    part = -1;
+		  }
+		break;
 	      }
 
 	    if (part >= 0)
 	      {
-		num_bsd_part++;
-
-	        dl->d_partitions[part].p_offset = start_block + reserved;
-	        dl->d_partitions[part].p_size = end_block - start_block - reserved;
+		num_part++;
+		if (bsd_part)
+		  {
+		    num_bsd_part++;
+		    dl->d_partitions[part].p_offset = start_block + reserved;
+		  }
+		else
+		  dl->d_partitions[part].p_offset = start_block;
+	        dl->d_partitions[part].p_size
+		  = end_block - dl->d_partitions[part].p_offset + 1;
 
 		/* for now, have this static.. XXX */
 		dl->d_partitions[part].p_fsize  = 1024;
-		dl->d_partitions[part].p_fstype = part == 1 ? FS_SWAP : FS_BSDFFS;
+		dl->d_partitions[part].p_fstype
+		  = bsd_part ? part == 1 ? FS_SWAP : FS_BSDFFS : FS_ADOS;
 		dl->d_partitions[part].p_frag   = 8;
 		dl->d_partitions[part].p_cpg    = 0;	/* XXX */
 	    
+#ifdef DEBUG
 	        if (sddebug)
-	          printf ("%c @%d - %d = %d\n", part + 'A',
-			  start_block, end_block, end_block - start_block - reserved);
+		  if (bsd_part)
+		    printf ("BSD partition %c @%d - %d size %d\n", part + 'A',
+			    start_block, end_block,
+			    dl->d_partitions[part].p_size);
+		  else
+		    printf ("Non-BSD partition %d @%d - %d size %d\n",
+			    part - 8, start_block, end_block,
+			    dl->d_partitions[part].p_size);
+#endif
 	      }
 	  }
 
-	dl->d_npartitions = num_bsd_part;
+	/* This slot is obviously overloaded to mean both the actual count
+	   of partitions (that's our view) and the maximum index of the
+	   d_partition table incremented by one (this is the view presented
+	   by the dkcksum function in ufs_disksubr.c).  If we want to go
+	   that way, change num_part to non_bsd_part.  XXX */
+#if 0
+	dl->d_npartitions = num_part;
+#else
+	dl->d_npartitions = non_bsd_part;
+#endif
+#ifdef DEBUG
 	if (sddebug)
-	  printf ("total %d BSD-partitions.\n", num_bsd_part);
+	  printf ("total %d partitions (%d BSD).\n", num_part, num_bsd_part);
+#endif
 
 	/* C gets everything */
 	dl->d_partitions[2].p_size = sc->sc_blks;

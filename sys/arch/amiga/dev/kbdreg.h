@@ -1,6 +1,17 @@
 /*
- * Copyright (c) 1982, 1986, 1990 Regents of the University of California.
- * All rights reserved.
+ * losely based on:
+ *
+ * Copyright (c) 1992, 1993
+ *	The Regents of the University of California.  All rights reserved.
+ *
+ * This software was developed by the Computer Systems Engineering group
+ * at Lawrence Berkeley Laboratory under DARPA contract BG 91-66 and
+ * contributed to Berkeley.
+ *
+ * All advertising materials mentioning features or use of this software
+ * must display the following acknowledgement:
+ *	This product includes software developed by the University of
+ *	California, Lawrence Berkeley Laboratory.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -30,16 +41,15 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)dcareg.h	7.3 (Berkeley) 5/7/91
+ *	@(#)kbio.h	8.1 (Berkeley) 6/11/93
+ *
+ * from: Header: kbio.h,v 1.4 92/11/26 01:16:32 torek Exp  (LBL)
+ * $Id: kbdreg.h,v 1.4 1994/01/26 21:06:02 mw Exp $
  */
 
-struct kbddevice {
-	int	dummy;
-};
+#define	KIOCTRANS	_IOW('k', 0, int)	/* set translation mode */
+			/* (we only accept TR_UNTRANS_EVENT) */
+#define	KIOCGTRANS	_IOR('k', 5, int)	/* get translation mode */
+#define	KIOCSDIRECT	_IOW('k', 10, int)	/* keys to console? */
 
-/*
- * WARNING: Serial console is assumed to be at SC9
- * and CONUNIT must be 0.
- */
-#define CONUNIT		(0)
-
+#define	TR_UNTRANS_EVENT	3

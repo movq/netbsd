@@ -58,3 +58,12 @@ struct serdevice {
 
 
 #define SERBRD(val)	((3579545/val-1) < 32768 ? 3579545/val-1 : 0)
+#define SER_VBL_PRIORITY (1)
+
+/* unit is in lower 7 bits (for now, only one unit:-))
+   dialin:    open blocks until carrier present, hangup on carrier drop
+   dialout:   carrier is ignored */
+
+#define SERUNIT(dev)   (minor(dev) & 0x7f)
+#define DIALIN(dev)    ((minor(dev) & 0x80) == 0x80)
+#define DIALOUT(dev)   ((minor(dev) & 0x80) == 0x00)
