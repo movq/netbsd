@@ -32,7 +32,7 @@
  *
  *	@(#)gmon.h	5.2 (Berkeley) 5/6/91
  *
- *	$Id: gmon.h,v 1.1 1993/09/17 18:42:10 phil Exp $
+ *	$Id: gmon.h,v 1.1.1.1 1993/09/17 18:42:11 phil Exp $
  */
 
 struct phdr {
