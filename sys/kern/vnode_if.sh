@@ -31,8 +31,7 @@
 # OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 # SUCH DAMAGE.
 #
-#	from: @(#)vnode_if.sh	8.1 (Berkeley) 6/10/93
-#	$Id: vnode_if.sh,v 1.1 1994/06/08 11:29:01 mycroft Exp $
+#	@(#)vnode_if.sh	8.1 (Berkeley) 6/10/93
 #
 
 # Script to produce VFS front-end sugar.

@@ -30,8 +30,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	from: @(#)sockio.h	8.1 (Berkeley) 3/28/94
- *	$Id: sockio.h,v 1.1 1994/05/21 05:19:58 cgd Exp $
+ *	@(#)sockio.h	8.1 (Berkeley) 3/28/94
  */
 
 #ifndef	_SYS_SOCKIO_H_
@@ -74,10 +73,5 @@
 
 #define	SIOCADDMULTI	 _IOW('i', 49, struct ifreq)	/* add m'cast addr */
 #define	SIOCDELMULTI	 _IOW('i', 50, struct ifreq)	/* del m'cast addr */
-
-#define	SIOCSIFMTU	 _IOW('i', 127, struct ifreq)	/* set ifnet mtu */
-#define	SIOCGIFMTU	_IOWR('i', 126, struct ifreq)	/* get ifnet mtu */
-#define	SIOCSIFASYNCMAP  _IOW('i', 125, struct ifreq)	/* set ppp asyncmap */
-#define	SIOCGIFASYNCMAP _IOWR('i', 124, struct ifreq)	/* get ppp asyncmap */
 
 #endif /* !_SYS_SOCKIO_H_ */

@@ -1,6 +1,6 @@
 /*-
- * Copyright (c) 1991 The Regents of the University of California.
- * All rights reserved.
+ * Copyright (c) 1991, 1993
+ *	The Regents of the University of California.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -30,7 +30,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)if_eon.c	7.16 (Berkeley) 6/27/91
+ *	@(#)if_eon.c	8.1 (Berkeley) 6/10/93
  */
 
 /***********************************************************
@@ -60,7 +60,7 @@ SOFTWARE.
  * ARGO Project, Computer Sciences Dept., University of Wisconsin - Madison
  */
 /*
- * $Header: /home/mike/src/cvs/netbsd/src/sys/netiso/Attic/if_eon.c,v 1.1 1993/04/09 12:01:11 cgd Exp $ 
+ * $Header: /home/mike/src/cvs/netbsd/src/sys/netiso/Attic/if_eon.c,v 1.1.1.1 1998/03/01 02:10:20 fvdl Exp $ 
  * $Source: /home/mike/src/cvs/netbsd/src/sys/netiso/Attic/if_eon.c,v $ 
  *
  *	EON rfc 
@@ -75,37 +75,37 @@ SOFTWARE.
 #define NEON 1
 
 
-#include "param.h"
-#include "systm.h"
-#include "types.h"
-#include "mbuf.h"
-#include "buf.h"
-#include "protosw.h"
-#include "socket.h"
-#include "ioctl.h"
-#include "errno.h"
-#include "types.h"
+#include <sys/param.h>
+#include <sys/systm.h>
+#include <sys/mbuf.h>
+#include <sys/buf.h>
+#include <sys/protosw.h>
+#include <sys/socket.h>
+#include <sys/ioctl.h>
+#include <sys/errno.h>
+#include <sys/types.h>
 
-#include "../net/if.h"
-#include "../net/if_types.h"
-#include "../net/if_dl.h"
-#include "../net/netisr.h"
-#include "../net/route.h"
-#include "machine/mtpr.h"
+#include <net/if.h>
+#include <net/if_types.h>
+#include <net/if_dl.h>
+#include <net/netisr.h>
+#include <net/route.h>
+#include <machine/mtpr.h>
 
-#include "../netinet/in.h"
-#include "../netinet/in_systm.h"
-#include "../netinet/in_var.h"
-#include "../netinet/ip.h"
-#include "../netinet/ip_var.h"
-#include "../netinet/if_ether.h"
+#include <netinet/in.h>
+#include <netinet/in_systm.h>
+#include <netinet/in_var.h>
+#include <netinet/ip.h>
+#include <netinet/ip_var.h>
+#include <netinet/if_ether.h>
 
-#include "iso.h"
-#include "iso_var.h"
-#include "iso_snpac.h"
-#include "argo_debug.h"
-#include "iso_errno.h"
-#include "eonvar.h"
+#include <netiso/iso.h>
+#include <netiso/iso_var.h>
+#include <netiso/iso_snpac.h>
+#include <netiso/argo_debug.h>
+#include <netiso/iso_errno.h>
+#include <netiso/eonvar.h>
+
 extern struct timeval time;
 extern struct ifnet loif;
 
@@ -116,8 +116,7 @@ int						eonoutput();
 int						eonioctl();
 int						eonattach();
 int						eoninit();
-int						eonrtrequest();
-extern 	int				ip_output();
+void						eonrtrequest();
 struct ifnet			eonif[1];
 
 eonprotoinit() {
@@ -197,7 +196,6 @@ eonioctl(ifp, cmd, data)
 			ifp->if_flags |= IFF_UP;
 			if (ifa->ifa_addr->sa_family != AF_LINK)
 				ifa->ifa_rtrequest = eonrtrequest;
-			ifa->ifa_llinfolen = sizeof(struct eon_llinfo);
 		}
 		break;
 	}
@@ -262,6 +260,7 @@ caddr_t loc;
  *
  * RETURNS:			nothing
  */
+void
 eonrtrequest(cmd, rt, gate)
 register struct rtentry *rt;
 register struct sockaddr *gate;
@@ -299,7 +298,7 @@ register struct sockaddr *gate;
 	if (gate || (gate = rt->rt_gateway)) switch (gate->sa_family) {
 		case AF_LINK:
 #define SDL(x) ((struct sockaddr_dl *)x)
-			if (SDL(gate)->sdl_alen = 1)
+			if (SDL(gate)->sdl_alen == 1)
 				el->el_snpaoffset = *(u_char *)LLADDR(SDL(gate));
 			else
 				ipaddrloc = LLADDR(SDL(gate));
@@ -432,7 +431,7 @@ send:
 		dump_buf(ei, sizeof(struct eon_iphdr));
 	ENDDEBUG
 
-	error = ip_output(m, (struct mbuf *)0, ro, 0);
+	error = ip_output(m, (struct mbuf *)0, ro, 0, NULL);
 	m = 0;
 	if (error) {
 		ifp->if_oerrors++;

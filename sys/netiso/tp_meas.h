@@ -1,6 +1,6 @@
 /*-
- * Copyright (c) 1991 The Regents of the University of California.
- * All rights reserved.
+ * Copyright (c) 1991, 1993
+ *	The Regents of the University of California.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -30,7 +30,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)tp_meas.h	7.5 (Berkeley) 5/6/91
+ *	@(#)tp_meas.h	8.1 (Berkeley) 6/10/93
  */
 
 /***********************************************************
@@ -91,4 +91,4 @@ extern struct tp_Meas tp_Meas[];
 #define TPtime_open_X		0x28 /* xtd format */
 #define TPtime_close		0x09
 
-#endif TP_PERF_MEAS
+#endif /* TP_PERF_MEAS */

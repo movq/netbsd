@@ -1,6 +1,6 @@
 /*-
- * Copyright (c) 1991 The Regents of the University of California.
- * All rights reserved.
+ * Copyright (c) 1991, 1993
+ *	The Regents of the University of California.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -30,7 +30,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)tp_clnp.h	7.3 (Berkeley) 5/6/91
+ *	@(#)tp_clnp.h	8.1 (Berkeley) 6/10/93
  */
 
 /***********************************************************
@@ -62,7 +62,7 @@ SOFTWARE.
 /* 
  * ARGO TP
  *
- * $Header: /home/mike/src/cvs/netbsd/src/sys/netiso/Attic/tp_clnp.h,v 1.1 1993/04/09 12:01:27 cgd Exp $
+ * $Header: /home/mike/src/cvs/netbsd/src/sys/netiso/Attic/tp_clnp.h,v 1.1.1.1 1998/03/01 02:10:22 fvdl Exp $
  * $Source: /home/mike/src/cvs/netbsd/src/sys/netiso/Attic/tp_clnp.h,v $
  *
  * AF_ISO net-dependent structures and include files
@@ -74,21 +74,21 @@ SOFTWARE.
 #define __TP_CLNP__
 
 #ifndef SOCK_STREAM
-#include "socket.h"
-#endif SOCK_STREAM
+#include <sys/socket.h>
+#endif /* SOCK_STREAM */
 
 #ifndef RTFREE
-#include "../net/route.h"
+#include <net/route.h>
 #endif
-#include "../netiso/iso.h"
-#include "../netiso/clnp.h"
-#include "../netiso/iso_pcb.h"
+#include <netiso/iso.h>
+#include <netiso/clnp.h>
+#include <netiso/iso_pcb.h>
 #ifndef IF_DEQUEUE
-#include "../net/if.h"
+#include <net/if.h>
 #endif
-#include "../netiso/iso_var.h"
+#include <netiso/iso_var.h>
 
 struct isopcb tp_isopcb;	
 	/* queue of active inpcbs for tp ; for tp with dod ip */
 
-#endif __TP_CLNP__
+#endif /* __TP_CLNP__ */

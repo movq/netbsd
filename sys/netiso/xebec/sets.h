@@ -1,4 +1,4 @@
-/* $Header: /home/mike/src/cvs/netbsd/src/sys/netiso/xebec/Attic/sets.h,v 1.1 1993/04/09 12:02:18 cgd Exp $ */
+/* $Header: /home/mike/src/cvs/netbsd/src/sys/netiso/xebec/Attic/sets.h,v 1.1.1.1 1998/03/01 02:10:31 fvdl Exp $ */
 /* $Source: /home/mike/src/cvs/netbsd/src/sys/netiso/xebec/Attic/sets.h,v $ */
 
 #define MAXEVENTS 200

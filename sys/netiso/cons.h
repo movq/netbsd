@@ -1,6 +1,6 @@
 /*-
- * Copyright (c) 1991 The Regents of the University of California.
- * All rights reserved.
+ * Copyright (c) 1991, 1993
+ *	The Regents of the University of California.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -30,7 +30,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)cons.h	7.3 (Berkeley) 5/6/91
+ *	@(#)cons.h	8.1 (Berkeley) 6/10/93
  */
 
 /***********************************************************
@@ -60,7 +60,7 @@ SOFTWARE.
  * ARGO Project, Computer Sciences Dept., University of Wisconsin - Madison
  */
 /*
- * $Header: /home/mike/src/cvs/netbsd/src/sys/netiso/Attic/cons.h,v 1.1 1993/04/09 12:01:03 cgd Exp $
+ * $Header: /home/mike/src/cvs/netbsd/src/sys/netiso/Attic/cons.h,v 1.1.1.1 1998/03/01 02:10:18 fvdl Exp $
  * $Source: /home/mike/src/cvs/netbsd/src/sys/netiso/Attic/cons.h,v $
  *
  * interface between TP and CONS
@@ -84,9 +84,9 @@ struct dte_addr {
 #define	CONS_NOT_DGM	0x0
 
 #ifndef	PRC_NCMDS
-#include "protosw.h"
-#endif	PRC_NCMDS
+#include <sys/protosw.h>
+#endif	/* PRC_NCMDS */
 
 #define PRC_CONS_SEND_DONE 2 /* something unused in protosw.h */
 
-#endif	KERNEL
+#endif	/* KERNEL */

@@ -30,8 +30,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	from: @(#)fs.h	8.7 (Berkeley) 4/19/94
- *	$Id: fs.h,v 1.1 1994/06/08 11:42:13 mycroft Exp $
+ *	@(#)fs.h	8.7 (Berkeley) 4/19/94
  */
 
 /*

@@ -35,8 +35,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	from: @(#)iso_rrip.h	8.2 (Berkeley) 1/23/94
- *	$Id: iso_rrip.h,v 1.1 1994/06/08 11:23:01 mycroft Exp $
+ *	@(#)iso_rrip.h	8.2 (Berkeley) 1/23/94
  */
 
 

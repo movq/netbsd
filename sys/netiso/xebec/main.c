@@ -1,4 +1,4 @@
-/* $Header: /home/mike/src/cvs/netbsd/src/sys/netiso/xebec/Attic/main.c,v 1.1 1993/04/09 12:02:09 cgd Exp $ */
+/* $Header: /home/mike/src/cvs/netbsd/src/sys/netiso/xebec/Attic/main.c,v 1.1.1.1 1998/03/01 02:10:29 fvdl Exp $ */
 /* $Source: /home/mike/src/cvs/netbsd/src/sys/netiso/xebec/Attic/main.c,v $ */
 /*
  * TODO:

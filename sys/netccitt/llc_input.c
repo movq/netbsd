@@ -36,8 +36,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	from: @(#)llc_input.c	8.1 (Berkeley) 6/10/93
- *	$Id: llc_input.c,v 1.1 1994/05/13 06:04:29 mycroft Exp $
+ *	@(#)llc_input.c	8.1 (Berkeley) 6/10/93
  */
 
 #include <sys/param.h>

@@ -33,9 +33,9 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	from: Id: lofs.h,v 1.8 1992/05/30 10:05:43 jsp Exp
- *	from: @(#)null.h	8.2 (Berkeley) 1/21/94
- *	$Id: null.h,v 1.1 1994/06/08 11:33:23 mycroft Exp $
+ *	@(#)null.h	8.2 (Berkeley) 1/21/94
+ *
+ * $Id: null.h,v 1.1.1.1 1998/03/01 02:09:58 fvdl Exp $
  */
 
 struct null_args {

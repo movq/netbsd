@@ -30,8 +30,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	from: @(#)vfs_cluster.c	8.7 (Berkeley) 2/13/94
- *	$Id: vfs_cluster.c,v 1.1 1994/06/08 11:28:51 mycroft Exp $
+ *	@(#)vfs_cluster.c	8.7 (Berkeley) 2/13/94
  */
 
 #include <sys/param.h>
@@ -42,7 +41,7 @@
 #include <sys/trace.h>
 #include <sys/malloc.h>
 #include <sys/resourcevar.h>
-#include <lib/libkern/libkern.h>
+#include <libkern/libkern.h>
 
 #ifdef DEBUG
 #include <vm/vm.h>

@@ -30,8 +30,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	from: @(#)lfs_extern.h	8.2 (Berkeley) 4/16/94
- *	$Id: lfs_extern.h,v 1.1 1994/06/08 11:42:33 mycroft Exp $
+ *	@(#)lfs_extern.h	8.2 (Berkeley) 4/16/94
  */
 
 struct fid;
@@ -71,7 +70,6 @@ int	 lfs_mountroot __P((void));
 struct buf *
 	 lfs_newbuf __P((struct vnode *, daddr_t, size_t));
 int	 lfs_read __P((struct vop_read_args *));
-int	 lfs_reclaim __P((struct vop_reclaim_args *));
 int	 lfs_remove __P((struct vop_remove_args *));
 int	 lfs_rmdir __P((struct vop_rmdir_args *));
 int	 lfs_rename __P((struct vop_rename_args *));

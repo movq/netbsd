@@ -1,6 +1,6 @@
 /*-
- * Copyright (c) 1991 The Regents of the University of California.
- * All rights reserved.
+ * Copyright (c) 1991, 1993
+ *	The Regents of the University of California.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -30,7 +30,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)tp_cons.c	7.8 (Berkeley) 5/9/91
+ *	@(#)tp_cons.c	8.1 (Berkeley) 6/10/93
  */
 
 /***********************************************************
@@ -61,7 +61,7 @@ SOFTWARE.
  */
 /* 
  * ARGO TP
- * $Header: /home/mike/src/cvs/netbsd/src/sys/netiso/Attic/tp_cons.c,v 1.1 1993/04/09 12:01:28 cgd Exp $
+ * $Header: /home/mike/src/cvs/netbsd/src/sys/netiso/Attic/tp_cons.c,v 1.1.1.1 1998/03/01 02:10:22 fvdl Exp $
  * $Source: /home/mike/src/cvs/netbsd/src/sys/netiso/Attic/tp_cons.c,v $
  *
  * Here is where you find the iso- and cons-dependent code.  We've tried
@@ -78,36 +78,36 @@ SOFTWARE.
 #ifdef ISO
 #ifdef TPCONS
 
-#include "param.h"
-#include "socket.h"
-#include "domain.h"
-#include "mbuf.h"
-#include "errno.h"
-#include "time.h"
+#include <sys/param.h>
+#include <sys/socket.h>
+#include <sys/domain.h>
+#include <sys/mbuf.h>
+#include <sys/errno.h>
+#include <sys/time.h>
 
-#include "../net/if.h"
-#include "../net/route.h"
+#include <net/if.h>
+#include <net/route.h>
 
-#include "tp_param.h"
-#include "argo_debug.h"
-#include "tp_stat.h"
-#include "tp_pcb.h"
-#include "tp_trace.h"
-#include "tp_stat.h"
-#include "tp_tpdu.h"
-#include "iso.h"
-#include "iso_errno.h"
-#include "iso_pcb.h"
-#include "cons.h"
-#include "tp_seq.h"
+#include <netiso/tp_param.h>
+#include <netiso/argo_debug.h>
+#include <netiso/tp_stat.h>
+#include <netiso/tp_pcb.h>
+#include <netiso/tp_trace.h>
+#include <netiso/tp_stat.h>
+#include <netiso/tp_tpdu.h>
+#include <netiso/iso.h>
+#include <netiso/iso_errno.h>
+#include <netiso/iso_pcb.h>
+#include <netiso/cons.h>
+#include <netiso/tp_seq.h>
 
 #undef FALSE
 #undef TRUE
-#include "../netccitt/x25.h"
-#include "../netccitt/pk.h"
-#include "../netccitt/pk_var.h"
+#include <netccitt/x25.h>
+#include <netccitt/pk.h>
+#include <netccitt/pk_var.h>
 
-#include "if_cons.c"
+#include <netiso/if_cons.c>
 int tpcons_output();
 
 /*
@@ -152,16 +152,18 @@ tpcons_ctlinput(cmd, siso, isop)
 	struct sockaddr_iso *siso;
 	struct isopcb *isop;
 {
+	register struct tp_pcb *tpcb = 0;
+
+	if (isop->isop_socket)
+		tpcb = (struct tp_pcb *)isop->isop_socket->so_pcb;
 	switch (cmd) {
 
 	case PRC_CONS_SEND_DONE:
-		if( isop->isop_socket ) { /* tp 0 only */
-			register struct tp_pcb *tpcb = 
-				(struct tp_pcb *)isop->isop_socket->so_tpcb;
+		if (tpcb) {
 			struct 	tp_event 		E;
 			int 					error = 0;
 
-			if( tpcb->tp_class == TP_CLASS_0 ) {
+			if (tpcb->tp_class == TP_CLASS_0) {
 				/* only if class is exactly class zero, not
 				 * still in class negotiation
 				 */
@@ -184,10 +186,10 @@ tpcons_ctlinput(cmd, siso, isop)
 					tpcb->tp_sock->so_error = error;
 				}
 			} /* else ignore it */
-		} 
+		}
 		break;
 	case PRC_ROUTEDEAD:
-		if( isop->isop_socket ) { /* tp 0 only */
+		if (tpcb && tpcb->tp_class == TP_CLASS_0) {
 			tpiso_reset(isop);
 			break;
 		} /* else drop through */
@@ -262,9 +264,25 @@ tpcons_output(isop, m0, datalen, nochksum)
 		m->m_next = m0;
 	}
 	m->m_pkthdr.len = datalen;
-	error = pk_send(isop->isop_chan, m);
-	IncStat(ts_tpdu_sent);
-
+	if (isop->isop_chan == 0) {
+		/* got a restart maybe? */
+		if ((isop->isop_chan = (caddr_t) pk_attach((struct socket *)0)) == 0) {
+			IFDEBUG(D_CCONS)
+				printf("tpcons_output: no pklcd\n");
+			ENDDEBUG
+			error = ENOBUFS;
+		}
+		if (error = cons_connect(isop)) {
+			pk_disconnect((struct pklcd *)isop->isop_chan);
+			isop->isop_chan = 0;
+			IFDEBUG(D_CCONS)
+				printf("tpcons_output: can't reconnect\n");
+			ENDDEBUG
+		}
+	} else {
+		error = pk_send(isop->isop_chan, m);
+		IncStat(ts_tpdu_sent);
+	}
 	return error;
 }
 /*
@@ -286,5 +304,5 @@ tpcons_dg_output(chan, m0, datalen)
 {
 	return tpcons_output(((struct pklcd *)chan)->lcd_upnext, m0, datalen, 0);
 }
-#endif TPCONS
-#endif ISO
+#endif /* TPCONS */
+#endif /* ISO */

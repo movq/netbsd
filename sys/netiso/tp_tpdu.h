@@ -1,6 +1,6 @@
 /*-
- * Copyright (c) 1991 The Regents of the University of California.
- * All rights reserved.
+ * Copyright (c) 1991, 1993
+ *	The Regents of the University of California.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -30,7 +30,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)tp_tpdu.h	7.4 (Berkeley) 5/6/91
+ *	@(#)tp_tpdu.h	8.1 (Berkeley) 6/10/93
  */
 
 /***********************************************************
@@ -62,7 +62,7 @@ SOFTWARE.
 /* 
  * ARGO TP
  *
- * $Header: /home/mike/src/cvs/netbsd/src/sys/netiso/Attic/tp_tpdu.h,v 1.1 1993/04/09 12:01:55 cgd Exp $
+ * $Header: /home/mike/src/cvs/netbsd/src/sys/netiso/Attic/tp_tpdu.h,v 1.1.1.1 1998/03/01 02:10:27 fvdl Exp $
  * $Source: /home/mike/src/cvs/netbsd/src/sys/netiso/Attic/tp_tpdu.h,v $
  *
  * This ghastly set of macros makes it possible to
@@ -86,7 +86,7 @@ SOFTWARE.
 #else
 #define	BYTE_ORDER	BIG_ENDIAN	/* mc68000, tahoe, most others */
 #endif
-#endif BYTE_ORDER
+#endif /* BYTE_ORDER */
 
 /* This much of a tpdu is the same for all types of tpdus  (except
  * DT tpdus in class 0; their exceptions are handled by the data
@@ -293,4 +293,4 @@ struct tpdu {
 	union 	tpdu_fixed_rest _tpdufr;
 };
 
-#endif __TP_TPDU__
+#endif /* __TP_TPDU__ */

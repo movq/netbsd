@@ -1,7 +1,7 @@
 /*
- * Copyright (c) 1993 The Regents of the University of California.
  * Copyright (c) 1993 Jan-Simon Pendry
- * All rights reserved.
+ * Copyright (c) 1993
+ *	The Regents of the University of California.  All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Jan-Simon Pendry.
@@ -34,10 +34,10 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * From:
- *	Id: procfs_note.c,v 4.1 1993/12/17 10:47:45 jsp Rel
+ *	@(#)procfs_note.c	8.2 (Berkeley) 1/21/94
  *
- *	$Id: procfs_note.c,v 1.1 1994/01/05 07:51:22 cgd Exp $
+ * From:
+ *	$Id: procfs_note.c,v 1.1.1.1 1998/03/01 02:10:01 fvdl Exp $
  */
 
 #include <sys/param.h>
@@ -49,18 +49,16 @@
 #include <sys/signal.h>
 #include <miscfs/procfs/procfs.h>
 
-pfs_donote(curp, p, pfs, uio)
+int
+procfs_donote(curp, p, pfs, uio)
 	struct proc *curp;
 	struct proc *p;
 	struct pfsnode *pfs;
 	struct uio *uio;
 {
-	int len = uio->uio_resid;
 	int xlen;
 	int error;
-	struct sigmap *sm;
 	char note[PROCFS_NOTELEN+1];
-	char *cp = note;
 
 	if (uio->uio_rw != UIO_WRITE)
 		return (EINVAL);

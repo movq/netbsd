@@ -1,6 +1,6 @@
 /*-
- * Copyright (c) 1991 The Regents of the University of California.
- * All rights reserved.
+ * Copyright (c) 1991, 1993, 1994
+ *	The Regents of the University of California.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -30,7 +30,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)clnp.h	7.8 (Berkeley) 5/6/91
+ *	@(#)clnp.h	8.2 (Berkeley) 4/16/94
  */
 
 /***********************************************************
@@ -59,24 +59,8 @@ SOFTWARE.
 /*
  * ARGO Project, Computer Sciences Dept., University of Wisconsin - Madison
  */
-/* $Header: /home/mike/src/cvs/netbsd/src/sys/netiso/Attic/clnp.h,v 1.1 1993/04/09 12:00:46 cgd Exp $ */
+/* $Header: /home/mike/src/cvs/netbsd/src/sys/netiso/Attic/clnp.h,v 1.1.1.1 1998/03/01 02:10:16 fvdl Exp $ */
 /* $Source: /home/mike/src/cvs/netbsd/src/sys/netiso/Attic/clnp.h,v $ */
-
-#ifndef BYTE_ORDER
-/*
- * Definitions for byte order,
- * according to byte significance from low address to high.
- */
-#define	LITTLE_ENDIAN	1234	/* least-significant byte first (vax) */
-#define	BIG_ENDIAN	4321	/* most-significant byte first (IBM, net) */
-#define	PDP_ENDIAN	3412	/* LSB first in word, MSW first in long (pdp) */
-
-#ifdef vax
-#define	BYTE_ORDER	LITTLE_ENDIAN
-#else
-#define	BYTE_ORDER	BIG_ENDIAN	/* mc68000, tahoe, most others */
-#endif
-#endif BYTE_ORDER
 
 /* should be config option but cpp breaks with too many #defines */
 #define	DECBIT
@@ -293,12 +277,13 @@ struct clnp_optidx {
 #define	CLNP_NO_ER		0x020	/* do not generate ERs */
 #define CLNP_SEND_RAW	0x080	/* send pkt as RAW DT rather than TP DT */
 #define	CLNP_NO_CKSUM	0x100	/* don't use clnp checksum */
-#define CLNP_ECHO		0x200	/* fake echo function */
+#define CLNP_ECHO		0x200	/* send echo request */
 #define	CLNP_NOCACHE	0x400	/* don't store cache information */
+#define CLNP_ECHOR		0x800	/* send echo reply */
 
 /* valid clnp flags */
 #define CLNP_VFLAGS		(CLNP_SEND_RAW|CLNP_NO_SEG|CLNP_NO_ER|CLNP_NO_CKSUM\
-	|CLNP_ECHO|CLNP_NOCACHE)
+	|CLNP_ECHO|CLNP_NOCACHE|CLNP_ECHOR)
 
 /* 
  *	Constants used by clnp
@@ -415,7 +400,7 @@ extern float troll_random;
 #define	SN_MTU(ifp, rt) (((rt && rt->rt_rmx.rmx_mtu) ?\
 	rt->rt_rmx.rmx_mtu : clnp_badmtu(ifp, rt, __LINE__, __FILE__)))
 
-#endif	TROLL
+#endif	/* TROLL */
 
 /*
  *	Macro to remove an address from a clnp header
@@ -474,5 +459,5 @@ struct iso_addr	*clnp_srcaddr();
 struct mbuf		*clnp_reass();
 #ifdef	TROLL
 struct troll	trollctl;
-#endif	TROLL
-#endif	KERNEL
+#endif	/* TROLL */
+#endif	/* KERNEL */

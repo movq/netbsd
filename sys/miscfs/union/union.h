@@ -34,8 +34,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	from: @(#)union.h	8.2 (Berkeley) 2/17/94
- *	$Id: union.h,v 1.1 1994/06/08 11:33:58 mycroft Exp $
+ *	@(#)union.h	8.2 (Berkeley) 2/17/94
  */
 
 struct union_args {

@@ -30,8 +30,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	from: @(#)ffs_vnops.c	8.7 (Berkeley) 2/3/94
- *	$Id: ffs_vnops.c,v 1.1 1994/06/08 11:42:11 mycroft Exp $
+ *	@(#)ffs_vnops.c	8.7 (Berkeley) 2/3/94
  */
 
 #include <sys/param.h>
@@ -52,6 +51,7 @@
 #include <miscfs/specfs/specdev.h>
 #include <miscfs/fifofs/fifo.h>
 
+#include <ufs/ufs/lockf.h>
 #include <ufs/ufs/quota.h>
 #include <ufs/ufs/inode.h>
 #include <ufs/ufs/dir.h>
@@ -89,7 +89,7 @@ struct vnodeopv_entry_desc ffs_vnodeop_entries[] = {
 	{ &vop_readlink_desc, ufs_readlink },		/* readlink */
 	{ &vop_abortop_desc, ufs_abortop },		/* abortop */
 	{ &vop_inactive_desc, ufs_inactive },		/* inactive */
-	{ &vop_reclaim_desc, ffs_reclaim },		/* reclaim */
+	{ &vop_reclaim_desc, ufs_reclaim },		/* reclaim */
 	{ &vop_lock_desc, ufs_lock },			/* lock */
 	{ &vop_unlock_desc, ufs_unlock },		/* unlock */
 	{ &vop_bmap_desc, ufs_bmap },			/* bmap */
@@ -138,7 +138,7 @@ struct vnodeopv_entry_desc ffs_specop_entries[] = {
 	{ &vop_readlink_desc, spec_readlink },		/* readlink */
 	{ &vop_abortop_desc, spec_abortop },		/* abortop */
 	{ &vop_inactive_desc, ufs_inactive },		/* inactive */
-	{ &vop_reclaim_desc, ffs_reclaim },		/* reclaim */
+	{ &vop_reclaim_desc, ufs_reclaim },		/* reclaim */
 	{ &vop_lock_desc, ufs_lock },			/* lock */
 	{ &vop_unlock_desc, ufs_unlock },		/* unlock */
 	{ &vop_bmap_desc, spec_bmap },			/* bmap */
@@ -188,7 +188,7 @@ struct vnodeopv_entry_desc ffs_fifoop_entries[] = {
 	{ &vop_readlink_desc, fifo_readlink },		/* readlink */
 	{ &vop_abortop_desc, fifo_abortop },		/* abortop */
 	{ &vop_inactive_desc, ufs_inactive },		/* inactive */
-	{ &vop_reclaim_desc, ffs_reclaim },		/* reclaim */
+	{ &vop_reclaim_desc, ufs_reclaim },		/* reclaim */
 	{ &vop_lock_desc, ufs_lock },			/* lock */
 	{ &vop_unlock_desc, ufs_unlock },		/* unlock */
 	{ &vop_bmap_desc, fifo_bmap },			/* bmap */
@@ -241,29 +241,48 @@ ffs_fsync(ap)
 	} */ *ap;
 {
 	register struct vnode *vp = ap->a_vp;
+	register struct buf *bp;
 	struct timeval tv;
+	struct buf *nbp;
+	int s;
 
-	vflushbuf(vp, ap->a_waitfor == MNT_WAIT);
+	/*
+	 * Flush all dirty buffers associated with a vnode.
+	 */
+loop:
+	s = splbio();
+	for (bp = vp->v_dirtyblkhd.lh_first; bp; bp = nbp) {
+		nbp = bp->b_vnbufs.le_next;
+		if ((bp->b_flags & B_BUSY))
+			continue;
+		if ((bp->b_flags & B_DELWRI) == 0)
+			panic("ffs_fsync: not dirty");
+		bremfree(bp);
+		bp->b_flags |= B_BUSY;
+		splx(s);
+		/*
+		 * Wait for I/O associated with indirect blocks to complete,
+		 * since there is no way to quickly wait for them below.
+		 */
+		if (bp->b_vp == vp || ap->a_waitfor == MNT_NOWAIT)
+			(void) bawrite(bp);
+		else
+			(void) bwrite(bp);
+		goto loop;
+	}
+	if (ap->a_waitfor == MNT_WAIT) {
+		while (vp->v_numoutput) {
+			vp->v_flag |= VBWAIT;
+			sleep((caddr_t)&vp->v_numoutput, PRIBIO + 1);
+		}
+#ifdef DIAGNOSTIC
+		if (vp->v_dirtyblkhd.lh_first) {
+			vprint("ffs_fsync: dirty", vp);
+			goto loop;
+		}
+#endif
+	}
+	splx(s);
 	tv = time;
 	return (VOP_UPDATE(ap->a_vp, &tv, &tv, ap->a_waitfor == MNT_WAIT));
-}
-
-/*
- * Reclaim an inode so that it can be used for other purposes.
- */
-int
-ffs_reclaim(ap)
-	struct vop_reclaim_args /* {
-		struct vnode *a_vp;
-	} */ *ap;
-{
-	register struct vnode *vp = ap->a_vp;
-	int error;
-
-	error = ufs_reclaim(vp);
-	if (error)
-		return (error);
-	FREE(vp->v_data, M_FFSNODE);
-	vp->v_data = NULL;
-	return (0);
 }

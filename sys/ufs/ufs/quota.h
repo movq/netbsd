@@ -33,8 +33,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	from: @(#)quota.h	8.1 (Berkeley) 6/11/93
- *	$Id: quota.h,v 1.1 1994/06/08 11:43:09 mycroft Exp $
+ *	@(#)quota.h	8.1 (Berkeley) 6/11/93
  */
 
 #ifndef _QUOTA_

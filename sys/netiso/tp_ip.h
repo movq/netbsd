@@ -1,6 +1,6 @@
 /*-
- * Copyright (c) 1991 The Regents of the University of California.
- * All rights reserved.
+ * Copyright (c) 1991, 1993
+ *	The Regents of the University of California.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -30,7 +30,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)tp_ip.h	7.3 (Berkeley) 5/6/91
+ *	@(#)tp_ip.h	8.1 (Berkeley) 6/10/93
  */
 
 /***********************************************************
@@ -62,7 +62,7 @@ SOFTWARE.
 /* 
  * ARGO TP
  *
- * $Header: /home/mike/src/cvs/netbsd/src/sys/netiso/Attic/tp_ip.h,v 1.1 1993/04/09 12:01:36 cgd Exp $
+ * $Header: /home/mike/src/cvs/netbsd/src/sys/netiso/Attic/tp_ip.h,v 1.1.1.1 1998/03/01 02:10:24 fvdl Exp $
  * $Source: /home/mike/src/cvs/netbsd/src/sys/netiso/Attic/tp_ip.h,v $
  *
  * internet IP-dependent structures and include files
@@ -74,18 +74,18 @@ SOFTWARE.
 #define __TP_IP__
 
 #ifndef SOCK_STREAM
-#include "socket.h"
-#endif SOCK_STREAM
+#include <sys/socket.h>
+#endif
 
-#include "../netinet/in.h"
-#include "../netinet/in_systm.h"
-#include "../netinet/ip.h"
-#include "../net/route.h"
-#include "../netinet/in_pcb.h"
-#include "../netinet/ip_var.h"
+#include <netinet/in.h>
+#include <netinet/in_systm.h>
+#include <netinet/ip.h>
+#include <net/route.h>
+#include <netinet/in_pcb.h>
+#include <netinet/ip_var.h>
 
 
 struct inpcb tp_inpcb;	
 	/* queue of active inpcbs for tp ; for tp with dod ip */
 
-#endif __TP_IP__
+#endif /* __TP_IP__ */

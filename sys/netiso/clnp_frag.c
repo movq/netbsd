@@ -1,6 +1,6 @@
 /*-
- * Copyright (c) 1991 The Regents of the University of California.
- * All rights reserved.
+ * Copyright (c) 1991, 1993
+ *	The Regents of the University of California.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -30,7 +30,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)clnp_frag.c	7.12 (Berkeley) 5/6/91
+ *	@(#)clnp_frag.c	8.1 (Berkeley) 6/10/93
  */
 
 /***********************************************************
@@ -59,25 +59,26 @@ SOFTWARE.
 /*
  * ARGO Project, Computer Sciences Dept., University of Wisconsin - Madison
  */
-/* $Header: /home/mike/src/cvs/netbsd/src/sys/netiso/Attic/clnp_frag.c,v 1.1 1993/04/09 12:00:50 cgd Exp $ */
+/* $Header: /home/mike/src/cvs/netbsd/src/sys/netiso/Attic/clnp_frag.c,v 1.1.1.1 1998/03/01 02:10:17 fvdl Exp $ */
 /* $Source: /home/mike/src/cvs/netbsd/src/sys/netiso/Attic/clnp_frag.c,v $ */
 
-#include "param.h"
-#include "mbuf.h"
-#include "domain.h"
-#include "protosw.h"
-#include "socket.h"
-#include "socketvar.h"
-#include "errno.h"
+#include <sys/param.h>
+#include <sys/systm.h>
+#include <sys/mbuf.h>
+#include <sys/domain.h>
+#include <sys/protosw.h>
+#include <sys/socket.h>
+#include <sys/socketvar.h>
+#include <sys/errno.h>
 
-#include "../net/if.h"
-#include "../net/route.h"
+#include <net/if.h>
+#include <net/route.h>
 
-#include "iso.h"
-#include "iso_var.h"
-#include "clnp.h"
-#include "clnp_stat.h"
-#include "argo_debug.h"
+#include <netiso/iso.h>
+#include <netiso/iso_var.h>
+#include <netiso/clnp.h>
+#include <netiso/clnp_stat.h>
+#include <netiso/argo_debug.h>
 
 /* all fragments are hung off this list */
 struct clnp_fragl	*clnp_frags = NULL;
@@ -243,7 +244,7 @@ struct rtentry *rt;			/* route if direct ether */
 			error = troll_output(ifp, frag_hdr, first_hop, rt);
 #else
 			error = (*ifp->if_output)(ifp, frag_hdr, first_hop, rt);
-#endif	TROLL
+#endif	/* TROLL */
 
 			/*
 			 *	Tough situation: if the error occured on the last 
@@ -282,7 +283,7 @@ struct rtentry *rt;			/* route if direct ether */
 					num_bytes *= troll_random();
 				frag_size -= num_bytes;
 			}
-#endif	TROLL
+#endif	/* TROLL */
 			total_len -= frag_size;
 			if (!last_frag) {
 				frag_base += frag_size;
@@ -782,7 +783,7 @@ struct clnp_fragl	*cfh;		/* fragment header */
 }
 #ifdef	TROLL
 static int troll_cnt;
-#include "time.h"
+#include <sys/time.h>
 /*
  * FUNCTION:		troll_random
  *
@@ -855,4 +856,4 @@ struct rtentry *rt;
 	}
 }
 
-#endif	TROLL
+#endif	/* TROLL */

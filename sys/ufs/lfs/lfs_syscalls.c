@@ -30,8 +30,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	from: @(#)lfs_syscalls.c	8.5 (Berkeley) 4/20/94
- *	$Id: lfs_syscalls.c,v 1.1 1994/06/08 11:42:46 mycroft Exp $
+ *	@(#)lfs_syscalls.c	8.5 (Berkeley) 4/20/94
  */
 
 #include <sys/param.h>

@@ -1,6 +1,6 @@
 /*-
- * Copyright (c) 1991 The Regents of the University of California.
- * All rights reserved.
+ * Copyright (c) 1991, 1993
+ *	The Regents of the University of California.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -30,7 +30,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)tp_user.h	7.10 (Berkeley) 5/6/91
+ *	@(#)tp_user.h	8.1 (Berkeley) 6/10/93
  */
 
 /***********************************************************
@@ -62,18 +62,14 @@ SOFTWARE.
 /* 
  * ARGO TP
  *
- * $Header: /home/mike/src/cvs/netbsd/src/sys/netiso/Attic/tp_user.h,v 1.1 1993/04/09 12:01:59 cgd Exp $
+ * $Header: /home/mike/src/cvs/netbsd/src/sys/netiso/Attic/tp_user.h,v 1.1.1.1 1998/03/01 02:10:27 fvdl Exp $
  * $Source: /home/mike/src/cvs/netbsd/src/sys/netiso/Attic/tp_user.h,v $
  *
  * These are the values a real-live user ;-) needs. 
  */
 
 #ifndef _TYPES_
-#ifdef KERNEL
-#include  "../sys/types.h"
-#else KERNEL
 #include  <sys/types.h>
-#endif KERNEL
 #endif
 
 #ifndef __TP_USER__
@@ -96,7 +92,7 @@ struct tp_conn_param {
 	short	p_ref_ticks;
 	short	p_inact_ticks;
 
-	short	p_unused;	/* was .. local credit fraction reported (>0) */
+	short	p_ptpdusize;	/* preferred tpdusize/128 */
 	short	p_winsize;
 
 	u_char	p_tpdusize; 	/* log 2 of size */
@@ -136,12 +132,11 @@ struct tp_conn_param {
 #define TPOPT_DISC_DATA		0x500 
 #define TPOPT_CFRM_DATA		0x600 
 #define TPOPT_CDDATA_CLEAR	0x700 
+#define TPOPT_MY_TSEL		0x800 
+#define TPOPT_PEER_TSEL		0x900 
 #define TPOPT_PERF_MEAS		0xa00
 #define TPOPT_PSTATISTICS	0xb00
 #define TPOPT_PARAMS		0xc00 /* to replace a bunch of the others */
-#define TPOPT_MY_TSEL		0x800 
-#define TPOPT_PEER_TSEL		0x900 
-#define TPOPT_NGC8_ACCEPT	0xd00 /* negotiate connection requests */
 #define TPOPT_DISC_REASON	0xe00
 
 struct tp_disc_reason {
@@ -154,14 +149,9 @@ struct tp_disc_reason {
  */
 
 /* read only flags */
-#define TPFLAG_DISC_DATA_OUT	(u_char)0x10 /* disc data present */
-#define TPFLAG_DISC_DATA_IN		(u_char)0x20 /* disc data present */
-#define TPFLAG_CONN_DATA_OUT	(u_char)0x40 /* conn data present */
-#define TPFLAG_CONN_DATA_IN		(u_char)0x80 /* conn data present */
-#define TPFLAG_XPD_PRESENT		(u_char)0x08 /* xpd data present */
-#define TPFLAG_PEER_ON_SAMENET	(u_char)0x02
 #define TPFLAG_NLQOS_PDN		(u_char)0x01
-#define TPFLAG_NGC8_ACCEPT		(u_char)0x04 /* negotiate conn rq's */
+#define TPFLAG_PEER_ON_SAMENET	(u_char)0x02
+#define TPFLAG_GENERAL_ADDR		(u_char)0x04 /* bound to wildcard addr */
 
 
 /* 
@@ -169,4 +159,4 @@ struct tp_disc_reason {
  */
 
 
-#endif __TP_USER__
+#endif /* __TP_USER__ */

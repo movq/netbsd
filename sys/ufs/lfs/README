@@ -1,5 +1,4 @@
-#	from: @(#)README	8.1 (Berkeley) 6/11/93
-#	$Id: README,v 1.1 1994/06/08 11:42:16 mycroft Exp $
+#	@(#)README	8.1 (Berkeley) 6/11/93
 
 The file system is reasonably stable, but incomplete.  There are
 places where cleaning performance can be improved dramatically (see

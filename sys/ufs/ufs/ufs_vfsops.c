@@ -35,8 +35,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	from: @(#)ufs_vfsops.c	8.4 (Berkeley) 4/16/94
- *	$Id: ufs_vfsops.c,v 1.1 1994/06/08 11:43:23 mycroft Exp $
+ *	@(#)ufs_vfsops.c	8.4 (Berkeley) 4/16/94
  */
 
 #include <sys/param.h>
@@ -53,6 +52,11 @@
 #include <ufs/ufs/inode.h>
 #include <ufs/ufs/ufsmount.h>
 #include <ufs/ufs/ufs_extern.h>
+
+/*
+ * Flag to permit forcible unmounting.
+ */
+int doforce = 1;
 
 /*
  * Make a filesystem operational.

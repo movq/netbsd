@@ -36,8 +36,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	from: @(#)llc_timer.c	8.1 (Berkeley) 6/10/93
- *	$Id: llc_timer.c,v 1.1 1994/05/13 06:04:35 mycroft Exp $
+ *	@(#)llc_timer.c	8.1 (Berkeley) 6/10/93
  */
 
 #include <sys/param.h>

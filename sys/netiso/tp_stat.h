@@ -1,6 +1,6 @@
 /*-
- * Copyright (c) 1991 The Regents of the University of California.
- * All rights reserved.
+ * Copyright (c) 1991, 1993
+ *	The Regents of the University of California.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -30,7 +30,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)tp_stat.h	7.5 (Berkeley) 6/27/91
+ *	@(#)tp_stat.h	8.1 (Berkeley) 6/10/93
  */
 
 /***********************************************************
@@ -62,7 +62,7 @@ SOFTWARE.
 /* 
  * ARGO TP
  *
- * $Header: /home/mike/src/cvs/netbsd/src/sys/netiso/Attic/tp_stat.h,v 1.1 1993/04/09 12:01:47 cgd Exp $
+ * $Header: /home/mike/src/cvs/netbsd/src/sys/netiso/Attic/tp_stat.h,v 1.1.1.1 1998/03/01 02:10:26 fvdl Exp $
  * $Source: /home/mike/src/cvs/netbsd/src/sys/netiso/Attic/tp_stat.h,v $
  *
  * Here are the data structures in which the global
@@ -146,6 +146,8 @@ struct tp_stat {
 	u_long	ts_Cset;
 	u_long	ts_Ccan_act;
 	u_long	ts_Ccan_inact;
+	u_long	ts_Fdelack;
+	u_long	ts_Fpruned;
 
 	u_long	ts_concat_rcvd;
 
@@ -176,8 +178,8 @@ struct tp_stat {
 	 * 2 --> tp_flags:  TPF_PEER_ON_SAMENET | ~TPF_NL_PDN
 	 * 3 --> tp_flags:  TPF_PEER_ON_SAMENET |  TPF_NL_PDN
 	 */
-	struct timeval ts_rtt[NRTT_CATEGORIES];
-	struct timeval ts_rtv[NRTT_CATEGORIES];
+	int ts_rtt[NRTT_CATEGORIES];
+	int ts_rtv[NRTT_CATEGORIES];
 
 	u_long ts_ackreason[_ACK_NUM_REASONS_];
 		/*  ACK_DONT 0 / ACK_STRAT_EACH 0x1 / ACK_STRAT_FULLWIN 0x4
@@ -219,7 +221,7 @@ struct tp_pmeas {
 		 * Each window size, we keep the running average of the time
 		 * taken by tp_sbsend() for each window size.
 		 */
-		struct timeval	tps_sendtime[TP_PM_MAX+1]; 
+		int	tps_sendtime[TP_PM_MAX+1]; 
 		/*
 		 * n_TMsendack: # times ack sent because timer went off
 		 * n_ack_cuz_eot: # times ack sent due to EOTSDU on incoming packet
@@ -276,6 +278,6 @@ int PStat_Junk;
 #define IFPERF(x)	if (0) {
 #define ENDPERF }
 
-#endif TP_PERF_MEAS
+#endif /* TP_PERF_MEAS */
 
-#endif __TP_STAT__
+#endif /* __TP_STAT__ */

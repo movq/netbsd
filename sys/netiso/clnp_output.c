@@ -1,6 +1,6 @@
 /*-
- * Copyright (c) 1991 The Regents of the University of California.
- * All rights reserved.
+ * Copyright (c) 1991, 1993
+ *	The Regents of the University of California.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -30,7 +30,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)clnp_output.c	7.10 (Berkeley) 5/6/91
+ *	@(#)clnp_output.c	8.1 (Berkeley) 6/10/93
  */
 
 /***********************************************************
@@ -59,27 +59,27 @@ SOFTWARE.
 /*
  * ARGO Project, Computer Sciences Dept., University of Wisconsin - Madison
  */
-/* $Header: /home/mike/src/cvs/netbsd/src/sys/netiso/Attic/clnp_output.c,v 1.1 1993/04/09 12:00:55 cgd Exp $ */
+/* $Header: /home/mike/src/cvs/netbsd/src/sys/netiso/Attic/clnp_output.c,v 1.1.1.1 1998/03/01 02:10:17 fvdl Exp $ */
 /* $Source: /home/mike/src/cvs/netbsd/src/sys/netiso/Attic/clnp_output.c,v $ */
 
-#include "param.h"
-#include "mbuf.h"
-#include "domain.h"
-#include "protosw.h"
-#include "socket.h"
-#include "socketvar.h"
-#include "errno.h"
-#include "time.h"
+#include <sys/param.h>
+#include <sys/mbuf.h>
+#include <sys/domain.h>
+#include <sys/protosw.h>
+#include <sys/socket.h>
+#include <sys/socketvar.h>
+#include <sys/errno.h>
+#include <sys/time.h>
 
-#include "../net/if.h"
-#include "../net/route.h"
+#include <net/if.h>
+#include <net/route.h>
 
-#include "iso.h"
-#include "iso_var.h"
-#include "iso_pcb.h"
-#include "clnp.h"
-#include "clnp_stat.h"
-#include "argo_debug.h"
+#include <netiso/iso.h>
+#include <netiso/iso_var.h>
+#include <netiso/iso_pcb.h>
+#include <netiso/clnp.h>
+#include <netiso/clnp_stat.h>
+#include <netiso/argo_debug.h>
 
 static struct clnp_fixed dt_template = {
 	ISO8473_CLNP,	/* network identifier */
@@ -111,10 +111,20 @@ static struct clnp_fixed echo_template = {
 	0				/* checksum */
 };
 
+static struct clnp_fixed echor_template = {
+	ISO8473_CLNP,	/* network identifier */
+	0,				/* length */
+	ISO8473_V1,		/* version */
+	CLNP_TTL,		/* ttl */
+	CLNP_ECR|CNF_SEG_OK|CNF_ERR_OK,		/* type */
+	0,				/* segment length */
+	0				/* checksum */
+};
+
 #ifdef	DECBIT
 u_char qos_option[] = {CLNPOVAL_QOS, 1, 
 	CLNPOVAL_GLOBAL|CLNPOVAL_SEQUENCING|CLNPOVAL_LOWDELAY};
-#endif	DECBIT
+#endif	/* DECBIT */
 
 int				clnp_id = 0;		/* id for segmented dgrams */
 
@@ -371,6 +381,8 @@ int					flags;		/* flags */
 			*clnp = raw_template;
 		} else if (flags & CLNP_ECHO) {
 			*clnp = echo_template;
+		} else if (flags & CLNP_ECHOR) {
+			*clnp = echor_template;
 		} else {
 			*clnp = dt_template;
 		}
@@ -454,7 +466,7 @@ int					flags;		/* flags */
 			hdrlen += sizeof(qos_option);
 			m->m_len += sizeof(qos_option);
 		}
-#endif	DECBIT
+#endif	/* DECBIT */
 
 		/*
 		 *	If an options mbuf is present, concatenate a copy to the hdr mbuf.

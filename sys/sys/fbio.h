@@ -36,7 +36,7 @@
  *
  *	@(#)fbio.h	8.2 (Berkeley) 10/30/93
  *
- * from: $Header: /home/mike/src/cvs/netbsd/src/sys/sys/Attic/fbio.h,v 1.1 1998/03/01 02:11:03 fvdl Exp $ (LBL)
+ * from: $Header: /home/mike/src/cvs/netbsd/src/sys/sys/Attic/fbio.h,v 1.1.1.1 1998/03/01 02:11:03 fvdl Exp $ (LBL)
  */
 
 /*

@@ -1,6 +1,6 @@
 /*-
- * Copyright (c) 1991 The Regents of the University of California.
- * All rights reserved.
+ * Copyright (c) 1991, 1993
+ *	The Regents of the University of California.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -30,7 +30,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)iso.c	7.14 (Berkeley) 6/27/91
+ *	@(#)iso.c	8.2 (Berkeley) 11/15/93
  */
 
 /***********************************************************
@@ -60,62 +60,41 @@ SOFTWARE.
  * ARGO Project, Computer Sciences Dept., University of Wisconsin - Madison
  */
 /*
- * $Header: /home/mike/src/cvs/netbsd/src/sys/netiso/Attic/iso.c,v 1.1 1993/04/09 12:01:12 cgd Exp $ 
+ * $Header: /home/mike/src/cvs/netbsd/src/sys/netiso/Attic/iso.c,v 1.1.1.1 1998/03/01 02:10:20 fvdl Exp $ 
  * $Source: /home/mike/src/cvs/netbsd/src/sys/netiso/Attic/iso.c,v $ 
  *
  * iso.c: miscellaneous routines to support the iso address family
  */
 
-#include "types.h"
-#include "param.h"
-#include "ioctl.h"
-#include "mbuf.h"
-#include "domain.h"
-#include "protosw.h"
-#include "socket.h"
-#include "socketvar.h"
-#include "errno.h"
+#include <sys/param.h>
+#include <sys/systm.h>
+#include <sys/ioctl.h>
+#include <sys/mbuf.h>
+#include <sys/domain.h>
+#include <sys/protosw.h>
+#include <sys/socket.h>
+#include <sys/socketvar.h>
+#include <sys/errno.h>
 
-#include "../net/if.h"
-#include "../net/route.h"
-#include "../net/af.h"
+#include <net/if.h>
+#include <net/route.h>
 
-#include "iso.h"
-#include "iso_var.h"
-#include "iso_snpac.h"
-#include "iso_pcb.h"
-#include "clnp.h"
-#include "argo_debug.h"
+#include <netiso/iso.h>
+#include <netiso/iso_var.h>
+#include <netiso/iso_snpac.h>
+#include <netiso/iso_pcb.h>
+#include <netiso/clnp.h>
+#include <netiso/argo_debug.h>
+#ifdef TUBA
+#include <netiso/tuba_table.h>
+#endif
 
 #ifdef ISO
 
 int	iso_interfaces = 0;		/* number of external interfaces */
 extern	struct ifnet loif;	/* loopback interface */
-int ether_output(), llc_rtrequest();
-
-
-/*
- * FUNCTION:		iso_init
- *
- * PURPOSE:			initialize the iso address family
- *
- * RETURNS:			nothing
- *
- * SIDE EFFECTS:	1) initializes the routing table.
- *
- *
- * NOTES:			
- */
-struct radix_node_head *iso_rnhead;
-iso_init()
-{
-	static iso_init_done;
-
-	if (iso_init_done == 0) {
-		iso_init_done++;
-		rn_inithead(&iso_rnhead, 48, AF_ISO);
-	}
-}
+int	ether_output();
+void	llc_rtrequest();
 
 /*
  * FUNCTION:		iso_addrmatch1
@@ -229,7 +208,7 @@ struct sockaddr_iso *sisoa, *sisob;
 
 	return ((lena == lenb) && (!bcmp(bufa, bufb, lena)));
 }
-#endif notdef
+#endif /* notdef */
 
 /*
  * FUNCTION:		iso_hashchar
@@ -419,14 +398,14 @@ caddr_t			buf;		/* RESULT: network portion of address here */
 
 	bcopy((caddr_t)isoa, buf, len);
 	IFDEBUG(D_ROUTE)
-		printf("in_netof: isoa ");
+		printf("iso_netof: isoa ");
 		dump_buf(isoa, len);
-		printf("in_netof: net ");
+		printf("iso_netof: net ");
 		dump_buf(buf, len);
 	ENDDEBUG
 	return len;
 }
-#endif notdef
+#endif /* notdef */
 /*
  * Generic iso control operations (ioctl's).
  * Ifp is 0 if not an interface-specific ioctl.
@@ -471,6 +450,11 @@ iso_control(so, cmd, data, ifp)
 			struct iso_ifaddr *nia;
 			if (cmd == SIOCDIFADDR_ISO)
 				return (EADDRNOTAVAIL);
+#ifdef TUBA
+			/* XXXXXX can't be done in the proto init routines */
+			if (tuba_tree == 0)
+				tuba_table_init();
+#endif
 			MALLOC(nia, struct iso_ifaddr *, sizeof(*nia),
 				       M_IFADDR, M_WAITOK);
 			if (nia == (struct iso_ifaddr *)0)
@@ -577,7 +561,7 @@ iso_control(so, cmd, data, ifp)
 			else
 				printf("Didn't unlink isoifadr from list\n");
 		}
-		free((caddr_t)oia, M_IFADDR);
+		IFAFREE((&oia->ia_ifa));
 		break;
 
 	default:
@@ -629,7 +613,8 @@ iso_ifinit(ifp, ia, siso, scrub)
 	 * if this is its first address,
 	 * and to validate the address if necessary.
 	 */
-	if (ifp->if_ioctl && (error = (*ifp->if_ioctl)(ifp, SIOCSIFADDR, ia))) {
+	if (ifp->if_ioctl &&
+				(error = (*ifp->if_ioctl)(ifp, SIOCSIFADDR, (caddr_t)ia))) {
 		splx(s);
 		ia->ia_addr = oldaddr;
 		return (error);
@@ -644,7 +629,6 @@ iso_ifinit(ifp, ia, siso, scrub)
 	if (ifp->if_output == ether_output) {
 		ia->ia_ifa.ifa_rtrequest = llc_rtrequest;
 		ia->ia_ifa.ifa_flags |= RTF_CLONING;
-		ia->ia_ifa.ifa_llinfolen = sizeof(struct llinfo_llc);
 	}
 	/*
 	 * Add route for the network.
@@ -723,7 +707,7 @@ iso_ifwithidi(addr)
 	return ((struct ifaddr *)0);
 }
 
-#endif notdef
+#endif /* notdef */
 /*
  * FUNCTION:		iso_ck_addr
  *
@@ -772,7 +756,7 @@ struct iso_addr	*isoab;		/* other addr to check */
 	}
 	return(0);
 }
-#endif notdef
+#endif /* notdef */
 /*
  * FUNCTION:		iso_localifa()
  *
@@ -827,8 +811,8 @@ iso_localifa(siso)
 }
 
 #ifdef	TPCONS
-#include "cons.h"
-#endif	TPCONS
+#include <netiso/cons.h>
+#endif	/* TPCONS */
 /*
  * FUNCTION:		iso_nlctloutput
  *
@@ -889,15 +873,16 @@ struct mbuf	*m;			/* data for set, buffer for get */
 			bcopy(data, (caddr_t)isop->isop_x25crud, (unsigned)data_len);
 			isop->isop_x25crud_len = data_len;
 			break;
-#endif	TPCONS
+#endif	/* TPCONS */
 
 		default:
 			error = EOPNOTSUPP;
 	}
-
+	if (cmd == PRCO_SETOPT)
+		m_freem(m);
 	return error;
 }
-#endif ISO
+#endif /* ISO */
 
 #ifdef ARGO_DEBUG
 
@@ -931,4 +916,4 @@ dump_isoaddr(s)
 	}
 }
 
-#endif ARGO_DEBUG
+#endif /* ARGO_DEBUG */

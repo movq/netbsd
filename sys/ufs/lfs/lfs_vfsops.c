@@ -30,8 +30,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	from: @(#)lfs_vfsops.c	8.7 (Berkeley) 4/16/94
- *	$Id: lfs_vfsops.c,v 1.1 1994/06/08 11:42:48 mycroft Exp $
+ *	@(#)lfs_vfsops.c	8.7 (Berkeley) 4/16/94
  */
 
 #include <sys/param.h>
@@ -63,7 +62,6 @@
 int lfs_mountfs __P((struct vnode *, struct mount *, struct proc *));
 
 struct vfsops lfs_vfsops = {
-	MOUNT_LFS,
 	lfs_mount,
 	ufs_start,
 	lfs_unmount,
@@ -274,8 +272,7 @@ lfs_mountfs(devvp, mp, p)
 	dev = devvp->v_rdev;
 	mp->mnt_data = (qaddr_t)ump;
 	mp->mnt_stat.f_fsid.val[0] = (long)dev;
-	mp->mnt_stat.f_fsid.val[1] = makefstype(MOUNT_LFS);
-	mp->mnt_maxsymlinklen = fs->lfs_maxsymlinklen;
+	mp->mnt_stat.f_fsid.val[1] = MOUNT_LFS;
 	mp->mnt_flag |= MNT_LOCAL;
 	ump->um_mountp = mp;
 	ump->um_dev = dev;
@@ -386,7 +383,7 @@ lfs_statfs(mp, sbp, p)
 	fs = ump->um_lfs;
 	if (fs->lfs_magic != LFS_MAGIC)
 		panic("lfs_statfs: magic");
-	sbp->f_type = 0;
+	sbp->f_type = MOUNT_LFS;
 	sbp->f_bsize = fs->lfs_bsize;
 	sbp->f_iosize = fs->lfs_bsize;
 	sbp->f_blocks = dbtofsb(fs,fs->lfs_dsize);
@@ -402,8 +399,6 @@ lfs_statfs(mp, sbp, p)
 		bcopy((caddr_t)mp->mnt_stat.f_mntfromname,
 			(caddr_t)&sbp->f_mntfromname[0], MNAMELEN);
 	}
-	strncpy(&sbp->f_fstypename[0], mp->mnt_op->vfs_name, MFSNAMELEN);
-	sbp->f_fstypename[MFSNAMELEN] = '\0';
 	return (0);
 }
 

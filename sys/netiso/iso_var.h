@@ -1,6 +1,6 @@
 /*-
- * Copyright (c) 1988, 1991 The Regents of the University of California.
- * All rights reserved.
+ * Copyright (c) 1988, 1991, 1993
+ *	The Regents of the University of California.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -30,7 +30,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)iso_var.h	7.5 (Berkeley) 5/6/91
+ *	@(#)iso_var.h	8.1 (Berkeley) 6/10/93
  */
 
 /***********************************************************
@@ -59,7 +59,7 @@ SOFTWARE.
 /*
  * ARGO Project, Computer Sciences Dept., University of Wisconsin - Madison
  */
-/* $Header: /home/mike/src/cvs/netbsd/src/sys/netiso/Attic/iso_var.h,v 1.1 1993/04/09 12:01:24 cgd Exp $
+/* $Header: /home/mike/src/cvs/netbsd/src/sys/netiso/Attic/iso_var.h,v 1.1.1.1 1998/03/01 02:10:21 fvdl Exp $
  * $Source: /home/mike/src/cvs/netbsd/src/sys/netiso/Attic/iso_var.h,v $
  */
 
@@ -134,4 +134,4 @@ struct snpa_hdr {
 struct iso_ifaddr	*iso_ifaddr;	/* linked list of iso address ifaces */
 struct iso_ifaddr	*iso_localifa();	/* linked list of iso address ifaces */
 struct ifqueue 		clnlintrq;		/* clnl packet input queue */
-#endif KERNEL
+#endif /* KERNEL */

@@ -34,9 +34,10 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	from: Id: procfs_regs.c,v 3.2 1993/12/15 09:40:17 jsp Exp
- *	from: @(#)procfs_fpregs.c	8.1 (Berkeley) 1/27/94
- *	$Id: procfs_fpregs.c,v 1.1 1994/06/08 11:33:35 mycroft Exp $
+ *	@(#)procfs_fpregs.c	8.1 (Berkeley) 1/27/94
+ *
+ * From:
+ *	$Id: procfs_fpregs.c,v 1.1.1.1 1998/03/01 02:10:00 fvdl Exp $
  */
 
 #include <sys/param.h>
@@ -45,7 +46,6 @@
 #include <sys/kernel.h>
 #include <sys/proc.h>
 #include <sys/vnode.h>
-#include <sys/ptrace.h>
 #include <machine/reg.h>
 #include <miscfs/procfs/procfs.h>
 
@@ -56,7 +56,6 @@ procfs_dofpregs(curp, p, pfs, uio)
 	struct pfsnode *pfs;
 	struct uio *uio;
 {
-#if defined(PT_GETFPREGS) || defined(PT_SETFPREGS)
 	int error;
 	struct fpreg r;
 	char *kv;
@@ -73,31 +72,16 @@ procfs_dofpregs(curp, p, pfs, uio)
 	if (kl < 0)
 		error = EINVAL;
 	else
-		error = process_read_fpregs(p, &r);
+		error = procfs_read_fpregs(p, &r);
 	if (error == 0)
 		error = uiomove(kv, kl, uio);
 	if (error == 0 && uio->uio_rw == UIO_WRITE) {
 		if (p->p_stat != SSTOP)
 			error = EBUSY;
 		else
-			error = process_write_fpregs(p, &r);
+			error = procfs_write_fpregs(p, &r);
 	}
 
 	uio->uio_offset = 0;
 	return (error);
-#else
-	return (EINVAL);
-#endif
-}
-
-int
-procfs_validfpregs(p)
-	struct proc *p;
-{
-
-#if defined(PT_SETFPREGS) || defined(PT_GETFPREGS)
-	return ((p->p_flag & P_SYSTEM) == 0);
-#else
-	return (0);
-#endif
 }

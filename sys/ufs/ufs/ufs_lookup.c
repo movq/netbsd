@@ -35,8 +35,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	from: @(#)ufs_lookup.c	8.6 (Berkeley) 4/1/94
- *	$Id: ufs_lookup.c,v 1.1 1994/06/08 11:43:19 mycroft Exp $
+ *	@(#)ufs_lookup.c	8.6 (Berkeley) 4/1/94
  */
 
 #include <sys/param.h>
@@ -332,17 +331,7 @@ searchloop:
 				 */
 				dp->i_ino = ep->d_ino;
 				dp->i_reclen = ep->d_reclen;
-#if 0 /* XXXX Upgrade on the fly! */
-				if (vdp->v_mount->mnt_maxsymlinklen > 0 &&
-				    ep->d_type == DT_UNKNOWN &&
-				    !(vdp->v_mount->mnt_flag & MNT_RDONLY) &&
-				    !VFS_VGET(vdp->v_mount, dp->i_ino, &tdp)) {
-					ep->d_type = tdp->v_type;
-					vput(tdp);
-					bdwrite(bp);
-				} else
-#endif
-					brelse(bp);
+				brelse(bp);
 				goto found;
 			}
 		}
@@ -617,8 +606,6 @@ ufs_dirbadentry(dp, ep, entryoffsetinblock)
 		printf("First bad\n");
 		goto bad;
 	}
-	if (ep->d_ino == 0)
-		return (0);
 	for (i = 0; i < namlen; i++)
 		if (ep->d_name[i] == '\0') {
 			/*return (1); */
@@ -627,9 +614,9 @@ ufs_dirbadentry(dp, ep, entryoffsetinblock)
 	}
 	if (ep->d_name[i])
 		goto bad;
-	return (0);
+	return (ep->d_name[i]);
 bad:
-	return (1);
+	return(1);
 }
 
 /*

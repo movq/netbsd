@@ -1,6 +1,6 @@
 /*-
- * Copyright (c) 1991 The Regents of the University of California.
- * All rights reserved.
+ * Copyright (c) 1991, 1993
+ *	The Regents of the University of California.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -30,7 +30,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)clnp_debug.c	7.8 (Berkeley) 5/27/91
+ *	@(#)clnp_debug.c	8.1 (Berkeley) 6/10/93
  */
 
 /***********************************************************
@@ -59,25 +59,24 @@ SOFTWARE.
 /*
  * ARGO Project, Computer Sciences Dept., University of Wisconsin - Madison
  */
-/* $Header: /home/mike/src/cvs/netbsd/src/sys/netiso/Attic/clnp_debug.c,v 1.1 1993/04/09 12:00:48 cgd Exp $ */
+/* $Header: /home/mike/src/cvs/netbsd/src/sys/netiso/Attic/clnp_debug.c,v 1.1.1.1 1998/03/01 02:10:16 fvdl Exp $ */
 /* $Source: /home/mike/src/cvs/netbsd/src/sys/netiso/Attic/clnp_debug.c,v $ */
 
-#include "types.h"
-#include "param.h"
-#include "mbuf.h"
-#include "domain.h"
-#include "protosw.h"
-#include "socket.h"
-#include "socketvar.h"
-#include "errno.h"
+#include <sys/param.h>
+#include <sys/mbuf.h>
+#include <sys/domain.h>
+#include <sys/protosw.h>
+#include <sys/socket.h>
+#include <sys/socketvar.h>
+#include <sys/errno.h>
 
-#include "../net/if.h"
-#include "../net/route.h"
+#include <net/if.h>
+#include <net/route.h>
 
-#include "iso.h"
-#include "clnp.h"
-#include "clnp_stat.h"
-#include "argo_debug.h"
+#include <netiso/iso.h>
+#include <netiso/clnp.h>
+#include <netiso/clnp_stat.h>
+#include <netiso/argo_debug.h>
 
 #ifdef	ARGO_DEBUG
 
@@ -91,7 +90,7 @@ struct addr_osinet u_osinet = {
 	{0x00, 0x04},
 	{0x00, 0x02, 0x00, 0x01, 0x23, 0x42, 0x78, 0x20, 0x01, 0x05, 0x00}
 };
-#endif notdef
+#endif /* notdef */
 struct addr_rfc986 u_rfc986 = {
 	{0x00, 0x06},
 	{0x01, 0xc0, 0x0c, 0x0c, 0xab, 0x11}
@@ -130,7 +129,7 @@ main()
 	a.isoa_len = 9;
 	printf("type bad idi: %s\n", clnp_iso_addrp(&a));
 }
-#endif	TESTDEBUG
+#endif	/* TESTDEBUG */
 
 unsigned int	clnp_debug;
 static char letters[] = "0123456789abcdef";
@@ -142,14 +141,15 @@ static char letters[] = "0123456789abcdef";
 char *
 clnp_hexp(src, len, where)
 char	*src;		/* src of data to print */
-int		len;		/* lengthof src */
+int		len;				/* lengthof src */
 char	*where;		/* where to put data */
 {
 	int i;
 
 	for (i=0; i<len; i++) {
-		*where++ = letters[src[i] >> 4];
-		*where++ = letters[src[i] & 0x0f];
+		register int j = ((u_char *)src)[i];
+		*where++ = letters[j >> 4];
+		*where++ = letters[j & 0x0f];
 	}
 	return where;
 }
@@ -228,7 +228,7 @@ struct iso_addr *isoa;
 				cp = clnp_hexp(&o986->o986_inetaddr[3], 1, cp);
 				*cp++ = DELIM;
 				cp = clnp_hexp(&o986->o986_upid, 1, cp);
-#endif vax
+#endif /* vax */
 			}
 			
 		} break;
@@ -237,7 +237,7 @@ struct iso_addr *isoa;
 			*cp++ = '?';
 			break;
 	}
-#endif notdef
+#endif /* notdef */
 	*cp = (char)0;
 	
 	return(iso_addr_b);
@@ -257,4 +257,4 @@ register struct sockaddr_iso *s;
 	return (iso_addr_b);
 }
 
-#endif	ARGO_DEBUG
+#endif	/* ARGO_DEBUG */

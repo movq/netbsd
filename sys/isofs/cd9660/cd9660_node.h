@@ -35,8 +35,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	from: @(#)cd9660_node.h	8.2 (Berkeley) 1/23/94
- *	$Id: cd9660_node.h,v 1.1 1994/06/08 11:22:52 mycroft Exp $
+ *	@(#)cd9660_node.h	8.2 (Berkeley) 1/23/94
  */
 
 /*

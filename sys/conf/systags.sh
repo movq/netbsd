@@ -38,7 +38,7 @@
 #
 # First written May 16, 1992 by Van Jacobson, Lawrence Berkeley Laboratory.
 #
-# from: $Header: /home/mike/src/cvs/netbsd/src/sys/conf/Attic/systags.sh,v 1.1 1998/03/01 02:09:33 fvdl Exp $
+# from: $Header: /home/mike/src/cvs/netbsd/src/sys/conf/Attic/systags.sh,v 1.1.1.1 1998/03/01 02:09:33 fvdl Exp $
 
 rm -f tags tags.tmp tags.cfiles tags.sfiles tags.hfiles
 MACHINE=`machine`

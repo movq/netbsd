@@ -30,8 +30,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	from: @(#)tuba_table.c	8.2 (Berkeley) 11/15/93
- *	$Id: tuba_table.c,v 1.1 1994/05/13 06:10:04 mycroft Exp $
+ *	@(#)tuba_table.c	8.2 (Berkeley) 11/15/93
  */
 #include <sys/param.h>
 #include <sys/systm.h>

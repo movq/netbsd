@@ -1,4 +1,4 @@
-/* $Header: /home/mike/src/cvs/netbsd/src/sys/netiso/Attic/tp_states.h,v 1.1 1993/04/09 12:01:48 cgd Exp $ */
+/* $Header: /home/mike/src/cvs/netbsd/src/sys/netiso/Attic/tp_states.h,v 1.1.1.1 1998/03/01 02:10:26 fvdl Exp $ */
 /* $Source: /home/mike/src/cvs/netbsd/src/sys/netiso/Attic/tp_states.h,v $ */
 #define ST_ERROR 0x0
 #define TP_CLOSED 0x1

@@ -30,8 +30,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	from: @(#)ufs_ihash.c	8.4 (Berkeley) 12/30/93
- *	$Id: ufs_ihash.c,v 1.1 1994/06/08 11:43:16 mycroft Exp $
+ *	@(#)ufs_ihash.c	8.4 (Berkeley) 12/30/93
  */
 
 #include <sys/param.h>

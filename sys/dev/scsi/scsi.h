@@ -41,7 +41,7 @@
  *
  *	@(#)scsi.h	8.1 (Berkeley) 6/10/93
  *
- * from: $Header: /home/mike/src/cvs/netbsd/src/sys/dev/scsi/Attic/scsi.h,v 1.1 1998/03/01 02:09:34 fvdl Exp $ (LBL)
+ * from: $Header: /home/mike/src/cvs/netbsd/src/sys/dev/scsi/Attic/scsi.h,v 1.1.1.1 1998/03/01 02:09:34 fvdl Exp $ (LBL)
  */
 
 /*

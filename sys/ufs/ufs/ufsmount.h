@@ -30,8 +30,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	from: @(#)ufsmount.h	8.2 (Berkeley) 1/12/94
- *	$Id: ufsmount.h,v 1.1 1994/06/08 11:43:27 mycroft Exp $
+ *	@(#)ufsmount.h	8.2 (Berkeley) 1/12/94
  */
 
 struct buf;

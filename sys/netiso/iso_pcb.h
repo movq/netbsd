@@ -1,6 +1,6 @@
 /*-
- * Copyright (c) 1991 The Regents of the University of California.
- * All rights reserved.
+ * Copyright (c) 1991, 1993
+ *	The Regents of the University of California.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -30,7 +30,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)iso_pcb.h	7.5 (Berkeley) 5/6/91
+ *	@(#)iso_pcb.h	8.1 (Berkeley) 6/10/93
  */
 
 /***********************************************************
@@ -59,7 +59,7 @@ SOFTWARE.
 /*
  * ARGO Project, Computer Sciences Dept., University of Wisconsin - Madison
  */
-/* $Header: /home/mike/src/cvs/netbsd/src/sys/netiso/Attic/iso_pcb.h,v 1.1 1993/04/09 12:01:19 cgd Exp $ */
+/* $Header: /home/mike/src/cvs/netbsd/src/sys/netiso/Attic/iso_pcb.h,v 1.1.1.1 1998/03/01 02:10:21 fvdl Exp $ */
 /* $Source: /home/mike/src/cvs/netbsd/src/sys/netiso/Attic/iso_pcb.h,v $ */
 
 #define	MAXX25CRUDLEN	16	/* 16 bytes of call request user data */
@@ -84,6 +84,7 @@ struct isopcb {
 	caddr_t					isop_chan;		/* actually struct pklcb * */
 	u_short					isop_refcnt;		/* mult TP4 tpcb's -> here */
 	u_short					isop_lport;			/* MISLEADLING work var */
+	u_short					isop_tuba_cached;	/* for tuba address ref cnts */
 	int						isop_x25crud_len;	/* x25 call request ud */
 	char					isop_x25crud[MAXX25CRUDLEN];
 	struct ifaddr			*isop_ifa;		/* ESIS interface assoc w/sock */

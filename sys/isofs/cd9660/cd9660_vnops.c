@@ -35,8 +35,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	from: @(#)cd9660_vnops.c	8.3 (Berkeley) 1/23/94
- *	$Id: cd9660_vnops.c,v 1.1 1994/06/08 11:22:58 mycroft Exp $
+ *	@(#)cd9660_vnops.c	8.3 (Berkeley) 1/23/94
  */
 
 #include <sys/param.h>
@@ -75,7 +74,7 @@ cd9660_mknod(ndp, vap, cred, p)
 	free(ndp->ni_pnbuf, M_NAMEI);
 	vput(ndp->ni_dvp);
 	vput(ndp->ni_vp);
-	return (EINVAL);
+	return EINVAL;
 #else
 	register struct vnode *vp;
 	struct iso_node *ip;
@@ -91,7 +90,7 @@ cd9660_mknod(ndp, vap, cred, p)
 		free(ndp->ni_pnbuf, M_NAMEI);
 		vput(ndp->ni_dvp);
 		vput(ndp->ni_vp);
-		return (EINVAL);
+		return EINVAL;
 	}
 	
 	dp = iso_dmap(ip->i_dev,ip->i_number,1);
@@ -166,26 +165,7 @@ cd9660_access(ap)
 		struct proc *a_p;
 	} */ *ap;
 {
-	register struct iso_node *ip = VTOI(ap->a_vp);
-	register int mode = ap->a_mode;
-	struct ucred *cred = ap->a_cred;
-	register gid_t *gp;
-	int i;
-
-	if (cred->cr_uid == 0)
-		return (0);
-
-	if (cred->cr_uid != ip->inode.iso_uid) {
-		mode >>= 3;
-		gp = cred->cr_groups;
-		for (i = 0; i < cred->cr_ngroups; i++, gp++)
-			if (ip->inode.iso_gid == *gp)
-				goto found;
-		mode >>= 3;
-	found:
-	}
-		
-	return ((ip->inode.iso_mode & mode) == mode ? 0 : EACCES);
+	return (0);
 }
 
 cd9660_getattr(ap)
@@ -388,9 +368,9 @@ struct isoreaddir {
 	off_t curroff;
 	struct uio *uio;
 	off_t uio_off;
-	int eofflag;
-	u_long *cookies;
+	u_int *cookiep;
 	int ncookies;
+	int eof;
 };
 
 static int
@@ -405,24 +385,24 @@ iso_uiodir(idp,dp,off)
 	dp->d_reclen = DIRSIZ(dp);
 	
 	if (idp->uio->uio_resid < dp->d_reclen) {
-		idp->eofflag = 0;
-		return (-1);
+		idp->eof = 0;
+		return -1;
 	}
 	
-	if (idp->cookies) {
+	if (idp->cookiep) {
 		if (idp->ncookies <= 0) {
-			idp->eofflag = 0;
-			return (-1);
+			idp->eof = 0;
+			return -1;
 		}
 		
-		*idp->cookies++ = off;
+		*idp->cookiep++ = off;
 		--idp->ncookies;
 	}
 	
 	if (error = uiomove(dp,dp->d_reclen,idp->uio))
-		return (error);
+		return error;
 	idp->uio_off = off;
-	return (0);
+	return 0;
 }
 
 static int
@@ -453,12 +433,12 @@ iso_shipdir(idp)
 		    || bcmp(sname,cname,sl)) {
 			if (idp->assocent.d_namlen) {
 				if (error = iso_uiodir(idp,&idp->assocent,idp->assocoff))
-					return (error);
+					return error;
 				idp->assocent.d_namlen = 0;
 			}
 			if (idp->saveent.d_namlen) {
 				if (error = iso_uiodir(idp,&idp->saveent,idp->saveoff))
-					return (error);
+					return error;
 				idp->saveent.d_namlen = 0;
 			}
 		}
@@ -471,12 +451,12 @@ iso_shipdir(idp)
 		idp->saveoff = idp->curroff;
 		bcopy(&idp->current,&idp->saveent,idp->current.d_reclen);
 	}
-	return (0);
+	return 0;
 }
 
 /*
  * Vnode op for readdir
- * XXX make sure everything still works now that eofflagp and cookies
+ * XXX make sure everything still works now that eofflagp and cookiep
  * are no longer args.
  */
 int
@@ -485,9 +465,6 @@ cd9660_readdir(ap)
 		struct vnode *a_vp;
 		struct uio *a_uio;
 		struct ucred *a_cred;
-		int *a_eofflag;
-		u_long *a_cookies;
-		int a_ncookies;
 	} */ *ap;
 {
 	register struct uio *uio = ap->a_uio;
@@ -509,9 +486,13 @@ cd9660_readdir(ap)
 	idp->saveent.d_namlen = 0;
 	idp->assocent.d_namlen = 0;
 	idp->uio = uio;
-	idp->eofflag = 1;
-	idp->cookies = ap->a_cookies;
-	idp->ncookies = ap->a_ncookies;
+#if 0
+	idp->cookiep = cookies;
+	idp->ncookies = ncookies;
+	idp->eof = 1;
+#else
+	idp->cookiep = 0;
+#endif
 	idp->curroff = uio->uio_offset;
 	
 	entryoffsetinblock = iso_blkoff(imp, idp->curroff);
@@ -584,9 +565,9 @@ cd9660_readdir(ap)
 		 */
 		switch (imp->iso_ftype) {
 		case ISO_FTYPE_RRIP:
-			cd9660_rrip_getname(ep,idp->current.d_name, &elen,
+			cd9660_rrip_getname(ep,idp->current.d_name,
+					   (u_short *)&idp->current.d_namlen,
 					   &idp->current.d_fileno,imp);
-			idp->current.d_namlen = (u_char)elen;
 			if (idp->current.d_namlen)
 				error = iso_uiodir(idp,&idp->current,idp->curroff);
 			break;
@@ -631,7 +612,9 @@ cd9660_readdir(ap)
 		brelse (bp);
 
 	uio->uio_offset = idp->uio_off;
-	*ap->a_eofflag = idp->eofflag;
+#if 0
+	*eofflagp = idp->eof;
+#endif
 	
 	FREE(idp,M_TEMP);
 	
@@ -668,19 +651,19 @@ cd9660_readlink(ap)
 	imp = ip->i_mnt;
 	
 	if (imp->iso_ftype != ISO_FTYPE_RRIP)
-		return (EINVAL);
+		return EINVAL;
 	
 	/*
 	 * Get parents directory record block that this inode included.
 	 */
 	error = bread(imp->im_devvp,
-		      (daddr_t)((ip->i_number&~imp->im_bmask) / DEV_BSIZE),
+		      (daddr_t)(ip->i_number / DEV_BSIZE),
 		      imp->logical_block_size,
 		      NOCRED,
 		      &bp);
 	if (error) {
 		brelse(bp);
-		return (EINVAL);
+		return EINVAL;
 	}
 
 	/*
@@ -706,7 +689,7 @@ cd9660_readlink(ap)
 	if ((ip->i_number & imp->im_bmask) + isonum_711(dirp->length)
 	    > imp->logical_block_size) {
 		brelse(bp);
-		return (EINVAL);
+		return EINVAL;
 	}
 	
 	/*
@@ -721,7 +704,7 @@ cd9660_readlink(ap)
 	if (cd9660_rrip_getsymname(dirp,symname,&symlen,imp) == 0) {
 		FREE(symname,M_NAMEI);
 		brelse(bp);
-		return (EINVAL);
+		return EINVAL;
 	}
 	/*
 	 * Don't forget before you leave from home ;-)
@@ -735,7 +718,7 @@ cd9660_readlink(ap)
 	
 	FREE(symname,M_NAMEI);
 	
-	return (error);
+	return error;
 }
 
 /*
@@ -751,7 +734,7 @@ cd9660_abortop(ap)
 {
 	if ((ap->a_cnp->cn_flags & (HASBUF | SAVESTART)) == HASBUF)
 		FREE(ap->a_cnp->cn_pnbuf, M_NAMEI);
-	return (0);
+	return 0;
 }
 
 /*
@@ -766,7 +749,7 @@ cd9660_lock(ap)
 	register struct iso_node *ip = VTOI(ap->a_vp);
 
 	ISO_ILOCK(ip);
-	return (0);
+	return 0;
 }
 
 /*
@@ -783,7 +766,7 @@ cd9660_unlock(ap)
 	if (!(ip->i_flag & ILOCKED))
 		panic("cd9660_unlock NOT LOCKED");
 	ISO_IUNLOCK(ip);
-	return (0);
+	return 0;
 }
 
 /*
@@ -797,8 +780,8 @@ cd9660_islocked(ap)
 {
 
 	if (VTOI(ap->a_vp)->i_flag & ILOCKED)
-		return (1);
-	return (0);
+		return 1;
+	return 0;
 }
 
 /*
@@ -850,7 +833,7 @@ cd9660_print(ap)
 	} */ *ap;
 {
 	printf("tag VT_ISOFS, isofs vnode\n");
-	return (0);
+	return 0;
 }
 
 /*

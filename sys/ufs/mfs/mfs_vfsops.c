@@ -30,8 +30,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	from: @(#)mfs_vfsops.c	8.4 (Berkeley) 4/16/94
- *	$Id: mfs_vfsops.c,v 1.1 1994/06/08 11:42:55 mycroft Exp $
+ *	@(#)mfs_vfsops.c	8.4 (Berkeley) 4/16/94
  */
 
 #include <sys/param.h>
@@ -67,7 +66,6 @@ extern int (**mfs_vnodeop_p)();
  * mfs vfs operations.
  */
 struct vfsops mfs_vfsops = {
-	MOUNT_MFS,
 	mfs_mount,
 	mfs_start,
 	ffs_unmount,
@@ -304,12 +302,6 @@ mfs_statfs(mp, sbp, p)
 	int error;
 
 	error = ffs_statfs(mp, sbp, p);
-#ifdef COMPAT_09
-	sbp->f_type = 3;
-#else
-	sbp->f_type = 0;
-#endif
-	strncpy(&sbp->f_fstypename[0], mp->mnt_op->vfs_name, MFSNAMELEN);
-	sbp->f_fstypename[MFSNAMELEN] = '\0';
+	sbp->f_type = MOUNT_MFS;
 	return (error);
 }

@@ -30,8 +30,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	from: @(#)lfs_inode.c	8.5 (Berkeley) 12/30/93
- *	$Id: lfs_inode.c,v 1.1 1994/06/08 11:42:35 mycroft Exp $
+ *	@(#)lfs_inode.c	8.5 (Berkeley) 12/30/93
  */
 
 #include <sys/param.h>

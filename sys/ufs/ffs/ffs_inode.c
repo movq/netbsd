@@ -30,8 +30,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	from: @(#)ffs_inode.c	8.5 (Berkeley) 12/30/93
- *	$Id: ffs_inode.c,v 1.1 1994/06/08 11:42:04 mycroft Exp $
+ *	@(#)ffs_inode.c	8.5 (Berkeley) 12/30/93
  */
 
 #include <sys/param.h>
@@ -202,7 +201,7 @@ ffs_truncate(ap)
 			return (error);
 		oip->i_size = length;
 		(void) vnode_pager_uncache(ovp);
-		if (aflags & B_SYNC)
+		if (aflags & IO_SYNC)
 			bwrite(bp);
 		else
 			bawrite(bp);
@@ -232,7 +231,7 @@ ffs_truncate(ap)
 		(void) vnode_pager_uncache(ovp);
 		bzero((char *)bp->b_data + offset, (u_int)(size - offset));
 		allocbuf(bp, size);
-		if (aflags & B_SYNC)
+		if (aflags & IO_SYNC)
 			bwrite(bp);
 		else
 			bawrite(bp);

@@ -30,8 +30,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	from: @(#)ffs_alloc.c	8.8 (Berkeley) 2/21/94
- *	$Id: ffs_alloc.c,v 1.1 1994/06/08 11:41:58 mycroft Exp $
+ *	@(#)ffs_alloc.c	8.8 (Berkeley) 2/21/94
  */
 
 #include <sys/param.h>
@@ -305,11 +304,7 @@ nospace:
  */
 #include <sys/sysctl.h>
 int doasyncfree = 1;
-
-#ifdef DEBUG
 struct ctldebug debug14 = { "doasyncfree", &doasyncfree };
-#endif
-
 int
 ffs_reallocblks(ap)
 	struct vop_reallocblks_args /* {

@@ -1,6 +1,6 @@
 /*-
- * Copyright (c) 1991 The Regents of the University of California.
- * All rights reserved.
+ * Copyright (c) 1991, 1993
+ *	The Regents of the University of California.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -30,7 +30,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)tp_timer.h	7.4 (Berkeley) 5/6/91
+ *	@(#)tp_timer.h	8.1 (Berkeley) 6/10/93
  */
 
 /***********************************************************
@@ -62,31 +62,32 @@ SOFTWARE.
 /* 
  * ARGO TP
  *
- * $Header: /home/mike/src/cvs/netbsd/src/sys/netiso/Attic/tp_timer.h,v 1.1 1993/04/09 12:01:54 cgd Exp $
+ * $Header: /home/mike/src/cvs/netbsd/src/sys/netiso/Attic/tp_timer.h,v 1.1.1.1 1998/03/01 02:10:27 fvdl Exp $
  * $Source: /home/mike/src/cvs/netbsd/src/sys/netiso/Attic/tp_timer.h,v $
  *
  * ARGO TP
  * The callout structures used by the tp timers.
  */
 
-#ifndef __TP_CALLOUT__
-#define __TP_CALLOUT__
+#ifndef __TP_TIMER__
+#define __TP_TIMER__
 
-/* C timers - one per tpcb, generally cancelled */
+#define SET_DELACK(t) {\
+    (t)->tp_flags |= TPF_DELACK; \
+    if ((t)->tp_fasttimeo == 0)\
+		{ (t)->tp_fasttimeo = tp_ftimeolist; tp_ftimeolist = (t); } }
 
-struct	Ccallout {
-	int	c_time;		/* incremental time */
-	int c_active;	/* this timer is active? */
-};
+#ifdef ARGO_DEBUG
+#define TP_DEBUG_TIMERS
+#endif
 
-/* E timers - generally expire or there must be > 1 active per tpcb */
-struct Ecallout {
-	int	c_time;		/* incremental time */
-	int c_func;		/* function to call */
-	u_int c_arg1;	/* argument to routine */
-	u_int c_arg2;	/* argument to routine */
-	int c_arg3;		/* argument to routine */
-	struct Ecallout *c_next;
-};
+#ifndef TP_DEBUG_TIMERS
+#define tp_ctimeout(tpcb, which, timo) ((tpcb)->tp_timer[which] = (timo))
+#define tp_cuntimeout(tpcb, which) ((tpcb)->tp_timer[which] = 0)
+#define tp_etimeout tp_ctimeout
+#define tp_euntimeout tp_cuntimeout
+#define tp_ctimeout_MIN(p, w, t) \
+    { if((p)->tp_timer[w] > (t)) (p)->tp_timer[w] = (t);}
+#endif /* TP_DEBUG_TIMERS */
 
-#endif __TP_CALLOUT__
+#endif /* __TP_TIMER__ */

@@ -35,8 +35,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	from: @(#)ufs_bmap.c	8.6 (Berkeley) 1/21/94
- *	$Id: ufs_bmap.c,v 1.1 1994/06/08 11:43:12 mycroft Exp $
+ *	@(#)ufs_bmap.c	8.6 (Berkeley) 1/21/94
  */
 
 #include <sys/param.h>

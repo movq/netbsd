@@ -33,7 +33,7 @@
  *	@(#)bpf_compat.h	8.1 (Berkeley) 6/10/93
  */
 
-/* from: $Header: /home/mike/src/cvs/netbsd/src/sys/net/Attic/bpf_compat.h,v 1.1 1998/03/01 02:10:05 fvdl Exp $ (LBL) */
+/* from: $Header: /home/mike/src/cvs/netbsd/src/sys/net/Attic/bpf_compat.h,v 1.1.1.1 1998/03/01 02:10:05 fvdl Exp $ (LBL) */
 
 /*
  * Some hacks for compatibility across SunOS and 4.4BSD.  We emulate malloc

@@ -1,6 +1,6 @@
 /*-
- * Copyright (c) 1991 The Regents of the University of California.
- * All rights reserved.
+ * Copyright (c) 1991, 1993
+ *	The Regents of the University of California.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -30,7 +30,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)clnp_input.c	7.13 (Berkeley) 5/6/91
+ *	@(#)clnp_input.c	8.1 (Berkeley) 6/10/93
  */
 
 /***********************************************************
@@ -59,35 +59,34 @@ SOFTWARE.
 /*
  * ARGO Project, Computer Sciences Dept., University of Wisconsin - Madison
  */
-/* $Header: /home/mike/src/cvs/netbsd/src/sys/netiso/Attic/clnp_input.c,v 1.1 1993/04/09 12:00:52 cgd Exp $ */
+/* $Header: /home/mike/src/cvs/netbsd/src/sys/netiso/Attic/clnp_input.c,v 1.1.1.1 1998/03/01 02:10:17 fvdl Exp $ */
 /* $Source: /home/mike/src/cvs/netbsd/src/sys/netiso/Attic/clnp_input.c,v $ */
 
-#include "types.h"
-#include "param.h"
-#include "mbuf.h"
-#include "domain.h"
-#include "protosw.h"
-#include "socket.h"
-#include "socketvar.h"
-#include "errno.h"
-#include "time.h"
+#include <sys/param.h>
+#include <sys/mbuf.h>
+#include <sys/domain.h>
+#include <sys/protosw.h>
+#include <sys/socket.h>
+#include <sys/socketvar.h>
+#include <sys/errno.h>
+#include <sys/time.h>
 
-#include "../net/if.h"
-#include "../net/if_types.h"
-#include "../net/route.h"
+#include <net/if.h>
+#include <net/if_types.h>
+#include <net/route.h>
 
-#include "iso.h"
-#include "iso_var.h"
-#include "iso_snpac.h"
-#include "clnp.h"
-#include "clnl.h"
-#include "esis.h"
-#include "../netinet/in_systm.h"
-#include "../netinet/ip.h"
-#include "../netinet/if_ether.h"
-#include "eonvar.h"
-#include "clnp_stat.h"
-#include "argo_debug.h"
+#include <netiso/iso.h>
+#include <netiso/iso_var.h>
+#include <netiso/iso_snpac.h>
+#include <netiso/clnp.h>
+#include <netiso/clnl.h>
+#include <netiso/esis.h>
+#include <netinet/in_systm.h>
+#include <netinet/ip.h>
+#include <netinet/if_ether.h>
+#include <netiso/eonvar.h>
+#include <netiso/clnp_stat.h>
+#include <netiso/argo_debug.h>
 
 #ifdef ISO
 u_char		clnp_protox[ISOPROTO_MAX];
@@ -101,7 +100,7 @@ int	esis_input();
 
 #ifdef	ISO_X25ESIS
 int	x25esis_input();
-#endif	ISO_X25ESIS
+#endif	/* ISO_X25ESIS */
 
 /*
  * FUNCTION:		clnp_init
@@ -437,7 +436,7 @@ struct snpa_hdr	*shp;	/* subnetwork header */
 			if (need_afrin)
 				INCSTAT(cns_congest_rcvd);
 		}
-#endif	DECBIT
+#endif	/* DECBIT */
 
 		if (errcode != 0) {
 			clnp_discard(m, (char)errcode);
@@ -535,21 +534,9 @@ struct snpa_hdr	*shp;	/* subnetwork header */
 		IFDEBUG(D_INPUT)
 			printf("clnp_input: echoing packet\n");
 		ENDDEBUG
-		/*
-		 *	Switch the source and destination address,
-		 */
-		hoff = (caddr_t)clnp + sizeof(struct clnp_fixed);
-		CLNP_INSERT_ADDR(hoff, src);
-		CLNP_INSERT_ADDR(hoff, dst);
-		clnp->cnf_type &= ~CNF_TYPE;
-		clnp->cnf_type |= CLNP_ECR;
-
-		/*
-		 *	Forward back to sender
-		 */
-		clnp_forward(m, (int)
-			(clnp->cnf_type & CNF_SEG_OK ? seg_part.cng_tot_len : seg_len),
-			&src, oidxp, seg_off, 0);
+		(void)clnp_echoreply(m,
+			(clnp->cnf_type & CNF_SEG_OK ? (int)seg_part.cng_tot_len : seg_len),
+			&source, &target, oidxp);
 		break;
 
 	default:
@@ -561,4 +548,4 @@ struct snpa_hdr	*shp;	/* subnetwork header */
  		break;
 	}
 }
-#endif ISO
+#endif /* ISO */

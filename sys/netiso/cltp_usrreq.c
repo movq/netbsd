@@ -1,6 +1,6 @@
 /*
- * Copyright (c) 1989 Regents of the University of California.
- * All rights reserved.
+ * Copyright (c) 1989, 1993
+ *	The Regents of the University of California.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -30,28 +30,28 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)cltp_usrreq.c	7.6 (Berkeley) 6/27/91
+ *	@(#)cltp_usrreq.c	8.1 (Berkeley) 6/10/93
  */
 
 #ifndef CLTPOVAL_SRC /* XXX -- till files gets changed */
-#include "param.h"
-#include "malloc.h"
-#include "mbuf.h"
-#include "protosw.h"
-#include "socket.h"
-#include "socketvar.h"
-#include "errno.h"
-#include "stat.h"
+#include <sys/param.h>
+#include <sys/malloc.h>
+#include <sys/mbuf.h>
+#include <sys/protosw.h>
+#include <sys/socket.h>
+#include <sys/socketvar.h>
+#include <sys/errno.h>
+#include <sys/stat.h>
 
-#include "../net/if.h"
-#include "../net/route.h"
+#include <net/if.h>
+#include <net/route.h>
 
-#include "argo_debug.h"
-#include "iso.h"
-#include "iso_pcb.h"
-#include "iso_var.h"
-#include "clnp.h"
-#include "cltp_var.h"
+#include <netiso/argo_debug.h>
+#include <netiso/iso.h>
+#include <netiso/iso_pcb.h>
+#include <netiso/iso_var.h>
+#include <netiso/clnp.h>
+#include <netiso/cltp_var.h>
 #endif
 
 /*
@@ -249,12 +249,6 @@ bad:
 	return (error);
 }
 
-#ifndef TP_LOCAL
-/* XXXX should go in iso.h maybe? from tp_param.h, in any case */
-#define		TP_LOCAL				22
-#define		TP_FOREIGN				33
-#endif
-
 u_long	cltp_sendspace = 9216;		/* really max datagram size */
 u_long	cltp_recvspace = 40 * (1024 + sizeof(struct sockaddr_iso));
 					/* 40 1K datagrams */
@@ -266,7 +260,7 @@ cltp_usrreq(so, req, m, nam, control)
 	int req;
 	struct mbuf *m, *nam, *control;
 {
-	struct isopcb *isop = sotoisopcb(so);
+	register struct isopcb *isop = sotoisopcb(so);
 	int s, error = 0;
 
 	if (req == PRU_CONTROL)
@@ -370,11 +364,15 @@ cltp_usrreq(so, req, m, nam, control)
 		break;
 
 	case PRU_SOCKADDR:
-		iso_getnetaddr(isop, nam, TP_LOCAL);
+		if (isop->isop_laddr)
+			bcopy((caddr_t)isop->isop_laddr, mtod(m, caddr_t),
+				nam->m_len = isop->isop_laddr->siso_len);
 		break;
 
 	case PRU_PEERADDR:
-		iso_getnetaddr(isop, nam, TP_FOREIGN);
+		if (isop->isop_faddr)
+			bcopy((caddr_t)isop->isop_faddr, mtod(m, caddr_t),
+				nam->m_len = isop->isop_faddr->siso_len);
 		break;
 
 	case PRU_SENSE:

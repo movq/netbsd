@@ -1,6 +1,6 @@
 /*-
- * Copyright (c) 1991 The Regents of the University of California.
- * All rights reserved.
+ * Copyright (c) 1991, 1993
+ *	The Regents of the University of California.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -30,7 +30,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)clnp_raw.c	7.8 (Berkeley) 5/6/91
+ *	@(#)clnp_raw.c	8.1 (Berkeley) 6/10/93
  */
 
 /***********************************************************
@@ -59,29 +59,29 @@ SOFTWARE.
 /*
  * ARGO Project, Computer Sciences Dept., University of Wisconsin - Madison
  */
-/* $Header: /home/mike/src/cvs/netbsd/src/sys/netiso/Attic/clnp_raw.c,v 1.1 1993/04/09 12:00:56 cgd Exp $ */
+/* $Header: /home/mike/src/cvs/netbsd/src/sys/netiso/Attic/clnp_raw.c,v 1.1.1.1 1998/03/01 02:10:17 fvdl Exp $ */
 /* $Source: /home/mike/src/cvs/netbsd/src/sys/netiso/Attic/clnp_raw.c,v $ */
 
-#include "param.h"
-#include "mbuf.h"
-#include "domain.h"
-#include "protosw.h"
-#include "socket.h"
-#include "socketvar.h"
-#include "errno.h"
-#include "time.h"
+#include <sys/param.h>
+#include <sys/mbuf.h>
+#include <sys/domain.h>
+#include <sys/protosw.h>
+#include <sys/socket.h>
+#include <sys/socketvar.h>
+#include <sys/errno.h>
+#include <sys/time.h>
 
-#include "../net/if.h"
-#include "../net/route.h"
-#include "../net/raw_cb.h"
+#include <net/if.h>
+#include <net/route.h>
+#include <net/raw_cb.h>
 
-#include "iso.h"
-#include "iso_pcb.h"
-#include "clnp.h"
-#include "clnp_stat.h"
-#include "argo_debug.h"
+#include <netiso/iso.h>
+#include <netiso/iso_pcb.h>
+#include <netiso/clnp.h>
+#include <netiso/clnp_stat.h>
+#include <netiso/argo_debug.h>
 
-#include "tp_user.h"/* XXX -- defines SOL_NETWORK */
+#include <netiso/tp_user.h>		/* XXX -- defines SOL_NETWORK */
 
 struct sockproto	rclnp_proto	= { PF_ISO, 0 };
 /*
@@ -109,13 +109,9 @@ int					hdrlen; /* length (in bytes) of clnp header */
 		m_freem(m);
 		return;
 	}
-#endif	TROLL
+#endif	/* TROLL */
 
-	if (raw_input(m, &rclnp_proto, (struct sockaddr *)src,
-		(struct sockaddr *)dst) == 0) {
-			clnp_stat.cns_delivered--;
-			clnp_stat.cns_noproto++;
-	}
+	raw_input(m, &rclnp_proto, (struct sockaddr *)src, (struct sockaddr *)dst);
 }
 
 /*
@@ -142,7 +138,7 @@ struct socket	*so;	/* socket to send from */
 	int						error;		/* return value of function */
 	int						flags;		/* flags for clnp_output */
 
-	if (0 == m0->m_flags & M_PKTHDR)
+	if (0 == (m0->m_flags & M_PKTHDR))
 		return (EINVAL);
 	/*
 	 *	Set up src address. If user has bound socket to an address, use it.
@@ -210,7 +206,7 @@ struct mbuf		**m;			/* ptr to ptr to option data */
 	else switch (op) {
 #else
 	switch (op) {
-#endif SOL_NETWORK
+#endif /* SOL_NETWORK */
 		case PRCO_SETOPT:
 			switch (optname) {
 				case CLNPOPT_FLAGS: {
@@ -256,7 +252,7 @@ struct mbuf		**m;			/* ptr to ptr to option data */
 					error = EINVAL;
 					break;
 			}
-#endif notdef
+#endif /* notdef */
 			break;
 		default:
 			error = EINVAL;

@@ -30,8 +30,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	from: @(#)mfsiom.h	8.1 (Berkeley) 6/11/93
- *	$Id: mfsiom.h,v 1.1 1994/06/08 11:42:58 mycroft Exp $
+ *	@(#)mfsiom.h	8.1 (Berkeley) 6/11/93
  */
 
 #define MFS_MAPREG	(MAXPHYS/NBPG + 2) /* Kernel mapping pte's */

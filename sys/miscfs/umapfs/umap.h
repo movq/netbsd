@@ -33,9 +33,9 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	from: @(#)null_vnops.c       1.5 (Berkeley) 7/10/92
- *	from: @(#)umap.h	8.3 (Berkeley) 1/21/94
- *	$Id: umap.h,v 1.1 1994/06/08 11:33:50 mycroft Exp $
+ *	@(#)umap.h	8.3 (Berkeley) 1/21/94
+ *
+ * @(#)null_vnops.c       1.5 (Berkeley) 7/10/92
  */
 
 #define MAPFILEENTRIES 64
@@ -47,8 +47,8 @@ struct umap_args {
 	char		*target;	/* Target of loopback  */
 	int 		nentries;       /* # of entries in user map array */
 	int 		gnentries;	/* # of entries in group map array */
-	uid_t 		(*mapdata)[2];	/* pointer to array of user mappings */
-	gid_t 		(*gmapdata)[2];	/* pointer to array of group mappings */
+	u_long 		(*mapdata)[2];	/* pointer to array of user mappings */
+	u_long 		(*gmapdata)[2];	/* pointer to array of group mappings */
 };
 
 struct umap_mount {
@@ -56,9 +56,9 @@ struct umap_mount {
 	struct vnode	*umapm_rootvp;	/* Reference to root umap_node */
 	int             info_nentries;  /* number of uid mappings */
 	int		info_gnentries;	/* number of gid mappings */
-	uid_t		info_mapdata[MAPFILEENTRIES][2]; /* mapping data for 
+	u_long		info_mapdata[MAPFILEENTRIES][2]; /* mapping data for 
 	    user mapping in ficus */
-	gid_t		info_gmapdata[GMAPFILEENTRIES][2]; /*mapping data for 
+	u_long		info_gmapdata[GMAPFILEENTRIES][2]; /*mapping data for 
 	    group mapping in ficus */
 };
 

@@ -1,6 +1,6 @@
 /*-
- * Copyright (c) 1991 The Regents of the University of California.
- * All rights reserved.
+ * Copyright (c) 1991, 1993
+ *	The Regents of the University of California.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -30,7 +30,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)tp_trace.c	7.4 (Berkeley) 5/6/91
+ *	@(#)tp_trace.c	8.1 (Berkeley) 6/10/93
  */
 
 /***********************************************************
@@ -62,7 +62,7 @@ SOFTWARE.
 /* 
  * ARGO TP
  *
- * $Header: /home/mike/src/cvs/netbsd/src/sys/netiso/Attic/tp_trace.c,v 1.1 1993/04/09 12:01:57 cgd Exp $
+ * $Header: /home/mike/src/cvs/netbsd/src/sys/netiso/Attic/tp_trace.c,v 1.1.1.1 1998/03/01 02:10:27 fvdl Exp $
  * $Source: /home/mike/src/cvs/netbsd/src/sys/netiso/Attic/tp_trace.c,v $
  *
  * The whole protocol trace module.
@@ -74,22 +74,21 @@ SOFTWARE.
 
 #define TP_TRACEFILE
 
-#include "param.h"
-#include "systm.h"
-#include "mbuf.h"
-#include "socket.h"
-#include "types.h"
-#include "time.h"
+#include <sys/param.h>
+#include <sys/systm.h>
+#include <sys/mbuf.h>
+#include <sys/socket.h>
+#include <sys/time.h>
 
-#include "tp_param.h"
-#include "tp_timer.h"
-#include "tp_stat.h"
-#include "tp_param.h"
-#include "tp_ip.h"
-#include "tp_pcb.h"
-#include "tp_tpdu.h"
-#include "argo_debug.h"
-#include "tp_trace.h"
+#include <netiso/tp_param.h>
+#include <netiso/tp_timer.h>
+#include <netiso/tp_stat.h>
+#include <netiso/tp_param.h>
+#include <netiso/tp_ip.h>
+#include <netiso/tp_pcb.h>
+#include <netiso/tp_tpdu.h>
+#include <netiso/argo_debug.h>
+#include <netiso/tp_trace.h>
 
 #ifdef TPPT
 static tp_seq = 0;
@@ -173,4 +172,4 @@ tpTrace(tpcb, event, arg, src, len, arg4, arg5)
 		break;
 	}
 }
-#endif TPPT
+#endif /* TPPT */

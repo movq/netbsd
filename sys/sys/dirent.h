@@ -1,6 +1,6 @@
-/*
- * Copyright (c) 1982, 1986, 1989 The Regents of the University of California.
- * All rights reserved.
+/*-
+ * Copyright (c) 1989, 1993
+ *	The Regents of the University of California.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -30,14 +30,13 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	from: @(#)dir.h	7.3 (Berkeley) 2/5/91
- *	$Id: dirent.h,v 1.1 1993/12/15 00:46:06 jtc Exp $
+ *	@(#)dirent.h	8.1 (Berkeley) 6/2/93
  */
 
-#ifndef _SYS_DIRENT_H_
-#define	_SYS_DIRENT_H_
-
 /*
+ * The dirent structure defines the format of directory entries returned by 
+ * the getdirentries(2) system call.
+ *
  * A directory entry has a struct dirent at the front of it, containing its
  * inode number, the length of the entry, and the length of the name
  * contained in the entry.  These are followed by the name padded to a 4
@@ -48,7 +47,8 @@
 struct dirent {
 	unsigned long	d_fileno;	/* file number of entry */
 	unsigned short	d_reclen;	/* length of this record */
-	unsigned short	d_namlen;	/* length of string in d_name */
+	unsigned char	d_type; 	/* file type, see below */
+	unsigned char	d_namlen;	/* length of string in d_name */
 #ifdef _POSIX_SOURCE
 	char	d_name[255 + 1];	/* name must be no longer than this */
 #else
@@ -57,23 +57,20 @@ struct dirent {
 #endif
 };
 
-
-#ifndef _POSIX_SOURCE
 /*
- * The DIRSIZ macro gives the minimum record length which will hold
- * the directory entry.  This requires the amount of space in struct direct
- * without the d_name field, plus enough space for the name with a terminating
- * null byte (dp->d_namlen+1), rounded up to a 4 byte boundary.
+ * File types
  */
-#undef DIRSIZ
-#define DIRSIZ(dp) \
-    ((sizeof (struct direct) - (MAXNAMLEN+1)) + (((dp)->d_namlen+1 + 3) &~ 3))
+#define	DT_UNKNOWN	 0
+#define	DT_FIFO		 1
+#define	DT_CHR		 2
+#define	DT_DIR		 4
+#define	DT_BLK		 6
+#define	DT_REG		 8
+#define	DT_LNK		10
+#define	DT_SOCK		12
 
-#ifdef KERNEL
-/* Temporary backwards compatibility. */
-#define direct dirent
-#endif /* KERNEL */
-
-#endif /* !_POSIX_SOURCE */
-
-#endif /* !_SYS_DIRENT_H_ */
+/*
+ * Convert between stat structure types and directory types.
+ */
+#define	IFTODT(mode)	(((mode) & 0170000) >> 12)
+#define	DTTOIF(dirtype)	((dirtype) << 12)

@@ -1,5 +1,5 @@
 #! /bin/sh -
-#	@(#)makesyscalls.sh	7.6 (Berkeley) 4/20/91
+#	@(#)makesyscalls.sh	8.1 (Berkeley) 6/10/93
 
 set -e
 
@@ -49,8 +49,8 @@ awk < $1 "
 	}
 	NR == 1 {
 		printf " * created from%s\n */\n\n", $0 > sysdcl
-		printf "#include \"param.h\"\n" > sysdcl
-		printf "#include \"systm.h\"\n\n" > sysdcl
+		printf "#include <sys/param.h>\n" > sysdcl
+		printf "#include <sys/systm.h>\n\n" > sysdcl
 		printf "int\tnosys();\n\n" > sysdcl
 
 		printf "struct sysent sysent[] = {\n" > sysent
@@ -102,7 +102,7 @@ awk < $1 "
 	}
 	$2 == "STD" {
 		printf("int\t%s();\n", $4) > sysdcl
-		printf("\t%d, %s,\t\t\t/* %d = %s */\n", \
+		printf("\t{ %d, %s },\t\t\t/* %d = %s */\n", \
 		    $3, $4, syscall, $5) > sysent
 		printf("\t\"%s\",\t\t\t/* %d = %s */\n", \
 		    $5, syscall, $5) > sysnames
@@ -113,7 +113,7 @@ awk < $1 "
 	}
 	$2 == "COMPAT" {
 		printf("int\to%s();\n", $4) > syscompat
-		printf("\tcompat(%d,%s),\t\t/* %d = old %s */\n", \
+		printf("\t{ compat(%d,%s) },\t\t/* %d = old %s */\n", \
 		    $3, $4, syscall, $5) > sysent
 		printf("\t\"old.%s\",\t\t/* %d = old %s */\n", \
 		    $5, syscall, $5) > sysnames
@@ -124,7 +124,7 @@ awk < $1 "
 	}
 	$2 == "LIBCOMPAT" {
 		printf("int\to%s();\n", $4) > syscompat
-		printf("\tcompat(%d,%s),\t\t/* %d = old %s */\n", \
+		printf("\t{ compat(%d,%s) },\t\t/* %d = old %s */\n", \
 		    $3, $4, syscall, $5) > sysent
 		printf("\t\"old.%s\",\t\t/* %d = old %s */\n", \
 		    $5, syscall, $5) > sysnames
@@ -134,7 +134,7 @@ awk < $1 "
 		next
 	}
 	$2 == "OBSOL" {
-		printf("\t0, nosys,\t\t\t/* %d = obsolete %s */\n", \
+		printf("\t{ 0, nosys },\t\t\t/* %d = obsolete %s */\n", \
 		    syscall, comment) > sysent
 		printf("\t\"obs_%s\",\t\t\t/* %d = obsolete %s */\n", \
 		    $4, syscall, comment) > sysnames
@@ -144,7 +144,7 @@ awk < $1 "
 		next
 	}
 	$2 == "UNIMPL" {
-		printf("\t0, nosys,\t\t\t/* %d = %s */\n", \
+		printf("\t{ 0, nosys },\t\t\t/* %d = %s */\n", \
 		    syscall, comment) > sysent
 		printf("\t\"#%d\",\t\t\t/* %d = %s */\n", \
 		    syscall, syscall, comment) > sysnames

@@ -33,9 +33,9 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	from: Id: lofs_subr.c, v 1.11 1992/05/30 10:05:43 jsp Exp
- *	from: @(#)umap_subr.c	8.6 (Berkeley) 1/26/94
- *	$Id: umap_subr.c,v 1.1 1994/06/08 11:33:51 mycroft Exp $
+ *	@(#)umap_subr.c	8.6 (Berkeley) 1/26/94
+ *
+ * $Id: umap_subr.c,v 1.1.1.1 1998/03/01 02:10:03 fvdl Exp $
  */
 
 #include <sys/param.h>
@@ -350,8 +350,9 @@ umap_mapids(v_mount, credp)
 	struct ucred *credp;
 {
 	int i, unentries, gnentries;
-	uid_t uid, *usermap;
-	gid_t gid, *groupmap;
+	u_long *groupmap, *usermap;
+	uid_t uid;
+	gid_t gid;
 
 	unentries =  MOUNTTOUMAPMOUNT(v_mount)->info_nentries;
 	usermap =  &(MOUNTTOUMAPMOUNT(v_mount)->info_mapdata[0][0]);

@@ -1,6 +1,6 @@
 /*-
- * Copyright (c) 1991 The Regents of the University of California.
- * All rights reserved.
+ * Copyright (c) 1991, 1993
+ *	The Regents of the University of California.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -30,7 +30,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)iso_chksum.c	7.5 (Berkeley) 5/6/91
+ *	@(#)iso_chksum.c	8.1 (Berkeley) 6/10/93
  */
 
 /***********************************************************
@@ -60,7 +60,7 @@ SOFTWARE.
  * ARGO Project, Computer Sciences Dept., University of Wisconsin - Madison
  */
 /* 
- * $Header: /home/mike/src/cvs/netbsd/src/sys/netiso/Attic/iso_chksum.c,v 1.1 1993/04/09 12:01:14 cgd Exp $
+ * $Header: /home/mike/src/cvs/netbsd/src/sys/netiso/Attic/iso_chksum.c,v 1.1.1.1 1998/03/01 02:10:20 fvdl Exp $
  * $Source: /home/mike/src/cvs/netbsd/src/sys/netiso/Attic/iso_chksum.c,v $
  *
  * ISO CHECKSUM
@@ -83,14 +83,15 @@ SOFTWARE.
  */
 
 #ifdef ISO
-#include "argo_debug.h"
-#include "param.h"
-#include "mbuf.h"
-#endif ISO
+#include <netiso/argo_debug.h>
+#include <sys/param.h>
+#include <sys/systm.h>
+#include <sys/mbuf.h>
+#endif /* ISO */
 
 #ifndef MNULL
 #define MNULL (struct mbuf *)0
-#endif MNULL
+#endif /* MNULL */
 
 /*
  * FUNCTION:	iso_check_csum
@@ -121,7 +122,7 @@ iso_check_csum(m, len)
 	int l;
 
 	l = len;
-	len = MIN(m->m_len, len);
+	len = min(m->m_len, len);
 	i = 0;
 
 	IFDEBUG(D_CHKSUM)
@@ -145,7 +146,7 @@ iso_check_csum(m, len)
 						l,i,m->m_data);
 			ENDDEBUG
 			ASSERT( m != MNULL);
-			len = MIN( m->m_len, l-i);
+			len = min( m->m_len, l-i);
 			p = mtod(m, u_char *);
 		}
 	}
@@ -197,9 +198,9 @@ iso_gen_csum(m,n,l)
 	ENDDEBUG
 
 	while(i < l) {
-		len = MIN(m->m_len, CLBYTES);
+		len = min(m->m_len, CLBYTES);
 		/* RAH: don't cksum more than l bytes */
-		len = MIN(len, l - i);
+		len = min(len, l - i);
 
 		cum +=len;
 		p = mtod(m, u_char *);
@@ -253,22 +254,6 @@ iso_gen_csum(m,n,l)
 	ENDDEBUG
 }
 
-struct mbuf  *
-m_append(head, m)
-	struct mbuf *head, *m;
-{
-	register struct mbuf *n;
-
-	if (m == 0)
-		return head;
-	if (head == 0)
-		return m;
-	n = head;
-	while (n->m_next)
-		n = n->m_next;
-	n->m_next = m;
-	return head;
-}
 /*
  * FUNCTION:	m_datalen
  *
@@ -283,23 +268,13 @@ m_append(head, m)
  */
 
 int
-m_datalen (morig)
-	struct mbuf *morig;
+m_datalen (m)
+	register struct mbuf *m;
 { 	
-	int	s = splimp();
-	register struct mbuf *n=morig;
-	register int datalen = 0;
+	register int datalen;
 
-	if( morig == (struct mbuf *)0)
-		return 0;
-	for(;;) {
-		datalen += n->m_len;
-		if (n->m_next == (struct mbuf *)0 ) {
-			break;
-		}
-		n = n->m_next;
-	}
-	splx(s);
+	for (datalen = 0; m; m = m->m_next)
+		datalen += m->m_len;
 	return datalen;
 }
 
@@ -348,7 +323,7 @@ m_compress(in, out)
 			int len;
 
 			len = M_TRAILINGSPACE(*out);
-			len = MIN(len, in->m_len);
+			len = min(len, in->m_len);
 			datalen += len;
 
 			IFDEBUG(D_REQUEST)

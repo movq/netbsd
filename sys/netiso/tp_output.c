@@ -1,6 +1,6 @@
 /*-
- * Copyright (c) 1991 The Regents of the University of California.
- * All rights reserved.
+ * Copyright (c) 1991, 1993
+ *	The Regents of the University of California.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -30,7 +30,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)tp_output.c	7.10 (Berkeley) 6/27/91
+ *	@(#)tp_output.c	8.1 (Berkeley) 6/10/93
  */
 
 /***********************************************************
@@ -62,33 +62,32 @@ SOFTWARE.
 /* 
  * ARGO TP
  *
- * $Header: /home/mike/src/cvs/netbsd/src/sys/netiso/Attic/tp_output.c,v 1.1 1993/04/09 12:01:41 cgd Exp $
+ * $Header: /home/mike/src/cvs/netbsd/src/sys/netiso/Attic/tp_output.c,v 1.1.1.1 1998/03/01 02:10:25 fvdl Exp $
  * $Source: /home/mike/src/cvs/netbsd/src/sys/netiso/Attic/tp_output.c,v $
  *
  * In here is tp_ctloutput(), the guy called by [sg]etsockopt(),
  */
 
-#include "param.h"
-#include "mbuf.h"
-#include "systm.h"
-#include "socket.h"
-#include "socketvar.h"
-#include "protosw.h"
-#include "errno.h"
-#include "time.h"
-#include "tp_param.h"
-#include "tp_user.h"
-#include "tp_stat.h"
-#include "tp_ip.h"
-#include "tp_clnp.h"
-#include "tp_timer.h"
-#include "argo_debug.h"
-#include "tp_pcb.h"
-#include "tp_trace.h"
-#include "kernel.h"
+#include <sys/param.h>
+#include <sys/mbuf.h>
+#include <sys/systm.h>
+#include <sys/socket.h>
+#include <sys/socketvar.h>
+#include <sys/protosw.h>
+#include <sys/errno.h>
+#include <sys/time.h>
+#include <sys/kernel.h>
 
-#define USERFLAGSMASK_G 0x0f00643b
-#define USERFLAGSMASK_S 0x0f000432
+#include <netiso/tp_param.h>
+#include <netiso/tp_user.h>
+#include <netiso/tp_stat.h>
+#include <netiso/tp_ip.h>
+#include <netiso/tp_clnp.h>
+#include <netiso/tp_timer.h>
+#include <netiso/argo_debug.h>
+#include <netiso/tp_pcb.h>
+#include <netiso/tp_trace.h>
+
 #define TPDUSIZESHIFT 24
 #define CLASSHIFT 16
 
@@ -176,18 +175,6 @@ tp_consistency( tpcb, cmd, param )
 		  (param->p_cr_ticks < 1) || (param->p_cc_ticks < 1) ) {
 			/* bad for any class because negot has to be done a la class 4 */
 			error = EINVAL; goto done;
-	}
-	IFDEBUG(D_SETPARAMS)
-		printf("winsize 0x%x\n",  param->p_winsize );
-	ENDDEBUG
-	if( (param->p_winsize < 128 ) || 
-		(param->p_winsize < param->p_tpdusize ) ||
-		(param->p_winsize > ((1+SB_MAX)>>2 /* 1/4 of the max */)) ) {
-			error = EINVAL; goto done;
-	} else {
-		if( tpcb->tp_state == TP_CLOSED )
-			soreserve(tpcb->tp_sock, (u_long)param->p_winsize,
-						(u_long)param->p_winsize);
 	}
 	IFDEBUG(D_SETPARAMS)
 		printf("use_csum 0x%x\n",  param->p_use_checksum );
@@ -301,9 +288,8 @@ tp_consistency( tpcb, cmd, param )
 	}
 
 	if ((error==0) && (cmd & TP_FORCE)) {
+		long dusize = ((long)param->p_ptpdusize) << 7;
 		/* Enforce Negotation rules below */
-		if (tpcb->tp_tpdusize > param->p_tpdusize)
-			tpcb->tp_tpdusize = param->p_tpdusize;
 		tpcb->tp_class = param->p_class;
 		if (tpcb->tp_use_checksum || param->p_use_checksum)
 			tpcb->tp_use_checksum = 1;
@@ -311,8 +297,19 @@ tp_consistency( tpcb, cmd, param )
 			tpcb->tp_xpd_service = 0;
 		if (!tpcb->tp_xtd_format || !param->p_xtd_format)
 			tpcb->tp_xtd_format = 0;
+		if (dusize) {
+			if (tpcb->tp_l_tpdusize > dusize)
+				tpcb->tp_l_tpdusize = dusize;
+			if (tpcb->tp_ptpdusize == 0 ||
+				tpcb->tp_ptpdusize > param->p_ptpdusize)
+				tpcb->tp_ptpdusize = param->p_ptpdusize;
+		} else {
+			if (param->p_tpdusize != 0 &&
+				tpcb->tp_tpdusize > param->p_tpdusize)
+				tpcb->tp_tpdusize = param->p_tpdusize;
+			tpcb->tp_l_tpdusize = 1 << tpcb->tp_tpdusize;
+		}
 	}
-
 done:
 
 	IFTRACE(D_CONN)
@@ -409,8 +406,20 @@ tp_ctloutput(cmd, so, level, optname, mp)
 		else if (tpcb->tp_nlproto->nlp_ctloutput == NULL)
 			error = EOPNOTSUPP;
 		else
-			error = (tpcb->tp_nlproto->nlp_ctloutput)(cmd, optname, 
-				tpcb->tp_npcb, *mp);
+			return ((tpcb->tp_nlproto->nlp_ctloutput)(cmd, optname, 
+				tpcb->tp_npcb, *mp));
+		goto done;
+	} else if ( level == SOL_SOCKET) {
+		if (optname == SO_RCVBUF && cmd == PRCO_SETOPT) {
+			u_long old_credit = tpcb->tp_maxlcredit;
+			tp_rsyset(tpcb);
+			if (tpcb->tp_rhiwat != so->so_rcv.sb_hiwat &&
+			    tpcb->tp_state == TP_OPEN &&
+			    (old_credit < tpcb->tp_maxlcredit))
+				tp_emit(AK_TPDU_type, tpcb,
+					tpcb->tp_rcvnxt, 0, MNULL);
+			tpcb->tp_rhiwat = so->so_rcv.sb_hiwat;
+		}
 		goto done;
 	} else if ( level !=  SOL_TRANSPORT ) {
 		error = EOPNOTSUPP; goto done;
@@ -440,7 +449,7 @@ tp_ctloutput(cmd, so, level, optname, mp)
 	 * the tpcb is gone 
 	 */
 	if ((so->so_state & (SS_ISCONNECTED | SS_ISCONFIRMING)) ==  0) {
-		if ( so->so_tpcb == (caddr_t)0 ) {
+		if ( so->so_pcb == (caddr_t)0 ) {
 			error = ENOTCONN; goto done;
 		}
 		if ( (tpcb->tp_state == TP_REFWAIT || tpcb->tp_state == TP_CLOSING) &&
@@ -457,48 +466,46 @@ tp_ctloutput(cmd, so, level, optname, mp)
 	switch (optname) {
 
 	case TPOPT_INTERCEPT:
+#define INA(t) (((struct inpcb *)(t->tp_npcb))->inp_laddr.s_addr)
+#define ISOA(t) (((struct isopcb *)(t->tp_npcb))->isop_laddr->siso_addr)
+
 		if ((so->so_state & SS_PRIV) == 0) {
 			error = EPERM;
-			break;
-		} else if (cmd != PRCO_SETOPT || tpcb->tp_state != TP_LISTENING)
+		} else if (cmd != PRCO_SETOPT || tpcb->tp_state != TP_CLOSED ||
+					(tpcb->tp_flags & TPF_GENERAL_ADDR) ||
+					tpcb->tp_next == 0)
 			error = EINVAL;
 		else {
-			register struct tp_pcb *t = 0;
-			struct mbuf *m = m_getclr(M_WAIT, MT_SONAME);
-			struct sockaddr *sa = mtod(m, struct sockaddr *);
-			(*tpcb->tp_nlproto->nlp_getnetaddr)(tpcb->tp_npcb, m, TP_LOCAL);
-			switch (sa->sa_family) {
-			case AF_ISO:
-				if (((struct sockaddr_iso *)sa)->siso_nlen == 0)
-					default: error = EINVAL;
-				break;
-			case AF_INET:
-				if (((struct sockaddr_in *)sa)->sin_addr.s_addr == 0)
-					error = EINVAL;
-				break;
-			}
-			for (t = tp_intercepts; t; t = t->tp_nextlisten) {
-				if (t->tp_nlproto->nlp_afamily != tpcb->tp_nlproto->nlp_afamily)
-					continue;
-				if ((*t->tp_nlproto->nlp_cmpnetaddr)(t->tp_npcb, sa, TP_LOCAL))
-					error = EADDRINUSE;
-			}
-			m_freem(m);
-			if (error)
-				break;
+			register struct tp_pcb *t;
+			error = EADDRINUSE;
+			for (t = tp_listeners; t; t = t->tp_nextlisten)
+				if ((t->tp_flags & TPF_GENERAL_ADDR) == 0 &&
+						t->tp_domain == tpcb->tp_domain)
+					switch (tpcb->tp_domain) {
+					default:
+						goto done;
+#ifdef	INET
+					case AF_INET:
+						if (INA(t) == INA(tpcb))
+							goto done;
+						continue;
+#endif
+#ifdef ISO
+					case AF_ISO:
+						if (bcmp(ISOA(t).isoa_genaddr, ISOA(tpcb).isoa_genaddr,
+										ISOA(t).isoa_len) == 0)
+							goto done;
+						continue;
+#endif
+					}
+			tpcb->tp_lsuffixlen = 0;
+			tpcb->tp_state = TP_LISTENING;
+			error = 0;
+			remque(tpcb);
+			tpcb->tp_next = tpcb->tp_prev = tpcb;
+			tpcb->tp_nextlisten = tp_listeners;
+			tp_listeners = tpcb;
 		}
-		{
-			register struct tp_pcb **tt;
-			for (tt = &tp_listeners; *tt; tt = &((*tt)->tp_nextlisten))
-				if (*tt == tpcb)
-					break;
-			if (*tt)
-				*tt = tpcb->tp_nextlisten;
-			else
-				{error = EHOSTUNREACH; goto done; }
-		}
-		tpcb->tp_nextlisten = tp_intercepts;
-		tp_intercepts = tpcb;
 		break;
 
 	case TPOPT_MY_TSEL:
@@ -604,7 +611,7 @@ tp_ctloutput(cmd, so, level, optname, mp)
 #else
 		error = EOPNOTSUPP;
 		goto done;
-#endif TP_PERF_MEAS
+#endif /* TP_PERF_MEAS */
 		
 	case TPOPT_CDDATA_CLEAR: 
 		if (cmd == PRCO_GETOPT) {
@@ -650,7 +657,7 @@ tp_ctloutput(cmd, so, level, optname, mp)
 				tptrace(TPPTmisc,"C/D DATA: flags snd.sbcc val_len",
 					tpcb->tp_flags, so->so_snd.sb_cc,val_len,0);
 			ENDTRACE
-			*mp = MNULL; /* prevent sosetopt from freeing it! */
+			*mp = MNULL;
 			if (optname == TPOPT_CFRM_DATA && (so->so_state & SS_ISCONFIRMING))
 				(void) tp_confirm(tpcb);
 		}
@@ -669,9 +676,9 @@ tp_ctloutput(cmd, so, level, optname, mp)
 		}
 		if( tpcb->tp_perf_on ) 
 			error = tp_setup_perf(tpcb);
-#else  TP_PERF_MEAS
+#else  /* TP_PERF_MEAS */
 		error = EOPNOTSUPP;
-#endif TP_PERF_MEAS
+#endif /* TP_PERF_MEAS */
 		break;
 
 	default:
@@ -687,15 +694,19 @@ done:
 	 * sigh: getsockopt looks only at m_len : all output data must 
 	 * reside in the first mbuf 
 	 */
-	if ( error  && (*mp) != MNULL )
-		(*mp)->m_len = 0;
-	if( (*mp) != MNULL ) {
-		ASSERT ( m_compress(*mp, mp) <= MLEN );
-		IFDEBUG(D_REQUEST)
-			dump_mbuf(*mp, "tp_ctloutput *mp after compress");
-		ENDDEBUG
+	if (*mp) {
+		if (cmd == PRCO_SETOPT) {
+			m_freem(*mp);
+			*mp = MNULL;
+		} else {
+			ASSERT ( m_compress(*mp, mp) <= MLEN );
+			if (error)
+				(*mp)->m_len = 0;
+			IFDEBUG(D_REQUEST)
+				dump_mbuf(*mp, "tp_ctloutput *mp after compress");
+			ENDDEBUG
+		}
 	}
-		
 	splx(s);
 	return error;
 }

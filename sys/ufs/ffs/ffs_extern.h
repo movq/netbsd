@@ -30,8 +30,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	from: @(#)ffs_extern.h	8.3 (Berkeley) 4/16/94
- *	$Id: ffs_extern.h,v 1.1 1994/06/08 11:42:03 mycroft Exp $
+ *	@(#)ffs_extern.h	8.3 (Berkeley) 4/16/94
  */
 
 struct buf;

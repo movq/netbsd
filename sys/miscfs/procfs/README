@@ -39,12 +39,12 @@ are:
 			[ not implemented. ]
 
 	regs	- r/w.	process register set.  this can be read
-			at any time even if the process is not stopped.
-			since the bsd kernel is single-processor, this
-			implementation will get the "right" register values.
+			or written any time even if the process
+			is not stopped.  since the bsd kernel
+			is single-processor, this implementation
+			will get the "right" register values.
 			a multi-proc kernel would need to do some
 			synchronisation.
-			writing is only allowed to a stopped process.
 
 this then looks like:
 
@@ -110,5 +110,4 @@ the debugger, the debugger should fork and the child should stop itself
 "attach".  as before, the child will hit a breakpoint on the first
 instruction in any newly exec'd image.
 
-From: Id: README,v 4.1 1993/12/17 10:47:45 jsp Rel 
-$Id: README,v 1.1 1994/01/05 07:51:08 cgd Exp $
+$Id: README,v 1.1.1.1 1998/03/01 02:10:00 fvdl Exp $

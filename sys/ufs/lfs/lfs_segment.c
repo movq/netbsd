@@ -30,8 +30,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	from: @(#)lfs_segment.c	8.5 (Berkeley) 1/4/94
- *	$Id: lfs_segment.c,v 1.1 1994/06/08 11:42:38 mycroft Exp $
+ *	@(#)lfs_segment.c	8.5 (Berkeley) 1/4/94
  */
 
 #include <sys/param.h>
