@@ -1,4 +1,4 @@
-.\"$Header: /home/mike/src/cvs/netbsd/src/share/doc/iso/wisc/Attic/errors.nr,v 1.1 1994/06/19 00:07:16 cgd Exp $
+.\"$Header: /home/mike/src/cvs/netbsd/src/share/doc/iso/wisc/Attic/errors.nr,v 1.1.1.1 1994/06/19 00:07:17 cgd Exp $
 .\"$Source: /home/mike/src/cvs/netbsd/src/share/doc/iso/wisc/Attic/errors.nr,v $
 .NC "Error Handling"
 This section describes the various ways that the ARGO kernel 

@@ -3,7 +3,7 @@
 # LICENSED MATERIALS - PROPERTY OF IBM
 # REFER TO COPYRIGHT INSTRUCTIONS FORM NUMBER G120-2083
 #
-.\"# $Header: /home/mike/src/cvs/netbsd/src/share/doc/iso/wiscman/Attic/if.4n,v 1.1 1994/06/19 00:07:22 cgd Exp $ 
+.\"# $Header: /home/mike/src/cvs/netbsd/src/share/doc/iso/wiscman/Attic/if.4n,v 1.1.1.1 1994/06/19 00:07:23 cgd Exp $ 
 .\"# $ACIS:if.4n_ca 1.5$ 
 .\"# $Source: /home/mike/src/cvs/netbsd/src/share/doc/iso/wiscman/Attic/if.4n,v $ 
 .\" @(#)if.4n	1.2 87/08/23 3.2/4.3NFSSRC

@@ -3,7 +3,7 @@
 .\" LICENSED MATERIALS - PROPERTY OF IBM
 .\" REFER TO COPYRIGHT INSTRUCTIONS FORM NUMBER G120-2083
 .\"
-.\"$Header: /home/mike/src/cvs/netbsd/src/share/doc/iso/wiscman/Attic/rvd.4p,v 1.1 1994/06/19 00:07:22 cgd Exp $
+.\"$Header: /home/mike/src/cvs/netbsd/src/share/doc/iso/wiscman/Attic/rvd.4p,v 1.1.1.1 1994/06/19 00:07:23 cgd Exp $
 .\"$ACIS:rvd.4p_ca 11.0$
 .\"$Source: /home/mike/src/cvs/netbsd/src/share/doc/iso/wiscman/Attic/rvd.4p,v $
 .\"This file contains -man macros.
