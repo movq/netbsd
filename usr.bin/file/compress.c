@@ -1,37 +1,85 @@
+/*	$NetBSD: compress.c,v 1.1.1.1 1998/09/19 18:07:33 christos Exp $	*/
+
 /*
  * compress routines:
- *	is_compress() returns 0 if uncompressed, number of bits if compressed.
- *	uncompress(old, n, newch) - uncompress old into new, return sizeof new
- * $Id: compress.c,v 1.1 1993/06/10 00:38:05 jtc Exp $
+ *	zmagic() - returns 0 if not recognized, uncompresses and prints
+ *		   information if recognized
+ *	uncompress(method, old, n, newch) - uncompress old into new, 
+ *					    using method, return sizeof new
  */
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
+#ifdef HAVE_CONFIG_H
+#include "config.h"
+#endif
+#ifdef HAVE_SYS_WAIT_H
 #include <sys/wait.h>
-
+#endif
 #include "file.h"
+#include <sys/cdefs.h>
+#ifndef lint
+#if 0
+FILE_RCSID("@(#)Id: compress.c,v 1.12 1998/06/27 13:57:23 christos Exp ")
+#else
+__RCSID("$NetBSD: compress.c,v 1.1.1.1 1998/09/19 18:07:33 christos Exp $");
+#endif
+#endif
 
-/* Check for compression, return nbits. Algorithm, in magic(4) format:
- * 0       string          \037\235        compressed data
- * >2      byte&0x80       >0              block compressed
- * >2      byte&0x1f       x               %d bits
- */
+
+static struct {
+   const char *magic;
+   int   maglen;
+   const char *const argv[3];
+   int	 silent;
+} compr[] = {
+    { "\037\235", 2, { "uncompress", "-c", NULL }, 0 },	/* compressed */
+    { "\037\213", 2, { "gzip", "-cdq", NULL }, 1 },	/* gzipped */
+    { "\037\236", 2, { "gzip", "-cdq", NULL }, 1 },	/* frozen */
+    { "\037\240", 2, { "gzip", "-cdq", NULL }, 1 },	/* SCO LZH */
+    /* the standard pack utilities do not accept standard input */
+    { "\037\036", 2, { "gzip", "-cdq", NULL }, 0 },	/* packed */
+};
+
+static int ncompr = sizeof(compr) / sizeof(compr[0]);
+
+
+static int uncompress __P((int, const unsigned char *, unsigned char **, int));
+
 int
-is_compress(p, b)
-const unsigned char *p;
-int *b;
+zmagic(buf, nbytes)
+unsigned char *buf;
+int nbytes;
 {
+	unsigned char *newbuf;
+	int newsize;
+	int i;
 
-	if (*p != '\037' || *(/*signed*/ char*)(p+1) != '\235')
-		return 0;	/* not compress()ed */
+	for (i = 0; i < ncompr; i++) {
+		if (nbytes < compr[i].maglen)
+			continue;
+		if (memcmp(buf, compr[i].magic,  compr[i].maglen) == 0)
+			break;
+	}
 
-	*b = *(p+2) & 0x80;
-	return *(p+2) & 0x1f;
+	if (i == ncompr)
+		return 0;
+
+	if ((newsize = uncompress(i, buf, &newbuf, nbytes)) != 0) {
+		tryit(newbuf, newsize, 1);
+		free(newbuf);
+		printf(" (");
+		tryit(buf, nbytes, 0);
+		printf(")");
+	}
+	return 1;
 }
 
-int
-uncompress(old, newch, n)
+
+static int
+uncompress(method, old, newch, n)
+int method;
 const unsigned char *old;
 unsigned char **newch;
 int n;
@@ -53,10 +101,13 @@ int n;
 		(void) dup(fdout[1]);
 		(void) close(fdout[0]);
 		(void) close(fdout[1]);
+		if (compr[method].silent)
+		    (void) close(2);
 
-		execlp("uncompress", "uncompress", "-c", NULL);
-		error("could not execute `uncompress' (%s).\n", 
-		      strerror(errno));
+		execvp(compr[method].argv[0],
+		       (char *const *)compr[method].argv);
+		error("could not execute `%s' (%s).\n", 
+		      compr[method].argv[0], strerror(errno));
 		/*NOTREACHED*/
 	case -1:
 		error("could not fork (%s).\n", strerror(errno));

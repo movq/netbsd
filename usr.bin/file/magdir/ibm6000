@@ -1,7 +1,6 @@
-#
-# magic.rs6000:
-#
-# RS/6000 and the RT PC.
+
+#------------------------------------------------------------------------------
+# ibm6000:  file(1) magic for RS/6000 and the RT PC.
 #
 0	beshort		0x01df		executable (RISC System/6000 V3.1) or obj module
 >12	belong		>0		not stripped
@@ -13,5 +12,6 @@
 0	beshort		0x0104		shared library
 0	beshort		0x0105		ctab data
 0	beshort		0xfe04		structured file
-0	string		0xabcdef	message catalog
-#0	string		<aiaff>		archive
+0	string		0xabcdef	AIX message catalog
+0	belong		0x000001f9	AIX compiled message catalog
+0	string		\<aiaff>	archive
