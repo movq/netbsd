@@ -21,11 +21,15 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
- * $Id: if_fpa.c,v 1.1 1995/08/19 00:59:48 cgd Exp $
+ * $Id: if_fpa.c,v 1.1.1.1 1995/08/19 00:59:48 cgd Exp $
  *
  * $Log: if_fpa.c,v $
- * Revision 1.1  1995/08/19 00:59:48  cgd
- * Initial revision
+ * Revision 1.1.1.1  1995/08/19 00:59:48  cgd
+ * Generic FDDI support by Matt Thomas.  Support for DEC "PDQ" FDDI chipset
+ * and for the PCI attachment of said chipset ("if_fpa"), also from Matt Thomas.
+ * Arguably, pdq* doesn't belong in sys/dev/ic, but it's going to be shared by
+ * various bus attachment devices at some point in the future, and there's no
+ * other place that seems to fit as well.
  *
  * Revision 1.1  1995/08/16  22:57:28  thomas
  * Initial revision
