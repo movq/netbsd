@@ -1,4 +1,4 @@
-/*	$NetBSD: led.c,v 1.1 2001/05/28 16:22:15 thorpej Exp $	*/
+/*	$NetBSD: led.c,v 1.2 2001/06/01 16:00:03 thorpej Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -57,8 +57,8 @@
 #endif
 
 #if defined(ALGOR_P4032)
-#define	LEDBASE		MIPS_PHYS_TO_KSEG1(XXX)
-#define	LED(x)		XXX
+#define	LEDBASE		MIPS_PHYS_TO_KSEG1(P4032_LED)
+#define	LED(x)		((3 - (x)) * 4)
 #elif defined(ALGOR_P5064)
 #define	LEDBASE		MIPS_PHYS_TO_KSEG1(P5064_LED1)
 #define	LED(x)		((3 - (x)) * 4)
