@@ -33,7 +33,7 @@
 
 #if defined(LIBC_SCCS) && !defined(lint)
 /*static char *sccsid = "from: @(#)getlogin.c	5.9 (Berkeley) 2/23/91";*/
-static char *rcsid = "$Id: getlogin.c,v 1.3 1993/08/26 00:44:38 jtc Exp $";
+static char *rcsid = "$Id: getlogin.c,v 1.4 1993/10/11 19:45:56 jtc Exp $";
 #endif /* LIBC_SCCS and not lint */
 
 #include <sys/param.h>
@@ -56,22 +56,4 @@ getlogin()
 		_logname_valid = 1;
 	}
 	return (*logname ? logname : (char *)NULL);
-}
-
-char *
-cuserid(s)
-	char *s;
-{
-	register struct passwd *pwd;
-
-	if ((pwd = getpwuid(geteuid())) == NULL) {
-		if (s)
-			*s = '\0';
-		return (s);
-	}
-	if (s) {
-		(void)strncpy(s, pwd->pw_name, L_cuserid);
-		return (s);
-	}
-	return (pwd->pw_name);
 }
