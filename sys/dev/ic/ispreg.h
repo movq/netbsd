@@ -1,4 +1,4 @@
-/*	$NetBSD: ispreg.h,v 1.1 1997/03/12 20:44:51 cgd Exp $ */
+/*	$NetBSD: ispreg.h,v 1.1.1.1 1997/03/12 20:44:51 cgd Exp $ */
 
 /*
  * Machine Independent (well, as best as possible) register

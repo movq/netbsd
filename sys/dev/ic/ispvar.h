@@ -1,4 +1,4 @@
-/*	$NetBSD: ispvar.h,v 1.1 1997/03/12 20:44:51 cgd Exp $ */
+/*	$NetBSD: ispvar.h,v 1.1.1.1 1997/03/12 20:44:51 cgd Exp $ */
 
 /*
  * Soft Definitions for for Qlogic ISP SCSI adapters.

@@ -1,4 +1,4 @@
-/*	$NetBSD: ispmbox.h,v 1.1 1997/03/12 20:44:51 cgd Exp $ */
+/*	$NetBSD: ispmbox.h,v 1.1.1.1 1997/03/12 20:44:51 cgd Exp $ */
 
 /*
  * Mailbox and Command Definitions for for Qlogic ISP SCSI adapters.

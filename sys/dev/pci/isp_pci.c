@@ -1,4 +1,4 @@
-/*	$NetBSD: isp_pci.c,v 1.1 1997/03/12 20:44:52 cgd Exp $ */
+/*	$NetBSD: isp_pci.c,v 1.1.1.1 1997/03/12 20:44:52 cgd Exp $ */
 
 /*
  * PCI specific probe and attach routines for Qlogic ISP SCSI adapters.

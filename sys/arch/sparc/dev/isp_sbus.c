@@ -1,4 +1,4 @@
-/*	$NetBSD: isp_sbus.c,v 1.1 1997/03/12 20:44:50 cgd Exp $ */
+/*	$NetBSD: isp_sbus.c,v 1.1.1.1 1997/03/12 20:44:50 cgd Exp $ */
 
 /*
  * SBus specific probe and attach routines for Qlogic ISP SCSI adapters.
