@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.inc,v 1.1 2003/09/12 04:43:18 lukem Exp $
+#	$NetBSD: Makefile.inc,v 1.1.1.1 2003/09/12 04:43:18 lukem Exp $
 
 BINDIR=	${X11BINDIR}
 LIBDIR=	${X11USRLIBDIR}
