@@ -31,7 +31,7 @@
  * SUCH DAMAGE.
  *
  *	from: @(#)fdreg.h	7.1 (Berkeley) 5/9/91
- *	$Id: fdreg.h,v 1.4 1993/06/18 06:19:20 cgd Exp $
+ *	$Id: fdreg.h,v 1.4.4.1 1993/09/14 17:32:25 mycroft Exp $
  */
 
 /*
@@ -62,3 +62,7 @@
 
 #define	fdin	7	/* Digital Input Register (R) */
 #define	FDI_DCHG	0x80	/* diskette has been changed */
+
+#define	FDC_BSIZE	512
+#define	FDC_NPORT	8
+#define	FDC_MAXIOSIZE	FDC_BSIZE	/* XXX this sucks */
