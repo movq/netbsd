@@ -1,4 +1,4 @@
-/*	$NetBSD: sshtty.c,v 1.1 2001/05/15 15:02:41 itojun Exp $	*/
+/*	$NetBSD: sshtty.c,v 1.1.1.1 2001/05/15 15:02:41 itojun Exp $	*/
 /* $OpenBSD: sshtty.c,v 1.1 2001/04/14 16:33:20 stevesk Exp $ */
 /*
  * Author: Tatu Ylonen <ylo@cs.hut.fi>
