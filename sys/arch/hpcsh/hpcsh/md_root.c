@@ -1,4 +1,4 @@
-/*	$NetBSD: md_root.c,v 1.1 2001/02/06 16:45:21 uch Exp $	*/
+/*	$NetBSD: md_root.c,v 1.2 2001/02/07 15:29:22 uch Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -77,9 +77,7 @@ md_root_setconf(caddr_t addr, size_t size)
  * This is called during pseudo-device attachment.
  */
 void
-md_attach_hook(unit, md)
-	int unit;
-	struct md_conf *md;
+md_attach_hook(int unit, struct md_conf *md)
 {
 	char pbuf[9];
 
@@ -97,9 +95,7 @@ md_attach_hook(unit, md)
  * This is called during open (i.e. mountroot)
  */
 void
-md_open_hook(unit, md)
-	int unit;
-	struct md_conf *md;
+md_open_hook(int unit, struct md_conf *md)
 {
 
 	if (unit == 0) {
