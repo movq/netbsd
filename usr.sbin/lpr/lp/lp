@@ -36,7 +36,7 @@
 #
 # Posix 1003.2 compliant print spooler interface.
 #
-# $Id: lp,v 1.1 1997/10/05 12:40:42 mrg Exp $
+# $Id: lp,v 1.1.1.1 1997/10/05 12:40:42 mrg Exp $
 #
 
 ncopies=""
