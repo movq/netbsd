@@ -1,4 +1,4 @@
-/*	$NetBSD: acconfig.h,v 1.1 2000/11/19 23:42:08 wiz Exp $	*/
+/*	$NetBSD: acconfig.h,v 1.1.1.1 2000/11/19 23:42:08 wiz Exp $	*/
 
 /*
  * Start of am-utils-6.x config.h file.
