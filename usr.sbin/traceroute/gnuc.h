@@ -1,4 +1,4 @@
-/*	$NetBSD: gnuc.h,v 1.1 1997/10/03 22:25:19 christos Exp $	*/
+/*	$NetBSD: gnuc.h,v 1.1.1.1 1997/10/03 22:25:19 christos Exp $	*/
 
 /* @(#) Header: gnuc.h,v 1.3 95/10/09 02:47:01 leres Exp  (LBL) */
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: ifaddrlist.h,v 1.1 1997/10/03 22:25:19 christos Exp $	*/
+/*	$NetBSD: ifaddrlist.h,v 1.1.1.1 1997/10/03 22:25:19 christos Exp $	*/
 
 /*
  * Copyright (c) 1997
