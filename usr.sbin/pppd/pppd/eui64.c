@@ -15,10 +15,10 @@
  * IMPLIED WARRANTIES, INCLUDING, WITHOUT LIMITATION, THE IMPLIED
  * WARRANTIES OF MERCHANTIBILITY AND FITNESS FOR A PARTICULAR PURPOSE.
  *
- * $Id: eui64.c,v 1.1 1999/08/24 20:25:44 christos Exp $
+ * $Id: eui64.c,v 1.1.1.1 1999/08/24 20:25:44 christos Exp $
  */
 
-#define RCSID	"$Id: eui64.c,v 1.1 1999/08/24 20:25:44 christos Exp $"
+#define RCSID	"$Id: eui64.c,v 1.1.1.1 1999/08/24 20:25:44 christos Exp $"
 
 #include "pppd.h"
 
