@@ -1,4 +1,4 @@
-/*	$NetBSD: dp8390reg.h,v 1.1 1996/05/05 12:17:09 oki Exp $	*/
+/*	$NetBSD: dp8390reg.h,v 1.1.1.1 1996/05/05 12:17:03 oki Exp $	*/
 
 /*
  * National Semiconductor DS8390 NIC register definitions.
