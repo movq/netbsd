@@ -1,6 +1,6 @@
 /*
- * Copyright (c) 1993 Regents of the University of California.
- * All rights reserved.
+ * Copyright (c) 1987, 1993
+ *	The Regents of the University of California.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,20 +32,25 @@
  */
 
 #if defined(LIBC_SCCS) && !defined(lint)
-static char rcsid[] = "$Id: insque.c,v 1.1 1993/08/13 02:49:43 brezak Exp $";
+static char sccsid[] = "@(#)insque.c	8.1 (Berkeley) 6/4/93";
 #endif /* LIBC_SCCS and not lint */
 
-struct qelem {
-        struct qelem *q_forw;
-        struct qelem *q_back;
+/*
+ * insque -- vax insque instruction
+ *
+ * NOTE: this implementation is non-atomic!!
+ */
+
+struct vaxque {		/* queue format expected by VAX queue instructions */
+	struct vaxque	*vq_next;
+	struct vaxque	*vq_prev;
 };
 
-void
-insque(struct qelem *entry,
-       struct qelem *pred)
+insque(e, prev)
+	register struct vaxque *e, *prev;
 {
-	entry->q_forw = pred->q_forw;
-	entry->q_back = pred;
-	(pred->q_forw)->q_back = entry;
-	pred->q_forw = entry;
+	e->vq_prev = prev;
+	e->vq_next = prev->vq_next;
+	prev->vq_next->vq_prev = e;
+	prev->vq_next = e;
 }

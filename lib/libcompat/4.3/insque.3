@@ -1,5 +1,5 @@
-.\" Copyright (c) 1983, 1991 Regents of the University of California.
-.\" All rights reserved.
+.\" Copyright (c) 1983, 1991, 1993
+.\"	The Regents of the University of California.  All rights reserved.
 .\"
 .\" Redistribution and use in source and binary forms, with or without
 .\" modification, are permitted provided that the following conditions
@@ -29,38 +29,52 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\"	$Id: insque.3,v 1.1 1993/08/13 02:49:42 brezak Exp $
+.\"     @(#)insque.3	8.2 (Berkeley) 12/11/93
 .\"
-.Dd August 12, 1993
+.Dd December 11, 1993
 .Dt INSQUE 3
+.Os BSD 4.2
 .Sh NAME
 .Nm insque ,
 .Nm remque
 .Nd insert/remove element from a queue
 .Sh SYNOPSIS
-.Ft struct qelem {
-.br
-.Ft 	struct qelem *q_forw;
-.br
-.Ft 	struct qelem *q_back;
-.br
-.Ft 	char q_data[];
-.br
-.Ft };
-.br
-.br
-.Ft void 
-.Fn insque "struct qelem *elem" "struct qelem *pred"
-.Ft struct qelem *
-.Fn remque "struct qelem *elem"
+.Bd -literal
+struct qelem {
+	struct	qelem *q_forw;
+	struct	qelem *q_back;
+	char	q_data[];
+};
+.Ed
+
+.Fn insque "(caddr_t) struct qelem *elem" "(caddr_t) struct qelem *pred"
+.Fn remque "(caddr_t) struct qelem *elem"
 .Sh DESCRIPTION
+The
+.Fn insque
+and 
+.Fn remque
+functions
+manipulate queues built from doubly linked lists.  Each
+element in the queue must be in the form of
+.Dq Li struct qelem .
+The function
+.Fn insque
+inserts 
+.Fa elem
+in a queue immediately after 
+.Fa pred ;
+.Fn remque
+removes an entry
+.Fa elem
+from a queue.
+.Sh SEE ALSO
+.%T "VAX Architecture Handbook" ,
+pp. 228-235.
+.Sh HISTORY
+The
 .Fn insque
 and
 .Fn remque
-manipulate queues built from doubly linked lists. Each element in the queue
-must begin with a "struct qelem".
-.Sh DIAGNOSTICS
-These functions are not atomic unless that machine architecture allows it.
-.Sh HISTORY
-These are derived from the insque and remque instructions on a VAX.
-
+functions appeared in 
+.Bx 4.2 .
