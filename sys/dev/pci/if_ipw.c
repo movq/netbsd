@@ -28,7 +28,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$Id: if_ipw.c,v 1.1 2004/08/23 11:42:02 lukem Exp $");
+__KERNEL_RCSID(0, "$Id: if_ipw.c,v 1.1.1.1 2004/08/23 11:42:02 lukem Exp $");
 
 /*-
  * Intel(R) PRO/Wireless 2100 MiniPCI driver
