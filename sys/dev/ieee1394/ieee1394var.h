@@ -39,12 +39,22 @@
 
 struct ieee1394_softc {
 	struct device sc1394_dev;
+	struct device *sc1394_if;
 
 	u_int32_t sc1394_max_receive;
 	u_int8_t sc1394_guid[8];
 	u_int8_t sc1394_link_speed;	/* IEEE1394_SPD_* */
+	u_int16_t sc1394_node_id;	/* my node id in network order */
+
+	int (*sc1394_ifoutput)(struct device *, struct mbuf *,
+	    void (*)(struct device *, struct mbuf *));
+	int (*sc1394_ifinreg)(struct device *, u_int32_t, u_int32_t,
+	    void (*)(struct device *, struct mbuf *));
 };
 
 int ieee1394_init __P((struct ieee1394_softc *));
+
+#define	IEEE1394_ARGTYPE_PTR	0
+#define	IEEE1394_ARGTYPE_MBUF	1
 
 #endif	/* _DEV_IEEE1394_IEEE1394VAR_H_ */
