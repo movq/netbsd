@@ -1,4 +1,4 @@
-/*	$NetBSD: cia_swiz_bus_io.c,v 1.6 1996/11/25 03:46:07 cgd Exp $	*/
+/* $NetBSD: cia_swiz_bus_io.c,v 1.11 1997/08/12 00:58:03 cgd Exp $ */
 
 /*
  * Copyright (c) 1996 Carnegie-Mellon University.
@@ -27,6 +27,11 @@
  * rights to redistribute these changes.
  */
 
+#include <machine/options.h>		/* Config options headers */
+#include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
+
+__KERNEL_RCSID(1, "$NetBSD: cia_swiz_bus_io.c,v 1.11 1997/08/12 00:58:03 cgd Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/malloc.h>
@@ -39,7 +44,7 @@
 #include <alpha/pci/ciareg.h>
 #include <alpha/pci/ciavar.h>
 
-#define	CHIP		cia
+#define	CHIP		cia_swiz
 
 #define	CHIP_EX_MALLOC_SAFE(v)	(((struct cia_config *)(v))->cc_mallocsafe)
 #define	CHIP_IO_EXTENT(v)	(((struct cia_config *)(v))->cc_io_ex)
@@ -64,4 +69,4 @@
 #define CHIP_IO_W2_SYS_END(v)						\
 	    (CIA_PCI_SIO2 + ((HAE_IO_REG2_MASK + 1) << 5) - 1)
 
-#include "pcs_bus_io_common.c"
+#include "pci_swiz_io_chipdep.c"
