@@ -1,4 +1,4 @@
-/*	$NetBSD: mktime.c,v 1.1 2003/10/06 16:44:03 wiz Exp $	*/
+/*	$NetBSD: mktime.c,v 1.1.1.1 2003/10/06 16:44:03 wiz Exp $	*/
 
 /* Copyright (C) 1993, 1994, 1995, 1996, 1997 Free Software Foundation, Inc.
    This file is part of the GNU C Library.

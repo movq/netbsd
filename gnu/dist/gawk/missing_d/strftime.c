@@ -1,4 +1,4 @@
-/*	$NetBSD: strftime.c,v 1.1 2003/10/06 16:44:11 wiz Exp $	*/
+/*	$NetBSD: strftime.c,v 1.1.1.1 2003/10/06 16:44:11 wiz Exp $	*/
 
 /* Copyright (C) 1991-1999, 2000, 2001, 2002, 2003
    Free Software Foundation, Inc.

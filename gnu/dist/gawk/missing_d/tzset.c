@@ -1,4 +1,4 @@
-/*	$NetBSD: tzset.c,v 1.1 2003/10/06 16:44:12 wiz Exp $	*/
+/*	$NetBSD: tzset.c,v 1.1.1.1 2003/10/06 16:44:12 wiz Exp $	*/
 
 /*
  * tzset.c
