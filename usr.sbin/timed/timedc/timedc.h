@@ -1,5 +1,5 @@
-/*
- * Copyright (c) 1983 Regents of the University of California.
+/*-
+ * Copyright (c) 1985, 1993 The Regents of the University of California.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -30,26 +30,26 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	from: @(#)timedc.h	2.4 (Berkeley) 6/1/90
- *	$Id: timedc.h,v 1.2 1993/08/01 17:55:07 mycroft Exp $
+ *	@(#)timedc.h	5.1 (Berkeley) 5/11/93
  */
 
 #include <sys/param.h>
-#include <stdio.h>
 #include <sys/time.h>
-#include <errno.h>
+#ifdef sgi
+#include <sys/uio.h>
+#endif
 #include <sys/socket.h>
 #include <netinet/in.h>
-#include <netdb.h>
 #include <arpa/inet.h>
+
+#include <errno.h>
+#include <netdb.h>
+#include <stdio.h>
 
 extern int errno;
 
 #define ON		1
 #define OFF		0
-
-#define MSGS 		6
-#define TRIALS		5
 
 #define GOOD		1
 #define UNREACHABLE	2
@@ -59,6 +59,8 @@ extern int errno;
 struct	cmd {
 	char	*c_name;		/* command name */
 	char	*c_help;		/* help message */
-	int	(*c_handler)();		/* routine to do the work */
+	void	(*c_handler)();		/* routine to do the work */
 	int	c_priv;			/* privileged command */
 };
+
+#include "timedc-extern.h"
