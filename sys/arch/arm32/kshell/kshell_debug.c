@@ -1,4 +1,4 @@
-/* $NetBSD: kshell_debug.c,v 1.5 1997/01/03 23:15:44 mark Exp $ */
+/*	$NetBSD: kshell_debug.c,v 1.7 1997/10/14 09:01:38 mark Exp $	*/
 
 /*
  * Copyright (c) 1994 Melvin Tang-Richardson (Nut)
@@ -52,7 +52,6 @@
 #include <vm/vm.h>
 #include <vm/vm_kern.h>
 
-#ifdef KSHELL
 int
 debug_count_processes_on_q(queue)
 	int queue;
@@ -116,7 +115,7 @@ debug_show_all_procs(argc, argv)
 				printf("%5d %08x %08x %08x %08x %08x %12s  ",
 				    p->p_pid, (u_int) ap, (u_int)p->p_addr,
 				    (u_int) p->p_vmspace,
-				    (u_int) &p->p_addr->u_pcb, (p->p_vmspace ? (u_int)&p->p_vmspace->vm_pmap : 0),
+				    (u_int) &p->p_addr->u_pcb, (p->p_vmspace ? (u_int)p->p_vmspace->vm_map.pmap : 0),
 				    ((p->p_comm == 0) ? "..." : p->p_comm));
 			else
 				printf("%5d %08x %08x %5d %5d %5d  %08x  %d  %12s %5u.%02d  ",
@@ -248,6 +247,5 @@ debug_show_pmap(pmap)
 	}
 	(void)splx(s);
 }
-#endif	/* KSHELL */
 
-/* End of debug.c */
+/* End of kshell_debug.c */
