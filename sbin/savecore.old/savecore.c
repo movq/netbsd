@@ -1,4 +1,4 @@
-/*	$NetBSD: savecore.c,v 1.1 1996/03/16 10:25:11 leo Exp $	*/
+/*	$NetBSD: savecore.c,v 1.1.1.1 1996/03/16 10:25:11 leo Exp $	*/
 
 /*-
  * Copyright (c) 1986, 1992, 1993
@@ -43,7 +43,7 @@ static char copyright[] =
 #if 0
 static char sccsid[] = "@(#)savecore.c	8.3 (Berkeley) 1/2/94";
 #else
-static char rcsid[] = "$NetBSD: savecore.c,v 1.1 1996/03/16 10:25:11 leo Exp $";
+static char rcsid[] = "$NetBSD: savecore.c,v 1.1.1.1 1996/03/16 10:25:11 leo Exp $";
 #endif
 #endif /* not lint */
 
