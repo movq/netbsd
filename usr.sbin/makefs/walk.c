@@ -1,4 +1,4 @@
-/*	$NetBSD: walk.c,v 1.1 2001/10/26 06:16:19 lukem Exp $	*/
+/*	$NetBSD: walk.c,v 1.1.1.1 2001/10/26 06:16:19 lukem Exp $	*/
 
 /*
  * Copyright 2001 Wasabi Systems, Inc.

@@ -1,4 +1,4 @@
-/*	$NetBSD: ffs_alloc.c,v 1.1 2001/10/26 06:21:35 lukem Exp $	*/
+/*	$NetBSD: ffs_alloc.c,v 1.1.1.1 2001/10/26 06:21:35 lukem Exp $	*/
 /* From: NetBSD: ffs_alloc.c,v 1.50 2001/09/06 02:16:01 lukem Exp */
 
 /*

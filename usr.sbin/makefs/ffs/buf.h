@@ -1,4 +1,4 @@
-/*	$NetBSD: buf.h,v 1.1 2001/10/26 06:20:21 lukem Exp $	*/
+/*	$NetBSD: buf.h,v 1.1.1.1 2001/10/26 06:20:21 lukem Exp $	*/
 
 /*
  * Copyright 2001 Wasabi Systems, Inc.

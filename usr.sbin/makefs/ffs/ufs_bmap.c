@@ -1,4 +1,4 @@
-/*	$NetBSD: ufs_bmap.c,v 1.1 2001/10/26 06:22:21 lukem Exp $	*/
+/*	$NetBSD: ufs_bmap.c,v 1.1.1.1 2001/10/26 06:22:21 lukem Exp $	*/
 /* From: NetBSD: ufs_bmap.c,v 1.10 2000/11/27 08:39:57 chs Exp */
 
 /*

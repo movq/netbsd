@@ -1,4 +1,4 @@
-/*	$NetBSD: ffs_extern.h,v 1.1 2001/10/26 06:21:48 lukem Exp $	*/
+/*	$NetBSD: ffs_extern.h,v 1.1.1.1 2001/10/26 06:21:48 lukem Exp $	*/
 /* From: NetBSD: ffs_extern.h,v 1.19 2001/08/17 02:18:48 lukem Exp */
 
 /*-

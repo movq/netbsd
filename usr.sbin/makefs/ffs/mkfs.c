@@ -1,4 +1,4 @@
-/*	$NetBSD: mkfs.c,v 1.1 2001/10/26 06:21:57 lukem Exp $	*/
+/*	$NetBSD: mkfs.c,v 1.1.1.1 2001/10/26 06:21:57 lukem Exp $	*/
 /* From NetBSD: mkfs.c,v 1.55 2001/09/06 02:16:01 lukem Exp $ */
 
 /*
@@ -39,7 +39,7 @@
 #if 0
 static char sccsid[] = "@(#)mkfs.c	8.11 (Berkeley) 5/3/95";
 #else
-__RCSID("$NetBSD: mkfs.c,v 1.1 2001/10/26 06:21:57 lukem Exp $");
+__RCSID("$NetBSD: mkfs.c,v 1.1.1.1 2001/10/26 06:21:57 lukem Exp $");
 #endif
 #endif /* not lint */
 
