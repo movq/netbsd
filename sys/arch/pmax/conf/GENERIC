@@ -1,4 +1,4 @@
-# $NetBSD: GENERIC,v 1.112 2003/10/25 13:21:13 simonb Exp $
+# $NetBSD: GENERIC,v 1.113 2003/12/13 23:04:37 ad Exp $
 #
 # GENERIC machine description file
 # 
@@ -19,10 +19,11 @@
 # device.
 
 include		"arch/pmax/conf/std.pmax"
+include		"arch/pmax/conf/files.pmax_rcons"
 
 options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
-#ident		"GENERIC-$Revision: 1.112 $"
+#ident		"GENERIC-$Revision: 1.113 $"
 
 maxusers	64
 
