@@ -1,4 +1,4 @@
-/*	$NetBSD: syscall.c,v 1.4 2002/01/14 23:14:33 bjh21 Exp $	*/
+/*	$NetBSD: syscall.c,v 1.5 2002/01/17 17:26:03 bjh21 Exp $	*/
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -76,13 +76,12 @@
  * Created      : 09/11/94
  */
 
-#include "opt_compat_linux.h"
 #include "opt_ktrace.h"
 #include "opt_syscall_debug.h"
 
 #include <sys/param.h>
 
-__RCSID("$NetBSD: syscall.c,v 1.4 2002/01/14 23:14:33 bjh21 Exp $");
+__RCSID("$NetBSD: syscall.c,v 1.5 2002/01/17 17:26:03 bjh21 Exp $");
 
 #include <sys/device.h>
 #include <sys/errno.h>
@@ -112,17 +111,11 @@ struct evcnt arm700bugcount =
     EVCNT_INITIALIZER(EVCNT_TYPE_MISC, NULL, "cpu", "arm700swibug");
 #endif
 
-#define MAXARGS 8
-
 void
-syscall(trapframe_t *frame)
+swi_handler(trapframe_t *frame)
 {
-	const struct sysent *callp;
 	struct proc *p;
 	u_int32_t insn;
-	int code, error;
-	u_int nap, nargs;
-	register_t *ap, *args, copyargs[MAXARGS], rval[2];
 
 	/*
 	 * Enable interrupts if they were enabled before the exception.
@@ -148,7 +141,6 @@ syscall(trapframe_t *frame)
 	insn = *(u_int32_t *)((frame->tf_r15 & R15_PC) - INSN_SIZE);
 #endif
 
-	uvmexp.syscalls++;
 	p = curproc;
 	p->p_addr->u_pcb.pcb_tf = frame;
 
@@ -183,8 +175,25 @@ syscall(trapframe_t *frame)
 	}
 #endif	/* CPU_ARM7 */
 
+	uvmexp.syscalls++;
+
+	(*(void(*)(struct trapframe *, struct proc *, u_int32_t))
+	    (p->p_emul->e_syscall))(frame, p, insn);
+}
+
+#define MAXARGS 8
+
+void
+syscall(struct trapframe *frame, struct proc *p, u_int32_t insn)
+{
+	const struct sysent *callp;
+	int code, error;
+	u_int nap, nargs;
+	register_t *ap, *args, copyargs[MAXARGS], rval[2];
+
 	switch (insn & SWI_OS_MASK) { /* Which OS is the SWI from? */
 	case SWI_OS_ARM: /* ARM-defined SWIs */
+		code = insn & 0x00ffffff;
 		switch (code) {
 		case SWI_IMB:
 		case SWI_IMBrange:
@@ -205,11 +214,6 @@ syscall(trapframe_t *frame)
 	case SWI_OS_NETBSD: /* New official NetBSD range. */
 		nap = 4;
 		break;
-#ifdef COMPAT_LINUX
-	case SWI_OS_LINUX:
-		nap = 8;
-		break;
-#endif
 	default:
 		/* Undefined so illegal instruction */
 		trapsignal(p, SIGILL, insn);
@@ -228,11 +232,6 @@ syscall(trapframe_t *frame)
 		nap--;
 		break;
         case SYS___syscall:
-#if 0
-		if (!(p->p_emul->e_flags & EMUL_HAS_SYS___syscall))
-			break;
-#endif
-
 		code = ap[_QUAD_LOWWORD];
 		ap += 2;
 		nap -= 2;
