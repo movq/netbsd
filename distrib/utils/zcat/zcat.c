@@ -1,4 +1,4 @@
-/*	$NetBSD: zcat.c,v 1.1 1996/09/12 20:24:00 gwr Exp $	*/
+/*	$NetBSD: zcat.c,v 1.1.1.1 1996/09/12 20:24:00 gwr Exp $	*/
 
 /* mini zcat.c -- a minimal zcat using the zlib compression library
  * Copyright (C) 1995-1996 Jean-loup Gailly.
