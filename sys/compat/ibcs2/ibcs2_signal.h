@@ -1,7 +1,7 @@
-/*	$NetBSD: ibcs2_signal.h,v 1.2 1994/10/26 02:53:02 cgd Exp $	*/
+/*	$NetBSD: ibcs2_signal.h,v 1.3 1995/03/14 15:12:34 scottb Exp $	*/
 
 /*
- * Copyright (c) 1994 Scott Bartram
+ * Copyright (c) 1994, 1995 Scott Bartram
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -66,6 +66,8 @@
 #define IBCS2_SIGCONT		25
 #define IBCS2_SIGTTIN		26
 #define IBCS2_SIGTTOU		27
+#define IBCS2_SIGVTALRM		28
+#define IBCS2_SIGPROF		29
 
 #define IBCS2_SIG_DFL		(void(*)())0
 #define IBCS2_SIG_ERR		(void(*)())-1
