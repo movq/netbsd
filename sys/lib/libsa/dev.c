@@ -1,4 +1,4 @@
-/*	$NetBSD: dev.c,v 1.4 1994/10/30 21:48:23 cgd Exp $	*/
+/*	$NetBSD: dev.c,v 1.5 1999/03/30 21:59:58 cgd Exp $	*/
 
 /*-
  * Copyright (c) 1993
@@ -39,8 +39,6 @@
 #include <sys/reboot.h>
 
 #include "stand.h"
-
-int errno;
 
 int
 nodev()
