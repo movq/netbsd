@@ -1,5 +1,5 @@
-.\" Copyright (c) 1983, 1990 The Regents of the University of California.
-.\" All rights reserved.
+.\" Copyright (c) 1983, 1990, 1993
+.\"	The Regents of the University of California.  All rights reserved.
 .\"
 .\" Redistribution and use in source and binary forms, with or without
 .\" modification, are permitted provided that the following conditions
@@ -29,9 +29,9 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\"     @(#)rwho.1	6.7 (Berkeley) 4/23/91
+.\"     @(#)rwho.1	8.1 (Berkeley) 6/6/93
 .\"
-.Dd April 23, 1991
+.Dd June 6, 1993
 .Dt RWHO 1
 .Os BSD 4.2
 .Sh NAME
@@ -62,8 +62,8 @@ unless the
 .Fl a
 flag is given.
 .Sh FILES
-.Bl -tag -width /var/spool/rwho/rhowd.* -compact
-.It Pa /var/spool/rwho/whod.*
+.Bl -tag -width /var/rwho/rhowd.* -compact
+.It Pa /var/rwho/whod.*
 information about other machines
 .El
 .Sh SEE ALSO
