@@ -1,4 +1,4 @@
-/*	$NetBSD: userret.h,v 1.2 2003/08/07 16:26:36 agc Exp $	*/
+/*	$NetBSD: userret.h,v 1.3 2003/10/31 16:44:34 cl Exp $	*/
 
 /*
  * XXXfvdl same as i386 counterpart, but should probably be independent.
@@ -73,6 +73,8 @@
  *
  */
 
+#include <sys/userret.h>
+
 static __inline void userret __P((register struct lwp *));
 
 /*
@@ -83,17 +85,9 @@ static __inline void
 userret(l)
 	register struct lwp *l;
 {
-	int sig;
-	struct proc *p = l->l_proc;
 
-	while ((sig = CURSIG(l)) != 0)
-		postsig(sig);
-
-	if (p->p_userret)
-		(p->p_userret)(l, p->p_userret_arg);
-
-	while (l->l_flag & L_SA_UPCALL)
-		sa_upcall_userret(l);
+	/* Invoke MI userret code */
+	mi_userret(l);
 
 	curcpu()->ci_schedstate.spc_curpriority = l->l_priority = l->l_usrpri;
 }
