@@ -1,4 +1,4 @@
-#	$NetBSD: files,v 1.112 1997/02/02 21:16:25 thorpej Exp $
+#	$NetBSD: files,v 1.117 1997/02/27 01:13:45 thorpej Exp $
 
 #	@(#)files.newconf	7.5 (Berkeley) 5/10/93
 
@@ -49,6 +49,10 @@ file	ipkdb/ipkdb_ppp.c		ipkdbppp needs-flag
 device	ahc: scsi
 file	dev/ic/aic7xxx.c	ahc
 
+# Adaptec AHA-154x and AHA-164x controllers
+device	aha: scsi
+file	dev/ic/aha.c		aha
+
 # BusLogic MultiMaster and MultiMaster Ultra SCSI controllers
 device	bha: scsi
 file	dev/ic/bha.c		bha
@@ -81,6 +85,10 @@ file	dev/ic/cy.c		cy needs-flag
 # Efficient Networks, Inc. ATM interface
 device	en: atm, ifnet
 file	dev/ic/midway.c		en
+
+# NCR 53x9x or Emulex ESP SCSI Controller
+define	ncr53c9x
+file	dev/ic/ncr53c9x.c	ncr53c9x
 
 # Attributes which machine-independent bus support can be attached to.
 # These should be defined here, because some of these busses can have
@@ -173,6 +181,7 @@ file kern/kern_sysctl.c
 file kern/kern_synch.c
 file kern/kern_time.c
 file kern/kern_xxx.c
+file kern/kgdb_stub.c			kgdb
 file kern/subr_autoconf.c
 file kern/subr_disk.c
 file kern/subr_extent.c
@@ -269,7 +278,7 @@ file net/raw_usrreq.c
 file net/route.c
 file net/rtsock.c
 file net/slcompress.c			sl | ppp | strip
-file net/pfil.c				pfil_hooks
+file net/pfil.c				pfil_hooks | ipfilter
 file netccitt/ccitt_proto.c		ccitt
 file netccitt/hd_debug.c		hdlc
 file netccitt/hd_input.c		hdlc
@@ -297,7 +306,7 @@ file netinet/in_pcb.c			inet
 file netinet/in_proto.c			inet
 file netinet/ip_icmp.c			inet
 file netinet/ip_input.c			inet
-file netinet/ip_mroute.c		inet
+file netinet/ip_mroute.c		inet & mrouting
 file netinet/ip_output.c		inet
 file netinet/raw_ip.c			inet
 file netinet/tcp_debug.c		inet

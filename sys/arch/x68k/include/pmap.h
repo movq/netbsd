@@ -1,4 +1,4 @@
-/*	$NetBSD: pmap.h,v 1.1 1996/05/05 12:17:13 oki Exp $	*/
+/*	$NetBSD: pmap.h,v 1.1.1.1 1996/05/05 12:17:03 oki Exp $	*/
 
 /* 
  * Copyright (c) 1987 Carnegie-Mellon University

@@ -2,7 +2,7 @@
  * THIS FILE AUTOMATICALLY GENERATED.  DO NOT EDIT.
  *
  * generated from:
- *	NetBSD: eisadevs,v 1.10 1996/09/06 18:01:07 thorpej Exp 
+ *	NetBSD: eisadevs,v 1.12 1997/02/16 20:10:31 jonathan Exp 
  */
 
 /*
@@ -156,6 +156,26 @@ struct eisa_knowndev eisa_knowndevs[] = {
 	    0,
 	    "TCM5093",
 	    EISA_PRODUCT_TCM5093,
+	},
+	{
+	    0,
+	    "TCM5920",
+	    EISA_PRODUCT_TCM5920,
+	},
+	{
+	    0,
+	    "TCM5970",
+	    EISA_PRODUCT_TCM5970,
+	},
+	{
+	    0,
+	    "TCM5971",
+	    EISA_PRODUCT_TCM5971,
+	},
+	{
+	    0,
+	    "TCM5972",
+	    EISA_PRODUCT_TCM5972,
 	},
 	{
 	    0,
