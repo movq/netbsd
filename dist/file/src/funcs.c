@@ -1,4 +1,4 @@
-/*	$NetBSD: funcs.c,v 1.1 2003/03/25 22:30:18 pooka Exp $	*/
+/*	$NetBSD: funcs.c,v 1.1.1.1 2003/03/25 22:30:18 pooka Exp $	*/
 
 /*
  * Copyright (c) Christos Zoulas 2003.

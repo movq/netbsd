@@ -1,4 +1,4 @@
-/*	$NetBSD: acconfig.h,v 1.1 2003/03/25 22:30:15 pooka Exp $	*/
+/*	$NetBSD: acconfig.h,v 1.1.1.1 2003/03/25 22:30:15 pooka Exp $	*/
 
 /* Autoheader needs me */
 #undef PACKAGE
