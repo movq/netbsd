@@ -1,6 +1,6 @@
 /*-
- * Copyright (c) 1992 The Regents of the University of California.
- * All rights reserved.
+ * Copyright (c) 1992, 1993
+ *	The Regents of the University of California.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -30,11 +30,11 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)fnmatch.h	5.1 (Berkeley) 6/28/92
+ *	@(#)fnmatch.h	8.1 (Berkeley) 6/2/93
  */
 
-#ifndef _FNMATCH_H_
-#define _FNMATCH_H_
+#ifndef	_FNMATCH_H_
+#define	_FNMATCH_H_
 
 #define	FNM_NOMATCH	1	/* Match failed. */
 
@@ -45,7 +45,9 @@
 #include <sys/cdefs.h>
 
 __BEGIN_DECLS
-int	fnmatch __P((const char *, const char *, int));
+#ifndef	_POSIX_SOURCE
+int	 fnmatch __P((const char *, const char *, int));
+#endif
 __END_DECLS
 
 #endif /* !_FNMATCH_H_ */
