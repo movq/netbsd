@@ -1,4 +1,4 @@
-/*	$NetBSD: ixdp425reg.h,v 1.2 2003/05/24 01:59:32 ichiro Exp $ */
+/*	$NetBSD: ixdp425reg.h,v 1.3 2003/09/25 14:11:18 ichiro Exp $ */
 /*
  * Copyright (c) 2003
  *	Ichiro FUKUHARA <ichiro@ichiro.org>.
@@ -36,28 +36,40 @@
 #define	_IXDP425REG_H_
 
 /*
- * GPIO  
+ * Interrupt & GPIO  
  */
 
 #if BOARDTYPE == ixdp425
-#define	PCI_CLK		14
-#define	PCI_RESET	13
-#define	PCI_INT_D	IXP425_INT_GPIO_11
-#define	PCI_INT_C	IXP425_INT_GPIO_10
-#define	PCI_INT_B	IXP425_INT_GPIO_9
-#define	PCI_INT_A	IXP425_INT_GPIO_8
+/* GPIOs */
+#define	GPIO_PCI_CLK	14
+#define	GPIO_PCI_RESET	13
+#define	GPIO_PCI_INTA	11
+#define	GPIO_PCI_INTB	10
+#define	GPIO_PCI_INTC	9
+#define	GPIO_PCI_INTD	8
+/* Interrupt */
+#define	PCI_INT_A	IXP425_INT_GPIO_11
+#define	PCI_INT_B	IXP425_INT_GPIO_10
+#define	PCI_INT_C	IXP425_INT_GPIO_9
+#define	PCI_INT_D	IXP425_INT_GPIO_8
 #define	I2C_SDA		IXP425_INT_GPIO_7
 #define	I2C_SCL		IXP425_INT_GPIO_6
 #endif /* BOARDTYPE == ixdp425 */
 
 #if BOARDTYPE == zao425		/* conf/ZAO425 */
-#define	PCI_CLK		14
-#define	PCI_RESET	13
+/* GPIOs */
+#define	GPIO_PCI_CLK	14
+#define	GPIO_PCI_RESET	13
+#define	GPIO_PCI_INTA	11
+#define	GPIO_PCI_INTB	10
+#define	GPIO_PCI_INTC	9
+#define	GPIO_PCI_INTD	8
+/* Interrupt */
 #define	MPCI_GPIO0	IXP425_INT_GPIO_12
-#define	PCI_INT_D	IXP425_INT_GPIO_11
-#define	PCI_INT_C	IXP425_INT_GPIO_10
-#define	PCI_INT_B	IXP425_INT_GPIO_9
-#define	PCI_INT_A	IXP425_INT_GPIO_8
+#define	PCI_INT_A	IXP425_INT_GPIO_11
+#define	PCI_INT_B	IXP425_INT_GPIO_10
+#define	PCI_INT_C	IXP425_INT_GPIO_9
+#define	PCI_INT_D	IXP425_INT_GPIO_8
 #define	I2C_SDA		IXP425_INT_GPIO_7
 #define	I2C_SCL		IXP425_INT_GPIO_6
 #define	MPCI_GPIO3	IXP425_INT_GPIO_5
