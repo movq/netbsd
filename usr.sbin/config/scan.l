@@ -1,5 +1,5 @@
 %{
-/*	$NetBSD: scan.l,v 1.25 1999/07/09 06:44:59 thorpej Exp $	*/
+/*	$NetBSD: scan.l,v 1.28 2000/10/02 19:48:35 cgd Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -69,7 +69,7 @@ struct incl {
 	int	in_ateof;	/* token to insert at EOF */
 };
 static struct incl *incl;
-static int endinclude __P((void));
+static int endinclude(void);
 
 #define	yywrap() 1
 
@@ -101,6 +101,7 @@ dumps		return DUMPS;
 file		return XFILE;
 file-system	return FILE_SYSTEM;
 flags		return FLAGS;
+ident		return IDENT;
 include		return INCLUDE;
 machine		return XMACHINE;
 major		return MAJOR;
@@ -185,8 +186,7 @@ with		return WITH;
  * Open the "main" file (conffile).
  */
 int
-firstfile(fname)
-	const char *fname;
+firstfile(const char *fname)
 {
 
 	if ((yyin = fopen(fname, "r")) == NULL)
@@ -204,14 +204,13 @@ firstfile(fname)
  * If ateof == 0 then nothing is inserted.
  */
 int
-include(fname, ateof, conditional)
-	const char *fname;
-	int ateof, conditional;
+include(const char *fname, int ateof, int conditional)
 {
 	FILE *fp;
 	struct incl *in;
 	char *s;
 	static int havedirs;
+	extern int vflag;
 
 	if (havedirs == 0) {
 		havedirs = 1;
@@ -223,6 +222,9 @@ include(fname, ateof, conditional)
 		if (conditional == 0)
 			error("cannot open %s for reading: %s\n", s,
 			    strerror(errno));
+		else if (vflag)
+			warn("cannot open conditional include file %s: %s",
+			     s, strerror(errno));
 		free(s);
 		return (-1);
 	}
@@ -244,7 +246,7 @@ include(fname, ateof, conditional)
  * Terminate the most recent inclusion.
  */
 static int
-endinclude()
+endinclude(void)
 {
 	struct incl *in;
 	int ateof;
@@ -270,7 +272,7 @@ endinclude()
  * token lookahead, so we can tell.
  */
 int
-currentline()
+currentline(void)
 {
 	extern int yychar;
 

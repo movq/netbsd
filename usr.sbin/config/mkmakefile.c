@@ -1,4 +1,4 @@
-/*	$NetBSD: mkmakefile.c,v 1.42 1999/07/09 18:45:31 thorpej Exp $	*/
+/*	$NetBSD: mkmakefile.c,v 1.48 2001/01/31 00:15:40 bjh21 Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -57,29 +57,40 @@
  * Make the Makefile.
  */
 
-static const char *srcpath __P((struct files *)); 
-                        
-static int emitdefs __P((FILE *));
-static int emitfiles __P((FILE *, int));
+static const char *srcpath(struct files *); 
 
-static int emitobjs __P((FILE *));
-static int emitcfiles __P((FILE *));
-static int emitsfiles __P((FILE *));
-static int emitrules __P((FILE *));
-static int emitload __P((FILE *));
-static int emitincludes __P((FILE *));
+static const char *prefix_prologue(const char *);
+
+static int emitdefs(FILE *);
+static int emitfiles(FILE *, int, int);
+
+static int emitobjs(FILE *);
+static int emitcfiles(FILE *);
+static int emitsfiles(FILE *);
+static int emitrules(FILE *);
+static int emitload(FILE *);
+static int emitincludes(FILE *);
 
 int
-mkmakefile()
+mkmakefile(void)
 {
 	FILE *ifp, *ofp;
 	int lineno;
-	int (*fn) __P((FILE *));
+	int (*fn)(FILE *);
 	char *ifname;
 	char line[BUFSIZ], buf[200];
 
+	/* Try a makefile for the port first.
+	 */
 	(void)sprintf(buf, "arch/%s/conf/Makefile.%s", machine, machine);
 	ifname = sourcepath(buf);
+	if ((ifp = fopen(ifname, "r")) == NULL) {
+		/* Try a makefile for the architecture second.
+		 */
+		(void)sprintf(buf, "arch/%s/conf/Makefile.%s", machinearch,
+			machinearch);
+		ifname = sourcepath(buf);
+	}
 	if ((ifp = fopen(ifname, "r")) == NULL) {
 		(void)fprintf(stderr, "config: cannot read %s: %s\n",
 		    ifname, strerror(errno));
@@ -156,8 +167,7 @@ bad:
  * get the .o from the obj-directory.
  */
 static const char *
-srcpath(fi)
-	struct files *fi;
+srcpath(struct files *fi)
 {
 #if 1
 	/* Always have source, don't support object dirs for kernel builds. */
@@ -176,9 +186,18 @@ srcpath(fi)
 #endif
 }
 
+static const char *
+prefix_prologue(const char *path)
+{
+
+	if (*path == '/')
+		return ("");
+	else
+		return ("$S/");
+}
+
 static int
-emitdefs(fp)
-	FILE *fp;
+emitdefs(FILE *fp)
 {
 	struct nvlist *nv;
 	char *sp;
@@ -202,6 +221,8 @@ emitdefs(fp)
 		return (1);
 	if (fprintf(fp, "PARAM=-DMAXUSERS=%d\n", maxusers) < 0)
 		return (1);
+	if (fprintf(fp, "TARGET_MACHINE=%s\n", machine) < 0)
+		return (1);
 	if (*srcdir == '/' || *srcdir == '.') {
 		if (fprintf(fp, "S=\t%s\n", srcdir) < 0)
 			return (1);
@@ -220,8 +241,7 @@ emitdefs(fp)
 }
 
 static int
-emitobjs(fp)
-	FILE *fp;
+emitobjs(FILE *fp)
 {
 	struct files *fi;
 	struct objects *oi;
@@ -266,8 +286,9 @@ emitobjs(fp)
 				return (1);
 		} else {
 			if (oi->oi_prefix != NULL) {
-				if (fprintf(fp, "%c$S/%s/%s", sp, oi->oi_prefix,
-				    oi->oi_path) < 0)
+				if (fprintf(fp, "%c%s%s/%s", sp,
+				    prefix_prologue(oi->oi_prefix),
+				    oi->oi_prefix, oi->oi_path) < 0)
 					return (1);
 			} else {
 				if (fprintf(fp, "%c$S/%s", sp, oi->oi_path) < 0)
@@ -283,25 +304,21 @@ emitobjs(fp)
 }
 
 static int
-emitcfiles(fp)
-	FILE *fp;
+emitcfiles(FILE *fp)
 {
 
-	return (emitfiles(fp, 'c'));
+	return (emitfiles(fp, 'c', 0));
 }
 
 static int
-emitsfiles(fp)
-	FILE *fp;
+emitsfiles(FILE *fp)
 {
 
-	return (emitfiles(fp, 's'));
+	return (emitfiles(fp, 's', 1));
 }
 
 static int
-emitfiles(fp, suffix)
-	FILE *fp;
-	int suffix;
+emitfiles(FILE *fp, int suffix, int upper_suffix)
 {
 	struct files *fi;
 	struct config *cf;
@@ -319,7 +336,8 @@ emitfiles(fp, suffix)
 		if ((fpath = srcpath(fi)) == NULL)
                         return (1);
 		len = strlen(fpath);
-		if (fpath[len - 1] != suffix)
+		if (! ((fpath[len - 1] == suffix) ||
+		    (upper_suffix && fpath[len - 1] == toupper(suffix))))
 			continue;
 		if (*fpath != '/') {
 			len += 3;	/* "$S/" */
@@ -337,8 +355,9 @@ emitfiles(fp, suffix)
 				return (1);
 		} else {
 			if (fi->fi_prefix != NULL) {
-				if (fprintf(fp, "%c$S/%s/%s", sp, fi->fi_prefix,
-				    fi->fi_path) < 0)
+				if (fprintf(fp, "%c%s%s/%s", sp,
+				    prefix_prologue(fi->fi_prefix),
+				    fi->fi_prefix, fi->fi_path) < 0)
 					return (1);
 			} else {
 				if (fprintf(fp, "%c$S/%s", sp, fi->fi_path) < 0)
@@ -378,8 +397,7 @@ emitfiles(fp, suffix)
  * Emit the make-rules.
  */
 static int
-emitrules(fp)
-	FILE *fp;
+emitrules(FILE *fp)
 {
 	struct files *fi;
 	const char *cp, *fpath;
@@ -396,7 +414,8 @@ emitrules(fp)
 				return (1);
 		} else {
 			if (fi->fi_prefix != NULL) {
-				if (fprintf(fp, "%s.o: $S/%s/%s\n", fi->fi_base,
+				if (fprintf(fp, "%s.o: %s%s/%s\n", fi->fi_base,
+				    prefix_prologue(fi->fi_prefix),
 				    fi->fi_prefix, fpath) < 0)
 					return (1);
 			} else {
@@ -425,13 +444,12 @@ emitrules(fp)
  * This function is not to be called `spurt'.
  */
 static int
-emitload(fp)
-	FILE *fp;
+emitload(FILE *fp)
 {
 	struct config *cf;
 	const char *nm, *swname;
 
-	if (fputs("all:", fp) < 0)
+	if (fputs(".MAIN: all\nall:", fp) < 0)
 		return (1);
 	for (cf = allcf; cf != NULL; cf = cf->cf_next) {
 		if (fprintf(fp, " %s", cf->cf_name) < 0)
@@ -471,13 +489,13 @@ swap%s.o: ", swname, swname) < 0)
  * Emit include headers (for any prefixes encountered)
  */
 static int
-emitincludes(fp)
-	FILE *fp;
+emitincludes(FILE *fp)
 {
 	struct prefix *pf;
 
 	for (pf = allprefixes; pf != NULL; pf = pf->pf_next) {
-		if (fprintf(fp, "INCLUDES+=\t-I$S/%s\n", pf->pf_prefix) < 0)
+		if (fprintf(fp, "INCLUDES+=\t-I%s%s\n",
+		    prefix_prologue(pf->pf_prefix), pf->pf_prefix) < 0)
 			return (1);
 	}
 
