@@ -32,7 +32,7 @@
  *
  *	@(#)endian.h	7.8 (Berkeley) 4/3/91
  *
- *	$Id: endian.h,v 1.1 1993/09/09 23:53:45 phil Exp $
+ *	$Id: endian.h,v 1.1.1.1 1993/09/09 23:53:46 phil Exp $
  */
 
 /*

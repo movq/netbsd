@@ -31,7 +31,7 @@
  * SUCH DAMAGE.
  *
  *	from: @(#)ansi.h	7.1 (Berkeley) 3/9/91
- *	$Id: ansi.h,v 1.1 1993/09/09 23:53:45 phil Exp $
+ *	$Id: ansi.h,v 1.1.1.1 1993/09/09 23:53:46 phil Exp $
  */
 
 #ifndef	_ANSI_H_

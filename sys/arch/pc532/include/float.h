@@ -32,7 +32,7 @@
  *
  *	@(#)float.h	7.2 (Berkeley) 6/28/90
  *
- *	$Id: float.h,v 1.1 1993/09/09 23:53:45 phil Exp $
+ *	$Id: float.h,v 1.1.1.1 1993/09/09 23:53:46 phil Exp $
  */
 
 #define FLT_RADIX	2		/* b */

@@ -31,7 +31,7 @@
  *
  *  machine/setjmp.h : for support of the library routines.
  *
- *	$Id: jmpbuf.h,v 1.1 1993/09/09 23:53:46 phil Exp $
+ *	$Id: jmpbuf.h,v 1.1.1.1 1993/09/09 23:53:47 phil Exp $
  */
 
 /* These are byte offsets into the jmp buffer. */

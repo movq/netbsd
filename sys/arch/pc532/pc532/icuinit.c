@@ -30,7 +30,7 @@
  *
  *	icuinit.c
  *
- *	$Id: icuinit.c,v 1.1 1993/09/09 23:53:48 phil Exp $
+ *	$Id: icuinit.c,v 1.1.1.1 1993/09/09 23:53:49 phil Exp $
  */
 
 /* icuinit.c - C support for 532 icu stuff. */

@@ -35,7 +35,7 @@
  *
  *	@(#)vmparam.h	5.9 (Berkeley) 5/12/91
  *
- *	$Id: vmparam.h,v 1.1 1993/09/09 23:53:46 phil Exp $
+ *	$Id: vmparam.h,v 1.1.1.1 1993/09/09 23:53:47 phil Exp $
  */
 
 

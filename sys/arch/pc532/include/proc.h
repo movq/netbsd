@@ -32,7 +32,7 @@
  *
  *	@(#)proc.h	7.1 (Berkeley) 5/15/91
  *
- *	$Id: proc.h,v 1.1 1993/09/09 23:53:45 phil Exp $
+ *	$Id: proc.h,v 1.1.1.1 1993/09/09 23:53:46 phil Exp $
  */
 
 /*

@@ -1,6 +1,6 @@
 # Copyright 1990 W. Jolitz
 # 	from: @(#)Makefile.i386	7.1 5/10/91
-#	$Id: Makefile.pc532,v 1.1 1993/09/09 23:53:44 phil Exp $
+#	$Id: Makefile.pc532,v 1.1.1.1 1993/09/09 23:53:45 phil Exp $
 #
 # Makefile for NetBSD/532
 #

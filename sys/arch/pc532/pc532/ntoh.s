@@ -25,7 +25,7 @@
  * any improvements or extensions that they make and grant Carnegie Mellon 
  * the rights to redistribute these changes.
  *
- *	$Id: ntoh.s,v 1.1 1993/09/09 23:53:48 phil Exp $
+ *	$Id: ntoh.s,v 1.1.1.1 1993/09/09 23:53:49 phil Exp $
  */
 
 #include <machine/asm.h>

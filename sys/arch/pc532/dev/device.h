@@ -32,7 +32,7 @@
  *
  *	from: @(#)isa_device.h	7.1 (Berkeley) 5/9/91
  *
- *	$Id: device.h,v 1.1 1993/09/09 23:53:52 phil Exp $
+ *	$Id: device.h,v 1.1.1.1 1993/09/09 23:53:53 phil Exp $
  */
 
 /*

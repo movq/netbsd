@@ -35,7 +35,7 @@
  *
  *	@(#)trap.c	7.4 (Berkeley) 5/13/91
  *
- *	$Id: trap.c,v 1.1 1993/09/09 23:53:49 phil Exp $
+ *	$Id: trap.c,v 1.1.1.1 1993/09/09 23:53:50 phil Exp $
  */
 
 /*

@@ -30,7 +30,7 @@
  *	Author: Tatu Ylonen, Jukka Virtanen
  *	Helsinki University of Technology 1992.
  *
- *	$Id: bcopy.s,v 1.1 1993/09/09 23:53:46 phil Exp $
+ *	$Id: bcopy.s,v 1.1.1.1 1993/09/09 23:53:47 phil Exp $
  */
 
 #include <machine/asm.h>

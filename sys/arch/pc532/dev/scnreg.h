@@ -30,7 +30,7 @@
  *
  *	dpreg.h: definitions for the dp driver.
  *
- *	$Id: scnreg.h,v 1.1 1993/09/09 23:53:51 phil Exp $
+ *	$Id: scnreg.h,v 1.1.1.1 1993/09/09 23:53:52 phil Exp $
  */
 
 /* Constants. */

@@ -32,7 +32,7 @@
  *
  *	@(#)limits.h	7.2 (Berkeley) 6/28/90
  *
- *	$Id: limits.h,v 1.1 1993/09/09 23:53:45 phil Exp $
+ *	$Id: limits.h,v 1.1.1.1 1993/09/09 23:53:46 phil Exp $
  */
 
 #define	CHAR_BIT	8		/* number of bits in a char */

@@ -36,7 +36,7 @@
  *
  *	@(#)pmap.h	7.4 (Berkeley) 5/12/91
  * 
- *	$Id: pmap.h,v 1.1 1993/09/09 23:53:45 phil Exp $
+ *	$Id: pmap.h,v 1.1.1.1 1993/09/09 23:53:46 phil Exp $
  */
 
 /*

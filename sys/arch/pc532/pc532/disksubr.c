@@ -32,7 +32,7 @@
  *
  *	from: @(#)ufs_disksubr.c	7.16 (Berkeley) 5/4/91
  *	
- *	$Id: disksubr.c,v 1.1 1993/09/09 23:53:48 phil Exp $
+ *	$Id: disksubr.c,v 1.1.1.1 1993/09/09 23:53:49 phil Exp $
  */
 
 #include "param.h"

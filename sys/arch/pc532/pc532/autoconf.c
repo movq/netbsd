@@ -35,7 +35,7 @@
  *
  *	@(#)autoconf.c	7.1 (Berkeley) 5/9/91
  *
- *	$Id: autoconf.c,v 1.1 1993/09/09 23:53:46 phil Exp $
+ *	$Id: autoconf.c,v 1.1.1.1 1993/09/09 23:53:47 phil Exp $
  */
 
 /*

@@ -31,7 +31,7 @@
  *
  *	icode.c
  *
- *	$Id: icode.c,v 1.1 1993/09/09 23:53:47 phil Exp $
+ *	$Id: icode.c,v 1.1.1.1 1993/09/09 23:53:48 phil Exp $
  */
 /*
  * This is the "user" code for process 1 that execs /sbin/init.

@@ -33,7 +33,7 @@
  * adapted to pc532 Mach by Tero Kivinen and Tatu Ylonen at Helsinki 
  * University of Technology.
  *
- *	$Id: db_disasm.c,v 1.1 1993/09/09 23:53:47 phil Exp $
+ *	$Id: db_disasm.c,v 1.1.1.1 1993/09/09 23:53:48 phil Exp $
  */
 
 /*

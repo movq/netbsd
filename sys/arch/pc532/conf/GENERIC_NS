@@ -1,7 +1,7 @@
 #
 # GENERIC_NS -- Generic 532 machine -- distribution
 #
-#	$Id: GENERIC_NS,v 1.1 1993/09/09 23:53:44 phil Exp $
+#	$Id: GENERIC_NS,v 1.1.1.1 1993/09/09 23:53:45 phil Exp $
 #
 machine		"pc532"
 cpu		"ns532"
