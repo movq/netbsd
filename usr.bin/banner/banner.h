@@ -1,4 +1,4 @@
-/*	$NetBSD: banner.h,v 1.1 1995/04/09 05:53:05 cgd Exp $ */
+/*	$NetBSD: banner.h,v 1.1.1.1 1995/04/09 05:53:05 cgd Exp $ */
 /*
  *	Various defines needed for code lifted from lpd.
  *	

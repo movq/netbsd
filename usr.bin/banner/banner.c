@@ -1,4 +1,4 @@
-/*	$NetBSD: banner.c,v 1.1 1995/04/09 05:53:05 cgd Exp $ */
+/*	$NetBSD: banner.c,v 1.1.1.1 1995/04/09 05:53:05 cgd Exp $ */
 /*
  *	Changes for banner(1)
  *
@@ -60,7 +60,7 @@ static char sccsid[] = "@(#)printjob.c	8.2 (Berkeley) 4/16/94";
 #endif /* not lint */
 
 #ifndef lint
-static char rcsid[] = "$NetBSD: banner.c,v 1.1 1995/04/09 05:53:05 cgd Exp $";
+static char rcsid[] = "$NetBSD: banner.c,v 1.1.1.1 1995/04/09 05:53:05 cgd Exp $";
 #endif
 #include <stdio.h>
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: chset.c,v 1.1 1995/04/09 05:53:05 cgd Exp $ */
+/*	$NetBSD: chset.c,v 1.1.1.1 1995/04/09 05:53:05 cgd Exp $ */
 /*
  *	Changes for banner(1)
  *      @(#)Copyright (c) 1995, Simon J. Gerraty.
@@ -52,7 +52,7 @@
 static char sccsid[] = "@(#)lpdchar.c	8.1 (Berkeley) 6/6/93";
 #endif /* not lint */
 #ifndef lint
-static char rcsid[] = "$NetBSD: chset.c,v 1.1 1995/04/09 05:53:05 cgd Exp $";
+static char rcsid[] = "$NetBSD: chset.c,v 1.1.1.1 1995/04/09 05:53:05 cgd Exp $";
 #endif
 
 #include "banner.h"
