@@ -1,4 +1,4 @@
-.\"	$NetBSD: hpc.4,v 1.3 2003/12/15 06:28:01 lonewolf Exp $
+.\"	$NetBSD: hpc.4,v 1.4 2004/02/08 13:25:39 sekiya Exp $
 .\"
 .\" Copyright (c) 2002 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -34,7 +34,7 @@
 .\" ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 .\" POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd December 15, 2003
+.Dd January 24, 2004
 .Dt HPC 4 sgimips
 .Os
 .Sh NAME
@@ -48,11 +48,13 @@ interfaces the peripherals connected to it to the
 .Xr gio 4
 bus.
 .Nm
-is found for example on the Indy and Indigo2 machines.
+is found on the Personal Iris 4D/3x, Indigo, Indy and Indigo2 machines.
 .Sh HARDWARE
 .Bl -tag -width dsclock -offset indent
 .It dsclock
 DS1286-based RTC
+.It dpclock
+DP8573A-based RTC
 .It haltwo
 HAL2 audio controller
 .It sq
@@ -68,7 +70,8 @@ Zilog Z8530 UART
 .El
 .Sh SEE ALSO
 .Xr gio 4 ,
-.Xr imc 4
+.Xr imc 4 ,
+.Xr pic 4
 .Sh HISTORY
 The
 .Nm
