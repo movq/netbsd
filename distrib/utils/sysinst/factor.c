@@ -1,4 +1,4 @@
-/*	$NetBSD: factor.c,v 1.1 1997/09/26 23:02:55 phil Exp $ */
+/*	$NetBSD: factor.c,v 1.1.1.1 1997/09/26 23:02:55 phil Exp $ */
 
 /*
  * Copyright (c) 1989, 1993
@@ -42,7 +42,7 @@
 #if 0
 static char sccsid[] = "@(#)pr_tbl.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: factor.c,v 1.1 1997/09/26 23:02:55 phil Exp $");
+__RCSID("$NetBSD: factor.c,v 1.1.1.1 1997/09/26 23:02:55 phil Exp $");
 #endif
 #endif /* not lint */
 
