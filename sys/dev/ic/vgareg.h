@@ -1,4 +1,4 @@
-/* $NetBSD: vgareg.h,v 1.1 1998/03/22 15:11:49 drochner Exp $ */
+/* $NetBSD: vgareg.h,v 1.2 1998/05/28 16:48:41 drochner Exp $ */
 
 /*
  * Copyright (c) 1998
@@ -54,15 +54,3 @@ struct reg_vgagdc { /* indexed via port 0x3ce */
 };
 #define VGA_GDC_INDEX 0xe
 #define VGA_GDC_DATA 0xf
-
-struct reg_6845 { /* indexed via port 0x3d4 (mono 0x3b4) */
-	char htotal, hdisple, hblanks, hblanke;
-	char hsyncs, hsynce, vtotal, overfll;
-	char irowaddr, maxrow, curstart, curend;
-	char startadrh, startadrl, cursorh, cursorl;
-	char vsyncs, vsynce, vde, offset;
-	char uloc, vbstart, vbend, mode;
-	char splitl;
-};
-#define VGA_6845_INDEX 4
-#define VGA_6845_DATA 5
