@@ -34,7 +34,7 @@
 
 #ifdef HAVE_CONFIG_H
 #include <config.h>
-RCSID("$Id: environment.c,v 1.1 2000/08/02 19:59:46 assar Exp $");
+RCSID("$Id: environment.c,v 1.1.1.1 2000/08/02 19:59:46 assar Exp $");
 #endif
 
 #include <stdio.h>

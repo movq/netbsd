@@ -33,7 +33,7 @@
 
 #include "hprop.h"
 
-RCSID("$Id: v4_dump.c,v 1.1 2000/08/02 19:58:56 assar Exp $");
+RCSID("$Id: v4_dump.c,v 1.1.1.1 2000/08/02 19:58:56 assar Exp $");
 
 #ifdef KRB4
 static time_t

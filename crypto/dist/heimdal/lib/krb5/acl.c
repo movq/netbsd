@@ -34,7 +34,7 @@
 #include "krb5_locl.h"
 #include <fnmatch.h>
 
-RCSID("$Id: acl.c,v 1.1 2000/08/02 19:59:23 assar Exp $");
+RCSID("$Id: acl.c,v 1.1.1.1 2000/08/02 19:59:23 assar Exp $");
 
 struct acl_field {
     enum { acl_string, acl_fnmatch, acl_retval } type;

@@ -33,7 +33,7 @@
 
 #include "kadm5_locl.h"
 
-RCSID("$Id: keys.c,v 1.1 2000/08/02 19:59:19 assar Exp $");
+RCSID("$Id: keys.c,v 1.1.1.1 2000/08/02 19:59:19 assar Exp $");
 
 /*
  * free all the memory used by (len, keys)

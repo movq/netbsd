@@ -1,4 +1,4 @@
-dnl $Id: db.m4,v 1.1 2000/08/02 20:00:28 assar Exp $
+dnl $Id: db.m4,v 1.1.1.1 2000/08/02 20:00:28 assar Exp $
 dnl
 dnl tests for various db libraries
 dnl

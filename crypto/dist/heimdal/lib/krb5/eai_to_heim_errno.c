@@ -33,7 +33,7 @@
 
 #include <krb5_locl.h>
 
-RCSID("$Id: eai_to_heim_errno.c,v 1.1 2000/08/02 19:59:26 assar Exp $");
+RCSID("$Id: eai_to_heim_errno.c,v 1.1.1.1 2000/08/02 19:59:26 assar Exp $");
 
 krb5_error_code
 krb5_eai_to_heim_errno(int eai_errno)

@@ -1,4 +1,4 @@
-# $Id: Makefile.am,v 1.1 2000/08/02 19:59:22 assar Exp $
+# $Id: Makefile.am,v 1.1.1.1 2000/08/02 19:59:22 assar Exp $
 
 include $(top_srcdir)/Makefile.am.common
 

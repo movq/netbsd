@@ -33,7 +33,7 @@
 
 #include "kuser_locl.h"
 
-RCSID("$Id: generate-requests.c,v 1.1 2000/08/02 19:58:58 assar Exp $");
+RCSID("$Id: generate-requests.c,v 1.1.1.1 2000/08/02 19:58:58 assar Exp $");
 
 static krb5_error_code
 null_key_proc (krb5_context context,
