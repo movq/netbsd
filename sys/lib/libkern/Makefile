@@ -1,7 +1,10 @@
-#	$NetBSD: Makefile,v 1.36 1997/05/31 21:22:11 cjs Exp $
+#	$NetBSD: Makefile,v 1.35 1997/05/30 01:55:10 cjs Exp $
 
 LIB=	kern
 NOPIC=
+
+# this library is needed only during build
+NOINSTALL=1
 
 M=	${.CURDIR}/arch/${MACHINE_ARCH}
 
@@ -28,9 +31,6 @@ CLEANFILES+= lib${LIB}.o lib${LIB}.po
 # mcount cannot be compiled with profiling
 mcount.po: mcount.o
 	cp mcount.o mcount.po
-
-# only needed during build
-libinstall::
 
 .include <bsd.lib.mk>
 

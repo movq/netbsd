@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.71 1997/05/31 21:21:16 cjs Exp $
+#	$NetBSD: Makefile,v 1.70 1997/05/26 03:55:43 cjs Exp $
 #	from: @(#)Makefile	8.7 (Berkeley) 5/25/95
 
 TZDIR=		/usr/share/zoneinfo
@@ -8,9 +8,7 @@ LOCALTIME=	US/Pacific
 # an objdir would break the installation stuff below
 NOOBJ=	oobj
 
-.if exists(etc.${MACHINE}/Makefile.inc)
-.include "etc.${MACHINE}/Makefile.inc"
-.endif
+.include <bsd.own.mk>	# for BUILDDIR and configs
 
 # -rw-r--r--
 BINOWN= root
