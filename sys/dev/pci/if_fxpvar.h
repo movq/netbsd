@@ -1,5 +1,3 @@
-/*	$NetBSD: if_fxpvar.h,v 1.1 1997/06/05 02:01:58 thorpej Exp $	*/
-
 /*                  
  * Copyright (c) 1995, David Greenman
  * All rights reserved.
@@ -29,7 +27,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *      Id: if_fxp.c,v 1.34 1997/04/23 01:44:30 davidg Exp
+ *	Id: if_fxpvar.h,v 1.3 1997/09/29 11:27:43 davidg Exp
  */
 
 /*
@@ -46,19 +44,25 @@ struct fxp_softc {
 	struct ethercom sc_ethercom;	/* ethernet common part */
 #else
 	struct arpcom arpcom;		/* per-interface network data */
-	struct caddr_t csr;		/* control/status registers */
+	caddr_t csr;			/* control/status registers */
 #endif /* __NetBSD__ */
+	struct ifmedia sc_media;	/* media information */
 	struct fxp_cb_tx *cbl_base;	/* base of TxCB list */
 	struct fxp_cb_tx *cbl_first;	/* first active TxCB in list */
 	struct fxp_cb_tx *cbl_last;	/* last active TxCB in list */
 	struct mbuf *rfa_headm;		/* first mbuf in receive frame area */
 	struct mbuf *rfa_tailm;		/* last mbuf in receive frame area */
 	struct fxp_stats *fxp_stats;	/* Pointer to interface stats */
+	struct callout_handle stat_ch;	/* Handle for canceling our stat timeout */
 	int tx_queued;			/* # of active TxCB's */
 	int promisc_mode;		/* promiscuous mode enabled */
 	int phy_primary_addr;		/* address of primary PHY */
 	int phy_primary_device;		/* device type of primary PHY */
 	int phy_10Mbps_only;		/* PHY is 10Mbps-only device */
+	int rx_idle_secs;		/* # of seconds RX has been idle */
+	int need_mcsetup;		/* multicast filter needs programming */
+	int all_mcasts;			/* receive all multicasts */
+	struct fxp_cb_mcs *mcsp;	/* Pointer to mcast setup descriptor */
 };
 
 /* Macros to ease CSR access. */
