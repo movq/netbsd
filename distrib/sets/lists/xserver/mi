@@ -1,9 +1,0 @@
-# $NetBSD: mi,v 1.13 2004/01/30 08:44:11 lukem Exp $
-./etc/mtree/set.xserver				xserver-sys-root
-./usr/X11R6/bin/Xprt
-./usr/X11R6/bin/xvidtune
-./usr/X11R6/lib/X11/app-defaults/Xvidtune
-./usr/X11R6/man/cat1/Xserver.0			-unknown-		.cat
-./usr/X11R6/man/cat1/xvidtune.0			-unknown-		.cat
-./usr/X11R6/man/man1/Xserver.1			-unknown-		.man
-./usr/X11R6/man/man1/xvidtune.1			-unknown-		.man

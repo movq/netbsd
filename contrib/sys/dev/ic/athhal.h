@@ -1,6 +1,5 @@
-/*	$NetBSD$	*/
 /*-
- * Copyright (c) 2002-2004 Sam Leffler, Errno Consulting, Atheros
+ * Copyright (c) 2002, 2003 Sam Leffler, Errno Consulting, Atheros
  * Communications, Inc.  All rights reserved.
  *
  * Redistribution and use in source and binary forms are permitted
@@ -34,7 +33,7 @@
  * OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGES.
  *
- * $Id: ah.h,v 1.1.1.5 2004/01/12 20:29:53 samleffler Exp $
+ * $Id: ah.h,v 1.35 2003/07/21 02:36:53 sam Exp $
  */
 
 #ifndef _ATH_AH_H_
@@ -47,12 +46,7 @@
  * follow must call back into the HAL through interface, supplying the
  * reference as the first parameter.
  */
-#ifdef __FreeBSD__
 #include "ah_osdep.h"
-#endif
-#ifdef __NetBSD__
-#include <../contrib/sys/dev/ic/athhal_osdep.h>
-#endif
 
 /*
  * Status codes that may be returned by the HAL.  Note that
@@ -60,47 +54,23 @@
  * error occurs--i.e. you cannot check it for success.
  */
 typedef enum {
-	HAL_OK		= 0,	/* No error */
-	HAL_ENXIO	= 1,	/* No hardware present */
-	HAL_ENOMEM	= 2,	/* Memory allocation failed */
-	HAL_EIO		= 3,	/* Hardware didn't respond as expected */
-	HAL_EEMAGIC	= 4,	/* EEPROM magic number invalid */
-	HAL_EEVERSION	= 5,	/* EEPROM version invalid */
-	HAL_EELOCKED	= 6,	/* EEPROM unreadable */
-	HAL_EEBADSUM	= 7,	/* EEPROM checksum invalid */
-	HAL_EEREAD	= 8,	/* EEPROM read problem */
-	HAL_EEBADMAC	= 9,	/* EEPROM mac address invalid */
-	HAL_EESIZE	= 10,	/* EEPROM size not supported */
-	HAL_EEWRITE	= 11,	/* Attempt to change write-locked EEPROM */
-	HAL_EINVAL	= 12,	/* Invalid parameter to function */
-	HAL_ENOTSUPP	= 13,	/* Hardware revision not supported */
-	HAL_ESELFTEST	= 14,	/* Hardware self-test failed */
-	HAL_EINPROGRESS	= 15,	/* Operation incomplete */
+	HAL_OK = 0,		/* No error */
+	HAL_ENXIO,		/* No hardware present */
+	HAL_ENOMEM,		/* Memory allocation failed */
+	HAL_EIO,		/* Hardware didn't respond as expected */
+	HAL_EEMAGIC,		/* EEPROM magic number invalid */
+	HAL_EEVERSION,		/* EEPROM version invalid */
+	HAL_EELOCKED,		/* EEPROM unreadable */
+	HAL_EEBADSUM,		/* EEPROM checksum invalid */
+	HAL_EEREAD,		/* EEPROM read problem */
+	HAL_EEBADMAC,		/* EEPROM mac address invalid */
+	HAL_EESIZE,		/* EEPROM size not supported */
+	HAL_EEWRITE,		/* Attempt to change write-locked EEPROM */
+	HAL_EINVAL,		/* Invalid parameter to function */
+	HAL_ENOTSUPP,		/* Hardware revision not supported */
+	HAL_ESELFTEST,		/* Hardware self-test failed */
+	HAL_EINPROGRESS,	/* Operation incomplete */
 } HAL_STATUS;
-
-#define HAL_STATUS_STRING(code, message) { code, message "(" #code ")" }
-#define HAL_STATUS_SENTINEL { 0, NULL }
-
-#define HAL_STATUS_STRINGS { \
-	HAL_STATUS_STRING(HAL_OK, "No error"), \
-	HAL_STATUS_STRING(HAL_ENXIO, "No hardware present"), \
-	HAL_STATUS_STRING(HAL_ENOMEM, "Memory allocation failed"), \
-	HAL_STATUS_STRING(HAL_EIO, "Hardware didn't respond as expected"), \
-	HAL_STATUS_STRING(HAL_EEMAGIC, "EEPROM magic number invalid"), \
-	HAL_STATUS_STRING(HAL_EEVERSION, "EEPROM version invalid"), \
-	HAL_STATUS_STRING(HAL_EELOCKED, "EEPROM unreadable"), \
-	HAL_STATUS_STRING(HAL_EEBADSUM, "EEPROM checksum invalid"), \
-	HAL_STATUS_STRING(HAL_EEREAD, "EEPROM read problem"), \
-	HAL_STATUS_STRING(HAL_EEBADMAC, "EEPROM mac address invalid"), \
-	HAL_STATUS_STRING(HAL_EESIZE, "EEPROM size not supported"), \
-	HAL_STATUS_STRING(HAL_EEWRITE, \
-	    "Attempt to change write-locked EEPROM"), \
-	HAL_STATUS_STRING(HAL_EINVAL, "Invalid parameter to function"), \
-	HAL_STATUS_STRING(HAL_ENOTSUPP, "Hardware revision not supported"), \
-	HAL_STATUS_STRING(HAL_ESELFTEST, "Hardware self-test failed"), \
-	HAL_STATUS_STRING(HAL_EINPROGRESS, "Operation incomplete"), \
-	HAL_STATUS_SENTINEL \
-}
 
 typedef enum {
 	AH_FALSE = 0,		/* NB: lots of code assumes false is zero */
@@ -129,10 +99,10 @@ typedef enum {
  */
 typedef enum {
 	HAL_TX_QUEUE_INACTIVE	= 0,		/* queue is inactive/unused */
-	HAL_TX_QUEUE_DATA	= 1,		/* data xmit q's */
-	HAL_TX_QUEUE_BEACON	= 2,		/* beacon xmit q */
-	HAL_TX_QUEUE_CAB	= 3,		/* "crap after beacon" xmit q */
-	HAL_TX_QUEUE_PSPOLL	= 4,		/* power-save poll xmit q */
+	HAL_TX_QUEUE_DATA,			/* data xmit q's */
+	HAL_TX_QUEUE_BEACON,			/* beacon xmit q */
+	HAL_TX_QUEUE_CAB,			/* "crap after beacon" xmit q */
+	HAL_TX_QUEUE_PSPOLL,			/* power-save poll xmit q */
 } HAL_TX_QUEUE;
 
 #define	HAL_NUM_TX_QUEUES	10		/* max possible # of queues */
@@ -219,9 +189,9 @@ typedef enum {
 } HAL_INT;
 
 typedef enum {
-	HAL_RFGAIN_INACTIVE		= 0,
-	HAL_RFGAIN_READ_REQUESTED	= 1,
-	HAL_RFGAIN_NEED_CHANGE		= 2
+	HAL_RFGAIN_INACTIVE,
+	HAL_RFGAIN_READ_REQUESTED,
+	HAL_RFGAIN_NEED_CHANGE
 } HAL_RFGAIN;
 
 /*
@@ -308,9 +278,9 @@ typedef struct {
 } HAL_RATE_SET;
 
 typedef enum {
-	HAL_ANT_VARIABLE = 0,			/* variable by programming */
-	HAL_ANT_FIXED_A	 = 1,			/* fixed to 11a frequencies */
-	HAL_ANT_FIXED_B	 = 2,			/* fixed to 11b frequencies */
+	HAL_ANT_VARIABLE,			/* variable by programming */
+	HAL_ANT_FIXED_A,			/* fixed to 11a frequencies */
+	HAL_ANT_FIXED_B,			/* fixed to 11b frequencies */
 } HAL_ANT_SETTING;
 
 typedef enum {
@@ -326,15 +296,10 @@ typedef struct {
 } HAL_KEYVAL;
 
 typedef enum {
-	HAL_CIPHER_WEP		= 0,
-	HAL_CIPHER_AES_CCM	= 1,
-	HAL_CIPHER_CKIP		= 2
+	HAL_CIPHER_WEP,
+	HAL_CIPHER_AES_CCM,
+	HAL_CIPHER_CKIP
 } HAL_CIPHER;
-
-enum {
-	HAL_SLOT_TIME_9	 = 9,
-	HAL_SLOT_TIME_20 = 20,
-};
 
 /*
  * Per-station beacon timer state.
@@ -360,26 +325,16 @@ struct ath_desc;
  * Clients of the HAL call ath_hal_attach to obtain a reference to an
  * ath_hal structure for use with the device.  Hardware-related operations
  * that follow must call back into the HAL through interface, supplying
- * the reference as the first parameter.  Note that before using the
- * reference returned by ath_hal_attach the caller should verify the
- * ABI version number.
+ * the reference as the first parameter.
  */
 struct ath_hal {
 	u_int32_t	ah_magic;	/* consistency check magic number */
-	u_int32_t	ah_abi;		/* HAL ABI version */
-#define	HAL_ABI_VERSION	0x04010701	/* YYMMDDnn */
 	u_int16_t	ah_devid;	/* PCI device ID */
 	u_int16_t	ah_subvendorid;	/* PCI subvendor ID */
 	HAL_SOFTC	ah_sc;		/* back pointer to driver/os state */
 	HAL_BUS_TAG	ah_st;		/* params for register r+w */
 	HAL_BUS_HANDLE	ah_sh;
 	HAL_CTRY_CODE	ah_countryCode;
-
-	u_int32_t	ah_macVersion;	/* MAC version id */
-	u_int16_t	ah_macRev;	/* MAC revision */
-	u_int16_t	ah_phyRev;	/* PHY revision */
-	u_int16_t	ah_analog5GhzRev;/* 2GHz radio revision */
-	u_int16_t	ah_analog2GhzRev;/* 5GHz radio revision */
 
 	const HAL_RATE_TABLE *(*ah_getRateTable)(struct ath_hal *, u_int mode);
 	void		(*ah_detach)(struct ath_hal*);
@@ -388,7 +343,7 @@ struct ath_hal {
 	HAL_BOOL	(*ah_reset)(struct ath_hal *, HAL_OPMODE,
 				HAL_CHANNEL *, HAL_BOOL bChannelChange,
 				HAL_STATUS *status);
-	void		(*ah_setPCUConfig)(struct ath_hal *);
+	HAL_BOOL	(*ah_setPCUConfig)(struct ath_hal *, HAL_OPMODE);
 	HAL_BOOL	(*ah_perCalibration)(struct ath_hal*, HAL_CHANNEL *);
 
 	/* Transmit functions */
@@ -409,6 +364,7 @@ struct ath_hal {
 				u_int keyIx, u_int antMode, u_int flags,
 				u_int rtsctsRate, u_int rtsctsDuration);
 	HAL_BOOL	(*ah_setupXTxDesc)(struct ath_hal *, struct ath_desc *,
+				HAL_BOOL shortPreamble,
 				u_int txRate1, u_int txTries1,
 				u_int txRate2, u_int txTries2,
 				u_int txRate3, u_int txTries3);
@@ -435,32 +391,30 @@ struct ath_hal {
 	void		(*ah_setRxFilter)(struct ath_hal*, u_int32_t);
 	HAL_BOOL	(*ah_setupRxDesc)(struct ath_hal *, struct ath_desc *,
 				u_int32_t size, u_int flags);
-	HAL_STATUS	(*ah_procRxDesc)(struct ath_hal *, struct ath_desc *,
-				u_int32_t phyAddr, struct ath_desc *next);
+	HAL_STATUS	(*ah_procRxDesc)(struct ath_hal *, struct ath_desc *);
 	void		(*ah_rxMonitor)(struct ath_hal *);
 
 	/* Misc Functions */
 	void		(*ah_dumpState)(struct ath_hal *);
-	HAL_BOOL	(*ah_getDiagState)(struct ath_hal *,
-				int, void **, u_int *);
+	void		(*ah_dumpEeprom)(struct ath_hal *);
+	void		(*ah_dumpRfGain)(struct ath_hal *);
+	void		(*ah_dumpAni)(struct ath_hal *);
 	void		(*ah_getMacAddress)(struct ath_hal *, u_int8_t *);
-	HAL_BOOL	(*ah_setMacAddress)(struct ath_hal *, const u_int8_t *);
 	HAL_BOOL	(*ah_setRegulatoryDomain)(struct ath_hal*,
 				u_int16_t, HAL_STATUS *);
 	void		(*ah_setLedState)(struct ath_hal*, HAL_LED_STATE);
 	void		(*ah_writeAssocid)(struct ath_hal*,
 				const u_int8_t *bssid, u_int16_t assocId,
 				u_int16_t timOffset);
-	HAL_BOOL	(*ah_gpioCfgOutput)(struct ath_hal *, u_int32_t gpio);
-	HAL_BOOL	(*ah_gpioCfgInput)(struct ath_hal *, u_int32_t gpio);
-	u_int32_t	(*ah_gpioGet)(struct ath_hal *, u_int32_t gpio);
-	HAL_BOOL	(*ah_gpioSet)(struct ath_hal *,
-				u_int32_t gpio, u_int32_t val);
+	u_int32_t	(*ah_gpioGet)(struct ath_hal*, u_int32_t gpio);
 	void		(*ah_gpioSetIntr)(struct ath_hal*, u_int, u_int32_t);
 	u_int32_t	(*ah_getTsf32)(struct ath_hal*);
 	u_int64_t	(*ah_getTsf64)(struct ath_hal*);
 	void		(*ah_resetTsf)(struct ath_hal*);
 	u_int16_t	(*ah_getRegDomain)(struct ath_hal*);
+	u_int		(*ah_getWirelessModes)(struct ath_hal*);
+	HAL_BOOL	(*ah_getRfKill)(struct ath_hal*);
+	u_int32_t	(*ah_getRandomSeed)(struct ath_hal*);
 	HAL_BOOL	(*ah_detectCardPresent)(struct ath_hal*);
 	void		(*ah_updateMibCounters)(struct ath_hal*, HAL_MIB_STATS*);
 	HAL_BOOL	(*ah_isHwCipherSupported)(struct ath_hal*, HAL_CIPHER);
@@ -470,17 +424,15 @@ struct ath_hal {
 	u_int32_t	(*ah_getDefAntenna)(struct ath_hal*);
 	void		(*ah_setDefAntenna)(struct ath_hal*, u_int32_t antenna);
 #endif
-	HAL_BOOL	(*ah_setSlotTime)(struct ath_hal*, u_int);
 
 	/* Key Cache Functions */
 	u_int32_t	(*ah_getKeyCacheSize)(struct ath_hal*);
 	HAL_BOOL	(*ah_resetKeyCacheEntry)(struct ath_hal*, u_int16_t);
 	HAL_BOOL	(*ah_isKeyCacheEntryValid)(struct ath_hal *, u_int16_t);
 	HAL_BOOL	(*ah_setKeyCacheEntry)(struct ath_hal*,
-				u_int16_t, const HAL_KEYVAL *,
-				const u_int8_t *, int);
+				u_int16_t, const HAL_KEYVAL *, u_int8_t *, int);
 	HAL_BOOL	(*ah_setKeyCacheEntryMac)(struct ath_hal*,
-				u_int16_t, const u_int8_t *);
+				u_int16_t, u_int8_t *);
 
 	/* Power Management Functions */
 	HAL_BOOL	(*ah_setPowerMode)(struct ath_hal*,
@@ -494,7 +446,7 @@ struct ath_hal {
 	HAL_BOOL	(*ah_disablePSPoll)(struct ath_hal *);
 
 	/* Beacon Management Functions */
-	void		(*ah_beaconInit)(struct ath_hal *,
+	void		(*ah_beaconInit)(struct ath_hal *, HAL_OPMODE,
 				u_int32_t, u_int32_t);
 	void		(*ah_setStationBeaconTimers)(struct ath_hal*,
 				const HAL_BEACON_STATE *, u_int32_t tsf,
@@ -546,8 +498,7 @@ extern	struct ath_hal *ath_hal_attach(u_int16_t devid, HAL_SOFTC,
  */
 extern	HAL_BOOL ath_hal_init_channels(struct ath_hal *,
 		HAL_CHANNEL *chans, u_int maxchans, u_int *nchans,
-		HAL_CTRY_CODE cc, u_int16_t modeSelect,
-		HAL_BOOL enableOutdoor, HAL_BOOL enableExtendedChannels);
+		HAL_CTRY_CODE cc, u_int16_t modeSelect, int enableOutdoor);
 
 /*
  * Return bit mask of wireless modes supported by the hardware.
@@ -573,9 +524,4 @@ extern u_int16_t ath_hal_computetxtime(struct ath_hal *,
  */
 extern	u_int ath_hal_mhz2ieee(u_int mhz, u_int flags);
 extern	u_int ath_hal_ieee2mhz(u_int ieee, u_int flags);
-
-/*
- * Return a version string for the HAL release.
- */
-extern	char ath_hal_version[];
 #endif /* _ATH_AH_H_ */
