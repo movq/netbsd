@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.inc,v 1.1 1997/12/24 02:33:05 jeremy Exp $
+#	$NetBSD: Makefile.inc,v 1.1.1.1 1997/12/24 02:33:05 jeremy Exp $
 #
 #	etc.sun3x/Makefile.inc -- sun3x-specific etc Makefile targets
 #
