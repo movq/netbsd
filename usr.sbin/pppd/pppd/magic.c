@@ -17,71 +17,50 @@
  * WARRANTIES OF MERCHANTIBILITY AND FITNESS FOR A PARTICULAR PURPOSE.
  */
 
-#ifndef lint
-static char rcsid[] = "$Id: magic.c,v 1.4 1996/03/15 03:03:54 paulus Exp $";
-#endif
-
 #include <stdio.h>
-#include <unistd.h>
 #include <sys/types.h>
 #include <sys/time.h>
 
-#include "pppd.h"
 #include "magic.h"
 
-extern long mrand48 __P((void));
-extern void srand48 __P((long));
+
+static u_long next;		/* Next value to return */
+
+extern u_long gethostid __ARGS((void));
+extern long random __ARGS((void));
+extern void srandom __ARGS((int));
+
 
 /*
  * magic_init - Initialize the magic number generator.
  *
+ * Computes first magic number and seed for random number generator.
  * Attempts to compute a random number seed which will not repeat.
- * The current method uses the current hostid, current process ID
- * and current time, currently.
+ * The current method uses the current hostid and current time.
  */
-void
-magic_init()
+void magic_init()
 {
-    long seed;
-    struct timeval t;
+    struct timeval tv;
 
-    gettimeofday(&t, NULL);
-    seed = gethostid() ^ t.tv_sec ^ t.tv_usec ^ getpid();
-    srand48(seed);
+    next = gethostid();
+    if (gettimeofday(&tv, NULL)) {
+	perror("gettimeofday");
+	exit(1);
+    }
+    next ^= (u_long) tv.tv_sec ^ (u_long) tv.tv_usec;
+
+    srandom((int) next);
 }
+
 
 /*
  * magic - Returns the next magic number.
  */
-u_int32_t
-magic()
+u_long magic()
 {
-    return (u_int32_t) mrand48();
+    u_long m;
+
+    m = next;
+    next = (u_long) random();
+    return (m);
 }
-
-#ifdef NO_DRAND48
-/*
- * Substitute procedures for those systems which don't have
- * drand48 et al.
- */
-
-double
-drand48()
-{
-    return (double)random() / (double)0x7fffffffL; /* 2**31-1 */
-}
-
-long
-mrand48()
-{
-    return random();
-}
-
-void
-srand48(seedval)
-long seedval;
-{
-    srandom((int)seedval);
-}
-
-#endif
