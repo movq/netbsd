@@ -1,4 +1,4 @@
-/*	$NetBSD: strtoimax.c,v 1.1 2003/01/26 00:43:15 wiz Exp $	*/
+/*	$NetBSD: strtoimax.c,v 1.1.1.1 2003/01/26 00:43:15 wiz Exp $	*/
 
 /* Convert string representation of a number into an intmax_t value.
 

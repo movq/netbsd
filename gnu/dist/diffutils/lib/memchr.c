@@ -1,4 +1,4 @@
-/*	$NetBSD: memchr.c,v 1.1 2003/01/26 00:43:14 wiz Exp $	*/
+/*	$NetBSD: memchr.c,v 1.1.1.1 2003/01/26 00:43:14 wiz Exp $	*/
 
 /* Copyright (C) 1991,93,96,97,99,2000 Free Software Foundation, Inc.
    Based on strlen implementation by Torbjorn Granlund (tege@sics.se),

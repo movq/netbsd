@@ -1,4 +1,4 @@
-/*	$NetBSD: sdiff.c,v 1.1 2003/01/26 00:43:17 wiz Exp $	*/
+/*	$NetBSD: sdiff.c,v 1.1.1.1 2003/01/26 00:43:17 wiz Exp $	*/
 
 /* sdiff - side-by-side merge of file differences
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: waitpid.c,v 1.1 2003/01/26 00:43:15 wiz Exp $	*/
+/*	$NetBSD: waitpid.c,v 1.1.1.1 2003/01/26 00:43:15 wiz Exp $	*/
 
 /* Emulate waitpid on systems that just have wait.
    Copyright (C) 1994, 1995, 1998, 1999 Free Software Foundation, Inc.

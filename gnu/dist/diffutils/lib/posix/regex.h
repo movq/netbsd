@@ -1,4 +1,4 @@
-/*	$NetBSD: regex.h,v 1.1 2003/01/26 00:43:16 wiz Exp $	*/
+/*	$NetBSD: regex.h,v 1.1.1.1 2003/01/26 00:43:16 wiz Exp $	*/
 
 /* Definitions for data structures and routines for the regular
    expression library, version 0.12.

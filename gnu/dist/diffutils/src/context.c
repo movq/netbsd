@@ -1,4 +1,4 @@
-/*	$NetBSD: context.c,v 1.1 2003/01/26 00:43:16 wiz Exp $	*/
+/*	$NetBSD: context.c,v 1.1.1.1 2003/01/26 00:43:16 wiz Exp $	*/
 
 /* Context-format output routines for GNU DIFF.
 

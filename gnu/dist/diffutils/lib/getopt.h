@@ -1,4 +1,4 @@
-/*	$NetBSD: getopt.h,v 1.1 2003/01/26 00:43:14 wiz Exp $	*/
+/*	$NetBSD: getopt.h,v 1.1.1.1 2003/01/26 00:43:14 wiz Exp $	*/
 
 /* Declarations for getopt.
    Copyright (C) 1989-1994, 1996-1999, 2001 Free Software Foundation, Inc.

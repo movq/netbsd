@@ -1,4 +1,4 @@
-/*	$NetBSD: error.h,v 1.1 2003/01/26 00:43:13 wiz Exp $	*/
+/*	$NetBSD: error.h,v 1.1.1.1 2003/01/26 00:43:13 wiz Exp $	*/
 
 /* Declaration for error-reporting function
    Copyright (C) 1995, 1996, 1997 Free Software Foundation, Inc.

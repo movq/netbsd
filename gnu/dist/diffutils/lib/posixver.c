@@ -1,4 +1,4 @@
-/*	$NetBSD: posixver.c,v 1.1 2003/01/26 00:43:15 wiz Exp $	*/
+/*	$NetBSD: posixver.c,v 1.1.1.1 2003/01/26 00:43:15 wiz Exp $	*/
 
 /* Which POSIX version to conform to, for utilities.
 

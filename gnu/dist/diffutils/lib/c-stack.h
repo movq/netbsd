@@ -1,4 +1,4 @@
-/*	$NetBSD: c-stack.h,v 1.1 2003/01/26 00:43:13 wiz Exp $	*/
+/*	$NetBSD: c-stack.h,v 1.1.1.1 2003/01/26 00:43:13 wiz Exp $	*/
 
 /* Stack overflow handling.
 

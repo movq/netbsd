@@ -1,4 +1,4 @@
-/*	$NetBSD: strtoul.c,v 1.1 2003/01/26 00:43:15 wiz Exp $	*/
+/*	$NetBSD: strtoul.c,v 1.1.1.1 2003/01/26 00:43:15 wiz Exp $	*/
 
 /* Copyright (C) 1991, 1999, 2001 Free Software Foundation, Inc.
 
