@@ -66,7 +66,7 @@
 
 #include <roken.h>
 
-RCSID("$Id: aklog.c,v 1.1 2000/06/16 18:46:14 thorpej Exp $");
+RCSID("$Id: aklog.c,v 1.1.1.1 2000/06/16 18:46:14 thorpej Exp $");
 
 static int debug = 0;
 

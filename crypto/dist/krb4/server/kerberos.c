@@ -9,7 +9,7 @@
 #include "config.h"
 #include "protos.h"
 
-RCSID("$Id: kerberos.c,v 1.1 2000/06/16 18:45:33 thorpej Exp $");
+RCSID("$Id: kerberos.c,v 1.1.1.1 2000/06/16 18:45:33 thorpej Exp $");
 
 #include <stdio.h>
 #include <stdlib.h>

@@ -36,7 +36,7 @@
  * Date: June 1996
  */
 
-/* $Id: KClient.h,v 1.1 2000/06/16 18:45:51 thorpej Exp $ */
+/* $Id: KClient.h,v 1.1.1.1 2000/06/16 18:45:51 thorpej Exp $ */
 
 #ifndef	KCLIENT_H
 #define	KCLIENT_H

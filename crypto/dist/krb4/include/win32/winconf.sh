@@ -1,6 +1,6 @@
 #!/bin/sh
 
-# $Id: winconf.sh,v 1.1 2000/06/16 18:46:07 thorpej Exp $
+# $Id: winconf.sh,v 1.1.1.1 2000/06/16 18:46:07 thorpej Exp $
 
 cat ../config.h.in | sed '
 s%#undef gid_t$%#define gid_t int%

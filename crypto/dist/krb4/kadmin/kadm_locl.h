@@ -31,7 +31,7 @@
  * SUCH DAMAGE.
  */
 
-/* $Id: kadm_locl.h,v 1.1 2000/06/16 18:46:06 thorpej Exp $ */
+/* $Id: kadm_locl.h,v 1.1.1.1 2000/06/16 18:46:06 thorpej Exp $ */
 
 #include "config.h"
 #include "protos.h"

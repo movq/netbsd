@@ -45,7 +45,7 @@
 #include <sys/capability.h>
 #endif
 
-RCSID("$Id: login.c,v 1.1 2000/06/16 18:46:16 thorpej Exp $");
+RCSID("$Id: login.c,v 1.1.1.1 2000/06/16 18:46:16 thorpej Exp $");
 
 #ifdef OTP
 #include <otp.h>

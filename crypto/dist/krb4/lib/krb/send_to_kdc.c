@@ -22,7 +22,7 @@ or implied warranty.
 #include "krb_locl.h"
 #include <base64.h>
 
-RCSID("$Id: send_to_kdc.c,v 1.1 2000/06/16 18:45:55 thorpej Exp $");
+RCSID("$Id: send_to_kdc.c,v 1.1.1.1 2000/06/16 18:45:55 thorpej Exp $");
 
 struct host {
     struct sockaddr_in addr;

@@ -32,7 +32,7 @@
  */
 
 /*
- * $Id: pw_check.h,v 1.1 2000/06/16 18:46:06 thorpej Exp $ 
+ * $Id: pw_check.h,v 1.1.1.1 2000/06/16 18:46:06 thorpej Exp $ 
  */
 
 int kadm_pw_check(char *pw, des_cblock *newkey, 

@@ -32,7 +32,7 @@
  */
 
 #include "ftp_locl.h"
-RCSID("$Id: ruserpass.c,v 1.1 2000/06/16 18:46:19 thorpej Exp $");
+RCSID("$Id: ruserpass.c,v 1.1.1.1 2000/06/16 18:46:19 thorpej Exp $");
 
 static	int token (void);
 static	FILE *cfile;

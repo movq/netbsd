@@ -32,7 +32,7 @@
 
 #include "ftpd_locl.h"
 
-RCSID("$Id: ls.c,v 1.1 2000/06/16 18:46:20 thorpej Exp $");
+RCSID("$Id: ls.c,v 1.1.1.1 2000/06/16 18:46:20 thorpej Exp $");
 
 struct fileinfo {
     struct stat st;

@@ -31,7 +31,7 @@
  * SUCH DAMAGE.
  */
 
-/* $Id: EncryptOption.cpp,v 1.1 2000/06/16 18:46:21 thorpej Exp $ */
+/* $Id: EncryptOption.cpp,v 1.1.1.1 2000/06/16 18:46:21 thorpej Exp $ */
 
 #include <Windows.h>
 #include "EncryptOption.h"

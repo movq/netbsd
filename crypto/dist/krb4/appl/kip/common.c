@@ -33,7 +33,7 @@
 
 #include "kip.h"
 
-RCSID("$Id: common.c,v 1.1 2000/06/16 18:46:21 thorpej Exp $");
+RCSID("$Id: common.c,v 1.1.1.1 2000/06/16 18:46:21 thorpej Exp $");
 
 /*
  * Copy packets from `tundev' to `netdev' or vice versa.

@@ -34,7 +34,7 @@
 #define PRINTOPTIONS
 #include "telnetd.h"
 
-RCSID("$Id: utility.c,v 1.1 2000/06/16 18:46:32 thorpej Exp $");
+RCSID("$Id: utility.c,v 1.1.1.1 2000/06/16 18:46:32 thorpej Exp $");
 
 /*
  * utility functions performing io related tasks

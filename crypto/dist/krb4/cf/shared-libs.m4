@@ -1,5 +1,5 @@
 dnl
-dnl $Id: shared-libs.m4,v 1.1 2000/06/16 18:46:11 thorpej Exp $
+dnl $Id: shared-libs.m4,v 1.1.1.1 2000/06/16 18:46:11 thorpej Exp $
 dnl
 dnl Shared library stuff has to be different everywhere
 dnl

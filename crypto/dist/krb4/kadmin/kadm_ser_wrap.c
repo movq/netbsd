@@ -30,7 +30,7 @@ unwraps wrapped packets and calls the appropriate server subroutine
 
 #include "kadm_locl.h"
 
-RCSID("$Id: kadm_ser_wrap.c,v 1.1 2000/06/16 18:46:06 thorpej Exp $");
+RCSID("$Id: kadm_ser_wrap.c,v 1.1.1.1 2000/06/16 18:46:06 thorpej Exp $");
 
 /* GLOBAL */
 Kadm_Server server_parm;

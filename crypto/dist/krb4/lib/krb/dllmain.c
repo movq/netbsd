@@ -40,7 +40,7 @@
 #include "ticket_memory.h"
 #include <Windows.h>
 
-RCSID("$Id: dllmain.c,v 1.1 2000/06/16 18:45:52 thorpej Exp $");
+RCSID("$Id: dllmain.c,v 1.1.1.1 2000/06/16 18:45:52 thorpej Exp $");
 
 void
 msg(char *text, int error)

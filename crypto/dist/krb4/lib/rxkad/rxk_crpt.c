@@ -33,7 +33,7 @@
 
 #include "rxkad_locl.h"
 
-RCSID("$Id: rxk_crpt.c,v 1.1 2000/06/16 18:45:50 thorpej Exp $");
+RCSID("$Id: rxk_crpt.c,v 1.1.1.1 2000/06/16 18:45:50 thorpej Exp $");
 
 /*
  * Unrolling of the inner loops helps the most on pentium chips

@@ -15,7 +15,7 @@
 
 #include "adm_locl.h"
 
-RCSID("$Id: kdb_util.c,v 1.1 2000/06/16 18:46:05 thorpej Exp $");
+RCSID("$Id: kdb_util.c,v 1.1.1.1 2000/06/16 18:46:05 thorpej Exp $");
 
 static des_cblock master_key, new_master_key;
 static des_key_schedule master_key_schedule, new_master_key_schedule;

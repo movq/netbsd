@@ -1,4 +1,4 @@
-dnl $Id: krb-struct-spwd.m4,v 1.1 2000/06/16 18:46:11 thorpej Exp $
+dnl $Id: krb-struct-spwd.m4,v 1.1.1.1 2000/06/16 18:46:11 thorpej Exp $
 dnl
 dnl Test for `struct spwd'
 

@@ -13,7 +13,7 @@
 
 #include "krb_locl.h"
 
-RCSID("$Id: lifetime.c,v 1.1 2000/06/16 18:45:54 thorpej Exp $");
+RCSID("$Id: lifetime.c,v 1.1.1.1 2000/06/16 18:45:54 thorpej Exp $");
 
 /* If you want to disable this feature */
 int krb_no_long_lifetimes = 0;

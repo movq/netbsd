@@ -1,4 +1,4 @@
-/* $Id: acconfig.h,v 1.1 2000/06/16 18:45:32 thorpej Exp $ */
+/* $Id: acconfig.h,v 1.1.1.1 2000/06/16 18:45:32 thorpej Exp $ */
 
 @BOTTOM@
 

@@ -33,7 +33,7 @@
 
 #ifdef HAVE_CONFIG_H
 #include <config.h>
-RCSID("$Id: hstrerror.c,v 1.1 2000/06/16 18:46:01 thorpej Exp $");
+RCSID("$Id: hstrerror.c,v 1.1.1.1 2000/06/16 18:46:01 thorpej Exp $");
 #endif
 
 #ifndef HAVE_HSTRERROR

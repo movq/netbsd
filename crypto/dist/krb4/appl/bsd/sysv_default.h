@@ -1,6 +1,6 @@
 /* Author: Wietse Venema <wietse@wzv.win.tue.nl> */
 
-/* $Id: sysv_default.h,v 1.1 2000/06/16 18:46:17 thorpej Exp $ */
+/* $Id: sysv_default.h,v 1.1.1.1 2000/06/16 18:46:17 thorpej Exp $ */
 
 extern char *default_console;
 extern char *default_altsh;

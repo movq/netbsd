@@ -32,7 +32,7 @@
  */
 
 #include "ftp_locl.h"
-RCSID ("$Id: ftp.c,v 1.1 2000/06/16 18:46:19 thorpej Exp $");
+RCSID ("$Id: ftp.c,v 1.1.1.1 2000/06/16 18:46:19 thorpej Exp $");
 
 struct sockaddr_storage hisctladdr_ss;
 struct sockaddr *hisctladdr = (struct sockaddr *)&hisctladdr_ss;

@@ -33,7 +33,7 @@
 
 #include "krb_locl.h"
 
-RCSID("$Id: encrypt_ktext.c,v 1.1 2000/06/16 18:45:52 thorpej Exp $");
+RCSID("$Id: encrypt_ktext.c,v 1.1.1.1 2000/06/16 18:45:52 thorpej Exp $");
 
 void
 encrypt_ktext(KTEXT cip, des_cblock *key, int encrypt)

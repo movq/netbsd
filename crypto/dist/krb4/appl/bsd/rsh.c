@@ -33,7 +33,7 @@
 
 #include "bsd_locl.h"
 
-RCSID("$Id: rsh.c,v 1.1 2000/06/16 18:46:16 thorpej Exp $");
+RCSID("$Id: rsh.c,v 1.1.1.1 2000/06/16 18:46:16 thorpej Exp $");
 
 CREDENTIALS cred;
 Key_schedule schedule;

@@ -33,7 +33,7 @@
 
 #include "krb_locl.h"
 
-RCSID("$Id: k_getport.c,v 1.1 2000/06/16 18:45:53 thorpej Exp $");
+RCSID("$Id: k_getport.c,v 1.1.1.1 2000/06/16 18:45:53 thorpej Exp $");
 
 int
 k_getportbyname (const char *service, const char *proto, int default_port)

@@ -33,7 +33,7 @@
 
 #include "rxkad_locl.h"
 
-RCSID("$Id: rxk_info.c,v 1.1 2000/06/16 18:45:50 thorpej Exp $");
+RCSID("$Id: rxk_info.c,v 1.1.1.1 2000/06/16 18:45:50 thorpej Exp $");
 
 int32
 rxkad_GetServerInfo(struct rx_connection *con,

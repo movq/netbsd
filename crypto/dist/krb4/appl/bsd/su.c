@@ -33,7 +33,7 @@
 
 #include "bsd_locl.h"
 
-RCSID ("$Id: su.c,v 1.1 2000/06/16 18:46:17 thorpej Exp $");
+RCSID ("$Id: su.c,v 1.1.1.1 2000/06/16 18:46:17 thorpej Exp $");
 
 #ifdef SYSV_SHADOW
 #include "sysv_shadow.h"

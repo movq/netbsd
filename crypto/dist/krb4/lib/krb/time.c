@@ -33,7 +33,7 @@
 
 #include "krb_locl.h"
 
-RCSID("$Id: time.c,v 1.1 2000/06/16 18:45:56 thorpej Exp $");
+RCSID("$Id: time.c,v 1.1.1.1 2000/06/16 18:45:56 thorpej Exp $");
 
 /* number of seconds the kdc clock is ahead of us */
 static int time_diff;

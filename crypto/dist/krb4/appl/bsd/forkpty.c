@@ -35,7 +35,7 @@
 
 #ifndef HAVE_FORKPTY
 
-RCSID("$Id: forkpty.c,v 1.1 2000/06/16 18:46:16 thorpej Exp $");
+RCSID("$Id: forkpty.c,v 1.1.1.1 2000/06/16 18:46:16 thorpej Exp $");
 
 /* Only CRAY is known to have problems with forkpty(). */
 #if defined(CRAY)

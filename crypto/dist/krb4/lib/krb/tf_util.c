@@ -21,7 +21,7 @@ or implied warranty.
         
 #include "krb_locl.h"
 
-RCSID("$Id: tf_util.c,v 1.1 2000/06/16 18:45:56 thorpej Exp $");
+RCSID("$Id: tf_util.c,v 1.1.1.1 2000/06/16 18:45:56 thorpej Exp $");
 
 
 #define TOO_BIG -1

@@ -47,7 +47,7 @@ or implied warranty.
 
 #include "krb_locl.h"
 
-RCSID("$Id: kntoln.c,v 1.1 2000/06/16 18:45:53 thorpej Exp $");
+RCSID("$Id: kntoln.c,v 1.1.1.1 2000/06/16 18:45:53 thorpej Exp $");
 
 int
 krb_kntoln(AUTH_DAT *ad, char *lname)

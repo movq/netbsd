@@ -22,7 +22,7 @@ or implied warranty.
 #include "config.h"
 #include "protos.h"
 
-RCSID("$Id: acl_files.c,v 1.1 2000/06/16 18:45:37 thorpej Exp $");
+RCSID("$Id: acl_files.c,v 1.1.1.1 2000/06/16 18:45:37 thorpej Exp $");
 
 #include <stdio.h>
 #include <stdlib.h>

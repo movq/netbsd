@@ -21,7 +21,7 @@ or implied warranty.
 
 #include "krb_locl.h"
 
-RCSID("$Id: getst.c,v 1.1 2000/06/16 18:45:53 thorpej Exp $");
+RCSID("$Id: getst.c,v 1.1.1.1 2000/06/16 18:45:53 thorpej Exp $");
 
 /*
  * getst() takes a file descriptor, a string and a count.  It reads

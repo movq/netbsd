@@ -1,4 +1,4 @@
-dnl $Id: krb-sys-aix.m4,v 1.1 2000/06/16 18:46:11 thorpej Exp $
+dnl $Id: krb-sys-aix.m4,v 1.1.1.1 2000/06/16 18:46:11 thorpej Exp $
 dnl
 dnl
 dnl AIX have a very different syscall convention

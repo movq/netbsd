@@ -35,7 +35,7 @@
 #endif
 #include "roken.h"
 
-RCSID("$Id: strpftime-test.c,v 1.1 2000/06/16 18:46:04 thorpej Exp $");
+RCSID("$Id: strpftime-test.c,v 1.1.1.1 2000/06/16 18:46:04 thorpej Exp $");
 
 enum { MAXSIZE = 26 };
 

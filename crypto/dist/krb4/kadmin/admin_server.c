@@ -30,7 +30,7 @@ or implied warranty.
 
 #include "kadm_locl.h"
 
-RCSID("$Id: admin_server.c,v 1.1 2000/06/16 18:46:06 thorpej Exp $");
+RCSID("$Id: admin_server.c,v 1.1.1.1 2000/06/16 18:46:06 thorpej Exp $");
 
 /* Almost all procs and such need this, so it is global */
 admin_params prm;		/* The command line parameters struct */

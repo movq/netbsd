@@ -8,7 +8,7 @@
  */
 #ifdef HAVE_CONFIG_H
 #include <config.h>
-RCSID("$Id: xnlock.c,v 1.1 2000/06/16 18:46:15 thorpej Exp $");
+RCSID("$Id: xnlock.c,v 1.1.1.1 2000/06/16 18:46:15 thorpej Exp $");
 #endif
 
 #include <stdio.h>

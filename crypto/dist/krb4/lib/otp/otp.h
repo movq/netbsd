@@ -31,7 +31,7 @@
  * SUCH DAMAGE.
  */
 
-/* $Id: otp.h,v 1.1 2000/06/16 18:45:57 thorpej Exp $ */
+/* $Id: otp.h,v 1.1.1.1 2000/06/16 18:45:57 thorpej Exp $ */
 
 #ifndef _OTP_H
 #define _OTP_H

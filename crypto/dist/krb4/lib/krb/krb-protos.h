@@ -31,7 +31,7 @@
  * SUCH DAMAGE. 
  */
 
-/* $Id: krb-protos.h,v 1.1 2000/06/16 18:45:53 thorpej Exp $ */
+/* $Id: krb-protos.h,v 1.1.1.1 2000/06/16 18:45:53 thorpej Exp $ */
 
 #ifndef __krb_protos_h__
 #define __krb_protos_h__

@@ -1,4 +1,4 @@
-dnl $Id: test-package.m4,v 1.1 2000/06/16 18:46:11 thorpej Exp $
+dnl $Id: test-package.m4,v 1.1.1.1 2000/06/16 18:46:11 thorpej Exp $
 dnl
 dnl AC_TEST_PACKAGE_NEW(package,headers,libraries,extra libs,default locations)
 

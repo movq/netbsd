@@ -31,7 +31,7 @@
  * SUCH DAMAGE.
  */
 
-/* $Id: bsd_locl.h,v 1.1 2000/06/16 18:46:16 thorpej Exp $ */
+/* $Id: bsd_locl.h,v 1.1.1.1 2000/06/16 18:46:16 thorpej Exp $ */
 
 #define LOGALL
 #define KERBEROS

@@ -1,6 +1,6 @@
 #include "krb_locl.h"
 
-RCSID("$Id: sizetest.c,v 1.1 2000/06/16 18:45:55 thorpej Exp $");
+RCSID("$Id: sizetest.c,v 1.1.1.1 2000/06/16 18:45:55 thorpej Exp $");
 
 static void
 fatal(const char *msg)

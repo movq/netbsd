@@ -1,4 +1,4 @@
-/*	$NetBSD: ftpcmd.y,v 1.1 2000/06/16 18:46:19 thorpej Exp $	*/
+/*	$NetBSD: ftpcmd.y,v 1.1.1.1 2000/06/16 18:46:19 thorpej Exp $	*/
 
 /*
  * Copyright (c) 1985, 1988, 1993, 1994
@@ -43,7 +43,7 @@
 %{
 
 #include "ftpd_locl.h"
-RCSID("$Id: ftpcmd.y,v 1.1 2000/06/16 18:46:19 thorpej Exp $");
+RCSID("$Id: ftpcmd.y,v 1.1.1.1 2000/06/16 18:46:19 thorpej Exp $");
 
 off_t	restart_point;
 

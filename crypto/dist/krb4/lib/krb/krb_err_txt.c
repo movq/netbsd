@@ -21,7 +21,7 @@ or implied warranty.
 
 #include "krb_locl.h"
 
-RCSID("$Id: krb_err_txt.c,v 1.1 2000/06/16 18:45:54 thorpej Exp $");
+RCSID("$Id: krb_err_txt.c,v 1.1.1.1 2000/06/16 18:45:54 thorpej Exp $");
 
 /*
  * This file contains an array of error text strings.

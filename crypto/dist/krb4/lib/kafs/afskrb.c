@@ -33,7 +33,7 @@
 
 #include "kafs_locl.h"
 
-RCSID("$Id: afskrb.c,v 1.1 2000/06/16 18:46:05 thorpej Exp $");
+RCSID("$Id: afskrb.c,v 1.1.1.1 2000/06/16 18:46:05 thorpej Exp $");
 
 struct krb_kafs_data {
     const char *realm;

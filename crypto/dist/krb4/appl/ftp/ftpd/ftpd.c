@@ -38,7 +38,7 @@
 #endif
 #include "getarg.h"
 
-RCSID("$Id: ftpd.c,v 1.1 2000/06/16 18:46:19 thorpej Exp $");
+RCSID("$Id: ftpd.c,v 1.1.1.1 2000/06/16 18:46:19 thorpej Exp $");
 
 static char version[] = "Version 6.00";
 

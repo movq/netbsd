@@ -33,7 +33,7 @@
 
 #include "krb_locl.h"
 
-RCSID("$Id: solaris_compat.c,v 1.1 2000/06/16 18:45:56 thorpej Exp $");
+RCSID("$Id: solaris_compat.c,v 1.1.1.1 2000/06/16 18:45:56 thorpej Exp $");
 
 #if (SunOS + 0) >= 50
 /*

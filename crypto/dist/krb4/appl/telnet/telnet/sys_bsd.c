@@ -33,7 +33,7 @@
 
 #include "telnet_locl.h"
 
-RCSID("$Id: sys_bsd.c,v 1.1 2000/06/16 18:46:32 thorpej Exp $");
+RCSID("$Id: sys_bsd.c,v 1.1.1.1 2000/06/16 18:46:32 thorpej Exp $");
 
 /*
  * The following routines try to encapsulate what is system dependent

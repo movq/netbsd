@@ -42,7 +42,7 @@
 
 #include "bsd_locl.h"
 
-RCSID("$Id: rshd.c,v 1.1 2000/06/16 18:46:16 thorpej Exp $");
+RCSID("$Id: rshd.c,v 1.1.1.1 2000/06/16 18:46:16 thorpej Exp $");
 
 extern char *__rcmd_errstr; /* syslog hook from libc/net/rcmd.c. */
 extern int __check_rhosts_file;

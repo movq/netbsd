@@ -30,7 +30,7 @@ or implied warranty.
 
 #include "kadm_locl.h"
 
-RCSID("$Id: kadm_funcs.c,v 1.1 2000/06/16 18:46:06 thorpej Exp $");
+RCSID("$Id: kadm_funcs.c,v 1.1.1.1 2000/06/16 18:46:06 thorpej Exp $");
 
 static int
 check_access(char *pname, char *pinst, char *prealm, enum acl_types acltype)

@@ -30,7 +30,7 @@ or implied warranty.
 
 #include "kadm_locl.h"
 
-RCSID("$Id: ksrvutil.c,v 1.1 2000/06/16 18:46:06 thorpej Exp $");
+RCSID("$Id: ksrvutil.c,v 1.1.1.1 2000/06/16 18:46:06 thorpej Exp $");
 
 #include "ksrvutil.h"
 

@@ -33,7 +33,7 @@
 
 #include "krb_locl.h"
 
-RCSID("$Id: rd_safe.c,v 1.1 2000/06/16 18:45:55 thorpej Exp $");
+RCSID("$Id: rd_safe.c,v 1.1.1.1 2000/06/16 18:45:55 thorpej Exp $");
 
 /* application include files */
 #include "krb-archaeology.h"

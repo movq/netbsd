@@ -31,7 +31,7 @@
  * SUCH DAMAGE.
  */
 
-/* $Id: kdb_locl.h,v 1.1 2000/06/16 18:45:51 thorpej Exp $ */
+/* $Id: kdb_locl.h,v 1.1.1.1 2000/06/16 18:45:51 thorpej Exp $ */
 
 #ifndef __kdb_locl_h
 #define __kdb_locl_h

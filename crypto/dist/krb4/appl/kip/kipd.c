@@ -33,7 +33,7 @@
 
 #include "kip.h"
 
-RCSID("$Id: kipd.c,v 1.1 2000/06/16 18:46:21 thorpej Exp $");
+RCSID("$Id: kipd.c,v 1.1.1.1 2000/06/16 18:46:21 thorpej Exp $");
 
 static int
 fatal (int fd, char *s)

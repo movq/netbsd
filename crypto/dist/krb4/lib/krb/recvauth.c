@@ -21,7 +21,7 @@ or implied warranty.
 
 #include "krb_locl.h"
 
-RCSID("$Id: recvauth.c,v 1.1 2000/06/16 18:45:55 thorpej Exp $");
+RCSID("$Id: recvauth.c,v 1.1.1.1 2000/06/16 18:45:55 thorpej Exp $");
 
 /*
  * krb_recvauth() reads (and optionally responds to) a message sent

@@ -33,7 +33,7 @@
 
 #include "krb_locl.h"
 
-RCSID("$Id: kuserok.c,v 1.1 2000/06/16 18:45:54 thorpej Exp $");
+RCSID("$Id: kuserok.c,v 1.1.1.1 2000/06/16 18:45:54 thorpej Exp $");
 
 #define OK 0
 #define NOTOK 1

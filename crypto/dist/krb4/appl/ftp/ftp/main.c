@@ -36,7 +36,7 @@
  */
 
 #include "ftp_locl.h"
-RCSID("$Id: main.c,v 1.1 2000/06/16 18:46:19 thorpej Exp $");
+RCSID("$Id: main.c,v 1.1.1.1 2000/06/16 18:46:19 thorpej Exp $");
 
 int
 main(int argc, char **argv)

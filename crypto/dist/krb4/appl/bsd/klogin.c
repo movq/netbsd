@@ -33,7 +33,7 @@
 
 #include "bsd_locl.h"
 
-RCSID("$Id: klogin.c,v 1.1 2000/06/16 18:46:16 thorpej Exp $");
+RCSID("$Id: klogin.c,v 1.1.1.1 2000/06/16 18:46:16 thorpej Exp $");
 
 #ifdef KERBEROS
 

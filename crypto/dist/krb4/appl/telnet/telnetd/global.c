@@ -36,7 +36,7 @@
 
 #include "telnetd.h"
 
-RCSID("$Id: global.c,v 1.1 2000/06/16 18:46:32 thorpej Exp $");
+RCSID("$Id: global.c,v 1.1.1.1 2000/06/16 18:46:32 thorpej Exp $");
 
 /*
  * Telnet server variable declarations

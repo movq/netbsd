@@ -10,7 +10,7 @@
  */
 
 #include "sample.h"
-RCSID("$Id: simple_client.c,v 1.1 2000/06/16 18:46:27 thorpej Exp $");
+RCSID("$Id: simple_client.c,v 1.1.1.1 2000/06/16 18:46:27 thorpej Exp $");
 
 #define MSG "hi, Jennifer!"		/* message text */
 

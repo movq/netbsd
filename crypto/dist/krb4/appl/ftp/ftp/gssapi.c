@@ -38,7 +38,7 @@
 #endif
 #include <gssapi.h>
 
-RCSID("$Id: gssapi.c,v 1.1 2000/06/16 18:46:19 thorpej Exp $");
+RCSID("$Id: gssapi.c,v 1.1.1.1 2000/06/16 18:46:19 thorpej Exp $");
 
 struct gss_data {
     gss_ctx_id_t context_hdl;

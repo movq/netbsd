@@ -1,5 +1,5 @@
 # Make prototypes from .c files
-# $Id: make-proto.pl,v 1.1 2000/06/16 18:46:11 thorpej Exp $
+# $Id: make-proto.pl,v 1.1.1.1 2000/06/16 18:46:11 thorpej Exp $
 
 ##use Getopt::Std;
 require 'getopts.pl';

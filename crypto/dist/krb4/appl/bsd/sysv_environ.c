@@ -2,7 +2,7 @@
 
 #include "bsd_locl.h"
 
-RCSID("$Id: sysv_environ.c,v 1.1 2000/06/16 18:46:17 thorpej Exp $");
+RCSID("$Id: sysv_environ.c,v 1.1.1.1 2000/06/16 18:46:17 thorpej Exp $");
 
 #ifdef HAVE_ULIMIT_H
 #include <ulimit.h>

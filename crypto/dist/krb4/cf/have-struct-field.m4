@@ -1,4 +1,4 @@
-dnl $Id: have-struct-field.m4,v 1.1 2000/06/16 18:46:10 thorpej Exp $
+dnl $Id: have-struct-field.m4,v 1.1.1.1 2000/06/16 18:46:10 thorpej Exp $
 dnl
 dnl check for fields in a structure
 dnl

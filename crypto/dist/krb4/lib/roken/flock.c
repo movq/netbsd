@@ -36,7 +36,7 @@
 #endif
 
 #ifndef HAVE_FLOCK
-RCSID("$Id: flock.c,v 1.1 2000/06/16 18:46:00 thorpej Exp $");
+RCSID("$Id: flock.c,v 1.1.1.1 2000/06/16 18:46:00 thorpej Exp $");
 
 #include "roken.h"
 

@@ -33,7 +33,7 @@
 
 #include "krb_locl.h"
 
-RCSID("$Id: str2key.c,v 1.1 2000/06/16 18:45:56 thorpej Exp $");
+RCSID("$Id: str2key.c,v 1.1.1.1 2000/06/16 18:45:56 thorpej Exp $");
 
 #define lowcase(c) (('A' <= (c) && (c) <= 'Z') ? ((c) - 'A' + 'a') : (c))
 

@@ -33,7 +33,7 @@
 
 #ifdef HAVE_CONFIG_H
 #include <config.h>
-RCSID("$Id: dllmain.c,v 1.1 2000/06/16 18:45:39 thorpej Exp $");
+RCSID("$Id: dllmain.c,v 1.1.1.1 2000/06/16 18:45:39 thorpej Exp $");
 #endif
 
 #include <Windows.h>

@@ -36,7 +36,7 @@
 #endif
 #include "roken.h"
 
-RCSID("$Id: strlcpy.c,v 1.1 2000/06/16 18:46:04 thorpej Exp $");
+RCSID("$Id: strlcpy.c,v 1.1.1.1 2000/06/16 18:46:04 thorpej Exp $");
 
 #ifndef HAVE_STRLCPY
 

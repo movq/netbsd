@@ -30,7 +30,7 @@
  * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE. */
 
-/* $Id: sia_locl.h,v 1.1 2000/06/16 18:45:48 thorpej Exp $ */
+/* $Id: sia_locl.h,v 1.1.1.1 2000/06/16 18:45:48 thorpej Exp $ */
 
 #ifndef __sia_locl_h__
 #define __sia_locl_h__

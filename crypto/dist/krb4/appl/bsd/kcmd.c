@@ -33,7 +33,7 @@
 
 #include "bsd_locl.h"
 
-RCSID("$Id: kcmd.c,v 1.1 2000/06/16 18:46:16 thorpej Exp $");
+RCSID("$Id: kcmd.c,v 1.1.1.1 2000/06/16 18:46:16 thorpej Exp $");
 
 #define	START_PORT	5120	 /* arbitrary */
 

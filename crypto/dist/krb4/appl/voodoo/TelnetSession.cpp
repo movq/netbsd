@@ -31,7 +31,7 @@
  * SUCH DAMAGE.
  */
 
-/* $Id: TelnetSession.cpp,v 1.1 2000/06/16 18:46:22 thorpej Exp $ */
+/* $Id: TelnetSession.cpp,v 1.1.1.1 2000/06/16 18:46:22 thorpej Exp $ */
 
 // TelnetSession.cpp
 // Author: Jörgen Karlsson - d93-jka@nada.kth.se

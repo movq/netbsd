@@ -33,7 +33,7 @@
  * SUCH DAMAGE.
  */
 
-/* @(#)$Id: rxkad.h,v 1.1 2000/06/16 18:45:50 thorpej Exp $ */
+/* @(#)$Id: rxkad.h,v 1.1.1.1 2000/06/16 18:45:50 thorpej Exp $ */
 
 #ifndef __RXKAD_H
 #define __RXKAD_H

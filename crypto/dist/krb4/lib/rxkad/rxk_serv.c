@@ -37,7 +37,7 @@
 #include <krb5.h>
 #endif
 
-RCSID("$Id: rxk_serv.c,v 1.1 2000/06/16 18:45:50 thorpej Exp $");
+RCSID("$Id: rxk_serv.c,v 1.1.1.1 2000/06/16 18:45:50 thorpej Exp $");
 
 static inline
 unsigned int

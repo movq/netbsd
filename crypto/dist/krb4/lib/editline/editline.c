@@ -25,7 +25,7 @@
 #include <ctype.h>
 #include <errno.h>
 
-RCSID("$Id: editline.c,v 1.1 2000/06/16 18:45:49 thorpej Exp $");
+RCSID("$Id: editline.c,v 1.1.1.1 2000/06/16 18:45:49 thorpej Exp $");
 
 /*
 **  Manifest constants.

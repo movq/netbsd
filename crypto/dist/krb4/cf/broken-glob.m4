@@ -1,4 +1,4 @@
-dnl $Id: broken-glob.m4,v 1.1 2000/06/16 18:46:09 thorpej Exp $
+dnl $Id: broken-glob.m4,v 1.1.1.1 2000/06/16 18:46:09 thorpej Exp $
 dnl
 dnl check for glob(3)
 dnl
