@@ -1,4 +1,4 @@
-#	$Id: Makefile,v 1.1 1994/12/01 04:26:46 phil Exp $
+#	$Id: Makefile,v 1.1.1.1 1994/12/01 04:26:47 phil Exp $
 
 PROG=	dc
 CFLAGS+=-D_POSIX_SOURCE -I${.CURDIR} -I${.CURDIR}/../bc
