@@ -1,4 +1,4 @@
-#	$Id: Makefile,v 1.1 1995/07/03 20:56:39 cgd Exp $
+#	$Id: Makefile,v 1.1.1.1 1995/07/03 20:56:39 cgd Exp $
 
 LIBS=	llib-lposix.ln llib-lstdc.ln
 
