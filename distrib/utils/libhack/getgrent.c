@@ -1,4 +1,4 @@
-/*	$NetBSD: getgrent.c,v 1.1 1995/10/08 23:08:48 gwr Exp $	*/
+/*	$NetBSD: getgrent.c,v 1.1.1.1 1995/10/08 23:08:48 gwr Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993

@@ -1,4 +1,4 @@
-/*	$NetBSD: yplib.c,v 1.1 1995/10/08 23:08:48 gwr Exp $	*/
+/*	$NetBSD: yplib.c,v 1.1.1.1 1995/10/08 23:08:48 gwr Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993 Theo de Raadt <deraadt@fsa.ca>
