@@ -1,4 +1,4 @@
-/*	$NetBSD: kexdhs.c,v 1.1 2003/04/03 05:57:22 itojun Exp $	*/
+/*	$NetBSD: kexdhs.c,v 1.1.1.1 2003/04/03 05:57:22 itojun Exp $	*/
 /*
  * Copyright (c) 2001 Markus Friedl.  All rights reserved.
  *
