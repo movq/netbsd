@@ -1,5 +1,3 @@
-/*	$NetBSD: pathnames.h,v 1.1 1996/02/02 15:30:21 mrg Exp $	*/
-
 /*
  * ++Copyright++ 1990
  * -
