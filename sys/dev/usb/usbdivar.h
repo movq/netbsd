@@ -1,4 +1,4 @@
-/*	$NetBSD: usbdivar.h,v 1.20 1999/05/16 13:51:05 augustss Exp $	*/
+/*	$NetBSD: usbdivar.h,v 1.17.2.1 1999/05/06 19:32:00 perry Exp $	*/
 
 /*
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -85,6 +85,7 @@ struct usbd_bus {
 	usbd_status	      (*open_pipe)__P((struct usbd_pipe *pipe));
 	u_int32_t		pipe_size; /* size of a pipe struct */
 	void		      (*do_poll)__P((struct usbd_bus *));
+	int			has_console; /* console input on this bus */
 	/* Filled by usb driver */
 	struct usbd_device     *root_hub;
 	usbd_device_handle	devices[USB_MAX_DEVICES];
@@ -217,21 +218,12 @@ usbd_status	usb_get_bus_handle __P((int, usbd_bus_handle *));
 #define UHUBCF_PORT_DEFAULT -1
 #define UHUBCF_CONFIGURATION_DEFAULT -1
 #define UHUBCF_INTERFACE_DEFAULT -1
-#define UHUBCF_VENDOR_DEFAULT -1
-#define UHUBCF_PRODUCT_DEFAULT -1
-#define UHUBCF_RELEASE_DEFAULT -1
 #endif
 
 #define	uhubcf_port		cf_loc[UHUBCF_PORT]
 #define	uhubcf_configuration	cf_loc[UHUBCF_CONFIGURATION]
 #define	uhubcf_interface	cf_loc[UHUBCF_INTERFACE]
-#define	uhubcf_vendor		cf_loc[UHUBCF_VENDOR]
-#define	uhubcf_product		cf_loc[UHUBCF_PRODUCT]
-#define	uhubcf_release		cf_loc[UHUBCF_RELEASE]
 #define	UHUB_UNK_PORT		UHUBCF_PORT_DEFAULT /* wildcarded 'port' */
 #define	UHUB_UNK_CONFIGURATION	UHUBCF_CONFIGURATION_DEFAULT /* wildcarded 'configuration' */
 #define	UHUB_UNK_INTERFACE	UHUBCF_INTERFACE_DEFAULT /* wildcarded 'interface' */
-#define	UHUB_UNK_VENDOR		UHUBCF_VENDOR_DEFAULT /* wildcarded 'vendor' */
-#define	UHUB_UNK_PRODUCT	UHUBCF_PRODUCT_DEFAULT /* wildcarded 'product' */
-#define	UHUB_UNK_RELEASE	UHUBCF_RELEASE_DEFAULT /* wildcarded 'release' */
 

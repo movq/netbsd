@@ -1,4 +1,4 @@
-/*	$NetBSD: start_bootsect.S,v 1.15 1999/05/02 12:44:34 fvdl Exp $	*/
+/*	$NetBSD: start_bootsect.S,v 1.12.2.1 1999/05/02 21:35:11 perry Exp $	*/
 	
 /*
  * BIOS bootsector startup

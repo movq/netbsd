@@ -1,4 +1,4 @@
-/*	$NetBSD: fd.c,v 1.7 1999/06/05 21:58:17 eeh Exp $	*/
+/*	$NetBSD: fd.c,v 1.5 1999/02/08 16:33:16 bouyer Exp $	*/
 
 /*-
  * Copyright (c) 1993, 1994, 1995 Charles M. Hannum.
@@ -310,7 +310,7 @@ fdcmatch(parent, match, aux)
 		return (0);
 
 	if (ca->ca_ra.ra_vaddr &&
-	    probeget(ca->ca_ra.ra_vaddr, ASI_PRIMARY, 1) == -1) {
+	    probeget(ca->ca_ra.ra_vaddr, 1) == -1) {
 		return (0);
 	}
 

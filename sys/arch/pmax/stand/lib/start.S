@@ -1,4 +1,4 @@
-/*	$NetBSD: start.S,v 1.14 1999/04/12 03:53:13 simonb Exp $	*/
+/*	$NetBSD: start.S,v 1.12 1999/03/29 13:48:25 simonb Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -95,7 +95,7 @@
 #include <mips/cpuregs.h>
 #include <machine/dec_prom.h>
 
-#ifdef BOOTRZ
+#ifdef BOOTXX
 /*
  * Boot block that starts in sector 0
  */
@@ -107,18 +107,22 @@ Dec_Diskboot:
 	.word	Dec_Diskboot		/* loadAddr */
 	.word	start			/* execAddr */
 	.word	16, 0			/* map[0] numBlocks, startBlock */
-	.word	0,0, 0,0, 0,0, 0,0	/* pad to 64 bytes (start of label) */
+	.word	0,0, 0,0, 0,0, 0,0
+	.word	0,0, 0,0, 0,0, 0,0
 
 Label_goes_here:
-	.word	0,0, 0,0, 0,0, 0,0, 0,0, 0,0, 0,0, 0,0	/* 276 bytes for ... */
-	.word	0,0, 0,0, 0,0, 0,0, 0,0, 0,0, 0,0, 0,0	/* ... BSD label */
+	.word	0,0, 0,0, 0,0, 0,0, 0,0, 0,0, 0,0, 0,0
+	.word	0,0, 0,0, 0,0, 0,0, 0,0, 0,0, 0,0, 0,0
 	.word	0,0, 0,0, 0,0, 0,0, 0,0, 0,0, 0,0, 0,0
 	.word	0,0, 0,0, 0,0, 0,0, 0,0, 0,0, 0,0, 0,0
 	.word	0,0, 0,0, 0
 #endif
 
 	.extern callv, 4
-
+/*
+ * Amount to take off of the stack for the benefit of the debugger.
+ */
+#define START_FRAME	((4 * 4) + 4 + 4)
 
 	.globl	start
 start:
@@ -126,9 +130,9 @@ start:
 #ifdef __GP_SUPPORT__
 	la      gp, _C_LABEL (_gp)
 #endif
-	la	sp, start - CALLFRAME_SIZ
-	sw	zero, CALLFRAME_RA(sp)		# Zero out old ra for debugger
-	sw	zero, CALLFRAME_SP(sp)		# Zero out old fp for debugger
+	la	sp, start - START_FRAME
+	sw	zero, START_FRAME - 4(sp)	# Zero out old ra for debugger
+	sw	zero, START_FRAME - 8(sp)	# Zero out old fp for debugger
 	move	s0, a0				# save argc
 	move	s1, a1				# save argv
 	beq	a2, DEC_REX_MAGIC, 1f		# jump if boot from DS5000
@@ -160,14 +164,6 @@ LEAF(prom_open)
 	j	v0
 	nop
 END(prom_open)
-
-#ifndef LIBSA_NO_DEV_CLOSE
-LEAF(prom_close)
-	li	v0, DEC_PROM_CLOSE
-	j	v0
-	nop
-END(prom_close)
-#endif
 
 LEAF(prom_lseek)
 	li	v0, DEC_PROM_LSEEK

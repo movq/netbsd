@@ -1,4 +1,4 @@
-/*	$NetBSD: trap.c,v 1.73 1999/04/06 05:55:06 scottr Exp $	*/
+/*	$NetBSD: trap.c,v 1.72.2.1 1999/04/07 01:51:26 scottr Exp $	*/
 
 /*
  * Copyright (c) 1988 University of Utah.

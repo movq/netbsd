@@ -1,4 +1,4 @@
-/*	$NetBSD: nexus.h,v 1.14 1999/05/23 22:56:54 ragge Exp $	*/
+/*	$NetBSD: nexus.h,v 1.13 1999/02/02 18:37:22 ragge Exp $	*/
 
 /*-
  * Copyright (c) 1982, 1986 The Regents of the University of California.
@@ -47,7 +47,6 @@
 #define VAX_VSBUS       16      /* VAXstation board */
 #define VAX_BIBUS       32      /* BI bus expansions: 8200/8800 */ 
 #define VAX_CMIBUS	64	/* CMI backplane (750) */
-#define VAX_XMIBUS	128	/* XMI backplane 6000/xxx */
 
 /*
  * Information about nexus's.
@@ -83,7 +82,9 @@
 #define	MAXNNEXUS NNEXSBI
 #endif
 
-#ifdef _KERNEL
+#ifndef _LOCORE
+
+#include <sys/types.h>
 
 struct	nexus {
 	union nexcsr {

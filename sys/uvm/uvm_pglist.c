@@ -1,4 +1,4 @@
-/*	$NetBSD: uvm_pglist.c,v 1.7 1999/05/24 19:10:58 thorpej Exp $	*/
+/*	$NetBSD: uvm_pglist.c,v 1.6 1998/08/13 02:11:03 eeh Exp $	*/
 
 #define VM_PAGE_ALLOC_MEMORY_STATS
  
@@ -136,7 +136,8 @@ uvm_pglistalloc(size, low, high, alignment, boundary, rlist, nsegs, waitok)
 	/*
 	 * Block all memory allocation and lock the free list.
 	 */
-	s = uvm_lock_fpageq();		/* lock free page queue */
+	s = splimp();
+	uvm_lock_fpageq();            /* lock free page queue */
 
 	/* Are there even any free pages? */
 	for (idx = 0; idx < VM_NFREELIST; idx++)
@@ -237,7 +238,8 @@ uvm_pglistalloc(size, low, high, alignment, boundary, rlist, nsegs, waitok)
 	error = 0;
 
 out:
-	uvm_unlock_fpageq(s);
+	uvm_unlock_fpageq();
+	splx(s);
 
 	/*
 	 * check to see if we need to generate some free pages waking
@@ -269,7 +271,8 @@ uvm_pglistfree(list)
 	/*
 	 * Block all memory allocation and lock the free list.
 	 */
-	s = uvm_lock_fpageq();
+	s = splimp();
+	uvm_lock_fpageq();
 
 	while ((m = list->tqh_first) != NULL) {
 #ifdef DIAGNOSTIC
@@ -284,5 +287,6 @@ uvm_pglistfree(list)
 		STAT_DECR(uvm_pglistalloc_npages);
 	}
 
-	uvm_unlock_fpageq(s);
+	uvm_unlock_fpageq();
+	splx(s);
 }

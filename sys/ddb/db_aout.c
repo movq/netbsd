@@ -1,4 +1,4 @@
-/*	$NetBSD: db_aout.c,v 1.25 1999/06/05 08:36:29 pk Exp $	*/
+/*	$NetBSD: db_aout.c,v 1.21.4.2 1999/04/12 21:27:07 pk Exp $	*/
 
 /* 
  * Mach Operating System
@@ -107,11 +107,6 @@ db_aout_sym_init(symsize, vsymtab, vesymtab, name)
 	sym_end   = (struct nlist *)((char *)sym_start + symsize);
 
 	strtab = (char *)sym_end;
-	if (ALIGNED_POINTER(strtab, int) == 0) {
-		printf("[ %s symbol table has bad string table address %p ]\n",
-		    name, strtab);
-		return (FALSE);
-	}
 	slen = *(int *)strtab;
 
 	estrtab = strtab + slen;
@@ -141,8 +136,8 @@ db_aout_sym_init(symsize, vsymtab, vesymtab, name)
 
 	if (db_add_symbol_table((char *)sym_start, (char *)sym_end, name,
 	    NULL) !=  -1) {
-                printf("[ preserving %ld bytes of %s a.out symbol table ]\n",
-                          (long)vesymtab - (long)vsymtab, name);
+                printf("[ preserving %d bytes of %s a.out symbol table ]\n",
+                          (char *)vesymtab - (char *)vsymtab, name);
 		return (TRUE);
         }
 	

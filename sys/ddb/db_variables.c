@@ -1,4 +1,4 @@
-/*	$NetBSD: db_variables.c,v 1.16 1999/04/12 20:38:21 pk Exp $	*/
+/*	$NetBSD: db_variables.c,v 1.14.6.2 1999/04/12 21:27:08 pk Exp $	*/
 
 /* 
  * Mach Operating System

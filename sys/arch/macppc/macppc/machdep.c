@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.47 1999/05/26 19:16:32 thorpej Exp $	*/
+/*	$NetBSD: machdep.c,v 1.38.2.2 1999/05/06 19:41:25 perry Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -31,6 +31,7 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include "opt_bufcache.h"
 #include "opt_compat_netbsd.h"
 #include "opt_ddb.h"
 #include "opt_inet.h"
@@ -39,6 +40,7 @@
 #include "opt_iso.h"
 #include "opt_ns.h"
 #include "opt_natm.h"
+#include "opt_sysv.h"
 #include "adb.h"
 #include "ipkdb.h"
 
@@ -57,6 +59,15 @@
 #include <sys/syslog.h>
 #include <sys/systm.h>
 #include <sys/user.h>
+#ifdef SYSVMSG
+#include <sys/msg.h>
+#endif
+#ifdef SYSVSEM
+#include <sys/sem.h>
+#endif
+#ifdef SYSVSHM
+#include <sys/shm.h>
+#endif
 
 #include <vm/vm.h>
 #include <vm/vm_kern.h>
@@ -77,18 +88,25 @@
 #include <machine/powerpc.h>
 #include <machine/trap.h>
 
+#include <dev/cons.h>
+#include <dev/ofw/openfirm.h>
+#include <dev/ofw/ofw_pci.h>
+
 #include <machine/bus.h>
 
 #include <dev/pci/pcireg.h>
 #include <dev/pci/pcivar.h>
 
-#include <dev/cons.h>
-#include <dev/ofw/openfirm.h>
+#include <dev/usb/usb.h>
+#include <dev/usb/usbdi.h>
+#include <dev/usb/usbdivar.h>
+#include <dev/usb/usb_mem.h>
 
-#include <dev/wscons/wsksymvar.h>
-#include <dev/wscons/wscons_callbacks.h>
+#include <dev/usb/uhcireg.h>
+#include <dev/usb/uhcivar.h>
 
-#include <dev/usb/ukbdvar.h>
+#include <dev/usb/ohcireg.h>
+#include <dev/usb/ohcivar.h>
 
 vm_map_t exec_map = NULL;
 vm_map_t mb_map = NULL;
@@ -111,19 +129,31 @@ paddr_t msgbuf_paddr;
 static int chosen;
 struct pmap ofw_pmap;
 
-int	ofkbd_ihandle;
-int	ofkbd_cngetc __P((dev_t));
-void	ofkbd_cnpollc __P((dev_t, int));
-
 int msgbufmapped = 0;
 
+/*
+ * Declare these as initialized data so we can patch them.
+ */
+#ifdef	NBUF
+int	nbuf = NBUF;
+#else
+int	nbuf = 0;
+#endif
+#ifdef	BUFPAGES
+int	bufpages = BUFPAGES;
+#else
+int	bufpages = 0;
+#endif
+#ifdef BUFCACHE
+int	bufcache = BUFCACHE;
+#else
+int	bufcache = 0;
+#endif
+
+caddr_t allocsys __P((caddr_t));
 void install_extint __P((void (*)(void)));
 
 int cold = 1;
-
-#ifdef DDB
-void *startsym, *endsym;
-#endif
 
 void
 initppc(startkernel, endkernel, args)
@@ -139,6 +169,7 @@ initppc(startkernel, endkernel, args)
 	extern tlbdsmiss, tlbdsmsize;
 #ifdef DDB
 	extern ddblow, ddbsize;
+	extern void *startsym, *endsym;
 #endif
 #if NIPKDB > 0
 	extern ipkdblow, ipkdbsize;
@@ -264,7 +295,7 @@ initppc(startkernel, endkernel, args)
 	 */
 	install_extint(ext_intr);
 
-	__syncicache((void *)EXC_RST, EXC_LAST - EXC_RST + 0x100);
+	syncicache((void *)EXC_RST, EXC_LAST - EXC_RST + 0x100);
 
 	/*
 	 * Now enable translation (and machine checks/recoverable interrupts).
@@ -277,13 +308,6 @@ initppc(startkernel, endkernel, args)
 	/*
 	 * Parse arg string.
 	 */
-#ifdef DDB
-	bcopy(args + strlen(args) + 1, &startsym, sizeof(startsym));
-	bcopy(args + strlen(args) + 5, &endsym, sizeof(endsym));
-	if (startsym == NULL || endsym == NULL)
-		startsym = endsym = NULL;
-#endif
-
 	bootpath = args;
 	while (*++args && *args != ' ');
 	if (*args) {
@@ -304,7 +328,7 @@ initppc(startkernel, endkernel, args)
 	}
 
 #ifdef DDB
-	ddb_init((int)((u_int)endsym - (u_int)startsym), startsym, endsym);
+	/* ddb_init((int)(endsym - startsym), startsym, endsym); */
 #endif
 #if NIPKDB > 0
 	/*
@@ -453,8 +477,8 @@ install_extint(handler)
 		      : "=r"(omsr), "=r"(msr) : "K"((u_short)~PSL_EE));
 	extint_call = (extint_call & 0xfc000003) | offset;
 	bcopy(&extint, (void *)EXC_EXI, (size_t)&extsize);
-	__syncicache((void *)&extint_call, sizeof extint_call);
-	__syncicache((void *)EXC_EXI, (int)&extsize);
+	syncicache((void *)&extint_call, sizeof extint_call);
+	syncicache((void *)EXC_EXI, (int)&extsize);
 	asm volatile ("mtmsr %0" :: "r"(omsr));
 }
 
@@ -468,7 +492,6 @@ cpu_startup()
 	caddr_t v;
 	vaddr_t minaddr, maxaddr;
 	int base, residual;
-	char pbuf[9];
 
 	initmsgbuf((caddr_t)msgbuf_paddr, round_page(MSGBUFSIZE));
 
@@ -478,17 +501,16 @@ cpu_startup()
 	printf("%s", version);
 	identifycpu();
 
-	format_bytes(pbuf, sizeof(pbuf), ctob(physmem));
-	printf("total memory = %s\n", pbuf);
+	printf("real mem  = %d\n", ctob(physmem));
 
 	/*
 	 * Find out how much space we need, allocate it,
 	 * and then give everything true virtual addresses.
 	 */
-	sz = (int)allocsys(NULL, NULL);
+	sz = (int)allocsys((caddr_t)0);
 	if ((v = (caddr_t)uvm_km_zalloc(kernel_map, round_page(sz))) == 0)
 		panic("startup: no room for tables");
-	if (allocsys(v, NULL) - v != sz)
+	if (allocsys(v) - v != sz)
 		panic("startup: table size inconsistency");
 
 	/*
@@ -536,19 +558,19 @@ cpu_startup()
 	 * limits the number of processes exec'ing at any time.
 	 */
 	exec_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
-				 16*NCARGS, VM_MAP_PAGEABLE, FALSE, NULL);
+				 16*NCARGS, TRUE, FALSE, NULL);
 
 	/*
 	 * Allocate a submap for physio
 	 */
 	phys_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
-				 VM_PHYS_SIZE, 0, FALSE, NULL);
+				 VM_PHYS_SIZE, TRUE, FALSE, NULL);
 
 	/*
-	 * No need to allocate an mbuf cluster submap.  Mbuf clusters
-	 * are allocated via the pool allocator, and we use direct-mapped
-	 * pool pages.
+	 * Finally, allocate mbuf cluster submap.
 	 */
+	mb_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
+			       VM_MBUF_SIZE, FALSE, FALSE, NULL);
 
 	/*
 	 * Initialize callouts.
@@ -557,15 +579,77 @@ cpu_startup()
 	for (i = 1; i < ncallout; i++)
 		callout[i - 1].c_next = &callout[i];
 
-	format_bytes(pbuf, sizeof(pbuf), ptoa(uvmexp.free));
-	printf("avail memory = %s\n", pbuf);
-	format_bytes(pbuf, sizeof(pbuf), bufpages * CLBYTES);
-	printf("using %d buffers containing %s of memory\n", nbuf, pbuf);
+	printf("avail mem = %ld\n", ptoa(uvmexp.free));
+	printf("using %d buffers containing %d bytes of memory\n",
+	       nbuf, bufpages * CLBYTES);
 
 	/*
 	 * Set up the buffers.
 	 */
 	bufinit();
+}
+
+/*
+ * Allocate space for system data structures.
+ */
+caddr_t
+allocsys(v)
+	caddr_t v;
+{
+#define	valloc(name, type, num) \
+	v = (caddr_t)(((name) = (type *)v) + (num))
+
+	valloc(callout, struct callout, ncallout);
+#ifdef	SYSVSHM
+	valloc(shmsegs, struct shmid_ds, shminfo.shmmni);
+#endif
+#ifdef	SYSVSEM
+	valloc(sema, struct semid_ds, seminfo.semmni);
+	valloc(sem, struct sem, seminfo.semmns);
+	valloc(semu, int, (seminfo.semmnu * seminfo.semusz) / sizeof(int));
+#endif
+#ifdef	SYSVMSG
+	valloc(msgpool, char, msginfo.msgmax);
+	valloc(msgmaps, struct msgmap, msginfo.msgseg);
+	valloc(msghdrs, struct msg, msginfo.msgtql);
+	valloc(msqids, struct msqid_ds, msginfo.msgmni);
+#endif
+
+	/*
+	 * Determine the number of pages to use for the buffer cache
+	 * (minimum 16).  Allocate 1/2 as many swap buffer headers as
+	 * file I/O buffers.
+	 */
+	if (bufpages == 0) {
+		if (bufcache == 0) {	/* use old algorithm */
+			bufpages = (physmem / 20) / CLSIZE;
+		} else {
+			/*
+			 * Set size of buffer cache to physmem/bufcache * 100
+			 * (i.e., bufcache % of physmem).
+			 */
+			if (bufcache < 5 || bufcache > 95) {
+				printf("warning: unable to set bufcache "
+				    "to %d%% of RAM, using 10%%", bufcache);
+				bufcache = 10;
+			}
+			bufpages = physmem / (CLSIZE * 100) * bufcache;
+		}
+	}
+	if (nbuf == 0) {
+		nbuf = bufpages;
+		if (nbuf < 16)
+			nbuf = 16;
+	}
+	if (nswbuf == 0) {
+		nswbuf = (nbuf / 2) & ~1;
+		if (nswbuf > 256)
+			nswbuf = 256;
+	}
+	valloc(buf, struct buf, nbuf);
+
+	return v;
+#undef valloc
 }
 
 /*
@@ -630,9 +714,9 @@ setregs(p, pack, stack)
 	p->p_addr->u_pcb.pcb_flags = 0;
 
 	/* sync I-cache for signal trampoline code */
-	__syncicache((void *)pmap_extract(p->p_addr->u_pcb.pcb_pm,
-					  (vaddr_t)p->p_sigacts->ps_sigcode),
-		     pack->ep_emul->e_esigcode - pack->ep_emul->e_sigcode);
+	syncicache((void *)pmap_extract(p->p_addr->u_pcb.pcb_pm,
+					(vaddr_t)p->p_sigacts->ps_sigcode),
+		   pack->ep_emul->e_esigcode - pack->ep_emul->e_sigcode);
 }
 
 /*
@@ -757,6 +841,7 @@ sys___sigreturn14(p, v, retval)
 
 /*
  * Machine dependent system variables.
+ * None for now.
  */
 int
 cpu_sysctl(name, namelen, oldp, oldlenp, newp, newlen, p)
@@ -771,10 +856,7 @@ cpu_sysctl(name, namelen, oldp, oldlenp, newp, newlen, p)
 	/* all sysctl names at this level are terminal */
 	if (namelen != 1)
 		return ENOTDIR;
-
 	switch (name[0]) {
-	case CPU_CACHELINE:
-		return sysctl_rdint(oldp, oldlenp, newp, CACHELINESIZE);
 	default:
 		return EOPNOTSUPP;
 	}
@@ -1023,6 +1105,12 @@ cninit()
 	int stdout;
 	char type[16];
 
+	/*
+	 * Initialize the PCI chipsets; can't map configuration
+	 * space registers yet!
+	 */
+	pci_init(0);
+
 	l = OF_getprop(chosen, "stdout", &stdout, sizeof(stdout));
 	if (l != sizeof(stdout))
 		goto nocons;
@@ -1037,7 +1125,10 @@ cninit()
 
 #if NOFB > 0
 	if (strcmp(type, "display") == 0) {
-		int stdin;
+		u_int32_t pciclass, reg, bus, device, function;
+		const char *usbstr;
+		int stdin, i;
+		pcitag_t tag;
 
 		/*
 		 * Attach the console output now (so we can see
@@ -1054,7 +1145,7 @@ cninit()
 			return;
 		}
 
-		node = OF_instance_to_package(stdin);
+		node = OF_instance_to_package(stdout);
 		bzero(type, sizeof(type));
 		l = OF_getprop(node, "name", type, sizeof(type));
 		if (l == -1 || l >= sizeof(type) - 1) {
@@ -1088,45 +1179,143 @@ cninit()
 		}
 
 		/*
-		 * We're not an ADB keyboard; must be USB.  Unfortunately,
-		 * we have a few problems:
-		 *
-		 *	(1) The stupid Macintosh firmware uses a
-		 *	    `psuedo-hid' (yes, they even spell it
-		 *	    incorrectly!) which apparently merges
-		 *	    all USB keyboard input into a single
-		 *	    input stream.  Because of this, we can't
-		 *	    actually determine which USB controller
-		 *	    or keyboard is really the console keyboard!
-		 *
-		 *	(2) Even if we could, USB requires a lot of
-		 *	    the kernel to be running in order for it
-		 *	    to work.
-		 *
-		 * So, what we do is this:
-		 *
-		 *	(1) Tell the ukbd driver that it is the console.
-		 *	    At autoconfiguration time, it will attach the
-		 *	    first USB keyboard instance as the console
-		 *	    keyboard.
-		 *
-		 *	(2) Until then, so that we have _something_, we
-		 *	    use the OpenFirmware I/O facilities to read
-		 *	    the keyboard.
+		 * We're not an ADB keyboard; must be USB.  The parent
+		 * node is pointing at the root hub.  We need to traverse
+		 * back until we find the USB controller.
 		 */
+		while (strcmp(type, "usb") != 0) {
+			node = OF_parent(node);
+			if (node == 0) {
+				printf("WARNING: unable to find USB "
+				    "controller\n");
+				return;
+			}
+			bzero(type, sizeof(type));
+			l = OF_getprop(node, "name", type, sizeof(type));
+			if (l == -1 || l >= sizeof(type) - 1) {
+				printf("WARNING: bad `name' property "
+				    "searching for USB controller\n");
+				return;
+			}
+		}
+
+		/*
+		 * `node' is now pointing at the USB controller.
+		 * We must determine the type and location of this
+		 * controller.
+		 */
+		if (OF_getprop(node, "class-code", &pciclass, sizeof(pciclass))
+		    != sizeof(pciclass)) {
+			printf("WARNING: unable to get PCI class code of "
+			    "USB controller\n");
+			return;
+		}
+
+		/*
+		 * The first address cell of the `reg' property will contain
+		 * bus/device/function information.
+		 */
+		if (OF_getprop(node, "reg", &reg, sizeof(reg)) <= 0) {
+			printf("WARNING: unable to get PCI location of "
+			    "USB controller\n");
+			return;
+		}
+
+		if (PCI_CLASS(pciclass) != PCI_CLASS_SERIALBUS) {
+			printf("WARNING: USB controller is not `serial bus' "
+			    "class\n");
+			return;
+		}
+
+		if (PCI_SUBCLASS(pciclass) != PCI_SUBCLASS_SERIALBUS_USB) {
+			printf("WARNING: USB controller is not `usb' "
+			    "subclass\n");
+			return;
+		}
+
+		switch (PCI_INTERFACE(pciclass)) {
+		case PCI_INTERFACE_UHCI:
+			usbstr = "UHCI";
+			break;
+
+		case PCI_INTERFACE_OHCI:
+			usbstr = "OHCI";
+			break;
+
+		default:
+			printf("WARNING: unknown USB controller interface\n");
+			return;
+		}
+
+		bus = (reg & OFW_PCI_PHYS_HI_BUSMASK) >>
+		    OFW_PCI_PHYS_HI_BUSSHIFT;
+		device = (reg & OFW_PCI_PHYS_HI_DEVICEMASK) >>
+		    OFW_PCI_PHYS_HI_DEVICESHIFT;
+		function = (reg & OFW_PCI_PHYS_HI_FUNCTIONMASK) >>
+		    OFW_PCI_PHYS_HI_FUNCTIONSHIFT;
+
+		printf("console keyboard type: USB on %s at %d,%d,%d\n",
+		    usbstr, bus, device, function);
+
+		/*
+		 * Locate the PCI bridge we're on, and create the tag
+		 * for the USB driver.
+		 */
+		for (i = 0; i < sizeof(pci_bridges) / sizeof(pci_bridges[0]);
+		     i++) {
+			if (pci_bridges[i].present &&
+			    pci_bridges[i].bus == bus)
+				break;
+		}
+		if (i == sizeof(pci_bridges) / sizeof(pci_bridges[0])) {
+			printf("WARNING: can't locate USB controller's "
+			    "PCI bridge\n");
+			return;
+		}
+
+		tag = pci_make_tag(pci_bridges[i].pc, bus, device, function);
+
 #if NUKBD > 0
-		printf("console keyboard type: USB\n");
-		ukbd_cnattach();
+		/*
+		 * XXX We can't attach the USB keyboard just yet.  We
+		 * XXX must defer it until autoconfiguration, because
+		 * XXX the USB code must be able to use memory allocation,
+		 * XXX DMA, etc.
+		 * XXX
+		 * XXX THIS SHOULD BE FIXED SOME DAY!
+		 */
 #else
 		panic("ukbd support not in kernel");
 #endif
 
-		/*
-		 * XXX This is a little gross, but we don't get to
-		 * XXX call wskbd_cnattach() twice.
-		 */
-		ofkbd_ihandle = stdin;
-		wsdisplay_set_cons_kbd(ofkbd_cngetc, ofkbd_cnpollc);
+		switch (PCI_INTERFACE(pciclass)) {
+		case PCI_INTERFACE_UHCI:
+#if NUHCI > 0
+		    {
+			extern void uhci_pci_has_console __P((pcitag_t));
+
+			uhci_pci_has_console(tag);
+		    }
+#else
+			panic("uhci support not in kernel");
+#endif
+			break;
+
+		case PCI_INTERFACE_OHCI:
+#if NOHCI > 0
+		    {
+			extern void ohci_pci_has_console __P((pcitag_t));
+
+			ohci_pci_has_console(tag);
+		    }
+#else
+			panic("ohci support not in kernel");
+#endif
+			break;
+
+		default:
+			panic("cninit: impossible");
+		}
 	}
 #endif /* NOFB > 0 */
 
@@ -1158,30 +1347,4 @@ cninit()
 
 nocons:
 	return;
-}
-
-/*
- * Bootstrap console keyboard routines, using OpenFirmware I/O.
- */
-int
-ofkbd_cngetc(dev)
-	dev_t dev;
-{
-	u_char c = '\0';
-	int l;
-
-	do {
-		l = OF_read(ofkbd_ihandle, &c, 1);
-	} while (l != 1);
-
-	return (c);
-}
-
-void
-ofkbd_cnpollc(dev, on)
-	dev_t dev;
-	int on;
-{
-
-	/* Nothing to do; always polled. */
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: db_lex.h,v 1.10 1999/04/12 20:38:21 pk Exp $	*/
+/*	$NetBSD: db_lex.h,v 1.8.20.2 1999/04/12 21:27:08 pk Exp $	*/
 
 /* 
  * Mach Operating System

@@ -1,4 +1,4 @@
-/*	$NetBSD: vm_machdep.c,v 1.80 1999/05/26 22:19:35 thorpej Exp $	*/
+/*	$NetBSD: vm_machdep.c,v 1.75.2.1 1999/05/05 17:07:06 perry Exp $	*/
 
 /*-
  * Copyright (c) 1995 Charles M. Hannum.  All rights reserved.
@@ -86,10 +86,8 @@ void	setredzone __P((u_short *, caddr_t));
  * the frame pointers on the stack after copying.
  */
 void
-cpu_fork(p1, p2, stack, stacksize)
+cpu_fork(p1, p2)
 	register struct proc *p1, *p2;
-	void *stack;
-	size_t stacksize;
 {
 	register struct pcb *pcb = &p2->p_addr->u_pcb;
 	register struct trapframe *tf;
@@ -120,24 +118,33 @@ cpu_fork(p1, p2, stack, stacksize)
 		panic("cpu_fork: curproc");
 #endif
 	*pcb = p1->p_addr->u_pcb;
+	pmap_activate(p2);
 
 	/*
 	 * Preset these so that gdt_compact() doesn't get confused if called
 	 * during the allocations below.
-	 *
-	 * Note: pcb_ldt_sel is handled in the pmap_activate() call below.
 	 */
 	pcb->pcb_tss_sel = GSEL(GNULL_SEL, SEL_KPL);
-
-	/*
-	 * Activate the addres space.  Note this will refresh pcb_ldt_sel.
-	 */
-	pmap_activate(p2);
+	pcb->pcb_ldt_sel = GSEL(GLDT_SEL, SEL_KPL);
 
 	/* Fix up the TSS. */
 	pcb->pcb_tss.tss_ss0 = GSEL(GDATA_SEL, SEL_KPL);
 	pcb->pcb_tss.tss_esp0 = (int)p2->p_addr + USPACE - 16;
 	tss_alloc(pcb);
+
+#ifdef USER_LDT
+	/* Copy the LDT, if necessary. */
+	if (pcb->pcb_flags & PCB_USER_LDT) {
+		size_t len;
+		union descriptor *new_ldt;
+
+		len = pcb->pcb_ldt_len * sizeof(union descriptor);
+		new_ldt = (union descriptor *)uvm_km_alloc(kernel_map, len);
+		memcpy(new_ldt, pcb->pcb_ldt, len);
+		pcb->pcb_ldt = new_ldt;
+		ldt_alloc(pcb, new_ldt, len);
+	}
+#endif
 
 	/*
 	 * Copy the trapframe, and arrange for the child to return directly
@@ -147,13 +154,6 @@ cpu_fork(p1, p2, stack, stacksize)
 	 */
 	p2->p_md.md_regs = tf = (struct trapframe *)pcb->pcb_tss.tss_esp0 - 1;
 	*tf = *p1->p_md.md_regs;
-
-	/*
-	 * If specified, give the child a different stack.
-	 */
-	if (stack != NULL)
-		tf->tf_esp = (u_int)stack + stacksize;
-
 	sf = (struct switchframe *)tf - 1;
 	sf->sf_ppl = 0;
 	sf->sf_esi = (int)child_return;
@@ -200,6 +200,10 @@ void
 cpu_exit(p)
 	register struct proc *p;
 {
+#ifdef USER_LDT
+	struct pcb *pcb;
+#endif
+	struct vmspace *vm;
 
 #if NNPX > 0
 	/* If we were using the FPU, forget about it. */
@@ -207,10 +211,13 @@ cpu_exit(p)
 		npxproc = 0;
 #endif
 
-	/*
-	 * No need to do user LDT cleanup here; it's handled in
-	 * pmap_destroy().
-	 */
+#ifdef USER_LDT
+	pcb = &p->p_addr->u_pcb;
+	if (pcb->pcb_flags & PCB_USER_LDT)
+		i386_user_cleanup(pcb);
+#endif
+
+	vm = p->p_vmspace;
 
 	uvmexp.swtch++;
 	switch_exit(p);
@@ -375,11 +382,26 @@ kvtop(addr)
 extern vm_map_t phys_map;
 
 /*
- * Map a user I/O request into kernel virtual address space.
- * Note: the pages are already locked by uvm_vslock(), so we
- * do not need to pass an access_type to pmap_enter().   
+ * Map an IO request into kernel virtual address space.  Requests fall into
+ * one of five catagories:
+ *
+ *	B_PHYS|B_UAREA:	User u-area swap.
+ *			Address is relative to start of u-area (p_addr).
+ *	B_PHYS|B_PAGET:	User page table swap.
+ *			Address is a kernel VA in usrpt (Usrptmap).
+ *	B_PHYS|B_DIRTY:	Dirty page push.
+ *			Address is a VA in proc2's address space.
+ *	B_PHYS|B_PGIN:	Kernel pagein of user pages.
+ *			Address is VA in user's address space.
+ *	B_PHYS:		User "raw" IO request.
+ *			Address is VA in user's address space.
+ *
+ * All requests are (re)mapped into kernel VA space via the phys_map
+ * (a name with only slightly more meaning than "kernel_map")
  */
+
 #if defined(PMAP_NEW)
+
 void
 vmapbuf(bp, len)
 	struct buf *bp;
@@ -417,7 +439,9 @@ vmapbuf(bp, len)
 		len -= PAGE_SIZE;
 	}
 }
+
 #else /* PMAP_NEW */
+
 void
 vmapbuf(bp, len)
 	struct buf *bp;
@@ -445,10 +469,12 @@ vmapbuf(bp, len)
 		len -= PAGE_SIZE;
 	} while (len);
 }
-#endif /* PMAP_NEW */
+
+#endif
 
 /*
- * Unmap a previously-mapped user I/O request.
+ * Free the io map PTEs associated with this IO operation.
+ * We also invalidate the TLB entries and restore the original b_addr.
  */
 void
 vunmapbuf(bp, len)

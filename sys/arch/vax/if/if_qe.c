@@ -1,4 +1,4 @@
-/*	$NetBSD: if_qe.c,v 1.35 1999/05/23 23:06:24 ragge Exp $ */
+/*	$NetBSD: if_qe.c,v 1.33 1998/11/29 14:48:52 ragge Exp $ */
 
 /*
  * Copyright (c) 1988 Regents of the University of California.
@@ -1030,17 +1030,6 @@ if (m) {
 *(((u_long *)m->m_data)+3)
 ; }
 #endif
-	if (m == NULL)
-		return;
-
-	/*
-	 * XXX I'll let ragge make this sane.  I'm not entirely
-	 * XXX sure what's going on in if_ubaget().
-	 */
-	M_PREPEND(m, sizeof(struct ether_header), M_DONTWAIT);
-	if (m == NULL)
-		return;
-	bcopy(eh, mtod(m, caddr_t), sizeof(struct ether_header));
 
 #if NBPFILTER > 0
 	/*
@@ -1052,8 +1041,13 @@ if (m) {
 	 * tho' it will make a copy for tcpdump.)
 	 */
 	if (sc->qe_if.if_bpf) {
+		struct mbuf m0;
+		m0.m_len = sizeof (struct ether_header);
+		m0.m_data = (caddr_t)eh;
+		m0.m_next = m;
+ 
 		/* Pass it up */
-		bpf_mtap(sc->qe_if.if_bpf, m);
+		bpf_mtap(sc->qe_if.if_bpf, &m0);
 
 		/*
 		 * Note that the interface cannot be in promiscuous mode if
@@ -1070,7 +1064,8 @@ if (m) {
 	}
 #endif /* NBPFILTER > 0 */
 
-	(*sc->qe_if.if_input)(&sc->qe_if, m);
+	if (m)
+		ether_input((struct ifnet *)&sc->qe_if, eh, m);
 }
 
 /*

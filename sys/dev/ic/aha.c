@@ -1,4 +1,4 @@
-/*	$NetBSD: aha.c,v 1.23 1999/04/15 23:51:44 mjl Exp $	*/
+/*	$NetBSD: aha.c,v 1.22 1998/12/09 08:47:18 thorpej Exp $	*/
 
 #include "opt_ddb.h"
 
@@ -1122,27 +1122,23 @@ aha_inquire_setup_information(sc)
 #endif /* AHADEBUG */
 
 	switch (revision.reply.boardid) {
-	case BOARD_1540_16HEAD_BIOS:
-	case BOARD_1540_64HEAD_BIOS:
-	case BOARD_1540:
+	case 0x31:
 		strcpy(sc->sc_model, "1540");
 		break;
-	case BOARD_1542:
+	case 0x41:
 		strcpy(sc->sc_model, "1540A/1542A/1542B");
 		break;
-	case BOARD_1640:
+	case 0x42:
 		strcpy(sc->sc_model, "1640");
 		break;
-	case BOARD_1740:
-		strcpy(sc->sc_model, "1740");
-		break;
-	case BOARD_1542C:
+	case 0x43:
 		strcpy(sc->sc_model, "1542C");
 		break;
-	case BOARD_1542CF:
+	case 0x44:
+	case 0x45:
 		strcpy(sc->sc_model, "1542CF");
 		break;
-	case BOARD_1542CP:
+	case 0x46:
 		strcpy(sc->sc_model, "1542CP");
 		break;
 	}

@@ -1,4 +1,4 @@
-/* $NetBSD: locore.s,v 1.63 1999/05/31 20:40:23 ross Exp $ */
+/* $NetBSD: locore.s,v 1.60 1999/03/24 05:50:50 mrg Exp $ */
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -66,7 +66,6 @@
 
 .stabs	__FILE__,100,0,0,kernel_text
 
-#include "opt_ddb.h"
 #include "opt_multiprocessor.h"
 #include "opt_compat_linux.h"
 
@@ -76,7 +75,7 @@
 
 #include <machine/asm.h>
 
-__KERNEL_RCSID(0, "$NetBSD: locore.s,v 1.63 1999/05/31 20:40:23 ross Exp $");
+__KERNEL_RCSID(0, "$NetBSD: locore.s,v 1.60 1999/03/24 05:50:50 mrg Exp $");
 
 #ifndef EVCNT_COUNTERS
 #include <machine/intrcnt.h>
@@ -180,8 +179,8 @@ bootstack:
  * All arguments are passed to alpha_init().
  */
 NESTED_NOPROFILE(locorestart,1,0,ra,0,0)
-	br	pv,1f
-1:	LDGP(pv)
+	br	pv,Lstart1
+Lstart1: LDGP(pv)
 
 	/* Switch to the boot stack. */
 	lda	sp,bootstack
@@ -219,12 +218,19 @@ NESTED_NOPROFILE(locorestart,1,0,ra,0,0)
 	call_pal PAL_imb
 
 	/*
-	 * All ready to go!  Call main()!
+	 * Construct a fake trap frame, so execve() can work normally.
+	 * Note that setregs() is responsible for setting its contents
+	 * to 'reasonable' values.
 	 */
-	CALL(main)
+	lda	sp,-(FRAME_SIZE * 8)(sp)	/* space for struct trapframe */
+	mov	sp, a0				/* main()'s arg is frame ptr */
+	CALL(main)				/* go to main()! */
 
-	/* This should never happen. */
-	PANIC("main() returned",Lmain_returned_pmsg)
+	/*
+	 * Call exception_return, to simulate return from (fake)
+	 * exception to user-land, running process 1, init!
+	 */
+	jmp	zero, exception_return		/* "And that's all she wrote." */
 	END(locorestart)
 
 /**************************************************************************/
@@ -271,17 +277,6 @@ NESTED_NOPROFILE(locorestart,1,0,ra,0,0)
  */
 #include <alpha/alpha/multiproc.s>
 #endif /* MULTIPROCESSOR */
-
-/**************************************************************************/
-
-/**************************************************************************/
-
-#if defined(DDB)
-/*
- * Pull in debugger glue.
- */
-#include <alpha/alpha/debug.s>
-#endif /* DDB */
 
 /**************************************************************************/
 
@@ -366,8 +361,8 @@ BSS(ssir, 8)
 IMPORT(astpending, 8)
 
 LEAF(exception_return, 1)			/* XXX should be NESTED */
-	br	pv, 1f
-1:	LDGP(pv)
+	br	pv, Ler1
+Ler1:	LDGP(pv)
 
 #if defined(MULTIPROCESSOR)
 	/* XXX XXX XXX */
@@ -380,40 +375,40 @@ LEAF(exception_return, 1)			/* XXX should be NESTED */
 	ldq	t0, 0(t0)
 	ldq	t1, RPB_PRIMARY_CPU_ID(t0)
 	cmpeq	t1, v0, t0
-	beq	t0, 4f				/* == 0: bail out now */
+	beq	t0, Lrestoreregs		/* == 0: bail out now */
 #endif
 
 	ldq	s1, (FRAME_PS * 8)(sp)		/* get the saved PS */
 	and	s1, ALPHA_PSL_IPL_MASK, t0	/* look at the saved IPL */
-	bne	t0, 4f				/* != 0: can't do AST or SIR */
+	bne	t0, Lrestoreregs		/* != 0: can't do AST or SIR */
 
 	/* see if we can do an SIR */
 	ldq	t1, ssir			/* SIR pending? */
-	beq	t1, 2f				/* no, try an AST*/
+	beq	t1, Lchkast			/* no, try an AST*/
 
 	/* We've got a SIR. */
 	CALL(do_sir)				/* do the SIR; lowers IPL */
 
-	/* Check for AST */
-2:	ldiq	a0, ALPHA_PSL_IPL_0		/* drop IPL to zero*/
+Lchkast:
+	ldiq	a0, ALPHA_PSL_IPL_0		/* drop IPL to zero*/
 	call_pal PAL_OSF1_swpipl
 
 	and	s1, ALPHA_PSL_USERMODE, t0	/* are we returning to user? */
-	beq	t0, 4f				/* no: just return */
+	beq	t0, Lrestoreregs		/* no: just return */
 
 	ldq	t2, astpending			/* AST pending? */
-	beq	t2, 3f				/* no: return & deal with FP */
+	beq	t2, Lsetfpenable		/* no: return & deal with FP */
 
 	/* We've got an AST.  Handle it. */
 	mov	sp, a0				/* only arg is frame */
 	CALL(ast)
 
-
+Lsetfpenable:
 	/*
 	 * enable FPU based on whether the current proc is fpcurproc.
 	 * Note: GET_*() clobbers v0, t0, t8...t11.
 	 */
-3:	GET_CURPROC(t1)
+	GET_CURPROC(t1)
 	ldq	t1, 0(t1)
 	GET_FPCURPROC(t2)
 	ldq	t2, 0(t2)
@@ -422,7 +417,8 @@ LEAF(exception_return, 1)			/* XXX should be NESTED */
 	cmovne	t1, 1, a0
 	call_pal PAL_OSF1_wrfen
 
-4:	/* restore the registers, and return */
+Lrestoreregs:
+	/* restore the registers, and return */
 	bsr	ra, exception_restore_regs	/* jmp/CALL trashes pv/t12 */
 	ldq	ra,(FRAME_RA*8)(sp)
 	.set noat
@@ -742,8 +738,8 @@ LEAF(restorefpstate, 1)
  */
 
 LEAF(savectx, 1)
-	br	pv, 1f
-1:	LDGP(pv)
+	br	pv, Lsavectx1
+Lsavectx1: LDGP(pv)
 	stq	sp, U_PCB_HWPCB_KSP(a0)		/* store sp */
 	stq	s0, U_PCB_CONTEXT+(0 * 8)(a0)	/* store s0 - s6 */
 	stq	s1, U_PCB_CONTEXT+(1 * 8)(a0)
@@ -773,18 +769,19 @@ IMPORT(kernel_lev1map, 8)
  * profiling.
  */
 LEAF(idle, 0)
-	br	pv, 1f
-1:	LDGP(pv)
+	br	pv, Lidle1
+Lidle1:	LDGP(pv)
 	/* Note: GET_CURPROC() clobbers v0, t0, t8...t11. */
 	GET_CURPROC(t1)
 	stq	zero, 0(t1)			/* curproc <- NULL for stats */
 	mov	zero, a0			/* enable all interrupts */
 	call_pal PAL_OSF1_swpipl
-2:	ldl	t0, whichqs			/* look for non-empty queue */
-	beq	t0, 2b
+Lidle2:
+	ldl	t0, whichqs			/* look for non-empty queue */
+	beq	t0, Lidle2
 	ldiq	a0, ALPHA_PSL_IPL_HIGH		/* disable all interrupts */
 	call_pal PAL_OSF1_swpipl
-	jmp	zero, cpu_switch_queuescan	/* jump back into the fray */
+	jmp	zero, sw1			/* jump back into the fray */
 	END(idle)
 
 /*
@@ -820,20 +817,21 @@ LEAF(cpu_switch, 0)
 
 	ldiq	a0, ALPHA_PSL_IPL_HIGH		/* disable all interrupts */
 	call_pal PAL_OSF1_swpipl
-cpu_switch_queuescan:
-	br	pv, 1f
-1:	LDGP(pv)
+sw1:
+	br	pv, Lcs1
+Lcs1:	LDGP(pv)
 	ldl	t0, whichqs			/* look for non-empty queue */
 	beq	t0, idle			/* and if none, go idle */
 	mov	t0, t3				/* t3 = saved whichqs */
 	mov	zero, t2			/* t2 = lowest bit set */
-	blbs	t0, 3f				/* if low bit set, done! */
+	blbs	t0, Lcs3			/* if low bit set, done! */
 
-2:	srl	t0, 1, t0			/* try next bit */
+Lcs2:	srl	t0, 1, t0			/* try next bit */
 	addq	t2, 1, t2
-	blbc	t0, 2b				/* if clear, try again */
+	blbc	t0, Lcs2			/* if clear, try again */
 
-3:	/*
+Lcs3:
+	/*
 	 * Remove process from queue
 	 */
 	lda	t1, qs				/* get queues */
@@ -842,22 +840,22 @@ cpu_switch_queuescan:
 
 	ldq	t4, PH_LINK(t0)			/* t4 = p = highest pri proc */
 	ldq	t5, P_FORW(t4)			/* t5 = p->p_forw */
-	bne	t4, 4f				/* make sure p != NULL */
+	bne	t4, Lcs4			/* make sure p != NULL */
 	PANIC("cpu_switch",Lcpu_switch_pmsg)	/* nothing in queue! */
 
-4:
+Lcs4:
 	stq	t5, PH_LINK(t0)			/* qp->ph_link = p->p_forw */
 	stq	t0, P_BACK(t5)			/* p->p_forw->p_back = qp */
 	stq	zero, P_BACK(t4)		/* firewall: p->p_back = NULL */
 	cmpeq	t0, t5, t0			/* see if queue is empty */
-	beq	t0, 5f				/* nope, it's not! */
+	beq	t0, Lcs5			/* nope, it's not! */
 
 	ldiq	t0, 1				/* compute bit in whichqs */
 	sll	t0, t2, t0
 	xor	t3, t0, t3			/* clear bit in whichqs */
 	stl	t3, whichqs
 
-5:
+Lcs5:
 	mov	t4, s2				/* save new proc */
 	ldq	s3, P_MD_PCBPADDR(s2)		/* save new pcbpaddr */
 
@@ -872,7 +870,7 @@ cpu_switch_queuescan:
 	 * s0 is clear before jumping here to find a new process.
 	 */
 	cmpeq	s0, t4, t0			/* oldproc == newproc? */
-	bne	t0, 7f				/* Yes!  Skip! */
+	bne	t0, Lcs7			/* Yes!  Skip! */
 
 	/*
 	 * Deactivate the old address space before activating the
@@ -888,12 +886,13 @@ cpu_switch_queuescan:
 	 * taken care of calling pmap_deactivate() in cpu_exit(),
 	 * before the vmspace went away.
 	 */
-	beq	s0, 6f
+	beq	s0, Lcs6
 
 	mov	s0, a0				/* pmap_deactivate(oldproc) */
 	CALL(pmap_deactivate)
 
-6:	/*
+Lcs6:
+	/*
 	 * Activate the new process's address space and perform
 	 * the actual context swap.
 	 */
@@ -904,7 +903,8 @@ cpu_switch_queuescan:
 	mov	s3, a0				/* swap the context */
 	SWITCH_CONTEXT
 
-7:	/*
+Lcs7:
+	/*
 	 * Now that the switch is done, update curproc and other
 	 * globals.  We must do this even if switching to ourselves
 	 * because we might have re-entered cpu_switch() from idle(),
@@ -990,7 +990,7 @@ LEAF(switch_exit, 1)
 	 * s0 will be restored when a new process is resumed.
 	 */
 	mov	zero, s0
-	jmp	zero, cpu_switch_queuescan
+	jmp	zero, sw1
 	END(switch_exit)
 
 /**************************************************************************/
@@ -1005,9 +1005,10 @@ LEAF(copystr, 4)
 	LDGP(pv)
 
 	mov	a2, t0			/* t0 = i = len */
-	beq	a2, 2f			/* if (len == 0), bail out */
+	beq	a2, Lcopystr2		/* if (len == 0), bail out */
 
-1:	ldq_u	t1, 0(a0)		/* t1 = *from */
+Lcopystr1:
+	ldq_u	t1, 0(a0)		/* t1 = *from */
 	extbl	t1, a0, t1
 	ldq_u	t3, 0(a1)		/* set up t2 with quad around *to */
 	insbl	t1, a1, t2
@@ -1016,20 +1017,23 @@ LEAF(copystr, 4)
 	stq_u	t3, 0(a1)		/* write out that quad */
 
 	subl	a2, 1, a2		/* len-- */
-	beq	t1, 2f			/* if (*from == 0), bail out */
+	beq	t1, Lcopystr2		/* if (*from == 0), bail out */
 	addq	a1, 1, a1		/* to++ */
 	addq	a0, 1, a0		/* from++ */
-	bne	a2, 1b			/* if (len != 0) copy more */
+	bne	a2, Lcopystr1		/* if (len != 0) copy more */
 
-2:	beq	a3, 3f			/* if (lenp != NULL) */
+Lcopystr2:
+	beq	a3, Lcopystr3		/* if (lenp != NULL) */
 	subl	t0, a2, t0		/* *lenp = (i - len) */
 	stq	t0, 0(a3)
-3:	beq	t1, 4f			/* *from == '\0'; leave quietly */
+Lcopystr3:
+	beq	t1, Lcopystr4		/* *from == '\0'; leave quietly */
 
 	ldiq	v0, ENAMETOOLONG		/* *from != '\0'; error. */
 	RET
 
-4:	mov	zero, v0		/* return 0. */
+Lcopystr4:
+	mov	zero, v0		/* return 0. */
 	RET
 	END(copystr)
 
@@ -1805,8 +1809,8 @@ LEAF(XentRestart, 1)			/* XXX should be NESTED */
 	stq	t12,(FRAME_T12*8)(sp)
 	stq	ra,(FRAME_RA*8)(sp)
 
-	br	pv,1f
-1:	LDGP(pv)
+	br	pv,LXconsole_restart1
+LXconsole_restart1: LDGP(pv)
 
 	ldq	a0,(FRAME_RA*8)(sp)		/* a0 = ra */
 	ldq	a1,(FRAME_T11*8)(sp)		/* a1 = ai */

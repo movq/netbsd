@@ -1,4 +1,4 @@
-/*	$NetBSD: vm_machdep.c,v 1.12 1999/05/26 22:19:36 thorpej Exp $	*/
+/*	$NetBSD: vm_machdep.c,v 1.9 1999/03/26 23:41:33 mycroft Exp $	*/
 
 /*
  * This file was taken from mvme68k/mvme68k/vm_machdep.c
@@ -83,10 +83,8 @@
  * the frame pointers on the stack after copying.
  */
 void
-cpu_fork(p1, p2, stack, stacksize)
+cpu_fork(p1, p2)
 	struct proc *p1, *p2;
-	void *stack;
-	size_t stacksize;
 {
 	struct pcb *pcb = &p2->p_addr->u_pcb;
 	struct trapframe *tf;
@@ -114,13 +112,6 @@ cpu_fork(p1, p2, stack, stacksize)
 	tf = (struct trapframe *)((u_int)p2->p_addr + USPACE) - 1;
 	p2->p_md.md_regs = (int *)tf;
 	*tf = *(struct trapframe *)p1->p_md.md_regs;
-
-	/*
-	 * If specified, give the child a different stack.
-	 */
-	if (stack != NULL)
-		tf->tf_regs[15] = (u_int)stack + stacksize;
-
 	sf = (struct switchframe *)tf - 1;
 	sf->sf_pc = (u_int)proc_trampoline;
 	pcb->pcb_regs[6] = (int)child_return;	/* A2 */
@@ -377,9 +368,12 @@ kvtop(addr)
 extern vm_map_t phys_map;
 
 /*
- * Map a user I/O request into kernel virtual address space.
- * Note: the pages are already locked by uvm_vslock(), so we
- * do not need to pass an access_type to pmap_enter().   
+ * Map an IO request into kernel virtual address space.
+ *
+ * XXX we allocate KVA space by using kmem_alloc_wait which we know
+ * allocates space without backing physical memory.  This implementation
+ * is a total crock, the multiple mappings of these physical pages should
+ * be reflected in the higher-level VM structures to avoid problems.
  */
 void
 vmapbuf(bp, len)
@@ -415,7 +409,7 @@ vmapbuf(bp, len)
 }
 
 /*
- * Unmap a previously-mapped user I/O request.
+ * Free the io map PTEs associated with this IO operation.
  */
 void
 vunmapbuf(bp, len)

@@ -1,4 +1,4 @@
-/*	$NetBSD: isa_io.c,v 1.6 1999/04/22 10:12:41 ross Exp $	*/
+/*	$NetBSD: isa_io.c,v 1.5.2.1 1999/04/22 15:22:44 perry Exp $	*/
 
 /*
  * Copyright 1997

@@ -1,4 +1,4 @@
-/*	$NetBSD: vm_machdep.c,v 1.51 1999/05/26 22:19:39 thorpej Exp $	     */
+/*	$NetBSD: vm_machdep.c,v 1.47.2.1 1999/05/03 12:56:52 perry Exp $	     */
 
 /*
  * Copyright (c) 1994 Ludd, University of Lule}, Sweden.
@@ -93,10 +93,8 @@ pagemove(from, to, size)
  * forking.
  */
 void
-cpu_fork(p1, p2, stack, stacksize)
+cpu_fork(p1, p2)
 	struct proc *p1, *p2;
-	void *stack;
-	size_t stacksize;
 {
 	struct pte *pt;
 	struct pcb *nyproc;
@@ -133,13 +131,6 @@ cpu_fork(p1, p2, stack, stacksize)
 	/* General registers as taken from userspace */
 	/* trapframe should be synced with pcb */
 	bcopy(&tf->r2,&nyproc->R[2],10*sizeof(int));
-
-	/*
-	 * If specified, give the child a different stack.
-	 */
-	if (stack != NULL)
-		tf->sp = (u_long)stack + stacksize;
-
 	nyproc->AP = tf->ap;
 	nyproc->FP = tf->fp;
 	nyproc->USP = tf->sp;
@@ -283,10 +274,6 @@ cpu_swapin(p)
 
 #if VAX410 || VAX43
 /*
- * Map a user I/O request into kernel virtual address space.
- * Note: the pages are already locked by uvm_vslock(), so we
- * do not need to pass an access_type to pmap_enter().   
- *
  * vmapbuf()/vunmapbuf() only used on some vaxstations without
  * any busadapter with MMU.
  * XXX - This must be reworked to be effective.
@@ -322,7 +309,8 @@ vmapbuf(bp, len)
 }
 
 /*
- * Unmap a previously-mapped user I/O request.
+ * Free the io map PTEs associated with this IO operation.
+ * We also invalidate the TLB entries and restore the original b_addr.
  */
 void
 vunmapbuf(bp, len)

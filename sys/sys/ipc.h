@@ -1,4 +1,4 @@
-/*	$NetBSD: ipc.h,v 1.20 1999/04/17 21:00:09 kleink Exp $	*/
+/*	$NetBSD: ipc.h,v 1.18.4.1 1999/04/19 04:29:22 cjs Exp $	*/
 
 /*
  * Copyright (c) 1988 University of Utah.

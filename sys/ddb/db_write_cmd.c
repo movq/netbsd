@@ -1,4 +1,4 @@
-/*	$NetBSD: db_write_cmd.c,v 1.11 1999/04/12 20:38:21 pk Exp $	*/
+/*	$NetBSD: db_write_cmd.c,v 1.9.2.2 1999/04/12 21:27:08 pk Exp $	*/
 
 /* 
  * Mach Operating System

@@ -1,4 +1,4 @@
-/*	$NetBSD: if_arp.c,v 1.61 1999/05/30 00:39:07 bad Exp $	*/
+/*	$NetBSD: if_arp.c,v 1.56.2.2 1999/05/04 22:28:45 perry Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -134,9 +134,7 @@ static	void arptimer __P((void *));
 static	struct llinfo_arp *arplookup __P((struct in_addr *, int, int));
 static	void in_arpinput __P((struct mbuf *));
 
-#if NLOOP > 0
 extern	struct ifnet loif[NLOOP];
-#endif
 LIST_HEAD(, llinfo_arp) llinfo_arp;
 struct	ifqueue arpintrq = {0, 0, 0, 50};
 int	arp_inuse, arp_allocated, arp_intimer;
@@ -330,10 +328,8 @@ arp_rtrequest(req, rt, sa)
 			    LLADDR(SDL(gate)),
 			    SDL(gate)->sdl_alen = 
 			    rt->rt_ifp->if_data.ifi_addrlen);
-#if NLOOP > 0
 			if (useloopback)
 				rt->rt_ifp = &loif[0];
-#endif
 		}
 		break;
 
@@ -639,28 +635,22 @@ in_arpinput(m)
 		}
 #if NTOKEN > 0
 		/*
-		 * XXX uses m_data and assumes the complete answer including
+		 * XXX uses m_pktdat and assumes the complete answer including
 		 * XXX token-ring headers is in the same buf
 		 */
-		if (ifp->if_type == IFT_ISO88025) {
-			struct token_header *trh;
+		if (ifp->if_type == IFT_ISO88025 &&
+			m->m_pktdat[8] & TOKEN_RI_PRESENT) {
+			struct token_rif	*rif;
+			size_t	riflen;
 
-			trh = (struct token_header *)M_TRHSTART(m);
-			if (trh->token_shost[0] & TOKEN_RI_PRESENT) {
-				struct token_rif	*rif;
-				size_t	riflen;
+			rif = TOKEN_RIF((struct token_header *) m->m_pktdat);
+			riflen = (ntohs(rif->tr_rcf) & TOKEN_RCF_LEN_MASK) >> 8;
 
-				rif = TOKEN_RIF(trh);
-				riflen = (ntohs(rif->tr_rcf) &
-				    TOKEN_RCF_LEN_MASK) >> 8;
-
-				if (riflen > 2 &&
-				    riflen < sizeof(struct token_rif) &&
-				    (riflen & 1) == 0) {
-					rif->tr_rcf ^= htons(TOKEN_RCF_DIRECTION);
-					rif->tr_rcf &= htons(~TOKEN_RCF_BROADCAST_MASK);
-					bcopy(rif, TOKEN_RIF(la), riflen);
-				}
+			if (riflen > 2 && riflen < sizeof(struct token_rif) &&
+				(riflen & 1) == 0) {
+				rif->tr_rcf ^= htons(TOKEN_RCF_DIRECTION);
+				rif->tr_rcf &= htons(~TOKEN_RCF_BROADCAST_MASK);
+				bcopy(rif, TOKEN_RIF(la), riflen);
 			}
 		}
 #endif /* NTOKEN > 0 */

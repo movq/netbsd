@@ -1,10 +1,2 @@
-/*	$NetBSD: reg.h,v 1.3 1999/05/03 10:02:19 tsubai Exp $	*/
+/*	$NetBSD: reg.h,v 1.2 1998/01/05 07:03:18 perry Exp $	*/
 
-struct reg {
-	register_t fixreg[32];
-	register_t lr;
-	int cr;
-	int xer;
-	register_t ctr;
-	register_t pc;
-};

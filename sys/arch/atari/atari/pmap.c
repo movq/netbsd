@@ -1,4 +1,4 @@
-/*	$NetBSD: pmap.c,v 1.45 1999/05/26 19:16:30 thorpej Exp $	*/
+/*	$NetBSD: pmap.c,v 1.43.2.1 1999/04/26 14:43:37 perry Exp $	*/
 
 /* 
  * Copyright (c) 1991 Regents of the University of California.
@@ -579,7 +579,7 @@ pmap_init()
 	}
 	else s = maxproc * ATARI_UPTSIZE;
 
-	pt_map = uvm_km_suballoc(kernel_map, &addr, &addr2, s, VM_MAP_PAGEABLE,
+	pt_map = uvm_km_suballoc(kernel_map, &addr, &addr2, s, TRUE,
 	    TRUE, &pt_map_store);
 
 #ifdef DEBUG

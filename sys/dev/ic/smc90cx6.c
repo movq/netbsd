@@ -1,4 +1,4 @@
-/*	$NetBSD: smc90cx6.c,v 1.30 1999/05/18 23:55:44 thorpej Exp $ */
+/*	$NetBSD: smc90cx6.c,v 1.29 1999/02/16 23:34:13 is Exp $ */
 
 /*-
  * Copyright (c) 1994, 1995, 1998 The NetBSD Foundation, Inc.
@@ -199,6 +199,7 @@ bah_attach_subr(sc)
 
 	bcopy(sc->sc_dev.dv_xname, ifp->if_xname, IFNAMSIZ);
 	ifp->if_softc = sc;
+	ifp->if_output = arc_output;
 	ifp->if_start = bah_start;
 	ifp->if_ioctl = bah_ioctl;
 	ifp->if_timer = 0;
@@ -610,7 +611,9 @@ bah_srint(vsc)
 		bpf_mtap(ifp->if_bpf, head);
 #endif
 
-	(*sc->sc_arccom.ac_if.if_input)(&sc->sc_arccom.ac_if, head);
+	arc_input(&sc->sc_arccom.ac_if, head);
+
+	/* arc_input has freed it, we dont need to... */
 
 	head = NULL;
 	ifp->if_ipackets++;

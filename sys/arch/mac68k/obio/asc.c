@@ -1,4 +1,4 @@
-/*	$NetBSD: asc.c,v 1.31 1999/04/22 18:00:34 ender Exp $	*/
+/*	$NetBSD: asc.c,v 1.30.4.1 1999/04/23 14:52:32 perry Exp $	*/
 
 /*
  * Copyright (C) 1997 Scott Reynolds

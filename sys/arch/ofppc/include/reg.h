@@ -1,3 +1,2 @@
-/*	$NetBSD: reg.h,v 1.3 1999/05/04 23:46:32 thorpej Exp $	*/
+/*	$NetBSD: reg.h,v 1.2 1998/01/05 07:03:18 perry Exp $	*/
 
-#include <powerpc/reg.h>

@@ -1,4 +1,4 @@
-/*	$NetBSD: if_ie.c,v 1.31 1999/05/21 21:33:59 thorpej Exp $ */
+/*	$NetBSD: if_ie.c,v 1.29 1999/03/25 23:13:54 thorpej Exp $ */
 
 /*-
  * Copyright (c) 1993, 1994, 1995 Charles M. Hannum.
@@ -212,7 +212,8 @@ static inline int check_eh __P((struct ie_softc *,
 		struct ether_header *eh, int *));
 static inline int ie_buflen __P((struct ie_softc *, int));
 static inline int ie_packet_len __P((struct ie_softc *));
-static inline struct mbuf * ieget __P((struct ie_softc *sc, int *to_bpf));
+static inline struct mbuf * ieget __P((struct ie_softc *sc,
+		struct ether_header *ehp, int *to_bpf));
 
 
 /*
@@ -912,15 +913,15 @@ iexmit(sc)
  * operation considerably.  (Provided that it works, of course.)
  */
 static inline struct mbuf *
-ieget(sc, to_bpf)
+ieget(sc, ehp, to_bpf)
 	struct ie_softc *sc;
+	struct ether_header *ehp;
 	int *to_bpf;
 {
 	struct mbuf *top, **mp, *m;
 	int len, totlen, resid;
 	int thisrboff, thismboff;
 	int head;
-	struct ether_header eh;
 
 	totlen = ie_packet_len(sc);
 	if (totlen <= 0)
@@ -931,8 +932,7 @@ ieget(sc, to_bpf)
 	/*
 	 * Snarf the Ethernet header.
 	 */
-	(sc->sc_memcpy)((caddr_t)&eh, (caddr_t)sc->cbuffs[head],
-	    sizeof(struct ether_header));
+	(sc->sc_memcpy)((caddr_t)ehp, (caddr_t)sc->cbuffs[head], sizeof(*ehp));
 
 	/*
 	 * As quickly as possible, check if this packet is for us.
@@ -941,13 +941,13 @@ ieget(sc, to_bpf)
 	 * This is only a consideration when FILTER is defined; i.e., when
 	 * we are either running BPF or doing multicasting.
 	 */
-	if (!check_eh(sc, &eh, to_bpf)) {
+	if (!check_eh(sc, ehp, to_bpf)) {
 		/* just this case, it's not an error */
 		sc->sc_if.if_ierrors--;
 		return 0;
 	}
 
-	resid = totlen;
+	resid = totlen -= (thisrboff = sizeof *ehp);
 
 	MGETHDR(m, M_DONTWAIT, MT_DATA);
 	if (m == 0)
@@ -977,17 +977,7 @@ ieget(sc, to_bpf)
 			if (m->m_flags & M_EXT)
 				len = MCLBYTES;
 		}
-
-		if (mp == &top) {
-			caddr_t newdata = (caddr_t)
-			    ALIGN(m->m_data + sizeof(struct ether_header)) -
-			    sizeof(struct ether_header);
-			len -= newdata - m->m_data; 
-			m->m_data = newdata;
-		}
-
 		m->m_len = len = min(totlen, len);
-
 		totlen -= len;
 		*mp = m;
 		mp = &m->m_next;
@@ -995,14 +985,6 @@ ieget(sc, to_bpf)
 
 	m = top;
 	thismboff = 0;
-
-	/*
-	 * Copy the Ethernet header into the mbuf chain.
-	 */
-	memcpy(mtod(m, caddr_t), &eh, sizeof(struct ether_header));
-	thismboff = sizeof(struct ether_header);
-	thisrboff = sizeof(struct ether_header);
-	resid -= sizeof(struct ether_header);
 
 	/*
 	 * Now we take the mbuf chain (hopefully only one mbuf most of the
@@ -1056,6 +1038,7 @@ ie_readframe(sc, num)
 {
 	int status;
 	struct mbuf *m = 0;
+	struct ether_header eh;
 #if NBPFILTER > 0
 	int bpf_gets_it = 0;
 #endif
@@ -1071,9 +1054,9 @@ ie_readframe(sc, num)
 
 	if (status & IE_FD_OK) {
 #if NBPFILTER > 0
-		m = ieget(sc, &bpf_gets_it);
+		m = ieget(sc, &eh, &bpf_gets_it);
 #else
-		m = ieget(sc, 0);
+		m = ieget(sc, &eh, 0);
 #endif
 		ie_drop_packet_buffer(sc);
 	}
@@ -1083,13 +1066,10 @@ ie_readframe(sc, num)
 	}
 
 #ifdef IEDEBUG
-	if (sc->sc_debug & IED_READFRAME) {
-		struct ether_header *eh = mtod(m, struct ether_header *);
-
+	if (sc->sc_debug & IED_READFRAME)
 		printf("%s: frame from ether %s type 0x%x\n",
 			sc->sc_dev.dv_xname,
-		    ether_sprintf(eh->ether_shost), (u_int)eh->ether_type);
-	}
+		    ether_sprintf(eh.ether_shost), (u_int)eh.ether_type);
 #endif
 
 #if NBPFILTER > 0
@@ -1102,8 +1082,13 @@ ie_readframe(sc, num)
 	 * tho' it will make a copy for tcpdump.)
 	 */
 	if (bpf_gets_it) {
+		struct mbuf m0;
+		m0.m_len = sizeof eh;
+		m0.m_data = (caddr_t)&eh;
+		m0.m_next = m;
+
 		/* Pass it up. */
-		bpf_mtap(sc->sc_if.if_bpf, m);
+		bpf_mtap(sc->sc_if.if_bpf, &m0);
 
 		/*
 		 * A signal passed up from the filtering code indicating that
@@ -1129,7 +1114,7 @@ ie_readframe(sc, num)
 	/*
 	 * Finally pass this packet up to higher layers.
 	 */
-	(*ifp->if_input)(&sc->sc_if, m);
+	ether_input(&sc->sc_if, &eh, m);
 	sc->sc_if.if_ipackets++;
 }
 

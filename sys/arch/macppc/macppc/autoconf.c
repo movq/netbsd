@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.11 1999/05/01 10:37:57 tsubai Exp $	*/
+/*	$NetBSD: autoconf.c,v 1.10.2.1 1999/05/06 02:00:42 perry Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.

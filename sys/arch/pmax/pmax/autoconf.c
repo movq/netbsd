@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.35 1999/05/31 07:42:56 nisimura Exp $	*/
+/*	$NetBSD: autoconf.c,v 1.32 1998/11/17 22:41:06 jonathan Exp $	*/
 
 /*
  * Copyright (c) 1988 University of Utah.
@@ -43,7 +43,7 @@
  */
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
-__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.35 1999/05/31 07:42:56 nisimura Exp $");
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.32 1998/11/17 22:41:06 jonathan Exp $");
 
 /*
  * Setup the system to run on the current machine.
@@ -88,9 +88,14 @@ tc_option_t tc_slot_info[TC_MAX_LOGICAL_SLOTS];
 
 void configure_scsi __P((void));
 
-void findroot __P((struct device **, int *));
+void	findroot __P((struct device **, int *));
 
-extern struct devnametobdevmaj dev_name2blk[];
+struct devnametobdevmaj pmax_nam2blk[] = {
+	{ "rz",		21 },
+	{ "md",		17 },
+	{ NULL,		0 },
+};
+
 
 /*
  * Determine mass storage and memory configuration for a machine.
@@ -102,10 +107,12 @@ extern struct devnametobdevmaj dev_name2blk[];
 void
 configure()
 {
+	int s;
+
 	/*
 	 * Kick off autoconfiguration
 	 */
-	(void)splhigh();
+	s = splhigh();
 	if (config_rootfound("mainbus", "mainbus") == NULL)
 	    panic("no mainbus found");
 
@@ -116,7 +123,7 @@ configure()
 #ifdef DEBUG
 	printf("autconfiguration done, spl back to 0x%x\n", s);
 #endif
-	_splnone();	/* enable all source forcing SOFT_INTs cleared */
+	spl0();
 
 	/*
 	 * Probe SCSI bus using old-style pmax configuration table.
@@ -140,7 +147,7 @@ cpu_rootconf()
 	printf("boot device: %s\n",
 	    booted_device ? booted_device->dv_xname : "<unknown>");
 
-	setroot(booted_device, booted_partition, dev_name2blk);
+	setroot(booted_device, booted_partition, pmax_nam2blk);
 }
 
 u_long	bootdev = 0;		/* should be dev_t, but not until 32 bits */
@@ -168,9 +175,9 @@ findroot(devpp, partp)
 		return;
 
 	majdev = B_TYPE(bootdev);
-	for (i = 0; dev_name2blk[i].d_name != NULL; i++) {
-		if (majdev == dev_name2blk[i].d_maj) {
-			bootdv_name = dev_name2blk[i].d_name;
+	for (i = 0; pmax_nam2blk[i].d_name != NULL; i++) {
+		if (majdev == pmax_nam2blk[i].d_maj) {
+			bootdv_name = pmax_nam2blk[i].d_name;
 			break;
 		}
 	}
@@ -207,7 +214,7 @@ findroot(devpp, partp)
  */
 void
 makebootdev(cp)
-	char *cp;
+	register char *cp;
 {
 	int majdev, unit, part, ctrl;
 
@@ -221,21 +228,21 @@ makebootdev(cp)
 		else
 			part = 0;
 		cp += 2;
-		for (majdev = 0; dev_name2blk[majdev].d_name != NULL;
+		for (majdev = 0; pmax_nam2blk[majdev].d_name != NULL;
 		    majdev++) {
-			if (cp[0] == dev_name2blk[majdev].d_name[0] &&
-			    cp[1] == dev_name2blk[majdev].d_name[1]) {
+			if (cp[0] == pmax_nam2blk[majdev].d_name[0] &&
+			    cp[1] == pmax_nam2blk[majdev].d_name[1]) {
 				bootdev = MAKEBOOTDEV(
-				    dev_name2blk[majdev].d_maj, 0, 0,
+				    pmax_nam2blk[majdev].d_maj, 0, 0,
 				    unit, part);
 				return;
 			}
 		}
 		goto defdev;
 	}
-	for (majdev = 0; dev_name2blk[majdev].d_name != NULL; majdev++)
-		if (cp[0] == dev_name2blk[majdev].d_name[0] &&
-		    cp[1] == dev_name2blk[majdev].d_name[1] &&
+	for (majdev = 0; pmax_nam2blk[majdev].d_name != NULL; majdev++)
+		if (cp[0] == pmax_nam2blk[majdev].d_name[0] &&
+		    cp[1] == pmax_nam2blk[majdev].d_name[1] &&
 		    cp[2] == '(')
 			goto fndmaj;
 defdev:
@@ -243,7 +250,7 @@ defdev:
 	return;
 
 fndmaj:
-	majdev = dev_name2blk[majdev].d_maj;
+	majdev = pmax_nam2blk[majdev].d_maj;
 	for (ctrl = 0, cp += 3; *cp >= '0' && *cp <= '9'; )
 		ctrl = ctrl * 10 + *cp++ - '0';
 	if (*cp == ',')

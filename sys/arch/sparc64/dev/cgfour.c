@@ -1,4 +1,4 @@
-/*	$NetBSD: cgfour.c,v 1.5 1999/06/05 21:58:17 eeh Exp $	*/
+/*	$NetBSD: cgfour.c,v 1.3 1998/11/19 15:38:24 mrg Exp $	*/
 
 /*
  * Copyright (c) 1996 Jason R. Thorpe.  All rights reserved.
@@ -159,7 +159,7 @@ cgfourmatch(parent, cf, aux)
 	/*
 	 * Make sure there's hardware there.
 	 */
-	if (probeget(ra->ra_vaddr, ASI_PRIMARY, 4) == -1)
+	if (probeget(ra->ra_vaddr, 4) == -1)
 		return (0);
 
 #if defined(SUN4)

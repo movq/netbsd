@@ -1,4 +1,4 @@
-/*	$NetBSD: uhci.c,v 1.28 1999/05/21 10:15:24 augustss Exp $	*/
+/*	$NetBSD: uhci.c,v 1.24 1999/02/20 23:26:16 augustss Exp $	*/
 
 /*
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -39,12 +39,12 @@
 
 /*
  * USB Universal Host Controller driver.
- * Handles e.g. PIIX3 and PIIX4.
+ * Handles PIIX3 and PIIX4.
  *
  * Data sheets: ftp://download.intel.com/design/intarch/datashts/29055002.pdf
  *              ftp://download.intel.com/design/intarch/datashts/29056201.pdf
  * UHCI spec: http://www.intel.com/design/usb/uhci11d.pdf
- * USB spec: http://www.usb.org/developers/data/usb11.pdf
+ * USB spec: http://www.usb.org/cgi-usb/mailmerge.cgi/home/usb/docs/developers/cgiform.tpl
  */
 
 #include <sys/param.h>
@@ -389,14 +389,14 @@ static void
 uhci_dumpregs(sc)
 	uhci_softc_t *sc;
 {
-	printf("%s regs: cmd=%04x, sts=%04x, intr=%04x, frnum=%04x, "
+	printf("%s; regs: cmd=%04x, sts=%04x, intr=%04x, frnum=%04x, "
 	       "flbase=%08x, sof=%04x, portsc1=%04x, portsc2=%04x\n",
 	       USBDEVNAME(sc->sc_bus.bdev),
 	       UREAD2(sc, UHCI_CMD),
 	       UREAD2(sc, UHCI_STS),
 	       UREAD2(sc, UHCI_INTR),
 	       UREAD2(sc, UHCI_FRNUM),
-	       UREAD4(sc, UHCI_FLBASEADDR),
+	       UREAD2(sc, UHCI_FLBASEADDR),
 	       UREAD2(sc, UHCI_SOF),
 	       UREAD2(sc, UHCI_PORTSC1),
 	       UREAD2(sc, UHCI_PORTSC2));
@@ -408,8 +408,7 @@ void
 uhci_dump_td(p)
 	uhci_soft_td_t *p;
 {
-	printf("TD(%p) at %08lx = link=0x%08lx status=0x%08lx "
-	       "token=0x%08lx buffer=0x%08lx\n",
+	printf("TD(%p) at %08lx = 0x%08lx 0x%08lx 0x%08lx 0x%08lx\n",
 	       p, (long)p->physaddr,
 	       (long)p->td->td_link,
 	       (long)p->td->td_status,
@@ -728,11 +727,7 @@ uhci_check_intr(sc, ii)
 		return;
 	}
 #endif
-	/* 
-	 * If the last TD is still active we need to check whether there
-	 * is a an error somewhere in the middle, or whether there was a
-	 * short packet (SPD and not ACTIVE).
-	 */
+	/* If the last TD is still active the whole transfer probably is. */
 	if (lstd->td->td_status & UHCI_TD_ACTIVE) {
 		DPRINTFN(15, ("uhci_check_intr: active ii=%p\n", ii));
 		for (std = ii->stdstart; std != lstd; std = std->td->link.std){
@@ -747,10 +742,10 @@ uhci_check_intr(sc, ii)
 		return;
 	}
  done:
-	usb_untimeout(uhci_timeout, ii, ii->timeout_handle);
 	upipe = (struct uhci_pipe *)ii->reqh->pipe;
 	upipe->pipe.endpoint->toggle = upipe->newtoggle;
 	uhci_ii_done(ii, 0);
+	usb_untimeout(uhci_timeout, ii, ii->timeout_handle);
 }
 
 void
@@ -760,8 +755,8 @@ uhci_ii_done(ii, timo)
 {
 	usbd_request_handle reqh = ii->reqh;
 	uhci_soft_td_t *std;
-	u_int32_t status;
-	int actlen;
+	u_int32_t tst;
+	int len, status, attr;
 
 	DPRINTFN(10, ("uhci_ii_done: ii=%p ready %d\n", ii, timo));
 
@@ -769,8 +764,8 @@ uhci_ii_done(ii, timo)
 	{
 		int s = splhigh();
 		if (ii->isdone) {
-			splx(s);
 			printf("uhci_ii_done: is done!\n");
+			splx(s);
 			return;
 		}
 		ii->isdone = 1;
@@ -778,21 +773,25 @@ uhci_ii_done(ii, timo)
 	}
 #endif
 
-	/* The transfer is done, compute actual length and status. */
+	/* The transfer is done, compute length and status. */
 	/* XXX Should stop at first inactive to get toggle right. */
 	/* XXX Is this correct for control xfers? */
-	actlen = 0;
-	for (std = ii->stdstart; std; std = std->td->link.std) {
-		status = std->td->td_status;
-		if (status & UHCI_TD_ACTIVE)
-			break;
+	for (len = status = 0, std = ii->stdstart; 
+	     std != 0; 
+	     std = std->td->link.std) {
+		tst = std->td->td_status;
+		status |= tst;
+#ifdef USB_DEBUG
+		if ((tst & UHCI_TD_ERROR) && uhcidebug) {
+			printf("uhci_ii_done: intr error TD:\n");
+			uhci_dump_td(std);
+		}
+#endif
 		if (UHCI_TD_GET_PID(std->td->td_token) != UHCI_TD_PID_SETUP)
-			actlen += UHCI_TD_GET_ACTLEN(status);
+			len += UHCI_TD_GET_ACTLEN(tst);
 	}
 	status &= UHCI_TD_ERROR;
-	DPRINTFN(10, ("uhci_check_intr: actlen=%d, status=0x%x\n", 
-		      actlen, status));
-	reqh->actlen = actlen;
+	DPRINTFN(10, ("uhci_check_intr: len=%d, status=0x%x\n", len, status));
 	if (status != 0) {
 		DPRINTFN(-1+(status==UHCI_TD_STALLED),
 			 ("uhci_ii_done: error, addr=%d, endpt=0x%02x, "
@@ -806,8 +805,10 @@ uhci_ii_done(ii, timo)
 			reqh->status = USBD_STALLED;
 		else
 			reqh->status = USBD_IOERROR; /* more info XXX */
+		reqh->actlen = 0;
 	} else {
 		reqh->status = USBD_NORMAL_COMPLETION;
+		reqh->actlen = len;
 	}
 	if (timo) {
 		/* We got a timeout.  Make sure transaction is not active. */
@@ -818,7 +819,8 @@ uhci_ii_done(ii, timo)
 	}
 	DPRINTFN(5, ("uhci_ii_done: calling handler ii=%p\n", ii));
 
-	switch (reqh->pipe->endpoint->edesc->bmAttributes & UE_XFERTYPE) {
+	attr = reqh->pipe->endpoint->edesc->bmAttributes;
+	switch (attr & UE_XFERTYPE) {
 	case UE_CONTROL:
 		uhci_ctrl_done(ii);
 		usb_start_next(reqh->pipe);
@@ -868,14 +870,15 @@ uhci_waitintr(sc, reqh)
 	usbd_request_handle reqh;
 {
 	int timo = reqh->timeout;
+	int usecs;
 	uhci_intr_info_t *ii;
 
-	DPRINTFN(10,("uhci_waitintr: timeout = %dms\n", timo));
+	DPRINTFN(10,("uhci_waitintr: timeout = %ds\n", timo));
 
 	reqh->status = USBD_IN_PROGRESS;
-	for (; timo >= 0; timo--) {
+	for (usecs = timo * 1000000 / hz; usecs > 0; usecs -= 1000) {
 		usb_delay_ms(&sc->sc_bus, 1);
-		DPRINTFN(20,("uhci_waitintr: 0x%04x\n", UREAD2(sc, UHCI_STS)));
+		DPRINTFN(10,("uhci_waitintr: 0x%04x\n", UREAD2(sc, UHCI_STS)));
 		if (UREAD2(sc, UHCI_STS) & UHCI_STS_USBINT) {
 			uhci_intr(sc);
 			if (reqh->status != USBD_IN_PROGRESS)
@@ -1107,7 +1110,7 @@ uhci_alloc_std_chain(upipe, sc, len, rd, spd, dma, sp, ep)
 	int endpt = upipe->pipe.endpoint->edesc->bEndpointAddress;
 
 	DPRINTFN(15, ("uhci_alloc_std_chain: addr=%d endpt=%d len=%d ls=%d "
-		      "spd=%d\n", addr, UE_GET_ADDR(endpt), len, 
+		      "spd=%d\n", addr, endpt, len, 
 		      upipe->pipe.device->lowspeed, spd));
 	if (len == 0) {
 		*sp = *ep = 0;
@@ -1127,7 +1130,7 @@ uhci_alloc_std_chain(upipe, sc, len, rd, spd, dma, sp, ep)
 	lastp = 0;
 	lastlink = UHCI_PTR_T;
 	ntd--;
-	status = UHCI_TD_SET_ERRCNT(3) | UHCI_TD_ACTIVE;
+	status = UHCI_TD_SET_ERRCNT(2) | UHCI_TD_ACTIVE;
 	if (upipe->pipe.device->lowspeed)
 		status |= UHCI_TD_LS;
 	if (spd)
@@ -1257,9 +1260,6 @@ uhci_device_bulk_start(reqh)
 		uhci_dump_tds(xfer);
 	}
 #endif
-
-	if (sc->sc_bus.use_polling)
-		uhci_waitintr(sc, reqh);
 
 	return (USBD_IN_PROGRESS);
 
@@ -2265,7 +2265,6 @@ uhci_root_ctrl_start(reqh)
 				goto ret;
 			}
 			totlen = l = min(len, USB_DEVICE_DESCRIPTOR_SIZE);
-			USETW(uhci_devd.idVendor, sc->sc_id_vendor);
 			memcpy(buf, &uhci_devd, l);
 			break;
 		case UDESC_CONFIG:
@@ -2618,4 +2617,3 @@ uhci_root_intr_close(pipe)
 	usb_untimeout(uhci_timo, pipe->intrreqh, pipe->intrreqh->timo_handle);
 	DPRINTF(("uhci_root_intr_close\n"));
 }
-

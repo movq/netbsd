@@ -1,4 +1,4 @@
-/*	$NetBSD: if.h,v 1.36 1999/05/18 23:57:19 thorpej Exp $	*/
+/*	$NetBSD: if.h,v 1.35 1999/03/27 01:24:49 aidan Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1989, 1993
@@ -129,8 +129,6 @@ struct ifnet {				/* and the entries */
 	int	(*if_output)		/* output routine (enqueue) */
 		__P((struct ifnet *, struct mbuf *, struct sockaddr *,
 		     struct rtentry *));
-	void	(*if_input)		/* input routine (from h/w driver) */
-		__P((struct ifnet *, struct mbuf *));
 	void	(*if_start)		/* initiate output routine */
 		__P((struct ifnet *));
 	int	(*if_ioctl)		/* ioctl routine */
@@ -370,6 +368,9 @@ struct	ifconf {
 struct ifnet_head ifnet;
 
 void	ether_ifattach __P((struct ifnet *, const u_int8_t *));
+void	ether_input __P((struct ifnet *, struct ether_header *, struct mbuf *));
+int	ether_output __P((struct ifnet *,
+	   struct mbuf *, struct sockaddr *, struct rtentry *));
 char	*ether_sprintf __P((const u_char *));
 
 void	if_attach __P((struct ifnet *));

@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.358 1999/05/26 19:16:31 thorpej Exp $	*/
+/*	$NetBSD: machdep.c,v 1.349.2.1 1999/04/16 16:17:27 chs Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997, 1998 The NetBSD Foundation, Inc.
@@ -75,6 +75,7 @@
  *	@(#)machdep.c	7.4 (Berkeley) 6/3/91
  */
 
+#include "opt_bufcache.h"
 #include "opt_cputype.h"
 #include "opt_ddb.h"
 #include "opt_vm86.h"
@@ -83,6 +84,7 @@
 #include "opt_compat_netbsd.h"
 #include "opt_cpureset_delay.h"
 #include "opt_compat_svr4.h"
+#include "opt_sysv.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -108,6 +110,15 @@
 #include <sys/core.h>
 #include <sys/kcore.h>
 #include <machine/kcore.h>
+#ifdef SYSVMSG
+#include <sys/msg.h>
+#endif
+#ifdef SYSVSEM
+#include <sys/sem.h>
+#endif
+#ifdef SYSVSHM
+#include <sys/shm.h>
+#endif
 
 #ifdef KGDB
 #include <sys/kgdb.h>
@@ -215,6 +226,26 @@ char bootinfo[BOOTINFO_MAXSIZE];
 struct bi_devmatch *i386_alldisks = NULL;
 int i386_ndisks = 0;
 
+/*
+ * Declare these as initialized data so we can patch them.
+ */
+int	nswbuf = 0;
+#ifdef	NBUF
+int	nbuf = NBUF;
+#else
+int	nbuf = 0;
+#endif
+#ifdef	BUFPAGES
+int	bufpages = BUFPAGES;
+#else
+int	bufpages = 0;
+#endif
+#ifdef BUFCACHE
+int	bufcache = BUFCACHE;	/* % of RAM to use for buffer cache */
+#else
+int	bufcache = 0;		/* fallback to old algorithm */
+#endif
+
 #ifdef CPURESET_DELAY
 int	cpureset_delay = CPURESET_DELAY;
 #else
@@ -270,6 +301,7 @@ static	int ioport_malloc_safe;
 phys_ram_seg_t mem_clusters[VM_PHYSSEG_MAX];
 int	mem_cluster_cnt;
 
+caddr_t	allocsys __P((caddr_t));
 int	cpu_dump __P((void));
 int	cpu_dumpsize __P((void));
 u_long	cpu_dump_mempagecnt __P((void));
@@ -362,7 +394,6 @@ cpu_startup()
 	int sz, x;
 	vaddr_t minaddr, maxaddr;
 	vsize_t size;
-	char pbuf[9];
 #if NBIOSCALL > 0
 	extern int biostramp_image_size;
 	extern u_char biostramp_image[];
@@ -372,7 +403,7 @@ cpu_startup()
 	 * Initialize error message buffer (et end of core).
 	 */
 #if defined(PMAP_NEW)
-	msgbuf_vaddr = uvm_km_valloc(kernel_map, i386_round_page(MSGBUFSIZE));
+	msgbuf_vaddr =  uvm_km_valloc(kernel_map, i386_round_page(MSGBUFSIZE));
 	if (msgbuf_vaddr == NULL)
 		panic("failed to valloc msgbuf_vaddr");
 #endif
@@ -380,7 +411,7 @@ cpu_startup()
 #if defined(PMAP_NEW)
 	for (x = 0; x < btoc(MSGBUFSIZE); x++)
 		pmap_kenter_pa((vaddr_t)msgbuf_vaddr + x * NBPG,
-		    msgbuf_paddr + x * NBPG, VM_PROT_READ|VM_PROT_WRITE);
+		    msgbuf_paddr + x * NBPG, VM_PROT_ALL);
 #else
 	for (x = 0; x < btoc(MSGBUFSIZE); x++)
 		pmap_enter(pmap_kernel(), (vaddr_t)msgbuf_vaddr + x * NBPG,
@@ -392,17 +423,16 @@ cpu_startup()
 	printf(version);
 	identifycpu();
 
-	format_bytes(pbuf, sizeof(pbuf), ctob(physmem));
-	printf("total memory = %s\n", pbuf);
+	printf("real mem  = %d\n", ctob(physmem));
 
 	/*
 	 * Find out how much space we need, allocate it,
 	 * and then give everything true virtual addresses.
 	 */
-	sz = (int)allocsys(NULL, NULL);
+	sz = (int)allocsys((caddr_t)0);
 	if ((v = (caddr_t)uvm_km_zalloc(kernel_map, round_page(sz))) == 0)
 		panic("startup: no room for tables");
-	if (allocsys(v, NULL) - v != sz)
+	if (allocsys(v) - v != sz)
 		panic("startup: table size inconsistency");
 
 	/*
@@ -441,19 +471,19 @@ cpu_startup()
 	 * limits the number of processes exec'ing at any time.
 	 */
 	exec_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
-				   16*NCARGS, VM_MAP_PAGEABLE, FALSE, NULL);
+				   16*NCARGS, TRUE, FALSE, NULL);
 
 	/*
 	 * Allocate a submap for physio
 	 */
 	phys_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
-				   VM_PHYS_SIZE, 0, FALSE, NULL);
+				   VM_PHYS_SIZE, TRUE, FALSE, NULL);
 
 	/*
 	 * Finally, allocate mbuf cluster submap.
 	 */
 	mb_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
-	    nmbclusters * mclbytes, VM_MAP_INTRSAFE, FALSE, NULL);
+	    VM_MBUF_SIZE, FALSE, FALSE, NULL);
 
 	/*
 	 * Initialize callouts
@@ -467,10 +497,9 @@ cpu_startup()
 	 * XXX we need to account for those pages when printing
 	 * XXX the amount of free memory.
 	 */
-	format_bytes(pbuf, sizeof(pbuf), ptoa(uvmexp.free - bufpages));
-	printf("avail memory = %s\n", pbuf);
-	format_bytes(pbuf, sizeof(pbuf), bufpages * CLBYTES);
-	printf("using %d buffers containing %s of memory\n", nbuf, pbuf);
+	printf("avail mem = %ld\n", ptoa(uvmexp.free - bufpages));
+	printf("using %d buffers containing %d bytes of memory\n",
+		nbuf, bufpages * CLBYTES);
 
 #if NBIOSCALL > 0
 	/*
@@ -490,7 +519,7 @@ cpu_startup()
 	pmap_enter(pmap_kernel(),
 		   (vaddr_t)BIOSTRAMP_BASE,	/* virtual */
 		   (paddr_t)BIOSTRAMP_BASE,	/* physical */
-		   VM_PROT_ALL,			/* protection */
+		   VM_PROT_READ|VM_PROT_WRITE,	/* protection */
 		   TRUE,			/* wired down */
 		   VM_PROT_READ|VM_PROT_WRITE);
 #endif
@@ -584,6 +613,95 @@ i386_bufinit()
 	 * Set up buffers, so they can be used to read disk labels.
 	 */
 	bufinit();
+}
+
+/*
+ * Allocate space for system data structures.  We are given
+ * a starting virtual address and we return a final virtual
+ * address; along the way we set each data structure pointer.
+ *
+ * We call allocsys() with 0 to find out how much space we want,
+ * allocate that much and fill it with zeroes, and then call
+ * allocsys() again with the correct base virtual address.
+ */
+caddr_t
+allocsys(v)
+	caddr_t v;
+{
+
+#define	valloc(name, type, num) \
+	    v = (caddr_t)(((name) = (type *)v) + (num))
+#ifdef REAL_CLISTS
+	valloc(cfree, struct cblock, nclist);
+#endif
+	valloc(callout, struct callout, ncallout);
+#ifdef SYSVSHM
+	valloc(shmsegs, struct shmid_ds, shminfo.shmmni);
+#endif
+#ifdef SYSVSEM
+	valloc(sema, struct semid_ds, seminfo.semmni);
+	valloc(sem, struct sem, seminfo.semmns);
+	/* This is pretty disgusting! */
+	valloc(semu, int, (seminfo.semmnu * seminfo.semusz) / sizeof(int));
+#endif
+#ifdef SYSVMSG
+	valloc(msgpool, char, msginfo.msgmax);
+	valloc(msgmaps, struct msgmap, msginfo.msgseg);
+	valloc(msghdrs, struct msg, msginfo.msgtql);
+	valloc(msqids, struct msqid_ds, msginfo.msgmni);
+#endif
+
+	/*
+	 * If necessary, determine the number of pages to use for the
+	 * buffer cache.  We allocate 1/2 as many swap buffer headers
+	 * as file I/O buffers.
+	 */
+	if (bufpages == 0) {
+		if (bufcache == 0) {		/* use old algorithm */
+			/*
+			 * Determine how many buffers to allocate. We use 10%
+			 * of the first 2MB of memory, and 5% of the rest, with
+			 * a minimum of 16 buffers.
+			 */
+			if (physmem < btoc(2 * 1024 * 1024))
+				bufpages = physmem / (10 * CLSIZE);
+			else
+				bufpages = (btoc(2 * 1024 * 1024) + physmem) /
+				    (20 * CLSIZE);
+		} else {
+			/*
+			 * Set size of buffer cache to physmem/bufcache * 100
+			 * (i.e., bufcache % of physmem).
+			 */
+			if (bufcache < 5 || bufcache > 95) {
+				printf(
+		"warning: unable to set bufcache to %d%% of RAM, using 10%%",
+				    bufcache);
+				bufcache = 10;
+			}
+			bufpages= physmem / (CLSIZE * 100) * bufcache;
+		}
+	}
+	if (nbuf == 0) {
+		nbuf = bufpages;
+		if (nbuf < 16)
+			nbuf = 16;
+	}
+
+	/*
+	 * XXX stopgap measure to prevent wasting too much KVM on
+	 * the sparsely filled buffer cache.
+	 */
+	if (nbuf * MAXBSIZE > VM_MAX_KERNEL_BUF)
+		nbuf = VM_MAX_KERNEL_BUF / MAXBSIZE;
+
+	if (nswbuf == 0) {
+		nswbuf = (nbuf / 2) &~ 1;	/* force even */
+		if (nswbuf > 256)
+			nswbuf = 256;		/* sanity */
+	}
+	valloc(buf, struct buf, nbuf);
+	return v;
 }
 
 /*  
@@ -1548,7 +1666,8 @@ setregs(p, pack, stack)
 #endif
 
 #ifdef USER_LDT
-	pmap_ldt_cleanup(p);
+	if (pcb->pcb_flags & PCB_USER_LDT)
+		i386_user_cleanup(pcb);
 #endif
 
 	p->p_md.md_flags &= ~MDP_USEDFPU;
@@ -1704,10 +1823,8 @@ init386(first_avail)
 	 * is what puts us over 16M.
 	 */
 	if (biosextmem > (15*1024) && biosextmem < (16*1024)) {
-		char pbuf[9];
-
-		format_bytes(pbuf, sizeof(pbuf), biosextmem - (15*1024));
-		printf("Warning: ignoring %s of remapped memory\n", pbuf);
+		printf("Warning: ignoring %dk of remapped memory\n",
+		    biosextmem - (15*1024));
 		biosextmem = (15*1024);
 	}
 #endif
@@ -2306,12 +2423,8 @@ i386_mem_add_mapping(bpa, size, cacheable, bshp)
 	*bshp = (bus_space_handle_t)(va + (bpa & PGOFSET));
 
 	for (; pa < endpa; pa += NBPG, va += NBPG) {
-#if defined(PMAP_NEW)
-		pmap_kenter_pa(va, pa, VM_PROT_READ | VM_PROT_WRITE);
-#else
 		pmap_enter(pmap_kernel(), va, pa,
 		    VM_PROT_READ | VM_PROT_WRITE, TRUE, 0);
-#endif
 
 		/*
 		 * PG_N doesn't exist on 386's, so we assume that
@@ -2741,9 +2854,12 @@ _bus_dmamem_map(t, segs, nsegs, size, kvap, flags)
 		    addr += NBPG, va += NBPG, size -= NBPG) {
 			if (size == 0)
 				panic("_bus_dmamem_map: size botch");
+#if defined(PMAP_NEW)
+			pmap_kenter_pa(va, addr, VM_PROT_READ | VM_PROT_WRITE);
+#else
 			pmap_enter(pmap_kernel(), va, addr,
-			    VM_PROT_READ | VM_PROT_WRITE, TRUE,
-			    VM_PROT_READ | VM_PROT_WRITE);
+			    VM_PROT_READ | VM_PROT_WRITE, TRUE, 0);
+#endif
 		}
 	}
 

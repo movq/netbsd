@@ -1,4 +1,4 @@
-/*	$NetBSD: vfs_subr.c,v 1.102 1999/04/21 02:37:07 mrg Exp $	*/
+/*	$NetBSD: vfs_subr.c,v 1.100 1999/03/24 05:51:26 mrg Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.

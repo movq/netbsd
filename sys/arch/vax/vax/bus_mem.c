@@ -1,4 +1,4 @@
-/*	$NetBSD: bus_mem.c,v 1.5 1999/05/24 20:10:30 ragge Exp $ */
+/*	$NetBSD: bus_mem.c,v 1.4 1999/03/26 23:41:38 mycroft Exp $ */
 /*
  * Copyright (c) 1998 Matt Thomas
  * All rights reserved.
@@ -47,26 +47,43 @@
 #include <machine/intr.h>
 
 static int
-vax_mem_bus_space_map(
-	void *t,
-	bus_addr_t pa,
+vax_mem_add_mapping(
+	bus_addr_t bpa,
 	bus_size_t size,
 	int cacheable,
-	bus_space_handle_t *bshp,
-	int f2)
+	bus_space_handle_t *bshp)
 {
-	vaddr_t va;
+	u_long pa, endpa;
+	vm_offset_t va;
 
-	va = uvm_km_valloc(kernel_map, size);
+	pa = trunc_page(bpa);
+	endpa = round_page(bpa + size);
+
+	va = uvm_km_valloc(kernel_map, endpa - pa);
 	if (va == 0)
 		return (ENOMEM);
 
-	*bshp = (bus_space_handle_t)(va + (pa & VAX_PGOFSET));
+	*bshp = (bus_space_handle_t)(va + (bpa & VAX_PGOFSET));
 
-	ioaccess(va, pa, size >> VAX_PGSHIFT);
+	for (; pa < endpa; pa += VAX_NBPG, va += VAX_NBPG) {
+		pmap_enter(pmap_kernel(), va, pa,
+		    VM_PROT_READ | VM_PROT_WRITE, TRUE, 0);
+	}
 
 	return 0;   
 } 
+
+static int
+vax_mem_bus_space_map(
+	void *t,
+	bus_addr_t a,
+	bus_size_t s,
+	int f,
+	bus_space_handle_t *hp,
+	int f2)
+{
+	return vax_mem_add_mapping(a, s, (f & BUS_SPACE_MAP_CACHEABLE), hp);
+}
 
 static int
 vax_mem_bus_space_subregion(
@@ -93,7 +110,6 @@ vax_mem_bus_space_unmap(
         /* 
          * Free the kernel virtual mapping.
          */
-	iounaccess(va, size >> VAX_PGSHIFT);
 	uvm_km_free(kernel_map, va, endva - va);
 }
 
@@ -121,7 +137,7 @@ vax_mem_bus_space_free(
 	panic("vax_mem_bus_free not implemented");
 }
 	
-struct vax_bus_space vax_mem_bus_space = {
+static const struct vax_bus_space vax_mem_bus_space = {
 	NULL,
 	vax_mem_bus_space_map,
 	vax_mem_bus_space_unmap,

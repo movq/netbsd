@@ -1,4 +1,4 @@
-/*	$NetBSD: ohci.c,v 1.30 1999/05/21 10:15:23 augustss Exp $	*/
+/*	$NetBSD: ohci.c,v 1.27 1999/01/13 10:33:53 augustss Exp $	*/
 
 /*
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -40,8 +40,8 @@
 /*
  * USB Open Host Controller driver.
  *
- * OHCI spec: ftp://ftp.compaq.com/pub/supportinformation/papers/hcir1_0a.exe
- * USB spec: http://www.usb.org/developers/data/usb11.pdf
+ * OHCI spec: http://www.intel.com/design/usb/ohci11d.pdf
+ * USB spec: http://www.teleport.com/cgi-bin/mailmerge.cgi/~usb/cgiform.tpl
  */
 
 #include <sys/param.h>
@@ -1481,7 +1481,6 @@ ohci_root_ctrl_start(reqh)
 				goto ret;
 			}
 			totlen = l = min(len, USB_DEVICE_DESCRIPTOR_SIZE);
-			USETW(ohci_devd.idVendor, sc->sc_id_vendor);
 			memcpy(buf, &ohci_devd, l);
 			break;
 		case UDESC_CONFIG:
@@ -2154,7 +2153,7 @@ ohci_device_intr_close(pipe)
 	splx(s);
 
 	for (j = 0; j < nslots; j++)
-		--sc->sc_bws[(pos * nslots + j) & OHCI_NO_INTRS];
+		--sc->sc_bws[pos * nslots + j];
 
 	ohci_free_std(sc, opipe->tail);
 	ohci_free_sed(sc, opipe->sed);
@@ -2200,7 +2199,7 @@ ohci_device_setintr(sc, opipe, ival)
 	for (best = i = slow, bestbw = ~0; i < shigh; i++) {
 		bw = 0;
 		for (j = 0; j < nslots; j++)
-			bw += sc->sc_bws[(i * nslots + j) % OHCI_NO_INTRS];
+			bw += sc->sc_bws[i * nslots + j];
 		if (bw < bestbw) {
 			best = i;
 			bestbw = bw;
@@ -2218,7 +2217,7 @@ ohci_device_setintr(sc, opipe, ival)
 	splx(s);
 
 	for (j = 0; j < nslots; j++)
-		++sc->sc_bws[(best * nslots + j) % OHCI_NO_INTRS];
+		++sc->sc_bws[best * nslots + j];
 	opipe->u.intr.nslots = nslots;
 	opipe->u.intr.pos = best;
 

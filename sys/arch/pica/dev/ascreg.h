@@ -1,4 +1,4 @@
-/*	$NetBSD: ascreg.h,v 1.4 1999/04/12 20:38:20 pk Exp $	*/
+/*	$NetBSD: ascreg.h,v 1.2.22.2 1999/04/12 21:27:07 pk Exp $	*/
 
 /*-
  * Copyright (c) 1992, 1993

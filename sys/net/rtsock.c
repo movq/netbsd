@@ -1,4 +1,4 @@
-/*	$NetBSD: rtsock.c,v 1.29 1999/04/02 17:22:21 chopps Exp $	*/
+/*	$NetBSD: rtsock.c,v 1.28.2.1 1999/04/02 22:41:08 chopps Exp $	*/
 
 /*
  * Copyright (c) 1988, 1991, 1993

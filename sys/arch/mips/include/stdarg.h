@@ -1,4 +1,4 @@
-/*	$NetBSD: stdarg.h,v 1.16 1999/05/03 16:30:33 christos Exp $	*/
+/*	$NetBSD: stdarg.h,v 1.14 1999/01/22 14:14:32 mycroft Exp $	*/
 
 /*-
  * Copyright (c) 1992, 1993
@@ -42,10 +42,6 @@
 
 typedef _BSD_VA_LIST_	va_list;
 
-#ifdef __lint__
-#define __builtin_next_arg(t) ((t) ? 0 : 0)
-#endif
-
 #define	__va_size(type) \
 	(((sizeof(type) + sizeof(long) - 1) / sizeof(long)) * sizeof(long))
 
@@ -63,6 +59,6 @@ typedef _BSD_VA_LIST_	va_list;
 		(abort(), 0)))[-1]
 #endif
 
-#define	va_end(ap)
+#define	va_end(ap)	
 
 #endif /* !_MIPS_STDARG_H_ */

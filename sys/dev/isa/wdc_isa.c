@@ -1,4 +1,4 @@
-/*	$NetBSD: wdc_isa.c,v 1.15 1999/05/19 14:41:25 bouyer Exp $ */
+/*	$NetBSD: wdc_isa.c,v 1.13.2.1 1999/04/12 09:14:31 bouyer Exp $ */
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -55,8 +55,9 @@
 #define	WDC_ISA_AUXREG_OFFSET	0x206
 #define	WDC_ISA_AUXREG_NPORTS	1 /* XXX "fdc" owns ports 0x3f7/0x377 */
 
-/* options passed via the 'flags' config keyword */
-#define WDC_OPTIONS_32	0x01 /* try to use 32bit data I/O */
+/*
+ * XXX This code currently doesn't even try to allow 32-bit data port use.
+ */
 
 struct wdc_isa_softc {
 	struct	wdc_softc sc_wdcdev;
@@ -149,9 +150,8 @@ wdc_isa_attach(parent, self, aux)
 		sc->sc_wdcdev.dma_finish = wdc_isa_dma_finish;
 		wdc_isa_dma_setup(sc);
 	}
-	sc->sc_wdcdev.cap |= WDC_CAPABILITY_DATA16 | WDC_CAPABILITY_PREATA;
-	if (sc->sc_wdcdev.sc_dev.dv_cfdata->cf_flags & WDC_OPTIONS_32)
-		sc->sc_wdcdev.cap |= WDC_CAPABILITY_DATA32;
+	sc->sc_wdcdev.cap |= WDC_CAPABILITY_DATA16 | WDC_CAPABILITY_DATA32 |
+	    WDC_CAPABILITY_PREATA;
 	sc->sc_wdcdev.PIO_cap = 0;
 	sc->wdc_chanptr = &sc->wdc_channel;
 	sc->sc_wdcdev.channels = &sc->wdc_chanptr;

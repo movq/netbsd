@@ -1,17 +1,15 @@
-#	$NetBSD: Makefile,v 1.53 1999/05/07 14:49:52 drochner Exp $
+#	$NetBSD: Makefile,v 1.50 1999/03/04 19:46:09 drochner Exp $
 
 LIB=	kern
 MKPIC=	no
 
 ARCHSUBDIR= ${MACHINE_ARCH:C/mipse[bl]/mips/}
-M= ${KERNDIR}/arch/${ARCHSUBDIR}
+M= ${.CURDIR}/arch/${ARCHSUBDIR}
 
 CPPFLAGS=	-I$M ${KERNCPPFLAGS} ${KERNMISCCPPFLAGS}
 
-.PATH.c: ${KERNDIR}
 .if exists ($M/Makefile.inc)
-.PATH.c: $M
-.PATH.S: $M
+.PATH:	$M
 .include "$M/Makefile.inc"
 .endif
 
@@ -23,7 +21,7 @@ SRCS+=	adddi3.c anddi3.c ashldi3.c ashrdi3.c cmpdi2.c divdi3.c iordi3.c \
 .endif
 
 # Other stuff
-SRCS+=	inet_addr.c intoa.c md5c.c sha1.c pmatch.c
+SRCS+=	md5c.c sha1.c pmatch.c
 
 # Files to clean up
 CLEANFILES+= lib${LIB}.o lib${LIB}.po

@@ -1,4 +1,4 @@
-/*	$NetBSD: obio.c,v 1.6 1999/05/01 10:36:08 tsubai Exp $	*/
+/*	$NetBSD: obio.c,v 1.5.2.1 1999/05/06 02:01:27 perry Exp $	*/
 
 /*-
  * Copyright (C) 1998	Internet Research Institute, Inc.

@@ -1,4 +1,4 @@
-/*	$NetBSD: if_tr_isa.c,v 1.4 1999/04/30 15:29:24 bad Exp $	*/
+/*	$NetBSD: if_tr_isa.c,v 1.2.2.2 1999/04/30 16:40:53 perry Exp $	*/
 
 #undef TRISADEBUG
 /*

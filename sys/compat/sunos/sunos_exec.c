@@ -1,4 +1,4 @@
-/*	$NetBSD: sunos_exec.c,v 1.17 1999/04/29 16:14:04 christos Exp $	*/
+/*	$NetBSD: sunos_exec.c,v 1.16.2.1 1999/04/30 15:30:25 perry Exp $	*/
 
 /*
  * Copyright (c) 1993 Theo de Raadt
