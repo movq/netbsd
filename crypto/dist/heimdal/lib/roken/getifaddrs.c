@@ -33,7 +33,7 @@
 
 #ifdef HAVE_CONFIG_H
 #include <config.h>
-RCSID("$Id: getifaddrs.c,v 1.1 2001/02/11 13:51:46 assar Exp $");
+RCSID("$Id: getifaddrs.c,v 1.1.1.1 2001/02/11 13:51:46 assar Exp $");
 #endif
 #include "roken.h"
 

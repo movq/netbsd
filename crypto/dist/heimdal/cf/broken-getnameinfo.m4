@@ -1,4 +1,4 @@
-dnl $Id: broken-getnameinfo.m4,v 1.1 2001/02/11 13:51:51 assar Exp $
+dnl $Id: broken-getnameinfo.m4,v 1.1.1.1 2001/02/11 13:51:51 assar Exp $
 dnl
 dnl test for broken AIX getnameinfo
 

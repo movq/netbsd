@@ -1,5 +1,5 @@
 #!/bin/sh
-# $Id: krb5-config.in,v 1.1 2001/02/11 13:51:51 assar Exp $
+# $Id: krb5-config.in,v 1.1.1.1 2001/02/11 13:51:51 assar Exp $
 
 do_libs=no
 do_cflags=no
@@ -21,7 +21,7 @@ for i in $*; do
     ;;
   --version)
     echo "@PACKAGE@ @VERSION@"
-    echo '$Id: krb5-config.in,v 1.1 2001/02/11 13:51:51 assar Exp $'
+    echo '$Id: krb5-config.in,v 1.1.1.1 2001/02/11 13:51:51 assar Exp $'
     exit 0
     ;;
   --prefix=*)

@@ -1,4 +1,4 @@
-@c $Id: migration.texi,v 1.1 2001/02/11 13:51:20 assar Exp $
+@c $Id: migration.texi,v 1.1.1.1 2001/02/11 13:51:20 assar Exp $
 
 @node Migration, Windows 2000 compatability, Kerberos 4 issues, Top
 @chapter Migration
