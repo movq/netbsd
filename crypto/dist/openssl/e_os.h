@@ -82,6 +82,12 @@ extern "C" {
 #define DEVRANDOM "/dev/urandom"
 #endif
 
+#if defined(VXWORKS)
+#  define NO_SYS_PARAM_H
+#  define NO_CHMOD
+#  define NO_SYSLOG
+#endif
+  
 #if defined(__MWERKS__) && defined(macintosh)
 # if macintosh==1
 #  ifndef MAC_OS_GUSI_SOURCE
@@ -148,6 +154,13 @@ extern "C" {
 #define closesocket(s)		MacSocket_close(s)
 #define readsocket(s,b,n)	MacSocket_recv((s),(b),(n),true)
 #define writesocket(s,b,n)	MacSocket_send((s),(b),(n))
+#elif defined(VMS)
+#define get_last_socket_error() errno
+#define clear_socket_error()    errno=0
+#define ioctlsocket(a,b,c)      ioctl(a,b,c)
+#define closesocket(s)          close(s)
+#define readsocket(s,b,n)       recv((s),(b),(n),0)
+#define writesocket(s,b,n)      send((s),(b),(n),0)
 #else
 #define get_last_socket_error()	errno
 #define clear_socket_error()	errno=0
@@ -166,9 +179,6 @@ extern "C" {
 #  define MS_FAR
 #endif
 
-#ifdef NO_STDIO
-#  define NO_FP_API
-#endif
 
 #if (defined(WINDOWS) || defined(MSDOS)) && !defined(__CYGWIN32__)
 
@@ -321,19 +331,12 @@ extern "C" {
 #  if defined(WINDOWS) || defined(MSDOS)
       /* windows world */
 
-#    ifdef NO_SOCK
-#      define SSLeay_Write(a,b,c)	(-1)
-#      define SSLeay_Read(a,b,c)	(-1)
-#      define SHUTDOWN(fd)		close(fd)
-#      define SHUTDOWN2(fd)		close(fd)
-#    else
 #      include <winsock.h>
 extern HINSTANCE _hInstance;
 #      define SSLeay_Write(a,b,c)	send((a),(b),(c),0)
 #      define SSLeay_Read(a,b,c)	recv((a),(b),(c),0)
 #      define SHUTDOWN(fd)		{ shutdown((fd),0); closesocket(fd); }
 #      define SHUTDOWN2(fd)		{ shutdown((fd),2); closesocket(fd); }
-#    endif
 
 #  elif defined(MAC_OS_pre_X)
 
@@ -348,7 +351,9 @@ extern HINSTANCE _hInstance;
 #    ifndef NO_SYS_PARAM_H
 #      include <sys/param.h>
 #    endif
-#    ifndef MPE
+#    ifdef VXWORKS
+#      include <time.h> 
+#    elif !defined(MPE)
 #      include <sys/time.h> /* Needed under linux for FD_XXX */
 #    endif
 
@@ -413,13 +418,10 @@ extern HINSTANCE _hInstance;
 #  endif
 #endif
 
-#if defined(THREADS) || defined(sun)
-#ifndef _REENTRANT
-#define _REENTRANT
-#endif
-#endif
-
 #if defined(sun) && !defined(__svr4__) && !defined(__SVR4)
+  /* include headers first, so our defines don't break it */
+#include <stdlib.h>
+#include <string.h>
   /* bcopy can handle overlapping moves according to SunOS 4.1.4 manpage */
 # define memmove(s1,s2,n) bcopy((s2),(s1),(n))
 # define strtoul(s,e,b) ((unsigned long int)strtol((s),(e),(b)))
@@ -451,18 +453,6 @@ extern char *sys_errlist[]; extern int sys_nerr;
 #define IRIX_CC_BUG	/* CDS++ up to V2.0Bsomething suffered from the same bug.*/
 #endif
 
-#ifdef NO_MD2
-#define MD2_Init MD2Init
-#define MD2_Update MD2Update
-#define MD2_Final MD2Final
-#define MD2_DIGEST_LENGTH 16
-#endif
-#ifdef NO_MD5
-#define MD5_Init MD5Init 
-#define MD5_Update MD5Update
-#define MD5_Final MD5Final
-#define MD5_DIGEST_LENGTH 16
-#endif
 
 #ifdef  __cplusplus
 }
