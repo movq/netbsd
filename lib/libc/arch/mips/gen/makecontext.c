@@ -1,4 +1,4 @@
-/*	$NetBSD: makecontext.c,v 1.1.2.4 2001/11/24 02:11:54 wdk Exp $	*/
+/*	$NetBSD: makecontext.c,v 1.1.2.5 2001/11/28 10:37:30 wdk Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -38,7 +38,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: makecontext.c,v 1.1.2.4 2001/11/24 02:11:54 wdk Exp $");
+__RCSID("$NetBSD: makecontext.c,v 1.1.2.5 2001/11/28 10:37:30 wdk Exp $");
 #endif
 
 #include <inttypes.h>
@@ -56,6 +56,8 @@ makecontext(ucontext_t *ucp, void (*func)(void), int argc, ...)
 	int i;
 	va_list ap;
 
+	void __resumecontext(void);
+
 	/* LINTED uintptr_t is safe */
 	sp  = (uintptr_t *)
 	    ((uintptr_t)ucp->uc_stack.ss_sp + ucp->uc_stack.ss_size);
@@ -65,7 +67,7 @@ makecontext(ucontext_t *ucp, void (*func)(void), int argc, ...)
 	      ((u_long)sp & ~0x7);	/* Align on double-word boundary. */
 
 	gr[_REG_SP]  = (__greg_t)sp;
-	gr[_REG_RA]  = (__greg_t)_resumecontext;
+	gr[_REG_RA]  = (__greg_t)__resumecontext;
 	gr[_REG_T9]  = (__greg_t)func;	/* required for .abicalls */
 	gr[_REG_EPC] = (__greg_t)func;
 
