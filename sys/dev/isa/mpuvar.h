@@ -1,4 +1,4 @@
-/*	$NetBSD: mpuvar.h,v 1.1 1999/03/22 07:37:35 mycroft Exp $	*/
+/*	$NetBSD: mpuvar.h,v 1.2 1999/08/01 17:53:40 augustss Exp $	*/
 
 /*
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -37,6 +37,7 @@
  */
 
 struct mpu_softc {
+	struct device sc_dev;		/* base device */
 	bus_space_tag_t iot;		/* tag */
 	bus_space_handle_t ioh;		/* handle */
 	int	open;
@@ -47,10 +48,6 @@ struct mpu_softc {
 struct midi_hw_if mpu_midi_hw_if;
 
 int	mpu_find __P((struct mpu_softc *));
-int	mpu_open __P((void *, int, 
-			 void (*iintr)__P((void *, int)),
-			 void (*ointr)__P((void *)), void *arg));
-void	mpu_close __P((void *));
-int	mpu_output __P((void *, int));
-void	mpu_getinfo __P((void *, struct midi_info *));
 int	mpu_intr __P((void *));
+
+#define MPU401_NPORT	2
