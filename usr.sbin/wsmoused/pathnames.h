@@ -1,4 +1,4 @@
-/* $NetBSD: pathnames.h,v 1.2 2002/06/27 15:07:52 christos Exp $ */
+/* $NetBSD: pathnames.h,v 1.3 2003/03/04 14:33:55 jmmv Exp $ */
 
 /*
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -36,5 +36,6 @@
 #define _PATH_PID "/var/run/wsmoused.pid"
 #define _PATH_TTYPREFIX "/dev/ttyE"
 #define _PATH_TTYSTAT "/dev/ttyEstat"
+#define _PATH_CONF "/etc/wsmoused.conf"
 
 #endif /* _WSMOUSED_PATHNAMES_H */
