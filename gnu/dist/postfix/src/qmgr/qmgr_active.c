@@ -102,6 +102,7 @@
 #include <recipient_list.h>
 #include <bounce.h>
 #include <defer.h>
+#include <trace.h>
 #include <abounce.h>
 #include <rec_type.h>
 
@@ -326,6 +327,7 @@ static void qmgr_active_done_2_generic(QMGR_MESSAGE *message)
     char   *myname = "qmgr_active_done_2_generic";
     const char *path;
     struct stat st;
+    int     status;
 
     /*
      * A delivery agent marks a queue file as corrupt by changing its
@@ -358,6 +360,22 @@ static void qmgr_active_done_2_generic(QMGR_MESSAGE *message)
     }
 
     /*
+     * As a temporary implementation, synchronously inform the sender of
+     * trace information. This will block for 10 seconds when the qmgr FIFO
+     * is full.
+     */
+    if (message->tflags & (DEL_REQ_FLAG_EXPAND | DEL_REQ_FLAG_RECORD)) {
+	status = trace_flush(message->tflags,
+			     message->queue_name,
+			     message->queue_id,
+			     message->encoding,
+			     message->sender);
+	if (status == 0 && message->tflags_offset)
+	    qmgr_message_kill_record(message, message->tflags_offset);
+	message->flags |= status;
+    }
+
+    /*
      * If we get to this point we have tried all recipients for this message.
      * If the message is too old, try to bounce it.
      * 
@@ -365,7 +383,8 @@ static void qmgr_active_done_2_generic(QMGR_MESSAGE *message)
      * daemon waits for the qmgr to accept the "new mail" trigger.
      */
     if (message->flags) {
-	if (event_time() >= message->arrival_time + var_max_queue_time) {
+	if (event_time() >= message->arrival_time +
+	    (*message->sender ? var_max_queue_time : var_dsn_queue_time)) {
 	    msg_info("%s: from=<%s>, status=expired, returned to sender",
 		     message->queue_id, message->sender);
 	    if (message->verp_delims == 0 || var_verp_bounce_off)
@@ -476,8 +495,9 @@ static void qmgr_active_done_3_generic(QMGR_MESSAGE *message)
 			  message->queue_id, message->queue_name);
 	    msg_warn("%s: remove %s from %s: %m", myname,
 		     message->queue_id, message->queue_name);
-	} else if (msg_verbose) {
-	    msg_info("%s: remove %s", myname, message->queue_id);
+	} else {
+	    /* Same format as logged by postsuper. */
+	    msg_info("%s: removed", message->queue_id);
 	}
     }
 
