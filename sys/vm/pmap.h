@@ -1,4 +1,4 @@
-/*	$NetBSD: pmap.h,v 1.31 1999/05/20 23:25:42 thorpej Exp $	*/
+/*	$NetBSD: pmap.h,v 1.29 1999/03/26 21:58:39 mycroft Exp $	*/
 
 /* 
  * Copyright (c) 1991, 1993
@@ -146,7 +146,7 @@ void		 pmap_enter __P((pmap_t,
 		    vaddr_t, paddr_t, vm_prot_t, boolean_t, vm_prot_t));
 paddr_t		pmap_extract __P((pmap_t, vaddr_t));
 #if defined(PMAP_NEW) && defined(PMAP_GROWKERNEL)
-vaddr_t		 pmap_growkernel __P((vaddr_t));
+void		 pmap_growkernel __P((vaddr_t));
 #endif
 
 void		 pmap_init __P((void));
@@ -185,14 +185,10 @@ void		 pmap_update __P((void));
 void		 pmap_zero_page __P((paddr_t));
 
 #if defined(PMAP_STEAL_MEMORY)
-vaddr_t		 pmap_steal_memory __P((vsize_t, paddr_t *,
+vaddr_t	 pmap_steal_memory __P((vsize_t, paddr_t *,
 		    paddr_t *));
 #else
 void		 pmap_virtual_space __P((vaddr_t *, vaddr_t *));
-#endif
-
-#if defined(PMAP_FORK)
-void		pmap_fork __P((pmap_t, pmap_t));
 #endif
 __END_DECLS
 #endif	/* kernel*/

@@ -1,4 +1,4 @@
-/*	$NetBSD: inphy.c,v 1.11 1999/04/23 04:24:32 thorpej Exp $	*/
+/*	$NetBSD: inphy.c,v 1.10.6.1 1999/04/23 15:39:09 perry Exp $	*/
 
 /*-
  * Copyright (c) 1998, 1999 The NetBSD Foundation, Inc.

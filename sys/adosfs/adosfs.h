@@ -1,4 +1,4 @@
-/*	$NetBSD: adosfs.h,v 1.16 1999/05/29 17:14:27 kleink Exp $	*/
+/*	$NetBSD: adosfs.h,v 1.15 1998/09/01 03:33:26 thorpej Exp $	*/
 
 /*
  * Copyright (c) 1994 Christian E. Hopps
@@ -149,7 +149,7 @@ extern struct pool adosfs_node_pool;
 /*
  * utility protos
  */
-#if BYTE_ORDER != BIG_ENDIAN
+#ifndef m68k
 u_int32_t adoswordn __P((struct buf *, int));
 #else
 #define adoswordn(bp,wn) (*((u_int32_t *)(bp)->b_data + (wn)))

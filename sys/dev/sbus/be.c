@@ -1,4 +1,4 @@
-/*	$NetBSD: be.c,v 1.6 1999/05/18 23:52:58 thorpej Exp $	*/
+/*	$NetBSD: be.c,v 1.5 1999/03/23 00:27:09 pk Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -504,6 +504,7 @@ be_read(sc, idx, len)
 	int idx, len;
 {
 	struct ifnet *ifp = &sc->sc_ethercom.ec_if;
+	struct ether_header *eh;
 	struct mbuf *m;
 
 	if (len <= sizeof(struct ether_header) ||
@@ -526,6 +527,9 @@ be_read(sc, idx, len)
 	}
 	ifp->if_ipackets++;
 
+	/* We assume that the header fits entirely in one mbuf. */
+	eh = mtod(m, struct ether_header *);
+
 #if NBPFILTER > 0
 	/*
 	 * Check if there's a BPF listener on this interface.
@@ -534,8 +538,9 @@ be_read(sc, idx, len)
 	if (ifp->if_bpf)
 		bpf_mtap(ifp->if_bpf, m);
 #endif
-	/* Pass the packet up. */
-	(*ifp->if_input)(ifp, m);
+	/* Pass the packet up, with the ether header sort-of removed. */
+	m_adj(m, sizeof(struct ether_header));
+	ether_input(ifp, eh, m);
 }
 
 /*

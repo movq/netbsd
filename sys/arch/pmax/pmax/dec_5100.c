@@ -1,4 +1,4 @@
-/*	$NetBSD: dec_5100.c,v 1.8 1999/05/26 04:23:59 nisimura Exp $	*/
+/*	$NetBSD: dec_5100.c,v 1.4 1999/03/15 11:45:16 nisimura Exp $	*/
 
 /*
  * Copyright (c) 1998 Jonathan Stone.  All rights reserved.
@@ -35,7 +35,7 @@
  */
 
 
-/*
+/* 
  * Local declarations
  */
 #include <sys/types.h>
@@ -54,8 +54,10 @@
 #include <mips/mips/mips_mcclock.h>	/* mcclock CPUspeed estimation */
 
 #include <pmax/pmax/clockreg.h>
-#include <pmax/pmax/turbochannel.h>
-#include <pmax/pmax/pmaxtype.h>
+#include <pmax/pmax/turbochannel.h> 
+#include <pmax/pmax/pmaxtype.h> 
+
+#include <pmax/pmax/machdep.h>		/* XXXjrs replace with vectors */
 
 #include <pmax/pmax/kn01.h>		/* common definitions */
 #include <pmax/pmax/kn230.h>
@@ -69,10 +71,12 @@ void		dec_5100_init __P((void));
 void		dec_5100_os_init __P((void));
 void		dec_5100_bus_reset __P((void));
 
-void		dec_5100_enable_intr
+void		dec_5100_enable_intr 
 		   __P ((u_int slotno, int (*handler) __P((intr_arg_t sc)),
 			 intr_arg_t sc, int onoff));
-int		dec_5100_intr __P((unsigned, unsigned, unsigned, unsigned));
+int		dec_5100_intr __P((u_int mask, u_int pc, 
+			      u_int statusReg, u_int causeReg));
+
 void		dec_5100_cons_init __P((void));
 void		dec_5100_device_register __P((struct device *, void *));
 
@@ -82,23 +86,17 @@ void	dec_5100_intr_establish __P((void * cookie, int level,
 			 int (*handler) __P((intr_arg_t)), intr_arg_t arg));
 void	dec_5100_intr_disestablish __P((struct ibus_attach_args *ia));
 
-extern void kn230_wbflush __P((void));
-
-extern unsigned nullclkread __P((void));
-extern unsigned (*clkread) __P((void));
-extern void prom_haltbutton __P((void));
-
-extern volatile struct chiptime *mcclock_addr; /* XXX */
-extern char cpu_model[];
+extern void dec_mips1_wbflush __P((void));
 
 
 /*
- * Fill in platform struct.
+ * Fill in platform struct. 
  */
 void
 dec_5100_init()
 {
-	platform.iobus = "baseboard";
+
+	platform.iobus = "ibus";
 
 	platform.os_init = dec_5100_os_init;
 	platform.bus_reset = dec_5100_bus_reset;
@@ -106,7 +104,6 @@ dec_5100_init()
 	platform.device_register = dec_5100_device_register;
 
 	dec_5100_os_init();
-
 	sprintf(cpu_model, "DECsystem 5100 (MIPSMATE)");
 }
 
@@ -115,25 +112,25 @@ dec_5100_os_init()
 {
 
 	/* set correct wbflush routine for this motherboard */
-	mips_set_wbflush(kn230_wbflush);
+	 mips_set_wbflush(dec_mips1_wbflush);
 
 	/*
 	 * Set up interrupt handling and I/O addresses.
 	 */
 	mips_hardware_intr = dec_5100_intr;
 	tc_enable_interrupt = dec_5100_enable_intr; /*XXX*/
-	mcclock_addr = (void *)MIPS_PHYS_TO_KSEG1(KN01_SYS_CLOCK);
 
-	/* no high resolution timer circuit; possibly never called */
-	clkread = nullclkread;
+	/* NB: note inversion, ether, disk on hard int 1, tty on hard int 0 */
+	Mach_splbio = Mach_spl1;	/* just block hard int 1 */
+	Mach_splnet = Mach_spl1;	/* just block hard int 1 */
+	Mach_spltty = cpu_spl1;		/* block hard int 0 and 1 */
+	Mach_splimp = cpu_spl3;		/* block 0,1,2 */
+					/* XXX blocks out reset button? */
+	Mach_splclock = cpu_spl2;
+	Mach_splstatclock = cpu_spl2;
 
-	splvec.splbio = MIPS_SPL1;
-	splvec.splnet = MIPS_SPL1;
-	splvec.spltty = MIPS_SPL_0_1;
-	splvec.splimp = MIPS_SPL_0_1_2;
-	splvec.splclock = MIPS_SPL_0_1_2;
-	splvec.splstatclock = MIPS_SPL_0_1_2;
-
+	mcclock_addr = (volatile struct chiptime *)
+		MIPS_PHYS_TO_KSEG1(KN01_SYS_CLOCK);
 	mc_cpuspeed(mcclock_addr, MIPS_INT_MASK_2);
 }
 
@@ -144,13 +141,13 @@ dec_5100_os_init()
 void
 dec_5100_bus_reset()
 {
-	volatile u_int *icsr_addr =
+	register volatile u_int *icsr_addr =
 	   (volatile u_int *)MIPS_PHYS_TO_KSEG1(KN230_SYS_ICSR);
 
 	*icsr_addr |= KN230_CSR_INTR_WMERR ;
 
 	/* nothing else to do */
-	kn230_wbflush();
+	dec_mips1_wbflush();
 }
 
 void
@@ -177,7 +174,7 @@ dec_5100_device_register(dev, aux)
  */
 void
 dec_5100_enable_intr(slotno, handler, sc, on)
-	unsigned int slotno;
+	register unsigned int slotno;
 	int (*handler) __P((void* softc));
 	void *sc;
 	int on;
@@ -200,7 +197,7 @@ dec_5100_intr_establish(cookie, level, handler, arg)
 	int (*handler) __P((intr_arg_t));
 	intr_arg_t arg;
 {
-	int slotno = (int) cookie;
+	register int slotno = (int) cookie;
 
 	tc_slot_info[slotno].intr = handler;
 	tc_slot_info[slotno].sc = arg;
@@ -219,12 +216,16 @@ dec_5100_intr_disestablish(struct ibus_attach_args *ia)
  * Handle mipsmate (DECstation 5100) interrupts.
  */
 int
-dec_5100_intr(mask, pc, status, cause)
+dec_5100_intr(mask, pc, statusReg, causeReg)
 	unsigned mask;
 	unsigned pc;
-	unsigned status;
-	unsigned cause;
+	unsigned statusReg;
+	unsigned causeReg;
 {
+	register volatile struct chiptime *c = 
+	    (volatile struct chiptime *)MIPS_PHYS_TO_KSEG1(KN01_SYS_CLOCK);
+	struct clockframe cf;
+	int temp;
 	u_int icsr;
 
 	if (mask & MIPS_INT_MASK_4) {
@@ -235,28 +236,22 @@ dec_5100_intr(mask, pc, status, cause)
 #endif
 	}
 
-	icsr = *(volatile u_int *)MIPS_PHYS_TO_KSEG1(KN230_SYS_ICSR);
+	icsr = *((volatile u_int *)MIPS_PHYS_TO_KSEG1(KN230_SYS_ICSR));
 
 	/* handle clock interrupts ASAP */
 	if (mask & MIPS_INT_MASK_2) {
-		struct clockframe cf;
-		struct chiptime *clk;
-		volatile int temp;
-
-		clk = (void *)MIPS_PHYS_TO_KSEG1(KN01_SYS_CLOCK);
-		temp = clk->regc;	/* XXX clear interrupt bits */
-
+		temp = c->regc;	/* XXX clear interrupt bits */
 		cf.pc = pc;
-		cf.sr = status;
+		cf.sr = statusReg;
 		hardclock(&cf);
 		intrcnt[HARDCLOCK]++;
 
 		/* keep clock interrupts enabled when we return */
-		cause &= ~MIPS_INT_MASK_2;
+		causeReg &= ~MIPS_INT_MASK_2;
 	}
 
 	/* If clock interrupts were enabled, re-enable them ASAP. */
-	_splset(MIPS_SR_INT_IE | (status & MIPS_INT_MASK_2));
+	splx(MIPS_SR_INT_ENA_CUR | (statusReg & MIPS_INT_MASK_2));
 
 #define CALLINTR(slot, icnt) \
 	if (tc_slot_info[slot].intr) {					\
@@ -267,7 +262,7 @@ dec_5100_intr(mask, pc, status, cause)
 	if (mask & MIPS_INT_MASK_0) {
 		if (icsr & KN230_CSR_INTR_DZ0) {
 		    CALLINTR(1, SERIAL0_INTR);
-		}
+		}		    
 		if (icsr & KN230_CSR_INTR_OPT0)
 		    CALLINTR(5, SERIAL0_INTR);
 		if (icsr & KN230_CSR_INTR_OPT1)
@@ -289,7 +284,8 @@ dec_5100_intr(mask, pc, status, cause)
 		intrcnt[ERROR_INTR]++;
 	}
 
-	return (MIPS_SR_INT_IE | (status & ~cause & MIPS_HARD_INT_MASK));
+	return ((statusReg & ~causeReg & MIPS_HARD_INT_MASK) |
+		MIPS_SR_INT_ENA_CUR);
 }
 
 
@@ -303,16 +299,16 @@ dec_5100_intr(mask, pc, status, cause)
 void
 dec_5100_memintr()
 {
-	volatile u_int icsr;
-	volatile u_int *icsr_addr =
+	register volatile u_int icsr;
+	register volatile u_int *icsr_addr = 
 		(volatile u_int *)MIPS_PHYS_TO_KSEG1(KN230_SYS_ICSR);
 	extern int cold;
 
 	/* read icsr and clear error  */
 	icsr = *icsr_addr;
 	*icsr_addr = icsr | KN230_CSR_INTR_WMERR;
-	kn230_wbflush();
-
+	dec_mips1_wbflush();
+	
 #ifdef DIAGNOSTIC
 		printf("\nMemory interrupt\n");
 #endif

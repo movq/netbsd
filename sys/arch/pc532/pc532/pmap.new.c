@@ -1,4 +1,4 @@
-/*	$NetBSD: pmap.new.c,v 1.14 1999/05/25 20:37:49 thorpej Exp $	*/
+/*	$NetBSD: pmap.new.c,v 1.10.2.2 1999/04/19 04:34:55 cjs Exp $	*/
 
 /*
  *
@@ -616,10 +616,17 @@ vsize_t len;
 
     pte = vtopte(va);    
 
-#ifdef DIAGNOSTIC
-    if (*pte & PG_PVLIST)
-      panic("pmap_kremove: PG_PVLIST mapping for 0x%lx\n", va);
-#endif
+    /* 
+     * XXXCDC: we can get PVLIST if the mapping was created by uvm_fault
+     * as part of a pageable kernel mapping.  in that case we need to
+     * update the pvlists, so we punt the problem to the more powerful
+     * (and complex) pmap_remove() function.   this is kind of ugly...
+     * need to rethink this a bit.
+     */
+    if (*pte & PG_PVLIST) {
+      pmap_remove(pmap_kernel(), va, va + (len*NBPG)); /* punt ... */
+      return;
+    }
 
     *pte = 0;		/* zap! */
     pmap_update_pg(va);
@@ -2012,14 +2019,8 @@ vaddr_t startva, endva;
     /*
      * if we are not on a pv_head list we are done.
      */
-    if ((opte & PG_PVLIST) == 0) {
-#ifdef DIAGNOSTIC
-      if (vm_physseg_find(ns532_btop(opte & PG_FRAME), &off) != -1)
-	panic("pmap_remove_ptes: managed page without PG_PVLIST for 0x%lx",
-	  startva);
-#endif
+    if ((opte & PG_PVLIST) == 0)
       continue;
-    }
 
     bank = vm_physseg_find(ns532_btop(opte & PG_FRAME), &off);
     if (bank == -1)
@@ -2092,14 +2093,8 @@ vaddr_t va;
   /*
    * if we are not on a pv_head list we are done.
    */
-  if ((opte & PG_PVLIST) == 0) {
-#ifdef DIAGNOSTIC
-    if (vm_physseg_find(ns532_btop(opte & PG_FRAME), &off) != -1)
-      panic("pmap_remove_ptes: managed page without PG_PVLIST for 0x%lx",
-	va);
-#endif
+  if ((opte & PG_PVLIST) == 0)
     return(TRUE);
-  }
 
   bank = vm_physseg_find(ns532_btop(opte & PG_FRAME), &off);
   if (bank == -1)
@@ -3373,7 +3368,7 @@ enter_now:
  *	the pmaps on the system.
  */
 
-vaddr_t pmap_growkernel(maxkvaddr)
+void pmap_growkernel(maxkvaddr)
 
 vaddr_t maxkvaddr;
 
@@ -3384,7 +3379,7 @@ vaddr_t maxkvaddr;
 
   needed_kpde = (int)(maxkvaddr - VM_MIN_KERNEL_ADDRESS + (NBPD-1)) / NBPD;
   if (needed_kpde <= nkpde)
-    goto out;		/* we are OK */
+    return;		/* we are OK */
 
   /*
    * whoops!   we need to add kernel PTPs
@@ -3394,21 +3389,6 @@ vaddr_t maxkvaddr;
   simple_lock(&kpm->pm_obj.vmobjlock);
 
   for (/*null*/ ; nkpde < needed_kpde ; nkpde++) {
-
-    if (pmap_initialized == FALSE) {
-      /*
-       * we're growing the kernel pmap early (from uvm_pageboot_alloc()).
-       * this case must be handled a little differently.
-       */
-      paddr_t ptaddr;
-
-      if (uvm_page_physget(&ptaddr) == FALSE)
-	panic("pmap_growkernel: out of memory");
-
-      kpm->pm_pdir[PDSLOT_KERN + nkpde] = ptaddr | PG_RW | PG_V;
-      kpm->pm_stats.resident_count++;	/* count PTP as resident */
-      continue;
-    }
 
     pmap_alloc_ptp(kpm, PDSLOT_KERN + nkpde, FALSE);
     kpm->pm_pdir[PDSLOT_KERN + nkpde] &= ~PG_u; /* PG_u not for kernel */
@@ -3423,9 +3403,6 @@ vaddr_t maxkvaddr;
 
   simple_unlock(&kpm->pm_obj.vmobjlock);
   splx(s);
-
- out:
-  return (VM_MIN_KERNEL_ADDRESS + (nkpde * NBPD));
 }
 
 #ifdef DEBUG

@@ -1,4 +1,4 @@
-/*	$NetBSD: sd.c,v 1.145 1999/05/31 12:05:39 lukem Exp $	*/
+/*	$NetBSD: sd.c,v 1.144 1999/02/28 17:14:57 explorer Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -131,7 +131,6 @@ sdattach(parent, sd, sc_link, ops)
 {
 	int error, result;
 	struct disk_parms *dp = &sd->params;
-	char pbuf[9];
 
 	SC_DEBUG(sc_link, SDEV_DB2, ("sdattach: "));
 
@@ -175,12 +174,9 @@ sdattach(parent, sd, sc_link, ops)
 	printf("%s: ", sd->sc_dev.dv_xname);
 	switch (result) {
 	case SDGP_RESULT_OK:
-		format_bytes(pbuf, sizeof(pbuf),
-		    (u_int64_t)dp->disksize * dp->blksize);
-	        printf(
-		"%s, %ld cyl, %ld head, %ld sec, %ld bytes/sect x %ld sectors",
-		    pbuf, dp->cyls, dp->heads, dp->sectors, dp->blksize,
-		    dp->disksize);
+	        printf("%ldMB, %ld cyl, %ld head, %ld sec, %ld bytes/sect x %ld sectors",
+		    dp->disksize / (1048576 / dp->blksize), dp->cyls,
+		    dp->heads, dp->sectors, dp->blksize, dp->disksize);
 		break;
 
 	case SDGP_RESULT_OFFLINE:
@@ -1022,9 +1018,8 @@ sd_interpret_sense(xs)
 		} else if ((sense->add_sense_code_qual == 0x2) &&
 		    (sd->sc_link->quirks & SDEV_NOSTARTUNIT) == 0) {
 			if (sd->sc_link->flags & SDEV_REMOVABLE) {
-				printf(
-				"%s: removable disk stopped - not restarting\n",
-				    sd->sc_dev.dv_xname);
+				printf("%s: removable disk stopped- not "
+				    "restarting\n", sd->sc_dev.dv_xname);
 				retval = EIO;
 			} else {
 				printf("%s: respinning up disk\n",
@@ -1032,8 +1027,7 @@ sd_interpret_sense(xs)
 				retval = scsipi_start(sd->sc_link, SSS_START,
 				    SCSI_URGENT | SCSI_NOSLEEP);
 				if (retval != 0) {
-					printf(
-					    "%s: respin of disk failed - %d\n",
+					printf("%s: respin of disk failed-%d\n",
 					    sd->sc_dev.dv_xname, retval);
 					retval = EIO;
 				} else {

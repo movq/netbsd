@@ -1,10 +1,10 @@
-/*	$NetBSD: pcmciadevs.h,v 1.38 1999/05/24 13:05:40 christos Exp $	*/
+/*	$NetBSD: pcmciadevs.h,v 1.36.2.1 1999/04/27 13:54:48 perry Exp $	*/
 
 /*
  * THIS FILE AUTOMATICALLY GENERATED.  DO NOT EDIT.
  *
  * generated from:
- *	NetBSD: pcmciadevs,v 1.35 1999/05/24 13:05:12 christos Exp 
+ *	NetBSD: pcmciadevs,v 1.33.2.1 1999/04/27 13:53:47 perry Exp 
  */
 
 /*-
@@ -227,9 +227,6 @@
 #define	PCMCIA_CIS_SMC_8016	{ NULL, NULL, NULL, NULL }
 #define	PCMCIA_PRODUCT_SMC_8016	0x0105
 #define	PCMCIA_STR_SMC_8016	"SMC 8016 EtherCard"
-#define	PCMCIA_CIS_SMC_EZCARD	{ NULL, NULL, NULL, NULL }
-#define	PCMCIA_PRODUCT_SMC_EZCARD	0x8022
-#define	PCMCIA_STR_SMC_EZCARD	"SMC EXCard 10 PCMCIA"
 
 /* Cards we know only by their cis */
 #define	PCMCIA_VENDOR_PREMAX	-1	/* Premax */

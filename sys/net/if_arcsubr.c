@@ -1,4 +1,4 @@
-/*	$NetBSD: if_arcsubr.c,v 1.21 1999/05/18 23:57:20 thorpej Exp $	*/
+/*	$NetBSD: if_arcsubr.c,v 1.20 1999/02/25 11:20:34 is Exp $	*/
 
 /*
  * Copyright (c) 1994, 1995 Ignatios Souvatzis
@@ -90,16 +90,12 @@ u_int8_t  arcbroadcastaddr = 0;
 #define senderr(e) { error = (e); goto bad;}
 #define SIN(s) ((struct sockaddr_in *)s)
 
-static	int arc_output __P((struct ifnet *, struct mbuf *,
-	    struct sockaddr *, struct rtentry *));
-static	void arc_input __P((struct ifnet *, struct mbuf *));
-
 /*
  * ARCnet output routine.
  * Encapsulate a packet of type family for the local net.
  * Assumes that ifp is actually pointer to arccom structure.
  */
-static int
+int
 arc_output(ifp, m0, dst, rt0)
 	register struct ifnet *ifp;
 	struct mbuf *m0;
@@ -522,7 +518,7 @@ arc_isphds(type)
  * the packet is in the mbuf chain m with
  * the ARCnet header.
  */
-static void
+void
 arc_input(ifp, m)
 	struct ifnet *ifp;
 	struct mbuf *m;
@@ -640,8 +636,6 @@ arc_ifattach(ifp, lla)
 		    ifp->if_xname, arc_phdsmtu);
 
 	ifp->if_mtu = (ifp->if_flags & IFF_LINK0 ? arc_phdsmtu : ARCMTU);
-	ifp->if_output = arc_output;
-	ifp->if_input = arc_input;
 	ac = (struct arccom *)ifp;
 	ac->ac_seqid = (time.tv_sec) & 0xFFFF; /* try to make seqid unique */
 	if (lla == 0) {

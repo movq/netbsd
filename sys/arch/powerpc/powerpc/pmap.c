@@ -1,4 +1,4 @@
-/*	$NetBSD: pmap.c,v 1.21 1999/04/17 21:16:47 ws Exp $	*/
+/*	$NetBSD: pmap.c,v 1.19.2.1 1999/04/16 16:23:25 chs Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -1020,7 +1020,7 @@ pmap_enter(pm, va, pa, prot, wired, access_type)
 			/* 
 			 * Flush the real memory from the cache.
 			 */
-			__syncicache((void *)pa, NBPG);
+			syncicache((void *)pa, NBPG);
 		}
 
 	s = splimp();
@@ -1432,5 +1432,5 @@ pmap_procwr(p, va, len)
 	paddr_t pa;
 
 	pa = pmap_extract(p->p_vmspace->vm_map.pmap, va);
-	__syncicache((void *)pa, len);
+	syncicache((void *)pa, len);
 }

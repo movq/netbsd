@@ -1,4 +1,4 @@
-/*	$NetBSD: tropic.c,v 1.5 1999/05/29 22:44:11 bad Exp $	*/
+/*	$NetBSD: tropic.c,v 1.2.2.1 1999/04/29 22:22:08 perry Exp $	*/
 
 /* 
  * Ported to NetBSD by Onno van der Linden
@@ -338,6 +338,7 @@ tr_attach(sc)
 	 */
 	bcopy(sc->sc_dev.dv_xname, ifp->if_xname, IFNAMSIZ);
 	ifp->if_softc = sc;
+	ifp->if_output = token_output;
 	ifp->if_ioctl = tr_ioctl;
 	if (sc->sc_init_status & FAST_PATH_TRANSMIT)
 		ifp->if_start = tr_start;
@@ -1172,6 +1173,7 @@ struct tr_softc *sc;
 	struct rbcb *rbc = &sc->rbc;
 	struct mbuf *m;
 	struct ifnet *ifp = &sc->sc_ethercom.ec_if;
+	struct token_header *trh;
 
 #ifdef TROPICDEBUG
 	printf("tr_rint: arb.command = %x, arb.station_id= %x\n",
@@ -1258,11 +1260,16 @@ struct tr_softc *sc;
 		ACA_SETB(sc, ACA_ISRA_o, RESP_IN_ASB);
 		++ifp->if_ipackets;
 
+		trh = mtod(m, struct token_header *);
 #if NBPFILTER > 0
 		if (ifp->if_bpf)
 			bpf_mtap(ifp->if_bpf, m);
 #endif
-		(*ifp->if_input)(ifp, m);
+		/*
+		 * lan_hdr_len = sizeof(*trh) + riflen
+		 */
+		m_adj(m, (ARB_INB(sc, arb, ARB_RXD_LANHDRLEN)));
+		token_input(ifp, trh, m);
 	}
 }
 
@@ -1474,6 +1481,11 @@ struct ifnet *ifp;
 			len = MCLBYTES;
 		}
 
+#if 0
+		/*
+		 * XXX this is what the ethernet drivers do,
+		 * but enabling it produces "xmit return code = 0x44"!
+		 */
 		/*
 		 * Make sure data after the MAC header is aligned.
 		 */
@@ -1484,6 +1496,7 @@ struct ifnet *ifp;
 			len -= newdata - m->m_data;
 			m->m_data = newdata;
 		}
+#endif
 		m->m_len = len = min(totlen, len);
 		tr_bcopy(sc, mtod(m, char *), len);
 		totlen -= len;

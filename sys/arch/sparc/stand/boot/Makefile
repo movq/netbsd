@@ -1,11 +1,9 @@
-#	$NetBSD: Makefile,v 1.14 1999/05/03 18:59:08 pk Exp $
+#	$NetBSD: Makefile,v 1.11 1999/03/05 11:13:39 pk Exp $
 
-STRIPFLAG=
 PROG=		boot
-PROGSOURCE=	boot.c net.c netif_sun.c conf.c openfirm.c bootinfo.c
-FILES=		boot.net
+PROGSOURCE=	boot.c net.c netif_sun.c conf.c openfirm.c
 NEWVERSWHAT=	"Secondary Boot"
-CLEANFILES+=	vers.c vers.o boot.net
+CLEANFILES+=	vers.c vers.o
 
 INCLUDE_LIBZ=	yes
 SAMISCMAKEFLAGS= SA_USE_CREAD=yes
@@ -13,25 +11,23 @@ SAMISCMAKEFLAGS= SA_USE_CREAD=yes
 .include "../Makefile.buildboot"
 
 RELOC=		0x300000
-
-.include <bsd.own.mk>
-
-LINKFLAGS=-N -Ttext ${RELOC} -e start
-
-all: ${FILES}
+LINKFLAGS=	-N -Ttext ${RELOC} -e start
 
 ${PROG}: ${OBJS} ${LIBSA} ${LIBZ} ${LIBKERN}
 	sh ${.CURDIR}/../common/newvers.sh ${.CURDIR}/version ${NEWVERSWHAT}
 	${COMPILE.c} vers.c
-	${LD} -o ${.TARGET}.tmp ${LINKFLAGS} ${OBJS} \
+	${LD} -o ${.TARGET} ${LINKFLAGS} ${OBJS} \
 	    vers.o ${LIBSA} ${LIBZ} ${LIBKERN}
-	@size ${.TARGET}.tmp
-	@objcopy -O binary ${.TARGET}.tmp ${.TARGET}
-	@rm -f ${.TARGET}.tmp
- 
-# conjure up a magic header that is accepted by all Sun PROMS;
-# see installboot.c for details.
-${FILES}: ${PROG}
-	(printf '\01\03\01\07\060\200\0\07\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0'; cat ${.ALLSRC} ) > ${.TARGET}
+	@size ${.TARGET}
+
+afterinstall:
+	# conjure up a magic header that is accepted by all Sun PROMS;
+	# see installboot.c for details.
+	printf '\01\03\01\07\060\200\0\07' | \
+		dd of=${DESTDIR}/${BINDIR}/boot.net bs=32 conv=sync
+	dd if=${DESTDIR}/${BINDIR}/boot of=${DESTDIR}/${BINDIR}/boot.net \
+		bs=32 skip=1 seek=1
+	chmod ${BINMODE} ${DESTDIR}/${BINDIR}/boot.net
+	chown ${BINOWN}.${BINGRP} ${DESTDIR}/${BINDIR}/boot.net
 
 .include <bsd.prog.mk>

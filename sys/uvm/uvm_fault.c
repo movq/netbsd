@@ -1,4 +1,4 @@
-/*	$NetBSD: uvm_fault.c,v 1.33 1999/06/04 23:38:41 thorpej Exp $	*/
+/*	$NetBSD: uvm_fault.c,v 1.27.2.1 1999/04/16 16:28:06 chs Exp $	*/
 
 /*
  *
@@ -589,19 +589,6 @@ uvm_fault(orig_map, vaddr, fault_type, access_type)
 		narrow = FALSE;		/* normal fault */
 
 	/*
-	 * before we do anything else, if this is a fault on a kernel
-	 * address, check to see if the address is managed by an
-	 * interrupt-safe map.  If it is, we fail immediately.  Intrsafe
-	 * maps are never pageable, and this approach avoids an evil
-	 * locking mess.
-	 */
-	if (orig_map == kernel_map && uvmfault_check_intrsafe(&ufi)) {
-		UVMHIST_LOG(maphist, "<- VA 0x%lx in intrsafe map %p",
-		    ufi.orig_rvaddr, ufi.map, 0, 0);
-		return (KERN_FAILURE);
-	}
-
-	/*
 	 * "goto ReFault" means restart the page fault from ground zero.
 	 */
 ReFault:
@@ -626,17 +613,6 @@ ReFault:
 		    ufi.entry->protection, access_type, 0, 0);
 		uvmfault_unlockmaps(&ufi, FALSE);
 		return (KERN_PROTECTION_FAILURE);
-	}
-
-	/*
-	 * if the map is not a pageable map, a page fault always fails.
-	 */
-
-	if ((ufi.map->flags & VM_MAP_PAGEABLE) == 0) {
-		UVMHIST_LOG(maphist,
-		    "<- map %p not pageable", ufi.map, 0, 0, 0);
-		uvmfault_unlockmaps(&ufi, FALSE);
-		return (KERN_FAILURE);
 	}
 
 	/*
@@ -1238,19 +1214,11 @@ ReFault:
 
 	if (fault_type == VM_FAULT_WIRE) {
 		uvm_pagewire(pg);
-
-		/*
-		 * since the now-wired page cannot be paged out,
-		 * release its swap resources for others to use.
-		 * since an anon with no swap cannot be PG_CLEAN,
-		 * clear its clean flag now.
-		 */
-
-		pg->flags &= ~(PG_CLEAN);
 		uvm_anon_dropswap(anon);
 	} else {
 		/* activate it */
 		uvm_pageactivate(pg);
+
 	}
 
 	uvm_unlock_pageq();
@@ -1670,20 +1638,13 @@ Case2:
 	if (fault_type == VM_FAULT_WIRE) {
 		uvm_pagewire(pg);
 		if (pg->pqflags & PQ_AOBJ) {
-
-			/*
-			 * since the now-wired page cannot be paged out,
-			 * release its swap resources for others to use.
-			 * since an aobj page with no swap cannot be PG_CLEAN,
-			 * clear its clean flag now.
-			 */
-
-			pg->flags &= ~(PG_CLEAN);
 			uao_dropswap(uobj, pg->offset >> PAGE_SHIFT);
 		}
 	} else {
+		
 		/* activate it */
 		uvm_pageactivate(pg);
+
 	}
 
 	uvm_unlock_pageq();
@@ -1715,10 +1676,9 @@ Case2:
  */
 
 int
-uvm_fault_wire(map, start, end, access_type)
+uvm_fault_wire(map, start, end)
 	vm_map_t map;
 	vaddr_t start, end;
-	vm_prot_t access_type;
 {
 	vaddr_t va;
 	pmap_t  pmap;
@@ -1740,10 +1700,10 @@ uvm_fault_wire(map, start, end, access_type)
 	 */
 
 	for (va = start ; va < end ; va += PAGE_SIZE) {
-		rv = uvm_fault(map, va, VM_FAULT_WIRE, access_type);
+		rv = uvm_fault(map, va, VM_FAULT_WIRE, VM_PROT_NONE);
 		if (rv) {
 			if (va != start) {
-				uvm_fault_unwire(map, start, va);
+				uvm_fault_unwire(map->pmap, start, va);
 			}
 			return (rv);
 		}
@@ -1754,22 +1714,18 @@ uvm_fault_wire(map, start, end, access_type)
 
 /*
  * uvm_fault_unwire(): unwire range of virtual space.
+ *
+ * => caller holds reference to pmap (via its map)
  */
 
 void
-uvm_fault_unwire(map, start, end)
-	vm_map_t map;
+uvm_fault_unwire(pmap, start, end)
+	struct pmap *pmap;
 	vaddr_t start, end;
 {
-	pmap_t pmap = vm_map_pmap(map);
 	vaddr_t va;
 	paddr_t pa;
 	struct vm_page *pg;
-
-#ifdef DIAGNOSTIC
-	if (map->flags & VM_MAP_INTRSAFE)
-		panic("uvm_fault_unwire: intrsafe map");
-#endif
 
 	/*
 	 * we assume that the area we are unwiring has actually been wired

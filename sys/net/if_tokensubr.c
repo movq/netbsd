@@ -1,4 +1,4 @@
-/*	$NetBSD: if_tokensubr.c,v 1.7 1999/05/30 00:39:07 bad Exp $	*/
+/*	$NetBSD: if_tokensubr.c,v 1.3.2.1 1999/04/08 21:44:00 bad Exp $	*/
 
 /*
  * Copyright (c) 1997-1999
@@ -126,17 +126,13 @@ extern struct ifqueue pkintrq;
 #define RCF_ALLROUTES (2 << 8) | TOKEN_RCF_FRAME2 | TOKEN_RCF_BROADCAST_ALL
 #define RCF_SINGLEROUTE (2 << 8) | TOKEN_RCF_FRAME2 | TOKEN_RCF_BROADCAST_SINGLE
 
-static	int token_output __P((struct ifnet *, struct mbuf *,
-	    struct sockaddr *, struct rtentry *)); 
-static	void token_input __P((struct ifnet *, struct mbuf *));
-
 /*
  * Token Ring output routine.
  * Encapsulate a packet of type family for the local net.
  * Assumes that ifp is actually pointer to arphdr structure.
  * XXX route info has to go into the same mbuf as the header
  */
-static int
+int
 token_output(ifp, m0, dst, rt0)
 	register struct ifnet *ifp;
 	struct mbuf *m0;
@@ -214,7 +210,7 @@ token_output(ifp, m0, dst, rt0)
 		break;
 	case AF_ARP:
 /*
- * XXX source routing, assume m->m_data contains the useful stuff
+ * XXX source routing, assume m->pktdat contains the useful stuff
  */
 		ah = mtod(m, struct arphdr *);
 		ah->ar_hrd = htons(ARPHRD_IEEE802);
@@ -245,7 +241,7 @@ token_output(ifp, m0, dst, rt0)
 		}
 		else {
 			bcopy((caddr_t)ar_tha(ah), (caddr_t)edst, sizeof(edst));
-			trh = (struct token_header *)M_TRHSTART(m);
+			trh = (struct token_header *) m->m_pktdat;
 			trh->token_ac = TOKEN_AC;
 			trh->token_fc = TOKEN_FC;
 			if (trh->token_shost[0] & TOKEN_RI_PRESENT) {
@@ -467,28 +463,28 @@ bad:
 
 /*
  * Process a received token ring packet;
- * the packet is in the mbuf chain m with
- * the token ring header.
+ * the packet is in the mbuf chain m without
+ * the token ring header, which is provided separately.
  */
-static void
-token_input(ifp, m)
+void
+token_input(ifp, trh, m)
 	struct ifnet *ifp;
+	register struct token_header *trh;
 	struct mbuf *m;
 {
 	register struct ifqueue *inq;
 	register struct llc *l;
-	struct token_header *trh;
-	int s, lan_hdr_len;
+	int s;
 
 	if ((ifp->if_flags & IFF_UP) == 0) {
 		m_freem(m);
 		return;
 	}
-
-	trh = mtod(m, struct token_header *);
-
 	ifp->if_lastchange = time;
-	ifp->if_ibytes += m->m_pkthdr.len;
+/*
+ * XXX (m->m_data - (char *) trh) assumes trh is in the same buf
+ */
+	ifp->if_ibytes += m->m_pkthdr.len + (m->m_data - (char *) trh);
 	if (bcmp((caddr_t)tokenbroadcastaddr, (caddr_t)trh->token_dhost,
 	    sizeof(tokenbroadcastaddr)) == 0)
 		m->m_flags |= M_BCAST;
@@ -496,16 +492,6 @@ token_input(ifp, m)
 		m->m_flags |= M_MCAST;
 	if (m->m_flags & (M_BCAST|M_MCAST))
 		ifp->if_imcasts++;
-
-	/* Skip past the Token Ring header and RIF. */
-	lan_hdr_len = sizeof(struct token_header);
-	if (trh->token_shost[0] & TOKEN_RI_PRESENT) {
-		struct token_rif *trrif;
-
-		trrif = TOKEN_RIF(trh);
-		lan_hdr_len += (ntohs(trrif->tr_rcf) & TOKEN_RCF_LEN_MASK) >> 8;
-	}
-	m_adj(m, lan_hdr_len);
 
 	l = mtod(m, struct llc *);
 	switch (l->llc_dsap) {
@@ -682,7 +668,6 @@ token_ifattach(ifp, lla)
 	ifp->if_hdrlen = 14;
 	ifp->if_mtu = ISO88025_MTU;
 	ifp->if_output = token_output;
-	ifp->if_input = token_input;
 	ifp->if_broadcastaddr = tokenbroadcastaddr;
 #ifdef IFF_NOTRAILERS
 	ifp->if_flags |= IFF_NOTRAILERS;

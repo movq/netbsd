@@ -1,4 +1,4 @@
-/*	$NetBSD: umap_vnops.c,v 1.14 1999/05/17 20:29:05 wrstuden Exp $	*/
+/*	$NetBSD: umap_vnops.c,v 1.13 1999/03/25 13:05:42 bouyer Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -69,6 +69,8 @@ int	umap_lock	__P((void *));
 int	umap_unlock	__P((void *));
 int	umap_open	__P((void *));
 int	umap_fsync	__P((void *));
+
+extern int  null_bypass __P((void *));
 
 /*
  * Global vfs data structures
@@ -319,7 +321,7 @@ umap_lock(v)
 	if ((ap->a_flags & LK_TYPE_MASK) == LK_DRAIN)
 		return (0);
 	ap->a_flags &= ~LK_INTERLOCK;
-	return (umap_bypass(ap));
+	return (null_bypass(ap));
 }
 
 /*
@@ -339,7 +341,7 @@ umap_unlock(v)
 
 	genfs_nounlock(ap);
 	ap->a_flags &= ~LK_INTERLOCK;
-	return (umap_bypass(ap));
+	return (null_bypass(ap));
 }
 
 /*

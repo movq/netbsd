@@ -1,4 +1,4 @@
-/*	$NetBSD: rcons_subr.c,v 1.5 1999/05/19 20:07:34 ad Exp $ */
+/*	$NetBSD: rcons_subr.c,v 1.2 1995/10/04 23:57:26 pk Exp $ */
 
 /*
  * Copyright (c) 1991, 1993
@@ -47,64 +47,30 @@
 #ifdef _KERNEL
 #include <sys/param.h>
 #include <sys/device.h>
-#include <sys/systm.h>
 #else
 #include <sys/types.h>
 #include "myfbdevice.h"
 #endif
 
 #include <dev/rcons/rcons.h>
-#include <dev/wscons/wsdisplayvar.h>
+#include <dev/rcons/raster.h>
+
+#include "rcons_subr.h"
 
 extern void rcons_bell(struct rconsole *);
 
-#if 0
 #define RCONS_ISPRINT(c) ((((c) >= ' ') && ((c) <= '~')) || ((c) > 160))
-#else
-#define RCONS_ISPRINT(c) (((((c) >= ' ') && ((c) <= '~'))) || ((c) > 127))
-#endif
 #define RCONS_ISDIGIT(c) ((c) >= '0' && (c) <= '9')
-
-/* Initalize our operations set */
-void
-rcons_init_ops(rc)
-	struct rconsole *rc;
-{
-	long tmp;
-	int i, m;
-
-	m = sizeof(rc->rc_charmap) / sizeof(rc->rc_charmap[0]);
-	
-	for (i = 0; i < m; i++)
-		rc->rc_ops->mapchar(rc->rc_cookie, i, rc->rc_charmap + i);
-
-	/* Determine which attributes the device supports. */
-	rc->rc_fgcolor = RASTERCONSOLE_FGCOL;
-	rc->rc_bgcolor = RASTERCONSOLE_BGCOL;
-	rc->rc_supwsflg = 0;
-	
-	for (i = 1; i < 256; i <<= 1)
-		if (rc->rc_ops->alloc_attr(rc->rc_cookie, 0, 0, i, &tmp) == 0)
-			rc->rc_supwsflg |= i;
-
-	/* Allocate kernel output attribute */
-	rc->rc_wsflg = WSATTR_HILIT;
-	rcons_setcolor(rc, RASTERCONSOLE_FGCOL, RASTERCONSOLE_BGCOL);
-	rc->rc_kern_attr = rc->rc_attr;
-	
-	rc->rc_wsflg = 0;
-	rcons_setcolor(rc, RASTERCONSOLE_FGCOL, RASTERCONSOLE_BGCOL);
-}
 
 /* Output (or at least handle) a string sent to the console */
 void
 rcons_puts(rc, str, n)
-	struct rconsole *rc;
-	unsigned char *str;
- 	int n;
+	register struct rconsole *rc;
+	register unsigned char *str;
+	register int n;
 {
-	int c, i, j;
-	unsigned char *cp;
+	register int c, i, j;
+	register unsigned char *cp;
 
 	/* Jump scroll */
 	/* XXX maybe this should be an option? */
@@ -120,7 +86,7 @@ rcons_puts(rc, str, n)
 		}
 
 		/* Only jump scroll two or more rows */
-		if (rc->rc_row + i > rc->rc_maxrow + 1) {
+		if (*rc->rc_row + i >= rc->rc_maxrow + 1) {
 			/* Erase the cursor (if necessary) */
 			if (rc->rc_bits & FB_CURSOR)
 				rcons_cursor(rc);
@@ -149,7 +115,7 @@ rcons_puts(rc, str, n)
 			/* Display the character */
 			if (RCONS_ISPRINT(c)) {
 				/* Try to output as much as possible */
-				j = rc->rc_maxcol - rc->rc_col;
+				j = rc->rc_maxcol - (*rc->rc_col + 1);
 				if (j > n)
 					j = n;
 				for (i = 1; i < j && RCONS_ISPRINT(str[i]); ++i)
@@ -168,48 +134,74 @@ rcons_puts(rc, str, n)
 		rcons_cursor(rc);
 }
 
+/* Actually write a string to the frame buffer */
+void
+rcons_text(rc, str, n)
+	register struct rconsole *rc;
+	register unsigned char *str;
+	register int n;
+{
+	register int x, y, op;
+
+	x = *rc->rc_col * rc->rc_font->width + rc->rc_xorigin;
+	y = *rc->rc_row * rc->rc_font->height +
+	    rc->rc_font->ascent + rc->rc_yorigin;
+	op = RAS_SRC;
+	if (((rc->rc_bits & FB_STANDOUT) != 0) ^
+	    ((rc->rc_bits & FB_INVERT) != 0))
+		op = RAS_NOT(op);
+	raster_textn(rc->rc_sp, x, y, op, rc->rc_font, str, n);
+	*rc->rc_col += n;
+	if (*rc->rc_col >= rc->rc_maxcol) {
+		*rc->rc_col = 0;
+		(*rc->rc_row)++;
+	}
+	if (*rc->rc_row >= rc->rc_maxrow)
+		rcons_scroll(rc, 1);
+}
 
 /* Handle a control character sent to the console */
 void
 rcons_pctrl(rc, c)
-	struct rconsole *rc;
-	int c;
+	register struct rconsole *rc;
+	register int c;
 {
 
 	switch (c) {
+
 	case '\r':	/* Carriage return */
-		rc->rc_col = 0;
+		*rc->rc_col = 0;
 		break;
 
 	case '\b':	/* Backspace */
-		if (rc->rc_col > 0)
-			(rc->rc_col)--;
+		if (*rc->rc_col > 0)
+			(*rc->rc_col)--;
 		break;
 
-	case '\v':	/* Vertical tab */
-		if (rc->rc_row > 0)
-			(rc->rc_row)--;
+	case '\013':	/* Vertical tab */
+		if (*rc->rc_row > 0)
+			(*rc->rc_row)--;
 		break;
 
 	case '\f':	/* Formfeed */
-		rc->rc_row = rc->rc_col = 0;
+		*rc->rc_row = *rc->rc_col = 0;
 		rcons_clear2eop(rc);
 		break;
 
 	case '\n':	/* Linefeed */
-		(rc->rc_row)++;
-		if (rc->rc_row >= rc->rc_maxrow)
+		(*rc->rc_row)++;
+		if (*rc->rc_row >= rc->rc_maxrow)
 			rcons_scroll(rc, 1);
 		break;
 
-	case '\a':	/* Bell */
+	case '\007':	/* Bell */
 		rcons_bell(rc);
 		break;
 
 	case '\t':	/* Horizontal tab */
-		rc->rc_col = (rc->rc_col + 8) & ~7;
-		if (rc->rc_col >= rc->rc_maxcol)
-			rc->rc_col = rc->rc_maxcol;
+		*rc->rc_col = (*rc->rc_col + 8) & ~7;
+		if (*rc->rc_col >= rc->rc_maxcol)
+			*rc->rc_col = rc->rc_maxcol - 1;
 		break;
 	}
 }
@@ -217,8 +209,8 @@ rcons_pctrl(rc, c)
 /* Handle the next character in an escape sequence */
 void
 rcons_esc(rc, c)
-	struct rconsole *rc;
-	int c;
+	register struct rconsole *rc;
+	register int c;
 {
 
 	if (c == '[') {
@@ -259,59 +251,11 @@ rcons_esc(rc, c)
 	}
 }
 
-
-/* Handle an SGR (Select Graphic Rendition) escape */
-void
-rcons_sgresc(rc, c)
-	struct rconsole *rc;
-	int c;
-{
-
-	switch (c) {
-	/* Clear all attributes || End underline */
-	case 0:
-		rc->rc_wsflg = 0;
-		rcons_setcolor(rc, RASTERCONSOLE_FGCOL, RASTERCONSOLE_BGCOL);
-		break;
-
-	/* ANSI foreground color */
-	case 30: case 31: case 32: case 33: 
-	case 34: case 35: case 36: case 37: 
-		rcons_setcolor(rc, c - 30, rc->rc_bgcolor);
-		break;
-
-	/* ANSI background color */
-	case 40: case 41: case 42: case 43:
-	case 44: case 45: case 46: case 47: 
-		rcons_setcolor(rc, rc->rc_fgcolor, c - 40);
-		break;
-		
-	/* Begin reverse */
-	case 7: 
-		rc->rc_wsflg |= WSATTR_REVERSE;
-		rcons_setcolor(rc, rc->rc_fgcolor, rc->rc_bgcolor);
-		break;
-		
-	/* Begin bold */
-	case 1:
-		rc->rc_wsflg |= WSATTR_HILIT;
-		rcons_setcolor(rc, rc->rc_fgcolor, rc->rc_bgcolor);
-		break;			
-		
-	/* Begin underline */
-	case 4:
-		rc->rc_wsflg |= WSATTR_UNDERLINE;
-		rcons_setcolor(rc, rc->rc_fgcolor, rc->rc_bgcolor);
-		break;			
-	}
-}
-
-
 /* Process a complete escape sequence */
 void
 rcons_doesc(rc, c)
-	struct rconsole *rc;
-	int c;
+	register struct rconsole *rc;
+	register int c;
 {
 
 #ifdef notdef
@@ -328,55 +272,55 @@ rcons_doesc(rc, c)
 
 	case 'A':
 		/* Cursor Up (CUU) */
-		rc->rc_row -= rc->rc_p0;
-		if (rc->rc_row < 0)
-			rc->rc_row = 0;
+		*rc->rc_row -= rc->rc_p0;
+		if (*rc->rc_row < 0)
+			*rc->rc_row = 0;
 		break;
 
 	case 'B':
 		/* Cursor Down (CUD) */
-		rc->rc_row += rc->rc_p0;
-		if (rc->rc_row >= rc->rc_maxrow)
-			rc->rc_row = rc->rc_maxrow - 1;
+		*rc->rc_row += rc->rc_p0;
+		if (*rc->rc_row >= rc->rc_maxrow)
+			*rc->rc_row = rc->rc_maxrow - 1;
 		break;
 
 	case 'C':
 		/* Cursor Forward (CUF) */
-		rc->rc_col += rc->rc_p0;
-		if (rc->rc_col >= rc->rc_maxcol)
-			rc->rc_col = rc->rc_maxcol - 1;
+		*rc->rc_col += rc->rc_p0;
+		if (*rc->rc_col >= rc->rc_maxcol)
+			*rc->rc_col = rc->rc_maxcol - 1;
 		break;
 
 	case 'D':
 		/* Cursor Backward (CUB) */
-		rc->rc_col -= rc->rc_p0;
-		if (rc->rc_col < 0)
-			rc->rc_col = 0;
+		*rc->rc_col -= rc->rc_p0;
+		if (*rc->rc_col < 0)
+			*rc->rc_col = 0;
 		break;
 
 	case 'E':
 		/* Cursor Next Line (CNL) */
-		rc->rc_col = 0;
-		rc->rc_row += rc->rc_p0;
-		if (rc->rc_row >= rc->rc_maxrow)
-			rc->rc_row = rc->rc_maxrow - 1;
+		*rc->rc_col = 0;
+		*rc->rc_row += rc->rc_p0;
+		if (*rc->rc_row >= rc->rc_maxrow)
+			*rc->rc_row = rc->rc_maxrow - 1;
 		break;
 
 	case 'f':
 		/* Horizontal And Vertical Position (HVP) */
 	case 'H':
 		/* Cursor Position (CUP) */
-		rc->rc_col = rc->rc_p1 - 1;
-		if (rc->rc_col < 0)
-			rc->rc_col = 0;
-		else if (rc->rc_col >= rc->rc_maxcol)
-			rc->rc_col = rc->rc_maxcol - 1;
+		*rc->rc_col = rc->rc_p1 - 1;
+		if (*rc->rc_col < 0)
+			*rc->rc_col = 0;
+		else if (*rc->rc_col >= rc->rc_maxcol)
+			*rc->rc_col = rc->rc_maxcol - 1;
 
-		rc->rc_row = rc->rc_p0 - 1;
-		if (rc->rc_row < 0)
-			rc->rc_row = 0;
-		else if (rc->rc_row >= rc->rc_maxrow)
-			rc->rc_row = rc->rc_maxrow - 1;
+		*rc->rc_row = rc->rc_p0 - 1;
+		if (*rc->rc_row < 0)
+			*rc->rc_row = 0;
+		else if (*rc->rc_row >= rc->rc_maxrow)
+			*rc->rc_row = rc->rc_maxrow - 1;
 		break;
 
 	case 'J':
@@ -405,19 +349,14 @@ rcons_doesc(rc, c)
 		break;
 
 	case 'm':
-		/* Select Graphic Rendition (SGR) */
+		/* Select Graphic Rendition (SGR); */
 		/* (defaults to zero) */
 		if (rc->rc_bits & FB_P0_DEFAULT)
 			rc->rc_p0 = 0;
-		
-		if (rc->rc_bits & FB_P1_DEFAULT)
-			rc->rc_p1 = 0;
-		
-		rcons_sgresc(rc, rc->rc_p0);
-		
-		if (rc->rc_bits & FB_P1)
-			rcons_sgresc(rc, rc->rc_p1);
-
+		if (rc->rc_p0)
+			rc->rc_bits |= FB_STANDOUT;
+		else
+			rc->rc_bits &= ~FB_STANDOUT;
 		break;
 
 	case 'p':
@@ -441,116 +380,33 @@ rcons_doesc(rc, c)
 
 	case 's':
 		/* Reset terminal emulator (SUNRESET) */
-		rc->rc_wsflg = 0;
+		rc->rc_bits &= ~FB_STANDOUT;
 		rc->rc_scroll = 0;
-		rc->rc_bits &= ~FB_NO_CURSOR;
-		rcons_setcolor(rc, RASTERCONSOLE_FGCOL, RASTERCONSOLE_BGCOL);
-
 		if (rc->rc_bits & FB_INVERT)
 			rcons_invert(rc, 0);
 		break;
-#ifdef notyet
-	/* 
-	 * XXX following two read \E[?25h and \E[?25l. rcons
-	 * can't currently handle the '?'.
-	 */
-	case 'h':
-		/* Normal/very visible cursor */
-		if (rc->rc_p0 == 25) {
-			rc->rc_bits &= ~FB_NO_CURSOR;
-			
-			if (rc->rc_bits & FB_CURSOR) {
-				rc->rc_bits ^= FB_CURSOR;
-				rcons_cursor(rc);
-			}
-		}
-		break;
-		
-	case 'l':
-		/* Invisible cursor */
-		if (rc->rc_p0 == 25 && (rc->rc_bits & FB_NO_CURSOR) == 0) {
-			if (rc->rc_bits & FB_CURSOR)
-				rcons_cursor(rc);
-		
-			rc->rc_bits |= FB_NO_CURSOR;
-		}
-		break;
-#endif
 	}
-}
-
-/* Set ANSI colors */
-void
-rcons_setcolor(rc, fg, bg)
-	struct rconsole *rc;
-	int fg, bg;
-{
-	int flg;
-	
-	if (fg > WSCOL_WHITE || fg < 0)
-		return;
-		
-	if (bg > WSCOL_WHITE || bg < 0)
-		return;
-
-#ifdef RASTERCONS_WONB
-	flg = bg;
-	bg = fg;
-	fg = flg;
-#endif	
-
-	/* Emulate WSATTR_REVERSE attribute if it's not supported */
-	if ((rc->rc_wsflg & WSATTR_REVERSE) && 
-	    !(rc->rc_supwsflg & WSATTR_REVERSE)) {
-		flg = bg;
-		bg = fg;
-		fg = flg;
-	}
-	
-	/* Mask out unsupported flags and get attribute */
-	flg = rc->rc_wsflg & rc->rc_supwsflg;
-	rc->rc_bgcolor = bg;
-	rc->rc_fgcolor = fg;
-	rc->rc_ops->alloc_attr(rc->rc_cookie, fg, bg, flg, &rc->rc_attr);
-}
-
-
-/* Actually write a string to the frame buffer */
-void
-rcons_text(rc, str, n)
-	struct rconsole *rc;
-	unsigned char *str;
-	int n;
-{
-	u_int uc;
-		
-	while (n--) {
-		uc = rc->rc_charmap[*str++ & 255];
-		rc->rc_ops->putchar(rc->rc_cookie, rc->rc_row, rc->rc_col++,
-		    uc, rc->rc_attr);												       
-	}
-
-	if (rc->rc_col >= rc->rc_maxcol) {
-		rc->rc_col = 0;
-		rc->rc_row++;
-	}
-
-	if (rc->rc_row >= rc->rc_maxrow)
-		rcons_scroll(rc, 1);
 }
 
 /* Paint (or unpaint) the cursor */
 void
 rcons_cursor(rc)
-	struct rconsole *rc;
+	register struct rconsole *rc;
 {
+	register int x, y;
+
+	x = *rc->rc_col * rc->rc_font->width + rc->rc_xorigin;
+	y = *rc->rc_row * rc->rc_font->height + rc->rc_yorigin;
+	raster_op(rc->rc_sp, x, y,
+#ifdef notdef
+	    /* XXX This is the right way but too slow */
+	    rc->rc_font->chars[(int)' '].r->width,
+	    rc->rc_font->chars[(int)' '].r->height,
+#else
+	    rc->rc_font->width, rc->rc_font->height,
+#endif
+	    RAS_INVERT, (struct raster *) 0, 0, 0);
 	rc->rc_bits ^= FB_CURSOR;
-	
-	if (rc->rc_bits & FB_NO_CURSOR)
-		return;
-	
-	rc->rc_ops->cursor(rc->rc_cookie, rc->rc_bits & FB_CURSOR,
-	    rc->rc_row, rc->rc_col);
 }
 
 /* Possibly change to SUNWOB or SUNBOW mode */
@@ -559,123 +415,183 @@ rcons_invert(rc, wob)
 	struct rconsole *rc;
 	int wob;
 {
+	if (((rc->rc_bits & FB_INVERT) != 0) ^ wob) {
+		/* Invert the display */
+		raster_op(rc->rc_sp, 0, 0, rc->rc_sp->width, rc->rc_sp->height,
+		    RAS_INVERT, (struct raster *) 0, 0, 0);
 
-	rc->rc_bits ^= FB_INVERT;
-	/* XXX how do we do we invert the framebuffer?? */
+		/* Swap things around */
+		rc->rc_ras_blank = RAS_NOT(rc->rc_ras_blank);
+		rc->rc_bits ^= FB_INVERT;
+	}
 }
 
 /* Clear to the end of the page */
 void
 rcons_clear2eop(rc)
-	struct rconsole *rc;
+	register struct rconsole *rc;
 {
-	if (rc->rc_col || rc->rc_row) {
-		rcons_clear2eol(rc);
+	register int y;
 
-		if (rc->rc_row < (rc->rc_maxrow - 1))
-			rc->rc_ops->eraserows(rc->rc_cookie, rc->rc_row + 1, 
-			    rc->rc_maxrow, rc->rc_attr);
-	} else
-		rc->rc_ops->eraserows(rc->rc_cookie, 0, rc->rc_maxrow,
-		    rc->rc_attr);
+	if (*rc->rc_col == 0 && *rc->rc_row == 0) {
+		/* Clear the entire frame buffer */
+		raster_op(rc->rc_sp, 0, 0,
+		    rc->rc_sp->width, rc->rc_sp->height,
+		    rc->rc_ras_blank, (struct raster *) 0, 0, 0);
+	} else {
+		/* Only clear what needs to be cleared */
+		rcons_clear2eol(rc);
+		y = (*rc->rc_row + 1) * rc->rc_font->height;
+
+		raster_op(rc->rc_sp, rc->rc_xorigin, rc->rc_yorigin + y,
+		    rc->rc_emuwidth, rc->rc_emuheight - y,
+		    rc->rc_ras_blank, (struct raster *) 0, 0, 0);
+	}
 }
 
 /* Clear to the end of the line */
 void
 rcons_clear2eol(rc)
-	struct rconsole *rc;
+	register struct rconsole *rc;
 {
-	rc->rc_ops->erasecols(rc->rc_cookie, rc->rc_row, rc->rc_col,
-	    rc->rc_maxcol - rc->rc_col, rc->rc_attr);
+	register int x;
+
+	x = *rc->rc_col * rc->rc_font->width;
+
+	raster_op(rc->rc_sp,
+	    rc->rc_xorigin + x,
+	    *rc->rc_row * rc->rc_font->height + rc->rc_yorigin,
+	    rc->rc_emuwidth - x, rc->rc_font->height,
+	    rc->rc_ras_blank, (struct raster *) 0, 0, 0);
 }
 
-
-/* Scroll up */
+/* Scroll up one line */
 void
 rcons_scroll(rc, n)
-	struct rconsole *rc;
-	int n;
+	register struct rconsole *rc;
+	register int n;
 {
+	register int ydiv;
+
 	/* Can't scroll more than the whole screen */
 	if (n > rc->rc_maxrow)
 		n = rc->rc_maxrow;
 
 	/* Calculate new row */
-	rc->rc_row -= n;
+	*rc->rc_row -= n;
+	if (*rc->rc_row < 0)
+		*rc->rc_row  = 0;
 
-	if (rc->rc_row < 0)
-		rc->rc_row = 0;
+	/* Calculate number of pixels to scroll */
+	ydiv = rc->rc_font->height * n;
 
-	rc->rc_ops->copyrows(rc->rc_cookie, n, 0, rc->rc_maxrow - n);
-	rc->rc_ops->eraserows(rc->rc_cookie, rc->rc_maxrow - n, n,  rc->rc_attr);
+	raster_op(rc->rc_sp, rc->rc_xorigin, rc->rc_yorigin,
+	    rc->rc_emuwidth, rc->rc_emuheight - ydiv,
+	    RAS_SRC, rc->rc_sp, rc->rc_xorigin, ydiv + rc->rc_yorigin);
+
+	raster_op(rc->rc_sp,
+	    rc->rc_xorigin, rc->rc_yorigin + rc->rc_emuheight - ydiv,
+	    rc->rc_emuwidth, ydiv, rc->rc_ras_blank, (struct raster *) 0, 0, 0);
 }
 
 /* Delete characters */
 void
 rcons_delchar(rc, n)
-	struct rconsole *rc;
-	int n;
+	register struct rconsole *rc;
+	register int n;
 {
-	/* Can't delete more chars than there are */
-	if (n > rc->rc_maxcol - rc->rc_col)
-		n = rc->rc_maxcol - rc->rc_col;
-		
-	rc->rc_ops->copycols(rc->rc_cookie, rc->rc_row, rc->rc_col + n,
-	    rc->rc_col, rc->rc_maxcol - rc->rc_col - n);
+	register int tox, fromx, y, width;
 
-	rc->rc_ops->erasecols(rc->rc_cookie, rc->rc_row, 
-	    rc->rc_maxcol - n, n, rc->rc_attr);
+	/* Can't delete more chars than there are */
+	if (n > rc->rc_maxcol - *rc->rc_col)
+		n = rc->rc_maxcol - *rc->rc_col;
+
+	fromx = (*rc->rc_col + n) * rc->rc_font->width;
+	tox = *rc->rc_col * rc->rc_font->width;
+	y = *rc->rc_row * rc->rc_font->height;
+	width = n * rc->rc_font->width;
+
+	raster_op(rc->rc_sp, tox + rc->rc_xorigin, y + rc->rc_yorigin,
+	    rc->rc_emuwidth - fromx, rc->rc_font->height,
+	    RAS_SRC, rc->rc_sp, fromx + rc->rc_xorigin, y + rc->rc_yorigin);
+
+	raster_op(rc->rc_sp,
+	    rc->rc_emuwidth - width + rc->rc_xorigin, y + rc->rc_yorigin,
+	    width, rc->rc_font->height,
+	    rc->rc_ras_blank, (struct raster *) 0, 0, 0);
 }
 
 /* Delete a number of lines */
 void
 rcons_delline(rc, n)
-	struct rconsole *rc;
-	int n;
+	register struct rconsole *rc;
+	register int n;
 {
+	register int fromy, toy, height;
+
 	/* Can't delete more lines than there are */
-	if (n > rc->rc_maxrow - rc->rc_row)
-		n = rc->rc_maxrow - rc->rc_row;
+	if (n > rc->rc_maxrow - *rc->rc_row)
+		n = rc->rc_maxrow - *rc->rc_row;
 
-	rc->rc_ops->copyrows(rc->rc_cookie, rc->rc_row + n, rc->rc_row,
-	    rc->rc_maxrow - rc->rc_row - n);
+	fromy = (*rc->rc_row + n) * rc->rc_font->height;
+	toy = *rc->rc_row * rc->rc_font->height;
+	height = rc->rc_font->height * n;
 
-	rc->rc_ops->eraserows(rc->rc_cookie, rc->rc_maxrow - n, n,
-	    rc->rc_attr);
+	raster_op(rc->rc_sp, rc->rc_xorigin, toy + rc->rc_yorigin,
+	    rc->rc_emuwidth, rc->rc_emuheight - fromy, RAS_SRC,
+	    rc->rc_sp, rc->rc_xorigin, fromy + rc->rc_yorigin);
+
+	raster_op(rc->rc_sp,
+	    rc->rc_xorigin, rc->rc_emuheight - height + rc->rc_yorigin,
+	    rc->rc_emuwidth, height,
+	    rc->rc_ras_blank, (struct raster *) 0, 0, 0);
 }
 
 /* Insert some characters */
 void
 rcons_insertchar(rc, n)
-	struct rconsole *rc;
-	int n;
+	register struct rconsole *rc;
+	register int n;
 {
-	/* Can't insert more chars than can fit */
-	if (n > rc->rc_maxcol - rc->rc_col)
-		n = rc->rc_maxcol - rc->rc_col - 1;
-		
-	rc->rc_ops->copycols(rc->rc_cookie, rc->rc_row, rc->rc_col,
-	    rc->rc_col + n, rc->rc_maxcol - rc->rc_col - n - 1);
+	register int tox, fromx, y;
 
-	rc->rc_ops->erasecols(rc->rc_cookie, rc->rc_row, rc->rc_col,
-	    n, rc->rc_attr);
+	/* Can't insert more chars than can fit */
+	if (n > rc->rc_maxcol - *rc->rc_col)
+		n = rc->rc_maxcol - *rc->rc_col;
+
+	tox = (*rc->rc_col + n) * rc->rc_font->width;
+	fromx = *rc->rc_col * rc->rc_font->width;
+	y = *rc->rc_row * rc->rc_font->height;
+
+	raster_op(rc->rc_sp, tox + rc->rc_xorigin, y + rc->rc_yorigin,
+	    rc->rc_emuwidth - tox, rc->rc_font->height,
+	    RAS_SRC, rc->rc_sp, fromx + rc->rc_xorigin, y + rc->rc_yorigin);
+
+	raster_op(rc->rc_sp, fromx + rc->rc_xorigin, y + rc->rc_yorigin,
+	    rc->rc_font->width * n, rc->rc_font->height,
+	    rc->rc_ras_blank, (struct raster *) 0, 0, 0);
 }
 
 /* Insert some lines */
 void
 rcons_insertline(rc, n)
-	struct rconsole *rc;
-	int n;
+	register struct rconsole *rc;
+	register int n;
 {
+	register int fromy, toy;
+
 	/* Can't insert more lines than can fit */
-	if (n > rc->rc_maxrow - rc->rc_row)
-		n = rc->rc_maxrow - rc->rc_row;
+	if (n > rc->rc_maxrow - *rc->rc_row)
+		n = rc->rc_maxrow - *rc->rc_row;
 
-	rc->rc_ops->copyrows(rc->rc_cookie, rc->rc_row, rc->rc_row + n,
-	    rc->rc_maxrow - rc->rc_row - n);
+	toy = (*rc->rc_row + n) * rc->rc_font->height;
+	fromy = *rc->rc_row * rc->rc_font->height;
 
-	rc->rc_ops->eraserows(rc->rc_cookie, rc->rc_row, n,
-	    rc->rc_attr);
+	raster_op(rc->rc_sp, rc->rc_xorigin, toy + rc->rc_yorigin,
+	    rc->rc_emuwidth, rc->rc_emuheight - toy,
+	    RAS_SRC, rc->rc_sp, rc->rc_xorigin, fromy + rc->rc_yorigin);
+
+	raster_op(rc->rc_sp, rc->rc_xorigin, fromy + rc->rc_yorigin,
+	    rc->rc_emuwidth, rc->rc_font->height * n,
+	    rc->rc_ras_blank, (struct raster *) 0, 0, 0);
 }
-
-/* end of rcons_subr.c */

@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.4 1999/04/10 21:36:26 tron Exp $
+#	$NetBSD: Makefile,v 1.3.2.1 1999/04/12 08:27:53 tron Exp $
 
 #
 # Use this file to regenerate AMIGA and DRACO out of the GENERIC template.

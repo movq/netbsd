@@ -1,4 +1,4 @@
-/*	$NetBSD: subr_pool.c,v 1.26 1999/05/10 21:15:42 thorpej Exp $	*/
+/*	$NetBSD: subr_pool.c,v 1.21.2.2 1999/04/07 00:34:55 thorpej Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1999 The NetBSD Foundation, Inc.
@@ -36,9 +36,6 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-
-#include "opt_pool.h"
-#include "opt_poollog.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -96,14 +93,14 @@ struct pool_item_header {
 struct pool_item {
 #ifdef DIAGNOSTIC
 	int pi_magic;
-#define	PI_MAGIC 0xdeadbeef
+#define PI_MAGIC 0xdeadbeef
 #endif
 	/* Other entries use only this list entry */
 	TAILQ_ENTRY(pool_item)	pi_list;
 };
 
 
-#define	PR_HASH_INDEX(pp,addr) \
+#define PR_HASH_INDEX(pp,addr) \
 	(((u_long)(addr) >> (pp)->pr_pageshift) & (PR_HASHTABSIZE - 1))
 
 
@@ -116,9 +113,11 @@ static void	pool_prime_page __P((struct pool *, caddr_t));
 static void	*pool_page_alloc __P((unsigned long, int, int));
 static void	pool_page_free __P((void *, unsigned long, int));
 
-static void pool_print1 __P((struct pool *, const char *,
-	void (*)(const char *, ...)));
+#if defined(POOL_DIAGNOSTIC) || defined(DEBUG)
+static void pool_print1 __P((struct pool *, const char *));
+#endif
 
+#ifdef POOL_DIAGNOSTIC
 /*
  * Pool log entry. An array of these is allocated in pool_create().
  */
@@ -126,8 +125,8 @@ struct pool_log {
 	const char	*pl_file;
 	long		pl_line;
 	int		pl_action;
-#define	PRLOG_GET	1
-#define	PRLOG_PUT	2
+#define PRLOG_GET	1
+#define PRLOG_PUT	2
 	void		*pl_addr;
 };
 
@@ -138,14 +137,8 @@ struct pool_log {
 
 int pool_logsize = POOL_LOGSIZE;
 
-#ifdef DIAGNOSTIC
 static void	pr_log __P((struct pool *, void *, int, const char *, long));
-static void	pr_printlog __P((struct pool *, struct pool_item *,
-		    void (*)(const char *, ...)));
-static void	pr_enter __P((struct pool *, const char *, long));
-static void	pr_leave __P((struct pool *));
-static void	pr_enter_check __P((struct pool *,
-		    void (*)(const char *, ...)));
+static void	pr_printlog __P((struct pool *));
 
 static __inline__ void
 pr_log(pp, v, action, file, line)
@@ -176,10 +169,8 @@ pr_log(pp, v, action, file, line)
 }
 
 static void
-pr_printlog(pp, pi, pr)
+pr_printlog(pp)
 	struct pool *pp;
-	struct pool_item *pi;
-	void (*pr) __P((const char *, ...));
 {
 	int i = pp->pr_logsize;
 	int n = pp->pr_curlogentry;
@@ -187,76 +178,30 @@ pr_printlog(pp, pi, pr)
 	if ((pp->pr_roflags & PR_LOGGING) == 0)
 		return;
 
+	pool_print1(pp, "printlog");
+
 	/*
 	 * Print all entries in this pool's log.
 	 */
 	while (i-- > 0) {
 		struct pool_log *pl = &pp->pr_log[n];
 		if (pl->pl_action != 0) {
-			if (pi == NULL || pi == pl->pl_addr) {
-				(*pr)("\tlog entry %d:\n", i);
-				(*pr)("\t\taction = %s, addr = %p\n",
-				    pl->pl_action == PRLOG_GET ? "get" : "put",
-				    pl->pl_addr);
-				(*pr)("\t\tfile: %s at line %lu\n",
-				    pl->pl_file, pl->pl_line);
-			}
+			printf("log entry %d:\n", i);
+			printf("\taction = %s, addr = %p\n",
+				pl->pl_action == PRLOG_GET ? "get" : "put",
+				pl->pl_addr);
+			printf("\tfile: %s at line %lu\n",
+				pl->pl_file, pl->pl_line);
 		}
 		if (++n >= pp->pr_logsize)
 			n = 0;
 	}
 }
-
-static __inline__ void
-pr_enter(pp, file, line)
-	struct pool *pp;
-	const char *file;
-	long line;
-{
-
-	if (pp->pr_entered_file != NULL) {
-		printf("pool %s: reentrancy at file %s line %ld\n",
-		    pp->pr_wchan, file, line);
-		printf("         previous entry at file %s line %ld\n",
-		    pp->pr_entered_file, pp->pr_entered_line);
-		panic("pr_enter");
-	}
-
-	pp->pr_entered_file = file;
-	pp->pr_entered_line = line;
-}
-
-static __inline__ void
-pr_leave(pp)
-	struct pool *pp;
-{
-
-	if (pp->pr_entered_file == NULL) {
-		printf("pool %s not entered?\n", pp->pr_wchan);
-		panic("pr_leave");
-	}
-
-	pp->pr_entered_file = NULL;
-	pp->pr_entered_line = 0;
-}
-
-static __inline__ void
-pr_enter_check(pp, pr)
-	struct pool *pp;
-	void (*pr) __P((const char *, ...));
-{
-
-	if (pp->pr_entered_file != NULL)
-		(*pr)("\n\tcurrently entered from file %s line %ld\n",
-		    pp->pr_entered_file, pp->pr_entered_line);
-}
 #else
-#define	pr_log(pp, v, action, file, line)
-#define	pr_printlog(pp, pi, pr)
-#define	pr_enter(pp, file, line)
-#define	pr_leave(pp)
-#define	pr_enter_check(pp, pr)
-#endif /* DIAGNOSTIC */
+#define pr_log(pp, v, action, file, line)
+#define pr_printlog(pp)
+#endif
+
 
 /*
  * Return the pool page header based on page address.
@@ -355,6 +300,11 @@ pool_create(size, align, ioff, nitems, wchan, pagesz, alloc, release, mtype)
 		return (NULL);
 
 	flags = PR_FREEHEADER;
+#ifdef POOL_DIAGNOSTIC
+	if (pool_logsize != 0)
+		flags |= PR_LOGGING;
+#endif
+
 	pool_init(pp, size, align, ioff, flags, wchan, pagesz,
 		  alloc, release, mtype);
 
@@ -388,14 +338,6 @@ pool_init(pp, size, align, ioff, flags, wchan, pagesz, alloc, release, mtype)
 	int		mtype;
 {
 	int off, slack, i;
-
-#ifdef POOL_DIAGNOSTIC
-	/*
-	 * Always log if POOL_DIAGNOSTIC is defined.
-	 */
-	if (pool_logsize != 0)
-		flags |= PR_LOGGING;
-#endif
 
 	/*
 	 * Check arguments and construct default values.
@@ -496,17 +438,16 @@ pool_init(pp, size, align, ioff, flags, wchan, pagesz, alloc, release, mtype)
 	pp->pr_hiwat = 0;
 	pp->pr_nidle = 0;
 
-	if (flags & PR_LOGGING) {
-		if (kmem_map == NULL ||
-		    (pp->pr_log = malloc(pool_logsize * sizeof(struct pool_log),
-		     M_TEMP, M_NOWAIT)) == NULL)
+#ifdef POOL_DIAGNOSTIC
+	if ((flags & PR_LOGGING) != 0) {
+		pp->pr_log = malloc(pool_logsize * sizeof(struct pool_log),
+				    M_TEMP, M_NOWAIT);
+		if (pp->pr_log == NULL)
 			pp->pr_roflags &= ~PR_LOGGING;
 		pp->pr_curlogentry = 0;
 		pp->pr_logsize = pool_logsize;
 	}
-
-	pp->pr_entered_file = NULL;
-	pp->pr_entered_line = 0;
+#endif
 
 	simple_lock_init(&pp->pr_slock);
 
@@ -536,7 +477,7 @@ pool_destroy(pp)
 
 #ifdef DIAGNOSTIC
 	if (pp->pr_nout != 0) {
-		pr_printlog(pp, NULL, printf);
+		pr_printlog(pp);
 		panic("pool_destroy: pool busy: still out: %u\n",
 		    pp->pr_nout);
 	}
@@ -554,8 +495,10 @@ pool_destroy(pp)
 	drainpp = NULL;
 	simple_unlock(&pool_head_slock);
 
+#ifdef POOL_DIAGNOSTIC
 	if ((pp->pr_roflags & PR_LOGGING) != 0)
 		free(pp->pr_log, M_TEMP);
+#endif
 
 	if (pp->pr_roflags & PR_FREEHEADER)
 		free(pp, M_POOL);
@@ -565,12 +508,19 @@ pool_destroy(pp)
 /*
  * Grab an item from the pool; must be called at appropriate spl level
  */
+#ifdef POOL_DIAGNOSTIC
 void *
 _pool_get(pp, flags, file, line)
 	struct pool *pp;
 	int flags;
 	const char *file;
 	long line;
+#else
+void *
+pool_get(pp, flags)
+	struct pool *pp;
+	int flags;
+#endif
 {
 	void *v;
 	struct pool_item *pi;
@@ -578,7 +528,7 @@ _pool_get(pp, flags, file, line)
 
 #ifdef DIAGNOSTIC
 	if ((pp->pr_roflags & PR_STATIC) && (flags & PR_MALLOCOK)) {
-		pr_printlog(pp, NULL, printf);
+		pr_printlog(pp);
 		panic("pool_get: static");
 	}
 #endif
@@ -587,7 +537,6 @@ _pool_get(pp, flags, file, line)
 		panic("pool_get: must have NOWAIT");
 
 	simple_lock(&pp->pr_slock);
-	pr_enter(pp, file, line);
 
  startover:
 	/*
@@ -597,7 +546,6 @@ _pool_get(pp, flags, file, line)
 	 */
 #ifdef DIAGNOSTIC
 	if (pp->pr_nout > pp->pr_hardlimit) {
-		pr_leave(pp);
 		simple_unlock(&pp->pr_slock);
 		panic("pool_get: %s: crossed hard limit", pp->pr_wchan);
 	}
@@ -609,11 +557,9 @@ _pool_get(pp, flags, file, line)
 			 * it be?
 			 */
 			pp->pr_flags |= PR_WANTED;
-			pr_leave(pp);
 			simple_unlock(&pp->pr_slock);
 			tsleep((caddr_t)pp, PSWP, pp->pr_wchan, 0);
 			simple_lock(&pp->pr_slock);
-			pr_enter(pp, file, line);
 			goto startover;
 		}
 		if (pp->pr_hardlimit_warning != NULL) {
@@ -637,7 +583,6 @@ _pool_get(pp, flags, file, line)
 
 		pp->pr_nfail++;
 
-		pr_leave(pp);
 		simple_unlock(&pp->pr_slock);
 		return (NULL);
 	}
@@ -665,11 +610,9 @@ _pool_get(pp, flags, file, line)
 		 * Release the pool lock, as the back-end page allocator
 		 * may block.
 		 */
-		pr_leave(pp);
 		simple_unlock(&pp->pr_slock);
 		v = (*pp->pr_alloc)(pp->pr_pagesz, flags, pp->pr_mtype);
 		simple_lock(&pp->pr_slock);
-		pr_enter(pp, file, line);
 
 		if (v == NULL) {
 			/*
@@ -686,7 +629,6 @@ _pool_get(pp, flags, file, line)
 
 			if ((flags & PR_WAITOK) == 0) {
 				pp->pr_nfail++;
-				pr_leave(pp);
 				simple_unlock(&pp->pr_slock);
 				return (NULL);
 			}
@@ -703,11 +645,9 @@ _pool_get(pp, flags, file, line)
 			 * try again?
 			 */
 			pp->pr_flags |= PR_WANTED;
-			pr_leave(pp);
 			simple_unlock(&pp->pr_slock);
 			tsleep((caddr_t)pp, PSWP, pp->pr_wchan, 0);
 			simple_lock(&pp->pr_slock);
-			pr_enter(pp, file, line);
 			goto startover;
 		}
 
@@ -720,13 +660,11 @@ _pool_get(pp, flags, file, line)
 	}
 
 	if ((v = pi = TAILQ_FIRST(&ph->ph_itemlist)) == NULL) {
-		pr_leave(pp);
 		simple_unlock(&pp->pr_slock);
 		panic("pool_get: %s: page empty", pp->pr_wchan);
 	}
 #ifdef DIAGNOSTIC
 	if (pp->pr_nitems == 0) {
-		pr_leave(pp);
 		simple_unlock(&pp->pr_slock);
 		printf("pool_get: %s: items on itemlist, nitems %u\n",
 		    pp->pr_wchan, pp->pr_nitems);
@@ -737,7 +675,7 @@ _pool_get(pp, flags, file, line)
 
 #ifdef DIAGNOSTIC
 	if (pi->pi_magic != PI_MAGIC) {
-		pr_printlog(pp, pi, printf);
+		pr_printlog(pp);
 		panic("pool_get(%s): free list modified: magic=%x; page %p;"
 		       " item addr %p\n",
 			pp->pr_wchan, pi->pi_magic, ph->ph_page, pi);
@@ -761,7 +699,6 @@ _pool_get(pp, flags, file, line)
 	if (TAILQ_FIRST(&ph->ph_itemlist) == NULL) {
 #ifdef DIAGNOSTIC
 		if (ph->ph_nmissing != pp->pr_itemsperpage) {
-			pr_leave(pp);
 			simple_unlock(&pp->pr_slock);
 			panic("pool_get: %s: nmissing inconsistent",
 			    pp->pr_wchan);
@@ -802,7 +739,6 @@ _pool_get(pp, flags, file, line)
 		 */
 	}
 
-	pr_leave(pp);
 	simple_unlock(&pp->pr_slock);
 	return (v);
 }
@@ -810,12 +746,19 @@ _pool_get(pp, flags, file, line)
 /*
  * Return resource to the pool; must be called at appropriate spl level
  */
+#ifdef POOL_DIAGNOSTIC
 void
 _pool_put(pp, v, file, line)
 	struct pool *pp;
 	void *v;
 	const char *file;
 	long line;
+#else
+void
+pool_put(pp, v)
+	struct pool *pp;
+	void *v;
+#endif
 {
 	struct pool_item *pi = v;
 	struct pool_item_header *ph;
@@ -825,12 +768,11 @@ _pool_put(pp, v, file, line)
 	page = (caddr_t)((u_long)v & pp->pr_pagemask);
 
 	simple_lock(&pp->pr_slock);
-	pr_enter(pp, file, line);
 
 	pr_log(pp, v, PRLOG_PUT, file, line);
 
 	if ((ph = pr_find_pagehead(pp, page)) == NULL) {
-		pr_printlog(pp, NULL, printf);
+		pr_printlog(pp);
 		panic("pool_put: %s: page header missing", pp->pr_wchan);
 	}
 
@@ -838,7 +780,6 @@ _pool_put(pp, v, file, line)
 	 * Return to item list.
 	 */
 #ifdef DIAGNOSTIC
-	/* XXX Should fill the item. */
 	pi->pi_magic = PI_MAGIC;
 #endif
 	TAILQ_INSERT_HEAD(&ph->ph_itemlist, pi, pi_list);
@@ -855,7 +796,6 @@ _pool_put(pp, v, file, line)
 		pp->pr_flags &= ~PR_WANTED;
 		if (ph->ph_nmissing == 0)
 			pp->pr_nidle++;
-		pr_leave(pp);
 		simple_unlock(&pp->pr_slock);
 		wakeup((caddr_t)pp);
 		return;
@@ -921,7 +861,6 @@ _pool_put(pp, v, file, line)
 		pp->pr_curpage = ph;
 	}
 
-	pr_leave(pp);
 	simple_unlock(&pp->pr_slock);
 
 }
@@ -966,7 +905,6 @@ pool_prime(pp, n, storage)
 			return (ENOMEM);
 		}
 
-		pp->pr_npagealloc++;
 		pool_prime_page(pp, cp);
 		pp->pr_minpages++;
 	}
@@ -1101,7 +1039,6 @@ pool_catchup(pp)
 			error = ENOMEM;
 			break;
 		}
-		pp->pr_npagealloc++;
 		pool_prime_page(pp, cp);
 	}
 
@@ -1231,10 +1168,8 @@ pool_page_free_nointr(v, sz, mtype)
  * Release all complete pages that have not been used recently.
  */
 void
-_pool_reclaim(pp, file, line)
+pool_reclaim(pp)
 	pool_handle_t pp;
-	const char *file;
-	long line;
 {
 	struct pool_item_header *ph, *phnext;
 	struct timeval curtime;
@@ -1245,7 +1180,6 @@ _pool_reclaim(pp, file, line)
 
 	if (simple_lock_try(&pp->pr_slock) == 0)
 		return;
-	pr_enter(pp, file, line);
 
 	s = splclock();
 	curtime = mono_time;
@@ -1276,7 +1210,6 @@ _pool_reclaim(pp, file, line)
 		}
 	}
 
-	pr_leave(pp);
 	simple_unlock(&pp->pr_slock);
 }
 
@@ -1310,136 +1243,46 @@ pool_drain(arg)
 }
 
 
+#if defined(POOL_DIAGNOSTIC) || defined(DEBUG)
 /*
  * Diagnostic helpers.
  */
 void
-pool_print(pp, modif)
+pool_print(pp, label)
 	struct pool *pp;
-	const char *modif;
+	const char *label;
 {
 	int s;
 
 	s = splimp();
-	if (simple_lock_try(&pp->pr_slock) == 0) {
-		printf("pool %s is locked; try again later\n",
-		    pp->pr_wchan);
-		splx(s);
-		return;
-	}
-	pool_print1(pp, modif, printf);
+	simple_lock(&pp->pr_slock);
+	pool_print1(pp, label);
 	simple_unlock(&pp->pr_slock);
 	splx(s);
 }
 
-void
-pool_printit(pp, modif, pr)
-	struct pool *pp;
-	const char *modif;
-	void (*pr) __P((const char *, ...));
-{
-	int didlock = 0;
-
-	if (pp == NULL) {
-		(*pr)("Must specify a pool to print.\n");
-		return;
-	}
-
-	/*
-	 * Called from DDB; interrupts should be blocked, and all
-	 * other processors should be paused.  We can skip locking
-	 * the pool in this case.
-	 *
-	 * We do a simple_lock_try() just to print the lock
-	 * status, however.
-	 */
-
-	if (simple_lock_try(&pp->pr_slock) == 0)
-		(*pr)("WARNING: pool %s is locked\n", pp->pr_wchan);
-	else
-		didlock = 1;
-
-	pool_print1(pp, modif, pr);
-
-	if (didlock)
-		simple_unlock(&pp->pr_slock);
-}
-
 static void
-pool_print1(pp, modif, pr)
+pool_print1(pp, label)
 	struct pool *pp;
-	const char *modif;
-	void (*pr) __P((const char *, ...));
+	const char *label;
 {
-	struct pool_item_header *ph;
-#ifdef DIAGNOSTIC
-	struct pool_item *pi;
-#endif
-	int print_log = 0, print_pagelist = 0;
-	char c;
 
-	while ((c = *modif++) != '\0') {
-		if (c == 'l')
-			print_log = 1;
-		if (c == 'p')
-			print_pagelist = 1;
-		modif++;
-	}
+	if (label != NULL)
+		printf("%s: ", label);
 
-	(*pr)("POOL %s: size %u, align %u, ioff %u, roflags 0x%08x\n",
-	    pp->pr_wchan, pp->pr_size, pp->pr_align, pp->pr_itemoffset,
-	    pp->pr_roflags);
-	(*pr)("\tpagesz %u, mtype %d\n", pp->pr_pagesz, pp->pr_mtype);
-	(*pr)("\talloc %p, release %p\n", pp->pr_alloc, pp->pr_free);
-	(*pr)("\tminitems %u, minpages %u, maxpages %u, npages %u\n",
-	    pp->pr_minitems, pp->pr_minpages, pp->pr_maxpages, pp->pr_npages);
-	(*pr)("\titemsperpage %u, nitems %u, nout %u, hardlimit %u\n",
-	    pp->pr_itemsperpage, pp->pr_nitems, pp->pr_nout, pp->pr_hardlimit);
-
-	(*pr)("\n\tnget %lu, nfail %lu, nput %lu\n",
-	    pp->pr_nget, pp->pr_nfail, pp->pr_nput);
-	(*pr)("\tnpagealloc %lu, npagefree %lu, hiwat %u, nidle %lu\n",
-	    pp->pr_npagealloc, pp->pr_npagefree, pp->pr_hiwat, pp->pr_nidle);
-
-	if (print_pagelist == 0)
-		goto skip_pagelist;
-
-	if ((ph = TAILQ_FIRST(&pp->pr_pagelist)) != NULL)
-		(*pr)("\n\tpage list:\n");
-	for (; ph != NULL; ph = TAILQ_NEXT(ph, ph_pagelist)) {
-		(*pr)("\t\tpage %p, nmissing %d, time %lu,%lu\n",
-		    ph->ph_page, ph->ph_nmissing,
-		    (u_long)ph->ph_time.tv_sec,
-		    (u_long)ph->ph_time.tv_usec);
-#ifdef DIAGNOSTIC
-		for (pi = TAILQ_FIRST(&ph->ph_itemlist); pi != NULL;
-		     pi = TAILQ_NEXT(pi, pi_list)) {
-			if (pi->pi_magic != PI_MAGIC) {
-				(*pr)("\t\t\titem %p, magic 0x%x\n",
-				    pi, pi->pi_magic);
-			}
-		}
-#endif
-	}
-	if (pp->pr_curpage == NULL)
-		(*pr)("\tno current page\n");
-	else
-		(*pr)("\tcurpage %p\n", pp->pr_curpage->ph_page);
-
- skip_pagelist:
-
-	if (print_log == 0)
-		goto skip_log;
-
-	(*pr)("\n");
-	if ((pp->pr_roflags & PR_LOGGING) == 0)
-		(*pr)("\tno log\n");
-	else
-		pr_printlog(pp, NULL, pr);
-
- skip_log:
-
-	pr_enter_check(pp, pr);
+	printf("pool %s: nalloc %lu nfree %lu npagealloc %lu npagefree %lu\n"
+	       "         npages %u minitems %u itemsperpage %u itemoffset %u\n"
+	       "         nidle %lu\n",
+		pp->pr_wchan,
+		pp->pr_nget,
+		pp->pr_nput,
+		pp->pr_npagealloc,
+		pp->pr_npagefree,
+		pp->pr_npages,
+		pp->pr_minitems,
+		pp->pr_itemsperpage,
+		pp->pr_itemoffset,
+		pp->pr_nidle);
 }
 
 int
@@ -1506,3 +1349,4 @@ out:
 	simple_unlock(&pp->pr_slock);
 	return (r);
 }
+#endif /* POOL_DIAGNOSTIC || DEBUG */

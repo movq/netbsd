@@ -1,4 +1,4 @@
-/* $NetBSD: lemac.c,v 1.12 1999/05/18 23:52:56 thorpej Exp $ */
+/* $NetBSD: lemac.c,v 1.11 1999/02/28 17:10:53 explorer Exp $ */
 
 /*-
  * Copyright (c) 1994, 1995, 1997 Matt Thomas <matt@3am-software.com>
@@ -334,9 +334,10 @@ lemac_input(
 	return;
     }
 #endif
-    m->m_pkthdr.len = m->m_len = length;
+    m->m_pkthdr.len = m->m_len = length - sizeof(eh);
+    m->m_data += sizeof(eh);
     m->m_pkthdr.rcvif = &sc->sc_if;
-    (*sc->sc_if.if_input)(&sc->sc_if, m);
+    ether_input(&sc->sc_if, &eh, m);
 }
 
 static void
@@ -1044,6 +1045,7 @@ lemac_ifattach(
     ifp->if_baudrate = 10000000;
     ifp->if_softc = (void *) sc;
     ifp->if_start = lemac_ifstart;
+    ifp->if_output = ether_output;
     ifp->if_ioctl = lemac_ifioctl;
 
     ifp->if_flags = IFF_BROADCAST | IFF_SIMPLEX

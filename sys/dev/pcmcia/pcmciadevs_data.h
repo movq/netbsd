@@ -1,10 +1,10 @@
-/*	$NetBSD: pcmciadevs_data.h,v 1.38 1999/05/24 13:05:40 christos Exp $	*/
+/*	$NetBSD: pcmciadevs_data.h,v 1.36.2.1 1999/04/27 13:54:48 perry Exp $	*/
 
 /*
  * THIS FILE AUTOMATICALLY GENERATED.  DO NOT EDIT.
  *
  * generated from:
- *	NetBSD: pcmciadevs,v 1.35 1999/05/24 13:05:12 christos Exp 
+ *	NetBSD: pcmciadevs,v 1.33.2.1 1999/04/27 13:53:47 perry Exp 
  */
 
 /*-
@@ -316,13 +316,6 @@ struct pcmcia_knowndev pcmcia_knowndevs[] = {
 	    0,
 	    "Standard Microsystems Corporation",
 	    "SMC 8016 EtherCard"	},
-	},
-	{
-	    PCMCIA_VENDOR_SMC, PCMCIA_PRODUCT_SMC_EZCARD,
-	    PCMCIA_CIS_SMC_EZCARD,
-	    0,
-	    "Standard Microsystems Corporation",
-	    "SMC EXCard 10 PCMCIA"	},
 	},
 	{
 	    PCMCIA_VENDOR_UNKNOWN, PCMCIA_PRODUCT_MEGAHERTZ_XJ2288,

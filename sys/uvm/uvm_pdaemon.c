@@ -1,4 +1,4 @@
-/*	$NetBSD: uvm_pdaemon.c,v 1.16 1999/05/24 19:10:57 thorpej Exp $	*/
+/*	$NetBSD: uvm_pdaemon.c,v 1.15 1999/03/30 10:12:01 mycroft Exp $	*/
 
 /* 
  * Copyright (c) 1997 Charles D. Cranor and Washington University.
@@ -367,9 +367,11 @@ uvmpd_scan_inactive(pglst)
 			 * update our copy of "free" and see if we've met
 			 * our target
 			 */
-			s = uvm_lock_fpageq();
+			s = splimp();
+			uvm_lock_fpageq();
 			free = uvmexp.free;
-			uvm_unlock_fpageq(s);
+			uvm_unlock_fpageq();
+			splx(s);
 
 			if (free + uvmexp.paging >= uvmexp.freetarg << 2 ||
 			    dirtyreacts == UVMPD_NUMDIRTYREACTS) {
@@ -952,9 +954,11 @@ uvmpd_scan()
 	/*
 	 * get current "free" page count
 	 */
-	s = uvm_lock_fpageq();
+	s = splimp();
+	uvm_lock_fpageq();
 	free = uvmexp.free;
-	uvm_unlock_fpageq(s);
+	uvm_unlock_fpageq();
+	splx(s);
 
 #ifndef __SWAP_BROKEN
 	/*

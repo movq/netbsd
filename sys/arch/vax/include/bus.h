@@ -1,4 +1,4 @@
-/*	$NetBSD: bus.h,v 1.7 1999/06/06 19:07:11 ragge Exp $	*/
+/*	$NetBSD: bus.h,v 1.4 1999/03/23 21:29:05 drochner Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997, 1998 The NetBSD Foundation, Inc.
@@ -105,7 +105,7 @@ typedef u_long bus_size_t;
 /*
  * Access methods for bus resources and address space.
  */
-typedef	struct vax_bus_space *bus_space_tag_t;
+typedef	struct vax_bus_space bus_space_tag_t;
 typedef	u_long bus_space_handle_t;
 
 struct vax_bus_space {
@@ -883,11 +883,6 @@ vax_mem_copy_region_4(t, h1, o1, h2, o2, c)
 #define	BUS_DMA_BUS3		0x40
 #define	BUS_DMA_BUS4		0x80
 
-/*
- * Private flags stored in the DMA map.
- */
-#define DMAMAP_HAS_SGMAP	0x80000000	/* sgva/len are valid */
-
 /* Forwards needed by prototypes below. */
 struct mbuf;
 struct uio;
@@ -1064,13 +1059,13 @@ int	_bus_dmamap_create __P((bus_dma_tag_t, bus_size_t, int, bus_size_t,
 	    bus_size_t, int, bus_dmamap_t *));
 void	_bus_dmamap_destroy __P((bus_dma_tag_t, bus_dmamap_t));
 
-int	_bus_dmamap_load __P((bus_dma_tag_t, bus_dmamap_t,
+int	_bus_dmamap_load_direct __P((bus_dma_tag_t, bus_dmamap_t,
 	    void *, bus_size_t, struct proc *, int));
-int	_bus_dmamap_load_mbuf __P((bus_dma_tag_t,
+int	_bus_dmamap_load_mbuf_direct __P((bus_dma_tag_t,
 	    bus_dmamap_t, struct mbuf *, int));
-int	_bus_dmamap_load_uio __P((bus_dma_tag_t,
+int	_bus_dmamap_load_uio_direct __P((bus_dma_tag_t,
 	    bus_dmamap_t, struct uio *, int));
-int	_bus_dmamap_load_raw __P((bus_dma_tag_t,
+int	_bus_dmamap_load_raw_direct __P((bus_dma_tag_t,
 	    bus_dmamap_t, bus_dma_segment_t *, int, bus_size_t, int));
 
 void	_bus_dmamap_unload __P((bus_dma_tag_t, bus_dmamap_t));

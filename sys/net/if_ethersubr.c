@@ -1,4 +1,4 @@
-/*	$NetBSD: if_ethersubr.c,v 1.42 1999/05/18 23:57:20 thorpej Exp $	*/
+/*	$NetBSD: if_ethersubr.c,v 1.41 1999/03/10 21:05:08 thorpej Exp $	*/
 
 /*
  * Copyright (c) 1982, 1989, 1993
@@ -114,16 +114,12 @@ u_char	etherbroadcastaddr[6] = { 0xff, 0xff, 0xff, 0xff, 0xff, 0xff };
 
 #define SIN(x) ((struct sockaddr_in *)x)
 
-static	int ether_output __P((struct ifnet *, struct mbuf *,
-	    struct sockaddr *, struct rtentry *));
-static	void ether_input __P((struct ifnet *, struct mbuf *));
-
 /*
  * Ethernet output routine.
  * Encapsulate a packet of type family for the local net.
  * Assumes that ifp is actually pointer to ethercom structure.
  */
-static int
+int
 ether_output(ifp, m0, dst, rt0)
 	struct ifnet *ifp;
 	struct mbuf *m0;
@@ -437,18 +433,18 @@ bad:
 
 /*
  * Process a received Ethernet packet;
- * the packet is in the mbuf chain m with
- * the ether header.
+ * the packet is in the mbuf chain m without
+ * the ether header, which is provided separately.
  */
-static void
-ether_input(ifp, m)
+void
+ether_input(ifp, eh, m)
 	struct ifnet *ifp;
+	struct ether_header *eh;
 	struct mbuf *m;
 {
 	struct ifqueue *inq;
 	u_int16_t etype;
 	int s;
-	struct ether_header *eh;
 #if defined (ISO) || defined (LLC) || defined(NETATALK)
 	struct llc *l;
 #endif
@@ -457,11 +453,8 @@ ether_input(ifp, m)
 		m_freem(m);
 		return;
 	}
-
-	eh = mtod(m, struct ether_header *);
-
 	ifp->if_lastchange = time;
-	ifp->if_ibytes += m->m_pkthdr.len;
+	ifp->if_ibytes += m->m_pkthdr.len + sizeof (*eh);
 	if (eh->ether_dhost[0] & 1) {
 		if (bcmp((caddr_t)etherbroadcastaddr, (caddr_t)eh->ether_dhost,
 		    sizeof(etherbroadcastaddr)) == 0)
@@ -473,10 +466,6 @@ ether_input(ifp, m)
 		ifp->if_imcasts++;
 
 	etype = ntohs(eh->ether_type);
-
-	/* Strip off the Ethernet header. */
-	m_adj(m, sizeof(struct ether_header));
-
 	switch (etype) {
 #ifdef INET
 	case ETHERTYPE_IP:
@@ -705,7 +694,6 @@ ether_ifattach(ifp, lla)
 	ifp->if_hdrlen = 14;
 	ifp->if_mtu = ETHERMTU;
 	ifp->if_output = ether_output;
-	ifp->if_input = ether_input;
 	if ((sdl = ifp->if_sadl) &&
 	    sdl->sdl_family == AF_LINK) {
 		sdl->sdl_type = IFT_ETHER;

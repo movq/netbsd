@@ -1,4 +1,4 @@
-/*	$NetBSD: if_fddisubr.c,v 1.26 1999/05/18 23:57:20 thorpej Exp $	*/
+/*	$NetBSD: if_fddisubr.c,v 1.25 1998/12/10 15:51:48 christos Exp $	*/
 
 /*
  * Copyright (c) 1995, 1996
@@ -151,16 +151,12 @@ extern struct ifqueue pkintrq;
 #define	FDDIADDR(ifp)		(FDDICOM(ifp)->ac_enaddr)
 #endif
 
-static	int fddi_output __P((struct ifnet *, struct mbuf *,
-	    struct sockaddr *, struct rtentry *)); 
-static	void fddi_input __P((struct ifnet *, struct mbuf *));
-
 /*
  * FDDI output routine.
  * Encapsulate a packet of type family for the local net.
  * Assumes that ifp is actually pointer to ethercom structure.
  */
-static int
+int
 fddi_output(ifp, m0, dst, rt0)
 	register struct ifnet *ifp;
 	struct mbuf *m0;
@@ -536,28 +532,25 @@ bad:
 
 /*
  * Process a received FDDI packet;
- * the packet is in the mbuf chain m with
- * the fddi header.
+ * the packet is in the mbuf chain m without
+ * the fddi header, which is provided separately.
  */
-static void
-fddi_input(ifp, m)
+void
+fddi_input(ifp, fh, m)
 	struct ifnet *ifp;
+	register struct fddi_header *fh;
 	struct mbuf *m;
 {
 	register struct ifqueue *inq;
 	register struct llc *l;
-	struct fddi_header *fh;
 	int s;
 
 	if ((ifp->if_flags & IFF_UP) == 0) {
 		m_freem(m);
 		return;
 	}
-
-	fh = mtod(m, struct fddi_header *);
-
 	ifp->if_lastchange = time;
-	ifp->if_ibytes += m->m_pkthdr.len;
+	ifp->if_ibytes += m->m_pkthdr.len + sizeof (*fh);
 	if (fh->fddi_dhost[0] & 1) {
 		if (bcmp((caddr_t)fddibroadcastaddr, (caddr_t)fh->fddi_dhost,
 		    sizeof(fddibroadcastaddr)) == 0)
@@ -581,9 +574,6 @@ fddi_input(ifp, m)
 	if ((fh->fddi_fc & FDDIFC_LLC_PRIO7) == FDDIFC_LLC_PRIO0)
 		m->m_flags |= M_LINK0;
 #endif
-
-	/* Strip off the FDDI header. */
-	m_adj(m, sizeof(struct fddi_header));
 
 	l = mtod(m, struct llc *);
 	switch (l->llc_dsap) {
@@ -794,8 +784,6 @@ fddi_ifattach(ifp)
 	ifp->if_addrlen = 6;
 	ifp->if_hdrlen = 21;
 	ifp->if_mtu = FDDIMTU;
-	ifp->if_output = fddi_output;
-	ifp->if_input = fddi_input;
 	ifp->if_baudrate = 100000000;
 #ifdef IFF_NOTRAILERS
 	ifp->if_flags |= IFF_NOTRAILERS;

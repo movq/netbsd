@@ -1,4 +1,4 @@
-/*	$NetBSD: mii_physubr.c,v 1.4 1999/04/26 14:48:57 kleink Exp $	*/
+/*	$NetBSD: mii_physubr.c,v 1.2.6.1 1999/04/23 15:40:26 perry Exp $	*/
 
 /*-
  * Copyright (c) 1998, 1999 The NetBSD Foundation, Inc.
@@ -59,7 +59,6 @@ void	mii_phy_auto_timeout __P((void *));
 int
 mii_phy_auto(mii, waitfor)
 	struct mii_softc *mii;
-	int waitfor;
 {
 	int bmsr, i;
 

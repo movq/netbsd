@@ -1,4 +1,4 @@
-/*	$NetBSD: ser.c,v 1.8 1999/04/06 19:28:41 pk Exp $	*/
+/*	$NetBSD: ser.c,v 1.6.6.1 1999/04/07 08:12:40 pk Exp $	*/
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.

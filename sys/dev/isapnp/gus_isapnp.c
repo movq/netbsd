@@ -1,4 +1,4 @@
-/*	$NetBSD: gus_isapnp.c,v 1.14 1999/05/18 16:41:07 augustss Exp $	*/
+/*	$NetBSD: gus_isapnp.c,v 1.13 1999/03/22 10:00:10 mycroft Exp $	*/
 
 /*
  * Copyright (c) 1997, 1999 The NetBSD Foundation, Inc.
@@ -126,7 +126,7 @@ extern struct cfdriver guspnp_cd;
  * The thing has 5 separate devices on the card
  */
 
-static int gus_0 = 1;		/* XXX what's this */
+static int gus_0 = 0;		/* XXX what's this */
 
 int
 gus_isapnp_match(parent, match, aux)
@@ -149,6 +149,8 @@ gus_isapnp_match(parent, match, aux)
  * pseudo-device driver.
  */
 
+static struct iw_softc *gussc;
+
 void
 gus_isapnp_attach(parent, self, aux)
 	struct device *parent, *self;
@@ -168,6 +170,8 @@ gus_isapnp_attach(parent, self, aux)
 		       sc->sc_dev.dv_xname);
 		return;
 	}
+
+	gussc = sc;
 
 	sc->sc_iot = ipa->ipa_iot;
 

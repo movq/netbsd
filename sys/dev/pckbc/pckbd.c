@@ -1,4 +1,4 @@
-/* $NetBSD: pckbd.c,v 1.19 1999/06/04 15:03:43 drochner Exp $ */
+/* $NetBSD: pckbd.c,v 1.17 1999/03/26 12:39:13 drochner Exp $ */
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -370,14 +370,13 @@ pckbd_enable(v, on)
 
 		cmd[0] = KBC_ENABLE;
 		res = pckbc_enqueue_cmd(sc->id->t_kbctag, sc->id->t_kbcslot,
-					cmd, 1, 0, 1, 0);
+					cmd, 1, 0, 0, 0);
 		if (res) {
 			printf("pckbd_enable: command error\n");
 			return (res);
 		}
 
-		res = pckbd_set_xtscancode(sc->id->t_kbctag,
-					   sc->id->t_kbcslot);
+		res = pckbd_set_xtscancode(sc->id->t_kbctag, sc->id->t_kbcslot);
 		if (res)
 			return (res);
 
@@ -388,7 +387,7 @@ pckbd_enable(v, on)
 
 		cmd[0] = KBC_DISABLE;
 		res = pckbc_enqueue_cmd(sc->id->t_kbctag, sc->id->t_kbcslot,
-					cmd, 1, 0, 1, 0);
+					cmd, 1, 0, 0, 0);
 		if (res) {
 			printf("pckbd_disable: command error\n");
 			return (res);
@@ -409,8 +408,6 @@ pckbd_decode(id, datain, type, dataout)
 	u_int *type;
 	int *dataout;
 {
-	int key;
-
 	if (datain == KBR_EXTENDED0) {
 		id->t_extended = 1;
 		return(0);
@@ -419,37 +416,31 @@ pckbd_decode(id, datain, type, dataout)
 		return(0);
 	}
 
- 	/* map extended keys to (unused) codes 128-254 */
-	key = (datain & 0x7f) | (id->t_extended ? 0x80 : 0);
-	id->t_extended = 0;
-
-	/*
-	 * process BREAK key (EXT1 1D 45  EXT1 9D C5):
-	 * map to (unused) code 7F
-	 */
+	/* process BREAK key (EXT1 1D 45  EXT1 9D C5) map to (unused) code 7F */
 	if (id->t_extended1 == 2 && (datain == 0x1d || datain == 0x9d)) {
 		id->t_extended1 = 1;
 		return(0);
-	} else if (id->t_extended1 == 1 &&
-		   (datain == 0x45 || datain == 0xc5)) {
+	} else if (id->t_extended1 == 1 && (datain == 0x45 || datain == 0xc5)) {
 		id->t_extended1 = 0;
-		key = 0x7f;
+		datain = (datain & 0x80) | 0x7f;
 	} else if (id->t_extended1 > 0) {
 		id->t_extended1 = 0;
 	}
+ 
+	/* Always ignore typematic keys */
+	if (datain == id->t_lastchar)
+		return(0);
+	id->t_lastchar = datain;
 
-	if (datain & 0x80) {
-		id->t_lastchar = 0;
+	if (datain & 0x80)
 		*type = WSCONS_EVENT_KEY_UP;
-	} else {
-		/* Always ignore typematic keys */
-		if (key == id->t_lastchar)
-			return(0);
-		id->t_lastchar = key;
+	else
 		*type = WSCONS_EVENT_KEY_DOWN;
-	}
 
-	*dataout = key;
+	/* map extended keys to (unused) codes 128-254 */
+	*dataout = (datain & 0x7f) | (id->t_extended ? 0x80 : 0);
+
+	id->t_extended = 0;
 	return(1);
 }
 

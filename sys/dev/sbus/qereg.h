@@ -1,4 +1,4 @@
-/*	$NetBSD: qereg.h,v 1.2 1999/04/20 20:24:39 pk Exp $	*/
+/*	$NetBSD: qereg.h,v 1.1.2.1 1999/04/23 15:08:38 perry Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.

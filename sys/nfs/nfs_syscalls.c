@@ -1,4 +1,4 @@
-/*	$NetBSD: nfs_syscalls.c,v 1.35 1999/05/05 20:01:12 thorpej Exp $	*/
+/*	$NetBSD: nfs_syscalls.c,v 1.33.6.1 1999/05/04 17:07:15 perry Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -242,7 +242,6 @@ sys_nfssvc(p, v, retval)
 		    sizeof(nfsdarg));
 		if (error)
 			return (error);
-		/* getsock() will use the descriptor for us */
 		error = getsock(p->p_fd, nfsdarg.sock, &fp);
 		if (error)
 			return (error);
@@ -254,13 +253,10 @@ sys_nfssvc(p, v, retval)
 		else {
 			error = sockargs(&nam, nfsdarg.name, nfsdarg.namelen,
 				MT_SONAME);
-			if (error) {
-				FILE_UNUSE(fp, NULL);
+			if (error)
 				return (error);
-			}
 		}
 		error = nfssvc_addsock(fp, nam);
-		FILE_UNUSE(fp, NULL);
 #endif /* !NFSSERVER */
 	} else {
 #ifndef NFSSERVER
@@ -790,7 +786,6 @@ nfsrv_zapsock(slp)
 	slp->ns_flag &= ~SLP_ALLFLAGS;
 	fp = slp->ns_fp;
 	if (fp) {
-		FILE_USE(fp);
 		slp->ns_fp = (struct file *)0;
 		so = slp->ns_so;
 		so->so_upcall = NULL;

@@ -1,4 +1,4 @@
-/*	$NetBSD: vm_map.h,v 1.27 1999/06/05 04:12:31 thorpej Exp $	*/
+/*	$NetBSD: vm_map.h,v 1.23 1999/03/31 12:29:51 mrg Exp $	*/
 
 /* 
  * Copyright (c) 1991, 1993
@@ -140,135 +140,71 @@ struct vm_map {
 	vm_map_entry_t		hint;		/* hint for quick lookups */
 	simple_lock_data_t	hint_lock;	/* lock for hint storage */
 	vm_map_entry_t		first_free;	/* First free space hint */
-	int			flags;		/* flags (read-only) */
+	boolean_t		entries_pageable; /* map entries pageable?? */
 	unsigned int		timestamp;	/* Version number */
 #define	min_offset		header.start
 #define max_offset		header.end
 };
 
-/* vm_map flags */
-#define	VM_MAP_PAGEABLE		0x01		/* entries are pageable */
-#define	VM_MAP_INTRSAFE		0x02		/* interrupt safe map */
-
 /*
- *	Interrupt-safe maps must also be kept on a special list,
- *	to assist uvm_fault() in avoiding locking problems.
- */
-struct vm_map_intrsafe {
-	struct vm_map	vmi_map;
-	LIST_ENTRY(vm_map_intrsafe) vmi_list;
-};
-
-LIST_HEAD(vmi_list, vm_map_intrsafe);
-#ifdef _KERNEL
-extern simple_lock_data_t vmi_list_slock;
-extern struct vmi_list vmi_list;
-
-static __inline int vmi_list_lock __P((void));
-static __inline void vmi_list_unlock __P((int));
-
-static __inline int
-vmi_list_lock()
-{
-	int s;
-
-	s = splhigh();
-	simple_lock(&vmi_list_slock);
-	return (s);
-}
-
-static __inline void
-vmi_list_unlock(s)
-	int s;
-{
-
-	simple_unlock(&vmi_list_slock);
-	splx(s);
-}
-#endif /* _KERNEL */
-
-/*
- * VM map locking operations:
- *
- *	These operations perform locking on the data portion of the
- *	map.
- *
- *	vm_map_lock_try: try to lock a map, failing if it is already locked.
- *
- *	vm_map_lock: acquire an exclusive (write) lock on a map.
- *
- *	vm_map_lock_read: acquire a shared (read) lock on a map.
- *
- *	vm_map_unlock: release an exclusive lock on a map.
- *
- *	vm_map_unlock_read: release a shared lock on a map.
- *
- * Note that "intrsafe" maps use only exclusive, spin locks.  We simply
- * use the sleep lock's interlock for this.
+ *	Macros:		vm_map_lock, etc.
+ *	Function:
+ *		Perform locking on the data portion of a map.
  */
 
-#ifdef _KERNEL
-/* XXX: clean up later */
 #include <sys/time.h>
 #include <sys/proc.h>	/* XXX for curproc and p_pid */
 
+#define	vm_map_lock_drain_interlock(map) { \
+	lockmgr(&(map)->lock, LK_DRAIN|LK_INTERLOCK, \
+		&(map)->ref_lock); \
+	(map)->timestamp++; \
+}
+#ifdef DIAGNOSTIC
+#define	vm_map_lock(map) { \
+	if (lockmgr(&(map)->lock, LK_EXCLUSIVE, (void *)0) != 0) { \
+		panic("vm_map_lock: failed to get lock"); \
+	} \
+	(map)->timestamp++; \
+}
+#else
+#define	vm_map_lock(map) { \
+	lockmgr(&(map)->lock, LK_EXCLUSIVE, (void *)0); \
+	(map)->timestamp++; \
+}
+#endif /* DIAGNOSTIC */
+#define	vm_map_unlock(map) \
+		lockmgr(&(map)->lock, LK_RELEASE, (void *)0)
+#define	vm_map_lock_read(map) \
+		lockmgr(&(map)->lock, LK_SHARED, (void *)0)
+#define	vm_map_unlock_read(map) \
+		lockmgr(&(map)->lock, LK_RELEASE, (void *)0)
+#define vm_map_set_recursive(map) { \
+	simple_lock(&(map)->lk_interlock); \
+	(map)->lk_flags |= LK_CANRECURSE; \
+	simple_unlock(&(map)->lk_interlock); \
+}
+#define vm_map_clear_recursive(map) { \
+	simple_lock(&(map)->lk_interlock); \
+	if ((map)->lk_exclusivecount <= 1) \
+		(map)->lk_flags &= ~LK_CANRECURSE; \
+	simple_unlock(&(map)->lk_interlock); \
+}
+
+#ifdef _KERNEL
+/* XXX: clean up later */
 static __inline boolean_t vm_map_lock_try __P((vm_map_t));
 
 static __inline boolean_t
 vm_map_lock_try(map)
 	vm_map_t map;
 {
-	boolean_t rv;
-
-	if (map->flags & VM_MAP_INTRSAFE)
-		rv = simple_lock_try(&map->lock.lk_intrlock);
-	else
-		rv = (lockmgr(&map->lock, LK_EXCLUSIVE|LK_NOWAIT, NULL) == 0);
-
-	if (rv)
-		map->timestamp++;
-
-	return (rv);
+	if (lockmgr(&(map)->lock, LK_EXCLUSIVE|LK_NOWAIT, (void *)0) != 0)
+		return(FALSE);
+	map->timestamp++;
+	return(TRUE);
 }
-
-#ifdef DIAGNOSTIC
-#define	_vm_map_lock(map)						\
-do {									\
-	if (lockmgr(&(map)->lock, LK_EXCLUSIVE, NULL) != 0)		\
-		panic("vm_map_lock: failed to get lock");		\
-} while (0)
-#else
-#define	_vm_map_lock(map)						\
-	(void) lockmgr(&(map)->lock, LK_EXCLUSIVE, NULL)
 #endif
-
-#define	vm_map_lock(map)						\
-do {									\
-	if ((map)->flags & VM_MAP_INTRSAFE)				\
-		simple_lock(&(map)->lock.lk_interlock);			\
-	else								\
-		_vm_map_lock((map));					\
-	(map)->timestamp++;						\
-} while (0)
-
-#ifdef DIAGNOSTIC
-#define	vm_map_lock_read(map)						\
-do {									\
-	if (map->flags & VM_MAP_INTRSAFE)				\
-		panic("vm_map_lock_read: intrsafe map");		\
-	(void) lockmgr(&(map)->lock, LK_SHARED, NULL);			\
-} while (0)
-#else
-#define	vm_map_lock_read(map)						\
-	(void) lockmgr(&(map)->lock, LK_SHARED, NULL)
-#endif
-
-#define	vm_map_unlock(map)						\
-	(void) lockmgr(&(map)->lock, LK_RELEASE, (void *)0)
-
-#define	vm_map_unlock_read(map)						\
-	(void) lockmgr(&(map)->lock, LK_RELEASE, (void *)0)
-#endif /* _KERNEL */
 
 /*
  *	Functions implemented as macros
@@ -288,4 +224,54 @@ do {									\
 #endif
 #endif	/* !defined MAX_KMAPENT */
 
+
+#ifdef _KERNEL
+boolean_t	 vm_map_check_protection __P((vm_map_t,
+		    vaddr_t, vaddr_t, vm_prot_t));
+int		 vm_map_copy __P((vm_map_t, vm_map_t, vaddr_t,
+		    vsize_t, vaddr_t, boolean_t, boolean_t));
+void		 vm_map_copy_entry __P((vm_map_t,
+		    vm_map_t, vm_map_entry_t, vm_map_entry_t));
+struct pmap;
+vm_map_t	 vm_map_create __P((struct pmap *,
+		    vaddr_t, vaddr_t, boolean_t));
+void		 vm_map_deallocate __P((vm_map_t));
+int		 vm_map_delete __P((vm_map_t, vaddr_t, vaddr_t));
+vm_map_entry_t	 vm_map_entry_create __P((vm_map_t));
+void		 vm_map_entry_delete __P((vm_map_t, vm_map_entry_t));
+void		 vm_map_entry_dispose __P((vm_map_t, vm_map_entry_t));
+void		 vm_map_entry_unwire __P((vm_map_t, vm_map_entry_t));
+int		 vm_map_find __P((vm_map_t, vm_object_t,
+		    vaddr_t, vaddr_t *, vsize_t, boolean_t));
+int		 vm_map_findspace __P((vm_map_t,
+		    vaddr_t, vsize_t, vaddr_t *));
+int		 vm_map_inherit __P((vm_map_t,
+		    vaddr_t, vaddr_t, vm_inherit_t));
+void		 vm_map_init __P((struct vm_map *,
+		    vaddr_t, vaddr_t, boolean_t));
+int		 vm_map_insert __P((vm_map_t,
+		    vm_object_t, vaddr_t, vaddr_t, vaddr_t));
+int		 vm_map_lookup __P((vm_map_t *, vaddr_t, vm_prot_t,
+		    vm_map_entry_t *, vm_object_t *, vaddr_t *, vm_prot_t *,
+		    boolean_t *, boolean_t *));
+void		 vm_map_lookup_done __P((vm_map_t, vm_map_entry_t));
+boolean_t	 vm_map_lookup_entry __P((vm_map_t,
+		    vaddr_t, vm_map_entry_t *));
+int		 vm_map_pageable __P((vm_map_t,
+		    vaddr_t, vaddr_t, boolean_t));
+int		 vm_map_clean __P((vm_map_t,
+		    vaddr_t, vaddr_t, boolean_t, boolean_t));
+void		 vm_map_print __P((vm_map_t, boolean_t));
+void		 _vm_map_print __P((vm_map_t, boolean_t,
+		    void (*)(const char *, ...)));
+int		 vm_map_protect __P((vm_map_t,
+		    vaddr_t, vaddr_t, vm_prot_t, boolean_t));
+void		 vm_map_reference __P((vm_map_t));
+int		 vm_map_remove __P((vm_map_t, vaddr_t, vaddr_t));
+void		 vm_map_simplify __P((vm_map_t, vaddr_t));
+void		 vm_map_simplify_entry __P((vm_map_t, vm_map_entry_t));
+void		 vm_map_startup __P((void));
+int		 vm_map_submap __P((vm_map_t,
+		    vaddr_t, vaddr_t, vm_map_t));
+#endif
 #endif /* _VM_MAP_ */

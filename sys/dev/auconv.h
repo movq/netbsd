@@ -1,4 +1,4 @@
-/*	$NetBSD: auconv.h,v 1.4 1999/04/13 20:37:21 augustss Exp $	*/
+/*	$NetBSD: auconv.h,v 1.3.10.1 1999/04/16 20:26:52 augustss Exp $	*/
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.

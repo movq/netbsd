@@ -1,4 +1,4 @@
-/*	$NetBSD: scsipi_base.c,v 1.21 1999/04/07 12:47:27 bouyer Exp $	*/
+/*	$NetBSD: scsipi_base.c,v 1.20.2.1 1999/04/07 15:04:22 bouyer Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.

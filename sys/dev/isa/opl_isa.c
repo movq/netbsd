@@ -1,4 +1,4 @@
-/*	$NetBSD: opl_isa.c,v 1.2 1999/04/13 20:37:21 augustss Exp $	*/
+/*	$NetBSD: opl_isa.c,v 1.1.6.1 1999/04/16 20:26:52 augustss Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.

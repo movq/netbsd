@@ -1,4 +1,4 @@
-/* $NetBSD: atomic.s,v 1.6 1999/05/31 20:40:23 ross Exp $ */
+/* $NetBSD: atomic.s,v 1.5 1998/09/25 23:59:42 thorpej Exp $ */
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-__KERNEL_RCSID(4, "$NetBSD: atomic.s,v 1.6 1999/05/31 20:40:23 ross Exp $")
+__KERNEL_RCSID(4, "$NetBSD: atomic.s,v 1.5 1998/09/25 23:59:42 thorpej Exp $")
 
 /*
  * Misc. `atomic' operations.
@@ -62,17 +62,20 @@ inc4:	.stabs	__FILE__,132,0,0,inc4; .loc	1 __LINE__
  */
 	.text
 LEAF(alpha_atomic_testset_l,2)
-1:	ldl_l	t0, 0(a0)
+Laatl_loop:
+	ldl_l	t0, 0(a0)
 	and	t0, a1, t3
-	bne	t3, 2f		/* already set, return(0) */
+	bne	t3, Laatl_already	/* already set, return(0) */
 	or	t0, a1, v0
 	stl_c	v0, 0(a0)
-	beq	v0, 3f		/* branch-prediction: "not taken" */
+	beq	v0, Laatl_retry
 	mb
-	RET			/* v0 != 0 */
-2:	mov	zero, v0
+	RET				/* v0 != 0 */
+Laatl_already:
+	mov	zero, v0
 	RET
-3:	br	1b		/* forward branch to here */
+Laatl_retry:
+	br	Laatl_loop
 	END(alpha_atomic_testset_l)
 
 /*
@@ -91,13 +94,15 @@ LEAF(alpha_atomic_testset_l,2)
  */
 	.text
 LEAF(alpha_atomic_setbits_q,2)
-1:	ldq_l	t0, 0(a0)
+Laasq_loop:
+	ldq_l	t0, 0(a0)
 	or	t0, a1, t0
 	stq_c	t0, 0(a0)
-	beq	t0, 2f
+	beq	t0, Laasq_retry
 	mb
 	RET
-2:	br	1b
+Laasq_retry:
+	br	Laasq_loop
 	END(alpha_atomic_setbits_q)
 
 /*
@@ -117,13 +122,15 @@ LEAF(alpha_atomic_setbits_q,2)
 	.text
 LEAF(alpha_atomic_clearbits_q,2)
 	ornot	zero, a1, t1
-1:	ldq_l	t0, 0(a0)
+Laacq_loop:
+	ldq_l	t0, 0(a0)
 	and	t0, t1, t0
 	stq_c	t0, 0(a0)
-	beq	t0, 2f
+	beq	t0, Laacq_retry
 	mb
 	RET
-2:	br	1b
+Laacq_retry:
+	br	Laacq_loop
 	END(alpha_atomic_setbits_q)
 
 /*
@@ -142,17 +149,20 @@ LEAF(alpha_atomic_clearbits_q,2)
  */
 	.text
 LEAF(alpha_atomic_testset_q,2)
-1:	ldq_l	t0, 0(a0)
+Laatq_loop:
+	ldq_l	t0, 0(a0)
 	and	t0, a1, t3
-	bne	t3, 2f	/* Already set, return(0) */
+	bne	t3, Laatq_already	/* Already set, return(0) */
 	or	t0, a1, v0
 	stq_c	v0, 0(a0)
-	beq	v0, 3f
+	beq	v0, Laatq_retry
 	mb
 	RET				/* v0 != 0 */
-2:	mov	zero, v0
+Laatq_already:
+	mov	zero, v0
 	RET
-3:	br	1b
+Laatq_retry:
+	br	Laatq_loop
 	END(alpha_atomic_testset_q)
 
 /*
@@ -171,11 +181,13 @@ LEAF(alpha_atomic_testset_q,2)
  */
 	.text
 LEAF(alpha_atomic_loadlatch_q,2)
-1:	mov	a1, t0
+Laallq_loop:
+	mov	a1, t0
 	ldq_l	v0, 0(a0)
 	stq_c	t0, 0(a0)
-	beq	t0, 2f
+	beq	t0, Laallq_retry
 	mb
 	RET
-2:	br	1b
+Laallq_retry:
+	br	Laallq_loop
 	END(alpha_atomic_loadlatch_q)

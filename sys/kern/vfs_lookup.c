@@ -1,4 +1,4 @@
-/*	$NetBSD: vfs_lookup.c,v 1.30 1999/04/30 18:43:00 thorpej Exp $	*/
+/*	$NetBSD: vfs_lookup.c,v 1.28.6.1 1999/04/07 19:07:29 wrstuden Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1989, 1993
@@ -82,7 +82,7 @@ int
 namei(ndp)
 	register struct nameidata *ndp;
 {
-	struct cwdinfo *cwdi;		/* pointer to cwd state */
+	register struct filedesc *fdp;	/* pointer to file descriptor state */
 	register char *cp;		/* pointer into pathname argument */
 	register struct vnode *dp;	/* the directory we are searching */
 	struct iovec aiov;		/* uio for reading symbolic links */
@@ -99,7 +99,7 @@ namei(ndp)
 	if (cnp->cn_flags & OPMASK)
 		panic ("namei: flags contaminated with nameiops");
 #endif
-	cwdi = cnp->cn_proc->p_cwdi;
+	fdp = cnp->cn_proc->p_fd;
 
 	/*
 	 * Get a buffer for the name to be translated, and copy the
@@ -135,7 +135,7 @@ namei(ndp)
 	/*
 	 * Get starting point for the translation.
 	 */
-	if ((ndp->ni_rootdir = cwdi->cwdi_rdir) == NULL)
+	if ((ndp->ni_rootdir = fdp->fd_rdir) == NULL)
 		ndp->ni_rootdir = rootvnode;
 	/*
 	 * Check if starting from root directory or current directory.
@@ -144,7 +144,7 @@ namei(ndp)
 		dp = ndp->ni_rootdir;
 		VREF(dp);
 	} else {
-		dp = cwdi->cwdi_cdir;
+		dp = fdp->fd_cdir;
 		VREF(dp);
 	}
 	for (;;) {

@@ -1,4 +1,4 @@
-/*	$NetBSD: if_ether.h,v 1.8 1999/04/09 09:32:51 drochner Exp $	*/
+/*	$NetBSD: if_ether.h,v 1.7.2.1 1999/04/09 17:19:03 drochner Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1993

@@ -1,4 +1,4 @@
-/*	$NetBSD: pdq_ifsubr.c,v 1.25 1999/05/18 23:52:56 thorpej Exp $	*/
+/*	$NetBSD: pdq_ifsubr.c,v 1.24 1998/09/28 18:01:44 matt Exp $	*/
 
 /*-
  * Copyright (c) 1995, 1996 Matt Thomas <matt@3am-software.com>
@@ -239,7 +239,7 @@ pdq_os_receive_pdu(
     int drop)
 {
     pdq_softc_t *sc = pdq->pdq_os_ctx;
-    struct fddi_header *fh;
+    struct fddi_header *fh = mtod(m, struct fddi_header *);
 
     sc->sc_if.if_ipackets++;
 #if defined(PDQ_BUS_DMA)
@@ -265,14 +265,16 @@ pdq_os_receive_pdu(
     if (sc->sc_bpf != NULL)
 	PDQ_BPF_MTAP(sc, m);
 #endif
-    fh = mtod(m, struct fddi_header *);
     if (drop || (fh->fddi_fc & (FDDIFC_L|FDDIFC_F)) != FDDIFC_LLC_ASYNC) {
 	PDQ_OS_DATABUF_FREE(pdq, m);
 	return;
     }
 
+    m->m_data += sizeof(struct fddi_header);
+    m->m_len  -= sizeof(struct fddi_header);
+    m->m_pkthdr.len -= sizeof(struct fddi_header);
     m->m_pkthdr.rcvif = &sc->sc_if;
-    (*sc->sc_if.if_input)(&sc->sc_if, m);
+    fddi_input(&sc->sc_if, fh, m);
 }
 
 void
@@ -554,9 +556,7 @@ pdq_ifattach(
 #endif
 
     ifp->if_ioctl = pdq_ifioctl;
-#if !defined(__NetBSD__)
     ifp->if_output = fddi_output;
-#endif
     ifp->if_start = pdq_ifstart;
 
 #if defined(IFM_FDDI)

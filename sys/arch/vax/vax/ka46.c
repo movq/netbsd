@@ -1,4 +1,4 @@
-/*	$NetBSD: ka46.c,v 1.8 1999/05/01 16:13:44 ragge Exp $ */
+/*	$NetBSD: ka46.c,v 1.6 1999/03/13 15:16:48 ragge Exp $ */
 /*
  * Copyright (c) 1998 Ludd, University of Lule}, Sweden.
  * All rights reserved.
@@ -70,6 +70,7 @@ extern  short *clk_page;
  */
 struct	cpu_dep ka46_calls = {
 	ka46_steal_pages,
+	no_nicr_clock,
 	ka46_mchk,
 	ka46_memerr, 
 	ka46_conf,
@@ -147,11 +148,15 @@ ka46_mchk(addr)
 	return 0;
 }
 
+extern caddr_t le_iomem;
+
 void
 ka46_steal_pages()
 {
-	extern	vm_offset_t virtual_avail, avail_end;
+	extern	vm_offset_t avail_start, virtual_avail, avail_end;
 	int	i;
+
+	MAPPHYS(le_iomem, (NI_IOSIZE/VAX_NBPG), VM_PROT_READ|VM_PROT_WRITE);
 
 	/* Turn on caches (to speed up execution a bit) */
 	ka46_cache_enable();

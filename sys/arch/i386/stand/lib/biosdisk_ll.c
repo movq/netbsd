@@ -1,4 +1,4 @@
-/*	$NetBSD: biosdisk_ll.c,v 1.9 1999/05/04 17:14:55 fvdl Exp $	 */
+/*	$NetBSD: biosdisk_ll.c,v 1.7.2.2 1999/05/04 17:28:30 perry Exp $	 */
 
 /*
  * Copyright (c) 1996

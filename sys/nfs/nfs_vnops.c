@@ -1,4 +1,4 @@
-/*	$NetBSD: nfs_vnops.c,v 1.101 1999/05/29 01:22:03 fvdl Exp $	*/
+/*	$NetBSD: nfs_vnops.c,v 1.100 1999/03/24 05:51:29 mrg Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -675,7 +675,64 @@ nfs_setattrrpc(vp, vap, cred, procp)
 	nfsm_reqhead(vp, NFSPROC_SETATTR, NFSX_FH(v3) + NFSX_SATTR(v3));
 	nfsm_fhtom(vp, v3);
 	if (v3) {
-		nfsm_v3attrbuild(vap, TRUE);
+		if (vap->va_mode != (mode_t)VNOVAL) {
+			nfsm_build(tl, u_int32_t *, 2 * NFSX_UNSIGNED);
+			*tl++ = nfs_true;
+			*tl = txdr_unsigned(vap->va_mode);
+		} else {
+			nfsm_build(tl, u_int32_t *, NFSX_UNSIGNED);
+			*tl = nfs_false;
+		}
+		if (vap->va_uid != (uid_t)VNOVAL) {
+			nfsm_build(tl, u_int32_t *, 2 * NFSX_UNSIGNED);
+			*tl++ = nfs_true;
+			*tl = txdr_unsigned(vap->va_uid);
+		} else {
+			nfsm_build(tl, u_int32_t *, NFSX_UNSIGNED);
+			*tl = nfs_false;
+		}
+		if (vap->va_gid != (gid_t)VNOVAL) {
+			nfsm_build(tl, u_int32_t *, 2 * NFSX_UNSIGNED);
+			*tl++ = nfs_true;
+			*tl = txdr_unsigned(vap->va_gid);
+		} else {
+			nfsm_build(tl, u_int32_t *, NFSX_UNSIGNED);
+			*tl = nfs_false;
+		}
+		if (vap->va_size != VNOVAL) {
+			nfsm_build(tl, u_int32_t *, 3 * NFSX_UNSIGNED);
+			*tl++ = nfs_true;
+			txdr_hyper(vap->va_size, tl);
+		} else {
+			nfsm_build(tl, u_int32_t *, NFSX_UNSIGNED);
+			*tl = nfs_false;
+		}
+		if (vap->va_atime.tv_sec != VNOVAL) {
+			if (vap->va_atime.tv_sec != time.tv_sec) {
+				nfsm_build(tl, u_int32_t *, 3 * NFSX_UNSIGNED);
+				*tl++ = txdr_unsigned(NFSV3SATTRTIME_TOCLIENT);
+				txdr_nfsv3time(&vap->va_atime, tl);
+			} else {
+				nfsm_build(tl, u_int32_t *, NFSX_UNSIGNED);
+				*tl = txdr_unsigned(NFSV3SATTRTIME_TOSERVER);
+			}
+		} else {
+			nfsm_build(tl, u_int32_t *, NFSX_UNSIGNED);
+			*tl = txdr_unsigned(NFSV3SATTRTIME_DONTCHANGE);
+		}
+		if (vap->va_mtime.tv_sec != VNOVAL) {
+			if (vap->va_mtime.tv_sec != time.tv_sec) {
+				nfsm_build(tl, u_int32_t *, 3 * NFSX_UNSIGNED);
+				*tl++ = txdr_unsigned(NFSV3SATTRTIME_TOCLIENT);
+				txdr_nfsv3time(&vap->va_mtime, tl);
+			} else {
+				nfsm_build(tl, u_int32_t *, NFSX_UNSIGNED);
+				*tl = txdr_unsigned(NFSV3SATTRTIME_TOSERVER);
+			}
+		} else {
+			nfsm_build(tl, u_int32_t *, NFSX_UNSIGNED);
+			*tl = txdr_unsigned(NFSV3SATTRTIME_DONTCHANGE);
+		}
 		nfsm_build(tl, u_int32_t *, NFSX_UNSIGNED);
 		*tl = nfs_false;
 	} else {
@@ -1142,6 +1199,7 @@ nfs_mknodrpc(dvp, vpp, cnp, vap)
 	register struct vattr *vap;
 {
 	register struct nfsv2_sattr *sp;
+	register struct nfsv3_sattr *sp3;
 	register u_int32_t *tl;
 	register caddr_t cp;
 	register int32_t t1, t2;
@@ -1169,9 +1227,10 @@ nfs_mknodrpc(dvp, vpp, cnp, vap)
 	nfsm_fhtom(dvp, v3);
 	nfsm_strtom(cnp->cn_nameptr, cnp->cn_namelen, NFS_MAXNAMLEN);
 	if (v3) {
-		nfsm_build(tl, u_int32_t *, NFSX_UNSIGNED);
+		nfsm_build(tl, u_int32_t *, NFSX_UNSIGNED + NFSX_V3SRVSATTR);
 		*tl++ = vtonfsv3_type(vap->va_type);
-		nfsm_v3attrbuild(vap, FALSE);
+		sp3 = (struct nfsv3_sattr *)tl;
+		nfsm_v3sattr(sp3, vap);
 		if (vap->va_type == VCHR || vap->va_type == VBLK) {
 			nfsm_build(tl, u_int32_t *, 2 * NFSX_UNSIGNED);
 			*tl++ = txdr_unsigned(major(vap->va_rdev));
@@ -1261,6 +1320,7 @@ nfs_create(v)
 	register struct vattr *vap = ap->a_vap;
 	register struct componentname *cnp = ap->a_cnp;
 	register struct nfsv2_sattr *sp;
+	register struct nfsv3_sattr *sp3;
 	register u_int32_t *tl;
 	register caddr_t cp;
 	register int32_t t1, t2;
@@ -1290,16 +1350,18 @@ again:
 	if (v3) {
 		nfsm_build(tl, u_int32_t *, NFSX_UNSIGNED);
 		if (fmode & O_EXCL) {
-			*tl = txdr_unsigned(NFSV3CREATE_EXCLUSIVE);
-			nfsm_build(tl, u_int32_t *, NFSX_V3CREATEVERF);
-			if (in_ifaddr.tqh_first)
-				*tl++ = in_ifaddr.tqh_first->ia_addr.sin_addr.s_addr;
-			else
-				*tl++ = create_verf;
-			*tl = ++create_verf;
+		    *tl = txdr_unsigned(NFSV3CREATE_EXCLUSIVE);
+		    nfsm_build(tl, u_int32_t *, NFSX_V3CREATEVERF);
+		    if (in_ifaddr.tqh_first)
+			*tl++ = in_ifaddr.tqh_first->ia_addr.sin_addr.s_addr;
+		    else
+			*tl++ = create_verf;
+		    *tl = ++create_verf;
 		} else {
-			*tl = txdr_unsigned(NFSV3CREATE_UNCHECKED);
-			nfsm_v3attrbuild(vap, FALSE);
+		    *tl = txdr_unsigned(NFSV3CREATE_UNCHECKED);
+		    nfsm_build(tl, u_int32_t *, NFSX_V3SRVSATTR);
+		    sp3 = (struct nfsv3_sattr *)tl;
+		    nfsm_v3sattr(sp3, vap);
 		}
 	} else {
 		nfsm_build(sp, struct nfsv2_sattr *, NFSX_V2SATTR);
@@ -1679,6 +1741,7 @@ nfs_symlink(v)
 	register struct vattr *vap = ap->a_vap;
 	register struct componentname *cnp = ap->a_cnp;
 	register struct nfsv2_sattr *sp;
+	register struct nfsv3_sattr *sp3;
 	register u_int32_t *tl;
 	register caddr_t cp;
 	register int32_t t1, t2;
@@ -1694,8 +1757,10 @@ nfs_symlink(v)
 	    nfsm_rndup(cnp->cn_namelen) + nfsm_rndup(slen) + NFSX_SATTR(v3));
 	nfsm_fhtom(dvp, v3);
 	nfsm_strtom(cnp->cn_nameptr, cnp->cn_namelen, NFS_MAXNAMLEN);
-	if (v3)
-		nfsm_v3attrbuild(vap, FALSE);
+	if (v3) {
+		nfsm_build(sp3, struct nfsv3_sattr *, NFSX_V3SRVSATTR);
+		nfsm_v3sattr(sp3, vap);
+	}
 	nfsm_strtom(ap->a_target, slen, NFS_MAXPATHLEN);
 	if (!v3) {
 		nfsm_build(sp, struct nfsv2_sattr *, NFSX_V2SATTR);
@@ -1745,6 +1810,7 @@ nfs_mkdir(v)
 	register struct vattr *vap = ap->a_vap;
 	register struct componentname *cnp = ap->a_cnp;
 	register struct nfsv2_sattr *sp;
+	register struct nfsv3_sattr *sp3;
 	register u_int32_t *tl;
 	register caddr_t cp;
 	register int32_t t1, t2;
@@ -1764,7 +1830,8 @@ nfs_mkdir(v)
 	nfsm_fhtom(dvp, v3);
 	nfsm_strtom(cnp->cn_nameptr, len, NFS_MAXNAMLEN);
 	if (v3) {
-		nfsm_v3attrbuild(vap, FALSE);
+		nfsm_build(sp3, struct nfsv3_sattr *, NFSX_V3SRVSATTR);
+		nfsm_v3sattr(sp3, vap);
 	} else {
 		nfsm_build(sp, struct nfsv2_sattr *, NFSX_V2SATTR);
 		sp->sa_mode = vtonfsv2_mode(VDIR, vap->va_mode);

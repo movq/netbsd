@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.119 1999/05/27 14:20:10 pk Exp $ */
+/*	$NetBSD: autoconf.c,v 1.116.2.1 1999/04/14 21:19:43 pk Exp $ */
 
 /*
  * Copyright (c) 1996
@@ -76,7 +76,6 @@
 #include <machine/promlib.h>
 #include <machine/openfirm.h>
 #include <machine/autoconf.h>
-#include <machine/bootinfo.h>
 
 #include <machine/oldmon.h>
 #include <machine/idprom.h>
@@ -108,7 +107,6 @@ int	mmu_3l;		/* SUN4_400 models have a 3-level MMU */
 #ifdef KGDB
 extern	int kgdb_debug_panic;
 #endif
-extern void *bootinfo;
 
 static	char *str2hex __P((char *, int *));
 static	int mbprint __P((void *, const char *));
@@ -199,9 +197,7 @@ void
 bootstrap()
 {
 	extern struct user *proc0paddr;
-#ifdef DDB
-	struct btinfo_symtab *bi_sym;
-#endif
+
 	prom_init();
 
 	/* Attach user structure to proc0 */
@@ -217,15 +213,7 @@ bootstrap()
 	/* Moved zs_kgdb_init() to dev/zs.c:consinit(). */
 #ifdef DDB
 	db_machine_init();
-	if ((bi_sym = lookup_bootinfo(BTINFO_SYMTAB)) != NULL) {
-	   	bi_sym->ssym += KERNBASE; 
-	   	bi_sym->esym += KERNBASE; 
-		ddb_init(bi_sym->nsym, (int *)bi_sym->ssym,
-		    (int *)bi_sym->esym);
-	} else {
-		/*
-		 * Compatibility, will go away.
-		 */
+	{
 		extern int end;
 		extern int *esym;
 
@@ -1273,7 +1261,7 @@ makememarr(ap, max, which)
 		int	addr;
 		int	len;
 	} v2rmi[200];		/* version 2 rom meminfo layout */
-#define	MAXMEMINFO ((int)sizeof(v2rmi) / (int)sizeof(*v2rmi))
+#define	MAXMEMINFO (sizeof(v2rmi) / sizeof(*v2rmi))
 	void *p;
 
 	struct v0mlist *mp;
@@ -1771,30 +1759,4 @@ device_register(dev, aux)
 		}
 	}
 
-}
-
-/*
- * lookup_bootinfo:
- * Look up information in bootinfo of boot loader.
- */
-void *
-lookup_bootinfo(type)
-	int type;
-{
-	struct btinfo_common *bt;
-	char *help = bootinfo;
-
-	/* Check for a bootinfo record first. */
-	if (help == NULL)
-		return (NULL);
-
-	do {
-		bt = (struct btinfo_common *)help;
-		if (bt->type == type)
-			return ((void *)help);
-		help += bt->next;
-	} while (bt->next != 0 &&
-		(size_t)help < (size_t)bootinfo + BOOTINFO_SIZE);
-
-	return (NULL);
 }

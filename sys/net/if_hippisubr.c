@@ -1,4 +1,4 @@
-/*	$NetBSD: if_hippisubr.c,v 1.3 1999/05/18 23:57:20 thorpej Exp $	*/
+/*	$NetBSD: if_hippisubr.c,v 1.2 1998/07/05 00:51:26 jonathan Exp $	*/
 
 /*
  * Copyright (c) 1982, 1989, 1993
@@ -71,9 +71,6 @@
 #define	llc_snap	llc_un.type_snap
 #endif
 
-static	int hippi_output __P((struct ifnet *, struct mbuf *,
-	    struct sockaddr *, struct rtentry *)); 
-static	void hippi_input __P((struct ifnet *, struct mbuf *));
 
 /*
  * HIPPI output routine.
@@ -82,7 +79,7 @@ static	void hippi_input __P((struct ifnet *, struct mbuf *));
  * protocols to HIPPI, so I don't include any code for them.
  */
 
-static int
+int
 hippi_output(ifp, m0, dst, rt0)
 	struct ifnet *ifp;
 	struct mbuf *m0;
@@ -229,19 +226,19 @@ hippi_output(ifp, m0, dst, rt0)
 
 /*
  * Process a received HIPPI packet;
- * the packet is in the mbuf chain m with
- * the HIPPI header.
+ * the packet is in the mbuf chain m without
+ * the HIPPI header, which is provided separately.
  */
 
-static void
-hippi_input(ifp, m)
+void
+hippi_input(ifp, hh, m)
 	struct ifnet *ifp;
+	struct hippi_header *hh;
 	struct mbuf *m;
 {
 	register struct ifqueue *inq;
 	register struct llc *l;
 	u_int16_t htype;
-	struct hippi_header *hh;
 	int s;
 
 	if ((ifp->if_flags & IFF_UP) == 0) {
@@ -251,10 +248,8 @@ hippi_input(ifp, m)
 
 	/* XXX:  need to check flags and drop if bogus! */
 
-	hh = mtod(m, struct hippi_header *);
-
 	ifp->if_lastchange = time;
-	ifp->if_ibytes += m->m_pkthdr.len;
+	ifp->if_ibytes += m->m_pkthdr.len + sizeof (*hh);
 	if (hh->hi_le.le_dest_addr[0] & 1) {
 		if (bcmp((caddr_t)etherbroadcastaddr, 
 			 (caddr_t)hh->hi_le.le_dest_addr,
@@ -265,9 +260,6 @@ hippi_input(ifp, m)
 	}
 	if (m->m_flags & (M_BCAST|M_MCAST))
 		ifp->if_imcasts++;
-
-	/* Skip past the HIPPI header. */
-	m_adj(m, sizeof(struct hippi_header));
 
 	l = mtod(m, struct llc *);
 	if (l->llc_dsap != LLC_SNAP_LSAP) {
@@ -343,7 +335,6 @@ hippi_ifattach(ifp, lla)
 	ifp->if_hdrlen = sizeof(struct hippi_header) + 8; /* add CCI */
 	ifp->if_mtu = HIPPIMTU;
 	ifp->if_output = hippi_output;
-	ifp->if_input = hippi_input;
 	if ((sdl = ifp->if_sadl) &&
 	    sdl->sdl_family == AF_LINK) {
 		sdl->sdl_type = IFT_HIPPI;

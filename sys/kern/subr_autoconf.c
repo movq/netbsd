@@ -1,4 +1,4 @@
-/*	$NetBSD: subr_autoconf.c,v 1.39 1999/04/21 02:37:07 mrg Exp $	*/
+/*	$NetBSD: subr_autoconf.c,v 1.37 1998/12/03 23:50:39 pk Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993

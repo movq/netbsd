@@ -1,4 +1,4 @@
-/*	$NetBSD: pmap.new.c,v 1.28 1999/05/25 20:33:33 thorpej Exp $	*/
+/*	$NetBSD: pmap.new.c,v 1.23.2.2 1999/05/05 17:05:44 perry Exp $	*/
 
 /*
  *
@@ -60,7 +60,6 @@
  */
 
 #include "opt_cputype.h"
-#include "opt_user_ldt.h"
 #include "opt_lockdebug.h"
 #include "opt_multiprocessor.h"
 
@@ -79,7 +78,6 @@
 
 #include <machine/cpu.h>
 #include <machine/specialreg.h>
-#include <machine/gdt.h>
 
 #include <dev/isa/isareg.h>
 #include <machine/isa_machdep.h>
@@ -635,20 +633,28 @@ vsize_t len;
 
   len = len / NBPG;
 
-  s = splimp();
-  simple_lock(&pm->pm_obj.vmobjlock);
-
   for ( /* null */ ; len ; len--, va += NBPG) {
 
     pte = vtopte(va);    
 
-#ifdef DIAGNOSTIC
-    if (*pte & PG_PVLIST)
-      panic("pmap_kremove: PG_PVLIST mapping for 0x%lx\n", va);
-#endif
+    /* 
+     * XXXCDC: we can get PVLIST if the mapping was created by uvm_fault
+     * as part of a pageable kernel mapping.  in that case we need to
+     * update the pvlists, so we punt the problem to the more powerful
+     * (and complex) pmap_remove() function.   this is kind of ugly...
+     * need to rethink this a bit.
+     */
+    if (*pte & PG_PVLIST) {
+      pmap_remove(pmap_kernel(), va, va + (len*NBPG)); /* punt ... */
+      return;
+    }
 
+    s = splimp();
+    simple_lock(&pm->pm_obj.vmobjlock);
     pm->pm_stats.resident_count--;
     pm->pm_stats.wired_count--;
+    simple_unlock(&pm->pm_obj.vmobjlock);
+    splx(s);
 
     *pte = 0;		/* zap! */
 #if defined(I386_CPU)
@@ -657,9 +663,6 @@ vsize_t len;
       pmap_update_pg(va);
     
   }
-
-  simple_unlock(&pm->pm_obj.vmobjlock);
-  splx(s);
 
 #if defined(I386_CPU)
   if (cpu_class == CPUCLASS_386)
@@ -683,16 +686,14 @@ vaddr_t va;
 
   s = splimp();
   simple_lock(&pm->pm_obj.vmobjlock);
-
   pm->pm_stats.resident_count--;
   pm->pm_stats.wired_count--;
+  simple_unlock(&pm->pm_obj.vmobjlock);
+  splx(s);
 
   pte = vtopte(va);
   *pte = 0;		/* zap! */
   pmap_update_pg(va);
-
-  simple_unlock(&pm->pm_obj.vmobjlock);
-  splx(s);
 }
 
 /*
@@ -1785,7 +1786,6 @@ struct pmap *pmap;
   pmap->pm_stats.wired_count = 0;
   pmap->pm_stats.resident_count = 1;	/* count the PDP allocd below */
   pmap->pm_ptphint = NULL;
-  pmap->pm_flags = 0;
 
   /* allocate PDP */
   pmap->pm_pdir = (pd_entry_t *) uvm_km_alloc(kernel_map, NBPG);
@@ -1799,11 +1799,6 @@ struct pmap *pmap;
   memset(pmap->pm_pdir, 0, PDSLOT_PTE * sizeof(pd_entry_t));
   /* put in recursive PDE to map the PTEs */
   pmap->pm_pdir[PDSLOT_PTE] = pmap->pm_pdirpa | PG_V | PG_KW;
-
-  /* init the LDT */
-  pmap->pm_ldt = NULL;
-  pmap->pm_ldt_len = 0;
-  pmap->pm_ldt_sel = GSEL(GLDT_SEL, SEL_KPL);
 
   /*
    * we need to lock pmaps_lock to prevent nkpde from changing on
@@ -1902,18 +1897,6 @@ struct pmap *pmap;
   /* XXX: need to flush it out of other processor's APTE space? */
 
   uvm_km_free(kernel_map, (vaddr_t)pmap->pm_pdir, NBPG);
-
-#ifdef USER_LDT
-  if (pmap->pm_flags & PMF_USER_LDT) {
-    /*
-     * no need to switch the LDT; this address space is gone,
-     * nothing is using it.
-     */
-    ldt_free(pmap);
-    uvm_km_free(kernel_map, (vaddr_t)pmap->pm_ldt,
-		pmap->pm_ldt_len * sizeof(union descriptor));
-  }
-#endif
 }
 
 /*
@@ -1929,79 +1912,6 @@ struct pmap *pmap;
   pmap->pm_obj.uo_refs++;
   simple_unlock(&pmap->pm_obj.vmobjlock);
 }
-
-#if defined(PMAP_FORK)
-/*
- * pmap_fork: perform any necessary data structure manipulation when
- * a VM space is forked.
- */
-
-void pmap_fork(pmap1, pmap2)
-
-struct pmap *pmap1, *pmap2;
-
-{
-  simple_lock(&pmap1->pm_obj.vmobjlock);
-  simple_lock(&pmap2->pm_obj.vmobjlock);
-
-#ifdef USER_LDT
-  /* Copy the LDT, if necessary. */
-  if (pmap1->pm_flags & PMF_USER_LDT) {
-    union descriptor *new_ldt;
-    size_t len;
-
-    len = pmap1->pm_ldt_len * sizeof(union descriptor);
-    new_ldt = (union descriptor *)uvm_km_alloc(kernel_map, len);
-    memcpy(new_ldt, pmap1->pm_ldt, len);
-    pmap2->pm_ldt = new_ldt;
-    pmap2->pm_ldt_len = pmap1->pm_ldt_len;
-    pmap2->pm_flags |= PMF_USER_LDT;
-    ldt_alloc(pmap2, new_ldt, len);
-  }
-#endif /* USER_LDT */
-
-  simple_unlock(&pmap2->pm_obj.vmobjlock);
-  simple_unlock(&pmap1->pm_obj.vmobjlock);
-}
-#endif /* PMAP_FORK */
-
-#ifdef USER_LDT
-/*
- * pmap_ldt_cleanup: if the pmap has a local LDT, deallocate it, and
- * restore the default.
- */
-
-void pmap_ldt_cleanup(p)
-
-struct proc *p;
-
-{
-  struct pcb *pcb = &p->p_addr->u_pcb; 
-  pmap_t pmap = p->p_vmspace->vm_map.pmap;
-  union descriptor *old_ldt = NULL;
-  size_t len = 0;
-
-  simple_lock(&pmap->pm_obj.vmobjlock);
-
-  if (pmap->pm_flags & PMF_USER_LDT) {
-    ldt_free(pmap);
-    pmap->pm_ldt_sel = GSEL(GLDT_SEL, SEL_KPL);
-    pcb->pcb_ldt_sel = pmap->pm_ldt_sel;
-    if (pcb == curpcb)
-      lldt(pcb->pcb_ldt_sel);
-    old_ldt = pmap->pm_ldt;
-    len = pmap->pm_ldt_len * sizeof(union descriptor);
-    pmap->pm_ldt = NULL;
-    pmap->pm_ldt_len = 0;
-    pmap->pm_flags &= ~PMF_USER_LDT;
-  }
-
-  simple_unlock(&pmap->pm_obj.vmobjlock);
-
-  if (old_ldt != NULL)
-    uvm_km_free(kernel_map, (vaddr_t)old_ldt, len);
-}
-#endif /* USER_LDT */
 
 /*
  * pmap_activate: activate a process' pmap (fill in %cr3 info)
@@ -2020,13 +1930,11 @@ struct proc *p;
   struct pcb *pcb = &p->p_addr->u_pcb;
   struct pmap *pmap = p->p_vmspace->vm_map.pmap;
 
-  pcb->pcb_pmap = pmap;
-  pcb->pcb_ldt_sel = pmap->pm_ldt_sel;
   pcb->pcb_cr3 = pmap->pm_pdirpa;
-  if (p == curproc)
+  pcb->pcb_pmap = pmap;
+  if (p == curproc) {
     lcr3(pcb->pcb_cr3);
-  if (pcb == curpcb)
-    lldt(pcb->pcb_ldt_sel);
+  }
 }
 
 /*
@@ -2230,14 +2138,8 @@ vaddr_t startva, endva;
     /*
      * if we are not on a pv_head list we are done.
      */
-    if ((opte & PG_PVLIST) == 0) {
-#ifdef DIAGNOSTIC
-      if (vm_physseg_find(i386_btop(opte & PG_FRAME), &off) != -1)
-	panic("pmap_remove_ptes: managed page without PG_PVLIST for 0x%lx",
-	  startva);
-#endif
+    if ((opte & PG_PVLIST) == 0)
       continue;
-    }
 
     bank = vm_physseg_find(i386_btop(opte & PG_FRAME), &off);
     if (bank == -1)
@@ -2310,14 +2212,8 @@ vaddr_t va;
   /*
    * if we are not on a pv_head list we are done.
    */
-  if ((opte & PG_PVLIST) == 0) {
-#ifdef DIAGNOSTIC
-      if (vm_physseg_find(i386_btop(opte & PG_FRAME), &off) != -1)
-	panic("pmap_remove_ptes: managed page without PG_PVLIST for 0x%lx",
-	  va);
-#endif
+  if ((opte & PG_PVLIST) == 0)
     return(TRUE);
-  }
 
   bank = vm_physseg_find(i386_btop(opte & PG_FRAME), &off);
   if (bank == -1)
@@ -3639,7 +3535,7 @@ enter_now:
  *	the pmaps on the system.
  */
 
-vaddr_t pmap_growkernel(maxkvaddr)
+void pmap_growkernel(maxkvaddr)
 
 vaddr_t maxkvaddr;
 
@@ -3650,7 +3546,7 @@ vaddr_t maxkvaddr;
 
   needed_kpde = (int)(maxkvaddr - VM_MIN_KERNEL_ADDRESS + (NBPD-1)) / NBPD;
   if (needed_kpde <= nkpde)
-    goto out;		/* we are OK */
+    return;		/* we are OK */
 
   /*
    * whoops!   we need to add kernel PTPs
@@ -3660,21 +3556,6 @@ vaddr_t maxkvaddr;
   simple_lock(&kpm->pm_obj.vmobjlock);
 
   for (/*null*/ ; nkpde < needed_kpde ; nkpde++) {
-
-    if (pmap_initialized == FALSE) {
-      /*
-       * we're growing the kernel pmap early (from uvm_pageboot_alloc()).
-       * this case must be handled a little differently.
-       */
-      paddr_t ptaddr;
-
-      if (uvm_page_physget(&ptaddr) == FALSE)
-	panic("pmap_growkernel: out of memory");
-
-      kpm->pm_pdir[PDSLOT_KERN + nkpde] = ptaddr | PG_RW | PG_V;
-      kpm->pm_stats.resident_count++;	/* count PTP as resident */
-      continue;
-    }
 
     pmap_alloc_ptp(kpm, PDSLOT_KERN + nkpde, FALSE);
     kpm->pm_pdir[PDSLOT_KERN + nkpde] &= ~PG_u; /* PG_u not for kernel */
@@ -3689,9 +3570,6 @@ vaddr_t maxkvaddr;
 
   simple_unlock(&kpm->pm_obj.vmobjlock);
   splx(s);
-
- out:
-  return (VM_MIN_KERNEL_ADDRESS + (nkpde * NBPD));
 }
 
 #ifdef DEBUG

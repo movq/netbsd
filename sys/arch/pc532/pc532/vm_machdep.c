@@ -1,4 +1,4 @@
-/*	$NetBSD: vm_machdep.c,v 1.34 1999/05/26 22:19:37 thorpej Exp $	*/
+/*	$NetBSD: vm_machdep.c,v 1.31 1999/03/24 05:51:09 mrg Exp $	*/
 
 /*-
  * Copyright (c) 1996 Matthias Pfaller.
@@ -75,10 +75,8 @@ void	setredzone __P((u_short *, caddr_t));
  * via proc_trampoline from cpu_switch.
  */
 void
-cpu_fork(p1, p2, stack, stacksize)
+cpu_fork(p1, p2)
 	register struct proc *p1, *p2;
-	void *stack;
-	size_t stacksize;
 {
 	register struct pcb *pcb = &p2->p_addr->u_pcb;
 	register struct syscframe *tf;
@@ -106,13 +104,6 @@ cpu_fork(p1, p2, stack, stacksize)
 	 * through rei().  Note the in-line cpu_set_kpc().
 	 */
 	tf = (struct syscframe *)((u_int)p2->p_addr + USPACE) - 1;
-
-	/*
-	 * If specified, give the child a different stack.
-	 */
-	if (stack != NULL)
-		tf->sf_regs.r_sp = (u_int)stack + stacksize;
-
 	p2->p_md.md_regs = &tf->sf_regs;
 	sf = (struct switchframe *)tf - 1;
 	sf->sf_p  = p2;
@@ -341,9 +332,22 @@ kvtop(addr)
 extern vm_map_t phys_map;
 
 /*
- * Map a user I/O request into kernel virtual address space.
- * Note: the pages are already locked by uvm_vslock(), so we
- * do not need to pass an access_type to pmap_enter().   
+ * Map an IO request into kernel virtual address space.  Requests fall into
+ * one of five catagories:
+ *
+ *	B_PHYS|B_UAREA:	User u-area swap.
+ *			Address is relative to start of u-area (p_addr).
+ *	B_PHYS|B_PAGET:	User page table swap.
+ *			Address is a kernel VA in usrpt (Usrptmap).
+ *	B_PHYS|B_DIRTY:	Dirty page push.
+ *			Address is a VA in proc2's address space.
+ *	B_PHYS|B_PGIN:	Kernel pagein of user pages.
+ *			Address is VA in user's address space.
+ *	B_PHYS:		User "raw" IO request.
+ *			Address is VA in user's address space.
+ *
+ * All requests are (re)mapped into kernel VA space via the useriomap
+ * (a name with only slightly more meaning than "kernelmap")
  */
 #if defined(PMAP_NEW)
 void
@@ -384,7 +388,9 @@ vmapbuf(bp, len)
 		len -= PAGE_SIZE;
 	}
 }
+
 #else /* PMAP_NEW */
+
 void
 vmapbuf(bp, len)
 	struct buf *bp;
@@ -412,10 +418,11 @@ vmapbuf(bp, len)
 		len -= PAGE_SIZE;
 	} while (len);
 }
-#endif /* PMAP_NEW */
+#endif
 
 /*
- * Unmap a previously-mapped user I/O request.
+ * Free the io map PTEs associated with this IO operation.
+ * We also invalidate the TLB entries and restore the original b_addr.
  */
 void
 vunmapbuf(bp, len)

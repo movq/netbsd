@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_synch.c,v 1.59 1999/04/21 02:37:07 mrg Exp $	*/
+/*	$NetBSD: kern_synch.c,v 1.57 1999/03/24 05:51:25 mrg Exp $	*/
 
 /*-
  * Copyright (c) 1982, 1986, 1990, 1991, 1993

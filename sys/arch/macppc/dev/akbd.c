@@ -1,4 +1,4 @@
-/*	$NetBSD: akbd.c,v 1.7 1999/05/06 19:20:59 thorpej Exp $	*/
+/*	$NetBSD: akbd.c,v 1.6.2.1 1999/05/06 19:42:17 perry Exp $	*/
 
 /*
  * Copyright (C) 1998	Colin Wood
