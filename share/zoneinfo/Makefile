@@ -1,12 +1,10 @@
-#	from: @(#)Makefile	5.9 (Berkeley) 2/28/91
-#	$Id: Makefile,v 1.9 1993/09/17 23:58:57 cgd Exp $
+#	@(#)Makefile	5.9 (Berkeley) 2/28/91
 
 # Change the line below for your time zone (after finding the zone you want in
 # the time zone files, or adding it to a time zone file).
 # Alternately, if you discover you've got the wrong time zone, you can just
 #	zic -l rightzone
 
-# This line has been moved to /usr/src/etc/Makefile
 LOCALTIME=	US/Pacific
 
 # If you want something other than Eastern United States time as a template
@@ -36,7 +34,7 @@ TZDIR=	${DESTDIR}/usr/share/zoneinfo
 #	REDO=		right_posix
 # below.
 
-REDO=		posix_only
+REDO=		right_only
 
 # If you're running on a System V-style system and don't want lint grief,
 # add
@@ -98,15 +96,14 @@ REDO=		posix_only
 # to the end of the "CFLAGS=" line
 
 .PATH:	${.CURDIR}/datfiles
-CFLAGS+=	-DTM_GMTOFF=tm_gmtoff -DTM_ZONE=tm_zone
+CFLAGS=	-DTM_GMTOFF=tm_gmtoff -DTM_ZONE=tm_zone
 PROG=	zic
 MAN5=	tzfile.0
-MAN8=	zic.0
 
 SRCS=	zic.c scheck.c ialloc.c
 
 YDATA=	africa antarctica asia australasia europe northamerica \
-	russia southamerica pacificnew etcetera factory
+	southamerica pacificnew etcetera factory
 NDATA=	systemv
 #SDATA=	solar87 solar88 solar89
 TDATA=	${YDATA} ${NDATA} ${SDATA}
@@ -122,7 +119,7 @@ right_only: leapseconds ${TDATA}
 	    ../obj/zic -d ${TZDIR} -L leapseconds ${TDATA})
 
 other_two: leapseconds ${TDATA}
-	(cd ${.CURDIR}/datfiles; \
+	(cd ${.CURDIR}/datfiles;
 	    ../obj/zic -d ${TZDIR}/posix -L /dev/null ${TDATA})
 	(cd ${.CURDIR}/datfiles; \
 	    ../obj/zic -d ${TZDIR}/right -L leapseconds ${TDATA})
@@ -131,9 +128,11 @@ posix_right: posix_only other_two
 
 right_posix: right_only other_two
 
-realinstall: ${DATA} ${REDO}
+install: maninstall ${DATA} ${REDO}
 	(cd ${.CURDIR}/datfiles; \
 	    ../obj/zic -d ${TZDIR} -p ${POSIXRULES})
+	install -c -o ${BINOWN} -g ${BINGRP} -m 444 \
+	    ${TZDIR}/${LOCALTIME} ${DESTDIR}/etc/localtime
 	chown -R ${BINOWN}.${BINGRP} ${TZDIR}
 	chmod -R a-w ${TZDIR}
 
