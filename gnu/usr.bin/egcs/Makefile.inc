@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.inc,v 1.1 1998/03/29 11:34:20 mrg Exp $
+#	$NetBSD: Makefile.inc,v 1.1.1.1 1998/03/29 11:34:20 mrg Exp $
 
 .if !defined(GCC_MAKEFILE_INC)
 GCC_MAKEFILE_INC=1
