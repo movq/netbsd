@@ -1,12 +1,12 @@
 #
-# SMALL 532 Distribution - 
+# SMALL 532 Distribution - RAM DISK
 #
-#	$Id: SMALL_RD,v 1.1 1994/03/22 00:12:44 phil Exp $
+#	$Id: SMALL_RD,v 1.2 1994/04/17 05:45:43 phil Exp $
 #
 machine		"pc532"
 cpu		"ns532"
 ident		SMALL_RD
-timezone	0 dst
+timezone	0
 maxusers	10
 options		SWAPPAGER,VNODEPAGER,DEVPAGER
 options		FFS
@@ -16,6 +16,8 @@ options		"TCP_COMPAT_42"
 options		"RAMD_SIZE=1536000"
 #options		"RAMD_ADR=0x400000"
 options		"COMDEF_SPEED=B19200"
+options		KTRACE
+options		"COMPAT_09"
 
 options		SCSI
 
@@ -40,6 +42,6 @@ device		com7 	at scn0 port 7 tty
 
 pseudo-device	loop
 pseudo-device	ether
+pseudo-device	log
 pseudo-device	sl	1
 pseudo-device	pty	10
-
