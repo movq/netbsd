@@ -1,4 +1,4 @@
-.\"	$NetBSD: ld.4,v 1.1 2000/11/26 17:44:12 ad Exp $
+.\"	$NetBSD: ld.4,v 1.2 2001/02/04 17:05:15 ad Exp $
 .\"
 .\" Copyright (c) 2000 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -43,6 +43,7 @@
 .Sh SYNOPSIS
 .Cd ld* at cac? unit ?
 .Cd ld* at iop? tid ?
+.Cd ld* at mlx? unit ?
 .Cd ld* at twe? unit ?
 .Sh DESCRIPTION
 The
@@ -67,6 +68,7 @@ partition
 .Xr intro 4 ,
 .Xr cac 4 ,
 .Xr iop 4 ,
+.Xr mlx 4 ,
 .Xr twe 4
 .Sh AUTHOR
 The
@@ -79,8 +81,8 @@ The
 driver first appeared in
 .Nx 1.6 .
 .Sh BUGS
-This driver is in reality a nasty hack intended to reduce code size
-and maintenace overheads.
+This driver is in reality a kludge intended to reduce code size and
+maintenace overheads.
 .Pp
 The capacity and geometry of units as accessed through the
 .Nm
