@@ -1,4 +1,4 @@
-/*	$NetBSD: esp_input.c,v 1.1 2000/06/14 19:39:43 thorpej Exp $	*/
+/*	$NetBSD: esp_input.c,v 1.1.1.1 2000/06/14 19:39:43 thorpej Exp $	*/
 /*	$KAME: esp_input.c,v 1.22 2000/03/21 05:14:49 itojun Exp $	*/
 
 /*

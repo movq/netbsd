@@ -1,4 +1,4 @@
-/*	$NetBSD: esp_core.c,v 1.1 2000/06/14 19:39:43 thorpej Exp $	*/
+/*	$NetBSD: esp_core.c,v 1.1.1.1 2000/06/14 19:39:43 thorpej Exp $	*/
 /*	$KAME: esp_core.c,v 1.15 2000/06/14 10:41:18 itojun Exp $	*/
 
 /*
