@@ -1,5 +1,5 @@
 /* macro.c -- user-defined macros for Texinfo.
-   $Id: macro.c,v 1.1 2001/07/25 16:21:00 assar Exp $
+   $Id: macro.c,v 1.1.1.1 2001/07/25 16:21:00 assar Exp $
 
    Copyright (C) 1998, 99 Free Software Foundation, Inc.
 

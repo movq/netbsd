@@ -1,5 +1,5 @@
 /* pc_term.c -- How to handle the PC terminal for Info under MS-DOS/MS-Windows.
-   $Id: pcterm.c,v 1.1 2001/07/25 16:20:56 assar Exp $
+   $Id: pcterm.c,v 1.1.1.1 2001/07/25 16:20:56 assar Exp $
 
    Copyright (C) 1998, 99 Free Software Foundation, Inc.
 

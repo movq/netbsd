@@ -1,5 +1,5 @@
 /* files.c -- file-related functions for Texinfo.
-   $Id: files.c,v 1.1 2001/07/25 16:20:57 assar Exp $
+   $Id: files.c,v 1.1.1.1 2001/07/25 16:20:57 assar Exp $
 
    Copyright (C) 1998, 99 Free Software Foundation, Inc.
 
