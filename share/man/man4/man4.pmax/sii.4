@@ -27,7 +27,7 @@
 .\" (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 .\" THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 .\"
-.\"	$NetBSD: sii.4,v 1.9 2001/08/26 14:23:26 wiz Exp $
+.\"	$NetBSD: sii.4,v 1.10 2001/09/21 09:11:48 gmcgarry Exp $
 .\"
 .Dd August 26, 2001
 .Dt SII 4 pmax
@@ -37,7 +37,8 @@
 .Nd
 SII SCSI adaptor
 .Sh SYNOPSIS
-.Cd "sii0 at mainbus0"
+.Cd "sii* at ibus0 addr ?
+.Cd "scsibus* at sii?"
 .Sh DESCRIPTION
 The
 .Nm
@@ -60,11 +61,12 @@ chip only supports DMA to or from a fixed window in memory.
 The driver uses this "window" area as a bounce buffer, copying data
 to and from the DMA region.
 .Sh SEE ALSO
+.Xr cd 4 ,
+.Xr ch 4 ,
+.Xr ibus 4 ,
 .Xr intro 4 ,
 .Xr sd 4 ,
-.Xr st 4 ,
-.Xr cd 4 ,
-.Xr ch 4
+.Xr st 4
 .Sh HISTORY
 The
 .Nm
