@@ -1,6 +1,6 @@
 /*-
- * Copyright (c) 1993 The Regents of the University of California.
- * All rights reserved.
+ * Copyright (c) 1993
+ *	The Regents of the University of California.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,7 +32,7 @@
  */
 
 #if defined(LIBC_SCCS) && !defined(lint)
-static char sccsid[] = "@(#)err.c	5.2 (Berkeley) 3/19/93";
+static char sccsid[] = "@(#)err.c	8.1 (Berkeley) 6/4/93";
 #endif /* LIBC_SCCS and not lint */
 
 #include <err.h>
@@ -125,7 +125,6 @@ void
 warn(const char *fmt, ...)
 #else
 warn(fmt, va_alist)
-	int eval;
 	const char *fmt;
 	va_dcl
 #endif
@@ -161,7 +160,6 @@ void
 warnx(const char *fmt, ...)
 #else
 warnx(fmt, va_alist)
-	int eval;
 	const char *fmt;
 	va_dcl
 #endif
