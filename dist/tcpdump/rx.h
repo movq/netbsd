@@ -1,4 +1,4 @@
-/*	$NetBSD: rx.h,v 1.1 2001/06/25 19:26:38 itojun Exp $	*/
+/*	$NetBSD: rx.h,v 1.1.1.1 2001/06/25 19:26:38 itojun Exp $	*/
 
 /*
  * Rx protocol format

@@ -1,4 +1,4 @@
-/*	$NetBSD: print-stp.c,v 1.1 2001/06/25 19:26:39 itojun Exp $	*/
+/*	$NetBSD: print-stp.c,v 1.1.1.1 2001/06/25 19:26:39 itojun Exp $	*/
 
 /*
  * Copyright (c) 2000 Lennert Buytenhek

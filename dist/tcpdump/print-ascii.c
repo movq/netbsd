@@ -1,4 +1,4 @@
-/*	$NetBSD: print-ascii.c,v 1.1 2001/06/25 19:26:33 itojun Exp $	*/
+/*	$NetBSD: print-ascii.c,v 1.1.1.1 2001/06/25 19:26:33 itojun Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.

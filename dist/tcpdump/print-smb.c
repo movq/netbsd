@@ -1,4 +1,4 @@
-/*	$NetBSD: print-smb.c,v 1.1 2001/06/25 19:26:39 itojun Exp $	*/
+/*	$NetBSD: print-smb.c,v 1.1.1.1 2001/06/25 19:26:39 itojun Exp $	*/
 
 /* 
  * Copyright (C) Andrew Tridgell 1995-1999

@@ -1,4 +1,4 @@
-/*	$NetBSD: ip.h,v 1.1 2001/06/25 19:26:32 itojun Exp $	*/
+/*	$NetBSD: ip.h,v 1.1.1.1 2001/06/25 19:26:32 itojun Exp $	*/
 
 /* @(#) Header: /tcpdump/master/tcpdump/ip.h,v 1.7 2000/10/03 09:17:40 guy Exp (LBL) */
 /*

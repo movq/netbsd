@@ -1,4 +1,4 @@
-/*	$NetBSD: print-chdlc.c,v 1.1 2001/06/25 19:26:34 itojun Exp $	*/
+/*	$NetBSD: print-chdlc.c,v 1.1.1.1 2001/06/25 19:26:34 itojun Exp $	*/
 
 /* maybe it should be merged into print-ppp.c */
 /*

@@ -1,4 +1,4 @@
-/*	$NetBSD: extract.h,v 1.1 2001/06/25 19:26:31 itojun Exp $	*/
+/*	$NetBSD: extract.h,v 1.1.1.1 2001/06/25 19:26:31 itojun Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993, 1994, 1995, 1996

@@ -1,4 +1,4 @@
-/*	$NetBSD: route6d.h,v 1.1 2001/06/25 19:26:40 itojun Exp $	*/
+/*	$NetBSD: route6d.h,v 1.1.1.1 2001/06/25 19:26:40 itojun Exp $	*/
 
 /*
  * Header: /tcpdump/master/tcpdump/route6d.h,v 1.2 2000/04/28 11:14:49 itojun Exp

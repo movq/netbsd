@@ -1,4 +1,4 @@
-/*	$NetBSD: print-sctp.c,v 1.1 2001/06/25 19:26:39 itojun Exp $	*/
+/*	$NetBSD: print-sctp.c,v 1.1.1.1 2001/06/25 19:26:39 itojun Exp $	*/
 
 /* Copyright (c) 2001 NETLAB, Temple University
  * Copyright (c) 2001 Protocol Engineering Lab, University of Delaware

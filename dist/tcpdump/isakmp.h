@@ -1,4 +1,4 @@
-/*	$NetBSD: isakmp.h,v 1.1 2001/06/25 19:26:32 itojun Exp $	*/
+/*	$NetBSD: isakmp.h,v 1.1.1.1 2001/06/25 19:26:32 itojun Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.

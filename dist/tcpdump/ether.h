@@ -1,4 +1,4 @@
-/*	$NetBSD: ether.h,v 1.1 2001/06/25 19:26:31 itojun Exp $	*/
+/*	$NetBSD: ether.h,v 1.1.1.1 2001/06/25 19:26:31 itojun Exp $	*/
 
 /* @(#) Header: /tcpdump/master/tcpdump/ether.h,v 1.6 2000/10/09 03:24:24 guy Exp (LBL) */
 /*

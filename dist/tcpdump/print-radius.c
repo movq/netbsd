@@ -1,4 +1,4 @@
-/*	$NetBSD: print-radius.c,v 1.1 2001/06/25 19:26:38 itojun Exp $	*/
+/*	$NetBSD: print-radius.c,v 1.1.1.1 2001/06/25 19:26:38 itojun Exp $	*/
 
 /*
  * Radius printer routines as specified on:

@@ -1,4 +1,4 @@
-/*	$NetBSD: smbutil.c,v 1.1 2001/06/25 19:26:40 itojun Exp $	*/
+/*	$NetBSD: smbutil.c,v 1.1.1.1 2001/06/25 19:26:40 itojun Exp $	*/
 
 /*
    Copyright (C) Andrew Tridgell 1995-1999

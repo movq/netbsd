@@ -1,4 +1,4 @@
-/*	$NetBSD: arcnet.h,v 1.1 2001/06/25 19:26:29 itojun Exp $	*/
+/*	$NetBSD: arcnet.h,v 1.1.1.1 2001/06/25 19:26:29 itojun Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1993

@@ -1,4 +1,4 @@
-/*	$NetBSD: print-ip6opts.c,v 1.1 2001/06/25 19:26:35 itojun Exp $	*/
+/*	$NetBSD: print-ip6opts.c,v 1.1.1.1 2001/06/25 19:26:35 itojun Exp $	*/
 
 /*
  * Copyright (C) 1998 WIDE Project.

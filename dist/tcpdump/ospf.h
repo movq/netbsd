@@ -1,4 +1,4 @@
-/*	$NetBSD: ospf.h,v 1.1 2001/06/25 19:26:33 itojun Exp $	*/
+/*	$NetBSD: ospf.h,v 1.1.1.1 2001/06/25 19:26:33 itojun Exp $	*/
 
 /* @(#) Header: /tcpdump/master/tcpdump/ospf.h,v 1.3 2000/12/17 23:07:50 guy Exp (LBL) */
 /*

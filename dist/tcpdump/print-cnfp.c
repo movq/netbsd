@@ -1,4 +1,4 @@
-/*	$NetBSD: print-cnfp.c,v 1.1 2001/06/25 19:26:34 itojun Exp $	*/
+/*	$NetBSD: print-cnfp.c,v 1.1.1.1 2001/06/25 19:26:34 itojun Exp $	*/
 
 /*	$OpenBSD: print-cnfp.c,v 1.2 1998/06/25 20:26:59 mickey Exp $	*/
 

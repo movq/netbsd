@@ -1,4 +1,4 @@
-/*	$NetBSD: print-mpls.c,v 1.1 2001/06/25 19:26:36 itojun Exp $	*/
+/*	$NetBSD: print-mpls.c,v 1.1.1.1 2001/06/25 19:26:36 itojun Exp $	*/
 
 /*
  * Copyright (C) 2001 WIDE Project.  All rights reserved.

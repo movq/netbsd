@@ -1,4 +1,4 @@
-/*	$NetBSD: print-atm.c,v 1.1 2001/06/25 19:26:33 itojun Exp $	*/
+/*	$NetBSD: print-atm.c,v 1.1.1.1 2001/06/25 19:26:33 itojun Exp $	*/
 
 /*
  * Copyright (c) 1994, 1995, 1996, 1997

@@ -1,4 +1,4 @@
-/*	$NetBSD: print-lane.c,v 1.1 2001/06/25 19:26:36 itojun Exp $	*/
+/*	$NetBSD: print-lane.c,v 1.1.1.1 2001/06/25 19:26:36 itojun Exp $	*/
 
 /*
  * Marko Kiiskila carnil@cs.tut.fi 

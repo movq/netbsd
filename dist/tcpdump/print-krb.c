@@ -1,4 +1,4 @@
-/*	$NetBSD: print-krb.c,v 1.1 2001/06/25 19:26:36 itojun Exp $	*/
+/*	$NetBSD: print-krb.c,v 1.1.1.1 2001/06/25 19:26:36 itojun Exp $	*/
 
 /*
  * Copyright (c) 1995, 1996, 1997

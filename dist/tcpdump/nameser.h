@@ -1,4 +1,4 @@
-/*	$NetBSD: nameser.h,v 1.1 2001/06/25 19:26:32 itojun Exp $	*/
+/*	$NetBSD: nameser.h,v 1.1.1.1 2001/06/25 19:26:32 itojun Exp $	*/
 
 /* @(#) Header: /tcpdump/master/tcpdump/nameser.h,v 1.7 2001/02/20 06:31:34 itojun Exp (LBL) */
 /*

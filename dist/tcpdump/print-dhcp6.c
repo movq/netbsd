@@ -1,4 +1,4 @@
-/*	$NetBSD: print-dhcp6.c,v 1.1 2001/06/25 19:26:34 itojun Exp $	*/
+/*	$NetBSD: print-dhcp6.c,v 1.1.1.1 2001/06/25 19:26:34 itojun Exp $	*/
 
 /*
  * Copyright (C) 1998 and 1999 WIDE Project.

@@ -1,4 +1,4 @@
-/*	$NetBSD: dhcp6opt.h,v 1.1 2001/06/25 19:26:31 itojun Exp $	*/
+/*	$NetBSD: dhcp6opt.h,v 1.1.1.1 2001/06/25 19:26:31 itojun Exp $	*/
 
 /* @(#) Header: /tcpdump/master/tcpdump/dhcp6opt.h,v 1.3 2000/12/17 23:07:49 guy Exp (LBL) */
 /*

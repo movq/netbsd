@@ -1,4 +1,4 @@
-/*	$NetBSD: strcasecmp.c,v 1.1 2001/06/25 19:26:40 itojun Exp $	*/
+/*	$NetBSD: strcasecmp.c,v 1.1.1.1 2001/06/25 19:26:40 itojun Exp $	*/
 
 /*
  * Copyright (c) 1987 Regents of the University of California.

@@ -1,4 +1,4 @@
-/*	$NetBSD: print-pim.c,v 1.1 2001/06/25 19:26:37 itojun Exp $	*/
+/*	$NetBSD: print-pim.c,v 1.1.1.1 2001/06/25 19:26:37 itojun Exp $	*/
 
 /*
  * Copyright (c) 1995, 1996

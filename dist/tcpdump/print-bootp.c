@@ -1,4 +1,4 @@
-/*	$NetBSD: print-bootp.c,v 1.1 2001/06/25 19:26:33 itojun Exp $	*/
+/*	$NetBSD: print-bootp.c,v 1.1.1.1 2001/06/25 19:26:33 itojun Exp $	*/
 
 /*
  * Copyright (c) 1990, 1991, 1993, 1994, 1995, 1996, 1997

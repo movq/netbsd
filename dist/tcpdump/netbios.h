@@ -1,4 +1,4 @@
-/*	$NetBSD: netbios.h,v 1.1 2001/06/25 19:26:32 itojun Exp $	*/
+/*	$NetBSD: netbios.h,v 1.1.1.1 2001/06/25 19:26:32 itojun Exp $	*/
 
 /*
  * NETBIOS protocol formats
