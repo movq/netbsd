@@ -1,4 +1,4 @@
-/*	$NetBSD: timekeeper.c,v 1.1 2001/08/12 18:34:25 scw Exp $	*/
+/*	$NetBSD: timekeeper.c,v 1.2 2002/02/12 20:38:28 scw Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -51,7 +51,7 @@
 #include <machine/cpu.h>
 #include <machine/bus.h>
 
-#include <mvme68k/mvme68k/clockvar.h>
+#include <dev/mvme/clockvar.h>
 
 #include <mvme68k/dev/mainbus.h>
 
