@@ -1,4 +1,4 @@
-/*	$NetBSD: sys_machdep.c,v 1.3 2000/06/09 14:08:45 kleink Exp $	*/
+/*	$NetBSD: sys_machdep.c,v 1.3.10.1 2001/11/05 19:46:19 briggs Exp $	*/
 
 /*
  * Copyright (C) 1996 Wolfgang Solfrank.
@@ -37,8 +37,8 @@
 #include <sys/syscallargs.h>
 
 int
-sys_sysarch(p, v, retval)
-	struct proc *p;
+sys_sysarch(l, v, retval)
+	struct lwp *l;
 	void *v;
 	register_t *retval;
 {
