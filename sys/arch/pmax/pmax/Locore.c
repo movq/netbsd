@@ -31,7 +31,7 @@
  * SUCH DAMAGE.
  *
  * from: @(#)Locore.c	7.2 (Berkeley) 10/11/92
- * $Id: Locore.c,v 1.1.1.1 1993/10/12 03:22:28 deraadt Exp $
+ * $Id: Locore.c,v 1.1 1993/10/12 03:22:27 deraadt Exp $
  */
 
 #include <sys/param.h>

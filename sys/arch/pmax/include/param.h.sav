@@ -37,7 +37,7 @@
  *
  * from: Utah Hdr: machparam.h 1.11 89/08/14
  * from: @(#)param.h	7.9 (Berkeley) 2/4/93
- * $Id: param.h.sav,v 1.1.1.1 1993/10/12 03:22:43 deraadt Exp $
+ * $Id: param.h.sav,v 1.1 1993/10/12 03:22:42 deraadt Exp $
  */
 
 /*
