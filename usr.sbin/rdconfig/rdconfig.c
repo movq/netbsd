@@ -1,4 +1,4 @@
-/*	$NetBSD: rdconfig.c,v 1.1 1995/10/08 22:40:41 gwr Exp $	*/
+/*	$NetBSD: rdconfig.c,v 1.1.1.1 1995/10/08 22:40:41 gwr Exp $	*/
 
 /*
  * Copyright (c) 1995 Gordon W. Ross
