@@ -1,4 +1,4 @@
-/*	$NetBSD: herror.c,v 1.1 2004/05/20 17:18:55 christos Exp $	*/
+/*	$NetBSD: herror.c,v 1.1.1.1 2004/05/20 17:18:55 christos Exp $	*/
 
 /*
  * Copyright (c) 1987, 1993
