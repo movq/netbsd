@@ -13,8 +13,8 @@
  *  3-Sep-90  Alessandro Forin (af) at Carnegie-Mellon University
  *  Created.
  * $Log: kernel_font.c,v $
- * Revision 1.1  1996/05/05 12:17:07  oki
- * Initial revision
+ * Revision 1.1.1.1  1996/05/05 12:17:03  oki
+ * NetBSD/x68k, by Masaru Oki.
  *
  * Revision 1.1  1995/05/16  19:54:59  oki
  * *** empty log message ***
