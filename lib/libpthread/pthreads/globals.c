@@ -1,5 +1,5 @@
 /* ==== globals.c ============================================================
- * Copyright (c) 1993 by Chris Provenzano, proven@mit.edu
+ * Copyright (c) 1993, 1994 by Chris Provenzano, proven@mit.edu
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -35,7 +35,11 @@
  *      -Started coding this file.
  */
 
-#include "pthread.h"
+#ifndef lint
+static const char rcsid[] = "$Id: globals.c,v 1.3 1994/02/07 22:04:19 proven Exp $ $provenid: globals.c,v 1.16 1994/02/07 02:18:57 proven Exp $";
+#endif
+
+#include <pthread.h>
 
 /*
  * Initial thread, running thread, and top of link list
