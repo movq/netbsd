@@ -1,4 +1,4 @@
-/*	$NetBSD: vrpiuvar.h,v 1.2 2000/01/08 02:57:25 takemura Exp $	*/
+/*	$NetBSD: vrpiuvar.h,v 1.3 2000/01/10 14:08:04 takemura Exp $	*/
 
 /*
  * Copyright (c) 1999 Shin Takemura All rights reserved.
@@ -43,7 +43,5 @@ struct vrpiu_softc {
 	enum vrpiu_stat sc_stat;
 	struct device *sc_wsmousedev;
 
-	/* correction parameters */
-	int sc_prmax, sc_prmbx, sc_prmcx, sc_prmxs;
-	int sc_prmay, sc_prmby, sc_prmcy, sc_prmys;
+	struct tpcalib_softc sc_tpcalib;
 };
