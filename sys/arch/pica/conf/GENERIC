@@ -1,4 +1,4 @@
-#	$NetBSD: GENERIC,v 1.18 1999/07/29 10:37:21 augustss Exp $
+#	$NetBSD: GENERIC,v 1.18.8.1 1999/12/21 23:16:13 wrstuden Exp $
 #
 #	Generic configuration file for MIPS R4400 PICA system
 #
@@ -49,6 +49,8 @@ options 	QUOTA		# FFS quotas
 options 	NFSSERVER	# Sun NFS-compatible filesystem (server)
 
 #options 	SCSIVERBOSE	# Verbose SCSI errors
+
+#options	NON_PO2_BLOCKS	# non-2**n block size support
 
 # Networking options
 options 	INET		# Internet protocols

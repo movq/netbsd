@@ -1,4 +1,4 @@
-/*	$NetBSD: param.h,v 1.15 1999/03/12 23:05:42 perry Exp $	*/
+/*	$NetBSD: param.h,v 1.15.14.1 1999/12/21 23:15:55 wrstuden Exp $	*/
 
 /*
  * Copyright (c) 1994,1995 Mark Brinicombe.
@@ -70,8 +70,8 @@
 #define	NPTEPG		(NBPG/(sizeof (pt_entry_t)))
 
 
-#define	DEV_BSHIFT	9		/* log2(DEV_BSIZE) */
-#define	DEV_BSIZE	(1 << DEV_BSHIFT)
+#define	DEF_BSHIFT	9		/* log2(DEF_BSIZE) */
+#define	DEF_BSIZE	(1 << DEF_BSHIFT)
 #define	BLKDEV_IOSIZE	2048
 #define	MAXPHYS		(64 * 1024)	/* max raw I/O transfer size */
 
@@ -104,6 +104,7 @@
 
 #if defined(_KERNEL) && !defined(_LKM)
 #include "opt_gateway.h"
+#include "opt_non_po2_blocks.h"
 #endif /* _KERNEL && ! _LKM */
 
 #ifdef GATEWAY
@@ -121,8 +122,8 @@
 #endif
 
 /* pages ("clicks") (4096 bytes) to disk blocks */
-#define	ctod(x)	((x) << (PGSHIFT - DEV_BSHIFT))
-#define	dtoc(x)	((x) >> (PGSHIFT - DEV_BSHIFT))
+#define	ctod(x, sh)	((x) << (PGSHIFT - (sh))
+#define	dtoc(x, sh)	((x) >> (PGSHIFT - (sh))
 /*#define	dtob(x)	((x) << DEV_BSHIFT)*/
 
 #define	ctob(x)	((x) << PGSHIFT)
@@ -130,10 +131,15 @@
 /* bytes to pages */
 #define	btoc(x)	(((x) + PGOFSET) >> PGSHIFT)
 
-#define	btodb(bytes)	 		/* calculates (bytes / DEV_BSIZE) */ \
-	((bytes) >> DEV_BSHIFT)
-#define	dbtob(db)			/* calculates (db * DEV_BSIZE) */ \
-	((db) << DEV_BSHIFT)
+#if defined(_LKM) || defined(NON_PO2_BLOCKS)
+#define	dbtob(x, sh)	(((sh) >= 0) ? ((x) << (sh)) : ((x) * (-sh)))
+#define	btodb(x, sh)	(((sh) >= 0) ? ((x) >> (sh)) : ((x) / (-sh)))
+#define	blocksize(sh)	(((sh) >= 0) ? (1 << (sh))   : (-sh))
+#else
+#define	dbtob(x, sh)	((x) << (sh))
+#define	btodb(x, sh)	((x) >> (sh))
+#define	blocksize(sh)	(((sh) >= 0) ? (1 << (sh))   : (0))
+#endif
 
 /*
  * Map a ``block device block'' to a file system block.
@@ -141,7 +147,7 @@
  * field from the disk label.
  * For now though just use DEV_BSIZE.
  */
-#define	bdbtofsb(bn)	((bn) / (BLKDEV_IOSIZE / DEV_BSIZE))
+#define	bdbtofsb(bn)	((bn) / (BLKDEV_IOSIZE / DEF_BSIZE))
 
 /* Constants used to divide the USPACE area */
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: ext2fs_vfsops.c,v 1.27 1999/07/17 01:08:29 wrstuden Exp $	*/
+/*	$NetBSD: ext2fs_vfsops.c,v 1.27.2.1 1999/12/21 23:20:06 wrstuden Exp $	*/
 
 /*
  * Copyright (c) 1997 Manuel Bouyer.
@@ -343,7 +343,6 @@ ext2fs_reload(mountp, cred, p)
 	struct buf *bp;
 	struct m_ext2fs *fs;
 	struct ext2fs *newfs;
-	struct partinfo dpart;
 	int i, size, error;
 	caddr_t cp;
 
@@ -358,10 +357,16 @@ ext2fs_reload(mountp, cred, p)
 	/*
 	 * Step 2: re-read superblock from disk.
 	 */
+#if 0
 	if (VOP_IOCTL(devvp, DIOCGPART, (caddr_t)&dpart, FREAD, NOCRED, p) != 0)
 		size = DEV_BSIZE;
 	else
 		size = dpart.disklab->d_secsize;
+#endif
+	if ((mountp->mnt_bshift = devvp->v_specbshift) <= 0)
+		return (EINVAL);
+	size = blocksize(devvp->v_specbshift);
+
 	error = bread(devvp, (ufs_daddr_t)(SBOFF / size), SBSIZE, NOCRED, &bp);
 	if (error) {
 		brelse(bp);
@@ -484,7 +489,6 @@ ext2fs_mountfs(devvp, mp, p)
 	register struct ext2fs *fs;
 	register struct m_ext2fs *m_fs;
 	dev_t dev;
-	struct partinfo dpart;
 	int error, i, size, ronly;
 	struct ucred *cred;
 	extern struct vnode *rootvp;
@@ -508,10 +512,15 @@ ext2fs_mountfs(devvp, mp, p)
 	error = VOP_OPEN(devvp, ronly ? FREAD : FREAD|FWRITE, FSCRED, p);
 	if (error)
 		return (error);
+#if 0
 	if (VOP_IOCTL(devvp, DIOCGPART, (caddr_t)&dpart, FREAD, cred, p) != 0)
 		size = DEV_BSIZE;
 	else
 		size = dpart.disklab->d_secsize;
+#endif
+	if ((mp->mnt_bshift = devvp->v_specbshift) <= 0)
+		return (EINVAL);
+	size = blocksize(devvp->v_specbshift);
 
 	bp = NULL;
 	ump = NULL;
@@ -520,7 +529,7 @@ ext2fs_mountfs(devvp, mp, p)
 	printf("sb size: %d ino size %d\n", sizeof(struct ext2fs),
 	    EXT2_DINODE_SIZE);
 #endif
-	error = bread(devvp, (SBOFF / DEV_BSIZE), SBSIZE, cred, &bp);
+	error = bread(devvp, (SBOFF >> mp->mnt_bshift), SBSIZE, cred, &bp);
 	if (error)
 		goto out;
 	fs = (struct ext2fs *)bp->b_data;
@@ -1006,7 +1015,8 @@ ext2fs_sbupdate(mp, waitfor)
 	register struct buf *bp;
 	int error = 0;
 
-	bp = getblk(mp->um_devvp, SBLOCK, SBSIZE, 0, 0);
+	bp = getblk(mp->um_devvp, btodb(SBOFF, mp->um_mountp->mnt_bshift),
+			SBSIZE, 0, 0);
 	e2fs_sbsave(&fs->e2fs, (struct ext2fs*)bp->b_data);
 	if (waitfor == MNT_WAIT)
 		error = bwrite(bp);

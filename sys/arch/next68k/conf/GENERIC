@@ -1,4 +1,4 @@
-# $NetBSD: GENERIC,v 1.19 1999/08/04 06:49:50 dbj Exp $
+# $NetBSD: GENERIC,v 1.19.8.1 1999/12/21 23:16:08 wrstuden Exp $
 #
 # GENERIC next68k
 #
@@ -19,6 +19,7 @@ options 	SYSVSHM		# System V shared memory
 options 	LKM		# loadable kernel modules
 options 	INSECURE	# disable kernel security level
 options 	UCONSOLE	# Allow non-root TIOCCONS
+#options	NON_PO2_BLOCKS	# non-2**n block size support
 
 # Which kernel debugger?  Uncomment either this:
 options 	DDB

@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.41 1999/09/17 19:59:42 thorpej Exp $	*/
+/*	$NetBSD: autoconf.c,v 1.41.2.1 1999/12/21 23:16:01 wrstuden Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -123,7 +123,7 @@ matchbiosdisks()
 	struct devnametobdevmaj *d;
 	int i, ck, error, m, n;
 	struct vnode *tv;
-	char mbr[DEV_BSIZE];
+	char mbr[DEF_BSIZE];
 
 	big = lookup_bootinfo(BTINFO_BIOSGEOM);
 
@@ -193,7 +193,7 @@ matchbiosdisks()
 				vrele(tv);
 				continue;
 			}
-			error = vn_rdwr(UIO_READ, tv, mbr, DEV_BSIZE, 0,
+			error = vn_rdwr(UIO_READ, tv, mbr, DEF_BSIZE, 0,
 			    UIO_SYSSPACE, 0, NOCRED, NULL, 0);
 			VOP_CLOSE(tv, FREAD, NOCRED, 0);
 			if (error) {
@@ -204,7 +204,7 @@ matchbiosdisks()
 				continue;
 			}
 
-			for (ck = i = 0; i < DEV_BSIZE; i++)
+			for (ck = i = 0; i < DEF_BSIZE; i++)
 				ck += mbr[i];
 			for (m = i = 0; i < big->num; i++) {
 				be = &big->disk[i];

@@ -1,4 +1,4 @@
-#	$NetBSD: GENERIC,v 1.260 1999/09/28 18:07:29 thorpej Exp $
+#	$NetBSD: GENERIC,v 1.260.2.1 1999/12/21 23:16:00 wrstuden Exp $
 #
 #	GENERIC -- everything that's currently supported
 #
@@ -58,6 +58,8 @@ options 	SYSVSHM		# System V-like memory sharing
 #options 	SHMMAXPGS=1024	# 1024 pages is the default
 
 options 	LKM		# loadable kernel modules
+
+#options	NON_PO2_BLOCKS	# non-2**n block size support
 
 # Diagnostic/debugging support options
 options 	DIAGNOSTIC	# cheap kernel consistency checks

@@ -1,4 +1,4 @@
-#	$NetBSD: GENERIC,v 1.19 1999/07/29 19:36:59 augustss Exp $
+#	$NetBSD: GENERIC,v 1.19.8.1 1999/12/21 23:15:57 wrstuden Exp $
 #
 # First try for BEBOX config file
 #
@@ -20,6 +20,7 @@ options 	TRAP_PANICWAIT
 options 	DDB
 #options 	DDB_HISTORY_SIZE=100	# Enable history editing in DDB
 options 	KTRACE
+#options	NON_PO2_BLOCKS	# non-2**n block size support
 
 options 	TCP_COMPAT_42
 options 	COMPAT_43

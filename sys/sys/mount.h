@@ -1,4 +1,4 @@
-/*	$NetBSD: mount.h,v 1.77 1999/07/04 16:20:12 sommerfeld Exp $	*/
+/*	$NetBSD: mount.h,v 1.77.8.1 1999/12/21 23:20:05 wrstuden Exp $	*/
 
 /*
  * Copyright (c) 1989, 1991, 1993
@@ -129,6 +129,7 @@ struct mount {
 	struct statfs	mnt_stat;		/* cache of filesystem stats */
 	qaddr_t		mnt_data;		/* private data */
 	int		mnt_wcnt;		/* count of vfs_busy waiters */
+	int		mnt_bshift;		/* shift code for mounted dev */
 };
 
 /*

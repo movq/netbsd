@@ -1,4 +1,4 @@
-/*	$NetBSD: ffs_vfsops.c,v 1.52 1999/08/03 19:22:43 drochner Exp $	*/
+/*	$NetBSD: ffs_vfsops.c,v 1.52.2.1 1999/12/21 23:20:07 wrstuden Exp $	*/
 
 /*
  * Copyright (c) 1989, 1991, 1993, 1994
@@ -321,7 +321,6 @@ ffs_reload(mountp, cred, p)
 	struct inode *ip;
 	struct buf *bp;
 	struct fs *fs, *newfs;
-	struct partinfo dpart;
 	int i, blks, size, error;
 	int32_t *lp;
 	caddr_t cp;
@@ -337,11 +336,17 @@ ffs_reload(mountp, cred, p)
 	/*
 	 * Step 2: re-read superblock from disk.
 	 */
+#if 0
 	if (VOP_IOCTL(devvp, DIOCGPART, (caddr_t)&dpart, FREAD, NOCRED, p) != 0)
 		size = DEV_BSIZE;
 	else
 		size = dpart.disklab->d_secsize;
-	error = bread(devvp, (ufs_daddr_t)(SBOFF / size), SBSIZE, NOCRED, &bp);
+#endif
+	if ((mountp->mnt_bshift = devvp->v_specbshift) <= 0)
+		return (EINVAL);
+
+	error = bread(devvp, (ufs_daddr_t)(SBOFF >> devvp->v_specbshift),
+				SBSIZE, NOCRED, &bp);
 	if (error) {
 		brelse(bp);
 		return (error);
@@ -366,6 +371,7 @@ ffs_reload(mountp, cred, p)
 	 */
 	memcpy(&newfs->fs_csp[0], &fs->fs_csp[0], sizeof(fs->fs_csp));
 	newfs->fs_maxcluster = fs->fs_maxcluster;
+ 	newfs->fs_fsbtodb = fs->fs_fsbtodb;
 	memcpy(fs, newfs, (u_int)fs->fs_sbsize);
 	if (fs->fs_sbsize < SBSIZE)
 		bp->b_flags |= B_INVAL;
@@ -469,7 +475,6 @@ ffs_mountfs(devvp, mp, p)
 	struct buf *bp;
 	struct fs *fs;
 	dev_t dev;
-	struct partinfo dpart;
 	caddr_t base, space;
 	int blks;
 	int error, i, size, ronly;
@@ -501,14 +506,19 @@ ffs_mountfs(devvp, mp, p)
 	error = VOP_OPEN(devvp, ronly ? FREAD : FREAD|FWRITE, FSCRED, p);
 	if (error)
 		return (error);
+#if 0
 	if (VOP_IOCTL(devvp, DIOCGPART, (caddr_t)&dpart, FREAD, cred, p) != 0)
 		size = DEV_BSIZE;
 	else
 		size = dpart.disklab->d_secsize;
+#endif
+	if ((mp->mnt_bshift = devvp->v_specbshift) <= 0)
+		return (EINVAL);
 
 	bp = NULL;
 	ump = NULL;
-	error = bread(devvp, (ufs_daddr_t)(SBOFF / size), SBSIZE, cred, &bp);
+	error = bread(devvp, (ufs_daddr_t)(SBOFF >> mp->mnt_bshift), SBSIZE,
+			cred, &bp);
 	if (error)
 		goto out;
 
@@ -553,6 +563,31 @@ ffs_mountfs(devvp, mp, p)
 		error = EROFS;		/* XXX what should be returned? */
 		goto out2;
 	}
+	/* XXX bread assumes b_blkno in DEV_BSIZE unit. Calculate fsbtosb */
+	/* XXX wrs - no, it doesn't. All we need to do is recalculate
+	 * fs_fsbtodb based on our current media. */
+
+	/* Make sure at most one fs frag per disk block */
+	if (fs->fs_fshift < mp->mnt_bshift) {
+		error = EINVAL;		/* XXX needs translation */
+		goto out2;
+	}
+	fs->fs_fsbtodb = fs->fs_fshift - mp->mnt_bshift;
+#if 0
+	ssize = fs->fs_fsize / fs->fs_nspf;
+	fs->fs_fsbtosb = fs->fs_fsbtodb;
+	if (ssize >= size) {
+		ssize = ssize / size;
+		for (i = 0; ssize > 1; ssize >>= 1)
+			i ++;
+		fs->fs_fsbtosb += i;
+	} else {
+		ssize = size / ssize;
+		for (i = 0; ssize > 1; ssize >>= 1)
+			i ++;
+		fs->fs_fsbtosb -= i;
+	}
+#endif
 	ump = malloc(sizeof *ump, M_UFSMNT, M_WAITOK);
 	memset((caddr_t)ump, 0, sizeof *ump);
 	ump->um_fs = fs;
@@ -1092,7 +1127,7 @@ ffs_sbupdate(mp, waitfor)
 	}							/* XXX */
 	fs->fs_maxfilesize = mp->um_savedmaxfilesize;	/* XXX */
 
-	bp = getblk(mp->um_devvp, SBOFF >> (fs->fs_fshift - fs->fs_fsbtodb),
+ 	bp = getblk(mp->um_devvp, SBOFF >> mp->um_mountp->mnt_bshift,
 	    (int)fs->fs_sbsize, 0, 0);
 	memcpy(bp->b_data, fs, fs->fs_sbsize);
 #ifdef FFS_EI

@@ -1,4 +1,4 @@
-/*	$NetBSD: iwm_fd.c,v 1.2 1999/03/27 05:45:19 scottr Exp $	*/
+/*	$NetBSD: iwm_fd.c,v 1.2.12.1 1999/12/21 23:16:04 wrstuden Exp $	*/
 
 /*
  * Copyright (c) 1997, 1998 Hauke Fath.  All rights reserved.
@@ -1809,7 +1809,7 @@ fdGetDiskLabel(fd, dev)
 	if (TRACE_OPEN)
 		printf(" now calling readdisklabel()...\n");
 
-	msg = readdisklabel(dev, fdstrategy, lp, clp);
+	msg = readdisklabel(dev, fdstrategy, lp, clp, 7);
 	if (msg == NULL) {
 		strncpy(lp->d_packname, "default label",
 		    sizeof(lp->d_packname));	/* XXX - ?? */

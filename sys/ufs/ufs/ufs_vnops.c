@@ -1,4 +1,4 @@
-/*	$NetBSD: ufs_vnops.c,v 1.58 1999/07/08 01:06:07 wrstuden Exp $	*/
+/*	$NetBSD: ufs_vnops.c,v 1.58.8.1 1999/12/21 23:20:11 wrstuden Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1989, 1993, 1995
@@ -310,7 +310,7 @@ ufs_getattr(v)
 		vap->va_blocksize = MAXBSIZE;
 	else
 		vap->va_blocksize = vp->v_mount->mnt_stat.f_iosize;
-	vap->va_bytes = dbtob((u_quad_t)ip->i_ffs_blocks);
+	vap->va_bytes = dbtob((u_quad_t)ip->i_ffs_blocks, UFS_BSHIFT);
 	vap->va_type = vp->v_type;
 	vap->va_filerev = ip->i_modrev;
 	return (0);

@@ -1,4 +1,4 @@
-/*	$NetBSD: ffs_balloc.c,v 1.14 1999/03/24 05:51:30 mrg Exp $	*/
+/*	$NetBSD: ffs_balloc.c,v 1.14.14.1 1999/12/21 23:20:07 wrstuden Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1989, 1993
@@ -320,9 +320,9 @@ fail:
 		/*
 		 * Restore user's disk quota because allocation failed.
 		 */
-		(void)chkdq(ip, (long)-btodb(deallocated), cred, FORCE);
+		(void)chkdq(ip, (long)-btodb(deallocated, UFS_BSHIFT), cred, FORCE);
 #endif
-		ip->i_ffs_blocks -= btodb(deallocated);
+		ip->i_ffs_blocks -= btodb(deallocated, UFS_BSHIFT);
 		ip->i_flag |= IN_CHANGE | IN_UPDATE;
 	}
 	return (error);

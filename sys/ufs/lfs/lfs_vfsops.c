@@ -1,4 +1,4 @@
-/*	$NetBSD: lfs_vfsops.c,v 1.38 1999/09/08 08:29:45 augustss Exp $	*/
+/*	$NetBSD: lfs_vfsops.c,v 1.38.2.1 1999/12/21 23:20:10 wrstuden Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -327,7 +327,6 @@ lfs_mountfs(devvp, mp, p)
 	register struct ufsmount *ump;
 	struct vnode *vp;
 	struct buf *bp, *abp;
-	struct partinfo dpart;
 	dev_t dev;
 	int error, i, ronly, size;
 	struct ucred *cred;
@@ -351,10 +350,15 @@ lfs_mountfs(devvp, mp, p)
 	error = VOP_OPEN(devvp, ronly ? FREAD : FREAD|FWRITE, FSCRED, p);
 	if (error)
 		return (error);
+#if 0
 	if (VOP_IOCTL(devvp, DIOCGPART, (caddr_t)&dpart, FREAD, cred, p) != 0)
-		size = DEV_BSIZE;
+		size = DEF_BSIZE;
 	else
 		size = dpart.disklab->d_secsize;
+#endif
+	if ((mp->mnt_bshift = devvp->v_specbshift) <= 0)
+		return (EINVAL);
+	size = blocksize(devvp->v_specbshift);
 
 	/* Don't free random space on error. */
 	bp = NULL;

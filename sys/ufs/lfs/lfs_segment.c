@@ -1,4 +1,4 @@
-/*	$NetBSD: lfs_segment.c,v 1.31 1999/10/01 22:07:42 mycroft Exp $	*/
+/*	$NetBSD: lfs_segment.c,v 1.31.6.1 1999/12/21 23:20:09 wrstuden Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -1041,21 +1041,21 @@ lfs_initseg(fs)
 		repeat = 1;
 		fs->lfs_offset = fs->lfs_curseg;
 		sp->seg_number = datosn(fs, fs->lfs_curseg);
-		sp->seg_bytes_left = fs->lfs_dbpseg * DEV_BSIZE;
+		sp->seg_bytes_left = fs->lfs_dbpseg * DEF_BSIZE;
 		/*
 		 * If the segment contains a superblock, update the offset
 		 * and summary address to skip over it.
 		 */
 		LFS_SEGENTRY(sup, fs, sp->seg_number, bp);
 		if (sup->su_flags & SEGUSE_SUPERBLOCK) {
-			fs->lfs_offset += LFS_SBPAD / DEV_BSIZE;
+			fs->lfs_offset += LFS_SBPAD / DEF_BSIZE;
 			sp->seg_bytes_left -= LFS_SBPAD;
 		}
 		brelse(bp);
 	} else {
 		sp->seg_number = datosn(fs, fs->lfs_curseg);
 		sp->seg_bytes_left = (fs->lfs_dbpseg -
-				      (fs->lfs_offset - fs->lfs_curseg)) * DEV_BSIZE;
+				      (fs->lfs_offset - fs->lfs_curseg)) * DEF_BSIZE;
 	}
 	fs->lfs_lastpseg = fs->lfs_offset;
 	
@@ -1071,7 +1071,7 @@ lfs_initseg(fs)
 	sp->segsum = (*sp->cbpp)->b_data;
 	bzero(sp->segsum, LFS_SUMMARY_SIZE);
 	sp->start_bpp = ++sp->cbpp;
-	fs->lfs_offset += LFS_SUMMARY_SIZE / DEV_BSIZE;
+	fs->lfs_offset += LFS_SUMMARY_SIZE / DEF_BSIZE;
 	
 	/* Set point to SEGSUM, initialize it. */
 	ssp = sp->segsum;
@@ -1250,10 +1250,10 @@ lfs_writeseg(fs, sp)
 	    cksum(&ssp->ss_datasum, LFS_SUMMARY_SIZE - sizeof(ssp->ss_sumsum));
 	free(datap, M_SEGMENT);
 #ifdef DIAGNOSTIC
-	if (fs->lfs_bfree < fsbtodb(fs, ninos) + LFS_SUMMARY_SIZE / DEV_BSIZE)
+	if (fs->lfs_bfree < fsbtodb(fs, ninos) + LFS_SUMMARY_SIZE / DEF_BSIZE)
 		panic("lfs_writeseg: No diskspace for summary");
 #endif
-	fs->lfs_bfree -= (fsbtodb(fs, ninos) + LFS_SUMMARY_SIZE / DEV_BSIZE);
+	fs->lfs_bfree -= (fsbtodb(fs, ninos) + LFS_SUMMARY_SIZE / DEF_BSIZE);
 
 	strategy = devvp->v_op[VOFFSET(vop_strategy)];
 
@@ -1284,7 +1284,7 @@ lfs_writeseg(fs, sp)
 		cbp->b_bcount = 0;
 
 #ifdef DIAGNOSTIC
-		if(datosn(fs,(*bpp)->b_blkno + ((*bpp)->b_bcount - 1)/DEV_BSIZE) != datosn(fs,cbp->b_blkno)) {
+		if(datosn(fs,(*bpp)->b_blkno + ((*bpp)->b_bcount - 1)/DEF_BSIZE) != datosn(fs,cbp->b_blkno)) {
 			panic("lfs_writeseg: Segment overwrite");
 		}
 #endif

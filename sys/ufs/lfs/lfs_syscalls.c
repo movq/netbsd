@@ -1,4 +1,4 @@
-/*	$NetBSD: lfs_syscalls.c,v 1.33 1999/07/08 01:06:06 wrstuden Exp $	*/
+/*	$NetBSD: lfs_syscalls.c,v 1.33.8.1 1999/12/21 23:20:10 wrstuden Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -765,8 +765,8 @@ sys_lfs_segclean(p, v, retval)
 	}
 	
 	fs->lfs_avail += fsbtodb(fs, fs->lfs_ssize) - 1;
-	fs->lfs_bfree += (sup->su_nsums * LFS_SUMMARY_SIZE / DEV_BSIZE) +
-		sup->su_ninos * btodb(fs->lfs_bsize);
+	fs->lfs_bfree += (sup->su_nsums * LFS_SUMMARY_SIZE / DEF_BSIZE) +
+		sup->su_ninos * btodb(fs->lfs_bsize, DEF_BSHIFT);
 	sup->su_flags &= ~SEGUSE_DIRTY;
 #ifdef DEBUG_LFS
 	/* XXX KS - before we return, really empty the segment (i.e., fill
@@ -782,7 +782,7 @@ sys_lfs_segclean(p, v, retval)
 		sizeleft = fs->lfs_ssize * fs->lfs_bsize - offset;
 		while(sizeleft > 0) {
 			bufsize = (sizeleft < MAXPHYS) ? sizeleft : MAXPHYS;
-			zbp = lfs_newbuf(VTOI(fs->lfs_ivnode)->i_devvp, start+(offset/DEV_BSIZE), bufsize);
+			zbp = lfs_newbuf(VTOI(fs->lfs_ivnode)->i_devvp, start+(offset/DEF_BSIZE), bufsize);
 			memset(zbp->b_data, 'Z', bufsize);
 			zbp->b_saveaddr = (caddr_t)fs;
 			s = splbio();

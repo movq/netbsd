@@ -1,4 +1,4 @@
-#	$NetBSD: GENERIC,v 1.4 1999/07/29 10:37:21 augustss Exp $
+#	$NetBSD: GENERIC,v 1.4.8.1 1999/12/21 23:16:12 wrstuden Exp $
 #
 # GENERIC: generic kernel for most machines
 #
@@ -19,6 +19,7 @@ options 	KTRACE			# system call tracing, a la ktrace(1)
 #options 	SHMMAXPGS=1024
 options 	LKM			# loadable kernel modules
 options 	PFIL_HOOKS		# pfil(9) packet filter hooks
+#options	NON_PO2_BLOCKS	# non-2**n block size support
 
 # compatibility options
 options 	COMPAT_11		# NetBSD 1.1,

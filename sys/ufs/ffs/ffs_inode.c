@@ -1,4 +1,4 @@
-/*	$NetBSD: ffs_inode.c,v 1.28 1999/03/24 05:51:30 mrg Exp $	*/
+/*	$NetBSD: ffs_inode.c,v 1.28.14.1 1999/12/21 23:20:07 wrstuden Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1989, 1993
@@ -263,7 +263,7 @@ ffs_truncate(v)
 	lastiblock[SINGLE] = lastblock - NDADDR;
 	lastiblock[DOUBLE] = lastiblock[SINGLE] - NINDIR(fs);
 	lastiblock[TRIPLE] = lastiblock[DOUBLE] - NINDIR(fs) * NINDIR(fs);
-	nblocks = btodb(fs->fs_bsize);
+	nblocks = btodb(fs->fs_bsize, UFS_BSHIFT);
 	/*
 	 * Update file and block pointers on disk before we start freeing
 	 * blocks.  If we crash before free'ing blocks below, the blocks
@@ -329,7 +329,7 @@ ffs_truncate(v)
 		oip->i_ffs_db[i] = 0;
 		bsize = blksize(fs, oip, i);
 		ffs_blkfree(oip, bn, bsize);
-		blocksreleased += btodb(bsize);
+		blocksreleased += btodb(bsize, UFS_BSHIFT);
 	}
 	if (lastblock < 0)
 		goto done;
@@ -359,7 +359,8 @@ ffs_truncate(v)
 			 */
 			bn += numfrags(fs, newspace);
 			ffs_blkfree(oip, bn, oldspace - newspace);
-			blocksreleased += btodb(oldspace - newspace);
+			blocksreleased += btodb(oldspace - newspace,
+						UFS_BSHIFT);
 		}
 	}
 done:
@@ -426,7 +427,7 @@ ffs_indirtrunc(ip, lbn, dbn, lastbn, level, countp)
 	last = lastbn;
 	if (lastbn > 0)
 		last /= factor;
-	nblocks = btodb(fs->fs_bsize);
+	nblocks = btodb(fs->fs_bsize, UFS_BSHIFT);
 	/*
 	 * Get buffer of block pointers, zero those entries corresponding
 	 * to blocks to be free'd, and update on disk copy first.  Since

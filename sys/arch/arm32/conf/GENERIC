@@ -1,4 +1,4 @@
-#	$NetBSD: GENERIC,v 1.57 1999/07/29 10:37:14 augustss Exp $
+#	$NetBSD: GENERIC,v 1.57.8.1 1999/12/21 23:15:55 wrstuden Exp $
 #
 #	GENERIC -- everything that's currently supported
 #
@@ -107,6 +107,7 @@ options 	IRQSTATS	# manage IRQ statistics
 options 	LKM		# loadable kernel modules
 options 	KMEMSTATS	# kernel memory statistics
 #options 	SCSIVERBOSE	# Verbose SCSI errors
+#options	NON_PO2_BLOCKS	# non-2**n block size support
 
 # Development and Debugging options
 

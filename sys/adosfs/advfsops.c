@@ -1,4 +1,4 @@
-/*	$NetBSD: advfsops.c,v 1.36 1999/06/02 22:04:30 is Exp $	*/
+/*	$NetBSD: advfsops.c,v 1.36.2.1 1999/12/21 23:19:51 wrstuden Exp $	*/
 
 /*
  * Copyright (c) 1994 Christian E. Hopps
@@ -127,6 +127,8 @@ adosfs_mount(mp, path, data, ndp, p)
 		vrele(devvp);
 		return (ENXIO);
 	}
+	if ((mp->mnt_bshift = devvp->v_specbshift) != 9) /* XXX */
+		return (ENXIO);
 	/*
 	 * If mount by non-root, then verify that user has necessary
 	 * permissions on the device.

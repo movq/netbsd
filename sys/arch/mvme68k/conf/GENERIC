@@ -1,4 +1,4 @@
-#	$NetBSD: GENERIC,v 1.2 1999/07/29 10:37:20 augustss Exp $
+#	$NetBSD: GENERIC,v 1.2.8.1 1999/12/21 23:16:06 wrstuden Exp $
 
 include		"arch/mvme68k/conf/std.mvme68k"
 
@@ -27,6 +27,8 @@ file-system 	KERNFS
 
 options 	NFSSERVER
 #options 	FFS_EI		# FFS Endian Independant support
+
+#options	NON_PO2_BLOCKS	# non-2**n block size support
 
 # Networking options
 options 	INET

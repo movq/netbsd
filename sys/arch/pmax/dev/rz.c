@@ -1,4 +1,4 @@
-/*	$NetBSD: rz.c,v 1.47 1999/09/17 20:04:49 thorpej Exp $	*/
+/*	$NetBSD: rz.c,v 1.47.8.1 1999/12/21 23:16:14 wrstuden Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -39,7 +39,7 @@
  */
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
-__KERNEL_RCSID(0, "$NetBSD: rz.c,v 1.47 1999/09/17 20:04:49 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rz.c,v 1.47.8.1 1999/12/21 23:16:14 wrstuden Exp $");
 
 /*
  * SCSI CCS (Command Command Set) disk driver.
@@ -158,7 +158,7 @@ static struct size rzdefaultpart[MAXPARTITIONS] = {
 
 extern char *
 readdisklabel __P((dev_t dev, void (*strat) __P((struct buf *bp)),
-		   struct disklabel *lp, struct cpu_disklabel *osdep));
+		   struct disklabel *lp, struct cpu_disklabel *osdep, int));
 
 /*
  * Ultrix disklabel declarations
@@ -941,7 +941,7 @@ rzgetinfo(dev)
 	}
 
 	lp->d_type = DTYPE_SCSI;
-	lp->d_secsize = DEV_BSIZE;
+	lp->d_secsize = DEF_BSIZE;
 	lp->d_secpercyl = 1 << sc->sc_bshift;
 	lp->d_npartitions = MAXPARTITIONS;
 	lp->d_partitions[part].p_offset = 0;
@@ -950,7 +950,7 @@ rzgetinfo(dev)
 	/*
 	 * Now try to read the disklabel
 	 */
-	msg = readdisklabel(dev, rzstrategy, lp, &cd);
+	msg = readdisklabel(dev, rzstrategy, lp, &cd, DEF_BSHIFT);
 
 	/*
 	 * If this is an installation diskimage, the label geometry

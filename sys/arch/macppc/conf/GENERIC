@@ -1,4 +1,4 @@
-#	$NetBSD: GENERIC,v 1.37 1999/09/19 22:02:38 matt Exp $
+#	$NetBSD: GENERIC,v 1.37.2.1 1999/12/21 23:16:05 wrstuden Exp $
 #
 # POWERMAC config file
 #
@@ -19,6 +19,8 @@ options 	SYSVSHM		# System V shared memory
 #options 	SHMMAXPGS=1024	# 1024 pages is the default
 
 options 	LKM		# loadable kernel modules
+
+#options	NON_PO2_BLOCKS	# non-2**n block size support
 
 # Diagnostic/debugging support options
 options 	DIAGNOSTIC	# cheap kernel consistency checks

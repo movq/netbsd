@@ -1,4 +1,4 @@
-/*	$NetBSD: rf_netbsdkintf.c,v 1.29 1999/08/14 23:34:18 oster Exp $	*/
+/*	$NetBSD: rf_netbsdkintf.c,v 1.29.8.1 1999/12/21 23:19:54 wrstuden Exp $	*/
 /*-
  * Copyright (c) 1996, 1997, 1998 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -2014,10 +2014,12 @@ raidmarkdirty(dev_t dev, struct vnode *b_vp, int mod_counter)
 
 /* ARGSUSED */
 int
-raidread_component_label(dev, b_vp, component_label)
+raidread_component_label(dev, b_vp, component_label, bshift, bsize)
 	dev_t dev;
 	struct vnode *b_vp;
 	RF_ComponentLabel_t *component_label;
+	int bshift;
+	int bsize;
 {
 	struct buf *bp;
 	int error;
@@ -2027,18 +2029,25 @@ raidread_component_label(dev, b_vp, component_label)
 
 	/* get a block of the appropriate size... */
 	bp = geteblk((int)RF_COMPONENT_INFO_SIZE);
+	if (bshift < 0) {
+		error = EINVAL;
+		goto out;
+	}
 	bp->b_dev = dev;
+	bp->b_bshift = bshift;
+	bp->b_bsize = blocksize(bshift);
 
 	/* get our ducks in a row for the read */
-	bp->b_blkno = RF_COMPONENT_INFO_OFFSET / DEV_BSIZE;
+	bp->b_blkno = btodb(RF_COMPONENT_INFO_OFFSET, bshift);
+ 	bp->b_resid = btodb(RF_COMPONENT_INFO_SIZE , bshift);
 	bp->b_bcount = RF_COMPONENT_INFO_SIZE;
 	bp->b_flags = B_BUSY | B_READ;
- 	bp->b_resid = RF_COMPONENT_INFO_SIZE / DEV_BSIZE;
 
 	(*bdevsw[major(bp->b_dev)].d_strategy)(bp);
 
 	error = biowait(bp); 
 
+out:
 	if (!error) {
 		memcpy(component_label, bp->b_un.b_addr,
 		       sizeof(RF_ComponentLabel_t));
@@ -2064,23 +2073,31 @@ raidread_component_label(dev, b_vp, component_label)
 }
 /* ARGSUSED */
 int 
-raidwrite_component_label(dev, b_vp, component_label)
+raidwrite_component_label(dev, b_vp, component_label, bshift, bsize)
 	dev_t dev; 
 	struct vnode *b_vp;
 	RF_ComponentLabel_t *component_label;
+	int bshift;
+	int bsize;
 {
 	struct buf *bp;
 	int error;
 
 	/* get a block of the appropriate size... */
 	bp = geteblk((int)RF_COMPONENT_INFO_SIZE);
+	if (bshift < 0) {
+		error = EINVAL;
+		goto out;
+	}
 	bp->b_dev = dev;
+	bp->b_bshift = bshift;
+	bp->b_bsize = blocksize(bshift);
 
 	/* get our ducks in a row for the write */
-	bp->b_blkno = RF_COMPONENT_INFO_OFFSET / DEV_BSIZE;
+	bp->b_blkno = btodb(RF_COMPONENT_INFO_OFFSET, bshift);
+ 	bp->b_resid = btodb(RF_COMPONENT_INFO_SIZE, bshift);
 	bp->b_bcount = RF_COMPONENT_INFO_SIZE;
 	bp->b_flags = B_BUSY | B_WRITE;
- 	bp->b_resid = RF_COMPONENT_INFO_SIZE / DEV_BSIZE;
 
 	memset( bp->b_un.b_addr, 0, RF_COMPONENT_INFO_SIZE );
 
@@ -2088,6 +2105,8 @@ raidwrite_component_label(dev, b_vp, component_label)
 
 	(*bdevsw[major(bp->b_dev)].d_strategy)(bp);
 	error = biowait(bp); 
+
+out:
         bp->b_flags = B_INVAL | B_AGE;
 	brelse(bp);
 	if (error) {

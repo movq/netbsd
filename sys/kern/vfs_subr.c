@@ -1,4 +1,4 @@
-/*	$NetBSD: vfs_subr.c,v 1.112 1999/10/01 22:03:17 mycroft Exp $	*/
+/*	$NetBSD: vfs_subr.c,v 1.112.8.1 1999/12/21 23:19:58 wrstuden Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.
@@ -95,6 +95,7 @@
 #include <sys/namei.h>
 #include <sys/ucred.h>
 #include <sys/buf.h>
+#include <sys/conf.h>
 #include <sys/errno.h>
 #include <sys/malloc.h>
 #include <sys/domain.h>
@@ -678,10 +679,15 @@ bgetvp(vp, bp)
 		panic("bgetvp: not free");
 	VHOLD(vp);
 	bp->b_vp = vp;
-	if (vp->v_type == VBLK || vp->v_type == VCHR)
+	if (vp->v_type == VBLK || vp->v_type == VCHR) {
 		bp->b_dev = vp->v_rdev;
-	else
+		bp->b_bshift = vp->v_specbshift;
+		bp->b_bsize = blocksize(bp->b_bshift);
+	} else {
 		bp->b_dev = NODEV;
+		bp->b_bshift = vp->v_mount->mnt_bshift;
+		bp->b_bsize = blocksize(bp->b_bshift);
+	}
 	/*
 	 * Insert onto list for new vnode.
 	 */

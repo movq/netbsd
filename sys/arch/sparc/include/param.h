@@ -1,4 +1,4 @@
-/*	$NetBSD: param.h,v 1.39 1999/05/03 16:14:02 christos Exp $ */
+/*	$NetBSD: param.h,v 1.39.8.1 1999/12/21 23:16:16 wrstuden Exp $ */
 
 /*
  * Copyright (c) 1992, 1993
@@ -92,8 +92,8 @@ extern int nbpg, pgofset, pgshift;
 #define PROM_LOADADDR	0x00004000	/* where the prom loads us */
 #define	KERNTEXTOFF	(KERNBASE+PROM_LOADADDR)/* start of kernel text */
 
-#define	DEV_BSIZE	512
-#define	DEV_BSHIFT	9		/* log2(DEV_BSIZE) */
+#define	DEF_BSIZE	512
+#define	DEF_BSHIFT	9		/* log2(DEF_BSIZE) */
 #define	BLKDEV_IOSIZE	2048
 #define	MAXPHYS		(64 * 1024)
 
@@ -120,6 +120,7 @@ extern int nbpg, pgofset, pgshift;
 
 #if defined(_KERNEL) && !defined(_LKM)
 #include "opt_gateway.h"
+#include "opt_non_po2_blocks.h"
 #endif /* _KERNEL && ! _LKM */
 
 #ifdef GATEWAY
@@ -139,16 +140,23 @@ extern int nbpg, pgofset, pgshift;
 #endif
 
 /* pages ("clicks") to disk blocks */
-#define	ctod(x)		((x) << (PGSHIFT - DEV_BSHIFT))
-#define	dtoc(x)		((x) >> (PGSHIFT - DEV_BSHIFT))
+#define	ctod(x, sh)		((x) << (PGSHIFT - (sh)))
+#define	dtoc(x, sh)		((x) >> (PGSHIFT - (sh)))
 
 /* pages to bytes */
 #define	ctob(x)		((x) << PGSHIFT)
 #define	btoc(x)		(((x) + PGOFSET) >> PGSHIFT)
 
 /* bytes to disk blocks */
-#define	btodb(x)	((x) >> DEV_BSHIFT)
-#define	dbtob(x)	((x) << DEV_BSHIFT)
+#if defined(_LKM) || defined(NON_PO2_BLOCKS)
+#define	dbtob(x, sh)	(((sh) >= 0) ? ((x) << (sh)) : ((x) * (-sh)))
+#define	btodb(x, sh)	(((sh) >= 0) ? ((x) >> (sh)) : ((x) / (-sh)))
+#define	blocksize(sh)	(((sh) >= 0) ? (1 << (sh))   : (-sh))
+#else
+#define	dbtob(x, sh)	((x) << (sh))
+#define	btodb(x, sh)	((x) >> (sh))
+#define	blocksize(sh)	(((sh) >= 0) ? (1 << (sh))   : (0))
+#endif
 
 /*
  * Map a ``block device block'' to a file system block.

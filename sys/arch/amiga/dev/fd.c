@@ -1,4 +1,4 @@
-/*	$NetBSD: fd.c,v 1.40 1998/01/12 10:39:26 thorpej Exp $	*/
+/*	$NetBSD: fd.c,v 1.40.20.1 1999/12/21 23:15:54 wrstuden Exp $	*/
 
 /*
  * Copyright (c) 1994 Christian E. Hopps
@@ -811,7 +811,11 @@ fdgetdisklabel(sc, dev)
 	sc->flags |= FDF_HAVELABEL;
 
 	bp = (void *)geteblk((int)lp->d_secsize);
+	if (bp->b_bshift < 0)
+		goto nolabel;
 	bp->b_dev = dev;
+	bp->b_bshift = intlog2(FDSECSIZE);
+	bp->b_bsize = FDSECSIZE;
 	bp->b_blkno = 0;
 	bp->b_cylin = 0;
 	bp->b_bcount = FDSECSIZE;
@@ -823,16 +827,6 @@ fdgetdisklabel(sc, dev)
 	if (dlp->d_magic != DISKMAGIC || dlp->d_magic2 != DISKMAGIC ||
 	    dkcksum(dlp)) {
 		error = EINVAL;
-		goto nolabel;
-	}
-	bcopy(dlp, lp, sizeof(struct disklabel));
-	if (lp->d_trkseek > FDSTEPDELAY)
-		sc->stepdelay = lp->d_trkseek;
-	brelse(bp);
-	return(0);
-nolabel:
-	fdgetdefaultlabel(sc, lp, part);
-	brelse(bp);
 	return(0);
 }
 
@@ -919,9 +913,14 @@ fdputdisklabel(sc, dev)
 	/*
 	 * get buf and read in sector 0
 	 */
+	dev = FDMAKEDEV(major(dev), FDUNIT(dev), RAW_PART);
 	lp = sc->dkdev.dk_label;
 	bp = (void *)geteblk((int)lp->d_secsize);
-	bp->b_dev = FDMAKEDEV(major(dev), FDUNIT(dev), RAW_PART);
+	if (bp->b_bshift < 0)
+		goto done;
+	bp->b_dev = dev;
+	bp->b_bshift = intlog2(FDSECSIZE);
+	bp->b_bsize = FDSECSIZE;
 	bp->b_blkno = 0;
 	bp->b_cylin = 0;
 	bp->b_bcount = FDSECSIZE;

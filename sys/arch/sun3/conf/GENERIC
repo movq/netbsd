@@ -1,4 +1,4 @@
-# $NetBSD: GENERIC,v 1.59 1999/07/29 10:37:24 augustss Exp $
+# $NetBSD: GENERIC,v 1.59.8.1 1999/12/21 23:16:18 wrstuden Exp $
 
 # GENERIC Sun3 (3/50, 3/60, 3/110, 3/160, 3/260, 3/E)
 # Supports root on: ie0, le0, sd*, ...
@@ -21,6 +21,7 @@ options 	SYSVSHM		# System V shared memory
 options 	LKM		# loadable kernel modules
 #options 	INSECURE	# disable kernel security level
 #options 	UCONSOLE	# Allow non-root TIOCCONS
+#options	NON_PO2_BLOCKS	# non-2**n block size support
 
 # Which kernel debugger?  Uncomment either this:
 options 	DDB

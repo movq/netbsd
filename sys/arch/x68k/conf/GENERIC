@@ -1,4 +1,4 @@
-#	$NetBSD: GENERIC,v 1.36 1999/07/29 10:37:25 augustss Exp $
+#	$NetBSD: GENERIC,v 1.36.8.1 1999/12/21 23:16:20 wrstuden Exp $
 
 #
 #	GENERIC
@@ -58,6 +58,9 @@ options 	SYSVSHM		# System V shared memory
 
 ## Loadable kernel module support
 #options 	LKM
+
+## Support for block sizes which aren't 2**n
+#options	NON_PO2_BLOCKS
 
 ## NFS boot options; not supported currently: needs nfsboot program
 #options 	NFS_BOOT_BOOTPARAM

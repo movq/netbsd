@@ -1,4 +1,4 @@
-/*	$NetBSD: spec_vnops.c,v 1.43 1998/10/02 00:21:39 ross Exp $	*/
+/*	$NetBSD: spec_vnops.c,v 1.43.12.1 1999/12/21 23:20:01 wrstuden Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -189,6 +189,9 @@ spec_open(v)
 		VOP_UNLOCK(vp, 0);
 		error = (*cdevsw[maj].d_open)(dev, ap->a_mode, S_IFCHR, p);
 		vn_lock(vp, LK_EXCLUSIVE | LK_RETRY);
+		if (error == 0)
+			(*cdevsw[maj].d_ioctl)(dev, DIOCGBSHIFT,
+				(caddr_t)&vp->v_specbshift, 0, p);
 		return (error);
 
 	case VBLK:
@@ -207,7 +210,11 @@ spec_open(v)
 		 */
 		if ((error = vfs_mountedon(vp)) != 0)
 			return (error);
-		return ((*bdevsw[maj].d_open)(dev, ap->a_mode, S_IFBLK, p));
+		error = (*bdevsw[maj].d_open)(dev, ap->a_mode, S_IFBLK, p);
+		if (error == 0)
+			(*bdevsw[maj].d_ioctl)(dev, DIOCGBSHIFT,
+				(caddr_t)&vp->v_specbshift, 0, p);
+		return (error);
 	case VNON:
 	case VLNK:
 	case VDIR:
@@ -267,7 +274,8 @@ spec_read(v)
 		if (uio->uio_offset < 0)
 			return (EINVAL);
 		bsize = BLKDEV_IOSIZE;
-		ssize = DEV_BSIZE;
+		if ((ssize = blocksize(vp->v_specbshift)) > bsize)
+			bsize = ssize;
 		if ((majordev = major(vp->v_rdev)) < nblkdev &&
 		    (ioctl = bdevsw[majordev].d_ioctl) != NULL &&
 		    (*ioctl)(vp->v_rdev, DIOCGPART, (caddr_t)&dpart, FREAD, p) == 0) {
@@ -353,7 +361,8 @@ spec_write(v)
 		if (uio->uio_offset < 0)
 			return (EINVAL);
 		bsize = BLKDEV_IOSIZE;
-		ssize = DEV_BSIZE;
+		if ((ssize = blocksize(vp->v_specbshift)) > bsize)
+			bsize = ssize;
 		if ((majordev = major(vp->v_rdev)) < nblkdev &&
 		    (ioctl = bdevsw[majordev].d_ioctl) != NULL &&
 		    (*ioctl)(vp->v_rdev, DIOCGPART, (caddr_t)&dpart, FREAD, p) == 0) {

@@ -1,4 +1,4 @@
-/*	$NetBSD: param.h,v 1.71 1999/08/18 01:34:27 wrstuden Exp $	*/
+/*	$NetBSD: param.h,v 1.71.2.1 1999/12/21 23:20:05 wrstuden Exp $	*/
 
 /*-
  * Copyright (c) 1982, 1986, 1989, 1993
@@ -133,6 +133,11 @@
 #ifndef NVNODE
 #define	NVNODE (NPROC + NTEXT + 100)
 #endif
+/*
+ * Routine to determine the most significant bit set in the passed number.
+ * calculates int(log2(i)). -1 is returned when 0 is the passed in value.
+ */
+int intlog2 __P((u_int32_t));
 #endif /* _KERNEL */
 
 /* Signals. */

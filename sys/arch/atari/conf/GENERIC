@@ -1,5 +1,5 @@
 #
-#	$NetBSD: GENERIC,v 1.55 1999/07/29 10:37:15 augustss Exp $
+#	$NetBSD: GENERIC,v 1.55.8.1 1999/12/21 23:15:56 wrstuden Exp $
 #
 # Generic atari
 #
@@ -116,6 +116,7 @@ options 	SYSVSEM			# System V semaphores
 options 	KTRACE			# Add kernel tracing system call
 options 	DIAGNOSTIC		# Add additional error checking code
 options 	NKMEMCLUSTERS=256	# Size of kernel malloc area
+#options	NON_PO2_BLOCKS	# non-2**n block size support
 
 # These options enable verbose messages for several subsystems.
 # Warning, these may compile large string tables into the kernel!

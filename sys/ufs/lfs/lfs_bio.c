@@ -1,4 +1,4 @@
-/*	$NetBSD: lfs_bio.c,v 1.11 1999/06/01 03:00:40 perseant Exp $	*/
+/*	$NetBSD: lfs_bio.c,v 1.11.6.1 1999/12/21 23:20:09 wrstuden Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -155,7 +155,8 @@ lfs_bwrite(v)
 inline static int lfs_fits(struct lfs *fs, int db)
 {
 	if(((db + (fs->lfs_uinodes + INOPB((fs))) /
-	     INOPB(fs) + fsbtodb(fs, 1) + LFS_SUMMARY_SIZE / DEV_BSIZE +
+	     INOPB(fs) + fsbtodb(fs, 1) + 
+	     (LFS_SUMMARY_SIZE / DEF_BSIZE) +
 	     fs->lfs_segtabsz)) >= fs->lfs_avail)
 	{
 		return 0;
@@ -205,7 +206,7 @@ lfs_bwrite_ext(bp, flags)
 		if(CANT_WAIT(bp,flags)) {
 			if(((db + (fs->lfs_uinodes + INOPB((fs))) / INOPB(fs)
 			     + fsbtodb(fs, 1)
-			     + LFS_SUMMARY_SIZE / DEV_BSIZE
+			     + LFS_SUMMARY_SIZE / DEF_BSIZE
 			     + fs->lfs_segtabsz)) >= fs->lfs_avail)
 			{
 				printf("A");
@@ -398,7 +399,7 @@ lfs_newbuf(vp, daddr, size)
 	size_t nbytes;
 	int s;
 	
-	nbytes = roundup(size, DEV_BSIZE);
+	nbytes = roundup(size, DEF_BSIZE);
 	
 	bp = malloc(sizeof(struct buf), M_SEGMENT, M_WAITOK);
 	bzero(bp, sizeof(struct buf));
