@@ -1,6 +1,6 @@
 /*-
- * Copyright (c) 1991 The Regents of the University of California.
- * All rights reserved.
+ * Copyright (c) 1991, 1993
+ *	The Regents of the University of California.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,7 +32,7 @@
  */
 
 #ifndef lint
-static char sccsid[] = "@(#)set.c	5.2 (Berkeley) 12/24/91";
+static char sccsid[] = "@(#)set.c	8.2 (Berkeley) 2/28/94";
 #endif /* not lint */
 
 #include <termios.h>
@@ -253,10 +253,12 @@ set_init()
 	settle = set_tabs();
 
 	if (isreset) {
+		bp = buf;
 		if (tgetstr("rs", &bp) != 0 || tgetstr("is", &bp) != 0) {
 			tputs(buf, 0, outc);
 			settle = 1;
 		}
+		bp = buf;
 		if (tgetstr("rf", &bp) != 0 || tgetstr("if", &bp) != 0) {
 			cat(buf);
 			settle = 1;
