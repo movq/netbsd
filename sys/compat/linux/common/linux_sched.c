@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_sched.c,v 1.7.2.6 2002/07/12 01:40:02 nathanw Exp $	*/
+/*	$NetBSD: linux_sched.c,v 1.7.2.7 2002/12/29 19:52:11 thorpej Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -42,7 +42,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: linux_sched.c,v 1.7.2.6 2002/07/12 01:40:02 nathanw Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux_sched.c,v 1.7.2.7 2002/12/29 19:52:11 thorpej Exp $");
 
 #include <sys/param.h>
 #include <sys/mount.h>
@@ -281,7 +281,8 @@ linux_sys_sched_yield(cl, v, retval)
 	void *v;
 	register_t *retval;
 {
-	need_resched(curcpu());
+
+	yield();
 	return 0;
 }
 
