@@ -35,7 +35,7 @@
  */
 
 #if defined(LIBC_SCCS) && !defined(lint)
-static char sccsid[] = "@(#)bt_close.c	8.1 (Berkeley) 6/4/93";
+static char sccsid[] = "@(#)bt_close.c	8.3 (Berkeley) 2/21/94";
 #endif /* LIBC_SCCS and not lint */
 
 #include <sys/param.h>
@@ -68,6 +68,12 @@ __bt_close(dbp)
 	int fd;
 
 	t = dbp->internal;
+
+	/* Toss any page pinned across calls. */
+	if (t->bt_pinned != NULL) {
+		mpool_put(t->bt_mp, t->bt_pinned, 0);
+		t->bt_pinned = NULL;
+	}
 
 	/*
 	 * Delete any already deleted record that we've been saving
@@ -114,12 +120,19 @@ __bt_sync(dbp, flags)
 	PAGE *h;
 	void *p;
 
+	t = dbp->internal;
+
+	/* Toss any page pinned across calls. */
+	if (t->bt_pinned != NULL) {
+		mpool_put(t->bt_mp, t->bt_pinned, 0);
+		t->bt_pinned = NULL;
+	}
+
+	/* Sync doesn't currently take any flags. */
 	if (flags != 0) {
 		errno = EINVAL;
 		return (RET_ERROR);
 	}
-
-	t = dbp->internal;
 
 	if (ISSET(t, B_INMEM | B_RDONLY) || !ISSET(t, B_MODIFIED))
 		return (RET_SUCCESS);
@@ -134,7 +147,7 @@ __bt_sync(dbp, flags)
 	 * contents.
 	 */
 	if (ISSET(t, B_DELCRSR)) {
-		if ((p = malloc(t->bt_psize)) == NULL)
+		if ((p = (void *)malloc(t->bt_psize)) == NULL)
 			return (RET_ERROR);
 		if ((h = mpool_get(t->bt_mp, t->bt_bcursor.pgno, 0)) == NULL)
 			return (RET_ERROR);

@@ -1,5 +1,5 @@
 /*-
- * Copyright (c) 1990, 1993
+ * Copyright (c) 1990, 1993, 1994
  *	The Regents of the University of California.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -32,7 +32,7 @@
  */
 
 #if defined(LIBC_SCCS) && !defined(lint)
-static char sccsid[] = "@(#)rec_utils.c	8.1 (Berkeley) 6/4/93";
+static char sccsid[] = "@(#)rec_utils.c	8.4 (Berkeley) 6/20/94";
 #endif /* LIBC_SCCS and not lint */
 
 #include <sys/param.h>
@@ -70,28 +70,44 @@ __rec_ret(t, e, nrec, key, data)
 
 	rl = GETRLEAF(e->page, e->index);
 
+	/*
+	 * We always copy big data to make it contigous.  Otherwise, we
+	 * leave the page pinned and don't copy unless the user specified
+	 * concurrent access.
+	 */
 	if (rl->flags & P_BIGDATA) {
 		if (__ovfl_get(t, rl->bytes,
 		    &data->size, &t->bt_dbuf, &t->bt_dbufsz))
 			return (RET_ERROR);
-	} else {
+		data->data = t->bt_dbuf;
+	} else if (ISSET(t, B_DB_LOCK)) {
 		/* Use +1 in case the first record retrieved is 0 length. */
 		if (rl->dsize + 1 > t->bt_dbufsz) {
-			if ((p = realloc(t->bt_dbuf, rl->dsize + 1)) == NULL)
+			p = (void *)(t->bt_dbuf == NULL ?
+			    malloc(rl->dsize + 1) :
+			    realloc(t->bt_dbuf, rl->dsize + 1));
+			if (p == NULL)
 				return (RET_ERROR);
 			t->bt_dbuf = p;
 			t->bt_dbufsz = rl->dsize + 1;
 		}
 		memmove(t->bt_dbuf, rl->bytes, rl->dsize);
 		data->size = rl->dsize;
+		data->data = t->bt_dbuf;
+	} else {
+		data->size = rl->dsize;
+		data->data = rl->bytes;
 	}
-	data->data = t->bt_dbuf;
 
 retkey:	if (key == NULL)
 		return (RET_SUCCESS);
 
+	/* We have to copy the key, it's not on the page. */
 	if (sizeof(recno_t) > t->bt_kbufsz) {
-		if ((p = realloc(t->bt_kbuf, sizeof(recno_t))) == NULL)
+		p = (void *)(t->bt_kbuf == NULL ?
+		    malloc(sizeof(recno_t)) :
+		    realloc(t->bt_kbuf, sizeof(recno_t)));
+		if (p == NULL)
 			return (RET_ERROR);
 		t->bt_kbuf = p;
 		t->bt_kbufsz = sizeof(recno_t);
