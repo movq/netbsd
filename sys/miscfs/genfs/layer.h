@@ -1,4 +1,4 @@
-/*	$NetBSD: umap_subr.c,v 1.14.4.1 1999/08/02 22:30:25 thorpej Exp $	*/
+/*	$NetBSD: layer.h,v 1.1.2.2 1999/08/02 22:27:34 thorpej Exp $	*/
 
 /*
  * Copyright (c) 1999 National Aeronautics & Space Administration
@@ -32,8 +32,9 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
+
 /*
- * Copyright (c) 1992, 1993, 1995
+ * Copyright (c) 1992, 1993
  *	The Regents of the University of California.  All rights reserved.
  *
  * This code is derived from software donated to Berkeley by
@@ -67,126 +68,100 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	from: Id: lofs_subr.c, v 1.11 1992/05/30 10:05:43 jsp Exp
- *	@(#)umap_subr.c	8.9 (Berkeley) 5/14/95
+ *	from: Id: lofs.h,v 1.8 1992/05/30 10:05:43 jsp Exp
+ *	@(#)null.h	8.2 (Berkeley) 1/21/94
  */
 
-#include <sys/param.h>
-#include <sys/systm.h>
-#include <sys/proc.h>
-#include <sys/time.h>
-#include <sys/types.h>
-#include <sys/vnode.h>
-#include <sys/mount.h>
-#include <sys/namei.h>
-#include <sys/malloc.h>
-#include <miscfs/specfs/specdev.h>
-#include <miscfs/umapfs/umap.h>
+#ifndef _MISCFS_GENFS_LAYER_H_
+#define _MISCFS_GENFS_LAYER_H_
 
-u_long umap_findid __P((u_long, u_long [][2], int));
-int umap_node_alloc __P((struct mount *, struct vnode *,
-				struct vnode **));
+struct layer_args {
+	char	*target;		/* Target of loopback  */
+	struct	export_args	export;	/* network export info */
+};
+
+#ifdef _KERNEL
+
+struct layer_node;
+
+LIST_HEAD(layer_node_hashhead, layer_node);
+
+struct layer_mount {
+	struct mount		*layerm_vfs;
+	struct vnode		*layerm_rootvp;	/* Ref to root layer_node */
+	struct netexport	layerm_export;	/* export info */
+	u_int			layerm_flags;	/* mount point layer flags */
+	u_int			layerm_size;	/* size of fs's struct node */
+	enum vtype		layerm_tag;	/* vtag of our vnodes */
+	int				/* bypass routine for this mount */
+				(*layerm_bypass) __P((void *));
+	int			(*layerm_alloc)	/* alloc a new layer node */
+				__P((struct mount *, struct vnode *,
+						struct vnode **));
+	int			(**layerm_vnodeop_p)	/* ops for our nodes */
+				__P((void *));
+	struct layer_node_hashhead	/* head of hash list for layer_nodes */
+				*layerm_node_hashtbl;
+	u_long			layerm_node_hash; /* hash mask for hash chain */
+	struct simplelock	layerm_hashlock; /* interlock for hash chain. */
+};
+
+#define	LAYERFS_MFLAGS		0x00000fff	/* reserved layer mount flags */
+#define	LAYERFS_MBYPASSDEBUG	0x00000001
 
 /*
- * umap_findid is called by various routines in umap_vnodeops.c to
- * find a user or group id in a map.
+ * A cache of vnode references
  */
-u_long
-umap_findid(id, map, nentries)
-	u_long id;
-	u_long map[][2];
-	int nentries;
-{
-	int i;
+struct layer_node {
+	LIST_ENTRY(layer_node)	layer_hash;	/* Hash list */
+	struct vnode	        *layer_lowervp;	/* VREFed once */
+	struct vnode		*layer_vnode;	/* Back pointer */
+	unsigned int		layer_flags;	/* locking, etc. */
+};
 
-	/* Find uid entry in map */
-	i = 0;
-	while ((i<nentries) && ((map[i][0]) != id))
-		i++;
-
-	if (i < nentries)
-		return (map[i][1]);
-	else
-		return (-1);
-
-}
+#define	LAYERFS_RESFLAGS	0x00000fff	/* flags reserved for layerfs */
 
 /*
- * umap_reverse_findid is called by umap_getattr() in umap_vnodeops.c to
- * find a user or group id in a map, in reverse.
+ * The following macros handle upperfs-specific locking. They are needed
+ * when the lowerfs does not export a struct lock for locking use by the
+ * upper layers. These macros are inteded for adjusting the upperfs
+ * struct lock to reflect changes in the underlying vnode's lock state.
  */
-u_long
-umap_reverse_findid(id, map, nentries)
-	u_long id;
-	u_long map[][2];
-	int nentries;
-{
-	int i;
+#define	LAYERFS_UPPERLOCK(v, f, r)	do { \
+	if ((v)->v_vnlock == NULL) \
+		r = lockmgr(&(v)->v_lock, (f), &(v)->v_interlock); \
+	else \
+		r = 0; \
+	} while (0)
 
-	/* Find uid entry in map */
-	i = 0;
-	while ((i<nentries) && ((map[i][1]) != id))
-		i++;
+#define	LAYERFS_UPPERUNLOCK(v, f, r)	do { \
+	if ((v)->v_vnlock == NULL) \
+	    r = lockmgr(&(v)->v_lock, (f) | LK_RELEASE, &(v)->v_interlock); \
+	else \
+		r = 0; \
+	} while (0)
 
-	if (i < nentries)
-		return (map[i][0]);
-	else
-		return (-1);
+#define	LAYERFS_UPPERISLOCKED(v, r)	do { \
+	if ((v)->v_vnlock == NULL) \
+		r = lockstatus(&(v)->v_lock); \
+	else \
+		r = -1; \
+	} while (0)
 
-}
+#define	LAYERFS_DO_BYPASS(vp, ap)	\
+	(*MOUNTTOLAYERMOUNT((vp)->v_mount)->layerm_bypass)((ap))
 
-/* umap_mapids maps all of the ids in a credential, both user and group. */
+extern int layer_node_create __P((struct mount *mp, struct vnode *target, struct vnode **vpp));
+extern struct vnode *layer_checkvp __P((struct vnode *vp, char *fil, int lno));
 
-void
-umap_mapids(v_mount, credp)
-	struct mount *v_mount;
-	struct ucred *credp;
-{
-	int i, unentries, gnentries;
-	uid_t uid;
-	gid_t gid;
-	u_long (*usermap)[2], (*groupmap)[2];
-
-	if (credp == NOCRED)
-		return;
-
-	unentries =  MOUNTTOUMAPMOUNT(v_mount)->info_nentries;
-	usermap =  MOUNTTOUMAPMOUNT(v_mount)->info_mapdata;
-	gnentries =  MOUNTTOUMAPMOUNT(v_mount)->info_gnentries;
-	groupmap =  MOUNTTOUMAPMOUNT(v_mount)->info_gmapdata;
-
-	/* Find uid entry in map */
-
-	uid = (uid_t) umap_findid(credp->cr_uid, usermap, unentries);
-
-	if (uid != -1)
-		credp->cr_uid = uid;
-	else
-		credp->cr_uid = (uid_t) NOBODY;
-
-#if 1
-	/* cr_gid is the same as cr_groups[0] in 4BSD, but not in NetBSD */
-
-	/* Find gid entry in map */
-
-	gid = (gid_t) umap_findid(credp->cr_gid, groupmap, gnentries);
-
-	if (gid != -1)
-		credp->cr_gid = gid;
-	else
-		credp->cr_gid = NULLGROUP;
+#define	MOUNTTOLAYERMOUNT(mp) ((struct layer_mount *)((mp)->mnt_data))
+#define	VTOLAYER(vp) ((struct layer_node *)(vp)->v_data)
+#define	LAYERTOV(xp) ((xp)->layer_vnode)
+#ifdef LAYERFS_DIAGNOSTIC
+#define	LAYERVPTOLOWERVP(vp) layer_checkvp((vp), __FILE__, __LINE__)
+#else
+#define	LAYERVPTOLOWERVP(vp) (VTOLAYER(vp)->layer_lowervp)
 #endif
 
-	/* Now we must map each of the set of groups in the cr_groups 
-		structure. */
-
-	for(i=0; i < credp->cr_ngroups; i++) {
-		gid = (gid_t) umap_findid(credp->cr_groups[i],
-					  groupmap, gnentries);
-
-		if (gid != -1)
-			credp->cr_groups[i] = gid;
-		else
-			credp->cr_groups[i] = NULLGROUP;
-	}
-}
+#endif /* _KERNEL */
+#endif /* _MISCFS_GENFS_LAYER_H_ */

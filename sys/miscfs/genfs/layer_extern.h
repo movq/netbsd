@@ -1,4 +1,4 @@
-/*	$NetBSD: umap_subr.c,v 1.14.4.1 1999/08/02 22:30:25 thorpej Exp $	*/
+/*	$NetBSD: layer_extern.h,v 1.1.2.2 1999/08/02 22:27:34 thorpej Exp $	*/
 
 /*
  * Copyright (c) 1999 National Aeronautics & Space Administration
@@ -67,126 +67,52 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	from: Id: lofs_subr.c, v 1.11 1992/05/30 10:05:43 jsp Exp
- *	@(#)umap_subr.c	8.9 (Berkeley) 5/14/95
  */
-
-#include <sys/param.h>
-#include <sys/systm.h>
-#include <sys/proc.h>
-#include <sys/time.h>
-#include <sys/types.h>
-#include <sys/vnode.h>
-#include <sys/mount.h>
-#include <sys/namei.h>
-#include <sys/malloc.h>
-#include <miscfs/specfs/specdev.h>
-#include <miscfs/umapfs/umap.h>
-
-u_long umap_findid __P((u_long, u_long [][2], int));
-int umap_node_alloc __P((struct mount *, struct vnode *,
-				struct vnode **));
 
 /*
- * umap_findid is called by various routines in umap_vnodeops.c to
- * find a user or group id in a map.
+ * Routines defined by layerfs
  */
-u_long
-umap_findid(id, map, nentries)
-	u_long id;
-	u_long map[][2];
-	int nentries;
-{
-	int i;
 
-	/* Find uid entry in map */
-	i = 0;
-	while ((i<nentries) && ((map[i][0]) != id))
-		i++;
+/* misc routines in layer_subr.c */
+void	layerfs_init __P((void));
+int	layer_node_alloc __P((struct mount *, struct vnode *, struct vnode **));
+int	layer_node_create __P((struct mount *, struct vnode *, struct vnode **));
+struct vnode *
+	layer_node_find __P((struct mount *, struct vnode *));
+#define LOG2_SIZEVNODE	7		/* log2(sizeof struct vnode) */
+#define LAYER_NHASH(lmp, vp) \
+	(&((lmp)->layerm_node_hashtbl[(((u_long)vp)>>LOG2_SIZEVNODE) & \
+		(lmp)->layerm_node_hash]))
 
-	if (i < nentries)
-		return (map[i][1]);
-	else
-		return (-1);
+/* vfs routines */
+int	layerfs_start __P((struct mount *, int, struct proc *));
+int	layerfs_root __P((struct mount *, struct vnode **));
+int	layerfs_quotactl __P((struct mount *, int, uid_t, caddr_t,
+			     struct proc *));
+int	layerfs_statfs __P((struct mount *, struct statfs *, struct proc *));
+int	layerfs_sync __P((struct mount *, int, struct ucred *, struct proc *));
+int	layerfs_vget __P((struct mount *, ino_t, struct vnode **));
+int	layerfs_fhtovp __P((struct mount *, struct fid *, struct vnode **));
+int	layerfs_checkexp __P((struct mount *, struct mbuf *, int *,
+			   struct ucred **));
+int	layerfs_vptofh __P((struct vnode *, struct fid *));
+int	layerfs_sysctl __P((int *, u_int, void *, size_t *, void *, size_t,
+			   struct proc *));
 
-}
-
-/*
- * umap_reverse_findid is called by umap_getattr() in umap_vnodeops.c to
- * find a user or group id in a map, in reverse.
- */
-u_long
-umap_reverse_findid(id, map, nentries)
-	u_long id;
-	u_long map[][2];
-	int nentries;
-{
-	int i;
-
-	/* Find uid entry in map */
-	i = 0;
-	while ((i<nentries) && ((map[i][1]) != id))
-		i++;
-
-	if (i < nentries)
-		return (map[i][0]);
-	else
-		return (-1);
-
-}
-
-/* umap_mapids maps all of the ids in a credential, both user and group. */
-
-void
-umap_mapids(v_mount, credp)
-	struct mount *v_mount;
-	struct ucred *credp;
-{
-	int i, unentries, gnentries;
-	uid_t uid;
-	gid_t gid;
-	u_long (*usermap)[2], (*groupmap)[2];
-
-	if (credp == NOCRED)
-		return;
-
-	unentries =  MOUNTTOUMAPMOUNT(v_mount)->info_nentries;
-	usermap =  MOUNTTOUMAPMOUNT(v_mount)->info_mapdata;
-	gnentries =  MOUNTTOUMAPMOUNT(v_mount)->info_gnentries;
-	groupmap =  MOUNTTOUMAPMOUNT(v_mount)->info_gmapdata;
-
-	/* Find uid entry in map */
-
-	uid = (uid_t) umap_findid(credp->cr_uid, usermap, unentries);
-
-	if (uid != -1)
-		credp->cr_uid = uid;
-	else
-		credp->cr_uid = (uid_t) NOBODY;
-
-#if 1
-	/* cr_gid is the same as cr_groups[0] in 4BSD, but not in NetBSD */
-
-	/* Find gid entry in map */
-
-	gid = (gid_t) umap_findid(credp->cr_gid, groupmap, gnentries);
-
-	if (gid != -1)
-		credp->cr_gid = gid;
-	else
-		credp->cr_gid = NULLGROUP;
-#endif
-
-	/* Now we must map each of the set of groups in the cr_groups 
-		structure. */
-
-	for(i=0; i < credp->cr_ngroups; i++) {
-		gid = (gid_t) umap_findid(credp->cr_groups[i],
-					  groupmap, gnentries);
-
-		if (gid != -1)
-			credp->cr_groups[i] = gid;
-		else
-			credp->cr_groups[i] = NULLGROUP;
-	}
-}
+/* VOP routines */
+int	layer_bypass __P((void *));
+int	layer_getattr __P((void *));
+int	layer_inactive __P((void *));
+int	layer_reclaim __P((void *));
+int	layer_print __P((void *));
+int	layer_strategy __P((void *));
+int	layer_bwrite __P((void *));
+int	layer_bmap __P((void *));
+int	layer_lock __P((void *));
+int	layer_unlock __P((void *));
+int	layer_islocked __P((void *));
+int	layer_fsync __P((void *));
+int	layer_lookup __P((void *));
+int	layer_setattr __P((void *));
+int	layer_access __P((void *));
+int	layer_open __P((void *));
