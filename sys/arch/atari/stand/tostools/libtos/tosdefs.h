@@ -1,4 +1,4 @@
-/*	$NetBSD: tosdefs.h,v 1.1 2001/10/10 14:19:53 leo Exp $	*/
+/*	$NetBSD: tosdefs.h,v 1.2 2001/10/11 07:07:42 leo Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -35,6 +35,9 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
+
+#ifndef _LIBTOS_TOSDEFS_H
+#define _LIBTOS_TOSDEFS_H
 
 #include <sys/types.h>
 
@@ -105,3 +108,5 @@ typedef struct osdsc {
 #define	ttmem_start	kp.ttmem_start
 #define	cputype		kp.bootflags
 #define	boothowto	kp.boothowto
+
+#endif /* !_LIBTOS_TOSDEFS_H */
