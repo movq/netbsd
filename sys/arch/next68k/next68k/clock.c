@@ -1,4 +1,4 @@
-/*	$NetBSD: clock.c,v 1.1 1998/06/09 07:53:05 dbj Exp $	*/
+/*	$NetBSD: clock.c,v 1.1.1.1 1998/06/09 07:53:05 dbj Exp $	*/
 /*
  * Copyright (c) 1998 Darrin B. Jewell
  * All rights reserved.

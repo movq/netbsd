@@ -1,4 +1,4 @@
-/* $NetBSD: bus_dma.c,v 1.1 1998/06/09 07:53:05 dbj Exp $ */
+/* $NetBSD: bus_dma.c,v 1.1.1.1 1998/06/09 07:53:05 dbj Exp $ */
 
 /*-
  * Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.
@@ -40,7 +40,7 @@
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
 #if 0
-__KERNEL_RCSID(0, "$NetBSD: bus_dma.c,v 1.1 1998/06/09 07:53:05 dbj Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bus_dma.c,v 1.1.1.1 1998/06/09 07:53:05 dbj Exp $");
 #endif
 
 #include <sys/param.h>

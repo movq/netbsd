@@ -1,4 +1,4 @@
-/*	$NetBSD: boot.c,v 1.1 1998/06/09 07:53:06 dbj Exp $	*/
+/*	$NetBSD: boot.c,v 1.1.1.1 1998/06/09 07:53:06 dbj Exp $	*/
 /*
  * Copyright (c) 1994 Rolf Grossmann
  * All rights reserved.
@@ -44,7 +44,7 @@ extern int errno;
  * Boot device is derived from PROM provided information.
  */
 
-char *version="$Revision: 1.1 $";
+char *version="$Revision: 1.1.1.1 $";
 extern int subversion;
 #define KNAMEN 100
 char kernel[KNAMEN];

@@ -1,4 +1,4 @@
-# $NetBSD: std.next68k,v 1.1 1998/06/09 07:53:05 dbj Exp $
+# $NetBSD: std.next68k,v 1.1.1.1 1998/06/09 07:53:05 dbj Exp $
 
 # Standard information for next68k
 machine	next68k m68k

@@ -1,4 +1,4 @@
-# $NetBSD: Makefile.next68k,v 1.1 1998/06/09 07:53:05 dbj Exp $
+# $NetBSD: Makefile.next68k,v 1.1.1.1 1998/06/09 07:53:05 dbj Exp $
 
 # Makefile for NetBSD
 #

@@ -1,4 +1,4 @@
-/*	$NetBSD: conf.c,v 1.1 1998/06/09 07:53:06 dbj Exp $	*/
+/*	$NetBSD: conf.c,v 1.1.1.1 1998/06/09 07:53:06 dbj Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1990, 1993

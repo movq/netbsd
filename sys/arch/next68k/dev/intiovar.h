@@ -1,4 +1,4 @@
-/*	$NetBSD: intiovar.h,v 1.1 1998/06/09 07:53:05 dbj Exp $	*/
+/*	$NetBSD: intiovar.h,v 1.1.1.1 1998/06/09 07:53:05 dbj Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.

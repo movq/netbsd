@@ -1,5 +1,5 @@
 #!/bin/sh
-#	$NetBSD: installboot.sh,v 1.1 1998/06/09 07:53:06 dbj Exp $
+#	$NetBSD: installboot.sh,v 1.1.1.1 1998/06/09 07:53:06 dbj Exp $
 
 # simple installboot program we can use until we have disklabel to do the job.
 # (This one has the advantage that it runs on any architecture. However it
