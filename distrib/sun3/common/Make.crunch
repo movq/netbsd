@@ -1,4 +1,4 @@
-#	$NetBSD: Make.crunch,v 1.1 1995/10/08 23:07:46 gwr Exp $
+#	$NetBSD: Make.crunch,v 1.1.1.1 1995/10/08 23:07:46 gwr Exp $
 #
 # This is included by subdirectories building a crunched binary.
 # Assume the following are already defined:  TOP, CBIN

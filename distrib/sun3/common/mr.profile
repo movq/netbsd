@@ -1,5 +1,5 @@
 #
-#	$NetBSD: mr.profile,v 1.1 1995/10/08 23:07:47 gwr Exp $
+#	$NetBSD: mr.profile,v 1.1.1.1 1995/10/08 23:07:47 gwr Exp $
 #
 # Copyright (c) 1994 Christopher G. Demetriou
 # All rights reserved.
