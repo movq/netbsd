@@ -1,4 +1,4 @@
-# $Id: Makefile,v 1.1 2003/02/16 08:15:08 jdolecek Exp $
+# $Id: Makefile,v 1.1.1.1 2003/02/16 08:15:08 jdolecek Exp $
 
 PROG=	mount_smbfs
 SRCS=	mount_smbfs.c getmntopts.c

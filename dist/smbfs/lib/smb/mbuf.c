@@ -29,7 +29,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * $Id: mbuf.c,v 1.1 2003/02/16 08:15:08 jdolecek Exp $
+ * $Id: mbuf.c,v 1.1.1.1 2003/02/16 08:15:08 jdolecek Exp $
  */
 
 #include <sys/types.h>

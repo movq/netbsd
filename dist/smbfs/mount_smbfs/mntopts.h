@@ -31,7 +31,7 @@
  * SUCH DAMAGE.
  *
  *	@(#)mntopts.h	8.7 (Berkeley) 3/29/95
- *	$Id: mntopts.h,v 1.1 2003/02/16 08:15:08 jdolecek Exp $
+ *	$Id: mntopts.h,v 1.1.1.1 2003/02/16 08:15:08 jdolecek Exp $
  */
 
 struct mntopt {

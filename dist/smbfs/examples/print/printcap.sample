@@ -1,4 +1,4 @@
-# $Id: printcap.sample,v 1.1 2003/02/16 08:15:07 jdolecek Exp $
+# $Id: printcap.sample,v 1.1.1.1 2003/02/16 08:15:07 jdolecek Exp $
 
 # Sample printcap entry for NetWare printer
 fserverlj|LJ6L on the fserver:\

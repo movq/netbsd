@@ -29,7 +29,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * $Id: cflib.h,v 1.1 2003/02/16 08:15:07 jdolecek Exp $
+ * $Id: cflib.h,v 1.1.1.1 2003/02/16 08:15:07 jdolecek Exp $
  */
 #ifndef _zzzzzz_RCFILE_H_
 #define _zzzzzz_RCFILE_H_
