@@ -1,4 +1,4 @@
-/* $NetBSD: radlib.c,v 1.1 2005/02/19 23:56:34 manu Exp $ */
+/* $NetBSD: radlib.c,v 1.1.1.1 2005/02/19 23:56:34 manu Exp $ */
 
 /*-
  * Copyright 1998 Juniper Networks, Inc.
@@ -30,7 +30,7 @@
 #ifdef __FreeBSD__
 __FBSDID("$FreeBSD: /repoman/r/ncvs/src/lib/libradius/radlib.c,v 1.12 2004/06/14 20:55:30 stefanf Exp $");
 #else
-__RCSID("$NetBSD: radlib.c,v 1.1 2005/02/19 23:56:34 manu Exp $");
+__RCSID("$NetBSD: radlib.c,v 1.1.1.1 2005/02/19 23:56:34 manu Exp $");
 #endif
 
 #include <sys/types.h>
