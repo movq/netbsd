@@ -1,5 +1,5 @@
 #
-#	$NetBSD: dot.profile,v 1.1 1995/04/17 19:08:51 leo Exp $
+#	$NetBSD: dot.profile,v 1.1.1.1 1995/04/17 19:08:51 leo Exp $
 #
 # Copyright (c) 1994 Christopher G. Demetriou
 # All rights reserved.
