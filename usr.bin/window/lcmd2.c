@@ -1,6 +1,6 @@
 /*
- * Copyright (c) 1983 Regents of the University of California.
- * All rights reserved.
+ * Copyright (c) 1983, 1993
+ *	The Regents of the University of California.  All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Edward Wang at The University of California, Berkeley.
@@ -35,7 +35,7 @@
  */
 
 #ifndef lint
-static char sccsid[] = "@(#)lcmd2.c	3.23 (Berkeley) 6/17/90";
+static char sccsid[] = "@(#)lcmd2.c	8.1 (Berkeley) 6/6/93";
 #endif /* not lint */
 
 #include "defs.h"
@@ -43,8 +43,9 @@ static char sccsid[] = "@(#)lcmd2.c	3.23 (Berkeley) 6/17/90";
 #include "value.h"
 #include "var.h"
 #include "lcmd.h"
-#include <sys/resource.h>
 #include "alias.h"
+#include <sys/types.h>
+#include <sys/resource.h>
 
 /*ARGSUSED*/
 l_iostat(v, a)
@@ -82,9 +83,10 @@ struct value *v, *a;
 	wwprintf(w, "select\terror\tzero\n");
 	wwprintf(w, "%d\t%d\t%d\n",
 		wwnselect, wwnselecte, wwnselectz);
-	wwprintf(w, "read\terror\tzero\tchar\n");
-	wwprintf(w, "%d\t%d\t%d\t%d\n",
-		wwnread, wwnreade, wwnreadz, wwnreadc);
+	wwprintf(w, "read\terror\tzero\tchar\tack\tnack\tstat\terrorc\n");
+	wwprintf(w, "%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\n",
+		wwnread, wwnreade, wwnreadz, wwnreadc, wwnreadack, wwnreadnack,
+		wwnreadstat, wwnreadec);
 	wwprintf(w, "ptyread\terror\tzero\tcontrol\tdata\tchar\n");
 	wwprintf(w, "%d\t%d\t%d\t%d\t%d\t%d\n",
 		wwnwread, wwnwreade, wwnwreadz,

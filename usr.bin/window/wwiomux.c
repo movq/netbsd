@@ -1,6 +1,6 @@
 /*
- * Copyright (c) 1983 Regents of the University of California.
- * All rights reserved.
+ * Copyright (c) 1983, 1993
+ *	The Regents of the University of California.  All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Edward Wang at The University of California, Berkeley.
@@ -35,7 +35,7 @@
  */
 
 #ifndef lint
-static char sccsid[] = "@(#)wwiomux.c	3.26 (Berkeley) 8/12/90";
+static char sccsid[] = "@(#)wwiomux.c	8.1 (Berkeley) 6/6/93";
 #endif /* not lint */
 
 #include "ww.h"
@@ -75,11 +75,15 @@ wwiomux()
 		}
 
 		FD_ZERO(&imask);
+		n = -1;
 		for (w = wwhead.ww_forw; w != &wwhead; w = w->ww_forw) {
 			if (w->ww_pty < 0)
 				continue;
-			if (w->ww_obq < w->ww_obe)
+			if (w->ww_obq < w->ww_obe) {
+				if (w->ww_pty > n)
+					n = w->ww_pty;
 				FD_SET(w->ww_pty, &imask);
+			}
 			if (w->ww_obq > w->ww_obp && !w->ww_stopped)
 				noblock = 1;
 		}
@@ -113,7 +117,7 @@ wwiomux()
 			tv.tv_usec = 10000;
 		}
 		wwnselect++;
-		n = select(wwdtablesize, &imask, (fd_set *)0, (fd_set *)0, &tv);
+		n = select(n + 1, &imask, (fd_set *)0, (fd_set *)0, &tv);
 		wwsetjmp = 0;
 		noblock = 0;
 

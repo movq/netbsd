@@ -1,6 +1,6 @@
 /*
- * Copyright (c) 1983 Regents of the University of California.
- * All rights reserved.
+ * Copyright (c) 1983, 1993
+ *	The Regents of the University of California.  All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Edward Wang at The University of California, Berkeley.
@@ -35,7 +35,7 @@
  */
 
 #ifndef lint
-static char sccsid[] = "@(#)wwinit.c	3.40 (Berkeley) 8/12/90";
+static char sccsid[] = "@(#)wwinit.c	8.2 (Berkeley) 4/28/95";
 #endif /* not lint */
 
 #include "ww.h"
@@ -50,13 +50,16 @@ wwinit()
 	char *kp;
 	int s;
 
-	wwdtablesize = getdtablesize();
+	wwdtablesize = 3;
 	wwhead.ww_forw = &wwhead;
 	wwhead.ww_back = &wwhead;
 
-	s = sigblock(sigmask(SIGIO));
+	s = sigblock(sigmask(SIGIO) | sigmask(SIGCHLD) | sigmask(SIGALRM) |
+		sigmask(SIGHUP) | sigmask(SIGTERM));
 	if (signal(SIGIO, wwrint) == BADSIG ||
 	    signal(SIGCHLD, wwchild) == BADSIG ||
+	    signal(SIGHUP, wwquit) == BADSIG ||
+	    signal(SIGTERM, wwquit) == BADSIG ||
 	    signal(SIGPIPE, SIG_IGN) == BADSIG) {
 		wwerrno = WWE_SYS;
 		return -1;
@@ -97,13 +100,14 @@ wwinit()
 	wwnewtty.ww_termios = wwoldtty.ww_termios;
 	wwnewtty.ww_termios.c_iflag &=
 		~(ISTRIP | INLCR | IGNCR | ICRNL | IXON | IXOFF | IMAXBEL);
-	wwnewtty.ww_termios.c_iflag |= INPCK;
 	wwnewtty.ww_termios.c_oflag = 0;
 	wwnewtty.ww_termios.c_cflag &= ~(CSIZE | PARENB);
 	wwnewtty.ww_termios.c_cflag |= CS8;
 	wwnewtty.ww_termios.c_lflag = 0;
 	for (i = 0; i < NCCS; i++)
 		wwnewtty.ww_termios.c_cc[i] = _POSIX_VDISABLE;
+	wwnewtty.ww_termios.c_cc[VMIN] = 0;
+	wwnewtty.ww_termios.c_cc[VTIME] = 0;
 #endif
 	wwnewtty.ww_fflags = wwoldtty.ww_fflags | FASYNC;
 	if (wwsettty(0, &wwnewtty) < 0)
@@ -209,9 +213,7 @@ wwinit()
 		wwalloc(0, 0, wwnrow, wwncol, sizeof (union ww_char));
 	if (wwos == 0)
 		goto bad;
-	for (i = 0; i < wwnrow; i++)
-		for (j = 0; j < wwncol; j++)
-			wwos[i][j].c_w = ' ';
+	/* wwos is cleared in wwstart1() */
 	wwns = (union ww_char **)
 		wwalloc(0, 0, wwnrow, wwncol, sizeof (union ww_char));
 	if (wwns == 0)
@@ -219,6 +221,13 @@ wwinit()
 	for (i = 0; i < wwnrow; i++)
 		for (j = 0; j < wwncol; j++)
 			wwns[i][j].c_w = ' ';
+	if (tt.tt_checkpoint) {
+		/* wwcs is also cleared in wwstart1() */
+		wwcs = (union ww_char **)
+			wwalloc(0, 0, wwnrow, wwncol, sizeof (union ww_char));
+		if (wwcs == 0)
+			goto bad;
+	}
 
 	wwtouched = malloc((unsigned) wwnrow);
 	if (wwtouched == 0) {
@@ -283,11 +292,20 @@ wwinit()
 	 * wwterm now points to the copy.
 	 */
 	(void) setenv("TERM", WWT_TERM, 1);
+#ifdef TERMINFO
+	if (wwterminfoinit() < 0)
+		goto bad;
+#endif
 
-	(void) sigsetmask(s);
+	if (tt.tt_checkpoint)
+		if (signal(SIGALRM, wwalarm) == BADSIG) {
+			wwerrno = WWE_SYS;
+			goto bad;
+		}
 	/* catch typeahead before ASYNC was set */
 	(void) kill(getpid(), SIGIO);
-	xxstart();
+	wwstart1();
+	(void) sigsetmask(s);
 	return 0;
 bad:
 	/*
@@ -329,4 +347,42 @@ wwaddcap1(cap, kp)
 	while (*(*kp)++ = *cap++)
 		;
 	(*kp)--;
+}
+
+wwstart()
+{
+	register i;
+
+	(void) wwsettty(0, &wwnewtty);
+	for (i = 0; i < wwnrow; i++)
+		wwtouched[i] = WWU_TOUCHED;
+	wwstart1();
+}
+
+wwstart1()
+{
+	register i, j;
+
+	for (i = 0; i < wwnrow; i++)
+		for (j = 0; j < wwncol; j++) {
+			wwos[i][j].c_w = ' ';
+			if (tt.tt_checkpoint)
+				wwcs[i][j].c_w = ' ';
+		}
+	xxstart();
+	if (tt.tt_checkpoint)
+		wwdocheckpoint = 1;
+}
+
+/*
+ * Reset data structures and terminal from an unknown state.
+ * Restoring wwos has been taken care of elsewhere.
+ */
+wwreset()
+{
+	register i;
+
+	xxreset();
+	for (i = 0; i < wwnrow; i++)
+		wwtouched[i] = WWU_TOUCHED;
 }

@@ -1,6 +1,6 @@
 /*
- * Copyright (c) 1983 Regents of the University of California.
- * All rights reserved.
+ * Copyright (c) 1983, 1993
+ *	The Regents of the University of California.  All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Edward Wang at The University of California, Berkeley.
@@ -35,12 +35,13 @@
  */
 
 #ifndef lint
-static char sccsid[] = "@(#)wwopen.c	3.29 (Berkeley) 6/6/90";
+static char sccsid[] = "@(#)wwopen.c	8.2 (Berkeley) 4/28/95";
 #endif /* not lint */
 
 #include "ww.h"
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <fcntl.h>
 
 struct ww *
 wwopen(flags, nrow, ncol, row, col, nline)
@@ -103,6 +104,8 @@ wwopen(flags, nrow, ncol, row, col, nline)
 			wwerrno = WWE_SYS;
 			goto bad;
 		}
+		(void) fcntl(d[0], F_SETFD, 1);
+		(void) fcntl(d[1], F_SETFD, 1);
 		w->ww_pty = d[0];
 		w->ww_socket = d[1];
 	}
@@ -113,6 +116,8 @@ wwopen(flags, nrow, ncol, row, col, nline)
 		}
 		w->ww_obe = w->ww_ob + 512;
 		w->ww_obp = w->ww_obq = w->ww_ob;
+		if (w->ww_pty >= wwdtablesize)
+			wwdtablesize = w->ww_pty + 1;
 	}
 
 	w->ww_win = wwalloc(w->ww_w.t, w->ww_w.l,
