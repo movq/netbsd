@@ -25,7 +25,7 @@
  */
 #ifndef lint
 /* from: print-bootp.c,v 1.17 91/11/14 22:21:34 leres Exp */
-static char rcsid[] = "$Id: print-bootp.c,v 1.1 1994/06/27 21:25:49 gwr Exp $";
+static char rcsid[] = "$Id: print-bootp.c,v 1.1.1.1 1994/06/27 21:25:50 gwr Exp $";
 #endif
 
 #include <stdio.h>
