@@ -1,4 +1,4 @@
-/*	$NetBSD: config.h,v 1.1 1997/09/26 02:53:21 gwr Exp $	*/
+/*	$NetBSD: config.h,v 1.1.1.1 1997/09/26 02:53:21 gwr Exp $	*/
 
 /* config.h.  Generated automatically by configure.  */
 /* config.h.in.  Generated automatically from configure.in by autoheader.  */
