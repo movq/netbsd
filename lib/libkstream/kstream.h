@@ -6,7 +6,7 @@
    For copying and distribution information, please see the file
    <mit-copyright.h>.
 
-   $NetBSD: kstream.h,v 1.1 2000/06/17 06:24:28 thorpej Exp $
+   $NetBSD: kstream.h,v 1.1.1.1 2000/06/17 06:24:28 thorpej Exp $
  */
 
 #include <sys/types.h>		/* for size_t */
