@@ -43,7 +43,7 @@
 #if NSCSI > 0
 
 #ifndef lint
-static char rcsid[] = "$Header: /home/mike/src/cvs/netbsd/src/sys/arch/amiga/dev/Attic/scsi.c,v 1.1 1993/07/05 19:19:43 mw Exp $";
+static char rcsid[] = "$Header: /home/mike/src/cvs/netbsd/src/sys/arch/amiga/dev/Attic/scsi.c,v 1.1.1.1 1993/07/05 19:19:44 mw Exp $";
 #endif
 
 #include "sys/param.h"

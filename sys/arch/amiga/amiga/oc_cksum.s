@@ -89,7 +89,7 @@
 | enough gain to be worth the effort.
 
 	.data
-	.asciz	"@(#)$Header: /home/mike/src/cvs/netbsd/src/sys/arch/amiga/amiga/Attic/oc_cksum.s,v 1.1 1993/07/05 19:19:49 mw Exp $"
+	.asciz	"@(#)$Header: /home/mike/src/cvs/netbsd/src/sys/arch/amiga/amiga/Attic/oc_cksum.s,v 1.1.1.1 1993/07/05 19:19:50 mw Exp $"
 	.even
 	.text
 
