@@ -1,4 +1,4 @@
-/*	$NetBSD: vm_machdep.c,v 1.60.4.2 2001/11/20 16:31:59 pk Exp $ */
+/*	$NetBSD: vm_machdep.c,v 1.60.4.3 2001/12/08 04:22:22 thorpej Exp $ */
 
 /*
  * Copyright (c) 1996
@@ -200,7 +200,7 @@ vunmapbuf(bp, len)
  * accordingly.
  */
 void
-cpu_fork(l1, l2, stack, stacksize, func, arg)
+cpu_lwp_fork(l1, l2, stack, stacksize, func, arg)
 	struct lwp *l1, *l2;
 	void *stack;
 	size_t stacksize;
@@ -229,7 +229,7 @@ cpu_fork(l1, l2, stack, stacksize, func, arg)
 	}
 #ifdef DIAGNOSTIC
 	else if (l1 != &lwp0)
-		panic("cpu_fork: curproc");
+		panic("cpu_lwp_fork: curproc");
 #endif
 
 	bcopy((caddr_t)opcb, (caddr_t)npcb, sizeof(struct pcb));
