@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1994 Matthias Pfaller.
+ * Copyright (c) 1995 Matthias Pfaller.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -27,7 +27,7 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
- *	$Id: cloak.c,v 1.1.1.1 1995/09/10 06:13:44 phil Exp $
+ *	$Id: cloak.c,v 1.2 1995/09/26 21:25:03 phil Exp $
  */
 
 #include <stdio.h>
@@ -70,10 +70,10 @@ main(int argc, char **argv)
 
 	n = sizeof(SYM_DATA) + sizeof(SYM_LEN) + sizeof(n);
 	nlist[0].n_un.n_strx  = sizeof(n);
-	nlist[0].n_type  = N_DATA | N_EXT;
+	nlist[0].n_type  = N_TEXT | N_EXT;
 	nlist[0].n_value = 0;
 	nlist[1].n_un.n_strx  = nlist[0].n_un.n_strx + sizeof(SYM_DATA);
-	nlist[1].n_type  = N_DATA | N_EXT;
+	nlist[1].n_type  = N_TEXT | N_EXT;
 	nlist[1].n_value = ALIGN(data_len);
 	writex(1, nlist, sizeof(nlist), argv[0]);
 	writex(1, &n, sizeof(n), argv[0]);
@@ -81,8 +81,8 @@ main(int argc, char **argv)
 	writex(1, SYM_LEN, sizeof(SYM_LEN), argv[0]);
 
 	N_SETMAGIC(exec, OMAGIC, MID_MACHINE, 0);
-	exec.a_text   = 0;
-	exec.a_data   = ALIGN(data_len) + sizeof(data_len);
+	exec.a_text   = ALIGN(data_len) + sizeof(data_len);
+	exec.a_data   = 0;
 	exec.a_bss    = 0;
 	exec.a_syms   = sizeof(nlist);
 	exec.a_trsize = 0;
