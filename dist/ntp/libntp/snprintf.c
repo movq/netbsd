@@ -1,4 +1,4 @@
-/*	$NetBSD: snprintf.c,v 1.1 2000/04/22 14:52:54 simonb Exp $	*/
+/*	$NetBSD: snprintf.c,v 1.1.1.1 2000/04/22 14:52:54 simonb Exp $	*/
 
 #include <config.h>
 

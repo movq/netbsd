@@ -1,4 +1,4 @@
-/*	$NetBSD: ntp_crypto.h,v 1.1 2000/04/22 14:52:42 simonb Exp $	*/
+/*	$NetBSD: ntp_crypto.h,v 1.1.1.1 2000/04/22 14:52:42 simonb Exp $	*/
 
 /*
  * ntp_crypto.h - definitions for cryptographic operations

@@ -1,4 +1,4 @@
-/*	$NetBSD: ntp_genkeys.c,v 1.1 2000/04/22 14:54:31 simonb Exp $	*/
+/*	$NetBSD: ntp_genkeys.c,v 1.1.1.1 2000/04/22 14:54:31 simonb Exp $	*/
 
 /*
  * Program to generate MD5 and RSA keys for NTP clients and servers

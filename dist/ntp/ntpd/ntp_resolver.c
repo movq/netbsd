@@ -1,4 +1,4 @@
-/*	$NetBSD: ntp_resolver.c,v 1.1 2000/04/22 14:53:21 simonb Exp $	*/
+/*	$NetBSD: ntp_resolver.c,v 1.1.1.1 2000/04/22 14:53:21 simonb Exp $	*/
 
 /*
 ** Ancestor was ripped off from ../ntpres/ntpres.c by Greg Troxel 4/2/92
