@@ -1,3 +1,5 @@
+/*	$NetBSD: ntohl.S,v 1.6 1998/02/22 06:40:18 mycroft Exp $	*/
+
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
  * All rights reserved.
@@ -34,13 +36,11 @@
  * SUCH DAMAGE.
  *
  *	from: @(#)ntohl.s	5.2 (Berkeley) 12/17/90
- *	$NetBSD: ntohl.S,v 1.5 1997/10/13 11:56:51 lukem Exp $
  */
 
 #include <machine/asm.h>
-
 #if defined(LIBC_SCCS)
-RCSID("$NetBSD: ntohl.S,v 1.5 1997/10/13 11:56:51 lukem Exp $")
+	RCSID("$NetBSD: ntohl.S,v 1.6 1998/02/22 06:40:18 mycroft Exp $")
 #endif
 
 /* hostorder = ntohl(netorder) */
