@@ -1,4 +1,4 @@
-/*	$NetBSD: print-pflog.c,v 1.1 2002/05/31 09:28:49 itojun Exp $	*/
+/*	$NetBSD: print-pflog.c,v 1.1.1.1 2002/05/31 09:28:49 itojun Exp $	*/
 
 /*	$OpenBSD: print-pflog.c,v 1.9 2001/09/18 14:52:53 jakob Exp $	*/
 
